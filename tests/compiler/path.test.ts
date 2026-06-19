@@ -21,14 +21,14 @@ export function main(): void {
 
   assert.deepEqual(result.ir.features, ['objects', 'path', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['managed-values', 'objects', 'path', 'string-bytes'])
-  assert.match(result.code, /#include "ccjs\/path\.h"/)
-  assert.match(result.code, /ccjs_path_join\(&ccjs_default_allocator, ccjs_path_args_\d+, 4, &ccjs_path_value_\d+\)/)
-  assert.match(result.code, /ccjs_path_resolve\(&ccjs_default_allocator, ccjs_path_args_\d+, 4, &ccjs_path_value_\d+\)/)
-  assert.match(result.code, /ccjs_path_basename\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_path_parse\(&ccjs_default_allocator, ccjs_value_\d+, &ccjs_shape_path_parse_\d+, &parsed\)/)
-  assert.match(result.code, /ccjs_path_format\(&ccjs_default_allocator, parsed, &ccjs_path_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "\/", 1, &ccjs_path_constant_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, ":", 1, &ccjs_path_constant_\d+\)/)
+  assert.match(result.code, /#include "inox\/path\.h"/)
+  assert.match(result.code, /inox_path_join\(&inox_default_allocator, inox_path_args_\d+, 4, &inox_path_value_\d+\)/)
+  assert.match(result.code, /inox_path_resolve\(&inox_default_allocator, inox_path_args_\d+, 4, &inox_path_value_\d+\)/)
+  assert.match(result.code, /inox_path_basename\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_path_parse\(&inox_default_allocator, inox_value_\d+, &inox_shape_path_parse_\d+, &parsed\)/)
+  assert.match(result.code, /inox_path_format\(&inox_default_allocator, parsed, &inox_path_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "\/", 1, &inox_path_constant_\d+\)/)
+  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, ":", 1, &inox_path_constant_\d+\)/)
 })
 
 test('lowers named node:path imports to the C path runtime', () => {
@@ -48,15 +48,15 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_path_join\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_path_dirname\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_path_extname\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_path_normalize\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_path_relative\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_path_is_absolute\(ccjs_value_\d+, &ccjs_path_is_absolute_\d+\)/)
-  assert.match(result.code, /ccjs_path_parse\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_path_format\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "\/", 1, &ccjs_path_constant_\d+\)/)
+  assert.match(result.code, /inox_path_join\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_path_dirname\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_path_extname\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_path_normalize\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_path_relative\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_path_is_absolute\(inox_value_\d+, &inox_path_is_absolute_\d+\)/)
+  assert.match(result.code, /inox_path_parse\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_path_format\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "\/", 1, &inox_path_constant_\d+\)/)
 })
 
 test('tracks node:path constants as path runtime requirements', () => {
@@ -72,8 +72,8 @@ console.log(sep)
 
   assert.deepEqual(result.ir.features, ['path', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['managed-values', 'path', 'string-bytes'])
-  assert.match(result.code, /#include "ccjs\/path\.h"/)
-  assert.match(result.code, /ccjs_path_constant_\d+/)
+  assert.match(result.code, /#include "inox\/path\.h"/)
+  assert.match(result.code, /inox_path_constant_\d+/)
 })
 
 test('reports unsupported node:path methods at compile time only', () => {
@@ -95,7 +95,7 @@ matchesGlob('/tmp/file.txt', '*.txt')
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(

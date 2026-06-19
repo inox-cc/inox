@@ -27,7 +27,7 @@ var value = 1
 
 test('accepts diagnostic fixtures with stable diagnostic code', () => {
   const result = validateFixtureMetadata(`// @expect diagnostic
-// @diagnostic CCJS_NO_VAR
+// @diagnostic INOX_NO_VAR
 
 var value = 1
 `)

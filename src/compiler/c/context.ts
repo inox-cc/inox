@@ -438,7 +438,7 @@ export function createFunctionContext(
 }
 
 export function emitStatusCheck(call: string, context: CFailureContext): string {
-  return `if (${call} != CCJS_OK) ${emitFailureStatement(context)}`
+  return `if (${call} != INOX_OK) ${emitFailureStatement(context)}`
 }
 
 export function emitRuntimeTypeCheck(condition: string, context: CFailureContext): string {
@@ -455,16 +455,16 @@ export function emitFailureStatement(context: CFailureContext): string {
 
   if (context.throwingFunction && context.cleanupEnabled) {
     context.usedCleanupGoto = true
-    return 'do { ccjs_status_result = CCJS_ERR_TYPE; goto ccjs_cleanup; } while (0);'
+    return 'do { inox_status_result = INOX_ERR_TYPE; goto inox_cleanup; } while (0);'
   }
 
   if (context.statusReturn) {
-    return 'return CCJS_ERR_TYPE;'
+    return 'return INOX_ERR_TYPE;'
   }
 
   if (context.cleanupEnabled) {
     context.usedCleanupGoto = true
-    return 'goto ccjs_cleanup;'
+    return 'goto inox_cleanup;'
   }
 
   if (context.returnType === 'void') {
@@ -476,7 +476,7 @@ export function emitFailureStatement(context: CFailureContext): string {
     isManagedRuntimeReturnType(context.returnType) ||
     isOpaqueRuntimeValueType(context.returnType)
   ) {
-    return 'return ccjs_undefined_value();'
+    return 'return inox_undefined_value();'
   }
 
   return 'return 0;'
@@ -543,7 +543,7 @@ function stringArrayHas(values: string[], needle: string): boolean {
 }
 
 export function emitPrepareOwnedValueWrite(name: string): string[] {
-  return [`ccjs_release(${name});`, `${name} = ccjs_undefined_value();`]
+  return [`inox_release(${name});`, `${name} = inox_undefined_value();`]
 }
 
 type CReturnValueDeclarationContext = {
@@ -620,11 +620,11 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
   }
 
   if (returnType === 'promise') {
-    return ['ccjs_promise* ccjs_return = 0;']
+    return ['inox_promise* inox_return = 0;']
   }
 
   if (context.returnNullable === true && isNullableScalarType(returnType)) {
-    return ['ccjs_value ccjs_return = ccjs_undefined_value();']
+    return ['inox_value inox_return = inox_undefined_value();']
   }
 
   if (
@@ -632,11 +632,11 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
     isManagedRuntimeReturnType(returnType) ||
     isOpaqueRuntimeValueType(returnType)
   ) {
-    return ['ccjs_value ccjs_return = ccjs_undefined_value();']
+    return ['inox_value inox_return = inox_undefined_value();']
   }
 
   if (returnType !== 'void') {
-    return ['double ccjs_return = 0;']
+    return ['double inox_return = 0;']
   }
 
   return []
@@ -644,7 +644,7 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
 
 export function emitStatusResultDeclarations(context: CStatusResultDeclarationContext): string[] {
   if (context.throwingFunction) {
-    return ['ccjs_status ccjs_status_result = CCJS_OK;']
+    return ['inox_status inox_status_result = INOX_OK;']
   }
 
   return []
@@ -654,11 +654,11 @@ export function emitLoopFlowDeclarations(context: CLoopFlowDeclarationContext): 
   const lines: string[] = []
 
   if (context.breakFlowUsed) {
-    lines.push('int ccjs_break_active = 0;')
+    lines.push('int inox_break_active = 0;')
   }
 
   if (context.continueFlowUsed) {
-    lines.push('int ccjs_continue_active = 0;')
+    lines.push('int inox_continue_active = 0;')
   }
 
   return lines
@@ -666,7 +666,7 @@ export function emitLoopFlowDeclarations(context: CLoopFlowDeclarationContext): 
 
 export function emitReturnFlowDeclarations(context: CReturnFlowDeclarationContext): string[] {
   if (context.returnFlowUsed) {
-    return ['int ccjs_return_active = 0;']
+    return ['int inox_return_active = 0;']
   }
 
   return []
@@ -691,15 +691,15 @@ export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContex
   }
 
   for (const name of ownedValues) {
-    lines.push(`ccjs_value ${name} = ccjs_undefined_value();`)
+    lines.push(`inox_value ${name} = inox_undefined_value();`)
   }
 
   for (const name of ownedCryptoHashes) {
-    lines.push(`ccjs_crypto_hash* ${name} = 0;`)
+    lines.push(`inox_crypto_hash* ${name} = 0;`)
   }
 
   for (const name of ownedCryptoHmacs) {
-    lines.push(`ccjs_crypto_hmac* ${name} = 0;`)
+    lines.push(`inox_crypto_hmac* ${name} = 0;`)
   }
 
   return lines
@@ -714,7 +714,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
   }
 
   for (const name of ownedPromises) {
-    lines.push(`ccjs_promise* ${name} = 0;`)
+    lines.push(`inox_promise* ${name} = 0;`)
   }
 
   return lines
@@ -722,7 +722,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
 
 export function emitEventLoopDeclarations(context: CEventLoopDeclarationContext): string[] {
   if (context.eventLoopUsed === true && context.externalEventLoop !== true) {
-    return ['ccjs_loop ccjs_loop;', 'int ccjs_loop_active = 0;']
+    return ['inox_loop inox_loop;', 'int inox_loop_active = 0;']
   }
 
   return []
@@ -730,7 +730,7 @@ export function emitEventLoopDeclarations(context: CEventLoopDeclarationContext)
 
 export function emitErrorChannelDeclarations(context: CErrorChannelDeclarationContext): string[] {
   if (context.errorChannelUsed === true) {
-    return ['int ccjs_error_active = 0;']
+    return ['int inox_error_active = 0;']
   }
 
   return []
@@ -751,7 +751,7 @@ export function emitBoxedValueDeclarations(context: CBoxedValueDeclarationContex
 
   for (const name of boxedValues) {
     if (isRuntimeBoxedValueType(boxedValueTypes.get(name))) {
-      lines.push(`ccjs_value* ${name} = 0;`)
+      lines.push(`inox_value* ${name} = 0;`)
     } else {
       lines.push(`double* ${name} = 0;`)
     }
@@ -765,17 +765,17 @@ export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
 
   for (let index = context.ownedCryptoHmacs.length - 1; index >= 0; index--) {
     const name = context.ownedCryptoHmacs[index]
-    lines.push(`ccjs_crypto_hmac_free(${name});`)
+    lines.push(`inox_crypto_hmac_free(${name});`)
   }
 
   for (let index = context.ownedCryptoHashes.length - 1; index >= 0; index--) {
     const name = context.ownedCryptoHashes[index]
-    lines.push(`ccjs_crypto_hash_free(${name});`)
+    lines.push(`inox_crypto_hash_free(${name});`)
   }
 
   for (let index = context.ownedValues.length - 1; index >= 0; index--) {
     const name = context.ownedValues[index]
-    lines.push(`ccjs_release(${name});`)
+    lines.push(`inox_release(${name});`)
   }
 
   return lines
@@ -786,14 +786,14 @@ export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
 
   for (let index = context.ownedPromises.length - 1; index >= 0; index--) {
     const name = context.ownedPromises[index]
-    const release = `if (${name} != 0) ccjs_promise_release(${name});`
+    const release = `if (${name} != 0) inox_promise_release(${name});`
 
     if (context.unhandledRejectionFlag == null) {
       lines.push(release)
       continue
     }
 
-    lines.push(`if (${name} != 0 && ccjs_promise_is_unhandled_rejection(${name})) {`)
+    lines.push(`if (${name} != 0 && inox_promise_is_unhandled_rejection(${name})) {`)
     lines.push('  fprintf(stderr, "Unhandled Promise rejection\\n");')
     lines.push(`  ${context.unhandledRejectionFlag} = 1;`)
     lines.push('}')
@@ -809,13 +809,13 @@ export function emitEventLoopInit(context: CFunctionContext): string[] {
   }
 
   if (context.externalEventLoop) {
-    return [`if (ccjs_loop == 0) ${emitFailureStatement(context)}`]
+    return [`if (inox_loop == 0) ${emitFailureStatement(context)}`]
   }
 
   return [
-    `if (ccjs_loop_init(&ccjs_loop, &ccjs_default_allocator) != CCJS_OK) ${emitFailureStatement(context)}`,
-    'ccjs_loop_active = 1;',
-    `ccjs_loop.now_ms = ${emitEventLoopCurrentTimeExpression()};`
+    `if (inox_loop_init(&inox_loop, &inox_default_allocator) != INOX_OK) ${emitFailureStatement(context)}`,
+    'inox_loop_active = 1;',
+    `inox_loop.now_ms = ${emitEventLoopCurrentTimeExpression()};`
   ]
 }
 
@@ -825,10 +825,10 @@ export function emitEventLoopDrain(context: CFunctionContext): string[] {
   }
 
   const loop = emitEventLoopReference(context)
-  const statusCheck = emitStatusCheck(`ccjs_loop_poll(${loop}, ${emitEventLoopCurrentTimeExpression()})`, context)
+  const statusCheck = emitStatusCheck(`inox_loop_poll(${loop}, ${emitEventLoopCurrentTimeExpression()})`, context)
   const lines: string[] = []
 
-  lines.push(`while (ccjs_loop_has_work(${loop})) {`)
+  lines.push(`while (inox_loop_has_work(${loop})) {`)
 
   for (const line of emitEventLoopSleepUntilNextTimerLines(context, '  ')) {
     lines.push(line)
@@ -842,7 +842,7 @@ export function emitEventLoopDrain(context: CFunctionContext): string[] {
 
 export function emitEventLoopCleanup(context: CFunctionContext): string[] {
   if (context.eventLoopUsed && !context.externalEventLoop) {
-    return ['if (ccjs_loop_active) ccjs_loop_dispose(&ccjs_loop);']
+    return ['if (inox_loop_active) inox_loop_dispose(&inox_loop);']
   }
 
   return []
@@ -850,10 +850,10 @@ export function emitEventLoopCleanup(context: CFunctionContext): string[] {
 
 export function emitEventLoopReference(context: CEventLoopContext): string {
   if (context.externalEventLoop) {
-    return 'ccjs_loop'
+    return 'inox_loop'
   }
 
-  return '&ccjs_loop'
+  return '&inox_loop'
 }
 
 export function emitEventLoopNextTimeExpression(context: CFunctionContext): string {
@@ -861,19 +861,19 @@ export function emitEventLoopNextTimeExpression(context: CFunctionContext): stri
 }
 
 export function emitEventLoopCurrentTimeExpression(): string {
-  return 'ccjs_performance_now()'
+  return 'inox_performance_now()'
 }
 
 export function emitEventLoopSleepUntilNextTimerLines(context: CFunctionContext, indent: string): string[] {
   const loop = emitEventLoopReference(context)
 
   return [
-    `${indent}#if !defined(CCJS_LOOP_BACKEND_LIBUV)`,
+    `${indent}#if !defined(INOX_LOOP_BACKEND_LIBUV)`,
     `${indent}{`,
-    `${indent}  ccjs_number ccjs_next_due_ms = 0;`,
-    `${indent}  ccjs_number ccjs_now_ms = ${emitEventLoopCurrentTimeExpression()};`,
-    `${indent}  if (ccjs_loop_pending_microtasks(${loop}) == 0 && ccjs_loop_pending_immediates(${loop}) == 0 && ccjs_loop_next_timer_due_ms(${loop}, &ccjs_next_due_ms) && ccjs_next_due_ms > ccjs_now_ms) {`,
-    `${indent}    ccjs_time_sleep_ms(ccjs_next_due_ms - ccjs_now_ms);`,
+    `${indent}  inox_number inox_next_due_ms = 0;`,
+    `${indent}  inox_number inox_now_ms = ${emitEventLoopCurrentTimeExpression()};`,
+    `${indent}  if (inox_loop_pending_microtasks(${loop}) == 0 && inox_loop_pending_immediates(${loop}) == 0 && inox_loop_next_timer_due_ms(${loop}, &inox_next_due_ms) && inox_next_due_ms > inox_now_ms) {`,
+    `${indent}    inox_time_sleep_ms(inox_next_due_ms - inox_now_ms);`,
     `${indent}  }`,
     `${indent}}`,
     `${indent}#endif`
@@ -888,11 +888,11 @@ export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
 
     if (isRuntimeBoxedValueType(context.boxedValueTypes.get(name))) {
       lines.push(`if (${name} != 0) {`)
-      lines.push(`  ccjs_release(*${name});`)
-      lines.push(`  ccjs_default_free(0, ${name}, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+      lines.push(`  inox_release(*${name});`)
+      lines.push(`  inox_default_free(0, ${name}, sizeof(inox_value), _Alignof(inox_value));`)
       lines.push('}')
     } else {
-      lines.push(`if (${name} != 0) ccjs_default_free(0, ${name}, sizeof(double), _Alignof(double));`)
+      lines.push(`if (${name} != 0) inox_default_free(0, ${name}, sizeof(double), _Alignof(double));`)
     }
   }
 
@@ -909,11 +909,11 @@ export function emitCleanupReturn(context: CFunctionContext): string[] {
   }
 
   if (isManagedRuntimeReturnType(context.returnType)) {
-    return ['return ccjs_return;']
+    return ['return inox_return;']
   }
 
   if (context.returnType !== 'void') {
-    return ['return ccjs_return;']
+    return ['return inox_return;']
   }
 
   return ['return;']
@@ -925,21 +925,21 @@ export function emitThrowingFunctionErrorTransfer(context: CFunctionContext): st
   }
 
   return [
-    'if (ccjs_error_active) {',
-    `  *${context.functionErrorOut} = ccjs_error;`,
-    '  ccjs_error = ccjs_undefined_value();',
+    'if (inox_error_active) {',
+    `  *${context.functionErrorOut} = inox_error;`,
+    '  inox_error = inox_undefined_value();',
     '}'
   ]
 }
 
 export function emitThrowingFunctionCleanupReturn(context: CFunctionContext): string[] {
-  const lines: string[] = ['if (ccjs_status_result != CCJS_OK) return ccjs_status_result;']
+  const lines: string[] = ['if (inox_status_result != INOX_OK) return inox_status_result;']
 
   if (context.returnType !== 'void') {
-    lines.push(`*${context.functionReturnOut} = ccjs_return;`)
+    lines.push(`*${context.functionReturnOut} = inox_return;`)
   }
 
-  lines.push('return CCJS_OK;')
+  lines.push('return INOX_OK;')
 
   return lines
 }

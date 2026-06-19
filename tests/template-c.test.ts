@@ -22,10 +22,10 @@ test('lowers C console.log template interpolation', () => {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_(?:expr_)?value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(user, 1, &ccjs_expr_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(ready\) != 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_log_string_\d+->len, ccjs_log_string_\d+->bytes\);/)
+  assert.match(result.code, /inox_object_get_known\(user, 0, &inox_(?:expr_)?value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(user, 1, &inox_expr_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_bool\(&inox_default_allocator, \(ready\) != 0, &inox_value_\d+\)/)
+  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)inox_log_string_\d+->len, inox_log_string_\d+->bytes\);/)
 })
 
 test('diagnoses unsupported C template placeholders', () => {
@@ -34,7 +34,7 @@ test('diagnoses unsupported C template placeholders', () => {
   console.log(\`hello \${missing}\`)
 }
 `,
-    'CCJS_UNKNOWN_NAME',
+    'INOX_UNKNOWN_NAME',
     {
       target: 'c'
     }
@@ -72,10 +72,10 @@ console.log(echo(\`\${str1} \${String(num)}\`))
   )
 
   assert.match(result.code, /#include <string\.h>/)
-  assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, num, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_concat_parts\(&ccjs_default_allocator,/)
-  assert.match(result.code, /const ccjs_string\* t = \(ccjs_string\*\)[A-Za-z_][A-Za-z0-9_]*\.as\.ref;/)
-  assert.match(result.code, /echo\(ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_number\(&inox_default_allocator, num, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_concat_parts\(&inox_default_allocator,/)
+  assert.match(result.code, /const inox_string\* t = \(inox_string\*\)[A-Za-z_][A-Za-z0-9_]*\.as\.ref;/)
+  assert.match(result.code, /echo\(inox_value_\d+\)/)
 })
 
 test('lowers C template interpolation for unknown runtime values', () => {
@@ -91,7 +91,7 @@ console.log(label('Ada'), label(7), label(true), label(null))
     }
   )
 
-  assert.match(result.code, /ccjs_string_from_value\(&ccjs_default_allocator, value, &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_value\(&inox_default_allocator, value, &inox_value_\d+\)/)
   assert.doesNotMatch(result.code, /template placeholders currently support/)
 })
 
@@ -107,11 +107,11 @@ test('lowers C template interpolation for array join runtime strings', () => {
     }
   )
 
-  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, features, ", ", 2, &ccjs_array_join_\d+\)/)
-  assert.match(result.code, /ccjs_template_string_\d+ = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
+  assert.match(result.code, /inox_array_join\(&inox_default_allocator, features, ", ", 2, &inox_array_join_\d+\)/)
+  assert.match(result.code, /inox_template_string_\d+ = \(inox_string\*\)inox_array_join_\d+\.as\.ref;/)
   assert.doesNotMatch(
     result.code,
-    /ccjs_string_from_number\(&ccjs_default_allocator, ccjs_array_join_\d+, &ccjs_value_\d+\)/
+    /inox_string_from_number\(&inox_default_allocator, inox_array_join_\d+, &inox_value_\d+\)/
   )
 })
 
@@ -135,10 +135,10 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_string_from_value\(&ccjs_default_allocator, ccjs_value_\d+, &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_value\(&inox_default_allocator, inox_value_\d+, &inox_value_\d+\)/)
   assert.doesNotMatch(
     result.code,
-    /ccjs_string_from_number\(&ccjs_default_allocator, ccjs_objfn_deps_read\(/
+    /inox_string_from_number\(&inox_default_allocator, inox_objfn_deps_read\(/
   )
 })
 
@@ -159,10 +159,10 @@ console.log(ok(null), ok('ok'))
     }
   )
 
-  assert.match(result.code, /ccjs_value value = ccjs_param_value;/)
-  assert.match(result.code, /value\.tag == CCJS_TAG_NULL \|\| value\.tag == CCJS_TAG_UNDEFINED/)
-  assert.match(result.code, /ccjs_string\* ccjs_cmp_string_\d+ = \(ccjs_string\*\)value\.as\.ref;/)
-  assert.doesNotMatch(result.code, /ccjs_string\* value = \(ccjs_string\*\)ccjs_param_value\.as\.ref;/)
+  assert.match(result.code, /inox_value value = inox_param_value;/)
+  assert.match(result.code, /value\.tag == INOX_TAG_NULL \|\| value\.tag == INOX_TAG_UNDEFINED/)
+  assert.match(result.code, /inox_string\* inox_cmp_string_\d+ = \(inox_string\*\)value\.as\.ref;/)
+  assert.doesNotMatch(result.code, /inox_string\* value = \(inox_string\*\)inox_param_value\.as\.ref;/)
 })
 
 test('generated C console log template interpolation compiles and runs with runtime sources', async (t) => {

@@ -1415,7 +1415,7 @@ class Checker {
 
     if (statement.type === 'BreakStatement') {
       if (this.breakDepth === 0) {
-        this.report('CCJS_BREAK_OUTSIDE', 'break can only be used inside a loop or switch', statement.loc)
+        this.report('INOX_BREAK_OUTSIDE', 'break can only be used inside a loop or switch', statement.loc)
       }
 
       return
@@ -1423,7 +1423,7 @@ class Checker {
 
     if (statement.type === 'ContinueStatement') {
       if (this.continueDepth === 0) {
-        this.report('CCJS_CONTINUE_OUTSIDE', 'continue can only be used inside a loop', statement.loc)
+        this.report('INOX_CONTINUE_OUTSIDE', 'continue can only be used inside a loop', statement.loc)
       }
 
       return
@@ -1436,7 +1436,7 @@ class Checker {
 
     if (statement.type === 'VariableDeclaration') {
       if (statement.kind === 'const' && statement.init == null) {
-        this.report('CCJS_CONST_INIT', 'const declarations must have an initializer', statement.loc)
+        this.report('INOX_CONST_INIT', 'const declarations must have an initializer', statement.loc)
       }
 
       let declared: ResolvedTypeInfo | null = null
@@ -2042,7 +2042,7 @@ class Checker {
           }
 
           this.report(
-            'CCJS_ARG_COUNT',
+            'INOX_ARG_COUNT',
             this.argumentCountMessage(`function ${name}`, params, expression.args.length),
             expression.loc
           )
@@ -2072,7 +2072,7 @@ class Checker {
 
     if (expression.type === 'AwaitExpression') {
       if (this.asyncDepth === 0 && this.functionDepth > 0) {
-        this.report('CCJS_AWAIT_OUTSIDE_ASYNC', 'await can only be used inside async functions', expression.loc)
+        this.report('INOX_AWAIT_OUTSIDE_ASYNC', 'await can only be used inside async functions', expression.loc)
       }
 
       const argumentType = this.checkExpression(expression.argument)
@@ -2172,7 +2172,7 @@ class Checker {
     }
 
     if (expression.target.type !== 'Reference') {
-      this.report('CCJS_INVALID_ASSIGNMENT_TARGET', 'assignment target must be a binding or field', expression.loc)
+      this.report('INOX_INVALID_ASSIGNMENT_TARGET', 'assignment target must be a binding or field', expression.loc)
       return this.checkExpression(expression.value)
     }
 
@@ -2183,7 +2183,7 @@ class Checker {
       if (expression.target.path.length === 1 && symbol.mutable !== true) {
         const path: string[] = expression.target.path
         this.report(
-          'CCJS_ASSIGN_CONST',
+          'INOX_ASSIGN_CONST',
           `cannot assign to ${symbol.kind} binding ${path[0]}`,
           expression.target.loc
         )
@@ -2239,7 +2239,7 @@ class Checker {
         if (expression.argument.path.length === 1 && symbol.mutable !== true) {
           const path: string[] = expression.argument.path
           this.report(
-            'CCJS_ASSIGN_CONST',
+            'INOX_ASSIGN_CONST',
             `cannot assign to ${symbol.kind} binding ${path[0]}`,
             expression.argument.loc
           )
@@ -2257,7 +2257,7 @@ class Checker {
       return 'number'
     }
 
-    this.report('CCJS_INVALID_ASSIGNMENT_TARGET', 'update target must be a binding or field', expression.loc)
+    this.report('INOX_INVALID_ASSIGNMENT_TARGET', 'update target must be a binding or field', expression.loc)
 
     return 'number'
   }
@@ -2286,7 +2286,7 @@ class Checker {
 
     if (isEqualityOperator(expression.operator) && !nullableEquality && !isEqualityComparableType(left, right)) {
       this.report(
-        'CCJS_TYPE_MISMATCH',
+        'INOX_TYPE_MISMATCH',
         `cannot compare ${left} and ${right} with ${expression.operator}`,
         expression.loc
       )
@@ -2436,7 +2436,7 @@ class Checker {
     const field = this.findShapeField(shape, expression.property)
 
     if (field == null) {
-      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
+      this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
       return 'unknown'
     }
 
@@ -2535,7 +2535,7 @@ class Checker {
     const field = this.findShapeField(shape, expression.property)
 
     if (field == null) {
-      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
+      this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
       expression.nullable = true
       expression.valueType = 'unknown'
       return 'unknown'
@@ -2578,24 +2578,24 @@ class Checker {
     const valueType = this.checkExpression(expression.value)
 
     if (targetType === 'string' && expression.target.property === 'length') {
-      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
+      this.report('INOX_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
       return valueType
     }
 
     if (targetType === 'array' && expression.target.property === 'length') {
-      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
+      this.report('INOX_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
       return valueType
     }
 
     if (targetType === 'map' || targetType === 'set') {
       if (expression.target.property === 'size') {
-        this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field size', expression.target.loc)
+        this.report('INOX_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field size', expression.target.loc)
         return valueType
       }
     }
 
     if (targetType === 'bytes' && expression.target.property === 'length') {
-      this.report('CCJS_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
+      this.report('INOX_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
       return valueType
     }
 
@@ -2621,14 +2621,14 @@ class Checker {
     const field = this.findShapeField(shape, expression.target.property)
 
     if (field == null) {
-      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.target.property}`, expression.target.loc)
+      this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.target.property}`, expression.target.loc)
       return valueType
     }
 
     if (field.readonly === true) {
       if (!this.canInitializeReadonlyClassField(expression.target.object)) {
         this.report(
-          'CCJS_ASSIGN_READONLY_FIELD',
+          'INOX_ASSIGN_READONLY_FIELD',
           `cannot assign to readonly field ${expression.target.property}`,
           expression.target.loc
         )
@@ -2840,7 +2840,7 @@ class Checker {
     const field = this.findShapeField(shape, expression.index.value)
 
     if (field == null) {
-      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.index.value}`, expression.index.loc)
+      this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.index.value}`, expression.index.loc)
       return 'unknown'
     }
 
@@ -2904,7 +2904,7 @@ class Checker {
     const field = this.findShapeField(shape, expression.index.value)
 
     if (field == null) {
-      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.index.value}`, expression.index.loc)
+      this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.index.value}`, expression.index.loc)
       expression.nullable = true
       expression.valueType = 'unknown'
       return 'unknown'
@@ -3044,14 +3044,14 @@ class Checker {
     const field = this.findShapeField(shape, expression.target.index.value)
 
     if (field == null) {
-      this.report('CCJS_UNKNOWN_FIELD', `unknown field ${expression.target.index.value}`, expression.target.index.loc)
+      this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.target.index.value}`, expression.target.index.loc)
       return valueType
     }
 
     if (field.readonly === true) {
       if (!this.canInitializeReadonlyClassField(expression.target.object)) {
         this.report(
-          'CCJS_ASSIGN_READONLY_FIELD',
+          'INOX_ASSIGN_READONLY_FIELD',
           `cannot assign to readonly field ${expression.target.index.value}`,
           expression.target.loc
         )
@@ -3478,7 +3478,7 @@ class Checker {
     if (!this.acceptsArgumentCount(params, expression.args.length)) {
       const path: string[] = expression.callee.path
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         this.argumentCountMessage(`function ${path[0]}`, params, expression.args.length),
         expression.loc
       )
@@ -3512,7 +3512,7 @@ class Checker {
       if (staticMethod === 'from') {
         if (expression.args.length < 1 || expression.args.length > 2) {
           this.report(
-            'CCJS_ARG_COUNT',
+            'INOX_ARG_COUNT',
             `function Buffer.from expects 1 or 2 argument(s), got ${expression.args.length}`,
             expression.loc
           )
@@ -3538,7 +3538,7 @@ class Checker {
       if (staticMethod === 'isBuffer') {
         if (expression.args.length !== 1) {
           this.report(
-            'CCJS_ARG_COUNT',
+            'INOX_ARG_COUNT',
             `function Buffer.isBuffer expects 1 argument(s), got ${expression.args.length}`,
             expression.loc
           )
@@ -3557,7 +3557,7 @@ class Checker {
       if (staticMethod === 'alloc') {
         if (expression.args.length !== 1) {
           this.report(
-            'CCJS_ARG_COUNT',
+            'INOX_ARG_COUNT',
             `function Buffer.alloc expects 1 argument(s), got ${expression.args.length}`,
             expression.loc
           )
@@ -3585,7 +3585,7 @@ class Checker {
     if (instanceMethod === 'slice') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `bytes.slice expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -3606,7 +3606,7 @@ class Checker {
     if (instanceMethod === 'toString') {
       if (expression.args.length > 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `bytes.toString expects 0 or 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -3687,7 +3687,7 @@ class Checker {
     }
 
     this.report(
-      'CCJS_NOT_IMPLEMENTED',
+      'INOX_NOT_IMPLEMENTED',
       `node:buffer ${unsupported} is not implemented by the current C backend`,
       expression.loc
     )
@@ -3753,7 +3753,7 @@ class Checker {
     }
 
     this.report(
-      'CCJS_NOT_IMPLEMENTED',
+      'INOX_NOT_IMPLEMENTED',
       `${usage.source} ${usage.name} is not implemented by the current C backend: ${usage.reason}`,
       expression.loc
     )
@@ -3774,7 +3774,7 @@ class Checker {
     }
 
     this.report(
-      'CCJS_NOT_IMPLEMENTED',
+      'INOX_NOT_IMPLEMENTED',
       `${usage.source} ${usage.name} is not implemented by the current C backend: ${usage.reason}`,
       expression.loc
     )
@@ -3886,7 +3886,7 @@ class Checker {
     this.checkAssignableType(argType, 'string', arg.loc, false, this.expressionCanBeNull(arg))
 
     if (arg.type !== 'StringLiteral' || arg.value !== 'utf8') {
-      this.report('CCJS_TYPE_MISMATCH', `${label} encoding must be 'utf8' in the MVP`, arg.loc)
+      this.report('INOX_TYPE_MISMATCH', `${label} encoding must be 'utf8' in the MVP`, arg.loc)
     }
   }
 
@@ -3905,7 +3905,7 @@ class Checker {
       }
 
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:crypto ${call.method} is not implemented by the current C backend`,
         expression.loc
       )
@@ -3929,7 +3929,7 @@ class Checker {
 
       if (expression.args.length !== 0) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -3937,7 +3937,7 @@ class Checker {
 
       if (!this.supportsCryptoHash()) {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           "node:crypto getHashes requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
           expression.loc
         )
@@ -3952,7 +3952,7 @@ class Checker {
 
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -3969,7 +3969,7 @@ class Checker {
 
       if (!this.supportsCryptoHash()) {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           "node:crypto createHash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
           expression.loc
         )
@@ -3978,7 +3978,7 @@ class Checker {
 
       if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           "node:crypto createHash only supports the 'sha256' algorithm in the current C backend",
           expression.args[0].loc
         )
@@ -3993,7 +3993,7 @@ class Checker {
 
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4010,7 +4010,7 @@ class Checker {
 
       if (!this.supportsCryptoHash()) {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           "node:crypto createHmac requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
           expression.loc
         )
@@ -4019,7 +4019,7 @@ class Checker {
 
       if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           "node:crypto createHmac only supports the 'sha256' algorithm in the current C backend",
           expression.args[0].loc
         )
@@ -4027,7 +4027,7 @@ class Checker {
 
       if (argTypes[1] !== 'string' && argTypes[1] !== 'bytes') {
         this.report(
-          'CCJS_TYPE_MISMATCH',
+          'INOX_TYPE_MISMATCH',
           'node:crypto createHmac key must be a string or Buffer in the current C backend',
           expression.args[1].loc
         )
@@ -4041,7 +4041,7 @@ class Checker {
 
       if (expression.args.length < 2 || expression.args.length > 3) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 2 or 3 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4058,7 +4058,7 @@ class Checker {
 
         if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
           this.report(
-            'CCJS_NOT_IMPLEMENTED',
+            'INOX_NOT_IMPLEMENTED',
             "node:crypto hash only supports the 'sha256' algorithm in the current C backend",
             expression.args[0].loc
           )
@@ -4067,7 +4067,7 @@ class Checker {
 
       if (expression.args[1] != null && argTypes[1] !== 'string' && argTypes[1] !== 'bytes') {
         this.report(
-          'CCJS_TYPE_MISMATCH',
+          'INOX_TYPE_MISMATCH',
           'node:crypto hash data must be a string or Buffer in the current C backend',
           expression.args[1].loc
         )
@@ -4075,7 +4075,7 @@ class Checker {
 
       if (!this.supportsCryptoHash()) {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           "node:crypto hash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
           expression.loc
         )
@@ -4103,7 +4103,7 @@ class Checker {
 
       if (expression.args[2].type !== 'StringLiteral' || expression.args[2].value !== 'hex') {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           "node:crypto hash only supports the 'hex' and 'buffer' output encodings in the current C backend",
           expression.args[2].loc
         )
@@ -4121,7 +4121,7 @@ class Checker {
 
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4158,7 +4158,7 @@ class Checker {
     if (method === 'getRandomValues') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4179,7 +4179,7 @@ class Checker {
     if (method === 'randomBytes') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4193,7 +4193,7 @@ class Checker {
     if (method === 'randomFillSync') {
       if (expression.args.length < 1 || expression.args.length > 3) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 to 3 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4222,7 +4222,7 @@ class Checker {
     if (method === 'randomInt') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4240,7 +4240,7 @@ class Checker {
 
     if (expression.args.length !== 0) {
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         'node:crypto randomUUID options are not implemented by the current C backend',
         expression.loc
       )
@@ -4277,7 +4277,7 @@ class Checker {
     if (method === 'update') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label}.update expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4288,7 +4288,7 @@ class Checker {
 
         if (dataType !== 'string' && dataType !== 'bytes') {
           this.report(
-            'CCJS_TYPE_MISMATCH',
+            'INOX_TYPE_MISMATCH',
             `${label}.update data must be a string or Buffer in the current C backend`,
             expression.args[0].loc
           )
@@ -4307,7 +4307,7 @@ class Checker {
 
         if (expression.args[1].type !== 'StringLiteral' || expression.args[1].value !== 'utf8') {
           this.report(
-            'CCJS_NOT_IMPLEMENTED',
+            'INOX_NOT_IMPLEMENTED',
             `${label}.update only supports the 'utf8' input encoding in the current C backend`,
             expression.args[1].loc
           )
@@ -4320,7 +4320,7 @@ class Checker {
 
     if (expression.args.length > 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${label}.digest expects 0 or 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -4343,7 +4343,7 @@ class Checker {
 
     if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'hex') {
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `${label}.digest only supports the 'hex' encoding in the current C backend`,
         expression.args[0].loc
       )
@@ -4370,7 +4370,7 @@ class Checker {
       }
 
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:child_process ${call.method} is not implemented by the current C backend`,
         expression.loc
       )
@@ -4381,7 +4381,7 @@ class Checker {
     if (call.method === 'execSync') {
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4401,7 +4401,7 @@ class Checker {
     if (call.method === 'execFileSync') {
       if (expression.args.length < 2 || expression.args.length > 3) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 2 or 3 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4429,7 +4429,7 @@ class Checker {
 
       if (args != null && args.type !== 'ArrayLiteral') {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           'node:child_process execFileSync currently expects a string[] literal args argument',
           args.loc
         )
@@ -4450,7 +4450,7 @@ class Checker {
 
     if (expression.args.length < 1 || expression.args.length > 3) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${call.label} expects 1 to 3 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -4478,7 +4478,7 @@ class Checker {
 
     if (args != null && args.type !== 'ArrayLiteral') {
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         'node:child_process spawnSync currently expects a string[] literal args argument',
         args.loc
       )
@@ -4576,7 +4576,7 @@ class Checker {
       }
 
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         'node:child_process sync helpers currently require { encoding: "utf8" }',
         reportLoc
       )
@@ -4600,7 +4600,7 @@ class Checker {
       }
 
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         'node:child_process sync helpers currently support only { encoding: "utf8" }',
         reportLoc
       )
@@ -4622,7 +4622,7 @@ class Checker {
           (property.value.value !== 'pipe' && property.value.value !== 'ignore')
         ) {
           this.report(
-            'CCJS_NOT_IMPLEMENTED',
+            'INOX_NOT_IMPLEMENTED',
             "node:child_process sync helpers currently support stdio: 'pipe' or 'ignore'",
             property.value.loc
           )
@@ -4639,7 +4639,7 @@ class Checker {
         if (property.value.type !== 'ObjectLiteral') {
           this.checkExpression(property.value)
           this.report(
-            'CCJS_NOT_IMPLEMENTED',
+            'INOX_NOT_IMPLEMENTED',
             'node:child_process sync helpers currently expect env to be an object literal',
             property.value.loc
           )
@@ -4656,7 +4656,7 @@ class Checker {
 
       this.checkExpression(property.value)
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:child_process sync option ${property.key} is not implemented by the current C backend`,
         property.loc
       )
@@ -4680,7 +4680,7 @@ class Checker {
 
     if (call.unsupported) {
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:os ${call.method} is not implemented by the current C backend`,
         expression.loc
       )
@@ -4690,7 +4690,7 @@ class Checker {
 
     if (expression.args.length !== 0) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -4840,7 +4840,7 @@ class Checker {
 
     if (call.unsupported) {
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:process ${call.method} is not implemented by the current C backend`,
         expression.loc
       )
@@ -4853,7 +4853,7 @@ class Checker {
     if (call.method === 'cwd') {
       if (expression.args.length !== 0) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -4865,7 +4865,7 @@ class Checker {
 
     if (expression.args.length > 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${call.label} expects 0 or 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -4961,7 +4961,7 @@ class Checker {
     if (root.importedName === 'default' || root.importedName === 'process') {
       if (path.length === 2 && isUnsupportedProcessRuntimeProperty(path[1])) {
         this.report(
-          'CCJS_NOT_IMPLEMENTED',
+          'INOX_NOT_IMPLEMENTED',
           `node:process ${path[1]} is not implemented by the current C backend`,
           expression.loc
         )
@@ -5095,7 +5095,7 @@ class Checker {
 
     if (call.unsupported) {
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:url ${call.method} is not implemented by the current C backend`,
         expression.loc
       )
@@ -5105,7 +5105,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -5126,7 +5126,7 @@ class Checker {
 
         if (argType !== 'string' && !(argType === 'object' && isUrlObject)) {
           this.report(
-            'CCJS_TYPE_MISMATCH',
+            'INOX_TYPE_MISMATCH',
             `function ${call.label} expects string or URL, got ${argType}`,
             expression.args[0].loc
           )
@@ -5177,7 +5177,7 @@ class Checker {
 
     if (expression.args.length !== expectedArgs) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function URLSearchParams.${method} expects ${expectedArgs} argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -5356,7 +5356,7 @@ class Checker {
       }
 
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:path ${call.method} is not implemented by the current C backend`,
         expression.loc
       )
@@ -5387,7 +5387,7 @@ class Checker {
     if (method === 'parse') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -5410,7 +5410,7 @@ class Checker {
     if (method === 'format') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -5448,7 +5448,7 @@ class Checker {
     if (method === 'basename') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${call.label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -5477,7 +5477,7 @@ class Checker {
 
     if (expression.args.length !== expectedArgs) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${call.label} expects ${expectedArgs} argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -5704,15 +5704,9 @@ class Checker {
     expression.debugRuntimeMethod = method
 
     if (expression.args.length !== 0) {
-      let rootName = 'inox'
-
-      if (path[0] === 'ccjs') {
-        rootName = 'ccjs'
-      }
-
       this.report(
-        'CCJS_ARG_COUNT',
-        `function ${rootName}.__debug.memory expects 0 argument(s), got ${expression.args.length}`,
+        'INOX_ARG_COUNT',
+        `function inox.__debug.memory expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
@@ -5759,7 +5753,7 @@ class Checker {
     }
 
     if (method == null) {
-      this.report('CCJS_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
+      this.report('INOX_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
       expression.valueType = 'unknown'
       return 'unknown'
     }
@@ -5776,7 +5770,7 @@ class Checker {
 
     if (!this.acceptsArgumentCount(params, expression.args.length)) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         this.argumentCountMessage(`method ${expression.callee.property}`, params, expression.args.length),
         expression.loc
       )
@@ -5827,7 +5821,7 @@ class Checker {
 
     if (expression.args.length !== expectedArgCount) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function Math.${method} expects ${expectedArgCount} argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -5858,7 +5852,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function Array.isArray expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -5902,7 +5896,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function Object.${method} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -5914,7 +5908,7 @@ class Checker {
 
       if (argType !== 'unknown' && argType !== 'object' && argType !== 'array') {
         this.report(
-          'CCJS_TYPE_MISMATCH',
+          'INOX_TYPE_MISMATCH',
           `function Object.${method} expects an object or array argument`,
           arg.loc
         )
@@ -6003,7 +5997,7 @@ class Checker {
       }
 
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${receiverName}.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -6054,7 +6048,7 @@ class Checker {
 
     if (expression.args.length < 1 || expression.args.length > 2) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function fetch expects 1 or 2 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -6071,7 +6065,7 @@ class Checker {
 
       if (this.isFetchHttpsLiteral(expression.args[0]) && !this.supportsFetchHttps()) {
         this.report(
-          'CCJS_FETCH',
+          'INOX_FETCH',
           'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice',
           expression.args[0].loc
         )
@@ -6094,7 +6088,7 @@ class Checker {
     if (expression.type !== 'ObjectLiteral') {
       this.checkExpression(expression)
       this.report(
-        'CCJS_FETCH',
+        'INOX_FETCH',
         'fetch init must be an object literal in the current C/libuv fetch slice',
         expression.loc
       )
@@ -6105,7 +6099,7 @@ class Checker {
       if (!isFetchInitOption(property.key)) {
         this.checkExpression(property.value)
         this.report(
-          'CCJS_FETCH',
+          'INOX_FETCH',
           `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`,
           property.loc
         )
@@ -6123,7 +6117,7 @@ class Checker {
 
         if (property.key === 'redirect' && !this.isSupportedFetchRedirectLiteral(property.value)) {
           this.report(
-            'CCJS_FETCH',
+            'INOX_FETCH',
             "fetch init redirect must be 'follow', 'manual' or 'error' in the current C/libuv fetch slice",
             property.value.loc
           )
@@ -6136,7 +6130,7 @@ class Checker {
 
         if (bodyType !== 'string' && bodyType !== 'bytes') {
           this.report(
-            'CCJS_FETCH',
+            'INOX_FETCH',
             'fetch init body must be a string, Buffer or Uint8Array in the current C/libuv fetch slice',
             property.value.loc
           )
@@ -6150,7 +6144,7 @@ class Checker {
 
         if (signalType !== 'object' || signalShape == null || signalShape.builtin !== 'fetch.AbortSignal') {
           this.report(
-            'CCJS_FETCH',
+            'INOX_FETCH',
             'fetch init signal must be an AbortSignal in the current C/libuv fetch slice',
             property.value.loc
           )
@@ -6161,7 +6155,7 @@ class Checker {
       if (property.value.type !== 'ObjectLiteral') {
         this.checkExpression(property.value)
         this.report(
-          'CCJS_FETCH',
+          'INOX_FETCH',
           'fetch init headers must be an object literal in the current C/libuv fetch slice',
           property.value.loc
         )
@@ -6318,7 +6312,7 @@ class Checker {
     if (isUnsupportedRuntimeBuiltinImportSource(statement.source)) {
       const unsupportedMessage = unsupportedRuntimeBuiltinImportMessageFromKnownSource(statement.source)
 
-      this.report('CCJS_NOT_IMPLEMENTED', unsupportedMessage, statement.loc)
+      this.report('INOX_NOT_IMPLEMENTED', unsupportedMessage, statement.loc)
       return
     }
 
@@ -6335,7 +6329,7 @@ class Checker {
     }
 
     this.report(
-      'CCJS_NOT_IMPLEMENTED',
+      'INOX_NOT_IMPLEMENTED',
       `${feature} is not implemented for C without libuv; compile with loopBackend: 'libuv' or --loop-backend libuv`,
       loc
     )
@@ -6365,7 +6359,7 @@ class Checker {
 
     if (expression.args.length !== 0) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function AbortController.abort expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -6391,7 +6385,7 @@ class Checker {
 
     if (expression.args.length !== 0) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function Response.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -6399,7 +6393,7 @@ class Checker {
 
     if (!isSupportedFetchResponseBodyMethod(expression.callee.property)) {
       this.report(
-        'CCJS_FETCH',
+        'INOX_FETCH',
         `Response.${expression.callee.property} is not supported by the current C/libuv fetch slice`,
         expression.loc
       )
@@ -6429,7 +6423,7 @@ class Checker {
     }
 
     this.report(
-      'CCJS_FETCH',
+      'INOX_FETCH',
       'Response.body streams are not supported by the current C/libuv fetch slice',
       expression.loc
     )
@@ -6452,7 +6446,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function Headers.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -6521,7 +6515,7 @@ class Checker {
     const removedInfo = removedFsRuntimeMethodInfo(expression.callee)
 
     if (removedInfo != null && this.isFsRuntimeRootName(removedInfo.root)) {
-      this.report('CCJS_FS_UNSUPPORTED', removedInfo.message, expression.loc)
+      this.report('INOX_FS_UNSUPPORTED', removedInfo.message, expression.loc)
       expression.valueType = 'unknown'
 
       return 'unknown'
@@ -6553,7 +6547,7 @@ class Checker {
     const unsupportedMessage = unsupportedFsRuntimeMethodMessage(info, promisesApi)
 
     if (unsupportedMessage != null) {
-      this.report('CCJS_FS_UNSUPPORTED', unsupportedMessage, expression.loc)
+      this.report('INOX_FS_UNSUPPORTED', unsupportedMessage, expression.loc)
       expression.valueType = 'unknown'
 
       return 'unknown'
@@ -6562,7 +6556,7 @@ class Checker {
     if (method === 'statSync' || method === 'lstatSync') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6579,7 +6573,7 @@ class Checker {
     if (method === 'accessSync') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6596,7 +6590,7 @@ class Checker {
     if (method === 'mkdirSync') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6614,7 +6608,7 @@ class Checker {
     if (method === 'unlinkSync') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6630,7 +6624,7 @@ class Checker {
     if (method === 'rmSync') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6649,7 +6643,7 @@ class Checker {
     if (method === 'renameSync') {
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6666,7 +6660,7 @@ class Checker {
     if (method === 'readFileSync') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6699,7 +6693,7 @@ class Checker {
 
       if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6725,7 +6719,7 @@ class Checker {
     if (method === 'writeFileSync') {
       if (expression.args.length < 2 || expression.args.length > 3) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 or 3 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6743,7 +6737,7 @@ class Checker {
     if (method === 'appendFileSync') {
       if (expression.args.length < 2 || expression.args.length > 3) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 or 3 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6761,7 +6755,7 @@ class Checker {
     if (method === 'copyFileSync') {
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6778,7 +6772,7 @@ class Checker {
     if (method === 'realpathSync' || method === 'readlinkSync') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6794,7 +6788,7 @@ class Checker {
     if (method === 'symlinkSync') {
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6811,7 +6805,7 @@ class Checker {
     if (method === 'readFile') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6841,7 +6835,7 @@ class Checker {
     if (method === 'stat' || method === 'lstat') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6859,7 +6853,7 @@ class Checker {
     if (method === 'access') {
       if (expression.args.length < 1 || expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6885,7 +6879,7 @@ class Checker {
 
       if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6909,7 +6903,7 @@ class Checker {
     if (method === 'unlink') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6934,7 +6928,7 @@ class Checker {
 
       if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6959,7 +6953,7 @@ class Checker {
     if (method === 'rename') {
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -6985,7 +6979,7 @@ class Checker {
 
       if (expression.args.length < 1 || expression.args.length > maxArgs) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -7020,7 +7014,7 @@ class Checker {
 
       if (expression.args.length < 2 || expression.args.length > maxArgs) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -7039,7 +7033,7 @@ class Checker {
     if (method === 'copyFile') {
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -7057,7 +7051,7 @@ class Checker {
     if (method === 'realpath' || method === 'readlink') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -7074,7 +7068,7 @@ class Checker {
     if (method === 'symlink') {
       if (expression.args.length !== 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${label} expects 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -7099,7 +7093,7 @@ class Checker {
 
     if (expression.args.length < 2 || expression.args.length > maxArgs) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -7233,7 +7227,7 @@ class Checker {
 
     if (arg.type !== 'ObjectLiteral') {
       this.report(
-        'CCJS_TYPE_MISMATCH',
+        'INOX_TYPE_MISMATCH',
         `${label} options must be an object literal in the current compiler slice`,
         arg.loc
       )
@@ -7255,7 +7249,7 @@ class Checker {
       }
 
       if (!allowedOption) {
-        this.report('CCJS_UNKNOWN_FIELD', `unknown ${label} option ${property.key}`, property.loc)
+        this.report('INOX_UNKNOWN_FIELD', `unknown ${label} option ${property.key}`, property.loc)
         this.checkExpression(property.value)
         continue
       }
@@ -7268,7 +7262,7 @@ class Checker {
 
       if (valueType !== 'boolean' || property.value.type !== 'BooleanLiteral') {
         this.report(
-          'CCJS_TYPE_MISMATCH',
+          'INOX_TYPE_MISMATCH',
           `${label} option ${property.key} must be a boolean literal in the current compiler slice`,
           property.value.loc
         )
@@ -7302,7 +7296,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function JSON.${method} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -7832,7 +7826,7 @@ class Checker {
 
     if (expression.args.length > 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function Promise.${method} expects at most 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -7881,7 +7875,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `promise.${property} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -7947,7 +7941,7 @@ class Checker {
 
     if (expression.async === true) {
       this.report(
-        'CCJS_ASYNC_CALLBACK',
+        'INOX_ASYNC_CALLBACK',
         'async Promise callbacks are not supported in the current compiler slice; use a named async helper and await it explicitly',
         expression.loc
       )
@@ -7956,7 +7950,7 @@ class Checker {
 
     if (expression.params.length > params.length) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `${label} expects at most ${params.length} parameter(s), got ${expression.params.length}`,
         expression.loc
       )
@@ -8095,7 +8089,7 @@ class Checker {
     }
 
     this.report(
-      'CCJS_TIMER_REF_UNREF',
+      'INOX_TIMER_REF_UNREF',
       'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default',
       expression.loc
     )
@@ -8276,7 +8270,7 @@ class Checker {
     if (timerClearMethodName(method) != null) {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function ${method} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -8294,7 +8288,7 @@ class Checker {
     if (method === 'setImmediate') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function setImmediate expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -8308,7 +8302,7 @@ class Checker {
 
     if (expression.args.length !== 2) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function ${method} expects 2 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -8387,7 +8381,7 @@ class Checker {
     if (arg.type === 'ArrowFunctionExpression') {
       if (arg.async === true) {
         this.report(
-          'CCJS_ASYNC_TIMER_CALLBACK',
+          'INOX_ASYNC_TIMER_CALLBACK',
           'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly',
           arg.loc
         )
@@ -8410,7 +8404,7 @@ class Checker {
 
     if (params != null && params.length !== functionType.params.length) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `function callback expects ${functionType.params.length} argument(s), got ${params.length}`,
         arg.loc
       )
@@ -8418,7 +8412,7 @@ class Checker {
 
     if (symbol != null && (symbol.async === true || symbol.returnType === 'promise')) {
       this.report(
-        'CCJS_ASYNC_TIMER_CALLBACK',
+        'INOX_ASYNC_TIMER_CALLBACK',
         'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly',
         arg.loc
       )
@@ -8439,7 +8433,7 @@ class Checker {
   checkCollectionArgCount(expression: AnyNode, name: string, expected: number): void {
     if (expression.args.length !== expected) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `${name} expects ${expected} argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -8479,7 +8473,7 @@ class Checker {
       expression.valueType = 'number'
 
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `array.${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report('INOX_ARG_COUNT', `array.${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       }
 
       if (expression.args[0] != null) {
@@ -8508,7 +8502,7 @@ class Checker {
       expression.nullable = true
 
       if (expression.args.length !== 0) {
-        this.report('CCJS_ARG_COUNT', `array.pop expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report('INOX_ARG_COUNT', `array.pop expects 0 argument(s), got ${expression.args.length}`, expression.loc)
       }
 
       for (let index = 0; index < expression.args.length; index = index + 1) {
@@ -8525,7 +8519,7 @@ class Checker {
 
       if (expression.args.length > 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `array.join expects 0 or 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -8554,7 +8548,7 @@ class Checker {
       expression.valueType = 'boolean'
 
       if (expression.args.length !== 1) {
-        this.report('CCJS_ARG_COUNT', `array.includes expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report('INOX_ARG_COUNT', `array.includes expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       }
 
       if (expression.args[0] != null) {
@@ -8583,7 +8577,7 @@ class Checker {
     if (expression.callee.property === 'slice') {
       if (expression.args.length > 2) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `array.slice expects 0, 1 or 2 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -8602,7 +8596,7 @@ class Checker {
     if (expression.callee.property === 'sort') {
       if (expression.args.length > 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `array.sort expects 0 or 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -8625,7 +8619,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `array.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -8755,7 +8749,7 @@ class Checker {
 
     if (expression.async === true) {
       this.report(
-        'CCJS_ASYNC_CALLBACK',
+        'INOX_ASYNC_CALLBACK',
         'async Array callbacks are not supported in the current compiler slice; use a synchronous callback',
         expression.loc
       )
@@ -8764,7 +8758,7 @@ class Checker {
 
     if (expression.params.length > params.length) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `array callback expects at most ${params.length} parameter(s), got ${expression.params.length}`,
         expression.loc
       )
@@ -8939,12 +8933,12 @@ class Checker {
     }
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `String expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('INOX_ARG_COUNT', `String expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       return 'string'
     }
 
     if (argTypes[0] !== 'boolean' && argTypes[0] !== 'null' && argTypes[0] !== 'number' && argTypes[0] !== 'string') {
-      this.report('CCJS_TYPE_MISMATCH', `cannot convert ${argTypes[0]} to string with String`, expression.args[0].loc)
+      this.report('INOX_TYPE_MISMATCH', `cannot convert ${argTypes[0]} to string with String`, expression.args[0].loc)
     }
 
     return 'string'
@@ -8971,7 +8965,7 @@ class Checker {
     expression.nullable = true
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `Number expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('INOX_ARG_COUNT', `Number expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       return 'number'
     }
 
@@ -9010,7 +9004,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `${castName} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9051,7 +9045,7 @@ class Checker {
 
     if (expression.args.length > 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `number.toString expects 0 or 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9092,7 +9086,7 @@ class Checker {
     expression.stringRuntimeMethod = 'charCodeAt'
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `string.charCodeAt expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('INOX_ARG_COUNT', `string.charCodeAt expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       return 'number'
     }
 
@@ -9131,7 +9125,7 @@ class Checker {
     }
 
     if (expression.args.length !== 0) {
-      this.report('CCJS_ARG_COUNT', `string.${method} expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('INOX_ARG_COUNT', `string.${method} expects 0 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
     expression.valueType = 'string'
@@ -9158,7 +9152,7 @@ class Checker {
     }
 
     if (expression.args.length !== 0) {
-      this.report('CCJS_ARG_COUNT', `string.toUpperCase expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('INOX_ARG_COUNT', `string.toUpperCase expects 0 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
     expression.valueType = 'string'
@@ -9187,7 +9181,7 @@ class Checker {
 
     if (expression.args.length < 1 || expression.args.length > 2) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `string.padStart expects 1 or 2 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9239,7 +9233,7 @@ class Checker {
 
     if (expression.args.length < 1 || expression.args.length > 2) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `string.${method} expects 1 or 2 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9291,7 +9285,7 @@ class Checker {
 
     if (expression.args.length < 1 || expression.args.length > 2) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `string.slice expects 1 or 2 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9334,7 +9328,7 @@ class Checker {
     }
 
     if (expression.args.length !== 1) {
-      this.report('CCJS_ARG_COUNT', `string.split expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report('INOX_ARG_COUNT', `string.split expects 1 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
     if (expression.args[0] != null) {
@@ -9382,7 +9376,7 @@ class Checker {
 
     if (expression.args.length < 1 || expression.args.length > maxArgs) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         stringPredicateArgCountMessage(method, expression.args.length),
         expression.loc
       )
@@ -9485,7 +9479,7 @@ class Checker {
 
       if (expression.args.length !== 0) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `AbortController constructor expects 0 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -9500,7 +9494,7 @@ class Checker {
     if (binaryConstructorNameFromPath(expression.callee.path) === 'Uint8Array') {
       if (expression.args.length !== 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `Uint8Array constructor expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -9508,7 +9502,7 @@ class Checker {
 
       if (expression.args[0] != null && argTypes[0] !== 'number' && argTypes[0] !== 'array') {
         this.report(
-          'CCJS_TYPE_MISMATCH',
+          'INOX_TYPE_MISMATCH',
           `Uint8Array constructor expects number or number[], got ${argTypes[0]}`,
           expression.args[0].loc
         )
@@ -9544,7 +9538,7 @@ class Checker {
     }
 
     if (symbol == null || (symbol.kind !== 'class' && symbol.constructable !== true)) {
-      this.report('CCJS_UNKNOWN_NAME', `unknown class ${constructorName}`, expression.callee.loc)
+      this.report('INOX_UNKNOWN_NAME', `unknown class ${constructorName}`, expression.callee.loc)
       return 'object'
     }
 
@@ -9561,7 +9555,7 @@ class Checker {
 
     if (constructorParams.length !== expression.args.length) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `class ${constructorName} constructor expects ${constructorParams.length} argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9615,7 +9609,7 @@ class Checker {
 
     if (isUnsupportedUrlRuntimeMethod(importedName)) {
       this.report(
-        'CCJS_NOT_IMPLEMENTED',
+        'INOX_NOT_IMPLEMENTED',
         `node:url ${importedName} is not implemented by the current C backend`,
         expression.loc
       )
@@ -9630,7 +9624,7 @@ class Checker {
     if (importedName === 'URLSearchParams') {
       if (expression.args.length > 1) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `URLSearchParams constructor expects 0 or 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
@@ -9641,7 +9635,7 @@ class Checker {
 
         if (argType !== 'string' && argType !== 'object') {
           this.report(
-            'CCJS_TYPE_MISMATCH',
+            'INOX_TYPE_MISMATCH',
             `URLSearchParams constructor expects string or object, got ${argType}`,
             expression.args[0].loc
           )
@@ -9690,7 +9684,7 @@ class Checker {
 
     if (expression.args.length < 1 || expression.args.length > 2) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `URL constructor expects 1 or 2 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9735,7 +9729,7 @@ class Checker {
 
     if (expression.args.length !== 1) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `Promise constructor expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9962,7 +9956,7 @@ class Checker {
   checkErrorConstructorExpression(expression: AnyNode, argTypes: ValueType[]): void {
     if (expression.args.length > 2) {
       this.report(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `Error constructor expects at most 2 argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -9986,7 +9980,7 @@ class Checker {
 
     if (options.type !== 'ObjectLiteral') {
       this.report(
-        'CCJS_TYPE_MISMATCH',
+        'INOX_TYPE_MISMATCH',
         'Error options must be an object literal in the current compiler slice',
         options.loc
       )
@@ -9997,7 +9991,7 @@ class Checker {
 
     for (const property of properties) {
       if (property.key !== 'code' && property.key !== 'cause') {
-        this.report('CCJS_UNKNOWN_FIELD', `unknown Error option ${property.key}`, property.loc)
+        this.report('INOX_UNKNOWN_FIELD', `unknown Error option ${property.key}`, property.loc)
         continue
       }
 
@@ -10014,7 +10008,7 @@ class Checker {
 
         if (property.value.type !== 'NullLiteral' && causeType !== 'object') {
           this.report(
-            'CCJS_TYPE_MISMATCH',
+            'INOX_TYPE_MISMATCH',
             'Error cause must be an Error object or null in the current compiler slice',
             property.value.loc
           )
@@ -10047,7 +10041,7 @@ class Checker {
   checkArrowFunctionExpression(expression: AnyNode, functionType?: AnyNode | null): void {
     if (expression.async === true) {
       this.report(
-        'CCJS_ASYNC_CALLBACK',
+        'INOX_ASYNC_CALLBACK',
         'async arrow callbacks are not supported in the current compiler slice; use an async function declaration',
         expression.loc
       )
@@ -10075,7 +10069,7 @@ class Checker {
     try {
       if (functionType != null && expression.params.length > functionType.params.length) {
         this.report(
-          'CCJS_ARG_COUNT',
+          'INOX_ARG_COUNT',
           `function callback expects at most ${functionType.params.length} parameter(s), got ${expression.params.length}`,
           expression.loc
         )
@@ -10348,7 +10342,7 @@ class Checker {
         extendsLoc = statement.extendsLoc
       }
 
-      this.report('CCJS_CLASS_EXTENDS', 'class inheritance is not supported', extendsLoc)
+      this.report('INOX_CLASS_EXTENDS', 'class inheritance is not supported', extendsLoc)
     }
 
     let fields: AnyNode[] = []
@@ -10365,11 +10359,11 @@ class Checker {
           fieldStaticLoc = field.staticLoc
         }
 
-        this.report('CCJS_CLASS_STATIC', 'static class fields are not supported', fieldStaticLoc)
+        this.report('INOX_CLASS_STATIC', 'static class fields are not supported', fieldStaticLoc)
       }
 
       if (fieldNames.has(field.name)) {
-        this.report('CCJS_REDECLARED_NAME', `field ${field.name} is already declared in this class`, field.loc)
+        this.report('INOX_REDECLARED_NAME', `field ${field.name} is already declared in this class`, field.loc)
       }
 
       fieldNames.add(field.name)
@@ -10383,15 +10377,15 @@ class Checker {
           methodStaticLoc = method.staticLoc
         }
 
-        this.report('CCJS_CLASS_STATIC', 'static class methods are not supported', methodStaticLoc)
+        this.report('INOX_CLASS_STATIC', 'static class methods are not supported', methodStaticLoc)
       }
 
       if (methodNames.has(method.name)) {
-        this.report('CCJS_REDECLARED_NAME', `method ${method.name} is already declared in this class`, method.loc)
+        this.report('INOX_REDECLARED_NAME', `method ${method.name} is already declared in this class`, method.loc)
       }
 
       if (fieldNames.has(method.name)) {
-        this.report('CCJS_REDECLARED_NAME', `method ${method.name} conflicts with a class field`, method.loc)
+        this.report('INOX_REDECLARED_NAME', `method ${method.name} conflicts with a class field`, method.loc)
       }
 
       methodNames.add(method.name)
@@ -10490,7 +10484,7 @@ class Checker {
 
       if (property == null) {
         if (field.optional !== true) {
-          this.report('CCJS_MISSING_FIELD', `missing field ${field.name}`, expression.loc)
+          this.report('INOX_MISSING_FIELD', `missing field ${field.name}`, expression.loc)
         }
         continue
       }
@@ -10574,7 +10568,7 @@ class Checker {
 
     for (const property of expression.properties) {
       if (shape.dynamic !== true && this.findShapeField(shape, property.key) == null) {
-        this.report('CCJS_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
+        this.report('INOX_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
       }
     }
   }
@@ -10783,7 +10777,7 @@ class Checker {
 
     for (const property of expression.properties) {
       if (keys.has(property.key)) {
-        this.report('CCJS_DUPLICATE_OBJECT_KEY', `duplicate object property ${property.key}`, property.loc)
+        this.report('INOX_DUPLICATE_OBJECT_KEY', `duplicate object property ${property.key}`, property.loc)
       }
 
       keys.add(property.key)
@@ -11054,7 +11048,7 @@ class Checker {
 
     if (!isSwitchableType(discriminantType)) {
       this.report(
-        'CCJS_SWITCH_TYPE',
+        'INOX_SWITCH_TYPE',
         `switch discriminant must be number, string or boolean, got ${discriminantType}`,
         statement.discriminant.loc
       )
@@ -11066,7 +11060,7 @@ class Checker {
       for (const item of statement.cases) {
         if (item.test == null) {
           if (hasDefault) {
-            this.report('CCJS_DUPLICATE_DEFAULT', 'switch can only have one default branch', item.loc)
+            this.report('INOX_DUPLICATE_DEFAULT', 'switch can only have one default branch', item.loc)
           }
 
           hasDefault = true
@@ -11075,7 +11069,7 @@ class Checker {
 
           if (!isMatchingSwitchCaseType(caseType, discriminantType)) {
             this.report(
-              'CCJS_SWITCH_TYPE',
+              'INOX_SWITCH_TYPE',
               `switch case type ${caseType} does not match discriminant type ${discriminantType}`,
               item.test.loc
             )
@@ -11099,7 +11093,7 @@ class Checker {
     const conditionType = this.checkExpression(expression)
 
     if (!isConditionValueType(conditionType)) {
-      this.report('CCJS_CONDITION_TYPE', `condition must be boolean or truthy-compatible, got ${conditionType}`, expression.loc)
+      this.report('INOX_CONDITION_TYPE', `condition must be boolean or truthy-compatible, got ${conditionType}`, expression.loc)
     }
   }
 
@@ -11303,7 +11297,7 @@ class Checker {
       return
     }
 
-    this.report('CCJS_WEAK_ACCESS', 'nullable weak value access requires optional chaining or a prior null check', loc)
+    this.report('INOX_WEAK_ACCESS', 'nullable weak value access requires optional chaining or a prior null check', loc)
   }
 
   inferNullableAccessValueType(expression: AnyNode): ValueType | null {
@@ -11442,7 +11436,7 @@ class Checker {
     }
 
     if (symbol == null) {
-      this.report('CCJS_UNKNOWN_NAME', `unknown name ${root}`, reference.loc)
+      this.report('INOX_UNKNOWN_NAME', `unknown name ${root}`, reference.loc)
       return null
     }
 
@@ -11451,7 +11445,7 @@ class Checker {
 
   declareTypeAlias(item: TypeAliasDeclarationNode): void {
     if (this.types.has(item.name)) {
-      this.report('CCJS_REDECLARED_NAME', `type ${item.name} is already declared`, item.loc)
+      this.report('INOX_REDECLARED_NAME', `type ${item.name} is already declared`, item.loc)
       return
     }
 
@@ -11528,7 +11522,7 @@ class Checker {
           const cycleText: string = this.formatOwnershipCycle(cycle)
 
           this.report(
-            'CCJS_OWNERSHIP_CYCLE',
+            'INOX_OWNERSHIP_CYCLE',
             'strong ownership cycle detected: ' + cycleText + '. Mark one back-reference as weak.',
             cycleLoc
           )
@@ -12108,7 +12102,7 @@ class Checker {
 
     }
 
-    this.report('CCJS_UNKNOWN_TYPE', `unknown type ${name}`, loc)
+    this.report('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc)
 
     return {
       valueType: 'unknown',
@@ -12404,7 +12398,7 @@ class Checker {
       }
 
       this.report(
-        'CCJS_WEAK_TYPE',
+        'INOX_WEAK_TYPE',
         `weak field ${field.name} must target an object or class type in the current compiler slice`,
         weakLoc
       )
@@ -13100,7 +13094,7 @@ class Checker {
 
   declare(name: string, symbol: SymbolInfo, loc: SourceLocation): void {
     if (this.scope.hasOwn(name)) {
-      this.report('CCJS_REDECLARED_NAME', `name ${name} is already declared in this scope`, loc)
+      this.report('INOX_REDECLARED_NAME', `name ${name} is already declared in this scope`, loc)
       return
     }
 
@@ -13232,7 +13226,7 @@ class Checker {
         actualLabel = `${actual} | null`
       }
 
-      this.report('CCJS_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
+      this.report('INOX_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
     }
   }
 

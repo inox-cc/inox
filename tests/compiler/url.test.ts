@@ -29,19 +29,19 @@ export function main(): void {
 
   assert.deepEqual(result.ir.features, ['collections', 'map-get-null', 'objects', 'runtime-values', 'string-bytes', 'url'])
   assert.deepEqual(result.ir.runtimeRequirements, ['collections', 'managed-values', 'objects', 'string-bytes', 'url'])
-  assert.match(result.code, /#include "ccjs\/url\.h"/)
-  assert.match(result.code, /ccjs_url_path_to_file_url\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_new\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_file_url_to_path\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_set_field\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_search_params_new\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_search_params_get\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_search_params_has\(/)
-  assert.match(result.code, /ccjs_url_search_params_append\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_search_params_set\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_search_params_delete\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_search_params_to_string\(&ccjs_default_allocator,/)
-  assert.match(result.code, /static const ccjs_field_info ccjs_shape_url_\d+_fields\[\]/)
+  assert.match(result.code, /#include "inox\/url\.h"/)
+  assert.match(result.code, /inox_url_path_to_file_url\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_new\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_file_url_to_path\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_set_field\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_search_params_new\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_search_params_get\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_search_params_has\(/)
+  assert.match(result.code, /inox_url_search_params_append\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_search_params_set\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_search_params_delete\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_search_params_to_string\(&inox_default_allocator,/)
+  assert.match(result.code, /static const inox_field_info inox_shape_url_\d+_fields\[\]/)
 })
 
 test('lowers default node:url namespace helpers', () => {
@@ -59,8 +59,8 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_url_path_to_file_url\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_url_file_url_to_path\(&ccjs_default_allocator,/)
+  assert.match(result.code, /inox_url_path_to_file_url\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_url_file_url_to_path\(&inox_default_allocator,/)
 })
 
 test('reports unsupported node:url methods at compile time only', () => {
@@ -82,7 +82,7 @@ parse('https://example.com/')
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(

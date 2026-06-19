@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_SWITCH_CASE
+// @diagnostic INOX_C_SWITCH_CASE
 
 function choose(label: string): number {
   return 1

@@ -19,7 +19,7 @@ test('generated C node:os helpers compile and run with runtime sources', async (
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-os-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-os-'))
   const source = join(dir, 'node-os.c')
   const output = join(dir, 'node-os')
 

@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_NULLISH
+// @diagnostic INOX_C_UNSUPPORTED_EXPR
 
 function coalesce(value: unknown): unknown {
   return value ?? 'Ada'

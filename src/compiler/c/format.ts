@@ -800,7 +800,7 @@ function isGeneratedCControlStart(line: string): boolean {
 function isGeneratedCGotoLabel(line: string): boolean {
   const trimmed = line.trim()
 
-  if (!generatedCStringStartsWithAt(trimmed, 'ccjs_', 0)) {
+  if (!generatedCStringStartsWithAt(trimmed, 'inox_', 0)) {
     return false
   }
 

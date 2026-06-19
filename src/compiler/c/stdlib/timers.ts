@@ -85,15 +85,15 @@ export function isTimerStartCallExpression(expression: AnyNode | null | undefine
 
 function timerStartCallNameFor(method: string | null): string | null {
   if (method === 'setImmediate') {
-    return 'ccjs_loop_queue_immediate'
+    return 'inox_loop_queue_immediate'
   }
 
   if (method === 'setInterval') {
-    return 'ccjs_loop_set_interval'
+    return 'inox_loop_set_interval'
   }
 
   if (method === 'setTimeout') {
-    return 'ccjs_loop_set_timeout'
+    return 'inox_loop_set_timeout'
   }
 
   return null
@@ -143,7 +143,7 @@ function timerOutName(options: PreparedCallOptions, context: TimerFunctionContex
   }
 
   if (options.asValue === true) {
-    return nextCName(context, 'ccjs_timer_handle')
+    return nextCName(context, 'inox_timer_handle')
   }
 
   return null
@@ -191,7 +191,7 @@ export function emitTimerVariableDeclaration(
       })
 
       if (timerCall != null) {
-        const lines = [`ccjs_timer_handle* ${statement.name} = 0;`]
+        const lines = [`inox_timer_handle* ${statement.name} = 0;`]
         appendTimerLines(lines, timerCall.lines)
         context.variables.set(statement.name, 'timer')
 
@@ -201,11 +201,11 @@ export function emitTimerVariableDeclaration(
 
     if (init != null && init.type === 'CallExpression' && cTimerClearCallName(init.callee) != null) {
       context.diagnostics.push(
-        diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls return void and cannot initialize a value', statement.loc)
+        diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls return void and cannot initialize a value', statement.loc)
       )
       context.variables.set(statement.name, 'timer')
 
-      return [`ccjs_timer_handle* ${statement.name} = 0;`]
+      return [`inox_timer_handle* ${statement.name} = 0;`]
     }
 
     return null
@@ -219,7 +219,7 @@ export function emitTimerVariableDeclaration(
   const lines: string[] = []
 
   appendTimerLines(lines, handle.lines)
-  lines.push(`ccjs_timer_handle* ${statement.name} = ${handle.expression};`)
+  lines.push(`inox_timer_handle* ${statement.name} = ${handle.expression};`)
 
   context.variables.set(statement.name, 'timer')
 
@@ -251,7 +251,7 @@ export function emitPreparedTimerCallExpression(
     const lines: string[] = []
 
     appendTimerLines(lines, handle.lines)
-    lines.push(`ccjs_loop_clear_timer(${handle.expression});`)
+    lines.push(`inox_loop_clear_timer(${handle.expression});`)
 
     return {
       lines: lines,
@@ -268,7 +268,7 @@ export function emitPreparedTimerCallExpression(
   if (context.statusReturn && !context.externalEventLoop) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_TIMER_CALLBACK',
+        'INOX_C_TIMER_CALLBACK',
         'timer calls inside runtime callbacks need callback loop capture and are not supported by the current C backend slice',
         expression.loc
       )
@@ -283,7 +283,7 @@ export function emitPreparedTimerCallExpression(
   if (timerStartCallRequiresHandle(method) && options.out == null && options.asValue !== true) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_TIMER_HANDLE',
+        'INOX_C_TIMER_HANDLE',
         'setInterval requires a timer handle so it can be cleared by the current C backend slice',
         expression.loc
       )
@@ -299,25 +299,25 @@ export function emitPreparedTimerCallExpression(
 
   const out = timerOutName(options, context)
   const callback = dependencies.emitRuntimeCallbackValue(expression.args[0], timerCallbackFunctionType(), context)
-  const callbackContext = nextCName(context, 'ccjs_timer_ctx')
+  const callbackContext = nextCName(context, 'inox_timer_ctx')
   const lines: string[] = []
 
   if (out != null && options.out == null) {
-    lines.push(`ccjs_timer_handle* ${out} = 0;`)
+    lines.push(`inox_timer_handle* ${out} = 0;`)
   }
 
   appendTimerLines(lines, callback.lines)
-  lines.push(`ccjs_value* ${callbackContext} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+  lines.push(`inox_value* ${callbackContext} = inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
   lines.push(`if (${callbackContext} == 0) ${emitFailureStatement(context)}`)
   lines.push(`*${callbackContext} = ${callback.expression};`)
-  lines.push(`ccjs_retain(*${callbackContext});`)
+  lines.push(`inox_retain(*${callbackContext});`)
   const outArgument = timerOutArgument(out)
 
   if (!timerStartCallHasDelay(method)) {
     lines.push(
-      `if (${callName}(${emitEventLoopReference(context)}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
+      `if (${callName}(${emitEventLoopReference(context)}, inox_timer_callback_run, ${callbackContext}, inox_timer_callback_finalize, ${outArgument}) != INOX_OK) {`
     )
-    lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
+    lines.push(`  inox_timer_callback_finalize(${callbackContext});`)
     lines.push(`  ${emitFailureStatement(context)}`)
     lines.push('}')
 
@@ -331,9 +331,9 @@ export function emitPreparedTimerCallExpression(
 
   appendTimerLines(lines, delay.lines)
   lines.push(
-    `if (${callName}(${emitEventLoopReference(context)}, ${delay.expression}, ccjs_timer_callback_run, ${callbackContext}, ccjs_timer_callback_finalize, ${outArgument}) != CCJS_OK) {`
+    `if (${callName}(${emitEventLoopReference(context)}, ${delay.expression}, inox_timer_callback_run, ${callbackContext}, inox_timer_callback_finalize, ${outArgument}) != INOX_OK) {`
   )
-  lines.push(`  ccjs_timer_callback_finalize(${callbackContext});`)
+  lines.push(`  inox_timer_callback_finalize(${callbackContext});`)
   lines.push(`  ${emitFailureStatement(context)}`)
   lines.push('}')
 
@@ -376,11 +376,11 @@ export function emitPreparedTimerHandleExpression(
 
   if (expression != null) {
     context.diagnostics.push(
-      diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls require a timer handle value', expression.loc)
+      diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls require a timer handle value', expression.loc)
     )
   } else {
     context.diagnostics.push(
-      diagnostic('CCJS_C_TIMER_HANDLE', 'timer clear calls require a timer handle value')
+      diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls require a timer handle value')
     )
   }
 

@@ -72,8 +72,8 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_array_len/)
-  assert.match(result.code, /ccjs_array_get/)
+  assert.match(result.code, /inox_array_len/)
+  assert.match(result.code, /inox_array_get/)
 })
 
 test('compiles typed object shape field lookup through helper result', () => {
@@ -116,6 +116,6 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_array_get/)
-  assert.match(result.code, /ccjs_object_get_known/)
+  assert.match(result.code, /inox_array_get/)
+  assert.match(result.code, /inox_object_get_known/)
 })

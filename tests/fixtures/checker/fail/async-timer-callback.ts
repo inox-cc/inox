@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_ASYNC_TIMER_CALLBACK
+// @diagnostic INOX_ASYNC_TIMER_CALLBACK
 
 export function main(): void {
   setTimeout(async () => {

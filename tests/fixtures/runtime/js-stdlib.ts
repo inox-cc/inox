@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_NULLISH
+// @diagnostic INOX_C_UNSUPPORTED_EXPR
 
 const started = Date.now()
 const precise = performance.now()

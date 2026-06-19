@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_DUPLICATE_DEFAULT
+// @diagnostic INOX_DUPLICATE_DEFAULT
 
 export function main(): void {
   switch (1) {

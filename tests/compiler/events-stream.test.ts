@@ -77,5 +77,5 @@ console.log('ok')
     }
   )
 
-  assert.doesNotMatch(result.code, /ccjs_events|ccjs_stream|events\.h|stream\.h/)
+  assert.doesNotMatch(result.code, /inox_events|inox_stream|events\.h|stream\.h/)
 })

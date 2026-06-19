@@ -138,7 +138,7 @@ export function emitPreparedFetchCallExpression(
 
     registerEventLoop(context)
 
-    const out = preparedCallOut(options, context, 'ccjs_promise')
+    const out = preparedCallOut(options, context, 'inox_promise')
     const valueType = resolveFetchPromiseValueType(expression, method)
 
     if (options.owned !== false) {
@@ -146,14 +146,14 @@ export function emitPreparedFetchCallExpression(
     }
 
     if (method === 'fetch') {
-      const url = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
+      const url = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fetch_url')
       const init = emitPreparedFetchInitOperand(expression, context, dependencies)
       let call = ''
 
       if (init.expression === '0') {
-        call = `ccjs_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`
+        call = `inox_fetch(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, &${out})`
       } else {
-        call = `ccjs_fetch_with_init(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, ${init.expression}, &${out})`
+        call = `inox_fetch_with_init(${emitEventLoopReference(context)}, ${url.bytes}, ${url.length}, ${init.expression}, &${out})`
       }
 
       const lines: string[] = []
@@ -177,13 +177,13 @@ export function emitPreparedFetchCallExpression(
       appendLines(lines, response.lines)
       lines.push(
         emitRuntimeTypeCheck(
-          `${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`,
+          `${response.expression}.tag != INOX_TAG_OBJECT || ${response.expression}.as.ref == 0`,
           context
         )
       )
       lines.push(
         emitStatusCheck(
-          `ccjs_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
+          `inox_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
           context
         )
       )
@@ -210,20 +210,20 @@ export function emitPreparedFetchHeadersCallExpression(
 
   if (method === 'headersGet' || method === 'headersHas') {
     const headers = dependencies.emitCValueExpression(expression.callee.object, context)
-    const name = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_header_name')
+    const name = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fetch_header_name')
     const lines: string[] = []
 
     appendLines(lines, headers.lines)
     lines.push(
-      emitRuntimeTypeCheck(`${headers.expression}.tag != CCJS_TAG_OBJECT || ${headers.expression}.as.ref == 0`, context)
+      emitRuntimeTypeCheck(`${headers.expression}.tag != INOX_TAG_OBJECT || ${headers.expression}.as.ref == 0`, context)
     )
     appendLines(lines, name.lines)
 
     if (method === 'headersHas') {
-      const out = preparedCallOut(options, context, 'ccjs_fetch_header_has')
+      const out = preparedCallOut(options, context, 'inox_fetch_header_has')
       lines.push(`int ${out} = 0;`)
       lines.push(
-        emitStatusCheck(`ccjs_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
+        emitStatusCheck(`inox_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
       )
 
       return {
@@ -233,7 +233,7 @@ export function emitPreparedFetchHeadersCallExpression(
       }
     }
 
-    const out = preparedCallOut(options, context, 'ccjs_fetch_header_value')
+    const out = preparedCallOut(options, context, 'inox_fetch_header_value')
 
     if (options.owned !== false) {
       registerOwnedValue(context, out)
@@ -242,7 +242,7 @@ export function emitPreparedFetchHeadersCallExpression(
     appendLines(lines, emitPrepareOwnedValueWrite(out))
     lines.push(
       emitStatusCheck(
-        `ccjs_fetch_headers_get(&ccjs_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
+        `inox_fetch_headers_get(&inox_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
         context
       )
     )
@@ -281,16 +281,16 @@ export function emitPreparedFetchInitOperand(
   let method: PreparedStringBytesOperand = emptyStringBytesOperand()
   let redirect: PreparedStringBytesOperand = emptyStringBytesOperand()
   let body: PreparedStringBytesOperand = emptyStringBytesOperand()
-  let signal: PreparedExpression = { lines: [], expression: 'ccjs_undefined_value()' }
+  let signal: PreparedExpression = { lines: [], expression: 'inox_undefined_value()' }
   let headersExpression = '0'
   let headerCount = '0'
 
   if (methodValue != null) {
-    method = dependencies.emitPreparedStringBytesOperand(methodValue, context, 'ccjs_fetch_method')
+    method = dependencies.emitPreparedStringBytesOperand(methodValue, context, 'inox_fetch_method')
   }
 
   if (redirectValue != null) {
-    redirect = dependencies.emitPreparedStringBytesOperand(redirectValue, context, 'ccjs_fetch_redirect')
+    redirect = dependencies.emitPreparedStringBytesOperand(redirectValue, context, 'inox_fetch_redirect')
   }
 
   if (bodyValue != null) {
@@ -304,11 +304,11 @@ export function emitPreparedFetchInitOperand(
   appendLines(lines, method.lines)
 
   if (headersValue != null && headersValue.type === 'ObjectLiteral' && headersValue.properties.length > 0) {
-    const headersName = nextCName(context, 'ccjs_fetch_headers')
+    const headersName = nextCName(context, 'inox_fetch_headers')
     const headerInitializers: string[] = []
 
     for (const property of headersValue.properties) {
-      const value = dependencies.emitPreparedStringBytesOperand(property.value, context, 'ccjs_fetch_header')
+      const value = dependencies.emitPreparedStringBytesOperand(property.value, context, 'inox_fetch_header')
 
       appendLines(lines, value.lines)
       headerInitializers.push(
@@ -317,7 +317,7 @@ export function emitPreparedFetchInitOperand(
     }
 
     lines.push(
-      `ccjs_fetch_header ${headersName}[${headersValue.properties.length}] = { ${joinStrings(headerInitializers, ', ')} };`
+      `inox_fetch_header ${headersName}[${headersValue.properties.length}] = { ${joinStrings(headerInitializers, ', ')} };`
     )
     headersExpression = headersName
     headerCount = `${headersValue.properties.length}`
@@ -327,10 +327,10 @@ export function emitPreparedFetchInitOperand(
   appendLines(lines, signal.lines)
   appendLines(lines, redirect.lines)
 
-  const initName = nextCName(context, 'ccjs_fetch_init')
+  const initName = nextCName(context, 'inox_fetch_init')
 
   lines.push(
-    `ccjs_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length}, ${signal.expression}, ${redirect.bytes}, ${redirect.length} };`
+    `inox_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length}, ${signal.expression}, ${redirect.bytes}, ${redirect.length} };`
   )
 
   return {
@@ -360,16 +360,16 @@ export function emitPreparedFetchSignalOperand(
 ): PreparedExpression {
   if (expression.type === 'MemberExpression' && expression.property === 'signal') {
     const controller = dependencies.emitCValueExpression(expression.object, context)
-    const signal = nextCName(context, 'ccjs_fetch_signal')
+    const signal = nextCName(context, 'inox_fetch_signal')
     const lines: string[] = []
 
     registerOwnedValue(context, signal)
     appendLines(lines, controller.lines)
     lines.push(
-      emitRuntimeTypeCheck(`${controller.expression}.tag != CCJS_TAG_OBJECT || ${controller.expression}.as.ref == 0`, context)
+      emitRuntimeTypeCheck(`${controller.expression}.tag != INOX_TAG_OBJECT || ${controller.expression}.as.ref == 0`, context)
     )
     appendLines(lines, emitPrepareOwnedValueWrite(signal))
-    lines.push(emitStatusCheck(`ccjs_fetch_abort_controller_signal(${controller.expression}, &${signal})`, context))
+    lines.push(emitStatusCheck(`inox_fetch_abort_controller_signal(${controller.expression}, &${signal})`, context))
 
     return {
       lines,
@@ -381,7 +381,7 @@ export function emitPreparedFetchSignalOperand(
   const lines: string[] = []
 
   appendLines(lines, signal.lines)
-  lines.push(emitRuntimeTypeCheck(`${signal.expression}.tag != CCJS_TAG_OBJECT || ${signal.expression}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${signal.expression}.tag != INOX_TAG_OBJECT || ${signal.expression}.as.ref == 0`, context))
 
   return {
     lines,
@@ -396,12 +396,12 @@ export function emitPreparedFetchBodyOperand(
 ): PreparedStringBytesOperand {
   if (dependencies.inferExpressionType(expression, context) === 'bytes') {
     const value = dependencies.emitCValueExpression(expression, context)
-    const bytes = nextCName(context, 'ccjs_fetch_body')
+    const bytes = nextCName(context, 'inox_fetch_body')
     const lines: string[] = []
 
     appendLines(lines, value.lines)
-    lines.push(emitRuntimeValueCheck(value.expression, 'CCJS_TAG_BYTES', context))
-    lines.push(`ccjs_bytes* ${bytes} = (ccjs_bytes*)${value.expression}.as.ref;`)
+    lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_BYTES', context))
+    lines.push(`inox_bytes* ${bytes} = (inox_bytes*)${value.expression}.as.ref;`)
 
     return {
       lines,
@@ -410,5 +410,5 @@ export function emitPreparedFetchBodyOperand(
     }
   }
 
-  return dependencies.emitPreparedStringBytesOperand(expression, context, 'ccjs_fetch_body')
+  return dependencies.emitPreparedStringBytesOperand(expression, context, 'inox_fetch_body')
 }

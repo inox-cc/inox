@@ -9,7 +9,7 @@ test('CLI links debug memory runtime when inox.__debug.memory is used', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-debug-memory-'))
   const entry = join(dir, 'main.ts')
   const output = join(dir, 'main')
 
@@ -46,7 +46,7 @@ test('compiled C debug memory snapshots catch managed value leaks after helper r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-managed-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-debug-memory-managed-'))
   const entry = join(dir, 'main.ts')
   const output = join(dir, 'main')
 
@@ -59,13 +59,13 @@ test('compiled C debug memory snapshots catch managed value leaks after helper r
   return 9
 }
 
-const baselineA = ccjs.__debug.memory()
-const baselineB = ccjs.__debug.memory()
+const baselineA = inox.__debug.memory()
+const baselineB = inox.__debug.memory()
 const statsObjectAllocs = baselineB.liveAllocCount - baselineA.liveAllocCount
 const statsObjectBytes = baselineB.liveBytes - baselineA.liveBytes
-const before = ccjs.__debug.memory()
+const before = inox.__debug.memory()
 const total = makeManagedValues()
-const after = ccjs.__debug.memory()
+const after = inox.__debug.memory()
 
 console.log(
   total,
@@ -102,7 +102,7 @@ test('compiled C debug memory snapshots catch weak cell leaks after helper retur
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-weak-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-debug-memory-weak-'))
   const entry = join(dir, 'main.ts')
   const output = join(dir, 'main')
 
@@ -127,13 +127,13 @@ function makeWeakChild(): number {
   return 1
 }
 
-const baselineA = ccjs.__debug.memory()
-const baselineB = ccjs.__debug.memory()
+const baselineA = inox.__debug.memory()
+const baselineB = inox.__debug.memory()
 const statsObjectAllocs = baselineB.liveAllocCount - baselineA.liveAllocCount
 const statsObjectBytes = baselineB.liveBytes - baselineA.liveBytes
-const before = ccjs.__debug.memory()
+const before = inox.__debug.memory()
 const total = makeWeakChild()
-const after = ccjs.__debug.memory()
+const after = inox.__debug.memory()
 
 console.log(
   total,
@@ -168,7 +168,7 @@ test('C debug memory counters return to zero for array map and set cleanup', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-containers-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-debug-memory-containers-'))
   const source = join(dir, 'debug-memory-containers.c')
   const output = join(dir, 'debug-memory-containers')
 
@@ -177,12 +177,12 @@ test('C debug memory counters return to zero for array map and set cleanup', asy
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/array.h"
-#include "ccjs/debug.h"
-#include "ccjs/map.h"
-#include "ccjs/set.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/array.h"
+#include "inox/debug.h"
+#include "inox/map.h"
+#include "inox/set.h"
+#include "inox/string.h"
 
 static void* base_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -205,43 +205,43 @@ static void base_free(void* user, void* ptr, size_t size, size_t align) {
 }
 
 int main(void) {
-  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
-  ccjs_allocator allocator = ccjs_debug_allocator(&base);
-  ccjs_debug_memory_stats stats;
-  ccjs_value key = ccjs_undefined_value();
-  ccjs_value value = ccjs_undefined_value();
-  ccjs_value array = ccjs_undefined_value();
-  ccjs_value map = ccjs_undefined_value();
-  ccjs_value set = ccjs_undefined_value();
+  inox_allocator base = { 0, base_alloc, base_realloc, base_free };
+  inox_allocator allocator = inox_debug_allocator(&base);
+  inox_debug_memory_stats stats;
+  inox_value key = inox_undefined_value();
+  inox_value value = inox_undefined_value();
+  inox_value array = inox_undefined_value();
+  inox_value map = inox_undefined_value();
+  inox_value set = inox_undefined_value();
 
-  ccjs_debug_memory_reset();
+  inox_debug_memory_reset();
 
-  if (ccjs_string_from_literal(&allocator, "key", 3, &key) != CCJS_OK) return 1;
-  if (ccjs_string_from_literal(&allocator, "value", 5, &value) != CCJS_OK) return 2;
-  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 3;
-  if (ccjs_array_set(array, 0, key) != CCJS_OK) return 4;
-  if (ccjs_map_new(&allocator, &map) != CCJS_OK) return 5;
-  if (ccjs_map_set(map, key, value) != CCJS_OK) return 6;
-  if (ccjs_set_new(&allocator, &set) != CCJS_OK) return 7;
-  if (ccjs_set_add(set, key) != CCJS_OK) return 8;
+  if (inox_string_from_literal(&allocator, "key", 3, &key) != INOX_OK) return 1;
+  if (inox_string_from_literal(&allocator, "value", 5, &value) != INOX_OK) return 2;
+  if (inox_array_new(&allocator, 1, &array) != INOX_OK) return 3;
+  if (inox_array_set(array, 0, key) != INOX_OK) return 4;
+  if (inox_map_new(&allocator, &map) != INOX_OK) return 5;
+  if (inox_map_set(map, key, value) != INOX_OK) return 6;
+  if (inox_set_new(&allocator, &set) != INOX_OK) return 7;
+  if (inox_set_add(set, key) != INOX_OK) return 8;
 
-  ccjs_debug_memory_snapshot(&stats);
-  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 2) return 9;
-  if (stats.live_refs_by_kind[CCJS_REF_ARRAY] != 1) return 10;
-  if (stats.live_refs_by_kind[CCJS_REF_MAP] != 1) return 11;
-  if (stats.live_refs_by_kind[CCJS_REF_SET] != 1) return 12;
+  inox_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[INOX_REF_STRING] != 2) return 9;
+  if (stats.live_refs_by_kind[INOX_REF_ARRAY] != 1) return 10;
+  if (stats.live_refs_by_kind[INOX_REF_MAP] != 1) return 11;
+  if (stats.live_refs_by_kind[INOX_REF_SET] != 1) return 12;
 
-  ccjs_release(key);
-  ccjs_release(value);
-  ccjs_release(array);
-  ccjs_release(map);
-  ccjs_release(set);
+  inox_release(key);
+  inox_release(value);
+  inox_release(array);
+  inox_release(map);
+  inox_release(set);
 
-  ccjs_debug_memory_snapshot(&stats);
-  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 0) return 13;
-  if (stats.live_refs_by_kind[CCJS_REF_ARRAY] != 0) return 14;
-  if (stats.live_refs_by_kind[CCJS_REF_MAP] != 0) return 15;
-  if (stats.live_refs_by_kind[CCJS_REF_SET] != 0) return 16;
+  inox_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[INOX_REF_STRING] != 0) return 13;
+  if (stats.live_refs_by_kind[INOX_REF_ARRAY] != 0) return 14;
+  if (stats.live_refs_by_kind[INOX_REF_MAP] != 0) return 15;
+  if (stats.live_refs_by_kind[INOX_REF_SET] != 0) return 16;
   if (stats.live_alloc_count != 0 || stats.live_bytes != 0) return 17;
   if (stats.alloc_count != stats.free_count) return 18;
 
@@ -251,7 +251,7 @@ int main(void) {
 `
     )
 
-    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_DEBUG_MEMORY=1'])
+    const compile = await compileRuntimeProgram(source, output, ['-DINOX_DEBUG_MEMORY=1'])
 
     assert.equal(compile.code, 0, compile.stderr)
 

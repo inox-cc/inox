@@ -507,9 +507,9 @@ export function emitCModuleHeader(
   lines.push(`#ifndef ${plan.headerGuard}`)
   lines.push(`#define ${plan.headerGuard}`)
   lines.push('')
-  lines.push('#include "ccjs/value.h"')
-  lines.push('#include "ccjs/loop.h"')
-  lines.push('#include "ccjs/promise.h"')
+  lines.push('#include "inox/value.h"')
+  lines.push('#include "inox/loop.h"')
+  lines.push('#include "inox/promise.h"')
   lines.push('')
 
   if (plan.initName != null) {
@@ -755,7 +755,7 @@ function isPlainArrowFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapt
     }
   }
 
-  if (adapter.target.startsWith('ccjs_callback_arrow_')) {
+  if (adapter.target.startsWith('inox_callback_arrow_')) {
     return true
   }
 
@@ -791,15 +791,15 @@ function emitThrowingFunctionPointerAdapterTargetCall(adapter: CFunctionPointerA
   }
 
   if (returnType !== 'void') {
-    lines.push(`${returnType} ccjs_adapter_result = ${cFunctionPointerAdapterDefaultReturnValue(returnType)};`)
-    callArgs.push('&ccjs_adapter_result')
+    lines.push(`${returnType} inox_adapter_result = ${cFunctionPointerAdapterDefaultReturnValue(returnType)};`)
+    callArgs.push('&inox_adapter_result')
   }
 
-  lines.push('ccjs_value ccjs_adapter_error = ccjs_undefined_value();')
-  callArgs.push('&ccjs_adapter_error')
-  lines.push(`ccjs_status ccjs_adapter_status = ${adapter.target}(${joinStrings(callArgs, ', ')});`)
-  lines.push('if (ccjs_adapter_status != CCJS_OK) {')
-  lines.push('  ccjs_release(ccjs_adapter_error);')
+  lines.push('inox_value inox_adapter_error = inox_undefined_value();')
+  callArgs.push('&inox_adapter_error')
+  lines.push(`inox_status inox_adapter_status = ${adapter.target}(${joinStrings(callArgs, ', ')});`)
+  lines.push('if (inox_adapter_status != INOX_OK) {')
+  lines.push('  inox_release(inox_adapter_error);')
 
   if (adapterReturnType === 'void') {
     lines.push('  return;')
@@ -808,7 +808,7 @@ function emitThrowingFunctionPointerAdapterTargetCall(adapter: CFunctionPointerA
   }
 
   lines.push('}')
-  lines.push('ccjs_release(ccjs_adapter_error);')
+  lines.push('inox_release(inox_adapter_error);')
 
   if (adapterReturnType !== 'void') {
     lines.push(`return ${throwingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`)
@@ -819,15 +819,15 @@ function emitThrowingFunctionPointerAdapterTargetCall(adapter: CFunctionPointerA
 
 function throwingFunctionPointerAdapterReturnExpression(adapterReturnType: string, targetReturnType: string): string {
   if (targetReturnType !== 'void') {
-    return 'ccjs_adapter_result'
+    return 'inox_adapter_result'
   }
 
   return cFunctionPointerAdapterDefaultReturnValue(adapterReturnType)
 }
 
 function cFunctionPointerAdapterDefaultReturnValue(returnType: string): string {
-  if (returnType === 'ccjs_value') {
-    return 'ccjs_undefined_value()'
+  if (returnType === 'inox_value') {
+    return 'inox_undefined_value()'
   }
 
   if (returnType.includes('*')) {
@@ -901,7 +901,7 @@ function collectCModuleObjectFunctionFieldNamesFromShape(
 }
 
 function emitFunctionPointerAdapterModuleObjectFieldArg(name: string, moduleObjectFunctionFields: Set<string>): string | null {
-  const prefix = 'ccjs_objfn_ccjs_arg_'
+  const prefix = 'inox_objfn_inox_arg_'
 
   if (!name.startsWith(prefix)) {
     return null
@@ -923,7 +923,7 @@ function emitFunctionPointerAdapterModuleObjectFieldArg(name: string, moduleObje
     return null
   }
 
-  const candidate = `ccjs_objfn_${name.slice(index + 1)}`
+  const candidate = `inox_objfn_${name.slice(index + 1)}`
 
   if (moduleObjectFunctionFields.has(candidate)) {
     return candidate
@@ -937,7 +937,7 @@ function emitFunctionPointerAdapterDefaultTargetArg(
   adapter: CFunctionPointerAdapter
 ): string | null {
   for (let index = adapter.functionType.params.length; index < adapter.targetFunctionType.params.length; index = index + 1) {
-    if (name !== `ccjs_arg_${index}`) {
+    if (name !== `inox_arg_${index}`) {
       continue
     }
 
@@ -958,7 +958,7 @@ function emitFunctionPointerAdapterDefaultParamValue(param: CFunctionParam): str
 
   if (value != null) {
     if (value.type === 'NullLiteral') {
-      return 'ccjs_null_value()'
+      return 'inox_null_value()'
     }
 
     if (value.type === 'BooleanLiteral') {
@@ -980,7 +980,7 @@ function emitFunctionPointerAdapterDefaultParamValue(param: CFunctionParam): str
     isManagedRuntimeReturnType(param.valueType) ||
     isOpaqueRuntimeValueType(param.valueType)
   ) {
-    return 'ccjs_undefined_value()'
+    return 'inox_undefined_value()'
   }
 
   return '0'
@@ -1326,7 +1326,7 @@ function emitCModuleObjectFunctionFieldDefinitions(
         )
         emitted = true
       } else if (isRuntimeFunctionType(field.functionType)) {
-        lines.push(`static ccjs_value ${name};`)
+        lines.push(`static inox_value ${name};`)
         emitted = true
       }
     } else if (field.valueType === 'object' && field.shape != null && field.shape.fields != null) {
@@ -1374,7 +1374,7 @@ function cModuleValueCType(valueType: string): string {
   }
 
   if (valueType === 'unknown') {
-    return 'ccjs_value'
+    return 'inox_value'
   }
 
   return emitCType(valueType)
@@ -1405,9 +1405,9 @@ function emitCModuleInitFunction(
   const lines: string[] = []
 
   lines.push(`void ${plan.initName}(void) {`)
-  lines.push('  static bool ccjs_initialized = false;')
-  lines.push('  if (ccjs_initialized) return;')
-  lines.push('  ccjs_initialized = true;')
+  lines.push('  static bool inox_initialized = false;')
+  lines.push('  if (inox_initialized) return;')
+  lines.push('  inox_initialized = true;')
   pushIndentedCModuleLines(lines, initCalls)
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnValueDeclarations(context))
@@ -1422,7 +1422,7 @@ function emitCModuleInitFunction(
   pushIndentedCModuleLines(lines, emitEventLoopDrain(context))
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('ccjs_cleanup:')
+    lines.push('inox_cleanup:')
     pushIndentedCModuleLines(lines, emitOwnedValueCleanup(context))
     pushIndentedCModuleLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedCModuleLines(lines, emitEventLoopCleanup(context))
@@ -1454,7 +1454,7 @@ function emitCModuleMainFunction(
   }
 
   if (context.processRuntime) {
-    lines.push('  ccjs_process_init(argc, argv);')
+    lines.push('  inox_process_init(argc, argv);')
   }
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnValueDeclarations(context))
@@ -1470,7 +1470,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitEventLoopDrain(context))
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('ccjs_cleanup:')
+    lines.push('inox_cleanup:')
     pushIndentedCModuleLines(lines, emitOwnedValueCleanup(context))
     pushIndentedCModuleLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedCModuleLines(lines, emitEventLoopCleanup(context))

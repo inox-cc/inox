@@ -58,7 +58,7 @@ export function emitPreparedChildProcessCallExpression(
   }
 
   const command = dependencies.emitCValueExpression(expression.args[0], context)
-  let out = nextCName(context, 'ccjs_child_process_output')
+  let out = nextCName(context, 'inox_child_process_output')
 
   if (options.out != null) {
     out = options.out
@@ -78,7 +78,7 @@ export function emitPreparedChildProcessCallExpression(
     pushChildProcessLines(lines, childOptions.lines)
     lines.push(
       emitStatusCheck(
-        `ccjs_child_process_exec_sync(&ccjs_default_allocator, ${command.expression}, ${childOptions.expression}, &${out})`,
+        `inox_child_process_exec_sync(&inox_default_allocator, ${command.expression}, ${childOptions.expression}, &${out})`,
         context
       )
     )
@@ -107,7 +107,7 @@ export function emitPreparedChildProcessCallExpression(
 
   let childOptions: PreparedExpression = {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 
   if (optionsArg != null) {
@@ -139,18 +139,18 @@ export function emitPreparedChildProcessCallExpression(
     if (args.length === 0) {
       lines.push(
         emitStatusCheck(
-          `ccjs_child_process_spawn_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, ${shape.expression}, &${out})`,
+          `inox_child_process_spawn_sync(&inox_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, ${shape.expression}, &${out})`,
           context
         )
       )
     } else {
-      const argsName = nextCName(context, 'ccjs_child_process_args')
+      const argsName = nextCName(context, 'inox_child_process_args')
       const argsValue = emitChildProcessArgumentArray(args)
 
-      lines.push(`ccjs_value ${argsName}[] = { ${argsValue} };`)
+      lines.push(`inox_value ${argsName}[] = { ${argsValue} };`)
       lines.push(
         emitStatusCheck(
-          `ccjs_child_process_spawn_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression}, &${out})`,
+          `inox_child_process_spawn_sync(&inox_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression}, &${out})`,
           context
         )
       )
@@ -165,18 +165,18 @@ export function emitPreparedChildProcessCallExpression(
   if (args.length === 0) {
     lines.push(
       emitStatusCheck(
-        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, &${out})`,
+        `inox_child_process_exec_file_sync(&inox_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, &${out})`,
         context
       )
     )
   } else {
-    const argsName = nextCName(context, 'ccjs_child_process_args')
+    const argsName = nextCName(context, 'inox_child_process_args')
     const argsValue = emitChildProcessArgumentArray(args)
 
-    lines.push(`ccjs_value ${argsName}[] = { ${argsValue} };`)
+    lines.push(`inox_value ${argsName}[] = { ${argsValue} };`)
     lines.push(
       emitStatusCheck(
-        `ccjs_child_process_exec_file_sync(&ccjs_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, &${out})`,
+        `inox_child_process_exec_file_sync(&inox_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, &${out})`,
         context
       )
     )
@@ -189,15 +189,15 @@ export function emitPreparedChildProcessCallExpression(
 }
 
 function emitChildProcessSpawnSyncResultShape(context: CFunctionContext): PreparedExpression {
-  const shapeName = nextCName(context, 'ccjs_shape_spawn_sync')
+  const shapeName = nextCName(context, 'inox_shape_spawn_sync')
   const fieldsName = `${shapeName}_fields`
   const lines = [
-    `static const ccjs_field_info ${fieldsName}[] = {`,
-    `  { "status", CCJS_FIELD_READONLY },`,
-    `  { "stdout", CCJS_FIELD_READONLY },`,
-    `  { "stderr", CCJS_FIELD_READONLY },`,
+    `static const inox_field_info ${fieldsName}[] = {`,
+    `  { "status", INOX_FIELD_READONLY },`,
+    `  { "stdout", INOX_FIELD_READONLY },`,
+    `  { "stderr", INOX_FIELD_READONLY },`,
     '};',
-    `static const ccjs_shape ${shapeName} = {`,
+    `static const inox_shape ${shapeName} = {`,
     '  3,',
     `  ${fieldsName}`,
     '};'

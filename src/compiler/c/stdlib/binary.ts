@@ -124,8 +124,8 @@ function emitCBufferFromValueExpression(
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
-  const value = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_buffer_from')
-  const temp = nextCName(context, 'ccjs_bytes')
+  const value = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_buffer_from')
+  const temp = nextCName(context, 'inox_bytes')
   registerOwnedValue(context, temp)
   const lines: string[] = []
 
@@ -133,11 +133,11 @@ function emitCBufferFromValueExpression(
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_bytes_from_data(&ccjs_default_allocator, (const uint8_t*)${value.bytes}, ${value.length}, &${temp})`,
+      `inox_bytes_from_data(&inox_default_allocator, (const uint8_t*)${value.bytes}, ${value.length}, &${temp})`,
       context
     )
   )
-  lines.push(emitRuntimeValueCheck(temp, 'CCJS_TAG_BYTES', context))
+  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_BYTES', context))
 
   return {
     lines: lines,
@@ -150,7 +150,7 @@ function emitCBytesAllocValueExpression(
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
-  const temp = nextCName(context, 'ccjs_bytes')
+  const temp = nextCName(context, 'inox_bytes')
   registerOwnedValue(context, temp)
   let firstArg: AnyNode | null = null
 
@@ -163,7 +163,7 @@ function emitCBytesAllocValueExpression(
     const lines: string[] = []
 
     pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`ccjs_bytes_new(&ccjs_default_allocator, ${elements.length}, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox_bytes_new(&inox_default_allocator, ${elements.length}, &${temp})`, context))
 
     for (let index = 0; index < elements.length; index = index + 1) {
       const element = binaryNodeAt(elements, index)
@@ -172,7 +172,7 @@ function emitCBytesAllocValueExpression(
       pushBinaryLines(lines, value.lines)
       lines.push(
         emitStatusCheck(
-          `ccjs_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`,
+          `inox_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`,
           context
         )
       )
@@ -191,7 +191,7 @@ function emitCBytesAllocValueExpression(
   ) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_JS_GLOBAL',
+        'INOX_C_JS_GLOBAL',
         'Uint8Array constructor currently supports only length or array literals in C',
         expression.loc
       )
@@ -199,7 +199,7 @@ function emitCBytesAllocValueExpression(
 
     return {
       lines: [],
-      expression: 'ccjs_undefined_value()'
+      expression: 'inox_undefined_value()'
     }
   }
 
@@ -210,7 +210,7 @@ function emitCBytesAllocValueExpression(
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_bytes_new(&ccjs_default_allocator, (size_t)(${size.expression}), &${temp})`,
+      `inox_bytes_new(&inox_default_allocator, (size_t)(${size.expression}), &${temp})`,
       context
     )
   )
@@ -228,12 +228,12 @@ function emitCBytesSliceValueExpression(
 ): PreparedExpression {
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
   const start = dependencies.emitPreparedNumberExpression(expression.args[0], context)
-  const lengthName = nextCName(context, 'ccjs_bytes_len')
-  const startRaw = nextCName(context, 'ccjs_bytes_start_raw')
-  const startIndex = nextCName(context, 'ccjs_bytes_start')
-  const endRaw = nextCName(context, 'ccjs_bytes_end_raw')
-  const endIndex = nextCName(context, 'ccjs_bytes_end')
-  const temp = nextCName(context, 'ccjs_bytes_slice')
+  const lengthName = nextCName(context, 'inox_bytes_len')
+  const startRaw = nextCName(context, 'inox_bytes_start_raw')
+  const startIndex = nextCName(context, 'inox_bytes_start')
+  const endRaw = nextCName(context, 'inox_bytes_end_raw')
+  const endIndex = nextCName(context, 'inox_bytes_end')
+  const temp = nextCName(context, 'inox_bytes_slice')
   registerOwnedValue(context, temp)
   const lines: string[] = []
   const endLines: string[] = []
@@ -251,15 +251,15 @@ function emitCBytesSliceValueExpression(
   pushBinaryLines(lines, endLines)
 
   lines.push(`size_t ${lengthName} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_bytes_len(${receiver.expression}, &${lengthName})`, context))
+  lines.push(emitStatusCheck(`inox_bytes_len(${receiver.expression}, &${lengthName})`, context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${endExpression};`)
-  pushBinaryLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_bytes_start'))
-  pushBinaryLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_bytes_end'))
+  pushBinaryLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_bytes_start'))
+  pushBinaryLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_bytes_end'))
   lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`ccjs_bytes_slice(${receiver.expression}, ${startIndex}, ${endIndex}, &${temp})`, context))
-  lines.push(emitRuntimeValueCheck(temp, 'CCJS_TAG_BYTES', context))
+  lines.push(emitStatusCheck(`inox_bytes_slice(${receiver.expression}, ${startIndex}, ${endIndex}, &${temp})`, context))
+  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_BYTES', context))
 
   return {
     lines: lines,
@@ -273,14 +273,14 @@ function emitCBytesToStringValueExpression(
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
-  const temp = nextCName(context, 'ccjs_bytes_string')
+  const temp = nextCName(context, 'inox_bytes_string')
   registerOwnedValue(context, temp)
   const lines: string[] = []
 
   pushBinaryLines(lines, receiver.lines)
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`ccjs_bytes_to_string(&ccjs_default_allocator, ${receiver.expression}, &${temp})`, context))
-  lines.push(emitRuntimeValueCheck(temp, 'CCJS_TAG_STRING', context))
+  lines.push(emitStatusCheck(`inox_bytes_to_string(&inox_default_allocator, ${receiver.expression}, &${temp})`, context))
+  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_STRING', context))
 
   return {
     lines: lines,
@@ -298,7 +298,7 @@ export function emitPreparedBinaryNumberCallExpression(
 
     return {
       lines: value.lines,
-      expression: `(${value.expression}.tag == CCJS_TAG_BYTES ? 1 : 0)`
+      expression: `(${value.expression}.tag == INOX_TAG_BYTES ? 1 : 0)`
     }
   }
 
@@ -319,12 +319,12 @@ export function emitPreparedBytesLengthExpression(
   }
 
   const value = dependencies.emitCValueExpression(expression.object, context)
-  const temp = nextCName(context, 'ccjs_bytes_len')
+  const temp = nextCName(context, 'inox_bytes_len')
   const lines: string[] = []
 
   pushBinaryLines(lines, value.lines)
   lines.push(`size_t ${temp} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_bytes_len(${value.expression}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_bytes_len(${value.expression}, &${temp})`, context))
 
   return {
     lines: lines,
@@ -346,13 +346,13 @@ export function emitPreparedBytesIndexExpression(
 
   const value = dependencies.emitCValueExpression(expression.object, context)
   const index = dependencies.emitPreparedNumberExpression(expression.index, context)
-  const byte = nextCName(context, 'ccjs_byte')
+  const byte = nextCName(context, 'inox_byte')
   const lines: string[] = []
 
   pushBinaryLines(lines, value.lines)
   pushBinaryLines(lines, index.lines)
   lines.push(`uint8_t ${byte} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_bytes_get(${value.expression}, (size_t)(${index.expression}), &${byte})`, context))
+  lines.push(emitStatusCheck(`inox_bytes_get(${value.expression}, (size_t)(${index.expression}), &${byte})`, context))
 
   return {
     lines: lines,
@@ -383,7 +383,7 @@ export function emitPreparedBytesIndexAssignment(
   pushBinaryLines(lines, byte.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_bytes_set(${value.expression}, (size_t)(${index.expression}), (uint8_t)(${byte.expression}))`,
+      `inox_bytes_set(${value.expression}, (size_t)(${index.expression}), (uint8_t)(${byte.expression}))`,
       context
     )
   )

@@ -37,7 +37,6 @@ type StringSet = Set<string>
 const jsStdGlobalRootNames = [
   'Array',
   'Buffer',
-  'ccjs',
   'inox',
   'Date',
   'Error',
@@ -310,7 +309,6 @@ function isJsStdGlobalRootName(name: string): boolean {
   return (
     name === 'Array' ||
     name === 'Buffer' ||
-    name === 'ccjs' ||
     name === 'inox' ||
     name === 'Date' ||
     name === 'Error' ||
@@ -381,7 +379,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'Uint16Array')
   pushStringIfPresent(values, result, 'Uint32Array')
   pushStringIfPresent(values, result, 'Uint8Array')
-  pushStringIfPresent(values, result, 'ccjs')
   pushStringIfPresent(values, result, 'clearImmediate')
   pushStringIfPresent(values, result, 'clearInterval')
   pushStringIfPresent(values, result, 'clearTimeout')

@@ -22,11 +22,11 @@ export function main(): void {
 
   assert.deepEqual(result.ir.features, ['binary', 'crypto', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'crypto', 'managed-values', 'string-bytes'])
-  assert.match(result.code, /#include "ccjs\/crypto\.h"/)
-  assert.match(result.code, /ccjs_crypto_random_bytes\(&ccjs_default_allocator, 8, &ccjs_crypto_bytes_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_random_fill\(bytes, 1, 2, 1\)/)
-  assert.match(result.code, /ccjs_crypto_random_int\(1, 10, &ccjs_crypto_int_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_random_uuid\(&ccjs_default_allocator, &ccjs_crypto_uuid_\d+\)/)
+  assert.match(result.code, /#include "inox\/crypto\.h"/)
+  assert.match(result.code, /inox_crypto_random_bytes\(&inox_default_allocator, 8, &inox_crypto_bytes_\d+\)/)
+  assert.match(result.code, /inox_crypto_random_fill\(bytes, 1, 2, 1\)/)
+  assert.match(result.code, /inox_crypto_random_int\(1, 10, &inox_crypto_int_\d+\)/)
+  assert.match(result.code, /inox_crypto_random_uuid\(&inox_default_allocator, &inox_crypto_uuid_\d+\)/)
 })
 
 test('lowers named node:crypto random imports to the C crypto runtime', () => {
@@ -42,10 +42,10 @@ export function main(): void {
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_crypto_random_bytes\(&ccjs_default_allocator, 4, &ccjs_crypto_bytes_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_random_fill\(bytes, 0, 0, 0\)/)
-  assert.match(result.code, /ccjs_crypto_random_int\(0, 10, &ccjs_crypto_int_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_random_uuid\(&ccjs_default_allocator, &ccjs_crypto_uuid_\d+\)/)
+  assert.match(result.code, /inox_crypto_random_bytes\(&inox_default_allocator, 4, &inox_crypto_bytes_\d+\)/)
+  assert.match(result.code, /inox_crypto_random_fill\(bytes, 0, 0, 0\)/)
+  assert.match(result.code, /inox_crypto_random_int\(0, 10, &inox_crypto_int_\d+\)/)
+  assert.match(result.code, /inox_crypto_random_uuid\(&inox_default_allocator, &inox_crypto_uuid_\d+\)/)
 })
 
 test('recognizes crypto runtime global method paths', () => {
@@ -71,11 +71,11 @@ console.log(hex)
 
   assert.deepEqual(result.ir.features, ['crypto', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'crypto', 'managed-values', 'string-bytes'])
-  assert.match(result.code, /ccjs_crypto_hash\* hash = 0;/)
-  assert.match(result.code, /ccjs_crypto_hash_create\(&ccjs_default_allocator, "sha256", 6, &hash\)/)
-  assert.match(result.code, /ccjs_crypto_hash_update\(hash, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_hash_digest_hex\(&ccjs_default_allocator, hash, &ccjs_crypto_digest_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_hash_free\(hash\)/)
+  assert.match(result.code, /inox_crypto_hash\* hash = 0;/)
+  assert.match(result.code, /inox_crypto_hash_create\(&inox_default_allocator, "sha256", 6, &hash\)/)
+  assert.match(result.code, /inox_crypto_hash_update\(hash, inox_value_\d+\)/)
+  assert.match(result.code, /inox_crypto_hash_digest_hex\(&inox_default_allocator, hash, &inox_crypto_digest_\d+\)/)
+  assert.match(result.code, /inox_crypto_hash_free\(hash\)/)
 })
 
 test('lowers chained node:crypto createHash digest bytes to the C crypto runtime', () => {
@@ -91,11 +91,11 @@ console.log(digest.length)
     }
   )
 
-  assert.match(result.code, /ccjs_crypto_hash_create\(&ccjs_default_allocator, "sha256", 6, &ccjs_crypto_hash_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_hash_update\(ccjs_crypto_hash_\d+, ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_crypto_hash_create\(&inox_default_allocator, "sha256", 6, &inox_crypto_hash_\d+\)/)
+  assert.match(result.code, /inox_crypto_hash_update\(inox_crypto_hash_\d+, inox_value_\d+\)/)
   assert.match(
     result.code,
-    /ccjs_crypto_hash_digest_bytes\(&ccjs_default_allocator, ccjs_crypto_hash_\d+, &ccjs_crypto_digest_\d+\)/
+    /inox_crypto_hash_digest_bytes\(&inox_default_allocator, inox_crypto_hash_\d+, &inox_crypto_digest_\d+\)/
   )
 })
 
@@ -124,20 +124,20 @@ console.log(hmac.digest('hex'))
 
   assert.deepEqual(result.ir.features, ['binary', 'crypto', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'crypto', 'managed-values', 'string-bytes'])
-  assert.match(result.code, /ccjs_crypto_get_hashes\(&ccjs_default_allocator, &ccjs_crypto_hashes_\d+\)/)
+  assert.match(result.code, /inox_crypto_get_hashes\(&inox_default_allocator, &inox_crypto_hashes_\d+\)/)
   assert.match(
     result.code,
-    /ccjs_crypto_hash_oneshot_hex\(&ccjs_default_allocator, "sha256", 6, ccjs_value_\d+, &ccjs_crypto_digest_\d+\)/
+    /inox_crypto_hash_oneshot_hex\(&inox_default_allocator, "sha256", 6, inox_value_\d+, &inox_crypto_digest_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_crypto_hash_oneshot_bytes\(&ccjs_default_allocator, "sha256", 6, ccjs_value_\d+, &ccjs_crypto_digest_\d+\)/
+    /inox_crypto_hash_oneshot_bytes\(&inox_default_allocator, "sha256", 6, inox_value_\d+, &inox_crypto_digest_\d+\)/
   )
-  assert.match(result.code, /ccjs_crypto_hmac_create\(&ccjs_default_allocator, "sha256", 6, ccjs_value_\d+, &hmac\)/)
-  assert.match(result.code, /ccjs_crypto_hmac_update\(hmac, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_hmac_digest_hex\(&ccjs_default_allocator, hmac, &ccjs_crypto_digest_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_timing_safe_equal\(bytes, otherBytes, &ccjs_crypto_equal_\d+\)/)
-  assert.match(result.code, /ccjs_crypto_hmac_free\(hmac\)/)
+  assert.match(result.code, /inox_crypto_hmac_create\(&inox_default_allocator, "sha256", 6, inox_value_\d+, &hmac\)/)
+  assert.match(result.code, /inox_crypto_hmac_update\(hmac, inox_value_\d+\)/)
+  assert.match(result.code, /inox_crypto_hmac_digest_hex\(&inox_default_allocator, hmac, &inox_crypto_digest_\d+\)/)
+  assert.match(result.code, /inox_crypto_timing_safe_equal\(bytes, otherBytes, &inox_crypto_equal_\d+\)/)
+  assert.match(result.code, /inox_crypto_hmac_free\(hmac\)/)
 })
 
 test('reports node:crypto createHash without a TLS crypto backend at compile time', () => {
@@ -157,7 +157,7 @@ createHash('sha256')
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(
@@ -287,7 +287,7 @@ export function main(): void {
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(
@@ -318,7 +318,7 @@ export function main(): void {
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(

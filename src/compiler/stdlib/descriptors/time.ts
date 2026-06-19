@@ -23,14 +23,14 @@ const monotonicClockTimeRuntimeCapability: TimeRuntimeCapability = {
 const dateNowRuntimeDescriptor: TimeRuntimeDescriptor = {
   method: 'dateNow',
   path: ['Date', 'now'],
-  cFunction: 'ccjs_date_now',
+  cFunction: 'inox_date_now',
   capability: wallClockTimeRuntimeCapability
 }
 
 const performanceNowRuntimeDescriptor: TimeRuntimeDescriptor = {
   method: 'performanceNow',
   path: ['performance', 'now'],
-  cFunction: 'ccjs_performance_now',
+  cFunction: 'inox_performance_now',
   capability: monotonicClockTimeRuntimeCapability
 }
 
@@ -57,11 +57,11 @@ export function timeRuntimeCFunctionNameFromPath(
   path: string[] | null | undefined
 ): string | null {
   if (isDateNowRuntimePath(path)) {
-    return 'ccjs_date_now'
+    return 'inox_date_now'
   }
 
   if (isPerformanceNowRuntimePath(path)) {
-    return 'ccjs_performance_now'
+    return 'inox_performance_now'
   }
 
   return null

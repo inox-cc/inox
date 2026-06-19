@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_UNKNOWN_NAME
+// @diagnostic INOX_UNKNOWN_NAME
 
 console.log(`hello ${missing}`)
 

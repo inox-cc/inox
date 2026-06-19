@@ -84,13 +84,13 @@ export function emitPreparedPathConstantExpression(
     return null
   }
 
-  const out = nextCName(context, 'ccjs_path_constant')
+  const out = nextCName(context, 'inox_path_constant')
   registerOwnedValue(context, out)
 
   const lines = emitPrepareOwnedValueWrite(out)
   lines.push(
     emitStatusCheck(
-      `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
+      `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
       context
     )
   )
@@ -111,7 +111,7 @@ export function emitPreparedPathObjectCallExpression(
     return null
   }
 
-  let out = nextCName(context, 'ccjs_path_object')
+  let out = nextCName(context, 'inox_path_object')
 
   if (options != null && options.out != null) {
     out = options.out
@@ -134,7 +134,7 @@ export function emitPreparedPathObjectCallExpression(
 
   lines.push(
     emitStatusCheck(
-      `ccjs_path_parse(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
+      `inox_path_parse(&inox_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
       context
     )
   )
@@ -157,7 +157,7 @@ export function emitPreparedPathStringCallExpression(
     return null
   }
 
-  let out = nextCName(context, 'ccjs_path_value')
+  let out = nextCName(context, 'inox_path_value')
   const lines: string[] = []
 
   if (options != null && options.out != null) {
@@ -184,9 +184,9 @@ export function emitPreparedPathStringCallExpression(
     pushLines(lines, emitPrepareOwnedValueWrite(out))
 
     if (args.length === 0) {
-      lines.push(emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, 0, 0, &${out})`, context))
+      lines.push(emitStatusCheck(`inox_path_${method}(&inox_default_allocator, 0, 0, &${out})`, context))
     } else {
-      const argArray = nextCName(context, 'ccjs_path_args')
+      const argArray = nextCName(context, 'inox_path_args')
       const expressions: string[] = []
 
       for (let index = 0; index < args.length; index = index + 1) {
@@ -194,9 +194,9 @@ export function emitPreparedPathStringCallExpression(
         expressions.push(arg.expression)
       }
 
-      lines.push(`ccjs_value ${argArray}[] = { ${joinStrings(expressions, ', ')} };`)
+      lines.push(`inox_value ${argArray}[] = { ${joinStrings(expressions, ', ')} };`)
       lines.push(
-        emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${argArray}, ${args.length}, &${out})`, context)
+        emitStatusCheck(`inox_path_${method}(&inox_default_allocator, ${argArray}, ${args.length}, &${out})`, context)
       )
     }
 
@@ -211,7 +211,7 @@ export function emitPreparedPathStringCallExpression(
 
     pushLines(lines, object.lines)
     pushLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_path_format(&ccjs_default_allocator, ${object.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_path_format(&inox_default_allocator, ${object.expression}, &${out})`, context))
 
     return {
       lines,
@@ -227,7 +227,7 @@ export function emitPreparedPathStringCallExpression(
   if (method === 'basename') {
     let suffix: PreparedExpression = {
       lines: [],
-      expression: 'ccjs_undefined_value()'
+      expression: 'inox_undefined_value()'
     }
     let suffixPresent = '0'
 
@@ -239,7 +239,7 @@ export function emitPreparedPathStringCallExpression(
     pushLines(lines, suffix.lines)
     lines.push(
       emitStatusCheck(
-        `ccjs_path_basename(&ccjs_default_allocator, ${first.expression}, ${suffix.expression}, ${suffixPresent}, &${out})`,
+        `inox_path_basename(&inox_default_allocator, ${first.expression}, ${suffix.expression}, ${suffixPresent}, &${out})`,
         context
       )
     )
@@ -256,7 +256,7 @@ export function emitPreparedPathStringCallExpression(
     pushLines(lines, to.lines)
     lines.push(
       emitStatusCheck(
-        `ccjs_path_relative(&ccjs_default_allocator, ${first.expression}, ${to.expression}, &${out})`,
+        `inox_path_relative(&inox_default_allocator, ${first.expression}, ${to.expression}, &${out})`,
         context
       )
     )
@@ -267,7 +267,7 @@ export function emitPreparedPathStringCallExpression(
     }
   }
 
-  lines.push(emitStatusCheck(`ccjs_path_${method}(&ccjs_default_allocator, ${first.expression}, &${out})`, context))
+  lines.push(emitStatusCheck(`inox_path_${method}(&inox_default_allocator, ${first.expression}, &${out})`, context))
 
   return {
     lines,
@@ -285,12 +285,12 @@ export function emitPreparedPathBooleanCallExpression(
   }
 
   const value = dependencies.emitCValueExpression(expression.args[0], context)
-  const out = nextCName(context, 'ccjs_path_is_absolute')
+  const out = nextCName(context, 'inox_path_is_absolute')
   const lines: string[] = []
 
   pushLines(lines, value.lines)
   lines.push(`int ${out} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_path_is_absolute(${value.expression}, &${out})`, context))
+  lines.push(emitStatusCheck(`inox_path_is_absolute(${value.expression}, &${out})`, context))
 
   return {
     lines,
@@ -299,18 +299,18 @@ export function emitPreparedPathBooleanCallExpression(
 }
 
 function emitPathParseObjectShape(context: PathCContext): PreparedExpression {
-  const shapeName = nextCName(context, 'ccjs_shape_path_parse')
+  const shapeName = nextCName(context, 'inox_shape_path_parse')
   const fieldsName = `${shapeName}_fields`
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
 
-  lines.push(`  { ${cStringLiteral('root')}, CCJS_FIELD_READONLY },`)
-  lines.push(`  { ${cStringLiteral('dir')}, CCJS_FIELD_READONLY },`)
-  lines.push(`  { ${cStringLiteral('base')}, CCJS_FIELD_READONLY },`)
-  lines.push(`  { ${cStringLiteral('ext')}, CCJS_FIELD_READONLY },`)
-  lines.push(`  { ${cStringLiteral('name')}, CCJS_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('root')}, INOX_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('dir')}, INOX_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('base')}, INOX_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('ext')}, INOX_FIELD_READONLY },`)
+  lines.push(`  { ${cStringLiteral('name')}, INOX_FIELD_READONLY },`)
 
   lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`static const inox_shape ${shapeName} = {`)
   lines.push('  5,')
   lines.push(`  ${fieldsName}`)
   lines.push('};')

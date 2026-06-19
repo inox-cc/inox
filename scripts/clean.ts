@@ -124,7 +124,7 @@ async function collectSystemTempPaths(root: string): Promise<string[]> {
   }
 
   return entries
-    .filter((entry) => entry.name.startsWith('inox-') || entry.name.startsWith('ccjs-'))
+    .filter((entry) => entry.name.startsWith('inox-'))
     .map((entry) => join(root, entry.name))
 }
 
@@ -212,7 +212,7 @@ function usage(): string {
 Removes known inox build outputs and temporary files:
 - repo outputs: ${repoOutputPaths.join(', ')}
 - repo temp files: ${[...repoTempFileNames, ...repoTempFileSuffixes.map((suffix) => `*${suffix}`)].join(', ')}
-- system temp entries named inox-* or ccjs-* under ${systemTempRoots.join(', ')}
+- system temp entries named inox-* under ${systemTempRoots.join(', ')}
 `
 }
 

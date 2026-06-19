@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_BREAK_OUTSIDE
+// @diagnostic INOX_BREAK_OUTSIDE
 
 export function main(): void {
   break

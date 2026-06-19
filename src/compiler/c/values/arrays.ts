@@ -737,7 +737,7 @@ export function emitPreparedRuntimeArrayIndexValue(
   appendLines(lines, array.lines)
   appendLines(lines, index.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`ccjs_array_get(${array.expression}, ${index.expression}, &${value})`, context))
+  lines.push(emitStatusCheck(`inox_array_get(${array.expression}, ${index.expression}, &${value})`, context))
 
   return {
     lines,
@@ -779,18 +779,18 @@ export function emitPreparedKnownArrayIndexValueExpression(
       return null
     }
 
-    const temp = nextCName(context, 'ccjs_value')
-    let tag = 'CCJS_TAG_STRING'
+    const temp = nextCName(context, 'inox_value')
+    let tag = 'INOX_TAG_STRING'
 
     if (elementValueType === 'array') {
-      tag = 'CCJS_TAG_ARRAY'
+      tag = 'INOX_TAG_ARRAY'
     }
 
     registerOwnedValue(context, temp)
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`ccjs_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
     appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
     return {
@@ -809,13 +809,13 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
   const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
   if (runtimeElement != null) {
-    const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_value')
+    const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_value')
 
     if (runtimeElement.valueType === 'string') {
       const lines: string[] = []
 
       appendLines(lines, value.lines)
-      appendLines(lines, emitRuntimeFieldValueCheck(value.expression, 'CCJS_TAG_STRING', expression, context))
+      appendLines(lines, emitRuntimeFieldValueCheck(value.expression, 'INOX_TAG_STRING', expression, context))
 
       return {
         lines,
@@ -894,12 +894,12 @@ export function emitPreparedArrayLengthExpression(
   }
 
   const value = deps.emitCValueExpression(expression.object, context)
-  const temp = nextCName(context, 'ccjs_array_len')
+  const temp = nextCName(context, 'inox_array_len')
   const lines: string[] = []
 
   appendLines(lines, value.lines)
   lines.push(`size_t ${temp} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_array_len(${value.expression}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_array_len(${value.expression}, &${temp})`, context))
 
   return {
     lines,
@@ -1070,7 +1070,7 @@ export function emitArraySortVariableDeclaration(
   appendLines(lines, sorted.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${sorted.expression};`)
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1096,7 +1096,7 @@ export function emitArrayFilterVariableDeclaration(
   appendLines(lines, filtered.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${filtered.expression};`)
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1122,7 +1122,7 @@ export function emitArrayMapVariableDeclaration(
   appendLines(lines, mapped.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${mapped.expression};`)
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1148,7 +1148,7 @@ export function emitArraySliceVariableDeclaration(
   appendLines(lines, sliced.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${sliced.expression};`)
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1177,7 +1177,7 @@ export function emitPreparedArraySortCallExpression(
     const lines: string[] = []
 
     appendLines(lines, receiver.lines)
-    lines.push(emitStatusCheck(`ccjs_array_sort(${receiver.expression})`, context))
+    lines.push(emitStatusCheck(`inox_array_sort(${receiver.expression})`, context))
 
     return {
       lines,
@@ -1213,16 +1213,16 @@ export function emitPreparedArraySliceCallExpression(
     lines: [],
     expression: '0'
   }
-  const lengthName = nextCName(context, 'ccjs_array_slice_length')
-  const startRaw = nextCName(context, 'ccjs_array_slice_start_raw')
-  const startIndex = nextCName(context, 'ccjs_array_slice_start')
-  const endRaw = nextCName(context, 'ccjs_array_slice_end_raw')
-  const endIndex = nextCName(context, 'ccjs_array_slice_end')
+  const lengthName = nextCName(context, 'inox_array_slice_length')
+  const startRaw = nextCName(context, 'inox_array_slice_start_raw')
+  const startIndex = nextCName(context, 'inox_array_slice_start')
+  const endRaw = nextCName(context, 'inox_array_slice_end_raw')
+  const endIndex = nextCName(context, 'inox_array_slice_end')
   let end: PreparedExpression = {
     lines: [],
     expression: `((double)${lengthName})`
   }
-  const out = nextCName(context, 'ccjs_array_slice')
+  const out = nextCName(context, 'inox_array_slice')
   const lines: string[] = []
 
   if (expression.args[0] != null) {
@@ -1239,16 +1239,16 @@ export function emitPreparedArraySliceCallExpression(
   appendLines(lines, start.lines)
   appendLines(lines, end.lines)
   lines.push(`size_t ${lengthName} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${lengthName})`, context))
+  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${lengthName})`, context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${end.expression};`)
-  appendLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_array_slice_start'))
-  appendLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_array_slice_end'))
+  appendLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_array_slice_start'))
+  appendLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_array_slice_end'))
   lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
   appendLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(
     emitStatusCheck(
-      `ccjs_array_slice(&ccjs_default_allocator, ${receiver.expression}, ${startIndex}, ${endIndex}, &${out})`,
+      `inox_array_slice(&inox_default_allocator, ${receiver.expression}, ${startIndex}, ${endIndex}, &${out})`,
       context
     )
   )
@@ -1287,10 +1287,10 @@ export function emitPreparedArrayJoinCallExpression(
   }
 
   if (expression.args[0] != null) {
-    separator = arrayDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_array_join_separator')
+    separator = arrayDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_array_join_separator')
   }
 
-  const out = nextCName(context, 'ccjs_array_join')
+  const out = nextCName(context, 'inox_array_join')
   const lines: string[] = []
   registerOwnedValue(context, out)
 
@@ -1299,7 +1299,7 @@ export function emitPreparedArrayJoinCallExpression(
   appendLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(
     emitStatusCheck(
-      `ccjs_array_join(&ccjs_default_allocator, ${receiver.expression}, ${separator.bytes}, ${separator.length}, &${out})`,
+      `inox_array_join(&inox_default_allocator, ${receiver.expression}, ${separator.bytes}, ${separator.length}, &${out})`,
       context
     )
   )
@@ -1346,11 +1346,11 @@ export function emitPreparedArrayIncludesCallExpression(
     searchType = arrayDeps(context).inferExpressionType(search, context)
   }
   const searchValue = emitPreparedArrayElementValue(search, searchType, context)
-  const found = nextCName(context, 'ccjs_array_includes')
-  const length = nextCName(context, 'ccjs_array_includes_length')
-  const index = nextCName(context, 'ccjs_array_includes_index')
-  const value = nextCName(context, 'ccjs_array_includes_value')
-  const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
+  const found = nextCName(context, 'inox_array_includes')
+  const length = nextCName(context, 'inox_array_includes_length')
+  const index = nextCName(context, 'inox_array_includes_index')
+  const value = nextCName(context, 'inox_array_includes_value')
+  const readStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)
   const lines: string[] = []
 
   registerOwnedValue(context, value)
@@ -1358,11 +1358,11 @@ export function emitPreparedArrayIncludesCallExpression(
   appendLines(lines, searchValue.lines)
   lines.push(`double ${found} = 0;`)
   lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
+  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
   lines.push(`  ${readStatus}`)
-  lines.push(`  if (ccjs_hash_value_equal(${value}, ${searchValue.expression})) {`)
+  lines.push(`  if (inox_hash_value_equal(${value}, ${searchValue.expression})) {`)
   lines.push(`    ${found} = 1;`)
   lines.push('    break;')
   lines.push('  }')
@@ -1407,7 +1407,7 @@ export function emitPreparedArrayPushCallExpression(
 
     appendLines(lines, receiver.lines)
     appendLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_array_push(${receiver.expression}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_array_push(${receiver.expression}, ${value.expression})`, context))
 
     return {
       lines,
@@ -1447,7 +1447,7 @@ export function emitPreparedArrayUnshiftCallExpression(
 
   const valueType = arrayDeps(context).inferExpressionType(arg, context)
   const value = emitPreparedArrayElementValue(arg, valueType, context)
-  const length = nextCName(context, 'ccjs_array_unshift_len')
+  const length = nextCName(context, 'inox_array_unshift_len')
   const lines: string[] = []
 
   updateUnshiftedArrayMetadata(callee.object, valueType, context)
@@ -1455,7 +1455,7 @@ export function emitPreparedArrayUnshiftCallExpression(
   appendLines(lines, receiver.lines)
   appendLines(lines, value.lines)
   lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_array_unshift(${receiver.expression}, ${value.expression}, &${length})`, context))
+  lines.push(emitStatusCheck(`inox_array_unshift(${receiver.expression}, ${value.expression}, &${length})`, context))
 
   return {
     lines,
@@ -1481,7 +1481,7 @@ export function emitPreparedArrayPopCallExpression(
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
   if (receiver != null) {
-    const value = nextCName(context, 'ccjs_array_pop')
+    const value = nextCName(context, 'inox_array_pop')
     registerOwnedValue(context, value)
     updatePoppedArrayMetadata(callee.object, context)
 
@@ -1489,11 +1489,11 @@ export function emitPreparedArrayPopCallExpression(
 
     appendLines(lines, receiver.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(value))
-    lines.push(emitStatusCheck(`ccjs_array_pop(${receiver.expression}, &${value})`, context))
+    lines.push(emitStatusCheck(`inox_array_pop(${receiver.expression}, &${value})`, context))
 
     if (options != null && options.discard === true) {
-      lines.push(`ccjs_release(${value});`)
-      lines.push(`${value} = ccjs_undefined_value();`)
+      lines.push(`inox_release(${value});`)
+      lines.push(`${value} = inox_undefined_value();`)
     }
 
     return {
@@ -1524,12 +1524,12 @@ function emitPreparedArrayComparatorSortCallExpression(
     return null
   }
 
-  const length = nextCName(context, 'ccjs_sort_length')
-  const index = nextCName(context, 'ccjs_sort_index')
-  const scan = nextCName(context, 'ccjs_sort_scan')
-  const left = nextCName(context, 'ccjs_sort_left')
-  const right = nextCName(context, 'ccjs_sort_right')
-  const compare = nextCName(context, 'ccjs_sort_compare')
+  const length = nextCName(context, 'inox_sort_length')
+  const index = nextCName(context, 'inox_sort_index')
+  const scan = nextCName(context, 'inox_sort_scan')
+  const left = nextCName(context, 'inox_sort_left')
+  const right = nextCName(context, 'inox_sort_right')
+  const compare = nextCName(context, 'inox_sort_compare')
 
   registerOwnedValue(context, left)
   registerOwnedValue(context, right)
@@ -1543,17 +1543,17 @@ function emitPreparedArrayComparatorSortCallExpression(
   appendLines(body, result.lines)
   body.push(`double ${compare} = ${result.expression};`)
   body.push(`if (!(${compare} > 0)) break;`)
-  body.push(emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan} - 1, ${right})`, context))
-  body.push(emitStatusCheck(`ccjs_array_set(${receiver.expression}, ${scan}, ${left})`, context))
+  body.push(emitStatusCheck(`inox_array_set(${receiver.expression}, ${scan} - 1, ${right})`, context))
+  body.push(emitStatusCheck(`inox_array_set(${receiver.expression}, ${scan}, ${left})`, context))
   restoreArrayVariableScope(context, bodyScope)
 
-  const leftReadStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${scan} - 1, &${left})`, context)
-  const rightReadStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${scan}, &${right})`, context)
+  const leftReadStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${scan} - 1, &${left})`, context)
+  const rightReadStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${scan}, &${right})`, context)
   const lines: string[] = []
 
   appendLines(lines, receiver.lines)
   lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
+  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
   lines.push(`for (size_t ${index} = 1; ${index} < ${length}; ${index} += 1) {`)
   lines.push(`  for (size_t ${scan} = ${index}; ${scan} > 0; ${scan} -= 1) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(left), '    ')
@@ -1606,10 +1606,10 @@ export function emitPreparedArrayMapCallExpression(
       return null
     }
 
-    const out = nextCName(context, 'ccjs_map_array')
-    const length = nextCName(context, 'ccjs_map_length')
-    const index = nextCName(context, 'ccjs_map_index')
-    const value = nextCName(context, 'ccjs_map_value')
+    const out = nextCName(context, 'inox_map_array')
+    const length = nextCName(context, 'inox_map_length')
+    const index = nextCName(context, 'inox_map_index')
+    const value = nextCName(context, 'inox_map_value')
     let mappedElementType = 'unknown'
 
     if (expression.arrayElementType != null) {
@@ -1641,14 +1641,14 @@ export function emitPreparedArrayMapCallExpression(
       return null
     }
 
-    const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
+    const readStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)
     const lines: string[] = []
 
     appendLines(lines, receiver.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, 0, &${out})`, context))
     lines.push(`size_t ${length} = 0;`)
-    lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
+    lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
     appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
     lines.push(`  ${readStatus}`)
@@ -1708,10 +1708,10 @@ export function emitPreparedArrayFilterCallExpression(
       return null
     }
 
-    const out = nextCName(context, 'ccjs_filter_array')
-    const length = nextCName(context, 'ccjs_filter_length')
-    const index = nextCName(context, 'ccjs_filter_index')
-    const value = nextCName(context, 'ccjs_filter_value')
+    const out = nextCName(context, 'inox_filter_array')
+    const length = nextCName(context, 'inox_filter_length')
+    const index = nextCName(context, 'inox_filter_index')
+    const value = nextCName(context, 'inox_filter_value')
 
     registerOwnedValue(context, out)
     registerOwnedValue(context, value)
@@ -1738,14 +1738,14 @@ export function emitPreparedArrayFilterCallExpression(
       return null
     }
 
-    const readStatus = emitStatusCheck(`ccjs_array_get(${receiver.expression}, ${index}, &${value})`, context)
+    const readStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)
     const lines: string[] = []
 
     appendLines(lines, receiver.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_array_new(&ccjs_default_allocator, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, 0, &${out})`, context))
     lines.push(`size_t ${length} = 0;`)
-    lines.push(emitStatusCheck(`ccjs_array_len(${receiver.expression}, &${length})`, context))
+    lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
     appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
     lines.push(`  ${readStatus}`)
@@ -2026,7 +2026,7 @@ function emitArrayFilterBooleanCallbackBodyLines(
   value: string,
   context: ArrayFunctionContext
 ): string[] {
-  const pushStatus = emitStatusCheck(`ccjs_array_push(${out}, ${value})`, context)
+  const pushStatus = emitStatusCheck(`inox_array_push(${out}, ${value})`, context)
   const lines: string[] = []
 
   appendLines(lines, emitArrayFilterBooleanTypeCheckLines(elementType, value, context))
@@ -2043,19 +2043,19 @@ function emitArrayFilterBooleanTypeCheckLines(
   context: ArrayFunctionContext
 ): string[] {
   if (elementType === 'string') {
-    return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context)]
+    return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context)]
   }
 
   if (elementType === 'boolean') {
-    return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context)]
+    return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context)]
   }
 
-  return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context)]
+  return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context)]
 }
 
 function arrayFilterBooleanPredicateExpression(elementType: string, value: string): string {
   if (elementType === 'string') {
-    return `((ccjs_string*)${value}.as.ref)->len > 0`
+    return `((inox_string*)${value}.as.ref)->len > 0`
   }
 
   if (elementType === 'boolean') {
@@ -2077,7 +2077,7 @@ function emitArrayCallbackBodyLines(
     return emitArrayCallbackReturnLines(body.returnExpression, returnKind, elementType, out, value, context)
   }
 
-  const doneLabel = nextCName(context, 'ccjs_array_callback_done')
+  const doneLabel = nextCName(context, 'inox_array_callback_done')
   const lines = emitArrayCallbackStatementListLines(body.statements, doneLabel, returnKind, elementType, out, value, context)
 
   lines.push(`${doneLabel}:;`)
@@ -2208,7 +2208,7 @@ function emitArrayMapReturnLines(
   const lines: string[] = []
 
   appendLines(lines, mappedValue.lines)
-  lines.push(emitStatusCheck(`ccjs_array_push(${out}, ${mappedValue.expression})`, context))
+  lines.push(emitStatusCheck(`inox_array_push(${out}, ${mappedValue.expression})`, context))
 
   return lines
 }
@@ -2216,7 +2216,7 @@ function emitArrayMapReturnLines(
 function emitArrayFilterReturnLines(expression: AnyNode, out: string, value: string, context: ArrayFunctionContext): string[] {
   const predicate = arrayDeps(context).emitPreparedNumberExpression(expression, context)
 
-  const pushStatus = emitStatusCheck(`ccjs_array_push(${out}, ${value})`, context)
+  const pushStatus = emitStatusCheck(`inox_array_push(${out}, ${value})`, context)
   const lines: string[] = []
 
   appendLines(lines, predicate.lines)
@@ -2251,13 +2251,13 @@ function emitPreparedArrayCallbackInput(
 
     if (receiver.elementType === 'string') {
       context.runtimeStrings.add(valueParam.name)
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
-      lines.push(`ccjs_string* ${valueParam.name} = (ccjs_string*)${value}.as.ref;`)
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+      lines.push(`inox_string* ${valueParam.name} = (inox_string*)${value}.as.ref;`)
     } else if (receiver.elementType === 'boolean') {
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
       lines.push(`double ${valueParam.name} = (double)(${value}.as.boolean != 0);`)
     } else {
-      lines.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context))
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
       lines.push(`double ${valueParam.name} = ${value}.as.number;`)
     }
   }
@@ -2382,10 +2382,10 @@ function emitPreparedArrayElementValue(
   }
 
   const value = arrayDeps(context).emitPreparedNumberExpression(expression, context)
-  let valueExpression = `ccjs_number_value(${value.expression})`
+  let valueExpression = `inox_number_value(${value.expression})`
 
   if (valueType === 'boolean') {
-    valueExpression = `ccjs_bool_value((${value.expression}) != 0)`
+    valueExpression = `inox_bool_value((${value.expression}) != 0)`
   }
 
   return {
@@ -2435,19 +2435,19 @@ function emitPreparedArraySortComparatorParam(
   if (elementType === 'string') {
     context.runtimeStrings.add(name)
     return [
-      emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context),
-      `ccjs_string* ${name} = (ccjs_string*)${value}.as.ref;`
+      emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context),
+      `inox_string* ${name} = (inox_string*)${value}.as.ref;`
     ]
   }
 
   if (elementType === 'boolean') {
     return [
-      emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context),
+      emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context),
       `double ${name} = (double)(${value}.as.boolean != 0);`
     ]
   }
 
-  return [emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context), `double ${name} = ${value}.as.number;`]
+  return [emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context), `double ${name} = ${value}.as.number;`]
 }
 
 function emitPreparedArrayReceiver(

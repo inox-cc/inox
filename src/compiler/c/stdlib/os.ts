@@ -68,13 +68,13 @@ export function emitPreparedOsConstantExpression(
     return null
   }
 
-  const out = nextCName(context, 'ccjs_os_constant')
+  const out = nextCName(context, 'inox_os_constant')
   registerOwnedValue(context, out)
 
   const lines = emitPrepareOwnedValueWrite(out)
   lines.push(
     emitStatusCheck(
-      `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
+      `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
       context
     )
   )
@@ -95,11 +95,11 @@ export function emitPreparedOsStringCallExpression(
     return null
   }
 
-  const out = nextCName(context, 'ccjs_os_value')
+  const out = nextCName(context, 'inox_os_value')
   const lines = emitPrepareOwnedValueWrite(out)
   registerOwnedValue(context, out)
 
-  lines.push(emitStatusCheck(`ccjs_os_${method}(&ccjs_default_allocator, &${out})`, context))
+  lines.push(emitStatusCheck(`inox_os_${method}(&inox_default_allocator, &${out})`, context))
 
   return {
     lines,

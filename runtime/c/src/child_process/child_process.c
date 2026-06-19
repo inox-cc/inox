@@ -1,4 +1,4 @@
-#include "ccjs/child_process.h"
+#include "inox/child_process.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -10,22 +10,22 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "ccjs/string.h"
+#include "inox/string.h"
 
-typedef struct ccjs_child_process_options {
+typedef struct inox_child_process_options {
   int ignore_stdio;
   int has_timeout;
   long timeout_ms;
-  ccjs_value cwd_value;
+  inox_value cwd_value;
   const char* cwd;
   size_t cwd_len;
   char* cwd_nul;
-  ccjs_value env_value;
+  inox_value env_value;
   char** envp;
   size_t env_count;
-} ccjs_child_process_options;
+} inox_child_process_options;
 
-typedef struct ccjs_child_process_result {
+typedef struct inox_child_process_result {
   int status;
   char* stdout_bytes;
   size_t stdout_len;
@@ -33,347 +33,347 @@ typedef struct ccjs_child_process_result {
   char* stderr_bytes;
   size_t stderr_len;
   size_t stderr_cap;
-} ccjs_child_process_result;
+} inox_child_process_result;
 
-static ccjs_status ccjs_child_process_string(ccjs_value value, const char** bytes, size_t* len);
-static ccjs_status ccjs_child_process_number(ccjs_value value, long* out);
-static ccjs_status ccjs_child_process_options_init(
-  ccjs_allocator* allocator,
-  ccjs_value options,
-  ccjs_child_process_options* out
+static inox_status inox_child_process_string(inox_value value, const char** bytes, size_t* len);
+static inox_status inox_child_process_number(inox_value value, long* out);
+static inox_status inox_child_process_options_init(
+  inox_allocator* allocator,
+  inox_value options,
+  inox_child_process_options* out
 );
-static void ccjs_child_process_options_dispose(ccjs_allocator* allocator, ccjs_child_process_options* options);
-static ccjs_status ccjs_child_process_option_get(
-  ccjs_value options,
+static void inox_child_process_options_dispose(inox_allocator* allocator, inox_child_process_options* options);
+static inox_status inox_child_process_option_get(
+  inox_value options,
   const char* name,
   size_t name_len,
-  ccjs_value* out,
+  inox_value* out,
   int* found
 );
-static ccjs_status ccjs_child_process_envp_from_object(
-  ccjs_allocator* allocator,
-  ccjs_value env,
+static inox_status inox_child_process_envp_from_object(
+  inox_allocator* allocator,
+  inox_value env,
   char*** out,
   size_t* out_count
 );
-static void ccjs_child_process_envp_free(ccjs_allocator* allocator, char** envp, size_t count);
-static ccjs_status ccjs_child_process_run_shell(
-  ccjs_allocator* allocator,
-  ccjs_value command,
-  ccjs_value options,
-  ccjs_child_process_result* result
+static void inox_child_process_envp_free(inox_allocator* allocator, char** envp, size_t count);
+static inox_status inox_child_process_run_shell(
+  inox_allocator* allocator,
+  inox_value command,
+  inox_value options,
+  inox_child_process_result* result
 );
-static ccjs_status ccjs_child_process_run_file(
-  ccjs_allocator* allocator,
-  ccjs_value file,
-  const ccjs_value* args,
+static inox_status inox_child_process_run_file(
+  inox_allocator* allocator,
+  inox_value file,
+  const inox_value* args,
   size_t arg_count,
-  ccjs_value options,
-  ccjs_child_process_result* result
+  inox_value options,
+  inox_child_process_result* result
 );
-static ccjs_status ccjs_child_process_run_argv(
-  ccjs_allocator* allocator,
+static inox_status inox_child_process_run_argv(
+  inox_allocator* allocator,
   char** argv,
-  ccjs_value options,
-  ccjs_child_process_result* result
+  inox_value options,
+  inox_child_process_result* result
 );
-static ccjs_status ccjs_child_process_build_argv(
-  ccjs_allocator* allocator,
-  ccjs_value file,
-  const ccjs_value* args,
+static inox_status inox_child_process_build_argv(
+  inox_allocator* allocator,
+  inox_value file,
+  const inox_value* args,
   size_t arg_count,
   char*** out
 );
-static void ccjs_child_process_free_argv(ccjs_allocator* allocator, char** argv);
-static ccjs_status ccjs_child_process_result_init(ccjs_allocator* allocator, ccjs_child_process_result* result);
-static void ccjs_child_process_result_dispose(ccjs_allocator* allocator, ccjs_child_process_result* result);
-static ccjs_status ccjs_child_process_result_append(
-  ccjs_allocator* allocator,
+static void inox_child_process_free_argv(inox_allocator* allocator, char** argv);
+static inox_status inox_child_process_result_init(inox_allocator* allocator, inox_child_process_result* result);
+static void inox_child_process_result_dispose(inox_allocator* allocator, inox_child_process_result* result);
+static inox_status inox_child_process_result_append(
+  inox_allocator* allocator,
   char** bytes,
   size_t* len,
   size_t* cap,
   const char* chunk,
   size_t chunk_len
 );
-static ccjs_status ccjs_child_process_spawn_result_object(
-  ccjs_allocator* allocator,
-  const ccjs_child_process_result* result,
-  const ccjs_shape* shape,
-  ccjs_value* out
+static inox_status inox_child_process_spawn_result_object(
+  inox_allocator* allocator,
+  const inox_child_process_result* result,
+  const inox_shape* shape,
+  inox_value* out
 );
-static ccjs_status ccjs_child_process_stdout_string(
-  ccjs_allocator* allocator,
-  const ccjs_child_process_result* result,
-  ccjs_value* out
+static inox_status inox_child_process_stdout_string(
+  inox_allocator* allocator,
+  const inox_child_process_result* result,
+  inox_value* out
 );
-static void ccjs_child_process_exec_child(char** argv, const ccjs_child_process_options* options);
-static long ccjs_child_process_now_ms(void);
-static char* ccjs_child_process_alloc(ccjs_allocator* allocator, size_t len);
-static char* ccjs_child_process_copy_nul(ccjs_allocator* allocator, const char* bytes, size_t len);
+static void inox_child_process_exec_child(char** argv, const inox_child_process_options* options);
+static long inox_child_process_now_ms(void);
+static char* inox_child_process_alloc(inox_allocator* allocator, size_t len);
+static char* inox_child_process_copy_nul(inox_allocator* allocator, const char* bytes, size_t len);
 
-ccjs_status ccjs_child_process_exec_sync(
-  ccjs_allocator* allocator,
-  ccjs_value command,
-  ccjs_value options,
-  ccjs_value* out
+inox_status inox_child_process_exec_sync(
+  inox_allocator* allocator,
+  inox_value command,
+  inox_value options,
+  inox_value* out
 ) {
-  ccjs_child_process_result result;
-  ccjs_status status = ccjs_child_process_result_init(allocator, &result);
+  inox_child_process_result result;
+  inox_status status = inox_child_process_result_init(allocator, &result);
 
-  if (status == CCJS_OK) {
-    status = ccjs_child_process_run_shell(allocator, command, options, &result);
+  if (status == INOX_OK) {
+    status = inox_child_process_run_shell(allocator, command, options, &result);
   }
 
-  if (status == CCJS_OK && result.status != 0) {
-    status = CCJS_ERR_UNSUPPORTED;
+  if (status == INOX_OK && result.status != 0) {
+    status = INOX_ERR_UNSUPPORTED;
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_child_process_stdout_string(allocator, &result, out);
+  if (status == INOX_OK) {
+    status = inox_child_process_stdout_string(allocator, &result, out);
   }
 
-  ccjs_child_process_result_dispose(allocator, &result);
+  inox_child_process_result_dispose(allocator, &result);
 
   return status;
 }
 
-ccjs_status ccjs_child_process_exec_file_sync(
-  ccjs_allocator* allocator,
-  ccjs_value file,
-  const ccjs_value* args,
+inox_status inox_child_process_exec_file_sync(
+  inox_allocator* allocator,
+  inox_value file,
+  const inox_value* args,
   size_t arg_count,
-  ccjs_value options,
-  ccjs_value* out
+  inox_value options,
+  inox_value* out
 ) {
-  ccjs_child_process_result result;
-  ccjs_status status = ccjs_child_process_result_init(allocator, &result);
+  inox_child_process_result result;
+  inox_status status = inox_child_process_result_init(allocator, &result);
 
-  if (status == CCJS_OK) {
-    status = ccjs_child_process_run_file(allocator, file, args, arg_count, options, &result);
+  if (status == INOX_OK) {
+    status = inox_child_process_run_file(allocator, file, args, arg_count, options, &result);
   }
 
-  if (status == CCJS_OK && result.status != 0) {
-    status = CCJS_ERR_UNSUPPORTED;
+  if (status == INOX_OK && result.status != 0) {
+    status = INOX_ERR_UNSUPPORTED;
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_child_process_stdout_string(allocator, &result, out);
+  if (status == INOX_OK) {
+    status = inox_child_process_stdout_string(allocator, &result, out);
   }
 
-  ccjs_child_process_result_dispose(allocator, &result);
+  inox_child_process_result_dispose(allocator, &result);
 
   return status;
 }
 
-ccjs_status ccjs_child_process_spawn_sync(
-  ccjs_allocator* allocator,
-  ccjs_value file,
-  const ccjs_value* args,
+inox_status inox_child_process_spawn_sync(
+  inox_allocator* allocator,
+  inox_value file,
+  const inox_value* args,
   size_t arg_count,
-  ccjs_value options,
-  const ccjs_shape* shape,
-  ccjs_value* out
+  inox_value options,
+  const inox_shape* shape,
+  inox_value* out
 ) {
-  ccjs_child_process_result result;
-  ccjs_status status = ccjs_child_process_result_init(allocator, &result);
+  inox_child_process_result result;
+  inox_status status = inox_child_process_result_init(allocator, &result);
 
-  if (status == CCJS_OK) {
-    status = ccjs_child_process_run_file(allocator, file, args, arg_count, options, &result);
+  if (status == INOX_OK) {
+    status = inox_child_process_run_file(allocator, file, args, arg_count, options, &result);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_child_process_spawn_result_object(allocator, &result, shape, out);
+  if (status == INOX_OK) {
+    status = inox_child_process_spawn_result_object(allocator, &result, shape, out);
   }
 
-  ccjs_child_process_result_dispose(allocator, &result);
+  inox_child_process_result_dispose(allocator, &result);
 
   return status;
 }
 
-static ccjs_status ccjs_child_process_string(ccjs_value value, const char** bytes, size_t* len) {
-  if (bytes == 0 || len == 0 || value.tag != CCJS_TAG_STRING || value.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+static inox_status inox_child_process_string(inox_value value, const char** bytes, size_t* len) {
+  if (bytes == 0 || len == 0 || value.tag != INOX_TAG_STRING || value.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_string* string = (ccjs_string*)value.as.ref;
+  inox_string* string = (inox_string*)value.as.ref;
   *bytes = string->bytes;
   *len = string->len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_child_process_number(ccjs_value value, long* out) {
-  if (out == 0 || value.tag != CCJS_TAG_NUMBER) {
-    return CCJS_ERR_TYPE;
+static inox_status inox_child_process_number(inox_value value, long* out) {
+  if (out == 0 || value.tag != INOX_TAG_NUMBER) {
+    return INOX_ERR_TYPE;
   }
 
   *out = (long)value.as.number;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_child_process_options_init(
-  ccjs_allocator* allocator,
-  ccjs_value options,
-  ccjs_child_process_options* out
+static inox_status inox_child_process_options_init(
+  inox_allocator* allocator,
+  inox_value options,
+  inox_child_process_options* out
 ) {
   out->ignore_stdio = 0;
   out->has_timeout = 0;
   out->timeout_ms = 0;
-  out->cwd_value = ccjs_undefined_value();
+  out->cwd_value = inox_undefined_value();
   out->cwd = 0;
   out->cwd_len = 0;
   out->cwd_nul = 0;
-  out->env_value = ccjs_undefined_value();
+  out->env_value = inox_undefined_value();
   out->envp = 0;
   out->env_count = 0;
 
-  if (options.tag == CCJS_TAG_UNDEFINED || options.tag == CCJS_TAG_NULL) {
-    return CCJS_OK;
+  if (options.tag == INOX_TAG_UNDEFINED || options.tag == INOX_TAG_NULL) {
+    return INOX_OK;
   }
 
-  if (options.tag != CCJS_TAG_OBJECT || options.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+  if (options.tag != INOX_TAG_OBJECT || options.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_value value = ccjs_undefined_value();
+  inox_value value = inox_undefined_value();
   int found = 0;
-  ccjs_status status = ccjs_child_process_option_get(options, "cwd", 3, &value, &found);
+  inox_status status = inox_child_process_option_get(options, "cwd", 3, &value, &found);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (found) {
-    status = ccjs_child_process_string(value, &out->cwd, &out->cwd_len);
+    status = inox_child_process_string(value, &out->cwd, &out->cwd_len);
 
-    if (status != CCJS_OK) {
-      ccjs_release(value);
+    if (status != INOX_OK) {
+      inox_release(value);
       return status;
     }
 
-    out->cwd_nul = ccjs_child_process_copy_nul(allocator, out->cwd, out->cwd_len);
+    out->cwd_nul = inox_child_process_copy_nul(allocator, out->cwd, out->cwd_len);
 
     if (out->cwd_nul == 0) {
-      ccjs_release(value);
-      return CCJS_ERR_OOM;
+      inox_release(value);
+      return INOX_ERR_OOM;
     }
 
     out->cwd_value = value;
   }
 
-  value = ccjs_undefined_value();
+  value = inox_undefined_value();
   found = 0;
-  status = ccjs_child_process_option_get(options, "stdio", 5, &value, &found);
+  status = inox_child_process_option_get(options, "stdio", 5, &value, &found);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (found) {
     const char* bytes = 0;
     size_t len = 0;
-    status = ccjs_child_process_string(value, &bytes, &len);
+    status = inox_child_process_string(value, &bytes, &len);
 
-    if (status == CCJS_OK && len == 6 && strncmp(bytes, "ignore", 6) == 0) {
+    if (status == INOX_OK && len == 6 && strncmp(bytes, "ignore", 6) == 0) {
       out->ignore_stdio = 1;
     }
 
-    ccjs_release(value);
+    inox_release(value);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
   }
 
-  value = ccjs_undefined_value();
+  value = inox_undefined_value();
   found = 0;
-  status = ccjs_child_process_option_get(options, "timeout", 7, &value, &found);
+  status = inox_child_process_option_get(options, "timeout", 7, &value, &found);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (found) {
-    status = ccjs_child_process_number(value, &out->timeout_ms);
-    ccjs_release(value);
+    status = inox_child_process_number(value, &out->timeout_ms);
+    inox_release(value);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
 
     out->has_timeout = 1;
   }
 
-  value = ccjs_undefined_value();
+  value = inox_undefined_value();
   found = 0;
-  status = ccjs_child_process_option_get(options, "env", 3, &value, &found);
+  status = inox_child_process_option_get(options, "env", 3, &value, &found);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (found) {
-    status = ccjs_child_process_envp_from_object(allocator, value, &out->envp, &out->env_count);
+    status = inox_child_process_envp_from_object(allocator, value, &out->envp, &out->env_count);
 
-    if (status != CCJS_OK) {
-      ccjs_release(value);
+    if (status != INOX_OK) {
+      inox_release(value);
       return status;
     }
 
     out->env_value = value;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void ccjs_child_process_options_dispose(ccjs_allocator* allocator, ccjs_child_process_options* options) {
+static void inox_child_process_options_dispose(inox_allocator* allocator, inox_child_process_options* options) {
   if (options->cwd_nul != 0) {
     allocator->free(allocator->user, options->cwd_nul, options->cwd_len + 1, _Alignof(char));
   }
 
-  ccjs_release(options->cwd_value);
-  ccjs_release(options->env_value);
-  ccjs_child_process_envp_free(allocator, options->envp, options->env_count);
+  inox_release(options->cwd_value);
+  inox_release(options->env_value);
+  inox_child_process_envp_free(allocator, options->envp, options->env_count);
 }
 
-static ccjs_status ccjs_child_process_option_get(
-  ccjs_value options,
+static inox_status inox_child_process_option_get(
+  inox_value options,
   const char* name,
   size_t name_len,
-  ccjs_value* out,
+  inox_value* out,
   int* found
 ) {
   *found = 0;
-  *out = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_get(options, name, name_len, out);
+  *out = inox_undefined_value();
+  inox_status status = inox_object_get(options, name, name_len, out);
 
-  if (status == CCJS_ERR_FIELD) {
-    return CCJS_OK;
+  if (status == INOX_ERR_FIELD) {
+    return INOX_OK;
   }
 
-  if (status == CCJS_OK) {
+  if (status == INOX_OK) {
     *found = 1;
   }
 
   return status;
 }
 
-static ccjs_status ccjs_child_process_envp_from_object(
-  ccjs_allocator* allocator,
-  ccjs_value env,
+static inox_status inox_child_process_envp_from_object(
+  inox_allocator* allocator,
+  inox_value env,
   char*** out,
   size_t* out_count
 ) {
-  if (env.tag != CCJS_TAG_OBJECT || env.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+  if (env.tag != INOX_TAG_OBJECT || env.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* object = (ccjs_object*)env.as.ref;
+  inox_object* object = (inox_object*)env.as.ref;
   char** envp = allocator->alloc(allocator->user, sizeof(char*) * (object->shape->field_count + 1), _Alignof(char*));
 
   if (envp == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   for (uint32_t index = 0; index <= object->shape->field_count; index += 1) {
@@ -381,48 +381,48 @@ static ccjs_status ccjs_child_process_envp_from_object(
   }
 
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
-    ccjs_value value = ccjs_undefined_value();
-    ccjs_status status = ccjs_object_get_known(env, index, &value);
+    inox_value value = inox_undefined_value();
+    inox_status status = inox_object_get_known(env, index, &value);
 
-    if (status != CCJS_OK) {
-      ccjs_child_process_envp_free(allocator, envp, index);
+    if (status != INOX_OK) {
+      inox_child_process_envp_free(allocator, envp, index);
       return status;
     }
 
     const char* value_bytes = 0;
     size_t value_len = 0;
-    status = ccjs_child_process_string(value, &value_bytes, &value_len);
+    status = inox_child_process_string(value, &value_bytes, &value_len);
 
-    if (status != CCJS_OK) {
-      ccjs_release(value);
-      ccjs_child_process_envp_free(allocator, envp, index);
+    if (status != INOX_OK) {
+      inox_release(value);
+      inox_child_process_envp_free(allocator, envp, index);
       return status;
     }
 
     const char* key = object->shape->fields[index].name == 0 ? "" : object->shape->fields[index].name;
     size_t key_len = strlen(key);
-    char* entry = ccjs_child_process_alloc(allocator, key_len + 1 + value_len);
+    char* entry = inox_child_process_alloc(allocator, key_len + 1 + value_len);
 
     if (entry == 0) {
-      ccjs_release(value);
-      ccjs_child_process_envp_free(allocator, envp, index);
-      return CCJS_ERR_OOM;
+      inox_release(value);
+      inox_child_process_envp_free(allocator, envp, index);
+      return INOX_ERR_OOM;
     }
 
     memcpy(entry, key, key_len);
     entry[key_len] = '=';
     memcpy(entry + key_len + 1, value_bytes, value_len);
     envp[index] = entry;
-    ccjs_release(value);
+    inox_release(value);
   }
 
   *out = envp;
   *out_count = object->shape->field_count;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void ccjs_child_process_envp_free(ccjs_allocator* allocator, char** envp, size_t count) {
+static void inox_child_process_envp_free(inox_allocator* allocator, char** envp, size_t count) {
   if (envp == 0) {
     return;
   }
@@ -436,73 +436,73 @@ static void ccjs_child_process_envp_free(ccjs_allocator* allocator, char** envp,
   allocator->free(allocator->user, envp, sizeof(char*) * (count + 1), _Alignof(char*));
 }
 
-static ccjs_status ccjs_child_process_run_shell(
-  ccjs_allocator* allocator,
-  ccjs_value command,
-  ccjs_value options,
-  ccjs_child_process_result* result
+static inox_status inox_child_process_run_shell(
+  inox_allocator* allocator,
+  inox_value command,
+  inox_value options,
+  inox_child_process_result* result
 ) {
   const char* command_bytes = 0;
   size_t command_len = 0;
-  ccjs_status status = ccjs_child_process_string(command, &command_bytes, &command_len);
+  inox_status status = inox_child_process_string(command, &command_bytes, &command_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   char** argv = allocator->alloc(allocator->user, sizeof(char*) * 4, _Alignof(char*));
 
   if (argv == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
-  argv[0] = ccjs_child_process_copy_nul(allocator, "/bin/sh", 7);
-  argv[1] = ccjs_child_process_copy_nul(allocator, "-c", 2);
-  argv[2] = ccjs_child_process_copy_nul(allocator, command_bytes, command_len);
+  argv[0] = inox_child_process_copy_nul(allocator, "/bin/sh", 7);
+  argv[1] = inox_child_process_copy_nul(allocator, "-c", 2);
+  argv[2] = inox_child_process_copy_nul(allocator, command_bytes, command_len);
   argv[3] = 0;
 
   if (argv[0] == 0 || argv[1] == 0 || argv[2] == 0) {
-    ccjs_child_process_free_argv(allocator, argv);
-    return CCJS_ERR_OOM;
+    inox_child_process_free_argv(allocator, argv);
+    return INOX_ERR_OOM;
   }
 
-  status = ccjs_child_process_run_argv(allocator, argv, options, result);
-  ccjs_child_process_free_argv(allocator, argv);
+  status = inox_child_process_run_argv(allocator, argv, options, result);
+  inox_child_process_free_argv(allocator, argv);
 
   return status;
 }
 
-static ccjs_status ccjs_child_process_run_file(
-  ccjs_allocator* allocator,
-  ccjs_value file,
-  const ccjs_value* args,
+static inox_status inox_child_process_run_file(
+  inox_allocator* allocator,
+  inox_value file,
+  const inox_value* args,
   size_t arg_count,
-  ccjs_value options,
-  ccjs_child_process_result* result
+  inox_value options,
+  inox_child_process_result* result
 ) {
   char** argv = 0;
-  ccjs_status status = ccjs_child_process_build_argv(allocator, file, args, arg_count, &argv);
+  inox_status status = inox_child_process_build_argv(allocator, file, args, arg_count, &argv);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_child_process_run_argv(allocator, argv, options, result);
-  ccjs_child_process_free_argv(allocator, argv);
+  status = inox_child_process_run_argv(allocator, argv, options, result);
+  inox_child_process_free_argv(allocator, argv);
 
   return status;
 }
 
-static ccjs_status ccjs_child_process_run_argv(
-  ccjs_allocator* allocator,
+static inox_status inox_child_process_run_argv(
+  inox_allocator* allocator,
   char** argv,
-  ccjs_value options_value,
-  ccjs_child_process_result* result
+  inox_value options_value,
+  inox_child_process_result* result
 ) {
-  ccjs_child_process_options options;
-  ccjs_status status = ccjs_child_process_options_init(allocator, options_value, &options);
+  inox_child_process_options options;
+  inox_status status = inox_child_process_options_init(allocator, options_value, &options);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
@@ -510,8 +510,8 @@ static ccjs_status ccjs_child_process_run_argv(
   int stderr_pipe[2] = { -1, -1 };
 
   if (!options.ignore_stdio && (pipe(stdout_pipe) != 0 || pipe(stderr_pipe) != 0)) {
-    ccjs_child_process_options_dispose(allocator, &options);
-    return CCJS_ERR_UNSUPPORTED;
+    inox_child_process_options_dispose(allocator, &options);
+    return INOX_ERR_UNSUPPORTED;
   }
 
   pid_t pid = fork();
@@ -527,8 +527,8 @@ static ccjs_status ccjs_child_process_run_argv(
       close(stderr_pipe[1]);
     }
 
-    ccjs_child_process_options_dispose(allocator, &options);
-    return CCJS_ERR_UNSUPPORTED;
+    inox_child_process_options_dispose(allocator, &options);
+    return INOX_ERR_UNSUPPORTED;
   }
 
   if (pid == 0) {
@@ -550,7 +550,7 @@ static ccjs_status ccjs_child_process_run_argv(
       close(stderr_pipe[1]);
     }
 
-    ccjs_child_process_exec_child(argv, &options);
+    inox_child_process_exec_child(argv, &options);
   }
 
   if (!options.ignore_stdio) {
@@ -562,7 +562,7 @@ static ccjs_status ccjs_child_process_run_argv(
   int stderr_open = !options.ignore_stdio;
   int exited = 0;
   int child_status = 0;
-  long start = ccjs_child_process_now_ms();
+  long start = inox_child_process_now_ms();
   int timed_out = 0;
 
   while (stdout_open || stderr_open || !exited) {
@@ -574,7 +574,7 @@ static ccjs_status ccjs_child_process_run_argv(
       }
     }
 
-    if (!exited && options.has_timeout && options.timeout_ms >= 0 && ccjs_child_process_now_ms() - start >= options.timeout_ms) {
+    if (!exited && options.has_timeout && options.timeout_ms >= 0 && inox_child_process_now_ms() - start >= options.timeout_ms) {
       kill(pid, SIGKILL);
       waitpid(pid, &child_status, 0);
       exited = 1;
@@ -608,7 +608,7 @@ static ccjs_status ccjs_child_process_run_argv(
     int ready = select(max_fd + 1, &readfds, 0, 0, &timeout);
 
     if (ready < 0 && errno != EINTR) {
-      status = CCJS_ERR_UNSUPPORTED;
+      status = INOX_ERR_UNSUPPORTED;
       break;
     }
 
@@ -618,11 +618,11 @@ static ccjs_status ccjs_child_process_run_argv(
       ssize_t count = read(stdout_pipe[0], buffer, sizeof(buffer));
 
       if (count > 0) {
-        status = ccjs_child_process_result_append(
+        status = inox_child_process_result_append(
           allocator, &result->stdout_bytes, &result->stdout_len, &result->stdout_cap, buffer, (size_t)count
         );
 
-        if (status != CCJS_OK) {
+        if (status != INOX_OK) {
           break;
         }
       } else if (count == 0) {
@@ -635,11 +635,11 @@ static ccjs_status ccjs_child_process_run_argv(
       ssize_t count = read(stderr_pipe[0], buffer, sizeof(buffer));
 
       if (count > 0) {
-        status = ccjs_child_process_result_append(
+        status = inox_child_process_result_append(
           allocator, &result->stderr_bytes, &result->stderr_len, &result->stderr_cap, buffer, (size_t)count
         );
 
-        if (status != CCJS_OK) {
+        if (status != INOX_OK) {
           break;
         }
       } else if (count == 0) {
@@ -662,7 +662,7 @@ static ccjs_status ccjs_child_process_run_argv(
     waitpid(pid, &child_status, 0);
   }
 
-  if (status == CCJS_OK) {
+  if (status == INOX_OK) {
     if (timed_out) {
       result->status = -1;
     } else if (WIFEXITED(child_status)) {
@@ -674,67 +674,67 @@ static ccjs_status ccjs_child_process_run_argv(
     }
   }
 
-  ccjs_child_process_options_dispose(allocator, &options);
+  inox_child_process_options_dispose(allocator, &options);
 
   return status;
 }
 
-static ccjs_status ccjs_child_process_build_argv(
-  ccjs_allocator* allocator,
-  ccjs_value file,
-  const ccjs_value* args,
+static inox_status inox_child_process_build_argv(
+  inox_allocator* allocator,
+  inox_value file,
+  const inox_value* args,
   size_t arg_count,
   char*** out
 ) {
   const char* file_bytes = 0;
   size_t file_len = 0;
-  ccjs_status status = ccjs_child_process_string(file, &file_bytes, &file_len);
+  inox_status status = inox_child_process_string(file, &file_bytes, &file_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   char** argv = allocator->alloc(allocator->user, sizeof(char*) * (arg_count + 2), _Alignof(char*));
 
   if (argv == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   for (size_t index = 0; index < arg_count + 2; index += 1) {
     argv[index] = 0;
   }
 
-  argv[0] = ccjs_child_process_copy_nul(allocator, file_bytes, file_len);
+  argv[0] = inox_child_process_copy_nul(allocator, file_bytes, file_len);
 
   if (argv[0] == 0) {
-    ccjs_child_process_free_argv(allocator, argv);
-    return CCJS_ERR_OOM;
+    inox_child_process_free_argv(allocator, argv);
+    return INOX_ERR_OOM;
   }
 
   for (size_t index = 0; index < arg_count; index += 1) {
     const char* arg_bytes = 0;
     size_t arg_len = 0;
-    status = ccjs_child_process_string(args[index], &arg_bytes, &arg_len);
+    status = inox_child_process_string(args[index], &arg_bytes, &arg_len);
 
-    if (status != CCJS_OK) {
-      ccjs_child_process_free_argv(allocator, argv);
+    if (status != INOX_OK) {
+      inox_child_process_free_argv(allocator, argv);
       return status;
     }
 
-    argv[index + 1] = ccjs_child_process_copy_nul(allocator, arg_bytes, arg_len);
+    argv[index + 1] = inox_child_process_copy_nul(allocator, arg_bytes, arg_len);
 
     if (argv[index + 1] == 0) {
-      ccjs_child_process_free_argv(allocator, argv);
-      return CCJS_ERR_OOM;
+      inox_child_process_free_argv(allocator, argv);
+      return INOX_ERR_OOM;
     }
   }
 
   *out = argv;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void ccjs_child_process_free_argv(ccjs_allocator* allocator, char** argv) {
+static void inox_child_process_free_argv(inox_allocator* allocator, char** argv) {
   if (argv == 0) {
     return;
   }
@@ -749,24 +749,24 @@ static void ccjs_child_process_free_argv(ccjs_allocator* allocator, char** argv)
   allocator->free(allocator->user, argv, sizeof(char*) * (index + 1), _Alignof(char*));
 }
 
-static ccjs_status ccjs_child_process_result_init(ccjs_allocator* allocator, ccjs_child_process_result* result) {
+static inox_status inox_child_process_result_init(inox_allocator* allocator, inox_child_process_result* result) {
   result->status = 0;
   result->stdout_len = 0;
   result->stdout_cap = 256;
   result->stderr_len = 0;
   result->stderr_cap = 256;
-  result->stdout_bytes = ccjs_child_process_alloc(allocator, result->stdout_cap);
-  result->stderr_bytes = ccjs_child_process_alloc(allocator, result->stderr_cap);
+  result->stdout_bytes = inox_child_process_alloc(allocator, result->stdout_cap);
+  result->stderr_bytes = inox_child_process_alloc(allocator, result->stderr_cap);
 
   if (result->stdout_bytes == 0 || result->stderr_bytes == 0) {
-    ccjs_child_process_result_dispose(allocator, result);
-    return CCJS_ERR_OOM;
+    inox_child_process_result_dispose(allocator, result);
+    return INOX_ERR_OOM;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void ccjs_child_process_result_dispose(ccjs_allocator* allocator, ccjs_child_process_result* result) {
+static void inox_child_process_result_dispose(inox_allocator* allocator, inox_child_process_result* result) {
   if (result->stdout_bytes != 0) {
     allocator->free(allocator->user, result->stdout_bytes, result->stdout_cap + 1, _Alignof(char));
   }
@@ -776,8 +776,8 @@ static void ccjs_child_process_result_dispose(ccjs_allocator* allocator, ccjs_ch
   }
 }
 
-static ccjs_status ccjs_child_process_result_append(
-  ccjs_allocator* allocator,
+static inox_status inox_child_process_result_append(
+  inox_allocator* allocator,
   char** bytes,
   size_t* len,
   size_t* cap,
@@ -794,7 +794,7 @@ static ccjs_status ccjs_child_process_result_append(
     char* next = allocator->realloc(allocator->user, *bytes, *cap + 1, next_cap + 1, _Alignof(char));
 
     if (next == 0) {
-      return CCJS_ERR_OOM;
+      return INOX_ERR_OOM;
     }
 
     *bytes = next;
@@ -805,63 +805,63 @@ static ccjs_status ccjs_child_process_result_append(
   *len += chunk_len;
   (*bytes)[*len] = 0;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_child_process_spawn_result_object(
-  ccjs_allocator* allocator,
-  const ccjs_child_process_result* result,
-  const ccjs_shape* shape,
-  ccjs_value* out
+static inox_status inox_child_process_spawn_result_object(
+  inox_allocator* allocator,
+  const inox_child_process_result* result,
+  const inox_shape* shape,
+  inox_value* out
 ) {
-  ccjs_value object = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_new(allocator, shape, &object);
-  ccjs_value stdout_value = ccjs_undefined_value();
-  ccjs_value stderr_value = ccjs_undefined_value();
+  inox_value object = inox_undefined_value();
+  inox_status status = inox_object_new(allocator, shape, &object);
+  inox_value stdout_value = inox_undefined_value();
+  inox_value stderr_value = inox_undefined_value();
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, 0, ccjs_number_value((ccjs_number)result->status));
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, 0, inox_number_value((inox_number)result->status));
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, result->stdout_bytes, result->stdout_len, &stdout_value);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, result->stdout_bytes, result->stdout_len, &stdout_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, 1, stdout_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, 1, stdout_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, result->stderr_bytes, result->stderr_len, &stderr_value);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, result->stderr_bytes, result->stderr_len, &stderr_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, 2, stderr_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, 2, stderr_value);
   }
 
-  ccjs_release(stdout_value);
-  ccjs_release(stderr_value);
+  inox_release(stdout_value);
+  inox_release(stderr_value);
 
-  if (status == CCJS_OK) {
+  if (status == INOX_OK) {
     *out = object;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  ccjs_release(object);
-  *out = ccjs_undefined_value();
+  inox_release(object);
+  *out = inox_undefined_value();
 
   return status;
 }
 
-static ccjs_status ccjs_child_process_stdout_string(
-  ccjs_allocator* allocator,
-  const ccjs_child_process_result* result,
-  ccjs_value* out
+static inox_status inox_child_process_stdout_string(
+  inox_allocator* allocator,
+  const inox_child_process_result* result,
+  inox_value* out
 ) {
-  return ccjs_string_from_literal(allocator, result->stdout_bytes, result->stdout_len, out);
+  return inox_string_from_literal(allocator, result->stdout_bytes, result->stdout_len, out);
 }
 
-static void ccjs_child_process_exec_child(char** argv, const ccjs_child_process_options* options) {
+static void inox_child_process_exec_child(char** argv, const inox_child_process_options* options) {
   if (options->cwd_nul != 0 && chdir(options->cwd_nul) != 0) {
     _exit(127);
   }
@@ -911,7 +911,7 @@ static void ccjs_child_process_exec_child(char** argv, const ccjs_child_process_
   _exit(127);
 }
 
-static long ccjs_child_process_now_ms(void) {
+static long inox_child_process_now_ms(void) {
   struct timeval value;
 
   if (gettimeofday(&value, 0) != 0) {
@@ -921,7 +921,7 @@ static long ccjs_child_process_now_ms(void) {
   return (long)value.tv_sec * 1000L + (long)(value.tv_usec / 1000L);
 }
 
-static char* ccjs_child_process_alloc(ccjs_allocator* allocator, size_t len) {
+static char* inox_child_process_alloc(inox_allocator* allocator, size_t len) {
   if (allocator == 0 || allocator->alloc == 0) {
     return 0;
   }
@@ -935,8 +935,8 @@ static char* ccjs_child_process_alloc(ccjs_allocator* allocator, size_t len) {
   return bytes;
 }
 
-static char* ccjs_child_process_copy_nul(ccjs_allocator* allocator, const char* bytes, size_t len) {
-  char* out = ccjs_child_process_alloc(allocator, len);
+static char* inox_child_process_copy_nul(inox_allocator* allocator, const char* bytes, size_t len) {
+  char* out = inox_child_process_alloc(allocator, len);
 
   if (out != 0) {
     memcpy(out, bytes, len);

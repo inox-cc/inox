@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_UNKNOWN_NAME
+// @diagnostic INOX_UNKNOWN_NAME
 
 export function main(): void {
   console.log(value)

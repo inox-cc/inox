@@ -66,9 +66,7 @@ Examples:
   inox index.ts --emit c -o build/index.c
   inox src/index.ts --emit c --out-dir generated --entry
   inox run src/main.ts
-  inox build src/main.ts --target c -o build/main
-
-The old ccjs command remains available as a compatibility alias.`
+  inox build src/main.ts --target c -o build/main`
 
 export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   if (args.length === 0) {

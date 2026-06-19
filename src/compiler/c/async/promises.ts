@@ -425,7 +425,7 @@ export function emitPreparedPromiseStaticExpression(
 
   registerEventLoop(context)
 
-  const out = preparedPromiseOut(options, context, 'ccjs_promise')
+  const out = preparedPromiseOut(options, context, 'inox_promise')
   const rejectionValueType = promiseStaticRejectionValueType(method, expression, context, dependencies)
 
   if (options.owned !== false) {
@@ -460,7 +460,7 @@ export function emitPreparedPromiseConstructorExpression(
 
   registerEventLoop(context)
 
-  const out = preparedPromiseOut(options, context, 'ccjs_promise')
+  const out = preparedPromiseOut(options, context, 'inox_promise')
   const executor = expression.args[0]
   const valueType = expressionPromiseValueType(expression)
   const rejectionValueType = promiseConstructorRejectionValueType(executor, context, dependencies)
@@ -469,12 +469,12 @@ export function emitPreparedPromiseConstructorExpression(
     registerOwnedPromise(context, out, valueType, rejectionValueType)
   }
 
-  const lines = [emitStatusCheck(`ccjs_promise_new(${emitEventLoopReference(context)}, &${out})`, context)]
+  const lines = [emitStatusCheck(`inox_promise_new(${emitEventLoopReference(context)}, &${out})`, context)]
 
   if (executor == null || executor.type !== 'ArrowFunctionExpression') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'Promise constructor currently supports only arrow-function executors in C',
         expression.loc
       )
@@ -532,7 +532,7 @@ export function emitPromiseConstructorSettlementCall(
   if (expression.args.length > 1) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'Promise constructor resolve/reject handlers currently support at most one argument in C',
         expression.loc
       )
@@ -573,7 +573,7 @@ export function emitPreparedPromiseMethodExpression(
   if (wrapper == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'Promise.then/catch currently supports only non-capturing expression-body, single-return block-body, straight-line block-body or simple control-flow block-body arrow callbacks in C',
         expression.loc
       )
@@ -592,7 +592,7 @@ export function emitPreparedPromiseMethodExpression(
   if (receiver == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'this Promise chain receiver is not supported by the current C backend slice',
         expression.loc
       )
@@ -606,7 +606,7 @@ export function emitPreparedPromiseMethodExpression(
     }
   }
 
-  const out = preparedPromiseOut(options, context, 'ccjs_promise')
+  const out = preparedPromiseOut(options, context, 'inox_promise')
   const valueType = expressionPromiseValueType(expression)
   const rejectionValueType = promiseMethodRejectionValueType(method, receiver)
   const callbackContext = emitPromiseChainCallbackContext(wrapper, context, dependencies)
@@ -715,7 +715,7 @@ export function emitPreparedPromiseReturningCallExpression(
     return null
   }
 
-  const out = preparedPromiseOut(options, context, 'ccjs_promise')
+  const out = preparedPromiseOut(options, context, 'inox_promise')
   const valueType = resolvePromiseReturningFunctionValueType(expression.callee, context)
   const call = dependencies.emitPreparedCallExpression(expression, context)
 
@@ -781,10 +781,10 @@ function promiseStaticRejectionValueType(
 
 function promiseStaticRuntimeCall(method: string | null): string {
   if (method === 'resolve') {
-    return 'ccjs_promise_resolved'
+    return 'inox_promise_resolved'
   }
 
-  return 'ccjs_promise_rejected'
+  return 'inox_promise_rejected'
 }
 
 function emitPreparedPromiseArgumentValue(
@@ -795,7 +795,7 @@ function emitPreparedPromiseArgumentValue(
   if (argument == null) {
     return {
       lines: [],
-      expression: 'ccjs_undefined_value()'
+      expression: 'inox_undefined_value()'
     }
   }
 
@@ -846,15 +846,15 @@ function promiseExecutorStatements(executor: AnyNode): AnyNode[] {
 
 function promiseConstructorRuntimeCall(kind: string): string {
   if (kind === 'resolve') {
-    return 'ccjs_promise_resolve'
+    return 'inox_promise_resolve'
   }
 
-  return 'ccjs_promise_reject'
+  return 'inox_promise_reject'
 }
 
 function promiseConstructorHandlerRuntimeCall(handler: CPromiseConstructorHandler | null | undefined): string {
   if (handler == null) {
-    return 'ccjs_promise_resolve'
+    return 'inox_promise_resolve'
   }
 
   return promiseConstructorRuntimeCall(handler.kind)
@@ -931,10 +931,10 @@ function promiseMethodRuntimeCall(
   const wrapperName = promiseChainWrapperName(wrapper)
 
   if (method === 'then') {
-    return `ccjs_promise_chain(${receiverExpression}, ${wrapperName}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+    return `inox_promise_chain(${receiverExpression}, ${wrapperName}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
   }
 
-  return `ccjs_promise_catch(${receiverExpression}, ${wrapperName}, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
+  return `inox_promise_catch(${receiverExpression}, ${wrapperName}, ${callbackContext.expression}, ${callbackContext.finalizer}, &${out})`
 }
 
 function promiseMethodRuntimeCallLines(
@@ -948,7 +948,7 @@ function promiseMethodRuntimeCallLines(
   }
 
   return [
-    `if (${runtimeCall} != CCJS_OK) {`,
+    `if (${runtimeCall} != INOX_OK) {`,
     `  ${promiseChainWrapperFinalizerName(wrapper)}(${callbackContext.expression});`,
     `  ${emitFailureStatement(context)}`,
     '}'
@@ -1418,7 +1418,7 @@ function emitPromiseChainCallbackContext(
     if (capture.mutable) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_ASYNC',
+          'INOX_C_ASYNC',
           'mutable Promise callback captures are outside the current C backend MVP; use const captures or move mutation outside the Promise callback',
           wrapper.expression.loc
         )
@@ -1428,7 +1428,7 @@ function emitPromiseChainCallbackContext(
     if (!isSupportedPromiseCaptureValueType(capture.valueType)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_ASYNC',
+          'INOX_C_ASYNC',
           'capturing Promise callbacks currently support only const number/boolean/string/object bindings',
           wrapper.expression.loc
         )
@@ -1436,16 +1436,16 @@ function emitPromiseChainCallbackContext(
     }
   }
 
-  const contextName = nextCName(context, 'ccjs_promise_callback_ctx')
+  const contextName = nextCName(context, 'inox_promise_callback_ctx')
 
   lines.push(
-    `${wrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
+    `${wrapper.contextTypeName}* ${contextName} = inox_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
   )
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
 
   if (wrapper.needsEventLoop === true) {
     registerEventLoop(context)
-    lines.push(`${contextName}->ccjs_loop = ${emitEventLoopReference(context)};`)
+    lines.push(`${contextName}->inox_loop = ${emitEventLoopReference(context)};`)
   }
 
   for (const capture of wrapper.captures) {
@@ -1648,9 +1648,9 @@ function registerPromiseChainExpression(
   const wrapper: CPromiseChainWrapper = {
     kind: 'promise-chain-arrow',
     key: key,
-    name: `ccjs_promise_chain_arrow_${index}`,
-    contextTypeName: `ccjs_promise_chain_context_${index}`,
-    finalizerName: `ccjs_promise_chain_context_${index}_finalize`,
+    name: `inox_promise_chain_arrow_${index}`,
+    contextTypeName: `inox_promise_chain_context_${index}`,
+    finalizerName: `inox_promise_chain_context_${index}_finalize`,
     expression: callback,
     returnType: promiseCallbackReturnType(callback, expression),
     returnShape: promiseCallbackReturnShape(callback),
@@ -1861,7 +1861,7 @@ function visitPromiseChainExpression(
 }
 
 export function emitPromiseChainCallbackWrapperHead(wrapper: CPromiseChainWrapper): string {
-  return `static ccjs_status ${wrapper.name}(void* context, ccjs_value ccjs_value_input, ccjs_value* out)`
+  return `static inox_status ${wrapper.name}(void* context, inox_value inox_value_input, inox_value* out)`
 }
 
 export function emitPromiseChainCallbackWrapperDeclaration(
@@ -1882,7 +1882,7 @@ export function emitPromiseChainCallbackWrapperDeclaration(
   context.runtimeCallbackReturnType = wrapper.returnType
   context.runtimeCallbackReturnShape = wrapper.returnShape
   context.runtimeCallbackReturnOut = '(*out)'
-  context.runtimeCallbackCleanupLabel = 'ccjs_promise_callback_cleanup'
+  context.runtimeCallbackCleanupLabel = 'inox_promise_callback_cleanup'
   const bodyLines: string[] = []
   appendLines(bodyLines, deps.emitRuntimeArrowCallbackContextLocals(wrapper, context, deps.callbackLoweringDependencies, 'context'))
   appendLines(bodyLines, emitPromiseChainCallbackParamPrelude(wrapper, context))
@@ -1891,13 +1891,13 @@ export function emitPromiseChainCallbackWrapperDeclaration(
   lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)} {`)
 
   if (deps.isPromiseChainCallbackWrapperWithContext(wrapper)) {
-    lines.push('  if (context == 0) return CCJS_ERR_TYPE;')
+    lines.push('  if (context == 0) return INOX_ERR_TYPE;')
   } else {
     lines.push('  (void)context;')
   }
 
-  lines.push('  if (out == 0) return CCJS_ERR_TYPE;')
-  lines.push('  *out = ccjs_undefined_value();')
+  lines.push('  if (out == 0) return INOX_ERR_TYPE;')
+  lines.push('  *out = inox_undefined_value();')
   appendIndentedLines(lines, bodyLines, '  ')
   appendIndentedLines(lines, deps.emitLoopFlowDeclarations(context), '  ')
   appendIndentedLines(lines, deps.emitReturnFlowDeclarations(context), '  ')
@@ -1912,7 +1912,7 @@ export function emitPromiseChainCallbackWrapperDeclaration(
 
   appendIndentedLines(lines, deps.emitOwnedValueCleanup(context), '  ')
   appendIndentedLines(lines, deps.emitBoxedValueCleanup(context), '  ')
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -1922,7 +1922,7 @@ function emitPromiseChainCallbackParamPrelude(wrapper: CPromiseChainWrapper, con
   const param = wrapper.expression.params[0]
 
   if (param == null) {
-    return ['(void)ccjs_value_input;']
+    return ['(void)inox_value_input;']
   }
 
   const valueType = callbackParamValueType(param)
@@ -1930,15 +1930,15 @@ function emitPromiseChainCallbackParamPrelude(wrapper: CPromiseChainWrapper, con
 
   if (valueType === 'number') {
     return [
-      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_NUMBER', context),
-      `double ${param.name} = ccjs_value_input.as.number;`
+      emitRuntimeTypeCheck('inox_value_input.tag != INOX_TAG_NUMBER', context),
+      `double ${param.name} = inox_value_input.as.number;`
     ]
   }
 
   if (valueType === 'boolean') {
     return [
-      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_BOOL', context),
-      `double ${param.name} = ccjs_value_input.as.boolean ? 1 : 0;`
+      emitRuntimeTypeCheck('inox_value_input.tag != INOX_TAG_BOOL', context),
+      `double ${param.name} = inox_value_input.as.boolean ? 1 : 0;`
     ]
   }
 
@@ -1946,19 +1946,19 @@ function emitPromiseChainCallbackParamPrelude(wrapper: CPromiseChainWrapper, con
     context.runtimeStrings.add(param.name)
 
     return [
-      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_STRING || ccjs_value_input.as.ref == 0', context),
-      `ccjs_string* ${param.name} = (ccjs_string*)ccjs_value_input.as.ref;`
+      emitRuntimeTypeCheck('inox_value_input.tag != INOX_TAG_STRING || inox_value_input.as.ref == 0', context),
+      `inox_string* ${param.name} = (inox_string*)inox_value_input.as.ref;`
     ]
   }
 
   if (valueType === 'object') {
     return [
-      emitRuntimeTypeCheck('ccjs_value_input.tag != CCJS_TAG_OBJECT || ccjs_value_input.as.ref == 0', context),
-      `ccjs_value ${param.name} = ccjs_value_input;`
+      emitRuntimeTypeCheck('inox_value_input.tag != INOX_TAG_OBJECT || inox_value_input.as.ref == 0', context),
+      `inox_value ${param.name} = inox_value_input;`
     ]
   }
 
-  return [`ccjs_value ${param.name} = ccjs_value_input;`]
+  return [`inox_value ${param.name} = inox_value_input;`]
 }
 
 function emitPromiseChainCallbackStatementLines(
@@ -1996,10 +1996,10 @@ function emitPromiseChainCallbackReturnLines(
 
   if (wrapper.returnType === 'number' || wrapper.returnType === 'boolean') {
     const value = deps.emitPreparedNumberExpression(returnExpression, context)
-    let expression = `ccjs_bool_value((${value.expression}) != 0)`
+    let expression = `inox_bool_value((${value.expression}) != 0)`
 
     if (wrapper.returnType === 'number') {
-      expression = `ccjs_number_value(${value.expression})`
+      expression = `inox_number_value(${value.expression})`
     }
 
     const lines: string[] = []

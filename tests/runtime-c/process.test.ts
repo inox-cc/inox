@@ -19,7 +19,7 @@ test('generated C node:process helpers compile and run with runtime sources', as
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-process-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-process-'))
   const source = join(dir, 'node-process.c')
   const output = join(dir, 'node-process')
 
@@ -29,7 +29,7 @@ test('generated C node:process helpers compile and run with runtime sources', as
 
 process.exitCode = 5
 console.log(process.argv[1])
-console.log(process.env.CCJS_PROCESS_TEST)
+console.log(process.env.INOX_PROCESS_TEST)
 console.log(process.cwd().length > 0)
 console.log(process.exitCode)
 console.log(process.argv.length)
@@ -40,7 +40,7 @@ console.log(pid, process.pid)
 console.log(platform, arch)
 console.log(process.platform, process.arch)
 console.log(version, process.version, versions.node, process.versions.node)
-console.log(env.CCJS_PROCESS_TEST)
+console.log(env.INOX_PROCESS_TEST)
 
 `,
       {
@@ -57,7 +57,7 @@ console.log(env.CCJS_PROCESS_TEST)
     const run = await runCommand(output, ['hello-process'], {
       env: {
         ...process.env,
-        CCJS_PROCESS_TEST: 'env-ok'
+        INOX_PROCESS_TEST: 'env-ok'
       }
     })
 
@@ -76,7 +76,7 @@ console.log(env.CCJS_PROCESS_TEST)
     assert.match(lines[8], /^[0-9]+ [0-9]+$/)
     assert.notEqual(lines[9], '')
     assert.notEqual(lines[10], '')
-    assert.equal(lines[11], 'v0.0.0-ccjs v0.0.0-ccjs 0.0.0-ccjs 0.0.0-ccjs')
+    assert.equal(lines[11], 'v0.0.0-inox v0.0.0-inox 0.0.0-inox 0.0.0-inox')
     assert.equal(lines[12], 'env-ok')
   } finally {
     await rm(dir, {

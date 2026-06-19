@@ -37,7 +37,7 @@ if (cmakeProbe.code !== 0) {
   process.exit(0)
 }
 
-const buildDir = await mkdtemp(join(tmpdir(), 'ccjs-libuv-cmake-'))
+const buildDir = await mkdtemp(join(tmpdir(), 'inox-libuv-cmake-'))
 
 try {
   if (!mode.networkOnly) {
@@ -118,23 +118,23 @@ async function checkLibuvTimerRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_timer_smoke C)
+project(inox_libuv_timer_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_timer_smoke timer-smoke.c)
-target_link_libraries(ccjs_libuv_timer_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_timer_smoke timer-smoke.c)
+target_link_libraries(inox_libuv_timer_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
     join(sourceDir, 'timer-smoke.c'),
     `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/loop.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/loop.h"
+#include "inox/time.h"
 
 typedef struct test_log {
   int immediate;
@@ -143,7 +143,7 @@ typedef struct test_log {
   int interval;
   int delayed;
   int finalized;
-  ccjs_timer_handle* interval_handle;
+  inox_timer_handle* interval_handle;
 } test_log;
 
 static void* test_alloc(void* user, size_t size, size_t align) {
@@ -166,35 +166,35 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status on_immediate(void* context) {
+static inox_status on_immediate(void* context) {
   ((test_log*)context)->immediate += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_timeout(void* context) {
+static inox_status on_timeout(void* context) {
   ((test_log*)context)->timeout += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_canceled(void* context) {
+static inox_status on_canceled(void* context) {
   ((test_log*)context)->canceled += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_interval(void* context) {
+static inox_status on_interval(void* context) {
   test_log* log = (test_log*)context;
   log->interval += 1;
 
   if (log->interval >= 3) {
-    ccjs_loop_clear_timer(log->interval_handle);
+    inox_loop_clear_timer(log->interval_handle);
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_delayed(void* context) {
+static inox_status on_delayed(void* context) {
   ((test_log*)context)->delayed += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
 static void on_finalize(void* context) {
@@ -202,43 +202,43 @@ static void on_finalize(void* context) {
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
-  ccjs_timer_handle* immediate = 0;
-  ccjs_timer_handle* timeout = 0;
-  ccjs_timer_handle* canceled = 0;
-  ccjs_timer_handle* interval = 0;
-  ccjs_timer_handle* delayed = 0;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
+  inox_timer_handle* immediate = 0;
+  inox_timer_handle* timeout = 0;
+  inox_timer_handle* canceled = 0;
+  inox_timer_handle* interval = 0;
+  inox_timer_handle* delayed = 0;
   test_log log = { 0, 0, 0, 0, 0, 0, 0 };
   int guard = 0;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_loop_queue_immediate(&loop, on_immediate, &log, on_finalize, &immediate) != CCJS_OK) return 2;
-  if (ccjs_loop_set_timeout(&loop, 0, on_timeout, &log, on_finalize, &timeout) != CCJS_OK) return 3;
-  if (ccjs_loop_set_timeout(&loop, 0, on_canceled, &log, on_finalize, &canceled) != CCJS_OK) return 4;
-  if (ccjs_loop_set_interval(&loop, 0, on_interval, &log, on_finalize, &interval) != CCJS_OK) return 5;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_loop_queue_immediate(&loop, on_immediate, &log, on_finalize, &immediate) != INOX_OK) return 2;
+  if (inox_loop_set_timeout(&loop, 0, on_timeout, &log, on_finalize, &timeout) != INOX_OK) return 3;
+  if (inox_loop_set_timeout(&loop, 0, on_canceled, &log, on_finalize, &canceled) != INOX_OK) return 4;
+  if (inox_loop_set_interval(&loop, 0, on_interval, &log, on_finalize, &interval) != INOX_OK) return 5;
   log.interval_handle = interval;
-  ccjs_loop_clear_timer(canceled);
-  ccjs_loop_clear_timer(canceled);
+  inox_loop_clear_timer(canceled);
+  inox_loop_clear_timer(canceled);
 
   if (log.immediate != 0 || log.timeout != 0 || log.canceled != 0 || log.interval != 0) return 6;
 
-  while (ccjs_loop_has_work(&loop) && guard < 20) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 7;
+  while (inox_loop_has_work(&loop) && guard < 20) {
+    if (inox_loop_poll(&loop, inox_performance_now()) != INOX_OK) return 7;
     guard += 1;
   }
 
   if (guard >= 20) return 8;
   if (log.immediate != 1 || log.timeout != 1 || log.canceled != 0 || log.interval != 3) return 9;
-  if (ccjs_loop_has_work(&loop)) return 10;
+  if (inox_loop_has_work(&loop)) return 10;
 
-  if (ccjs_loop_set_timeout(&loop, 10, on_delayed, &log, on_finalize, &delayed) != CCJS_OK) return 11;
+  if (inox_loop_set_timeout(&loop, 10, on_delayed, &log, on_finalize, &delayed) != INOX_OK) return 11;
   if (log.delayed != 0) return 12;
-  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 13;
+  if (inox_loop_poll(&loop, 0) != INOX_OK) return 13;
   if (log.delayed != 1) return 14;
-  if (ccjs_loop_has_work(&loop)) return 15;
+  if (inox_loop_has_work(&loop)) return 15;
 
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
   printf("%d %d %d %d %d %d\\n", log.immediate, log.timeout, log.canceled, log.interval, log.delayed, log.finalized);
   return 0;
 }
@@ -250,11 +250,11 @@ int main(void) {
     sourceDir,
     '-B',
     timerBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv timer smoke', 'cmake', ['--build', timerBuildDir])
 
-  const run = await runCommand(join(timerBuildDir, 'ccjs_libuv_timer_smoke'), [])
+  const run = await runCommand(join(timerBuildDir, 'inox_libuv_timer_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -282,7 +282,7 @@ setTimeout(() => {
 `
   const compiled = compileLibuvSource(source)
 
-  if (!compiled.code.includes('#if !defined(CCJS_LOOP_BACKEND_LIBUV)')) {
+  if (!compiled.code.includes('#if !defined(INOX_LOOP_BACKEND_LIBUV)')) {
     console.error('Compiled timer smoke did not guard generated sleep for libuv builds')
     process.exit(1)
   }
@@ -292,14 +292,14 @@ setTimeout(() => {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_timer_smoke C)
+project(inox_libuv_compiled_timer_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_timer_smoke generated-timer.c)
-target_link_libraries(ccjs_libuv_compiled_timer_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_timer_smoke generated-timer.c)
+target_link_libraries(inox_libuv_compiled_timer_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(join(sourceDir, 'generated-timer.c'), compiled.code)
@@ -309,11 +309,11 @@ target_link_libraries(ccjs_libuv_compiled_timer_smoke PRIVATE ccjs_runtime)
     sourceDir,
     '-B',
     timerBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build compiled libuv timer smoke', 'cmake', ['--build', timerBuildDir])
 
-  const run = await runCommand(join(timerBuildDir, 'ccjs_libuv_compiled_timer_smoke'), [])
+  const run = await runCommand(join(timerBuildDir, 'inox_libuv_compiled_timer_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -360,14 +360,14 @@ async function checkLibuvFsRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_fs_smoke C)
+project(inox_libuv_fs_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_fs_smoke fs-smoke.c)
-target_link_libraries(ccjs_libuv_fs_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_fs_smoke fs-smoke.c)
+target_link_libraries(inox_libuv_fs_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
@@ -375,13 +375,13 @@ target_link_libraries(ccjs_libuv_fs_smoke PRIVATE ccjs_runtime)
     `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/array.h"
-#include "ccjs/binary.h"
-#include "ccjs/fs.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/array.h"
+#include "inox/binary.h"
+#include "inox/fs.h"
+#include "inox/object.h"
+#include "inox/string.h"
+#include "inox/time.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -403,9 +403,9 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static int drain_loop(ccjs_loop* loop) {
-  while (ccjs_loop_has_work(loop)) {
-    if (ccjs_loop_poll(loop, ccjs_performance_now()) != CCJS_OK) {
+static int drain_loop(inox_loop* loop) {
+  while (inox_loop_has_work(loop)) {
+    if (inox_loop_poll(loop, inox_performance_now()) != INOX_OK) {
       return 0;
     }
   }
@@ -414,118 +414,118 @@ static int drain_loop(ccjs_loop* loop) {
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
-  ccjs_promise* read_text = 0;
-  ccjs_promise* write_text = 0;
-  ccjs_promise* read_entries = 0;
-  ccjs_promise* read_dirents = 0;
-  ccjs_promise* read_bytes = 0;
-  ccjs_promise* write_bytes = 0;
-  ccjs_promise* stat_file = 0;
-  ccjs_promise* lstat_dir = 0;
-  ccjs_promise* access_file = 0;
-  ccjs_promise* missing = 0;
-  ccjs_value bytes_to_write = ccjs_undefined_value();
-  ccjs_value text_value = ccjs_undefined_value();
-  ccjs_value entries_value = ccjs_undefined_value();
-  ccjs_value dirents_value = ccjs_undefined_value();
-  ccjs_value first_dirent = ccjs_undefined_value();
-  ccjs_value readlink_value = ccjs_undefined_value();
-  ccjs_value realpath_value = ccjs_undefined_value();
-  ccjs_value bytes_value = ccjs_undefined_value();
-  ccjs_value stat_value = ccjs_undefined_value();
-  ccjs_value lstat_value = ccjs_undefined_value();
-  ccjs_value missing_error = ccjs_undefined_value();
-  ccjs_value missing_code = ccjs_undefined_value();
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
+  inox_promise* read_text = 0;
+  inox_promise* write_text = 0;
+  inox_promise* read_entries = 0;
+  inox_promise* read_dirents = 0;
+  inox_promise* read_bytes = 0;
+  inox_promise* write_bytes = 0;
+  inox_promise* stat_file = 0;
+  inox_promise* lstat_dir = 0;
+  inox_promise* access_file = 0;
+  inox_promise* missing = 0;
+  inox_value bytes_to_write = inox_undefined_value();
+  inox_value text_value = inox_undefined_value();
+  inox_value entries_value = inox_undefined_value();
+  inox_value dirents_value = inox_undefined_value();
+  inox_value first_dirent = inox_undefined_value();
+  inox_value readlink_value = inox_undefined_value();
+  inox_value realpath_value = inox_undefined_value();
+  inox_value bytes_value = inox_undefined_value();
+  inox_value stat_value = inox_undefined_value();
+  inox_value lstat_value = inox_undefined_value();
+  inox_value missing_error = inox_undefined_value();
+  inox_value missing_code = inox_undefined_value();
   unsigned char output_bytes[] = { 9, 8, 7, 6, 5, 4 };
   size_t entries_len = 0;
   size_t dirents_len = 0;
   size_t bytes_len = 0;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_bytes_from_data(&allocator, output_bytes, sizeof(output_bytes), &bytes_to_write) != CCJS_OK) return 2;
-  if (ccjs_fs_mkdir_sync(${JSON.stringify(mutationNested)}, ${Buffer.byteLength(mutationNested)}, true) != CCJS_OK) return 31;
-  if (ccjs_fs_rename_sync(${JSON.stringify(mutationInput)}, ${Buffer.byteLength(mutationInput)}, ${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}) != CCJS_OK) return 32;
-  if (ccjs_fs_access_sync(${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}, CCJS_FS_R_OK) != CCJS_OK) return 33;
-  if (ccjs_fs_unlink_sync(${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}) != CCJS_OK) return 34;
-  if (ccjs_fs_rm_sync(${JSON.stringify(mutationRoot)}, ${Buffer.byteLength(mutationRoot)}, true, true) != CCJS_OK) return 35;
-  if (ccjs_fs_rm_sync(${JSON.stringify(mutationMissing)}, ${Buffer.byteLength(mutationMissing)}, false, true) != CCJS_OK) return 36;
-  if (ccjs_fs_append_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, " append", 7) != CCJS_OK) return 37;
-  if (ccjs_fs_copy_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, ${JSON.stringify(appendTextCopy)}, ${Buffer.byteLength(appendTextCopy)}) != CCJS_OK) return 38;
-  if (ccjs_fs_symlink_sync(${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}) != CCJS_OK) return 44;
-  if (ccjs_fs_readlink_sync(&allocator, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}, &readlink_value) != CCJS_OK) return 45;
-  if (ccjs_fs_realpath_sync(&allocator, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}, &realpath_value) != CCJS_OK) return 46;
-  if (ccjs_fs_read_file(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &read_text) != CCJS_OK) return 3;
-  if (ccjs_fs_write_file(&loop, ${JSON.stringify(textOutput)}, ${Buffer.byteLength(textOutput)}, "uv saved", 8, &write_text) != CCJS_OK) return 4;
-  if (ccjs_fs_read_dir(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_entries) != CCJS_OK) return 5;
-  if (ccjs_fs_read_dir_dirents(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_dirents) != CCJS_OK) return 39;
-  if (ccjs_fs_read_file_bytes(&loop, ${JSON.stringify(bytesInput)}, ${Buffer.byteLength(bytesInput)}, &read_bytes) != CCJS_OK) return 6;
-  if (ccjs_fs_write_file_bytes(&loop, ${JSON.stringify(bytesOutput)}, ${Buffer.byteLength(bytesOutput)}, bytes_to_write, &write_bytes) != CCJS_OK) return 7;
-  if (ccjs_fs_stat(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &stat_file) != CCJS_OK) return 8;
-  if (ccjs_fs_lstat(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &lstat_dir) != CCJS_OK) return 9;
-  if (ccjs_fs_access(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, CCJS_FS_R_OK, &access_file) != CCJS_OK) return 10;
-  if (ccjs_fs_read_file(&loop, ${JSON.stringify(missingInput)}, ${Buffer.byteLength(missingInput)}, &missing) != CCJS_OK) return 11;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_bytes_from_data(&allocator, output_bytes, sizeof(output_bytes), &bytes_to_write) != INOX_OK) return 2;
+  if (inox_fs_mkdir_sync(${JSON.stringify(mutationNested)}, ${Buffer.byteLength(mutationNested)}, true) != INOX_OK) return 31;
+  if (inox_fs_rename_sync(${JSON.stringify(mutationInput)}, ${Buffer.byteLength(mutationInput)}, ${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}) != INOX_OK) return 32;
+  if (inox_fs_access_sync(${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}, INOX_FS_R_OK) != INOX_OK) return 33;
+  if (inox_fs_unlink_sync(${JSON.stringify(mutationRenamed)}, ${Buffer.byteLength(mutationRenamed)}) != INOX_OK) return 34;
+  if (inox_fs_rm_sync(${JSON.stringify(mutationRoot)}, ${Buffer.byteLength(mutationRoot)}, true, true) != INOX_OK) return 35;
+  if (inox_fs_rm_sync(${JSON.stringify(mutationMissing)}, ${Buffer.byteLength(mutationMissing)}, false, true) != INOX_OK) return 36;
+  if (inox_fs_append_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, " append", 7) != INOX_OK) return 37;
+  if (inox_fs_copy_file_sync(${JSON.stringify(appendText)}, ${Buffer.byteLength(appendText)}, ${JSON.stringify(appendTextCopy)}, ${Buffer.byteLength(appendTextCopy)}) != INOX_OK) return 38;
+  if (inox_fs_symlink_sync(${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}) != INOX_OK) return 44;
+  if (inox_fs_readlink_sync(&allocator, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}, &readlink_value) != INOX_OK) return 45;
+  if (inox_fs_realpath_sync(&allocator, ${JSON.stringify(symlinkPath)}, ${Buffer.byteLength(symlinkPath)}, &realpath_value) != INOX_OK) return 46;
+  if (inox_fs_read_file(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &read_text) != INOX_OK) return 3;
+  if (inox_fs_write_file(&loop, ${JSON.stringify(textOutput)}, ${Buffer.byteLength(textOutput)}, "uv saved", 8, &write_text) != INOX_OK) return 4;
+  if (inox_fs_read_dir(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_entries) != INOX_OK) return 5;
+  if (inox_fs_read_dir_dirents(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &read_dirents) != INOX_OK) return 39;
+  if (inox_fs_read_file_bytes(&loop, ${JSON.stringify(bytesInput)}, ${Buffer.byteLength(bytesInput)}, &read_bytes) != INOX_OK) return 6;
+  if (inox_fs_write_file_bytes(&loop, ${JSON.stringify(bytesOutput)}, ${Buffer.byteLength(bytesOutput)}, bytes_to_write, &write_bytes) != INOX_OK) return 7;
+  if (inox_fs_stat(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, &stat_file) != INOX_OK) return 8;
+  if (inox_fs_lstat(&loop, ${JSON.stringify(entriesDir)}, ${Buffer.byteLength(entriesDir)}, &lstat_dir) != INOX_OK) return 9;
+  if (inox_fs_access(&loop, ${JSON.stringify(textInput)}, ${Buffer.byteLength(textInput)}, INOX_FS_R_OK, &access_file) != INOX_OK) return 10;
+  if (inox_fs_read_file(&loop, ${JSON.stringify(missingInput)}, ${Buffer.byteLength(missingInput)}, &missing) != INOX_OK) return 11;
   if (!drain_loop(&loop)) return 12;
-  if (ccjs_promise_get_state(read_text) != CCJS_PROMISE_FULFILLED) return 13;
-  if (ccjs_promise_get_state(write_text) != CCJS_PROMISE_FULFILLED) return 14;
-  if (ccjs_promise_get_state(read_entries) != CCJS_PROMISE_FULFILLED) return 15;
-  if (ccjs_promise_get_state(read_dirents) != CCJS_PROMISE_FULFILLED) return 40;
-  if (ccjs_promise_get_state(read_bytes) != CCJS_PROMISE_FULFILLED) return 16;
-  if (ccjs_promise_get_state(write_bytes) != CCJS_PROMISE_FULFILLED) return 17;
-  if (ccjs_promise_get_state(stat_file) != CCJS_PROMISE_FULFILLED) return 18;
-  if (ccjs_promise_get_state(lstat_dir) != CCJS_PROMISE_FULFILLED) return 19;
-  if (ccjs_promise_get_state(access_file) != CCJS_PROMISE_FULFILLED) return 20;
-  if (ccjs_promise_get_state(missing) != CCJS_PROMISE_REJECTED) return 21;
-  if (ccjs_promise_get_result(read_text, &text_value) != CCJS_OK) return 22;
-  if (ccjs_promise_get_result(read_entries, &entries_value) != CCJS_OK) return 23;
-  if (ccjs_promise_get_result(read_dirents, &dirents_value) != CCJS_OK) return 41;
-  if (ccjs_promise_get_result(read_bytes, &bytes_value) != CCJS_OK) return 24;
-  if (ccjs_promise_get_result(stat_file, &stat_value) != CCJS_OK) return 25;
-  if (ccjs_promise_get_result(lstat_dir, &lstat_value) != CCJS_OK) return 26;
-  if (ccjs_promise_get_result(missing, &missing_error) != CCJS_OK) return 27;
-  if (ccjs_array_len(entries_value, &entries_len) != CCJS_OK) return 28;
-  if (ccjs_array_len(dirents_value, &dirents_len) != CCJS_OK) return 42;
-  if (ccjs_array_get(dirents_value, 0, &first_dirent) != CCJS_OK) return 43;
-  if (ccjs_bytes_len(bytes_value, &bytes_len) != CCJS_OK) return 29;
-  if (ccjs_object_get(missing_error, "code", 4, &missing_code) != CCJS_OK) return 30;
+  if (inox_promise_get_state(read_text) != INOX_PROMISE_FULFILLED) return 13;
+  if (inox_promise_get_state(write_text) != INOX_PROMISE_FULFILLED) return 14;
+  if (inox_promise_get_state(read_entries) != INOX_PROMISE_FULFILLED) return 15;
+  if (inox_promise_get_state(read_dirents) != INOX_PROMISE_FULFILLED) return 40;
+  if (inox_promise_get_state(read_bytes) != INOX_PROMISE_FULFILLED) return 16;
+  if (inox_promise_get_state(write_bytes) != INOX_PROMISE_FULFILLED) return 17;
+  if (inox_promise_get_state(stat_file) != INOX_PROMISE_FULFILLED) return 18;
+  if (inox_promise_get_state(lstat_dir) != INOX_PROMISE_FULFILLED) return 19;
+  if (inox_promise_get_state(access_file) != INOX_PROMISE_FULFILLED) return 20;
+  if (inox_promise_get_state(missing) != INOX_PROMISE_REJECTED) return 21;
+  if (inox_promise_get_result(read_text, &text_value) != INOX_OK) return 22;
+  if (inox_promise_get_result(read_entries, &entries_value) != INOX_OK) return 23;
+  if (inox_promise_get_result(read_dirents, &dirents_value) != INOX_OK) return 41;
+  if (inox_promise_get_result(read_bytes, &bytes_value) != INOX_OK) return 24;
+  if (inox_promise_get_result(stat_file, &stat_value) != INOX_OK) return 25;
+  if (inox_promise_get_result(lstat_dir, &lstat_value) != INOX_OK) return 26;
+  if (inox_promise_get_result(missing, &missing_error) != INOX_OK) return 27;
+  if (inox_array_len(entries_value, &entries_len) != INOX_OK) return 28;
+  if (inox_array_len(dirents_value, &dirents_len) != INOX_OK) return 42;
+  if (inox_array_get(dirents_value, 0, &first_dirent) != INOX_OK) return 43;
+  if (inox_bytes_len(bytes_value, &bytes_len) != INOX_OK) return 29;
+  if (inox_object_get(missing_error, "code", 4, &missing_code) != INOX_OK) return 30;
 
-  ccjs_string* text = (ccjs_string*)text_value.as.ref;
-  ccjs_string* code = (ccjs_string*)missing_code.as.ref;
-  printf("%.*s %zu %zu %zu %s %s %s %.*s\\n", (int)text->len, text->bytes, entries_len, dirents_len, bytes_len, ccjs_fs_dirent_is_file(first_dirent) ? "true" : "false", ccjs_fs_stats_is_file(stat_value) ? "true" : "false", ccjs_fs_stats_is_directory(lstat_value) ? "true" : "false", (int)code->len, code->bytes);
+  inox_string* text = (inox_string*)text_value.as.ref;
+  inox_string* code = (inox_string*)missing_code.as.ref;
+  printf("%.*s %zu %zu %zu %s %s %s %.*s\\n", (int)text->len, text->bytes, entries_len, dirents_len, bytes_len, inox_fs_dirent_is_file(first_dirent) ? "true" : "false", inox_fs_stats_is_file(stat_value) ? "true" : "false", inox_fs_stats_is_directory(lstat_value) ? "true" : "false", (int)code->len, code->bytes);
 
-  ccjs_release(missing_code);
-  ccjs_release(missing_error);
-  ccjs_release(lstat_value);
-  ccjs_release(stat_value);
-  ccjs_release(bytes_value);
-  ccjs_release(first_dirent);
-  ccjs_release(dirents_value);
-  ccjs_release(entries_value);
-  ccjs_release(text_value);
-  ccjs_release(realpath_value);
-  ccjs_release(readlink_value);
-  ccjs_release(bytes_to_write);
-  ccjs_promise_release(missing);
-  ccjs_promise_release(access_file);
-  ccjs_promise_release(lstat_dir);
-  ccjs_promise_release(stat_file);
-  ccjs_promise_release(write_bytes);
-  ccjs_promise_release(read_bytes);
-  ccjs_promise_release(read_dirents);
-  ccjs_promise_release(read_entries);
-  ccjs_promise_release(write_text);
-  ccjs_promise_release(read_text);
-  ccjs_loop_dispose(&loop);
+  inox_release(missing_code);
+  inox_release(missing_error);
+  inox_release(lstat_value);
+  inox_release(stat_value);
+  inox_release(bytes_value);
+  inox_release(first_dirent);
+  inox_release(dirents_value);
+  inox_release(entries_value);
+  inox_release(text_value);
+  inox_release(realpath_value);
+  inox_release(readlink_value);
+  inox_release(bytes_to_write);
+  inox_promise_release(missing);
+  inox_promise_release(access_file);
+  inox_promise_release(lstat_dir);
+  inox_promise_release(stat_file);
+  inox_promise_release(write_bytes);
+  inox_promise_release(read_bytes);
+  inox_promise_release(read_dirents);
+  inox_promise_release(read_entries);
+  inox_promise_release(write_text);
+  inox_promise_release(read_text);
+  inox_loop_dispose(&loop);
   return 0;
 }
 `
   )
 
-  await checkCommand('configure libuv fs smoke', 'cmake', ['-S', sourceDir, '-B', fsBuildDir, '-DCCJS_LOOP_BACKEND=libuv'])
+  await checkCommand('configure libuv fs smoke', 'cmake', ['-S', sourceDir, '-B', fsBuildDir, '-DINOX_LOOP_BACKEND=libuv'])
   await checkCommand('build libuv fs smoke', 'cmake', ['--build', fsBuildDir])
 
-  const run = await runCommand(join(fsBuildDir, 'ccjs_libuv_fs_smoke'), [])
+  const run = await runCommand(join(fsBuildDir, 'inox_libuv_fs_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -580,24 +580,24 @@ async function checkLibuvConsoleRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_console_smoke C)
+project(inox_libuv_console_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_console_smoke console-smoke.c)
-target_link_libraries(ccjs_libuv_console_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_console_smoke console-smoke.c)
+target_link_libraries(inox_libuv_console_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
     join(sourceDir, 'console-smoke.c'),
-    `#include "ccjs/console.h"
+    `#include "inox/console.h"
 
 int main(void) {
-  if (ccjs_console_write_line(CCJS_CONSOLE_STDOUT, "uv console", 10) != CCJS_OK) return 1;
-  if (ccjs_console_printf(CCJS_CONSOLE_STDOUT, "%d %d\\n", 1, 2) < 0) return 2;
-  if (ccjs_console_write_line(CCJS_CONSOLE_STDERR, "uv err", 6) != CCJS_OK) return 3;
+  if (inox_console_write_line(INOX_CONSOLE_STDOUT, "uv console", 10) != INOX_OK) return 1;
+  if (inox_console_printf(INOX_CONSOLE_STDOUT, "%d %d\\n", 1, 2) < 0) return 2;
+  if (inox_console_write_line(INOX_CONSOLE_STDERR, "uv err", 6) != INOX_OK) return 3;
   return 0;
 }
 `
@@ -608,11 +608,11 @@ int main(void) {
     sourceDir,
     '-B',
     consoleBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv console smoke', 'cmake', ['--build', consoleBuildDir])
 
-  const run = await runCommand(join(consoleBuildDir, 'ccjs_libuv_console_smoke'), [])
+  const run = await runCommand(join(consoleBuildDir, 'inox_libuv_console_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
   const stderr = normalizeNewlines(run.stderr)
 
@@ -644,14 +644,14 @@ async function checkLibuvDgramRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_dgram_smoke C)
+project(inox_libuv_dgram_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_dgram_smoke dgram-smoke.c)
-target_link_libraries(ccjs_libuv_dgram_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_dgram_smoke dgram-smoke.c)
+target_link_libraries(inox_libuv_dgram_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
@@ -659,13 +659,13 @@ target_link_libraries(ccjs_libuv_dgram_smoke PRIVATE ccjs_runtime)
     `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/dgram.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/dgram.h"
+#include "inox/time.h"
 
 typedef struct test_state {
-  ccjs_dgram_socket* server;
-  ccjs_dgram_socket* client;
+  inox_dgram_socket* server;
+  inox_dgram_socket* client;
   int server_received;
   int server_sent;
   int client_received;
@@ -694,32 +694,32 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status on_send(void* user, ccjs_status status) {
+static inox_status on_send(void* user, inox_status status) {
   test_state* state = (test_state*)user;
-  if (status != CCJS_OK) return status;
+  if (status != INOX_OK) return status;
   state->server_sent += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_client_send(void* user, ccjs_status status) {
+static inox_status on_client_send(void* user, inox_status status) {
   test_state* state = (test_state*)user;
-  if (status != CCJS_OK) return status;
+  if (status != INOX_OK) return status;
   state->client_sent += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void on_close(void* user, ccjs_dgram_socket* socket) {
+static void on_close(void* user, inox_dgram_socket* socket) {
   (void)socket;
   ((test_state*)user)->closed += 1;
 }
 
-static ccjs_status on_server_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+static inox_status on_server_recv(void* user, inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
   test_state* state = (test_state*)user;
   state->server_received += 1;
-  return ccjs_dgram_send_with_callback(socket, bytes, len, host, port, on_send, state);
+  return inox_dgram_send_with_callback(socket, bytes, len, host, port, on_send, state);
 }
 
-static ccjs_status on_client_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+static inox_status on_client_recv(void* user, inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
   (void)socket;
   (void)host;
   (void)port;
@@ -728,48 +728,48 @@ static ccjs_status on_client_recv(void* user, ccjs_dgram_socket* socket, const c
   memcpy(state->message, bytes, copy_len);
   state->message[copy_len] = '\\0';
   state->client_received += 1;
-  ccjs_dgram_close(state->client);
-  ccjs_dgram_close(state->server);
-  return CCJS_OK;
+  inox_dgram_close(state->client);
+  inox_dgram_close(state->server);
+  return INOX_OK;
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
   test_state state = { 0 };
-  ccjs_status status;
-  ccjs_dgram_address address;
+  inox_status status;
+  inox_dgram_address address;
   int port = 0;
   int guard = 0;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_dgram_socket_new(&loop, 0, 0, &state.server) != CCJS_OK) return 2;
-  if (ccjs_dgram_socket_new(&loop, 0, 0, &state.client) != CCJS_OK) return 3;
-  if (ccjs_dgram_socket_on_message(state.server, on_server_recv, &state) != CCJS_OK) return 4;
-  if (ccjs_dgram_socket_on_message(state.client, on_client_recv, &state) != CCJS_OK) return 5;
-  if (ccjs_dgram_socket_on_close(state.server, on_close, &state) != CCJS_OK) return 6;
-  if (ccjs_dgram_socket_on_close(state.client, on_close, &state) != CCJS_OK) return 7;
-  status = ccjs_dgram_bind(state.server, "127.0.0.1", 0);
-  if (status != CCJS_OK) {
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_dgram_socket_new(&loop, 0, 0, &state.server) != INOX_OK) return 2;
+  if (inox_dgram_socket_new(&loop, 0, 0, &state.client) != INOX_OK) return 3;
+  if (inox_dgram_socket_on_message(state.server, on_server_recv, &state) != INOX_OK) return 4;
+  if (inox_dgram_socket_on_message(state.client, on_client_recv, &state) != INOX_OK) return 5;
+  if (inox_dgram_socket_on_close(state.server, on_close, &state) != INOX_OK) return 6;
+  if (inox_dgram_socket_on_close(state.client, on_close, &state) != INOX_OK) return 7;
+  status = inox_dgram_bind(state.server, "127.0.0.1", 0);
+  if (status != INOX_OK) {
     fprintf(stderr, "server bind status %d\\n", status);
     return 8;
   }
-  if (ccjs_dgram_socket_address(state.server, &address) != CCJS_OK) return 9;
+  if (inox_dgram_socket_address(state.server, &address) != INOX_OK) return 9;
   port = address.port;
   if (strcmp(address.family, "IPv4") != 0 || strcmp(address.address, "127.0.0.1") != 0) return 10;
-  if (ccjs_dgram_recv_start(state.server) != CCJS_OK) return 11;
-  if (ccjs_dgram_bind(state.client, "127.0.0.1", 0) != CCJS_OK) return 12;
-  if (ccjs_dgram_recv_start(state.client) != CCJS_OK) return 13;
-  if (ccjs_dgram_send_with_callback(state.client, "ping", 4, "127.0.0.1", port, on_client_send, &state) != CCJS_OK) return 14;
+  if (inox_dgram_recv_start(state.server) != INOX_OK) return 11;
+  if (inox_dgram_bind(state.client, "127.0.0.1", 0) != INOX_OK) return 12;
+  if (inox_dgram_recv_start(state.client) != INOX_OK) return 13;
+  if (inox_dgram_send_with_callback(state.client, "ping", 4, "127.0.0.1", port, on_client_send, &state) != INOX_OK) return 14;
 
-  while (ccjs_loop_has_work(&loop) && guard < 200) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 15;
+  while (inox_loop_has_work(&loop) && guard < 200) {
+    if (inox_loop_poll(&loop, inox_performance_now()) != INOX_OK) return 15;
     guard += 1;
   }
 
   if (guard >= 200) return 16;
   printf("%d %d %d %d %d %s\\n", state.server_received, state.server_sent, state.client_received, state.client_sent, state.closed, state.message);
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
   return 0;
 }
 `
@@ -780,11 +780,11 @@ int main(void) {
     sourceDir,
     '-B',
     dgramBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv dgram smoke', 'cmake', ['--build', dgramBuildDir])
 
-  const run = await runCommand(join(dgramBuildDir, 'ccjs_libuv_dgram_smoke'), [])
+  const run = await runCommand(join(dgramBuildDir, 'inox_libuv_dgram_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -808,14 +808,14 @@ async function checkLibuvDgramConnectedRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_dgram_connected_smoke C)
+project(inox_libuv_dgram_connected_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_dgram_connected_smoke dgram-connected-smoke.c)
-target_link_libraries(ccjs_libuv_dgram_connected_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_dgram_connected_smoke dgram-connected-smoke.c)
+target_link_libraries(inox_libuv_dgram_connected_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
@@ -823,13 +823,13 @@ target_link_libraries(ccjs_libuv_dgram_connected_smoke PRIVATE ccjs_runtime)
     `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/dgram.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/dgram.h"
+#include "inox/time.h"
 
 typedef struct test_state {
-  ccjs_dgram_socket* server;
-  ccjs_dgram_socket* client;
+  inox_dgram_socket* server;
+  inox_dgram_socket* client;
   int server_received;
   int client_received;
   int client_sent;
@@ -856,20 +856,20 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status on_client_send(void* user, ccjs_status status) {
+static inox_status on_client_send(void* user, inox_status status) {
   test_state* state = (test_state*)user;
-  if (status != CCJS_OK) return status;
+  if (status != INOX_OK) return status;
   state->client_sent += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_server_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+static inox_status on_server_recv(void* user, inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
   test_state* state = (test_state*)user;
   state->server_received += 1;
-  return ccjs_dgram_send_with_callback(socket, bytes, len, host, port, 0, 0);
+  return inox_dgram_send_with_callback(socket, bytes, len, host, port, 0, 0);
 }
 
-static ccjs_status on_client_recv(void* user, ccjs_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+static inox_status on_client_recv(void* user, inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
   (void)socket;
   (void)host;
   (void)port;
@@ -878,43 +878,43 @@ static ccjs_status on_client_recv(void* user, ccjs_dgram_socket* socket, const c
   memcpy(state->message, bytes, copy_len);
   state->message[copy_len] = '\\0';
   state->client_received += 1;
-  ccjs_dgram_close(state->client);
-  ccjs_dgram_close(state->server);
-  return CCJS_OK;
+  inox_dgram_close(state->client);
+  inox_dgram_close(state->server);
+  return INOX_OK;
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
   test_state state = { 0 };
-  ccjs_dgram_address server_address;
-  ccjs_dgram_address remote_address;
+  inox_dgram_address server_address;
+  inox_dgram_address remote_address;
   int guard = 0;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_dgram_socket_new(&loop, 0, 0, &state.server) != CCJS_OK) return 2;
-  if (ccjs_dgram_socket_new(&loop, 0, 0, &state.client) != CCJS_OK) return 3;
-  if (ccjs_dgram_socket_on_message(state.server, on_server_recv, &state) != CCJS_OK) return 4;
-  if (ccjs_dgram_socket_on_message(state.client, on_client_recv, &state) != CCJS_OK) return 5;
-  if (ccjs_dgram_bind(state.server, "127.0.0.1", 0) != CCJS_OK) return 6;
-  if (ccjs_dgram_socket_address(state.server, &server_address) != CCJS_OK) return 7;
-  if (ccjs_dgram_bind(state.client, "127.0.0.1", 0) != CCJS_OK) return 8;
-  if (ccjs_dgram_socket_remote_address(state.client, &remote_address) == CCJS_OK) return 9;
-  if (ccjs_dgram_socket_connect(state.client, "127.0.0.1", server_address.port) != CCJS_OK) return 10;
-  if (ccjs_dgram_socket_remote_address(state.client, &remote_address) != CCJS_OK) return 11;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_dgram_socket_new(&loop, 0, 0, &state.server) != INOX_OK) return 2;
+  if (inox_dgram_socket_new(&loop, 0, 0, &state.client) != INOX_OK) return 3;
+  if (inox_dgram_socket_on_message(state.server, on_server_recv, &state) != INOX_OK) return 4;
+  if (inox_dgram_socket_on_message(state.client, on_client_recv, &state) != INOX_OK) return 5;
+  if (inox_dgram_bind(state.server, "127.0.0.1", 0) != INOX_OK) return 6;
+  if (inox_dgram_socket_address(state.server, &server_address) != INOX_OK) return 7;
+  if (inox_dgram_bind(state.client, "127.0.0.1", 0) != INOX_OK) return 8;
+  if (inox_dgram_socket_remote_address(state.client, &remote_address) == INOX_OK) return 9;
+  if (inox_dgram_socket_connect(state.client, "127.0.0.1", server_address.port) != INOX_OK) return 10;
+  if (inox_dgram_socket_remote_address(state.client, &remote_address) != INOX_OK) return 11;
   if (strcmp(remote_address.address, "127.0.0.1") != 0 || remote_address.port != server_address.port) return 12;
-  if (ccjs_dgram_recv_start(state.server) != CCJS_OK) return 13;
-  if (ccjs_dgram_recv_start(state.client) != CCJS_OK) return 14;
-  if (ccjs_dgram_send_connected_with_callback(state.client, "connected", 9, on_client_send, &state) != CCJS_OK) return 15;
+  if (inox_dgram_recv_start(state.server) != INOX_OK) return 13;
+  if (inox_dgram_recv_start(state.client) != INOX_OK) return 14;
+  if (inox_dgram_send_connected_with_callback(state.client, "connected", 9, on_client_send, &state) != INOX_OK) return 15;
 
-  while (ccjs_loop_has_work(&loop) && guard < 200) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 16;
+  while (inox_loop_has_work(&loop) && guard < 200) {
+    if (inox_loop_poll(&loop, inox_performance_now()) != INOX_OK) return 16;
     guard += 1;
   }
 
   if (guard >= 200) return 17;
   printf("%d %d %d %s\\n", state.server_received, state.client_received, state.client_sent, state.message);
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
   return 0;
 }
 `
@@ -925,11 +925,11 @@ int main(void) {
     sourceDir,
     '-B',
     dgramBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv connected dgram smoke', 'cmake', ['--build', dgramBuildDir])
 
-  const run = await runCommand(join(dgramBuildDir, 'ccjs_libuv_dgram_connected_smoke'), [])
+  const run = await runCommand(join(dgramBuildDir, 'inox_libuv_dgram_connected_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -953,23 +953,23 @@ async function checkLibuvDgramOptionsRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_dgram_options_smoke C)
+project(inox_libuv_dgram_options_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_dgram_options_smoke dgram-options-smoke.c)
-target_link_libraries(ccjs_libuv_dgram_options_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_dgram_options_smoke dgram-options-smoke.c)
+target_link_libraries(inox_libuv_dgram_options_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
     join(sourceDir, 'dgram-options-smoke.c'),
     `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/dgram.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/dgram.h"
+#include "inox/time.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -992,35 +992,35 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
-  ccjs_dgram_socket* socket = 0;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
+  inox_dgram_socket* socket = 0;
   int send_size = 0;
   int recv_size = 0;
   int guard = 0;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_dgram_socket_new(&loop, 0, 0, &socket) != CCJS_OK) return 2;
-  if (ccjs_dgram_bind_flags(socket, "127.0.0.1", 0, CCJS_DGRAM_BIND_REUSEADDR) != CCJS_OK) return 3;
-  if (ccjs_dgram_set_broadcast(socket, 0) != CCJS_OK) return 4;
-  if (ccjs_dgram_set_ttl(socket, 32) != CCJS_OK) return 5;
-  if (ccjs_dgram_set_send_buffer_size(socket, 4096) != CCJS_OK) return 6;
-  if (ccjs_dgram_set_recv_buffer_size(socket, 4096) != CCJS_OK) return 7;
-  if (ccjs_dgram_get_send_buffer_size(socket, &send_size) != CCJS_OK) return 8;
-  if (ccjs_dgram_get_recv_buffer_size(socket, &recv_size) != CCJS_OK) return 9;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_dgram_socket_new(&loop, 0, 0, &socket) != INOX_OK) return 2;
+  if (inox_dgram_bind_flags(socket, "127.0.0.1", 0, INOX_DGRAM_BIND_REUSEADDR) != INOX_OK) return 3;
+  if (inox_dgram_set_broadcast(socket, 0) != INOX_OK) return 4;
+  if (inox_dgram_set_ttl(socket, 32) != INOX_OK) return 5;
+  if (inox_dgram_set_send_buffer_size(socket, 4096) != INOX_OK) return 6;
+  if (inox_dgram_set_recv_buffer_size(socket, 4096) != INOX_OK) return 7;
+  if (inox_dgram_get_send_buffer_size(socket, &send_size) != INOX_OK) return 8;
+  if (inox_dgram_get_recv_buffer_size(socket, &recv_size) != INOX_OK) return 9;
   if (send_size <= 0 || recv_size <= 0) return 10;
-  if (ccjs_dgram_unref(socket) != CCJS_OK) return 11;
-  if (ccjs_dgram_ref(socket) != CCJS_OK) return 12;
-  ccjs_dgram_close(socket);
+  if (inox_dgram_unref(socket) != INOX_OK) return 11;
+  if (inox_dgram_ref(socket) != INOX_OK) return 12;
+  inox_dgram_close(socket);
 
-  while (ccjs_loop_has_work(&loop) && guard < 200) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 13;
+  while (inox_loop_has_work(&loop) && guard < 200) {
+    if (inox_loop_poll(&loop, inox_performance_now()) != INOX_OK) return 13;
     guard += 1;
   }
 
   if (guard >= 200) return 14;
   printf("%d %d\\n", send_size > 0, recv_size > 0);
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
   return 0;
 }
 `
@@ -1031,11 +1031,11 @@ int main(void) {
     sourceDir,
     '-B',
     dgramBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv dgram options smoke', 'cmake', ['--build', dgramBuildDir])
 
-  const run = await runCommand(join(dgramBuildDir, 'ccjs_libuv_dgram_options_smoke'), [])
+  const run = await runCommand(join(dgramBuildDir, 'inox_libuv_dgram_options_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -1071,14 +1071,14 @@ server.bind(${port}, '127.0.0.1')
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_dgram_smoke C)
+project(inox_libuv_compiled_dgram_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_dgram_smoke generated-dgram-server.c)
-target_link_libraries(ccjs_libuv_compiled_dgram_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_dgram_smoke generated-dgram-server.c)
+target_link_libraries(inox_libuv_compiled_dgram_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(join(sourceDir, 'generated-dgram-server.c'), compiled.code)
@@ -1088,11 +1088,11 @@ target_link_libraries(ccjs_libuv_compiled_dgram_smoke PRIVATE ccjs_runtime)
     sourceDir,
     '-B',
     dgramBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build compiled libuv dgram smoke', 'cmake', ['--build', dgramBuildDir])
 
-  const executable = join(dgramBuildDir, 'ccjs_libuv_compiled_dgram_smoke')
+  const executable = join(dgramBuildDir, 'inox_libuv_compiled_dgram_smoke')
   const child = spawn(executable, [], {
     cwd: dgramBuildDir,
     stdio: ['ignore', 'pipe', 'pipe']
@@ -1187,14 +1187,14 @@ client.connect(${address.port}, '127.0.0.1', () => {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_dgram_connected_smoke C)
+project(inox_libuv_compiled_dgram_connected_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_dgram_connected_smoke generated-dgram-connected-client.c)
-target_link_libraries(ccjs_libuv_compiled_dgram_connected_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_dgram_connected_smoke generated-dgram-connected-client.c)
+target_link_libraries(inox_libuv_compiled_dgram_connected_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(join(sourceDir, 'generated-dgram-connected-client.c'), compiled.code)
@@ -1204,11 +1204,11 @@ target_link_libraries(ccjs_libuv_compiled_dgram_connected_smoke PRIVATE ccjs_run
     sourceDir,
     '-B',
     dgramBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build compiled connected libuv dgram smoke', 'cmake', ['--build', dgramBuildDir])
 
-  const executable = join(dgramBuildDir, 'ccjs_libuv_compiled_dgram_connected_smoke')
+  const executable = join(dgramBuildDir, 'inox_libuv_compiled_dgram_connected_smoke')
   const received = receiveUdpMessage(server, 3000)
   const child = spawn(executable, [], {
     cwd: dgramBuildDir,
@@ -1299,14 +1299,14 @@ socket.bind(0, '127.0.0.1', () => {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_dgram_options_smoke C)
+project(inox_libuv_compiled_dgram_options_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_dgram_options_smoke generated-dgram-options.c)
-target_link_libraries(ccjs_libuv_compiled_dgram_options_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_dgram_options_smoke generated-dgram-options.c)
+target_link_libraries(inox_libuv_compiled_dgram_options_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(join(sourceDir, 'generated-dgram-options.c'), compiled.code)
@@ -1316,11 +1316,11 @@ target_link_libraries(ccjs_libuv_compiled_dgram_options_smoke PRIVATE ccjs_runti
     sourceDir,
     '-B',
     dgramBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build compiled libuv dgram options smoke', 'cmake', ['--build', dgramBuildDir])
 
-  const run = await runCommand(join(dgramBuildDir, 'ccjs_libuv_compiled_dgram_options_smoke'), [])
+  const run = await runCommand(join(dgramBuildDir, 'inox_libuv_compiled_dgram_options_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -1344,14 +1344,14 @@ async function checkLibuvNetRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_net_smoke C)
+project(inox_libuv_net_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_net_smoke net-smoke.c)
-target_link_libraries(ccjs_libuv_net_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_net_smoke net-smoke.c)
+target_link_libraries(inox_libuv_net_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
@@ -1359,14 +1359,14 @@ target_link_libraries(ccjs_libuv_net_smoke PRIVATE ccjs_runtime)
     `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/net.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/net.h"
+#include "inox/time.h"
 
 typedef struct test_state {
-  ccjs_net_server* server;
-  ccjs_net_socket* accepted;
-  ccjs_net_socket* client;
+  inox_net_server* server;
+  inox_net_socket* accepted;
+  inox_net_socket* client;
   int server_received;
   int client_received;
   int client_connected;
@@ -1406,142 +1406,142 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status on_server_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
+static inox_status on_server_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
   test_state* state = (test_state*)user;
   state->server_received += 1;
-  return ccjs_net_socket_end(socket, bytes, len);
+  return inox_net_socket_end(socket, bytes, len);
 }
 
-static ccjs_status on_client_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
+static inox_status on_client_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
   test_state* state = (test_state*)user;
   size_t bytes_read = 0;
   size_t copy_len = len >= sizeof(state->message) ? sizeof(state->message) - 1 : len;
-  if (ccjs_net_socket_get_bytes_read(socket, &bytes_read) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (bytes_read < len) return CCJS_ERR_FIELD;
+  if (inox_net_socket_get_bytes_read(socket, &bytes_read) != INOX_OK) return INOX_ERR_FIELD;
+  if (bytes_read < len) return INOX_ERR_FIELD;
   memcpy(state->message, bytes, copy_len);
   state->message[copy_len] = '\\0';
   state->client_received += 1;
   state->socket_bytes_read_checked += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_socket_connected(void* user, ccjs_net_socket* socket) {
+static inox_status on_socket_connected(void* user, inox_net_socket* socket) {
   (void)socket;
   test_state* state = (test_state*)user;
   state->socket_connected += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_socket_ready(void* user, ccjs_net_socket* socket) {
+static inox_status on_socket_ready(void* user, inox_net_socket* socket) {
   (void)socket;
   test_state* state = (test_state*)user;
   state->socket_ready += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_socket_end(void* user, ccjs_net_socket* socket) {
+static inox_status on_socket_end(void* user, inox_net_socket* socket) {
   (void)socket;
   test_state* state = (test_state*)user;
   state->socket_ended += 1;
-  ccjs_net_server_close(state->server);
-  return CCJS_OK;
+  inox_net_server_close(state->server);
+  return INOX_OK;
 }
 
-static ccjs_status on_socket_close(void* user, ccjs_net_socket* socket) {
+static inox_status on_socket_close(void* user, inox_net_socket* socket) {
   (void)socket;
   test_state* state = (test_state*)user;
   state->socket_closed += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_socket_write(void* user, ccjs_net_socket* socket, ccjs_status status) {
+static inox_status on_socket_write(void* user, inox_net_socket* socket, inox_status status) {
   test_state* state = (test_state*)user;
   size_t bytes_written = 0;
-  if (status != CCJS_OK) return status;
-  if (ccjs_net_socket_get_bytes_written(socket, &bytes_written) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (bytes_written < 5) return CCJS_ERR_FIELD;
+  if (status != INOX_OK) return status;
+  if (inox_net_socket_get_bytes_written(socket, &bytes_written) != INOX_OK) return INOX_ERR_FIELD;
+  if (bytes_written < 5) return INOX_ERR_FIELD;
   state->socket_write_done += 1;
   state->socket_bytes_written_checked += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_socket_drain(void* user, ccjs_net_socket* socket) {
+static inox_status on_socket_drain(void* user, inox_net_socket* socket) {
   (void)socket;
   test_state* state = (test_state*)user;
   state->socket_drained += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_server_listening(void* user, ccjs_net_server* server) {
+static inox_status on_server_listening(void* user, inox_net_server* server) {
   (void)server;
   test_state* state = (test_state*)user;
   state->server_listening += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_server_close(void* user, ccjs_net_server* server) {
+static inox_status on_server_close(void* user, inox_net_server* server) {
   (void)server;
   test_state* state = (test_state*)user;
   state->server_closed += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_connection(void* user, ccjs_net_server* server, ccjs_net_socket* socket) {
+static inox_status on_connection(void* user, inox_net_server* server, inox_net_socket* socket) {
   (void)server;
   test_state* state = (test_state*)user;
   state->accepted = socket;
-  ccjs_net_socket_set_callbacks(socket, on_server_data, 0, state);
-  return ccjs_net_socket_read_start(socket);
+  inox_net_socket_set_callbacks(socket, on_server_data, 0, state);
+  return inox_net_socket_read_start(socket);
 }
 
-static ccjs_status on_connect(void* user, ccjs_net_socket* socket, ccjs_status status) {
+static inox_status on_connect(void* user, inox_net_socket* socket, inox_status status) {
   test_state* state = (test_state*)user;
-  ccjs_net_address local = { 0 };
-  ccjs_net_address remote = { 0 };
-  if (status != CCJS_OK) return status;
+  inox_net_address local = { 0 };
+  inox_net_address remote = { 0 };
+  if (status != INOX_OK) return status;
   state->client_connected += 1;
-  if (ccjs_net_socket_set_no_delay(socket, 1) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (ccjs_net_socket_set_keep_alive(socket, 1, 1) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (ccjs_net_socket_ref(socket) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (ccjs_net_socket_unref(socket) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (ccjs_net_socket_ref(socket) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (inox_net_socket_set_no_delay(socket, 1) != INOX_OK) return INOX_ERR_FIELD;
+  if (inox_net_socket_set_keep_alive(socket, 1, 1) != INOX_OK) return INOX_ERR_FIELD;
+  if (inox_net_socket_ref(socket) != INOX_OK) return INOX_ERR_FIELD;
+  if (inox_net_socket_unref(socket) != INOX_OK) return INOX_ERR_FIELD;
+  if (inox_net_socket_ref(socket) != INOX_OK) return INOX_ERR_FIELD;
   state->socket_options_checked += 1;
-  if (ccjs_net_socket_address(socket, &local) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (ccjs_net_socket_remote_address(socket, &remote) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (local.port <= 0 || remote.port <= 0) return CCJS_ERR_FIELD;
-  if (strcmp(local.family, "IPv4") != 0 || strcmp(remote.family, "IPv4") != 0) return CCJS_ERR_FIELD;
+  if (inox_net_socket_address(socket, &local) != INOX_OK) return INOX_ERR_FIELD;
+  if (inox_net_socket_remote_address(socket, &remote) != INOX_OK) return INOX_ERR_FIELD;
+  if (local.port <= 0 || remote.port <= 0) return INOX_ERR_FIELD;
+  if (strcmp(local.family, "IPv4") != 0 || strcmp(remote.family, "IPv4") != 0) return INOX_ERR_FIELD;
   state->socket_address_checked += 1;
   state->socket_remote_checked += 1;
-  if (ccjs_net_socket_read_start(socket) != CCJS_OK) return CCJS_ERR_FIELD;
-  return ccjs_net_socket_write_with_callback(socket, "hello", 5, on_socket_write, state);
+  if (inox_net_socket_read_start(socket) != INOX_OK) return INOX_ERR_FIELD;
+  return inox_net_socket_write_with_callback(socket, "hello", 5, on_socket_write, state);
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
   test_state state = { 0 };
-  ccjs_net_address address = { 0 };
+  inox_net_address address = { 0 };
   int port = 0;
   int guard = 0;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_net_server_new(&loop, on_connection, &state, &state.server) != CCJS_OK) return 2;
-  if (ccjs_net_server_on_listening(state.server, on_server_listening, &state) != CCJS_OK) return 3;
-  if (ccjs_net_server_on_close(state.server, on_server_close, &state) != CCJS_OK) return 4;
-  if (ccjs_net_server_listen(state.server, "127.0.0.1", 0, 16) != CCJS_OK) return 5;
-  if (ccjs_net_server_address(state.server, &address) != CCJS_OK) return 6;
-  if (ccjs_net_server_local_port(state.server, &port) != CCJS_OK) return 7;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_net_server_new(&loop, on_connection, &state, &state.server) != INOX_OK) return 2;
+  if (inox_net_server_on_listening(state.server, on_server_listening, &state) != INOX_OK) return 3;
+  if (inox_net_server_on_close(state.server, on_server_close, &state) != INOX_OK) return 4;
+  if (inox_net_server_listen(state.server, "127.0.0.1", 0, 16) != INOX_OK) return 5;
+  if (inox_net_server_address(state.server, &address) != INOX_OK) return 6;
+  if (inox_net_server_local_port(state.server, &port) != INOX_OK) return 7;
   if (port <= 0 || address.port != port || strcmp(address.family, "IPv4") != 0) return 8;
-  if (ccjs_net_connect(&loop, "localhost", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 9;
-  if (ccjs_net_socket_on_connect(state.client, on_socket_connected, &state) != CCJS_OK) return 10;
-  if (ccjs_net_socket_on_ready(state.client, on_socket_ready, &state) != CCJS_OK) return 11;
-  if (ccjs_net_socket_on_end(state.client, on_socket_end, &state) != CCJS_OK) return 12;
-  if (ccjs_net_socket_on_close(state.client, on_socket_close, &state) != CCJS_OK) return 13;
-  if (ccjs_net_socket_on_drain(state.client, on_socket_drain, &state) != CCJS_OK) return 14;
-  if (ccjs_net_socket_set_encoding(state.client, "utf8", 4) != CCJS_OK) return 15;
+  if (inox_net_connect(&loop, "localhost", port, on_connect, on_client_data, 0, &state, &state.client) != INOX_OK) return 9;
+  if (inox_net_socket_on_connect(state.client, on_socket_connected, &state) != INOX_OK) return 10;
+  if (inox_net_socket_on_ready(state.client, on_socket_ready, &state) != INOX_OK) return 11;
+  if (inox_net_socket_on_end(state.client, on_socket_end, &state) != INOX_OK) return 12;
+  if (inox_net_socket_on_close(state.client, on_socket_close, &state) != INOX_OK) return 13;
+  if (inox_net_socket_on_drain(state.client, on_socket_drain, &state) != INOX_OK) return 14;
+  if (inox_net_socket_set_encoding(state.client, "utf8", 4) != INOX_OK) return 15;
 
-  while (ccjs_loop_has_work(&loop) && guard < 400) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 16;
+  while (inox_loop_has_work(&loop) && guard < 400) {
+    if (inox_loop_poll(&loop, inox_performance_now()) != INOX_OK) return 16;
     guard += 1;
   }
 
@@ -1566,7 +1566,7 @@ int main(void) {
     state.client_received,
     state.message
   );
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
   return 0;
 }
 `
@@ -1577,11 +1577,11 @@ int main(void) {
     sourceDir,
     '-B',
     netBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv net smoke', 'cmake', ['--build', netBuildDir])
 
-  const run = await runCommand(join(netBuildDir, 'ccjs_libuv_net_smoke'), [])
+  const run = await runCommand(join(netBuildDir, 'inox_libuv_net_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -1615,14 +1615,14 @@ server.listen(${port}, '127.0.0.1')
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_net_smoke C)
+project(inox_libuv_compiled_net_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_net_smoke generated-net-server.c)
-target_link_libraries(ccjs_libuv_compiled_net_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_net_smoke generated-net-server.c)
+target_link_libraries(inox_libuv_compiled_net_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(join(sourceDir, 'generated-net-server.c'), compiled.code)
@@ -1632,11 +1632,11 @@ target_link_libraries(ccjs_libuv_compiled_net_smoke PRIVATE ccjs_runtime)
     sourceDir,
     '-B',
     netBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build compiled libuv net smoke', 'cmake', ['--build', netBuildDir])
 
-  const executable = join(netBuildDir, 'ccjs_libuv_compiled_net_smoke')
+  const executable = join(netBuildDir, 'inox_libuv_compiled_net_smoke')
   const child = spawn(executable, [], {
     cwd: netBuildDir,
     stdio: ['ignore', 'pipe', 'pipe']
@@ -1748,14 +1748,14 @@ client.on('end', () => {
       join(sourceDir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_net_client_smoke C)
+project(inox_libuv_compiled_net_client_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_net_client_smoke generated-net-client.c)
-target_link_libraries(ccjs_libuv_compiled_net_client_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_net_client_smoke generated-net-client.c)
+target_link_libraries(inox_libuv_compiled_net_client_smoke PRIVATE inox_runtime)
 `
     )
     await writeFile(join(sourceDir, 'generated-net-client.c'), compiled.code)
@@ -1765,11 +1765,11 @@ target_link_libraries(ccjs_libuv_compiled_net_client_smoke PRIVATE ccjs_runtime)
       sourceDir,
       '-B',
       netBuildDir,
-      '-DCCJS_LOOP_BACKEND=libuv'
+      '-DINOX_LOOP_BACKEND=libuv'
     ])
     await checkCommand('build compiled libuv net client smoke', 'cmake', ['--build', netBuildDir])
 
-    const run = await runCommand(join(netBuildDir, 'ccjs_libuv_compiled_net_client_smoke'), [])
+    const run = await runCommand(join(netBuildDir, 'inox_libuv_compiled_net_client_smoke'), [])
     const stdout = normalizeNewlines(run.stdout)
 
     if (run.code !== 0) {
@@ -1798,14 +1798,14 @@ async function checkLibuvHttpRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_http_smoke C)
+project(inox_libuv_http_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_http_smoke http-smoke.c)
-target_link_libraries(ccjs_libuv_http_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_http_smoke http-smoke.c)
+target_link_libraries(inox_libuv_http_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
@@ -1813,14 +1813,14 @@ target_link_libraries(ccjs_libuv_http_smoke PRIVATE ccjs_runtime)
     `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/http.h"
-#include "ccjs/net.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/http.h"
+#include "inox/net.h"
+#include "inox/time.h"
 
 typedef struct test_state {
-  ccjs_http_server* server;
-  ccjs_net_socket* client;
+  inox_http_server* server;
+  inox_net_socket* client;
   int handled;
   int client_connected;
   char response[512];
@@ -1846,58 +1846,58 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status on_http(void* user, const ccjs_http_request* request, ccjs_http_response* response) {
+static inox_status on_http(void* user, const inox_http_request* request, inox_http_response* response) {
   test_state* state = (test_state*)user;
-  ccjs_http_header headers[] = {
+  inox_http_header headers[] = {
     { "Content-Type", 12, "application/json", 16 },
-    { "X-CCJS", 6, "libuv-http", 10 }
+    { "X-INOX", 6, "libuv-http", 10 }
   };
-  if (!ccjs_http_request_method_equals(request, "GET", 3)) return CCJS_ERR_FIELD;
-  if (!ccjs_http_request_url_equals(request, "/hello", 6)) return CCJS_ERR_FIELD;
+  if (!inox_http_request_method_equals(request, "GET", 3)) return INOX_ERR_FIELD;
+  if (!inox_http_request_url_equals(request, "/hello", 6)) return INOX_ERR_FIELD;
   state->handled += 1;
-  if (ccjs_http_response_write_head(response, 201, headers, 2) != CCJS_OK) return CCJS_ERR_FIELD;
-  if (ccjs_http_response_write(response, "{\\"data\\":", 8) != CCJS_OK) return CCJS_ERR_FIELD;
-  return ccjs_http_response_end(response, "\\"hello\\"}", 8);
+  if (inox_http_response_write_head(response, 201, headers, 2) != INOX_OK) return INOX_ERR_FIELD;
+  if (inox_http_response_write(response, "{\\"data\\":", 8) != INOX_OK) return INOX_ERR_FIELD;
+  return inox_http_response_end(response, "\\"hello\\"}", 8);
 }
 
-static ccjs_status on_client_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
+static inox_status on_client_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
   test_state* state = (test_state*)user;
   size_t current = strlen(state->response);
   size_t copy_len = current + len >= sizeof(state->response) ? sizeof(state->response) - current - 1 : len;
   memcpy(state->response + current, bytes, copy_len);
   state->response[current + copy_len] = '\\0';
   if (strstr(state->response, "\\r\\n\\r\\n{\\"data\\":\\"hello\\"}") != 0) {
-    ccjs_net_socket_close(socket);
-    ccjs_http_server_close(state->server);
+    inox_net_socket_close(socket);
+    inox_http_server_close(state->server);
   }
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_connect(void* user, ccjs_net_socket* socket, ccjs_status status) {
+static inox_status on_connect(void* user, inox_net_socket* socket, inox_status status) {
   test_state* state = (test_state*)user;
-  if (status != CCJS_OK) return status;
+  if (status != INOX_OK) return status;
   state->client_connected += 1;
-  if (ccjs_net_socket_read_start(socket) != CCJS_OK) return CCJS_ERR_FIELD;
+  if (inox_net_socket_read_start(socket) != INOX_OK) return INOX_ERR_FIELD;
   const char* request = "GET /hello HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r\\n";
-  return ccjs_net_socket_write(socket, request, strlen(request));
+  return inox_net_socket_write(socket, request, strlen(request));
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
   test_state state = { 0 };
   int port = 0;
   int guard = 0;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_http_server_new(&loop, 0, 0, &state.server) != CCJS_OK) return 2;
-  if (ccjs_http_server_on_request(state.server, on_http, &state) != CCJS_OK) return 3;
-  if (ccjs_http_server_listen(state.server, "127.0.0.1", 0, 16) != CCJS_OK) return 4;
-  if (ccjs_http_server_local_port(state.server, &port) != CCJS_OK) return 5;
-  if (ccjs_net_connect(&loop, "127.0.0.1", port, on_connect, on_client_data, 0, &state, &state.client) != CCJS_OK) return 6;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_http_server_new(&loop, 0, 0, &state.server) != INOX_OK) return 2;
+  if (inox_http_server_on_request(state.server, on_http, &state) != INOX_OK) return 3;
+  if (inox_http_server_listen(state.server, "127.0.0.1", 0, 16) != INOX_OK) return 4;
+  if (inox_http_server_local_port(state.server, &port) != INOX_OK) return 5;
+  if (inox_net_connect(&loop, "127.0.0.1", port, on_connect, on_client_data, 0, &state, &state.client) != INOX_OK) return 6;
 
-  while (ccjs_loop_has_work(&loop) && guard < 500) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 7;
+  while (inox_loop_has_work(&loop) && guard < 500) {
+    if (inox_loop_poll(&loop, inox_performance_now()) != INOX_OK) return 7;
     guard += 1;
   }
 
@@ -1910,7 +1910,7 @@ int main(void) {
     strstr(state.response, "Content-Type: application/json") != 0 ? "json" : "content-type",
     strstr(state.response, "Content-Length: 16") != 0 ? "length" : "missing"
   );
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
   return 0;
 }
 `
@@ -1921,11 +1921,11 @@ int main(void) {
     sourceDir,
     '-B',
     httpBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv http smoke', 'cmake', ['--build', httpBuildDir])
 
-  const run = await runCommand(join(httpBuildDir, 'ccjs_libuv_http_smoke'), [])
+  const run = await runCommand(join(httpBuildDir, 'inox_libuv_http_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -1960,14 +1960,14 @@ server.listen(${port}, '127.0.0.1')
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_http_smoke C)
+project(inox_libuv_compiled_http_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_http_smoke generated-http-server.c)
-target_link_libraries(ccjs_libuv_compiled_http_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_http_smoke generated-http-server.c)
+target_link_libraries(inox_libuv_compiled_http_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(join(sourceDir, 'generated-http-server.c'), compiled.code)
@@ -1977,11 +1977,11 @@ target_link_libraries(ccjs_libuv_compiled_http_smoke PRIVATE ccjs_runtime)
     sourceDir,
     '-B',
     httpBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build compiled libuv http smoke', 'cmake', ['--build', httpBuildDir])
 
-  const executable = join(httpBuildDir, 'ccjs_libuv_compiled_http_smoke')
+  const executable = join(httpBuildDir, 'inox_libuv_compiled_http_smoke')
   const child = spawn(executable, [], {
     cwd: httpBuildDir,
     stdio: ['ignore', 'pipe', 'pipe']
@@ -2059,14 +2059,14 @@ async function checkLibuvFetchRuntime(workDir: string): Promise<void> {
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_fetch_smoke C)
+project(inox_libuv_fetch_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_fetch_smoke fetch-smoke.c)
-target_link_libraries(ccjs_libuv_fetch_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_fetch_smoke fetch-smoke.c)
+target_link_libraries(inox_libuv_fetch_smoke PRIVATE inox_runtime)
 `
   )
   await writeFile(
@@ -2074,13 +2074,13 @@ target_link_libraries(ccjs_libuv_fetch_smoke PRIVATE ccjs_runtime)
     `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/fetch.h"
-#include "ccjs/http.h"
-#include "ccjs/time.h"
+#include "inox/allocator.h"
+#include "inox/fetch.h"
+#include "inox/http.h"
+#include "inox/time.h"
 
 typedef struct test_state {
-  ccjs_http_server* server;
+  inox_http_server* server;
   int handled;
   int done;
   int status;
@@ -2108,49 +2108,49 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status on_http(void* user, const ccjs_http_request* request, ccjs_http_response* response) {
+static inox_status on_http(void* user, const inox_http_request* request, inox_http_response* response) {
   (void)request;
   test_state* state = (test_state*)user;
   state->handled += 1;
-  return ccjs_http_response_text(response, 200, "fetch-ok", 8);
+  return inox_http_response_text(response, 200, "fetch-ok", 8);
 }
 
-static ccjs_status on_fetch(void* user, ccjs_status status, const ccjs_fetch_response* response) {
+static inox_status on_fetch(void* user, inox_status status, const inox_fetch_response* response) {
   test_state* state = (test_state*)user;
-  if (status != CCJS_OK || response == 0) return CCJS_ERR_FIELD;
+  if (status != INOX_OK || response == 0) return INOX_ERR_FIELD;
   state->done += 1;
   state->status = response->status;
   state->ok = response->ok ? 1 : 0;
   size_t copy_len = response->body_len >= sizeof(state->body) ? sizeof(state->body) - 1 : response->body_len;
   memcpy(state->body, response->body, copy_len);
   state->body[copy_len] = '\\0';
-  ccjs_http_server_close(state->server);
-  return CCJS_OK;
+  inox_http_server_close(state->server);
+  return INOX_OK;
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
   test_state state = { 0 };
   int port = 0;
   int guard = 0;
   char url[128];
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_http_server_new(&loop, on_http, &state, &state.server) != CCJS_OK) return 2;
-  if (ccjs_http_server_listen(state.server, "127.0.0.1", 0, 16) != CCJS_OK) return 3;
-  if (ccjs_http_server_local_port(state.server, &port) != CCJS_OK) return 4;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_http_server_new(&loop, on_http, &state, &state.server) != INOX_OK) return 2;
+  if (inox_http_server_listen(state.server, "127.0.0.1", 0, 16) != INOX_OK) return 3;
+  if (inox_http_server_local_port(state.server, &port) != INOX_OK) return 4;
   snprintf(url, sizeof(url), "http://127.0.0.1:%d/value", port);
-  if (ccjs_fetch_get(&loop, url, on_fetch, &state) != CCJS_OK) return 5;
+  if (inox_fetch_get(&loop, url, on_fetch, &state) != INOX_OK) return 5;
 
-  while (ccjs_loop_has_work(&loop) && guard < 500) {
-    if (ccjs_loop_poll(&loop, ccjs_performance_now()) != CCJS_OK) return 6;
+  while (inox_loop_has_work(&loop) && guard < 500) {
+    if (inox_loop_poll(&loop, inox_performance_now()) != INOX_OK) return 6;
     guard += 1;
   }
 
   if (guard >= 500) return 7;
   printf("%d %d %d %d %s\\n", state.handled, state.done, state.status, state.ok, state.body);
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
   return 0;
 }
 `
@@ -2161,11 +2161,11 @@ int main(void) {
     sourceDir,
     '-B',
     fetchBuildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build libuv fetch smoke', 'cmake', ['--build', fetchBuildDir])
 
-  const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_fetch_smoke'), [])
+  const run = await runCommand(join(fetchBuildDir, 'inox_libuv_fetch_smoke'), [])
   const stdout = normalizeNewlines(run.stdout)
 
   if (run.code !== 0) {
@@ -2205,7 +2205,7 @@ async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
       if (
         request.method !== 'POST' ||
         request.headers['content-type'] !== 'application/json' ||
-        request.headers['x-ccjs'] !== 'fetch' ||
+        request.headers['x-inox'] !== 'fetch' ||
         body !== requestBody
       ) {
         response.writeHead(400, {
@@ -2242,7 +2242,7 @@ async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-CCJS': 'fetch'
+    'X-INOX': 'fetch'
   },
   body: '${requestBody}'
 })
@@ -2257,14 +2257,14 @@ console.log(response.status, response.ok, response.url, text)
       join(sourceDir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_fetch_client_smoke C)
+project(inox_libuv_compiled_fetch_client_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_fetch_client_smoke generated-fetch-client.c)
-target_link_libraries(ccjs_libuv_compiled_fetch_client_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_fetch_client_smoke generated-fetch-client.c)
+target_link_libraries(inox_libuv_compiled_fetch_client_smoke PRIVATE inox_runtime)
 `
     )
     await writeFile(join(sourceDir, 'generated-fetch-client.c'), compiled.code)
@@ -2274,11 +2274,11 @@ target_link_libraries(ccjs_libuv_compiled_fetch_client_smoke PRIVATE ccjs_runtim
       sourceDir,
       '-B',
       fetchBuildDir,
-      '-DCCJS_LOOP_BACKEND=libuv'
+      '-DINOX_LOOP_BACKEND=libuv'
     ])
     await checkCommand('build compiled libuv fetch client smoke', 'cmake', ['--build', fetchBuildDir])
 
-    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_client_smoke'), [])
+    const run = await runCommand(join(fetchBuildDir, 'inox_libuv_compiled_fetch_client_smoke'), [])
     const stdout = normalizeNewlines(run.stdout)
 
     if (run.code !== 0) {
@@ -2347,14 +2347,14 @@ console.log(response.status, response.ok, text)
       join(sourceDir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_fetch_chunked_smoke C)
+project(inox_libuv_compiled_fetch_chunked_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_fetch_chunked_smoke generated-fetch-chunked.c)
-target_link_libraries(ccjs_libuv_compiled_fetch_chunked_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_fetch_chunked_smoke generated-fetch-chunked.c)
+target_link_libraries(inox_libuv_compiled_fetch_chunked_smoke PRIVATE inox_runtime)
 `
     )
     await writeFile(join(sourceDir, 'generated-fetch-chunked.c'), compiled.code)
@@ -2364,11 +2364,11 @@ target_link_libraries(ccjs_libuv_compiled_fetch_chunked_smoke PRIVATE ccjs_runti
       sourceDir,
       '-B',
       fetchBuildDir,
-      '-DCCJS_LOOP_BACKEND=libuv'
+      '-DINOX_LOOP_BACKEND=libuv'
     ])
     await checkCommand('build compiled libuv fetch chunked smoke', 'cmake', ['--build', fetchBuildDir])
 
-    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_chunked_smoke'), [])
+    const run = await runCommand(join(fetchBuildDir, 'inox_libuv_compiled_fetch_chunked_smoke'), [])
     const stdout = normalizeNewlines(run.stdout)
 
     if (run.code !== 0) {
@@ -2440,14 +2440,14 @@ try {
       join(sourceDir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_fetch_abort_smoke C)
+project(inox_libuv_compiled_fetch_abort_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_fetch_abort_smoke generated-fetch-abort.c)
-target_link_libraries(ccjs_libuv_compiled_fetch_abort_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_fetch_abort_smoke generated-fetch-abort.c)
+target_link_libraries(inox_libuv_compiled_fetch_abort_smoke PRIVATE inox_runtime)
 `
     )
     await writeFile(join(sourceDir, 'generated-fetch-abort.c'), compiled.code)
@@ -2457,11 +2457,11 @@ target_link_libraries(ccjs_libuv_compiled_fetch_abort_smoke PRIVATE ccjs_runtime
       sourceDir,
       '-B',
       fetchBuildDir,
-      '-DCCJS_LOOP_BACKEND=libuv'
+      '-DINOX_LOOP_BACKEND=libuv'
     ])
     await checkCommand('build compiled libuv fetch abort smoke', 'cmake', ['--build', fetchBuildDir])
 
-    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_abort_smoke'), [])
+    const run = await runCommand(join(fetchBuildDir, 'inox_libuv_compiled_fetch_abort_smoke'), [])
     const stdout = normalizeNewlines(run.stdout)
 
     if (run.code !== 0) {
@@ -2548,14 +2548,14 @@ console.log(manual.status, manual.statusText, manual.redirected, location)
       join(sourceDir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_fetch_redirect_smoke C)
+project(inox_libuv_compiled_fetch_redirect_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_fetch_redirect_smoke generated-fetch-redirect.c)
-target_link_libraries(ccjs_libuv_compiled_fetch_redirect_smoke PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_fetch_redirect_smoke generated-fetch-redirect.c)
+target_link_libraries(inox_libuv_compiled_fetch_redirect_smoke PRIVATE inox_runtime)
 `
     )
     await writeFile(join(sourceDir, 'generated-fetch-redirect.c'), compiled.code)
@@ -2565,11 +2565,11 @@ target_link_libraries(ccjs_libuv_compiled_fetch_redirect_smoke PRIVATE ccjs_runt
       sourceDir,
       '-B',
       fetchBuildDir,
-      '-DCCJS_LOOP_BACKEND=libuv'
+      '-DINOX_LOOP_BACKEND=libuv'
     ])
     await checkCommand('build compiled libuv fetch redirect smoke', 'cmake', ['--build', fetchBuildDir])
 
-    const run = await runCommand(join(fetchBuildDir, 'ccjs_libuv_compiled_fetch_redirect_smoke'), [])
+    const run = await runCommand(join(fetchBuildDir, 'inox_libuv_compiled_fetch_redirect_smoke'), [])
     const stdout = normalizeNewlines(run.stdout)
 
     if (run.code !== 0) {
@@ -2601,7 +2601,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/from-fetch') {
     res.writeHead(200, {
       'Content-Type': 'text/plain',
-      'X-CCJS': 'network'
+      'X-INOX': 'network'
     })
     res.end('http-fetch-ok')
   } else {
@@ -2614,7 +2614,7 @@ server.listen(${port}, '127.0.0.1')
 `
   const clientSource = `const response = await fetch('http://127.0.0.1:${port}/from-fetch')
 const text = await response.text()
-const trace = response.headers.get('x-ccjs') ?? 'missing'
+const trace = response.headers.get('x-inox') ?? 'missing'
 console.log(response.status, response.ok, trace, text)
 `
   const compiledServer = compileLibuvSource(serverSource)
@@ -2625,16 +2625,16 @@ console.log(response.status, response.ok, trace, text)
     join(sourceDir, 'CMakeLists.txt'),
     `cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_libuv_compiled_http_fetch_smoke C)
+project(inox_libuv_compiled_http_fetch_smoke C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/ccjs_runtime")
-add_executable(ccjs_libuv_compiled_http_fetch_server generated-http-fetch-server.c)
-target_link_libraries(ccjs_libuv_compiled_http_fetch_server PRIVATE ccjs_runtime)
-add_executable(ccjs_libuv_compiled_http_fetch_client generated-http-fetch-client.c)
-target_link_libraries(ccjs_libuv_compiled_http_fetch_client PRIVATE ccjs_runtime)
+add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_executable(inox_libuv_compiled_http_fetch_server generated-http-fetch-server.c)
+target_link_libraries(inox_libuv_compiled_http_fetch_server PRIVATE inox_runtime)
+add_executable(inox_libuv_compiled_http_fetch_client generated-http-fetch-client.c)
+target_link_libraries(inox_libuv_compiled_http_fetch_client PRIVATE inox_runtime)
 `
   )
   await writeFile(join(sourceDir, 'generated-http-fetch-server.c'), compiledServer.code)
@@ -2645,11 +2645,11 @@ target_link_libraries(ccjs_libuv_compiled_http_fetch_client PRIVATE ccjs_runtime
     sourceDir,
     '-B',
     buildDir,
-    '-DCCJS_LOOP_BACKEND=libuv'
+    '-DINOX_LOOP_BACKEND=libuv'
   ])
   await checkCommand('build compiled libuv http/fetch roundtrip smoke', 'cmake', ['--build', buildDir])
 
-  const executable = join(buildDir, 'ccjs_libuv_compiled_http_fetch_server')
+  const executable = join(buildDir, 'inox_libuv_compiled_http_fetch_server')
   const child = spawn(executable, [], {
     cwd: buildDir,
     stdio: ['ignore', 'pipe', 'pipe']
@@ -2680,7 +2680,7 @@ target_link_libraries(ccjs_libuv_compiled_http_fetch_client PRIVATE ccjs_runtime
       throw new Error(`compiled HTTP server raw response mismatch: ${JSON.stringify(rawResponse)}`)
     }
 
-    const run = await runCommand(join(buildDir, 'ccjs_libuv_compiled_http_fetch_client'), [])
+    const run = await runCommand(join(buildDir, 'inox_libuv_compiled_http_fetch_client'), [])
     const clientStdout = normalizeNewlines(run.stdout)
     const expected = '200 1 network http-fetch-ok\n'
 

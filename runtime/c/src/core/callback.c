@@ -1,66 +1,66 @@
-#include "ccjs/callback.h"
-#ifdef CCJS_DEBUG_MEMORY
-#include "ccjs/debug.h"
+#include "inox/callback.h"
+#ifdef INOX_DEBUG_MEMORY
+#include "inox/debug.h"
 #endif
 
-ccjs_status ccjs_callback_new(
-  ccjs_allocator* allocator,
-  ccjs_callback_call_fn call,
+inox_status inox_callback_new(
+  inox_allocator* allocator,
+  inox_callback_call_fn call,
   void* context,
-  ccjs_callback_finalizer_fn finalizer,
-  ccjs_value* out
+  inox_callback_finalizer_fn finalizer,
+  inox_value* out
 ) {
   if (allocator == 0 || allocator->alloc == 0 || call == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_callback* callback = allocator->alloc(allocator->user, sizeof(ccjs_callback), _Alignof(ccjs_callback));
+  inox_callback* callback = allocator->alloc(allocator->user, sizeof(inox_callback), _Alignof(inox_callback));
 
   if (callback == 0) {
-    *out = ccjs_undefined_value();
-    return CCJS_ERR_OOM;
+    *out = inox_undefined_value();
+    return INOX_ERR_OOM;
   }
 
-  callback->header.kind = CCJS_REF_FUNCTION;
+  callback->header.kind = INOX_REF_FUNCTION;
   callback->header.ref_count = 1;
   callback->header.flags = 0;
-  callback->header.size = sizeof(ccjs_callback);
-  callback->header.align = _Alignof(ccjs_callback);
+  callback->header.size = sizeof(inox_callback);
+  callback->header.align = _Alignof(inox_callback);
   callback->header.allocator = allocator;
-  ccjs_ref_init_weak(&callback->header);
+  inox_ref_init_weak(&callback->header);
   callback->call = call;
   callback->context = context;
   callback->finalizer = finalizer;
 
-  out->tag = CCJS_TAG_FUNCTION;
+  out->tag = INOX_TAG_FUNCTION;
   out->as.ref = &callback->header;
-#ifdef CCJS_DEBUG_MEMORY
-  ccjs_debug_memory_record_ref_created(CCJS_REF_FUNCTION);
+#ifdef INOX_DEBUG_MEMORY
+  inox_debug_memory_record_ref_created(INOX_REF_FUNCTION);
 #endif
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_callback_call(ccjs_value callback, const ccjs_value* args, size_t arg_count, ccjs_value* out) {
-  if (out == 0 || callback.tag != CCJS_TAG_FUNCTION || callback.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_callback_call(inox_value callback, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (out == 0 || callback.tag != INOX_TAG_FUNCTION || callback.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  if (callback.as.ref->kind != CCJS_REF_FUNCTION) {
-    return CCJS_ERR_TYPE;
+  if (callback.as.ref->kind != INOX_REF_FUNCTION) {
+    return INOX_ERR_TYPE;
   }
 
   if (args == 0 && arg_count != 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_callback* instance = (ccjs_callback*)callback.as.ref;
+  inox_callback* instance = (inox_callback*)callback.as.ref;
 
   if (instance->call == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
   return instance->call(instance->context, args, arg_count, out);
 }

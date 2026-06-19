@@ -1,4 +1,4 @@
-#include "ccjs/os.h"
+#include "inox/os.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -6,33 +6,33 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #endif
-#include "ccjs/string.h"
+#include "inox/string.h"
 
-static ccjs_status ccjs_os_string(ccjs_allocator* allocator, const char* value, ccjs_value* out) {
-  return ccjs_string_from_literal(allocator, value == 0 ? "" : value, value == 0 ? 0 : strlen(value), out);
+static inox_status inox_os_string(inox_allocator* allocator, const char* value, inox_value* out) {
+  return inox_string_from_literal(allocator, value == 0 ? "" : value, value == 0 ? 0 : strlen(value), out);
 }
 
-ccjs_status ccjs_os_arch(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_os_arch(inox_allocator* allocator, inox_value* out) {
 #if defined(__aarch64__) || defined(_M_ARM64)
-  return ccjs_os_string(allocator, "arm64", out);
+  return inox_os_string(allocator, "arm64", out);
 #elif defined(__x86_64__) || defined(_M_X64)
-  return ccjs_os_string(allocator, "x64", out);
+  return inox_os_string(allocator, "x64", out);
 #elif defined(__i386__) || defined(_M_IX86)
-  return ccjs_os_string(allocator, "ia32", out);
+  return inox_os_string(allocator, "ia32", out);
 #elif defined(__arm__) || defined(_M_ARM)
-  return ccjs_os_string(allocator, "arm", out);
+  return inox_os_string(allocator, "arm", out);
 #elif defined(__riscv) && __riscv_xlen == 64
-  return ccjs_os_string(allocator, "riscv64", out);
+  return inox_os_string(allocator, "riscv64", out);
 #elif defined(__powerpc64__) || defined(__ppc64__)
-  return ccjs_os_string(allocator, "ppc64", out);
+  return inox_os_string(allocator, "ppc64", out);
 #elif defined(__s390x__)
-  return ccjs_os_string(allocator, "s390x", out);
+  return inox_os_string(allocator, "s390x", out);
 #else
-  return ccjs_os_string(allocator, "unknown", out);
+  return inox_os_string(allocator, "unknown", out);
 #endif
 }
 
-ccjs_status ccjs_os_homedir(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_os_homedir(inox_allocator* allocator, inox_value* out) {
   const char* home = getenv("HOME");
 
 #ifdef _WIN32
@@ -41,59 +41,59 @@ ccjs_status ccjs_os_homedir(ccjs_allocator* allocator, ccjs_value* out) {
   }
 #endif
 
-  return ccjs_os_string(allocator, home, out);
+  return inox_os_string(allocator, home, out);
 }
 
-ccjs_status ccjs_os_hostname(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_os_hostname(inox_allocator* allocator, inox_value* out) {
 #ifdef _WIN32
-  return ccjs_os_string(allocator, "", out);
+  return inox_os_string(allocator, "", out);
 #else
   char name[256];
 
   if (gethostname(name, sizeof(name)) != 0) {
-    return ccjs_os_string(allocator, "", out);
+    return inox_os_string(allocator, "", out);
   }
 
   name[sizeof(name) - 1] = 0;
-  return ccjs_os_string(allocator, name, out);
+  return inox_os_string(allocator, name, out);
 #endif
 }
 
-ccjs_status ccjs_os_platform(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_os_platform(inox_allocator* allocator, inox_value* out) {
 #if defined(__APPLE__)
-  return ccjs_os_string(allocator, "darwin", out);
+  return inox_os_string(allocator, "darwin", out);
 #elif defined(__linux__)
-  return ccjs_os_string(allocator, "linux", out);
+  return inox_os_string(allocator, "linux", out);
 #elif defined(_WIN32)
-  return ccjs_os_string(allocator, "win32", out);
+  return inox_os_string(allocator, "win32", out);
 #elif defined(__FreeBSD__)
-  return ccjs_os_string(allocator, "freebsd", out);
+  return inox_os_string(allocator, "freebsd", out);
 #elif defined(__OpenBSD__)
-  return ccjs_os_string(allocator, "openbsd", out);
+  return inox_os_string(allocator, "openbsd", out);
 #elif defined(__sun)
-  return ccjs_os_string(allocator, "sunos", out);
+  return inox_os_string(allocator, "sunos", out);
 #elif defined(_AIX)
-  return ccjs_os_string(allocator, "aix", out);
+  return inox_os_string(allocator, "aix", out);
 #else
-  return ccjs_os_string(allocator, "unknown", out);
+  return inox_os_string(allocator, "unknown", out);
 #endif
 }
 
-ccjs_status ccjs_os_release(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_os_release(inox_allocator* allocator, inox_value* out) {
 #ifdef _WIN32
-  return ccjs_os_string(allocator, "", out);
+  return inox_os_string(allocator, "", out);
 #else
   struct utsname info;
 
   if (uname(&info) != 0) {
-    return ccjs_os_string(allocator, "", out);
+    return inox_os_string(allocator, "", out);
   }
 
-  return ccjs_os_string(allocator, info.release, out);
+  return inox_os_string(allocator, info.release, out);
 #endif
 }
 
-ccjs_status ccjs_os_tmpdir(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_os_tmpdir(inox_allocator* allocator, inox_value* out) {
   const char* value = getenv("TMPDIR");
 
   if (value == 0 || value[0] == 0) {
@@ -112,19 +112,19 @@ ccjs_status ccjs_os_tmpdir(ccjs_allocator* allocator, ccjs_value* out) {
 #endif
   }
 
-  return ccjs_os_string(allocator, value, out);
+  return inox_os_string(allocator, value, out);
 }
 
-ccjs_status ccjs_os_type(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_os_type(inox_allocator* allocator, inox_value* out) {
 #ifdef _WIN32
-  return ccjs_os_string(allocator, "Windows_NT", out);
+  return inox_os_string(allocator, "Windows_NT", out);
 #else
   struct utsname info;
 
   if (uname(&info) != 0) {
-    return ccjs_os_string(allocator, "", out);
+    return inox_os_string(allocator, "", out);
   }
 
-  return ccjs_os_string(allocator, info.sysname, out);
+  return inox_os_string(allocator, info.sysname, out);
 #endif
 }

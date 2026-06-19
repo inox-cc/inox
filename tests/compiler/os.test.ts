@@ -17,15 +17,15 @@ export function main(): void {
 
   assert.deepEqual(result.ir.features, ['os', 'runtime-values'])
   assert.deepEqual(result.ir.runtimeRequirements, ['managed-values', 'os', 'string-bytes'])
-  assert.match(result.code, /#include "ccjs\/os\.h"/)
-  assert.match(result.code, /ccjs_os_platform\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
-  assert.match(result.code, /ccjs_os_arch\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
-  assert.match(result.code, /ccjs_os_tmpdir\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
-  assert.match(result.code, /ccjs_os_homedir\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
-  assert.match(result.code, /ccjs_os_hostname\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
-  assert.match(result.code, /ccjs_os_type\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
-  assert.match(result.code, /ccjs_os_release\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "\\n", 1, &ccjs_os_constant_\d+\)/)
+  assert.match(result.code, /#include "inox\/os\.h"/)
+  assert.match(result.code, /inox_os_platform\(&inox_default_allocator, &inox_os_value_\d+\)/)
+  assert.match(result.code, /inox_os_arch\(&inox_default_allocator, &inox_os_value_\d+\)/)
+  assert.match(result.code, /inox_os_tmpdir\(&inox_default_allocator, &inox_os_value_\d+\)/)
+  assert.match(result.code, /inox_os_homedir\(&inox_default_allocator, &inox_os_value_\d+\)/)
+  assert.match(result.code, /inox_os_hostname\(&inox_default_allocator, &inox_os_value_\d+\)/)
+  assert.match(result.code, /inox_os_type\(&inox_default_allocator, &inox_os_value_\d+\)/)
+  assert.match(result.code, /inox_os_release\(&inox_default_allocator, &inox_os_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "\\n", 1, &inox_os_constant_\d+\)/)
 })
 
 test('lowers named node:os imports to the C os runtime', () => {
@@ -39,14 +39,14 @@ console.log(platform(), arch(), tmpdir(), homedir(), hostname(), osType(), relea
     }
   )
 
-  assert.match(result.code, /ccjs_os_platform\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_os_arch\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_os_tmpdir\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_os_homedir\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_os_hostname\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_os_type\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_os_release\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_os_constant_\d+/)
+  assert.match(result.code, /inox_os_platform\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_os_arch\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_os_tmpdir\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_os_homedir\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_os_hostname\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_os_type\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_os_release\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_os_constant_\d+/)
 })
 
 test('reports unsupported node:os methods at compile time only', () => {
@@ -68,7 +68,7 @@ os.cpus()
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(
@@ -100,7 +100,7 @@ console.log(os.platform())
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_CAPABILITY'),
+        error.diagnostics.some((item) => item.code === 'INOX_CAPABILITY'),
         true
       )
       assert.equal(
@@ -127,5 +127,5 @@ console.log(os.platform())
     }
   )
 
-  assert.match(result.code, /ccjs_os_platform\(&ccjs_default_allocator, &ccjs_os_value_\d+\)/)
+  assert.match(result.code, /inox_os_platform\(&inox_default_allocator, &inox_os_value_\d+\)/)
 })

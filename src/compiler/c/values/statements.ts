@@ -579,7 +579,7 @@ function preparedCallDiscard(): PreparedCallOptions {
 
 function preparedPromiseReturnOptions(): PreparedCallOptions {
   return {
-    out: 'ccjs_return',
+    out: 'inox_return',
     owned: false
   }
 }
@@ -610,7 +610,7 @@ function referenceNode(name: string): StatementNode {
 function nullRuntimeValueExpression(): PreparedExpression {
   return {
     lines: [],
-    expression: 'ccjs_null_value()'
+    expression: 'inox_null_value()'
   }
 }
 
@@ -657,8 +657,8 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
 export function emitWhileStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const condition = emitPreparedConditionExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
-  const breakLabel = nextCName(context, 'ccjs_break')
-  const continueLabel = nextCName(context, 'ccjs_continue')
+  const breakLabel = nextCName(context, 'inox_break')
+  const continueLabel = nextCName(context, 'inox_continue')
   pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
   pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
   const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames)
@@ -696,8 +696,8 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     const test = emitPreparedForExpressionClause(statement.test, context)
     const update = emitPreparedForExpressionClause(statement.update, context)
     const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.test, context)
-    const breakLabel = nextCName(context, 'ccjs_break')
-    const continueLabel = nextCName(context, 'ccjs_continue')
+    const breakLabel = nextCName(context, 'inox_break')
+    const continueLabel = nextCName(context, 'inox_continue')
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
     const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames)
@@ -759,10 +759,10 @@ export function emitRuntimeStringVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
-  lines.push(`ccjs_retain(${value.expression});`)
+  lines.push(`inox_retain(${value.expression});`)
   lines.push(`${storage} = ${value.expression};`)
-  lines.push(emitRuntimeValueCheck(storage, 'CCJS_TAG_STRING', context))
-  lines.push(`${constPrefix(statement.kind === 'const')}ccjs_string* ${statement.name} = (ccjs_string*)${storage}.as.ref;`)
+  lines.push(emitRuntimeValueCheck(storage, 'INOX_TAG_STRING', context))
+  lines.push(`${constPrefix(statement.kind === 'const')}inox_string* ${statement.name} = (inox_string*)${storage}.as.ref;`)
 
   context.variables.set(statement.name, 'string')
   context.runtimeStrings.add(statement.name)
@@ -785,7 +785,7 @@ export function emitStringScalarVariableDeclaration(statement: StatementNode, co
 
   if (runtimeString != null) {
     context.runtimeStrings.add(statement.name)
-    return [`${constPrefix(statement.kind === 'const')}ccjs_string* ${statement.name} = ${runtimeString};`]
+    return [`${constPrefix(statement.kind === 'const')}inox_string* ${statement.name} = ${runtimeString};`]
   }
 
   const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
@@ -984,7 +984,7 @@ export function emitRuntimeValueVariableDeclaration(
     }
   }
 
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1163,7 +1163,7 @@ export function emitBoxedScalarVariableDeclaration(statement: StatementNode, con
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${statement.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`)
+  lines.push(`${statement.name} = inox_default_alloc(0, sizeof(double), _Alignof(double));`)
   lines.push(`if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`)
   lines.push(`*${statement.name} = ${value.expression};`)
 
@@ -1178,10 +1178,10 @@ export function emitBoxedRuntimeValueVariableDeclaration(
   const deps = statementDeps(context)
   const valueType = deps.inferExpressionType(expression, context)
   const value = deps.emitCValueExpression(expression, context)
-  let tag = 'CCJS_TAG_OBJECT'
+  let tag = 'INOX_TAG_OBJECT'
 
   if (valueType === 'string') {
-    tag = 'CCJS_TAG_STRING'
+    tag = 'INOX_TAG_STRING'
   }
 
   registerBoxedValue(context, statement.name, valueType)
@@ -1190,11 +1190,11 @@ export function emitBoxedRuntimeValueVariableDeclaration(
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${statement.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+  lines.push(`${statement.name} = inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
   lines.push(`if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`)
   lines.push(`*${statement.name} = ${value.expression};`)
   lines.push(emitRuntimeTypeCheck(`(*${statement.name}).tag != ${tag} || (*${statement.name}).as.ref == 0`, context))
-  lines.push(`ccjs_retain(*${statement.name});`)
+  lines.push(`inox_retain(*${statement.name});`)
 
   return lines
 }
@@ -1210,7 +1210,7 @@ export function reportCCollectionHashability(
   }
 
   pushDiagnostic(context,
-    diagnostic('CCJS_C_COLLECTION', `${subject} must be hashable in the current C backend slice`, loc)
+    diagnostic('INOX_C_COLLECTION', `${subject} must be hashable in the current C backend slice`, loc)
   )
 }
 
@@ -1257,20 +1257,20 @@ function emitForOfElementDeclaration(
   const checks: string[] = []
 
   if (elementType === 'string') {
-    declaration = `ccjs_string* ${name} = (ccjs_string*)${value}.as.ref;`
-    checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
+    declaration = `inox_string* ${name} = (inox_string*)${value}.as.ref;`
+    checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   } else if (elementType === 'unknown') {
-    declaration = `ccjs_value ${name} = ${value};`
+    declaration = `inox_value ${name} = ${value};`
   } else if (elementType === 'boolean') {
     declaration = `double ${name} = ((double)(${value}.as.boolean ? 1 : 0));`
-    checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_BOOL`, context))
+    checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
   } else if (isManagedRuntimeReturnType(elementType)) {
     const expectedTag = cRuntimeValueTag(elementType)
 
-    declaration = `ccjs_value ${name} = ${value};`
+    declaration = `inox_value ${name} = ${value};`
     pushAllLines(checks, emitRuntimeValueCheckLines(value, expectedTag, context))
   } else {
-    checks.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_NUMBER`, context))
+    checks.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
   }
 
   return {
@@ -1286,7 +1286,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   if (collectionConstructor == null) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_COLLECTION',
+        'INOX_C_COLLECTION',
         'this collection constructor is not supported by the current C backend slice',
         statement.loc
       )
@@ -1299,7 +1299,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   if (args.length > 1) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_COLLECTION',
+        'INOX_C_COLLECTION',
         'C collection constructors currently support at most one array literal iterable',
         statement.init.loc
       )
@@ -1329,7 +1329,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
 
     const lines: string[] = []
     pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-    lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${statement.name})`, context))
+    lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${statement.name})`, context))
 
     pushAllLines(lines, emitMapConstructorEntries(statement.name, constructorArg, context, statement.init.loc))
 
@@ -1348,7 +1348,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
 
   const lines: string[] = []
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${statement.name})`, context))
+  lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${statement.name})`, context))
 
   pushAllLines(lines, emitSetConstructorValues(statement.name, constructorArg, context, statement.init.loc))
 
@@ -1373,7 +1373,7 @@ function emitCollectionVariableCopyConstructor(statement: StatementNode, context
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAllLines(lines, value.lines)
   lines.push(`${statement.name} = ${value.expression};`)
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1394,7 +1394,7 @@ function emitMapConstructorEntries(
     pushDiagnostic(
       context,
       diagnostic(
-        'CCJS_C_COLLECTION',
+        'INOX_C_COLLECTION',
         'C Map constructor currently supports only array literal entries or Map copy sources',
         nodeLocOrFallback(expression, loc)
       )
@@ -1408,7 +1408,7 @@ function emitMapConstructorEntries(
     if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
       pushDiagnostic(context,
         diagnostic(
-	        'CCJS_C_COLLECTION',
+	        'INOX_C_COLLECTION',
 	        'C Map constructor entries must be [key, value] array literals',
 	        nodeLocOrFallback(entry, loc)
 	      )
@@ -1430,7 +1430,7 @@ function emitMapConstructorEntries(
 
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_map_set(${name}, ${key.expression}, ${value.expression})`, context))
   }
 
   return lines
@@ -1452,7 +1452,7 @@ function emitSetConstructorValues(
     pushDiagnostic(
       context,
       diagnostic(
-        'CCJS_C_COLLECTION',
+        'INOX_C_COLLECTION',
         'C Set constructor currently supports only array literal values or Set copy sources',
         nodeLocOrFallback(expression, loc)
       )
@@ -1467,7 +1467,7 @@ function emitSetConstructorValues(
     reportCCollectionHashability(deps.inferExpressionType(element, context), 'Set values', nodeLocOrFallback(element, loc), context)
 
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_set_add(${name}, ${value.expression})`, context))
   }
 
   return lines
@@ -1506,9 +1506,9 @@ function emitDirentArrayIndexVariableDeclaration(statement: StatementNode, conte
   const lines: string[] = []
   pushAllLines(lines, array.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`ccjs_array_get(${array.expression}, ${index}, &${statement.name})`, context))
-  lines.push(emitRuntimeValueCheck(statement.name, 'CCJS_TAG_OBJECT', context))
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(emitStatusCheck(`inox_array_get(${array.expression}, ${index}, &${statement.name})`, context))
+  lines.push(emitRuntimeValueCheck(statement.name, 'INOX_TAG_OBJECT', context))
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1745,7 +1745,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
       return {
         lines: [],
-        expression: `${constPrefix}ccjs_string* ${statement.name} = ${runtimeString}`
+        expression: `${constPrefix}inox_string* ${statement.name} = ${runtimeString}`
       }
     }
 
@@ -1884,7 +1884,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     const iterable = statement.iterable
 
     if (iterable != null && iterable.type === 'ArrayLiteral') {
-      const name = nextCName(context, 'ccjs_for_array')
+      const name = nextCName(context, 'inox_for_array')
       pushAllLines(
         setup,
         statementDeps(context).emitArrayVariableDeclaration(arrayVariableDeclarationNode(name, iterable), context)
@@ -1931,7 +1931,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
   if (array == null && runtimeArray == null) {
     pushDiagnostic(context,
-      diagnostic('CCJS_C_FOR_OF', 'C for-of currently supports arrays, Map values and Set values', statement.loc)
+      diagnostic('INOX_C_FOR_OF', 'C for-of currently supports arrays, Map values and Set values', statement.loc)
     )
     return []
   }
@@ -1947,7 +1947,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   if (!isCForOfArrayElementType(elementType)) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_FOR_OF',
+        'INOX_C_FOR_OF',
         'C for-of currently supports only uniform number/boolean/string arrays',
         statement.loc
       )
@@ -1955,21 +1955,21 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     return []
   }
 
-  const index = nextCName(context, 'ccjs_for_index')
-  const value = nextCName(context, 'ccjs_for_value')
+  const index = nextCName(context, 'inox_for_index')
+  const value = nextCName(context, 'inox_for_value')
   let length = '0'
   let arrayName = ''
 
   if (runtimeArray != null) {
-    length = nextCName(context, 'ccjs_for_length')
+    length = nextCName(context, 'inox_for_length')
     arrayName = runtimeArray.name
   } else if (array != null) {
     length = `${array.elements.length}`
     arrayName = array.name
   }
 
-  const breakLabel = nextCName(context, 'ccjs_break')
-  const continueLabel = nextCName(context, 'ccjs_continue')
+  const breakLabel = nextCName(context, 'inox_break')
+  const continueLabel = nextCName(context, 'inox_continue')
 
   registerOwnedValue(context, value)
 
@@ -1984,14 +1984,14 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     popFlowTarget(context.breakTargets)
     const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
 
-    const getElementStatus = emitStatusCheck(`ccjs_array_get(${arrayName}, ${index}, &${value})`, context)
+    const getElementStatus = emitStatusCheck(`inox_array_get(${arrayName}, ${index}, &${value})`, context)
     const lines: string[] = []
     pushAllLines(lines, setup)
 
     if (runtimeArray != null) {
       pushAllLines(lines, runtimeArray.lines)
       lines.push(`size_t ${length} = 0;`)
-      lines.push(emitStatusCheck(`ccjs_array_len(${arrayName}, &${length})`, context))
+      lines.push(emitStatusCheck(`inox_array_len(${arrayName}, &${length})`, context))
     }
 
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
@@ -2022,7 +2022,7 @@ function emitRuntimeMapForOfStatement(
   if (!isCForOfValueType(keyType) || !isCForOfValueType(valueType)) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_FOR_OF',
+        'INOX_C_FOR_OF',
         'C for-of currently supports only Map entries with number/boolean/string or managed runtime keys and values',
         statement.loc
       )
@@ -2030,12 +2030,12 @@ function emitRuntimeMapForOfStatement(
     return []
   }
 
-  const index = nextCName(context, 'ccjs_for_map_index')
-  const map = nextCName(context, 'ccjs_for_map')
-  const shapeName = nextCName(context, 'ccjs_shape_map_entry')
+  const index = nextCName(context, 'inox_for_map_index')
+  const map = nextCName(context, 'inox_for_map')
+  const shapeName = nextCName(context, 'inox_shape_map_entry')
   const fieldsName = `${shapeName}_fields`
-  const breakLabel = nextCName(context, 'ccjs_break')
-  const continueLabel = nextCName(context, 'ccjs_continue')
+  const breakLabel = nextCName(context, 'inox_break')
+  const continueLabel = nextCName(context, 'inox_continue')
 	  const fields = [
 	    {
 	      name: 'key',
@@ -2062,31 +2062,31 @@ function emitRuntimeMapForOfStatement(
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const createEntryStatus = emitStatusCheck(
-      `ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`,
+      `inox_object_new(&inox_default_allocator, &${shapeName}, &${statement.name})`,
       context
     )
     const initKeyStatus = emitStatusCheck(
-      `ccjs_object_init_known(${statement.name}, 0, ${map}->entries[${index}].key)`,
+      `inox_object_init_known(${statement.name}, 0, ${map}->entries[${index}].key)`,
       context
     )
     const initValueStatus = emitStatusCheck(
-      `ccjs_object_init_known(${statement.name}, 1, ${map}->entries[${index}].value)`,
+      `inox_object_init_known(${statement.name}, 1, ${map}->entries[${index}].value)`,
       context
     )
 
     const lines: string[] = []
-    lines.push(`static const ccjs_field_info ${fieldsName}[] = {`)
-    lines.push('  { "key", CCJS_FIELD_READONLY },')
-    lines.push('  { "value", CCJS_FIELD_READONLY },')
+    lines.push(`static const inox_field_info ${fieldsName}[] = {`)
+    lines.push('  { "key", INOX_FIELD_READONLY },')
+    lines.push('  { "value", INOX_FIELD_READONLY },')
     lines.push('};')
-    lines.push(`static const ccjs_shape ${shapeName} = {`)
+    lines.push(`static const inox_shape ${shapeName} = {`)
     lines.push('  2,')
     lines.push(`  ${fieldsName}`)
     lines.push('};')
     pushAllLines(lines, runtimeMap.lines)
-    lines.push(`ccjs_map* ${map} = (ccjs_map*)${runtimeMap.name}.as.ref;`)
+    lines.push(`inox_map* ${map} = (inox_map*)${runtimeMap.name}.as.ref;`)
     lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`)
-    lines.push(`  if (${map}->entries[${index}].state != CCJS_MAP_SLOT_OCCUPIED) continue;`)
+    lines.push(`  if (${map}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) continue;`)
     pushIndentedLines(lines, emitPrepareOwnedValueWrite(statement.name), '  ')
     lines.push(`  ${createEntryStatus}`)
     lines.push(`  ${initKeyStatus}`)
@@ -2161,7 +2161,7 @@ function emitRuntimeCollectionValueForOfStatement(
   if (unsupported) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_FOR_OF',
+        'INOX_C_FOR_OF',
         unsupportedMessage,
         statement.loc
       )
@@ -2169,23 +2169,23 @@ function emitRuntimeCollectionValueForOfStatement(
     return []
   }
 
-  let indexPrefix = 'ccjs_for_set_index'
-  let collectionPrefix = 'ccjs_for_set'
-  let collectionType = 'ccjs_set'
-  let slotState = 'CCJS_SET_SLOT_OCCUPIED'
+  let indexPrefix = 'inox_for_set_index'
+  let collectionPrefix = 'inox_for_set'
+  let collectionType = 'inox_set'
+  let slotState = 'INOX_SET_SLOT_OCCUPIED'
 
   if (isMap) {
-    indexPrefix = 'ccjs_for_map_index'
-    collectionPrefix = 'ccjs_for_map'
-    collectionType = 'ccjs_map'
-    slotState = 'CCJS_MAP_SLOT_OCCUPIED'
+    indexPrefix = 'inox_for_map_index'
+    collectionPrefix = 'inox_for_map'
+    collectionType = 'inox_map'
+    slotState = 'INOX_MAP_SLOT_OCCUPIED'
   }
 
   const index = nextCName(context, indexPrefix)
   const collection = nextCName(context, collectionPrefix)
-  const value = nextCName(context, 'ccjs_for_value')
-  const breakLabel = nextCName(context, 'ccjs_break')
-  const continueLabel = nextCName(context, 'ccjs_continue')
+  const value = nextCName(context, 'inox_for_value')
+  const breakLabel = nextCName(context, 'inox_break')
+  const continueLabel = nextCName(context, 'inox_continue')
 
   registerOwnedValue(context, value)
 
@@ -2211,7 +2211,7 @@ function emitRuntimeCollectionValueForOfStatement(
     } else {
       lines.push(`  ${value} = ${collection}->entries[${index}].value;`)
     }
-    lines.push(`  ccjs_retain(${value});`)
+    lines.push(`  inox_retain(${value});`)
     pushIndentedLines(lines, element.lines, '  ')
     lines.push(`  ${element.expression}`)
     pushIndentedLines(lines, body, '  ')
@@ -2228,7 +2228,7 @@ function emitRuntimeCollectionValueForOfStatement(
 
 export function emitSwitchStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const discriminant = statementDeps(context).emitPreparedNumberExpression(statement.discriminant, context)
-  const breakLabel = nextCName(context, 'ccjs_break')
+  const breakLabel = nextCName(context, 'inox_break')
   const lines: string[] = []
   pushAllLines(lines, discriminant.lines)
   lines.push(`switch ((int)${discriminant.expression}) {`)
@@ -2276,7 +2276,7 @@ function emitSwitchCaseLabel(expression: StatementNode | null | undefined, conte
 
   pushDiagnostic(context,
     diagnostic(
-      'CCJS_C_SWITCH_CASE',
+      'INOX_C_SWITCH_CASE',
       'C switch case labels must be numeric or boolean literals in the current backend slice',
       nodeLocOrFallback(expression, null)
     )
@@ -2297,7 +2297,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
   ) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'nested async try/catch state-machine lowering is not supported by the current C backend slice',
         statement.loc
       )
@@ -2306,7 +2306,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
   registerErrorChannel(context)
 
-  const id = nextCName(context, 'ccjs_try')
+  const id = nextCName(context, 'inox_try')
   let catchLabel: string | null = null
   let finallyLabel: string | null = null
 
@@ -2375,11 +2375,11 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
         if (catchValueType === 'object') {
           context.variables.set(statement.handler.param, 'object')
           statementDeps(context).registerErrorObjectShape(context, statement.handler.param)
-          catchBody.push(`ccjs_value ${statement.handler.param} = ccjs_error;`)
+          catchBody.push(`inox_value ${statement.handler.param} = inox_error;`)
         } else {
           context.variables.set(statement.handler.param, 'string')
           context.runtimeStrings.add(statement.handler.param)
-          catchBody.push(`ccjs_string* ${statement.handler.param} = (ccjs_string*)ccjs_error.as.ref;`)
+          catchBody.push(`inox_string* ${statement.handler.param} = (inox_string*)inox_error.as.ref;`)
         }
       }
 
@@ -2400,12 +2400,12 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     lines.push(
       `  if (${emitCatchBindingTypeCheck(catchValueType)}) ${catchFailureStatement}`
     )
-    lines.push('  ccjs_error_active = 0;')
+    lines.push('  inox_error_active = 0;')
     lines.push('  {')
     pushIndentedLines(lines, catchBody, '    ')
     lines.push('  }')
-    lines.push('  ccjs_release(ccjs_error);')
-    lines.push('  ccjs_error = ccjs_undefined_value();')
+    lines.push('  inox_release(inox_error);')
+    lines.push('  inox_error = inox_undefined_value();')
   }
 
   if (statement.finalizer != null && finallyLabel != null) {
@@ -2469,26 +2469,26 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     pushIndentedLines(lines, finalizerBody, '  ')
 
     if (outerThrowTarget != null) {
-      lines.push(`  if (ccjs_error_active) goto ${outerThrowTarget};`)
+      lines.push(`  if (inox_error_active) goto ${outerThrowTarget};`)
     } else {
       const finalizerFailureStatement: string = statementDeps(context).emitFailureStatement(context)
-      lines.push(`  if (ccjs_error_active) ${finalizerFailureStatement}`)
+      lines.push(`  if (inox_error_active) ${finalizerFailureStatement}`)
     }
 
     if (context.returnFlowUsed) {
       if (outerReturnTarget != null) {
-        lines.push(`  if (ccjs_return_active) goto ${outerReturnTarget};`)
+        lines.push(`  if (inox_return_active) goto ${outerReturnTarget};`)
       } else {
-        lines.push(`  if (ccjs_return_active) ${emitReturnCleanupStatement(context)}`)
+        lines.push(`  if (inox_return_active) ${emitReturnCleanupStatement(context)}`)
       }
     }
 
     if (context.breakFlowUsed && outerBreakTarget != null) {
-      lines.push(`  if (ccjs_break_active) goto ${outerBreakTarget.label};`)
+      lines.push(`  if (inox_break_active) goto ${outerBreakTarget.label};`)
     }
 
     if (context.continueFlowUsed && outerContinueTarget != null) {
-      lines.push(`  if (ccjs_continue_active) goto ${outerContinueTarget.label};`)
+      lines.push(`  if (inox_continue_active) goto ${outerContinueTarget.label};`)
     }
   }
 
@@ -2504,7 +2504,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
 
   if (target == null && !context.throwingFunction) {
     pushDiagnostic(context,
-      diagnostic('CCJS_C_THROW', 'uncaught throw is not supported by the current C backend slice', statement.loc)
+      diagnostic('INOX_C_THROW', 'uncaught throw is not supported by the current C backend slice', statement.loc)
     )
     return []
   }
@@ -2514,7 +2514,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   if (statementDeps(context).inferExpressionType(statement.argument, context) !== 'string' && !isErrorObject) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_THROW',
+        'INOX_C_THROW',
         'C throw currently supports only string values and lightweight Error objects in local try/catch regions',
         statement.loc
       )
@@ -2527,28 +2527,28 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   const value = statementDeps(context).emitCValueExpression(statement.argument, context)
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite('ccjs_error'))
-  lines.push(`ccjs_error = ${value.expression};`)
+  pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
+  lines.push(`inox_error = ${value.expression};`)
 
-  let typeCheck = 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
+  let typeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 
   if (isErrorObject) {
-    typeCheck = 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
+    typeCheck = 'inox_error.tag != INOX_TAG_OBJECT || inox_error.as.ref == 0'
   }
 
   lines.push(emitRuntimeTypeCheck(typeCheck, context))
-  lines.push('ccjs_retain(ccjs_error);')
+  lines.push('inox_retain(inox_error);')
 
   if (target == null) {
-    lines.push('ccjs_status_result = CCJS_ERR_THROW;')
+    lines.push('inox_status_result = INOX_ERR_THROW;')
   }
 
-  lines.push('ccjs_error_active = 1;')
+  lines.push('inox_error_active = 1;')
 
   if (target != null) {
     lines.push(`goto ${target};`)
   } else {
-    lines.push('goto ccjs_cleanup;')
+    lines.push('goto inox_cleanup;')
   }
 
   return lines
@@ -2610,7 +2610,7 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
 
     const lines: string[] = []
     pushAllLines(lines, value.lines)
-    lines.push(`ccjs_return = ${value.expression};`)
+    lines.push(`inox_return = ${value.expression};`)
     pushAllLines(lines, emitReturnJump(context))
 
     return lines
@@ -2981,11 +2981,11 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
-  lines.push(emitRuntimeValueCheck(value.expression, 'CCJS_TAG_STRING', context))
-  lines.push(`ccjs_retain(${value.expression});`)
+  lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_STRING', context))
+  lines.push(`inox_retain(${value.expression});`)
   pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
   lines.push(`${storage} = ${value.expression};`)
-  lines.push(`${target} = (ccjs_string*)${storage}.as.ref;`)
+  lines.push(`${target} = (inox_string*)${storage}.as.ref;`)
 
   return lines
 }
@@ -3030,8 +3030,8 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
     lines.push(valueCheck)
   }
 
-  lines.push(`ccjs_retain(${value.expression});`)
-  lines.push(`ccjs_release(${target});`)
+  lines.push(`inox_retain(${value.expression});`)
+  lines.push(`inox_release(${target});`)
   lines.push(`${target} = ${value.expression};`)
 
   return lines
@@ -3160,7 +3160,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
     if (deps.isArrayMethodCall(expression)) {
       pushDiagnostic(context,
         diagnostic(
-          'CCJS_C_ARRAY_METHOD',
+          'INOX_C_ARRAY_METHOD',
           'array methods are not supported by the current C backend slice',
           statement.loc
         )
@@ -3430,7 +3430,7 @@ function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFu
 
   pushAllLines(lines, index.lines)
   pushAllLines(lines, value.lines)
-  lines.push(emitStatusCheck(`ccjs_array_set(${arrayName}, ${index.expression}, ${value.expression})`, context))
+  lines.push(emitStatusCheck(`inox_array_set(${arrayName}, ${index.expression}, ${value.expression})`, context))
 
   return lines
 }
@@ -3503,7 +3503,7 @@ function emitPromiseReturnStatement(statement: StatementNode, context: CFunction
   if (promise == null) {
     pushDiagnostic(context,
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'this Promise return expression is not supported by the current C backend slice',
         statement.loc
       )
@@ -3548,10 +3548,10 @@ function emitRuntimeCallbackScalarReturnLines(
     value = statementDeps(context).emitPreparedNumberExpression(argument, context)
   }
 
-  let expression = `ccjs_bool_value((${value.expression}) != 0)`
+  let expression = `inox_bool_value((${value.expression}) != 0)`
 
   if (context.runtimeCallbackReturnType === 'number') {
-    expression = `ccjs_number_value(${value.expression})`
+    expression = `inox_number_value(${value.expression})`
   }
 
   const lines: string[] = []
@@ -3574,7 +3574,7 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(
   const expectedTag = cRuntimeValueTag(returnType)
   let value: PreparedExpression = {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 
   if (argument != null) {
@@ -3590,7 +3590,7 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(
   pushAllLines(lines, value.lines)
   lines.push(`${returnOut} = ${value.expression};`)
   lines.push(emitRuntimeValueCheck(returnOut, expectedTag, context))
-  lines.push(`ccjs_retain(${returnOut});`)
+  lines.push(`inox_retain(${returnOut});`)
   return lines
 }
 
@@ -3617,9 +3617,9 @@ function emitRuntimeValueReturnStatement(statement: StatementNode, context: CFun
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`ccjs_return = ${value.expression};`)
-  lines.push(emitRuntimeValueCheck('ccjs_return', expectedTag, context))
-  lines.push('ccjs_retain(ccjs_return);')
+  lines.push(`inox_return = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck('inox_return', expectedTag, context))
+  lines.push('inox_retain(inox_return);')
   pushAllLines(lines, emitReturnJump(context))
   return lines
 }
@@ -3634,10 +3634,10 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`ccjs_return = ${value.expression};`)
-  pushAllLines(lines, emitRuntimeNullableValueCheck('ccjs_return', expectedTag, context))
+  lines.push(`inox_return = ${value.expression};`)
+  pushAllLines(lines, emitRuntimeNullableValueCheck('inox_return', expectedTag, context))
   if (isManagedRuntimeReturnType(context.returnType)) {
-    lines.push('ccjs_retain(ccjs_return);')
+    lines.push('inox_retain(inox_return);')
   }
   pushAllLines(lines, emitReturnJump(context))
   return lines
@@ -3645,15 +3645,15 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
 
 export function emitCatchBindingTypeCheck(valueType: string): string {
   if (valueType === 'object') {
-    return 'ccjs_error.tag != CCJS_TAG_OBJECT || ccjs_error.as.ref == 0'
+    return 'inox_error.tag != INOX_TAG_OBJECT || inox_error.as.ref == 0'
   }
 
-  return 'ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0'
+  return 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 }
 
 export function registerErrorChannel(context: CFunctionContext): void {
   context.errorChannelUsed = true
-  registerOwnedValue(context, 'ccjs_error')
+  registerOwnedValue(context, 'inox_error')
 }
 
 export function currentErrorTarget(context: CFunctionContext): string | null {
@@ -3671,7 +3671,7 @@ export function emitBreakJump(context: CFunctionContext): string[] {
     if (target.throughFinally) {
       registerBreakFlow(context)
 
-      return ['ccjs_break_active = 1;', `goto ${label};`]
+      return ['inox_break_active = 1;', `goto ${label};`]
     }
 
     return [`goto ${label};`]
@@ -3689,7 +3689,7 @@ export function emitContinueJump(context: CFunctionContext): string[] {
     if (target.throughFinally) {
       registerContinueFlow(context)
 
-      return ['ccjs_continue_active = 1;', `goto ${label};`]
+      return ['inox_continue_active = 1;', `goto ${label};`]
     }
 
     return [`goto ${label};`]
@@ -3700,7 +3700,7 @@ export function emitBreakTargetLabel(label: string, context: CFunctionContext): 
   const lines = [`${label}:`]
 
   if (context.breakFlowUsed) {
-    lines.push('  if (ccjs_break_active) ccjs_break_active = 0;')
+    lines.push('  if (inox_break_active) inox_break_active = 0;')
   }
 
   lines.push(';')
@@ -3711,7 +3711,7 @@ export function emitContinueTargetLabel(label: string, context: CFunctionContext
   const lines = [`${label}:`]
 
   if (context.continueFlowUsed) {
-    lines.push('  if (ccjs_continue_active) ccjs_continue_active = 0;')
+    lines.push('  if (inox_continue_active) inox_continue_active = 0;')
   }
 
   lines.push('  ;')
@@ -3740,7 +3740,7 @@ export function emitReturnJump(context: CFunctionContext): string[] {
   if (target != null) {
     registerReturnFlow(context)
 
-    return ['ccjs_return_active = 1;', `goto ${target};`]
+    return ['inox_return_active = 1;', `goto ${target};`]
   }
 
   return [emitReturnCleanupStatement(context)]
@@ -3756,14 +3756,14 @@ export function emitReturnCleanupStatement(context: CFunctionContext): string {
   if (context.cleanupEnabled) {
     context.usedCleanupGoto = true
 
-    return 'goto ccjs_cleanup;'
+    return 'goto inox_cleanup;'
   }
 
   if (context.returnType === 'void') {
     return 'return;'
   }
 
-  return 'return ccjs_return;'
+  return 'return inox_return;'
 }
 
 function registerReturnFlow(context: CFunctionContext): void {

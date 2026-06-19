@@ -396,11 +396,11 @@ function createAsyncTaskWrapperFromBodyPlan(
     return {
       key: declaration.name,
       functionName: declaration.name,
-      frameTypeName: `ccjs_async_task_${cName}_frame`,
-      startName: `ccjs_async_task_${cName}_start`,
-      resumeName: `ccjs_async_task_${cName}_resume`,
-      rejectName: `ccjs_async_task_${cName}_reject`,
-      finalizerName: `ccjs_async_task_${cName}_finalize`,
+      frameTypeName: `inox_async_task_${cName}_frame`,
+      startName: `inox_async_task_${cName}_start`,
+      resumeName: `inox_async_task_${cName}_resume`,
+      rejectName: `inox_async_task_${cName}_reject`,
+      finalizerName: `inox_async_task_${cName}_finalize`,
       params,
       awaits: bodyPlan.awaits,
       prefixStatements: bodyPlan.prefixStatements,
@@ -955,7 +955,7 @@ function resolveAsyncTaskWrapperParams(
       valueType: param.valueType,
       nullable: param.nullable,
       fieldName: `param_${emitCIdentifier(param.name)}`,
-      argName: `ccjs_arg_${emitCIdentifier(param.name)}`
+      argName: `inox_arg_${emitCIdentifier(param.name)}`
     })
   }
 
@@ -2484,9 +2484,9 @@ export function emitAsyncTaskFrameType(wrapper: CAsyncTaskWrapper): string[] {
   const lines: string[] = []
 
   lines.push(`typedef struct ${wrapper.frameTypeName} {`)
-  lines.push('  ccjs_loop* ccjs_loop;')
-  lines.push('  ccjs_promise* promise;')
-  lines.push('  ccjs_promise* awaited;')
+  lines.push('  inox_loop* inox_loop;')
+  lines.push('  inox_promise* promise;')
+  lines.push('  inox_promise* awaited;')
   lines.push('  int state;')
 
   for (const param of wrapper.params) {
@@ -2504,7 +2504,7 @@ export function emitAsyncTaskFrameType(wrapper: CAsyncTaskWrapper): string[] {
 
 function emitAsyncTaskStorageCType(valueType: string): string {
   if (isManagedRuntimeReturnType(valueType)) {
-    return 'ccjs_value'
+    return 'inox_value'
   }
 
   return emitCType(valueType)
@@ -2512,7 +2512,7 @@ function emitAsyncTaskStorageCType(valueType: string): string {
 
 function emitAsyncTaskStorageInit(valueType: string): string {
   if (isManagedRuntimeReturnType(valueType)) {
-    return 'ccjs_undefined_value()'
+    return 'inox_undefined_value()'
   }
 
   return '0'
@@ -2520,9 +2520,9 @@ function emitAsyncTaskStorageInit(valueType: string): string {
 
 export function emitAsyncTaskWrapperPrototypes(wrapper: CAsyncTaskWrapper): string[] {
   return [
-    `static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)});`,
-    `static ccjs_status ${wrapper.resumeName}(void* context, ccjs_value ccjs_value_input);`,
-    `static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error);`,
+    `static inox_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)});`,
+    `static inox_status ${wrapper.resumeName}(void* context, inox_value inox_value_input);`,
+    `static inox_status ${wrapper.rejectName}(void* context, inox_value inox_error);`,
     `static void ${wrapper.finalizerName}(void* context);`
   ]
 }
@@ -2559,7 +2559,7 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
     }
   }
 
-  context.failureStatement = 'goto ccjs_start_error;'
+  context.failureStatement = 'goto inox_start_error;'
   const prefixScope = asyncTaskDeps(context).pushVariableScope(context)
   const prefixAndScheduleLines: string[] = []
   const prefixStatements: AsyncTaskAstNode[] = wrapper.prefixStatements
@@ -2578,12 +2578,12 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
 
   const lines: string[] = []
 
-  lines.push(`static ccjs_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`)
-  lines.push('  if (ccjs_loop == 0 || ccjs_loop->allocator == 0 || out == 0) return CCJS_ERR_TYPE;')
+  lines.push(`static inox_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`)
+  lines.push('  if (inox_loop == 0 || inox_loop->allocator == 0 || out == 0) return INOX_ERR_TYPE;')
   lines.push('  *out = 0;')
-  lines.push(`  ${wrapper.frameTypeName}* frame = ccjs_loop->allocator->alloc(ccjs_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`)
-  lines.push('  if (frame == 0) return CCJS_ERR_OOM;')
-  lines.push('  frame->ccjs_loop = ccjs_loop;')
+  lines.push(`  ${wrapper.frameTypeName}* frame = inox_loop->allocator->alloc(inox_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`)
+  lines.push('  if (frame == 0) return INOX_ERR_OOM;')
+  lines.push('  frame->inox_loop = inox_loop;')
   lines.push('  frame->promise = 0;')
   lines.push('  frame->awaited = 0;')
   lines.push('  frame->state = 0;')
@@ -2596,33 +2596,33 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
     lines.push(`  frame->${local.fieldName} = ${emitAsyncTaskStorageInit(local.type)};`)
   }
 
-  lines.push('  ccjs_status status = ccjs_promise_new(ccjs_loop, &frame->promise);')
+  lines.push('  inox_status status = inox_promise_new(inox_loop, &frame->promise);')
   appendIndentedAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueDeclarations(context), '  ')
-  lines.push('  if (status != CCJS_OK) {')
-  lines.push('    ccjs_loop->allocator->free(ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
+  lines.push('  if (status != INOX_OK) {')
+  lines.push('    inox_loop->allocator->free(inox_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
   lines.push('    return status;')
   lines.push('  }')
 
   for (const param of wrapper.params) {
     if (isManagedRuntimeReturnType(param.valueType)) {
-      lines.push(`  ccjs_retain(frame->${param.fieldName});`)
+      lines.push(`  inox_retain(frame->${param.fieldName});`)
     }
   }
 
-  lines.push('  ccjs_promise_retain(frame->promise);')
+  lines.push('  inox_promise_retain(frame->promise);')
   lines.push('  *out = frame->promise;')
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, 0, { includePrefixLocals: false }), '  ')
   appendIndentedAsyncTaskLines(lines, prefixAndScheduleLines, '  ')
   appendIndentedAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context), '  ')
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
 
   if (context.failureStatementUsed) {
-    lines.push('ccjs_start_error:')
+    lines.push('inox_start_error:')
     appendIndentedAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context), '  ')
-    lines.push('  ccjs_promise_release(*out);')
+    lines.push('  inox_promise_release(*out);')
     lines.push('  *out = 0;')
     lines.push(`  ${wrapper.finalizerName}(frame);`)
-    lines.push('  return CCJS_ERR_TYPE;')
+    lines.push('  return INOX_ERR_TYPE;')
   }
 
   lines.push('}')
@@ -2631,13 +2631,13 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
 }
 
 function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper): string {
-  const params = ['ccjs_loop* ccjs_loop']
+  const params = ['inox_loop* inox_loop']
 
   for (const param of wrapper.params) {
     params.push(`${emitCType(param.valueType)} ${param.argName}`)
   }
 
-  params.push('ccjs_promise** out')
+  params.push('inox_promise** out')
 
   return joinStrings(params, ', ')
 }
@@ -2680,16 +2680,16 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[
 
     if (local.type === 'string') {
       appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`))
-      lines.push(`frame->${local.fieldName}.tag = CCJS_TAG_STRING;`)
-      lines.push(`frame->${local.fieldName}.as.ref = (ccjs_ref*)&${local.name}->header;`)
-      lines.push(`ccjs_retain(frame->${local.fieldName});`)
+      lines.push(`frame->${local.fieldName}.tag = INOX_TAG_STRING;`)
+      lines.push(`frame->${local.fieldName}.as.ref = (inox_ref*)&${local.name}->header;`)
+      lines.push(`inox_retain(frame->${local.fieldName});`)
       continue
     }
 
     if (isManagedRuntimeReturnType(local.type)) {
       appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`))
       lines.push(`frame->${local.fieldName} = ${local.name};`)
-      lines.push(`ccjs_retain(frame->${local.fieldName});`)
+      lines.push(`inox_retain(frame->${local.fieldName});`)
       continue
     }
 
@@ -2850,11 +2850,11 @@ function registerAsyncTaskObjectShapeFields(
 
 function emitAsyncTaskVisibleLocalRead(name: string, valueType: string, fieldName: string): string[] {
   if (valueType === 'string') {
-    return [`ccjs_string* ${name} = (ccjs_string*)frame->${fieldName}.as.ref;`]
+    return [`inox_string* ${name} = (inox_string*)frame->${fieldName}.as.ref;`]
   }
 
   if (isManagedRuntimeReturnType(valueType)) {
-    return [`ccjs_value ${name} = frame->${fieldName};`]
+    return [`inox_value ${name} = frame->${fieldName};`]
   }
 
   return [`${emitCType(valueType)} ${name} = frame->${fieldName};`]
@@ -2905,24 +2905,24 @@ function emitAsyncTaskScheduleAwaitLines(
   const lines: string[] = []
 
   if (awaitedPromise == null) {
-    lines.push('status = ccjs_promise_new(ccjs_loop, &frame->awaited);')
+    lines.push('status = inox_promise_new(inox_loop, &frame->awaited);')
     appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
   } else {
     appendAsyncTaskLines(lines, awaitedPromise.lines)
   }
 
-  lines.push(`status = ccjs_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`)
+  lines.push(`status = inox_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
 
   if (awaitedPromise == null) {
-    let awaitedExpression = 'ccjs_undefined_value()'
+    let awaitedExpression = 'inox_undefined_value()'
 
     if (awaited != null) {
       appendAsyncTaskLines(lines, awaited.lines)
       awaitedExpression = awaited.expression
     }
 
-    lines.push(`status = ccjs_promise_resolve(frame->awaited, ${awaitedExpression});`)
+    lines.push(`status = inox_promise_resolve(frame->awaited, ${awaitedExpression});`)
     appendAsyncTaskLines(lines, emitAsyncTaskResolveStatusCheck(wrapper, options, cleanupLines))
   }
 
@@ -2938,9 +2938,9 @@ function emitAsyncTaskScheduleStatusCheck(
   const activeCleanupLines = asyncTaskLinesOrEmpty(cleanupLines)
 
   if (options.cleanup === 'start') {
-    lines.push('if (status != CCJS_OK) {')
+    lines.push('if (status != INOX_OK) {')
     appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
-    lines.push('  ccjs_promise_release(*out);')
+    lines.push('  inox_promise_release(*out);')
     lines.push('  *out = 0;')
     lines.push(`  ${wrapper.finalizerName}(frame);`)
     lines.push('  return status;')
@@ -2949,11 +2949,11 @@ function emitAsyncTaskScheduleStatusCheck(
     return lines
   }
 
-  lines.push('if (status != CCJS_OK) {')
+  lines.push('if (status != INOX_OK) {')
   appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
-  lines.push('  ccjs_status reject_status = ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)status));')
+  lines.push('  inox_status reject_status = inox_promise_reject(frame->promise, inox_number_value((inox_number)status));')
   lines.push(`  ${wrapper.finalizerName}(frame);`)
-  lines.push('  return reject_status == CCJS_OK ? status : reject_status;')
+  lines.push('  return reject_status == INOX_OK ? status : reject_status;')
   lines.push('}')
 
   return lines
@@ -2968,9 +2968,9 @@ function emitAsyncTaskResolveStatusCheck(
   const activeCleanupLines = asyncTaskLinesOrEmpty(cleanupLines)
 
   if (options.cleanup === 'start') {
-    lines.push('if (status != CCJS_OK) {')
+    lines.push('if (status != INOX_OK) {')
     appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
-    lines.push('  ccjs_promise_release(*out);')
+    lines.push('  inox_promise_release(*out);')
     lines.push('  *out = 0;')
 
     if (!options.final) {
@@ -2984,7 +2984,7 @@ function emitAsyncTaskResolveStatusCheck(
   }
 
   if (options.final) {
-    lines.push('if (status != CCJS_OK) {')
+    lines.push('if (status != INOX_OK) {')
     appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
     lines.push('  return status;')
     lines.push('}')
@@ -3093,7 +3093,7 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'async task state-machine slice currently supports local Promise.resolve call variables only',
         loc
       )
@@ -3114,7 +3114,7 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, value.lines)
-  lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &frame->awaited);`)
+  lines.push(`status = inox_promise_resolved(inox_loop, ${value.expression}, &frame->awaited);`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
@@ -3123,7 +3123,7 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
 }
 
 function emitAsyncTaskErrorStatusLines(wrapper: CAsyncTaskWrapper, options: AsyncTaskScheduleOptions): string[] {
-  const lines = ['status = CCJS_ERR_TYPE;']
+  const lines = ['status = INOX_ERR_TYPE;']
 
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
@@ -3192,99 +3192,99 @@ function emitPreparedAsyncTaskFsSourceExpression(
   }
 
   const method = cFsRuntimeExpressionMethod(expression)
-  const path = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
+  const path = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, path.lines)
 
   if (method === 'readFile') {
-    lines.push(`status = ccjs_fs_read_file(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_read_file(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'readFileBytes') {
-    lines.push(`status = ccjs_fs_read_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_read_file_bytes(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'readDir') {
-    lines.push(`status = ccjs_fs_read_dir(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_read_dir(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'readDirDirents') {
-    lines.push(`status = ccjs_fs_read_dir_dirents(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_read_dir_dirents(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'stat') {
-    lines.push(`status = ccjs_fs_stat(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_stat(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'lstat') {
-    lines.push(`status = ccjs_fs_lstat(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_lstat(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'realpath') {
-    lines.push(`status = ccjs_fs_realpath(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_realpath(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'readlink') {
-    lines.push(`status = ccjs_fs_readlink(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_readlink(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'access') {
     const mode = asyncTaskDeps(context).emitPreparedFsAccessModeExpression(expression, context)
 
     appendAsyncTaskLines(lines, mode.lines)
     lines.push(
-      `status = ccjs_fs_access(ccjs_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
+      `status = inox_fs_access(inox_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
     )
   } else if (method === 'appendFileBytes') {
     const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
 
     appendAsyncTaskLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
     lines.push(
-      `status = ccjs_fs_append_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
+      `status = inox_fs_append_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
     )
   } else if (method === 'appendFile') {
-    const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+    const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
 
     appendAsyncTaskLines(lines, bytes.lines)
     lines.push(
-      `status = ccjs_fs_append_file(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
+      `status = inox_fs_append_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
     )
   } else if (method === 'copyFile') {
-    const destPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_dest_path')
+    const destPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_dest_path')
 
     appendAsyncTaskLines(lines, destPath.lines)
     lines.push(
-      `status = ccjs_fs_copy_file(ccjs_loop, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &frame->awaited);`
+      `status = inox_fs_copy_file(inox_loop, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &frame->awaited);`
     )
   } else if (method === 'symlink') {
-    const linkPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_link_path')
+    const linkPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_link_path')
 
     appendAsyncTaskLines(lines, linkPath.lines)
     lines.push(
-      `status = ccjs_fs_symlink(ccjs_loop, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &frame->awaited);`
+      `status = inox_fs_symlink(inox_loop, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &frame->awaited);`
     )
   } else if (method === 'mkdir') {
     const recursiveFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')
 
     lines.push(
-      `status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, &frame->awaited);`
+      `status = inox_fs_mkdir(inox_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, &frame->awaited);`
     )
   } else if (method === 'unlink') {
-    lines.push(`status = ccjs_fs_unlink(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    lines.push(`status = inox_fs_unlink(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'rm') {
     const recursiveFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')
     const forceFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsForce')
 
     lines.push(
-      `status = ccjs_fs_rm(ccjs_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, ${forceFlag}, &frame->awaited);`
+      `status = inox_fs_rm(inox_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, ${forceFlag}, &frame->awaited);`
     )
   } else if (method === 'rename') {
-    const newPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
+    const newPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_new_path')
 
     appendAsyncTaskLines(lines, newPath.lines)
     lines.push(
-      `status = ccjs_fs_rename(ccjs_loop, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &frame->awaited);`
+      `status = inox_fs_rename(inox_loop, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &frame->awaited);`
     )
   } else if (method === 'writeFileBytes') {
     const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
 
     appendAsyncTaskLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
     lines.push(
-      `status = ccjs_fs_write_file_bytes(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
+      `status = inox_fs_write_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
     )
   } else {
-    const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+    const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
 
     appendAsyncTaskLines(lines, bytes.lines)
     lines.push(
-      `status = ccjs_fs_write_file(ccjs_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
+      `status = inox_fs_write_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
     )
   }
 
@@ -3309,16 +3309,16 @@ function emitPreparedAsyncTaskFetchSourceExpression(
   const lines: string[] = []
 
   if (method === 'fetch') {
-    const url = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fetch_url')
+    const url = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fetch_url')
     const init = asyncTaskDeps(context).emitPreparedFetchInitOperand(expression, context)
 
     appendAsyncTaskLines(lines, url.lines)
     appendAsyncTaskLines(lines, init.lines)
 
     if (init.expression === '0') {
-      lines.push(`status = ccjs_fetch(ccjs_loop, ${url.bytes}, ${url.length}, &frame->awaited);`)
+      lines.push(`status = inox_fetch(inox_loop, ${url.bytes}, ${url.length}, &frame->awaited);`)
     } else {
-      lines.push(`status = ccjs_fetch_with_init(ccjs_loop, ${url.bytes}, ${url.length}, ${init.expression}, &frame->awaited);`)
+      lines.push(`status = inox_fetch_with_init(inox_loop, ${url.bytes}, ${url.length}, ${init.expression}, &frame->awaited);`)
     }
   } else {
     const response = asyncTaskDeps(context).emitCValueExpression(expression.callee.object, context)
@@ -3326,11 +3326,11 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     appendAsyncTaskLines(lines, response.lines)
     lines.push(
       emitRuntimeTypeCheck(
-        `${response.expression}.tag != CCJS_TAG_OBJECT || ${response.expression}.as.ref == 0`,
+        `${response.expression}.tag != INOX_TAG_OBJECT || ${response.expression}.as.ref == 0`,
         context
       )
     )
-    lines.push(`status = ccjs_fetch_response_text(ccjs_loop, ${response.expression}, &frame->awaited);`)
+    lines.push(`status = inox_fetch_response_text(inox_loop, ${response.expression}, &frame->awaited);`)
   }
 
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
@@ -3353,17 +3353,17 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   const rejectArgument = asyncTaskFirstArgumentOrNull(expression)
 
   if (rejectArgument != null && rejectArgument.type === 'StringLiteral') {
-    const value = nextCName(context, 'ccjs_reject_value')
+    const value = nextCName(context, 'inox_reject_value')
     const bytes = cStringLiteral(rejectArgument.value)
     const length = utf8ByteLength(rejectArgument.value)
     const lines: string[] = []
 
-    lines.push(`ccjs_value ${value} = ccjs_undefined_value();`)
-    lines.push(`status = ccjs_string_from_literal(&ccjs_default_allocator, ${bytes}, ${length}, &${value});`)
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]))
-    lines.push(`status = ccjs_promise_rejected(ccjs_loop, ${value}, &frame->awaited);`)
-    lines.push(`ccjs_release(${value});`)
-    lines.push(`${value} = ccjs_undefined_value();`)
+    lines.push(`inox_value ${value} = inox_undefined_value();`)
+    lines.push(`status = inox_string_from_literal(&inox_default_allocator, ${bytes}, ${length}, &${value});`)
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`inox_release(${value});`]))
+    lines.push(`status = inox_promise_rejected(inox_loop, ${value}, &frame->awaited);`)
+    lines.push(`inox_release(${value});`)
+    lines.push(`${value} = inox_undefined_value();`)
     appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
     return {
@@ -3378,7 +3378,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   ) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'async task Promise.reject currently supports string, number and boolean rejection values in C',
         expression.loc
       )
@@ -3390,7 +3390,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   }
 
   let valueLines: string[] = []
-  let valueExpression = 'ccjs_undefined_value()'
+  let valueExpression = 'inox_undefined_value()'
 
   if (rejectArgument != null) {
     const value = asyncTaskDeps(context).emitCValueExpression(rejectArgument, context)
@@ -3402,7 +3402,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, valueLines)
-  lines.push(`status = ccjs_promise_rejected(ccjs_loop, ${valueExpression}, &frame->awaited);`)
+  lines.push(`status = inox_promise_rejected(inox_loop, ${valueExpression}, &frame->awaited);`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
@@ -3426,7 +3426,7 @@ function emitPreparedAsyncTaskSourceCallExpression(
 
   if (target != null) {
     const prepared = asyncTaskDeps(context).emitPreparedCallArgs(expression, target.params, context)
-    const args = ['ccjs_loop']
+    const args = ['inox_loop']
     const lines: string[] = []
 
     for (const arg of prepared.args) {
@@ -3475,7 +3475,7 @@ function emitPreparedAsyncFunctionSourceCallExpression(
 
     appendAsyncTaskLines(lines, call.lines)
     lines.push(`${call.expression};`)
-    lines.push('status = ccjs_promise_resolved(ccjs_loop, ccjs_undefined_value(), &frame->awaited);')
+    lines.push('status = inox_promise_resolved(inox_loop, inox_undefined_value(), &frame->awaited);')
     appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
     return {
@@ -3484,33 +3484,33 @@ function emitPreparedAsyncFunctionSourceCallExpression(
   }
 
   if (isManagedRuntimeReturnType(valueType)) {
-    const value = nextCName(context, 'ccjs_async_value')
+    const value = nextCName(context, 'inox_async_value')
     const tag = cRuntimeValueTag(valueType)
 
     const lines: string[] = []
 
     appendAsyncTaskLines(lines, call.lines)
-    lines.push(`ccjs_value ${value} = ${call.expression};`)
+    lines.push(`inox_value ${value} = ${call.expression};`)
     lines.push(emitRuntimeValueCheck(value, tag, context))
-    lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`)
-    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`ccjs_release(${value});`]))
-    lines.push(`ccjs_release(${value});`)
+    lines.push(`status = inox_promise_resolved(inox_loop, ${value}, &frame->awaited);`)
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`inox_release(${value});`]))
+    lines.push(`inox_release(${value});`)
 
     return {
       lines: lines
     }
   }
 
-  let value = `ccjs_number_value(${call.expression})`
+  let value = `inox_number_value(${call.expression})`
 
   if (valueType === 'boolean') {
-    value = `ccjs_bool_value((${call.expression}) != 0)`
+    value = `inox_bool_value((${call.expression}) != 0)`
   }
 
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, call.lines)
-  lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value}, &frame->awaited);`)
+  lines.push(`status = inox_promise_resolved(inox_loop, ${value}, &frame->awaited);`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
@@ -3536,7 +3536,7 @@ function emitPreparedPlainPromiseSourceCallExpression(
 
   const resolvedParams = asyncTaskFunctionParamsOrEmpty(params)
   const prepared = asyncTaskDeps(context).emitPreparedCallArgs(expression, resolvedParams, context)
-  const args = ['ccjs_loop']
+  const args = ['inox_loop']
   const lines: string[] = []
 
   for (const arg of prepared.args) {
@@ -3546,7 +3546,7 @@ function emitPreparedPlainPromiseSourceCallExpression(
   appendAsyncTaskLines(lines, prepared.lines)
   const calleeName: string = asyncTaskDeps(context).emitCallee(expression.callee, context)
   lines.push(`frame->awaited = ${calleeName}(${joinStrings(args, ', ')});`)
-  lines.push('status = frame->awaited == 0 ? CCJS_ERR_TYPE : CCJS_OK;')
+  lines.push('status = frame->awaited == 0 ? INOX_ERR_TYPE : INOX_OK;')
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
   return {
@@ -3602,7 +3602,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
 
   context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'async task state-machine slice currently supports local Promise.resolve then-chain variables only',
         asyncTaskLocationOrNull(expression)
       )
@@ -3622,7 +3622,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
 ): PreparedAsyncTaskPromise {
-  const source = nextCName(context, 'ccjs_async_task_source')
+  const source = nextCName(context, 'inox_async_task_source')
   let sourceType: string = item.type
 
   if (receiver.promiseValueType != null) {
@@ -3642,12 +3642,12 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
   const lines: string[] = []
 
   appendAsyncTaskLines(lines, callbackContext.lines)
-  lines.push(`ccjs_promise* ${source} = 0;`)
+  lines.push(`inox_promise* ${source} = 0;`)
   appendAsyncTaskLines(lines, value.lines)
-  lines.push(`status = ccjs_promise_resolved(ccjs_loop, ${value.expression}, &${source});`)
+  lines.push(`status = inox_promise_resolved(inox_loop, ${value.expression}, &${source});`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
-  lines.push(`status = ccjs_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`)
-  lines.push(`ccjs_promise_release(${source});`)
+  lines.push(`status = inox_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`)
+  lines.push(`inox_promise_release(${source});`)
   lines.push(`${source} = 0;`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
 
@@ -3687,7 +3687,7 @@ function emitAsyncTaskPromiseChainCallbackContextForWrapper(
     if (capture.mutable) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_ASYNC',
+          'INOX_C_ASYNC',
           'mutable Promise callback captures are outside the current C backend MVP; use const captures or move mutation outside the Promise callback',
           chainWrapper.expression.loc
         )
@@ -3697,7 +3697,7 @@ function emitAsyncTaskPromiseChainCallbackContextForWrapper(
     if (!isSupportedAsyncTaskPromiseCaptureType(capture.valueType)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_ASYNC',
+          'INOX_C_ASYNC',
           'capturing async Promise callbacks currently support only const number/boolean/string/object bindings',
           chainWrapper.expression.loc
         )
@@ -3705,18 +3705,18 @@ function emitAsyncTaskPromiseChainCallbackContextForWrapper(
     }
   }
 
-  const contextName = nextCName(context, 'ccjs_promise_callback_ctx')
+  const contextName = nextCName(context, 'inox_promise_callback_ctx')
 
   lines.push(
-    `${chainWrapper.contextTypeName}* ${contextName} = ccjs_default_alloc(0, sizeof(${chainWrapper.contextTypeName}), _Alignof(${chainWrapper.contextTypeName}));`
+    `${chainWrapper.contextTypeName}* ${contextName} = inox_default_alloc(0, sizeof(${chainWrapper.contextTypeName}), _Alignof(${chainWrapper.contextTypeName}));`
   )
   lines.push('if (' + contextName + ' == 0) {')
-  lines.push('  status = CCJS_ERR_OOM;')
+  lines.push('  status = INOX_ERR_OOM;')
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(asyncWrapper, options, null), '  ')
   lines.push('}')
 
   if (chainWrapper.needsEventLoop === true) {
-    lines.push(`${contextName}->ccjs_loop = ccjs_loop;`)
+    lines.push(`${contextName}->inox_loop = inox_loop;`)
   }
 
   for (const capture of chainWrapper.captures) {
@@ -3743,15 +3743,15 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
   if (awaitedExpression == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'async task state-machine slice currently supports await Promise.resolve calls only',
         null
       )
     )
 
     return {
-      lines: ['status = CCJS_ERR_TYPE;'],
-      expression: 'ccjs_undefined_value()'
+      lines: ['status = INOX_ERR_TYPE;'],
+      expression: 'inox_undefined_value()'
     }
   }
 
@@ -3762,15 +3762,15 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_ASYNC',
+        'INOX_C_ASYNC',
         'async task state-machine slice currently supports await Promise.resolve calls only',
         loc
       )
     )
 
     return {
-      lines: ['status = CCJS_ERR_TYPE;'],
-      expression: 'ccjs_undefined_value()'
+      lines: ['status = INOX_ERR_TYPE;'],
+      expression: 'inox_undefined_value()'
     }
   }
 
@@ -3791,7 +3791,7 @@ function emitPreparedAsyncTaskValueExpression(
   if (valueType === 'void') {
     return {
       lines: [],
-      expression: 'ccjs_undefined_value()'
+      expression: 'inox_undefined_value()'
     }
   }
 
@@ -3814,7 +3814,7 @@ function emitPreparedAsyncTaskValueExpression(
 
     return {
       lines: value.lines,
-      expression: `ccjs_bool_value((${value.expression}) != 0)`
+      expression: `inox_bool_value((${value.expression}) != 0)`
     }
   }
 
@@ -3822,7 +3822,7 @@ function emitPreparedAsyncTaskValueExpression(
 
   return {
     lines: value.lines,
-    expression: `ccjs_number_value(${value.expression})`
+    expression: `inox_number_value(${value.expression})`
   }
 }
 
@@ -3850,14 +3850,14 @@ function emitAsyncTaskResumeDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
 
   const lines: string[] = []
 
-  lines.push(`static ccjs_status ${wrapper.resumeName}(void* context, ccjs_value ccjs_value_input) {`)
+  lines.push(`static inox_status ${wrapper.resumeName}(void* context, inox_value inox_value_input) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
-  lines.push('  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;')
-  lines.push('  ccjs_status status = CCJS_OK;')
+  lines.push('  if (frame == 0 || frame->promise == 0) return INOX_ERR_TYPE;')
+  lines.push('  inox_status status = INOX_OK;')
   lines.push('  switch (frame->state) {')
   appendIndentedAsyncTaskLines(lines, cases, '  ')
   lines.push('  default:')
-  lines.push('    return ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE));')
+  lines.push('    return inox_promise_reject(frame->promise, inox_number_value((inox_number)INOX_ERR_TYPE));')
   lines.push('  }')
   lines.push('}')
 
@@ -3884,7 +3884,7 @@ function emitAsyncTaskResumeCase(
   appendIndentedAsyncTaskLines(lines, valueCheck, '  ')
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskStoreFulfilledValueLines(item), '  ')
   lines.push('  if (frame->awaited != 0) {')
-  lines.push('    ccjs_promise_release(frame->awaited);')
+  lines.push('    inox_promise_release(frame->awaited);')
   lines.push('    frame->awaited = 0;')
   lines.push('  }')
 
@@ -3894,16 +3894,16 @@ function emitAsyncTaskResumeCase(
       appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext), '  ')
     } else if (returnValueOwnedValues.length > 0) {
       for (const name of returnValueOwnedValues) {
-        lines.push(`  ccjs_value ${name} = ccjs_undefined_value();`)
+        lines.push(`  inox_value ${name} = inox_undefined_value();`)
       }
 
       appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1), '  ')
       appendIndentedAsyncTaskLines(lines, returnValue.lines, '  ')
       appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1), '  ')
-      lines.push(`  status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+      lines.push(`  status = inox_promise_resolve(frame->promise, ${returnValue.expression});`)
 
       for (let index = returnValueOwnedValues.length - 1; index >= 0; index = index - 1) {
-        lines.push(`  ccjs_release(${returnValueOwnedValues[index]});`)
+        lines.push(`  inox_release(${returnValueOwnedValues[index]});`)
       }
 
       lines.push('  return status;')
@@ -3911,7 +3911,7 @@ function emitAsyncTaskResumeCase(
       appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1), '  ')
       appendIndentedAsyncTaskLines(lines, returnValue.lines, '  ')
       appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1), '  ')
-      lines.push(`  return ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+      lines.push(`  return inox_promise_resolve(frame->promise, ${returnValue.expression});`)
     }
     lines.push('}')
     return lines
@@ -3925,17 +3925,17 @@ function emitAsyncTaskResumeCase(
   })
 
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1, null), '  ')
-  lines.push('  ccjs_loop* ccjs_loop = frame->ccjs_loop;')
-  lines.push('  if (ccjs_loop == 0) {')
+  lines.push('  inox_loop* inox_loop = frame->inox_loop;')
+  lines.push('  if (inox_loop == 0) {')
   appendIndentedAsyncTaskLines(
     lines,
-    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)'),
+    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'inox_number_value((inox_number)INOX_ERR_TYPE)'),
     '    '
   )
   lines.push('  }')
   lines.push(`  frame->state = ${followingItem.index};`)
   appendIndentedAsyncTaskLines(lines, schedule, '  ')
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -3996,15 +3996,15 @@ function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsy
   let refCheck = ''
 
   if (isManagedRuntimeReturnType(item.type)) {
-    refCheck = ' || ccjs_value_input.as.ref == 0'
+    refCheck = ' || inox_value_input.as.ref == 0'
   }
 
   const lines: string[] = []
 
-  lines.push(`if (ccjs_value_input.tag != ${expectedTag}${refCheck}) {`)
+  lines.push(`if (inox_value_input.tag != ${expectedTag}${refCheck}) {`)
   appendIndentedAsyncTaskLines(
     lines,
-    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'ccjs_number_value((ccjs_number)CCJS_ERR_TYPE)'),
+    emitAsyncTaskRejectAndMaybeFinalizeLines(wrapper, item, 'inox_number_value((inox_number)INOX_ERR_TYPE)'),
     '  '
   )
   lines.push('}')
@@ -4018,15 +4018,15 @@ function emitAsyncTaskStoreFulfilledValueLines(item: CAsyncTaskAwaitStep): strin
   }
 
   if (item.type === 'boolean') {
-    return [`frame->${item.fieldName} = ccjs_value_input.as.boolean ? 1 : 0;`]
+    return [`frame->${item.fieldName} = inox_value_input.as.boolean ? 1 : 0;`]
   }
 
   if (item.type === 'number') {
-    return [`frame->${item.fieldName} = ccjs_value_input.as.number;`]
+    return [`frame->${item.fieldName} = inox_value_input.as.number;`]
   }
 
   if (isManagedRuntimeReturnType(item.type)) {
-    return [`frame->${item.fieldName} = ccjs_value_input;`, `ccjs_retain(frame->${item.fieldName});`]
+    return [`frame->${item.fieldName} = inox_value_input;`, `inox_retain(frame->${item.fieldName});`]
   }
 
   return []
@@ -4039,7 +4039,7 @@ function emitAsyncTaskRejectAndMaybeFinalizeLines(
 ): string[] {
   const lines: string[] = []
 
-  lines.push(`ccjs_status reject_status = ccjs_promise_reject(frame->promise, ${errorExpression});`)
+  lines.push(`inox_status reject_status = inox_promise_reject(frame->promise, ${errorExpression});`)
 
   if (item.index < wrapper.awaits.length - 1) {
     lines.push(`${wrapper.finalizerName}(frame);`)
@@ -4101,7 +4101,7 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(
   appendAsyncTaskLines(lines, preludeLines)
   appendAsyncTaskLines(lines, returnValue.lines)
   appendAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, visibleAwaitCount))
-  lines.push(`status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+  lines.push(`status = inox_promise_resolve(frame->promise, ${returnValue.expression});`)
   appendAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context))
   lines.push('return status;')
 
@@ -4212,10 +4212,10 @@ function emitAsyncTaskRejectDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
 
   const lines: string[] = []
 
-  lines.push(`static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`)
+  lines.push(`static inox_status ${wrapper.rejectName}(void* context, inox_value inox_error) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
-  lines.push('  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;')
-  lines.push('  ccjs_status status = ccjs_promise_reject(frame->promise, ccjs_error);')
+  lines.push('  if (frame == 0 || frame->promise == 0) return INOX_ERR_TYPE;')
+  lines.push('  inox_status status = inox_promise_reject(frame->promise, inox_error);')
 
   if (lastState > 0) {
     lines.push(`  if (frame->state < ${lastState}) {`)
@@ -4238,14 +4238,14 @@ function emitAsyncTaskTryRejectDeclaration(wrapper: CAsyncTaskWrapper, baseConte
 
   const lines: string[] = []
 
-  lines.push(`static ccjs_status ${wrapper.rejectName}(void* context, ccjs_value ccjs_error) {`)
+  lines.push(`static inox_status ${wrapper.rejectName}(void* context, inox_value inox_error) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
-  lines.push('  if (frame == 0 || frame->promise == 0) return CCJS_ERR_TYPE;')
-  lines.push('  ccjs_status status = CCJS_OK;')
+  lines.push('  if (frame == 0 || frame->promise == 0) return INOX_ERR_TYPE;')
+  lines.push('  inox_status status = INOX_OK;')
   lines.push('  switch (frame->state) {')
   appendIndentedAsyncTaskLines(lines, cases, '  ')
   lines.push('  default:')
-  lines.push('    status = ccjs_promise_reject(frame->promise, ccjs_error);')
+  lines.push('    status = inox_promise_reject(frame->promise, inox_error);')
   lines.push('    return status;')
   lines.push('  }')
   lines.push('}')
@@ -4270,7 +4270,7 @@ function emitAsyncTaskTryRejectCase(
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryRejectFinallyLines(wrapper, baseContext, item.index), '  ')
   appendIndentedAsyncTaskLines(
     lines,
-    emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'ccjs_promise_reject(frame->promise, ccjs_error)'),
+    emitAsyncTaskSettleAndMaybeFinalizeLines(wrapper, item, 'inox_promise_reject(frame->promise, inox_error)'),
     '  '
   )
   lines.push('}')
@@ -4288,13 +4288,13 @@ function emitAsyncTaskTryRejectHandlerCase(
   const handlerParam = handler.param
 
   if (handlerParam != null) {
-    lines.push('  if (ccjs_error.tag != CCJS_TAG_STRING || ccjs_error.as.ref == 0) {')
+    lines.push('  if (inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0) {')
     appendIndentedAsyncTaskLines(
       lines,
       emitAsyncTaskSettleAndMaybeFinalizeLines(
         wrapper,
         item,
-        'ccjs_promise_reject(frame->promise, ccjs_number_value((ccjs_number)CCJS_ERR_TYPE))'
+        'inox_promise_reject(frame->promise, inox_number_value((inox_number)INOX_ERR_TYPE))'
       ),
       '    '
     )
@@ -4305,7 +4305,7 @@ function emitAsyncTaskTryRejectHandlerCase(
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, item.index), '  ')
 
   if (handlerParam != null) {
-    lines.push(`  ccjs_string* ${handlerParam} = (ccjs_string*)ccjs_error.as.ref;`)
+    lines.push(`  inox_string* ${handlerParam} = (inox_string*)inox_error.as.ref;`)
   }
 
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler), '  ')
@@ -4343,7 +4343,7 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(
   appendAsyncTaskLines(lines, handlerLines)
   appendAsyncTaskLines(lines, returnValue.lines)
   appendAsyncTaskLines(lines, emitAsyncTaskTryFinallyLines(wrapper, baseContext, visibleAwaitCount))
-  lines.push(`status = ccjs_promise_resolve(frame->promise, ${returnValue.expression});`)
+  lines.push(`status = inox_promise_resolve(frame->promise, ${returnValue.expression});`)
   appendAsyncTaskLines(lines, asyncTaskDeps(context).emitOwnedValueCleanup(context))
 
   if (item.index < wrapper.awaits.length - 1) {
@@ -4361,23 +4361,23 @@ function emitAsyncTaskFinalizerDeclaration(wrapper: CAsyncTaskWrapper): string[]
   lines.push(`static void ${wrapper.finalizerName}(void* context) {`)
   lines.push(`  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)context;`)
   lines.push('  if (frame == 0) return;')
-  lines.push('  if (frame->awaited != 0) ccjs_promise_release(frame->awaited);')
+  lines.push('  if (frame->awaited != 0) inox_promise_release(frame->awaited);')
 
   for (const param of wrapper.params) {
     if (isManagedRuntimeReturnType(param.valueType)) {
-      lines.push(`  ccjs_release(frame->${param.fieldName});`)
+      lines.push(`  inox_release(frame->${param.fieldName});`)
     }
   }
 
   for (const local of wrapper.frameLocals) {
     if (isManagedRuntimeReturnType(local.type)) {
-      lines.push(`  ccjs_release(frame->${local.fieldName});`)
+      lines.push(`  inox_release(frame->${local.fieldName});`)
     }
   }
 
-  lines.push('  if (frame->promise != 0) ccjs_promise_release(frame->promise);')
-  lines.push('  if (frame->ccjs_loop != 0 && frame->ccjs_loop->allocator != 0) {')
-  lines.push('    frame->ccjs_loop->allocator->free(frame->ccjs_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
+  lines.push('  if (frame->promise != 0) inox_promise_release(frame->promise);')
+  lines.push('  if (frame->inox_loop != 0 && frame->inox_loop->allocator != 0) {')
+  lines.push('    frame->inox_loop->allocator->free(frame->inox_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
   lines.push('  }')
   lines.push('}')
 
@@ -4396,7 +4396,7 @@ export function emitAsyncTaskFunctionStubDeclaration(
   if (context.returnType === 'void') {
     returnLine = '  return;'
   } else if (isManagedRuntimeReturnType(context.returnType)) {
-    returnLine = '  return ccjs_undefined_value();'
+    returnLine = '  return inox_undefined_value();'
   }
 
   const head: string = asyncTaskDeps(context).emitFunctionHead(statement, context)

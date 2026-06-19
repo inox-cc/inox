@@ -19,7 +19,7 @@ test('generated C node:path methods compile and run with runtime sources', async
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-path-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-path-'))
   const source = join(dir, 'node-path.c')
   const output = join(dir, 'node-path')
 

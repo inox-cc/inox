@@ -17,10 +17,10 @@ console.log(constants.MAX_LENGTH, buffer.constants.MAX_LENGTH)
 
   assert.deepEqual(result.ir.features, ['binary', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'managed-values', 'string-bytes'])
-  assert.match(result.code, /#include "ccjs\/binary\.h"/)
-  assert.match(result.code, /ccjs_bytes_from_data\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_bytes_new\(&ccjs_default_allocator,/)
-  assert.match(result.code, /\.tag == CCJS_TAG_BYTES/)
+  assert.match(result.code, /#include "inox\/binary\.h"/)
+  assert.match(result.code, /inox_bytes_from_data\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_bytes_new\(&inox_default_allocator,/)
+  assert.match(result.code, /\.tag == INOX_TAG_BYTES/)
   assert.match(result.code, /\(\(double\)\(\(size_t\)-1\)\)/)
 })
 
@@ -43,7 +43,7 @@ transcode(Buffer.from('hi'), 'utf8', 'latin1')
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(

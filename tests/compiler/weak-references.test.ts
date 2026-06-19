@@ -55,7 +55,7 @@ function read(bad: Bad): void {
   const count = bad.count
 }
 `,
-    'CCJS_WEAK_TYPE'
+    'INOX_WEAK_TYPE'
   )
 })
 
@@ -79,7 +79,7 @@ export function main(): void {
 }
 `)
 
-  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+  assert.match(compiled.code, /INOX_FIELD_WEAK/)
   assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
 })
 
@@ -91,7 +91,7 @@ test('rejects strong self ownership cycles before recursive type lowering', () =
 
 export function main(): void {}
 `,
-    'CCJS_OWNERSHIP_CYCLE'
+    'INOX_OWNERSHIP_CYCLE'
   )
 })
 
@@ -107,7 +107,7 @@ type Child = {
 
 export function main(): void {}
 `,
-    'CCJS_OWNERSHIP_CYCLE'
+    'INOX_OWNERSHIP_CYCLE'
   )
 })
 
@@ -121,7 +121,7 @@ class Child {
   parent: Parent | null
 }
 `,
-    'CCJS_OWNERSHIP_CYCLE'
+    'INOX_OWNERSHIP_CYCLE'
   )
 })
 
@@ -133,7 +133,7 @@ test('rejects container-mediated ownership cycles', () => {
 
 export function main(): void {}
 `,
-    'CCJS_OWNERSHIP_CYCLE'
+    'INOX_OWNERSHIP_CYCLE'
   )
 })
 
@@ -194,7 +194,7 @@ export function main(): void {
   console.log(child.parent.name)
 }
 `,
-    'CCJS_WEAK_ACCESS'
+    'INOX_WEAK_ACCESS'
   )
 })
 
@@ -215,7 +215,7 @@ export function main(): void {
   console.log(maybe.name)
 }
 `,
-    'CCJS_WEAK_ACCESS'
+    'INOX_WEAK_ACCESS'
   )
 })
 
@@ -240,7 +240,7 @@ export function main(): void {
 `)
 
   assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
-  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+  assert.match(compiled.code, /INOX_FIELD_WEAK/)
 })
 
 test('allows optional chaining over weak fields', () => {
@@ -260,7 +260,7 @@ export function main(): void {
 `)
 
   assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
-  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+  assert.match(compiled.code, /INOX_FIELD_WEAK/)
 })
 
 test('lowers weak class fields to C weak field metadata', () => {
@@ -283,7 +283,7 @@ export function main(): void {
 }
 `)
 
-  assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+  assert.match(compiled.code, /INOX_FIELD_WEAK/)
   assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
 })
 
@@ -298,5 +298,5 @@ export function main(): void {
 }
 `)
 
-  assert.match(compiled.code, /ccjs_object_get_known/)
+  assert.match(compiled.code, /inox_object_get_known/)
 })

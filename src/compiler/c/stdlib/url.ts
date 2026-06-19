@@ -136,7 +136,7 @@ export function emitPreparedUrlStringCallExpression(
   }
 
   const arg = dependencies.emitCValueExpression(expression.args[0], context)
-  const out = urlOutName(options, context, 'ccjs_url_path')
+  const out = urlOutName(options, context, 'inox_url_path')
   const lines: string[] = []
 
   if (options.owned !== false) {
@@ -145,7 +145,7 @@ export function emitPreparedUrlStringCallExpression(
 
   pushUrlLines(lines, arg.lines)
   pushUrlLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`ccjs_url_file_url_to_path(&ccjs_default_allocator, ${arg.expression}, &${out})`, context))
+  lines.push(emitStatusCheck(`inox_url_file_url_to_path(&inox_default_allocator, ${arg.expression}, &${out})`, context))
 
   return {
     lines,
@@ -165,7 +165,7 @@ export function emitPreparedUrlObjectExpression(
     return null
   }
 
-  const out = urlOutName(options, context, 'ccjs_url_object')
+  const out = urlOutName(options, context, 'inox_url_object')
   const input = dependencies.emitCValueExpression(expression.args[0], context)
   const shape = emitUrlObjectShape(context)
   const lines: string[] = []
@@ -184,7 +184,7 @@ export function emitPreparedUrlObjectExpression(
   if (method === 'pathToFileURL') {
     lines.push(
       emitStatusCheck(
-        `ccjs_url_path_to_file_url(&ccjs_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
+        `inox_url_path_to_file_url(&inox_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
         context
       )
     )
@@ -195,7 +195,7 @@ export function emitPreparedUrlObjectExpression(
     }
   }
 
-  let base = emptyPreparedUrlExpression('ccjs_undefined_value()')
+  let base = emptyPreparedUrlExpression('inox_undefined_value()')
   let hasBase = '0'
 
   if (expression.args.length > 1) {
@@ -206,7 +206,7 @@ export function emitPreparedUrlObjectExpression(
   pushUrlLines(lines, base.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_url_new(&ccjs_default_allocator, ${input.expression}, ${base.expression}, ${hasBase}, ${shape.expression}, &${out})`,
+      `inox_url_new(&inox_default_allocator, ${input.expression}, ${base.expression}, ${hasBase}, ${shape.expression}, &${out})`,
       context
     )
   )
@@ -227,8 +227,8 @@ export function emitPreparedUrlSearchParamsObjectExpression(
     return null
   }
 
-  const out = urlOutName(options, context, 'ccjs_url_search_params')
-  let init = emptyPreparedUrlExpression('ccjs_undefined_value()')
+  const out = urlOutName(options, context, 'inox_url_search_params')
+  let init = emptyPreparedUrlExpression('inox_undefined_value()')
   const shape = emitUrlSearchParamsObjectShape(context)
   const lines: string[] = []
 
@@ -248,7 +248,7 @@ export function emitPreparedUrlSearchParamsObjectExpression(
   dependencies.registerObjectShape(context, out, expression.shape)
   lines.push(
     emitStatusCheck(
-      `ccjs_url_search_params_new(&ccjs_default_allocator, ${init.expression}, ${shape.expression}, &${out})`,
+      `inox_url_search_params_new(&inox_default_allocator, ${init.expression}, ${shape.expression}, &${out})`,
       context
     )
   )
@@ -276,11 +276,11 @@ export function emitPreparedUrlSearchParamsCallExpression(
   const lines: string[] = []
 
   if (expression.args.length > 0) {
-    name = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_url_param_name')
+    name = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_url_param_name')
   }
 
   pushUrlLines(lines, receiver.lines)
-  lines.push(emitRuntimeTypeCheck(`${receiver.expression}.tag != CCJS_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${receiver.expression}.tag != INOX_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context))
 
   if (name != null) {
     pushUrlLines(lines, name.lines)
@@ -290,11 +290,11 @@ export function emitPreparedUrlSearchParamsCallExpression(
   const nameLength = urlStringLength(name)
 
   if (method === 'URLSearchParams.has') {
-    const out = urlOutName(options, context, 'ccjs_url_param_has')
+    const out = urlOutName(options, context, 'inox_url_param_has')
     lines.push(`int ${out} = 0;`)
     lines.push(
       emitStatusCheck(
-        `ccjs_url_search_params_has(${receiver.expression}, ${nameBytes}, ${nameLength}, &${out})`,
+        `inox_url_search_params_has(${receiver.expression}, ${nameBytes}, ${nameLength}, &${out})`,
         context
       )
     )
@@ -307,8 +307,8 @@ export function emitPreparedUrlSearchParamsCallExpression(
   }
 
   if (method === 'URLSearchParams.get' || method === 'URLSearchParams.toString') {
-    const out = urlOutName(options, context, 'ccjs_url_param_value')
-    let call = `ccjs_url_search_params_to_string(&ccjs_default_allocator, ${receiver.expression}, &${out})`
+    const out = urlOutName(options, context, 'inox_url_param_value')
+    let call = `inox_url_search_params_to_string(&inox_default_allocator, ${receiver.expression}, &${out})`
     let nullable = false
 
     if (options.owned !== false) {
@@ -316,7 +316,7 @@ export function emitPreparedUrlSearchParamsCallExpression(
     }
 
     if (method === 'URLSearchParams.get') {
-      call = `ccjs_url_search_params_get(&ccjs_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, &${out})`
+      call = `inox_url_search_params_get(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, &${out})`
       nullable = true
     }
 
@@ -334,7 +334,7 @@ export function emitPreparedUrlSearchParamsCallExpression(
   if (method === 'URLSearchParams.delete') {
     lines.push(
       emitStatusCheck(
-        `ccjs_url_search_params_delete(&ccjs_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength})`,
+        `inox_url_search_params_delete(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength})`,
         context
       )
     )
@@ -346,11 +346,11 @@ export function emitPreparedUrlSearchParamsCallExpression(
     }
   }
 
-  const value = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_url_param_value')
-  let call = `ccjs_url_search_params_append(&ccjs_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, ${value.bytes}, ${value.length})`
+  const value = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_url_param_value')
+  let call = `inox_url_search_params_append(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, ${value.bytes}, ${value.length})`
 
   if (method === 'URLSearchParams.set') {
-    call = `ccjs_url_search_params_set(&ccjs_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, ${value.bytes}, ${value.length})`
+    call = `inox_url_search_params_set(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, ${value.bytes}, ${value.length})`
   }
 
   pushUrlLines(lines, value.lines)
@@ -392,7 +392,7 @@ export function emitUrlObjectFieldAssignment(
   pushUrlLines(lines, value.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_url_set_field(&ccjs_default_allocator, ${object.expression}, ${fieldIndex}, ${value.expression})`,
+      `inox_url_set_field(&inox_default_allocator, ${object.expression}, ${fieldIndex}, ${value.expression})`,
       context
     )
   )
@@ -401,19 +401,19 @@ export function emitUrlObjectFieldAssignment(
 }
 
 function emitUrlObjectShape(context: CFunctionContext): PreparedExpression {
-  const shapeName = nextCName(context, 'ccjs_shape_url')
+  const shapeName = nextCName(context, 'inox_shape_url')
   const fieldsName = `${shapeName}_fields`
   const lines: string[] = []
 
-  lines.push(`static const ccjs_field_info ${fieldsName}[] = {`)
+  lines.push(`static const inox_field_info ${fieldsName}[] = {`)
   const fields: string[] = urlObjectFields
 
   for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field)}, CCJS_FIELD_READONLY },`)
+    lines.push(`  { ${cStringLiteral(field)}, INOX_FIELD_READONLY },`)
   }
 
   lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`static const inox_shape ${shapeName} = {`)
   lines.push(`  ${urlObjectFields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
@@ -425,11 +425,11 @@ function emitUrlObjectShape(context: CFunctionContext): PreparedExpression {
 }
 
 function emitUrlSearchParamsObjectShape(context: CFunctionContext): PreparedExpression {
-  const shapeName = nextCName(context, 'ccjs_shape_url_search_params')
+  const shapeName = nextCName(context, 'inox_shape_url_search_params')
   const fieldsName = `${shapeName}_fields`
   const lines: string[] = []
 
-  lines.push(`static const ccjs_field_info ${fieldsName}[] = {`)
+  lines.push(`static const inox_field_info ${fieldsName}[] = {`)
   const fields: string[] = urlSearchParamsObjectFields
 
   for (const field of fields) {
@@ -437,7 +437,7 @@ function emitUrlSearchParamsObjectShape(context: CFunctionContext): PreparedExpr
   }
 
   lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`static const inox_shape ${shapeName} = {`)
   lines.push(`  ${urlSearchParamsObjectFields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')

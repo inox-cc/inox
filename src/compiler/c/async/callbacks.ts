@@ -1041,7 +1041,7 @@ function registerNamedCallbackWrapper(
   const wrapper: CCallbackWrapper = {
     kind: 'named',
     key: key,
-    name: `ccjs_callback_${emitCIdentifier(target)}_${wrappers.size}`,
+    name: `inox_callback_${emitCIdentifier(target)}_${wrappers.size}`,
     target: target,
     functionType: functionType
   }
@@ -1081,9 +1081,9 @@ function registerArrowCallbackWrapper(
   const wrapper: CCallbackWrapper = {
     kind: 'arrow',
     key: key,
-    name: `ccjs_callback_arrow_${index}`,
-    contextTypeName: `ccjs_callback_context_${index}`,
-    finalizerName: `ccjs_callback_context_${index}_finalize`,
+    name: `inox_callback_arrow_${index}`,
+    contextTypeName: `inox_callback_context_${index}`,
+    finalizerName: `inox_callback_context_${index}_finalize`,
     expression: expression,
     functionType: functionType,
     needsEventLoop: functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions),
@@ -1127,7 +1127,7 @@ function registerPlainArrowCallbackWrapper(
   const wrapper: CCallbackWrapper = {
     kind: 'plain-arrow',
     key: key,
-    name: `ccjs_callback_arrow_${index}`,
+    name: `inox_callback_arrow_${index}`,
     expression: expression,
     functionType: resolvedFunctionType
   }
@@ -1403,7 +1403,7 @@ function preferredCallbackShape(
 }
 
 function preferredCallbackParamName(left: string, right: string): string {
-  if (left.length === 0 || left.startsWith('ccjs_arg_')) {
+  if (left.length === 0 || left.startsWith('inox_arg_')) {
     return right
   }
 
@@ -2519,7 +2519,7 @@ export function runtimeCallbackWrapperFor(
 }
 
 export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper): string {
-  return `static ccjs_status ${wrapper.name}(void* ccjs_context, const ccjs_value* args, size_t arg_count, ccjs_value* out)`
+  return `static inox_status ${wrapper.name}(void* inox_context, const inox_value* args, size_t arg_count, inox_value* out)`
 }
 
 export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): boolean {
@@ -2601,7 +2601,7 @@ function emitPlainArrowObjectFunctionFieldParam(
   const name = emitCObjectFunctionFieldName(objectName, field.name)
 
   if (!isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)) {
-    return `ccjs_value ${name}`
+    return `inox_value ${name}`
   }
 
   return `${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(field.functionType, [], seenTypes)})`
@@ -2627,7 +2627,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
 
     if (param.valueType === 'string') {
       context.runtimeStrings.add(name)
-      paramPrelude.push(`ccjs_string* ${name} = (ccjs_string*)${emitCStringParamName(name)}.as.ref;`)
+      paramPrelude.push(`inox_string* ${name} = (inox_string*)${emitCStringParamName(name)}.as.ref;`)
     }
 
     if (param.valueType === 'object') {
@@ -2658,7 +2658,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   pushIndentedLines(lines, statementLines)
 
   if (deps.shouldEmitCleanupLabel(context)) {
-    lines.push('ccjs_cleanup:')
+    lines.push('inox_cleanup:')
     pushIndentedLines(lines, deps.emitOwnedValueCleanup(context))
     pushIndentedLines(lines, deps.emitBoxedValueCleanup(context))
     lines.push(`  ${deps.emitCleanupReturn(context)}`)
@@ -2676,7 +2676,7 @@ function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index:
     return param.name
   }
 
-  return `ccjs_arg_${index}`
+  return `inox_arg_${index}`
 }
 
 function plainArrowCallbackCParamName(param: CFunctionParam, name: string): string {
@@ -2720,7 +2720,7 @@ function emitIndentedRuntimeArgCountCheck(paramCount: number): string {
     argsCheck = ' || args == 0'
   }
 
-  return `  if (out == 0 || arg_count != ${paramCount}${argsCheck}) return CCJS_ERR_TYPE;`
+  return `  if (out == 0 || arg_count != ${paramCount}${argsCheck}) return INOX_ERR_TYPE;`
 }
 
 export function emitRuntimeCallbackWrapperDeclaration(
@@ -2736,13 +2736,13 @@ export function emitRuntimeCallbackWrapperDeclaration(
   const lines: string[] = [`${emitRuntimeCallbackWrapperHead(wrapper)} {`]
 
   if (targetTakesEventLoop) {
-    lines.push('  if (ccjs_context == 0) return CCJS_ERR_TYPE;')
+    lines.push('  if (inox_context == 0) return INOX_ERR_TYPE;')
   } else {
-    lines.push('  (void)ccjs_context;')
+    lines.push('  (void)inox_context;')
   }
 
   lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params.length))
-  lines.push('  *out = ccjs_undefined_value();')
+  lines.push('  *out = inox_undefined_value();')
   const args: string[] = []
   const params: CFunctionParam[] = wrapper.functionType.params
   let index = 0
@@ -2766,16 +2766,16 @@ export function emitRuntimeCallbackWrapperDeclaration(
   if (wrapper.functionType.returnNullable === true && isNullableScalarType(wrapper.functionType.returnType)) {
     lines.push(`  *out = ${call};`)
   } else if (wrapper.functionType.returnType === 'number') {
-    lines.push(`  *out = ccjs_number_value(${call});`)
+    lines.push(`  *out = inox_number_value(${call});`)
   } else if (wrapper.functionType.returnType === 'boolean') {
-    lines.push(`  *out = ccjs_bool_value((${call}) != 0);`)
+    lines.push(`  *out = inox_bool_value((${call}) != 0);`)
   } else if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
     lines.push(`  *out = ${call};`)
   } else {
     lines.push(`  ${call};`)
   }
 
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -2793,7 +2793,7 @@ function emitNamedRuntimeCallbackTargetArgs(
   const moduleObjectFunctionFields = collectCallbackModuleObjectFunctionFieldNames(context)
 
   if (targetTakesEventLoop) {
-    callArgs.push('(ccjs_loop*)ccjs_context')
+    callArgs.push('(inox_loop*)inox_context')
   }
 
   for (const name of targetNames) {
@@ -2842,7 +2842,7 @@ function namedRuntimeCallbackTargetFunctionType(
 }
 
 function runtimeCallbackArgByName(name: string, runtimeArgs: string[]): string | null {
-  const prefix = 'ccjs_arg_'
+  const prefix = 'inox_arg_'
 
   if (!name.startsWith(prefix)) {
     return null
@@ -2903,7 +2903,7 @@ function collectCallbackModuleObjectFunctionFieldNames(context: CallbackEmitCont
 }
 
 function emitRuntimeCallbackModuleObjectFieldArg(name: string, moduleObjectFunctionFields: Set<string>): string | null {
-  const prefix = 'ccjs_objfn_ccjs_arg_'
+  const prefix = 'inox_objfn_inox_arg_'
 
   if (!name.startsWith(prefix)) {
     return null
@@ -2925,7 +2925,7 @@ function emitRuntimeCallbackModuleObjectFieldArg(name: string, moduleObjectFunct
     return null
   }
 
-  const candidate = `ccjs_objfn_${name.slice(index + 1)}`
+  const candidate = `inox_objfn_${name.slice(index + 1)}`
 
   if (moduleObjectFunctionFields.has(candidate)) {
     return candidate
@@ -2954,7 +2954,7 @@ export function emitRuntimeArrowCallbackContextType(wrapper: CCallbackContextWra
   const lines: string[] = [`typedef struct ${wrapper.contextTypeName} {`]
 
   if (wrapper.needsEventLoop === true) {
-    lines.push('  ccjs_loop* ccjs_loop;')
+    lines.push('  inox_loop* inox_loop;')
   }
 
   for (const capture of wrapper.captures) {
@@ -2975,20 +2975,20 @@ export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCa
 
   for (const capture of wrapper.captures) {
     if (isRetainedRuntimeArrowCapture(capture)) {
-      lines.push(`  ccjs_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+      lines.push(`  inox_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
     }
   }
 
   for (const capture of wrapper.captures) {
     if (isPromiseSettlementRuntimeArrowCapture(capture)) {
       lines.push(`  if (captured->${emitRuntimeArrowCaptureField(capture)} != 0) {`)
-      lines.push(`    ccjs_promise_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+      lines.push(`    inox_promise_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
       lines.push('  }')
     }
   }
 
   lines.push(
-    `  ccjs_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
+    `  inox_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
   )
   lines.push('}')
 
@@ -3017,7 +3017,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
     context.runtimeCallbackReturnShape = null
   }
   context.runtimeCallbackReturnOut = '(*out)'
-  context.runtimeCallbackCleanupLabel = 'ccjs_callback_cleanup'
+  context.runtimeCallbackCleanupLabel = 'inox_callback_cleanup'
   const bodyLines: string[] = []
 
   pushLines(bodyLines, emitRuntimeArrowCallbackContextLocals(wrapper, context, deps))
@@ -3027,13 +3027,13 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)} {`)
 
   if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
-    lines.push('  if (ccjs_context == 0) return CCJS_ERR_TYPE;')
+    lines.push('  if (inox_context == 0) return INOX_ERR_TYPE;')
   } else {
-    lines.push('  (void)ccjs_context;')
+    lines.push('  (void)inox_context;')
   }
 
   lines.push(emitIndentedRuntimeArgCountCheck(wrapper.functionType.params.length))
-  lines.push('  *out = ccjs_undefined_value();')
+  lines.push('  *out = inox_undefined_value();')
   pushIndentedLines(lines, bodyLines)
   pushIndentedLines(lines, deps.emitLoopFlowDeclarations(context))
   pushIndentedLines(lines, deps.emitReturnFlowDeclarations(context))
@@ -3046,7 +3046,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   }
   pushIndentedLines(lines, deps.emitOwnedValueCleanup(context))
   pushIndentedLines(lines, deps.emitBoxedValueCleanup(context))
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -3063,10 +3063,10 @@ function emitRuntimeArrowCallbackStatementLines(
     }
 
     const value = deps.emitPreparedNumberExpression(wrapper.expression.body, context)
-    let expression = `ccjs_bool_value((${value.expression}) != 0)`
+    let expression = `inox_bool_value((${value.expression}) != 0)`
 
     if (wrapper.functionType.returnType === 'number') {
-      expression = `ccjs_number_value(${value.expression})`
+      expression = `inox_number_value(${value.expression})`
     }
 
     const lines: string[] = []
@@ -3102,7 +3102,7 @@ export function emitRuntimeArrowCallbackContextLocals(
   wrapper: CCallbackContextWrapper,
   context: CallbackFunctionContext,
   deps: CallbackLoweringDependencies,
-  contextParameterName = 'ccjs_context'
+  contextParameterName = 'inox_context'
 ): string[] {
   if (!hasRuntimeArrowCallbackContext(wrapper)) {
     return []
@@ -3113,8 +3113,8 @@ export function emitRuntimeArrowCallbackContextLocals(
   if (wrapper.needsEventLoop === true) {
     context.eventLoopUsed = true
     context.externalEventLoop = true
-    lines.push('if (captured->ccjs_loop == 0) return CCJS_ERR_TYPE;')
-    lines.push('ccjs_loop* ccjs_loop = captured->ccjs_loop;')
+    lines.push('if (captured->inox_loop == 0) return INOX_ERR_TYPE;')
+    lines.push('inox_loop* inox_loop = captured->inox_loop;')
   }
 
   for (const capture of wrapper.captures) {
@@ -3130,7 +3130,7 @@ export function emitRuntimeArrowCallbackContextLocals(
         kind: kind,
         promise
       })
-      lines.push(`ccjs_promise* ${promise} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+      lines.push(`inox_promise* ${promise} = captured->${emitRuntimeArrowCaptureField(capture)};`)
       continue
     }
 
@@ -3153,14 +3153,14 @@ export function emitRuntimeArrowCallbackContextLocals(
       if (capture.valueType === 'string') {
         context.runtimeStrings.add(capture.name)
         lines.push(
-          `ccjs_string* ${capture.name} = (ccjs_string*)captured->${emitRuntimeArrowCaptureField(capture)}.as.ref;`
+          `inox_string* ${capture.name} = (inox_string*)captured->${emitRuntimeArrowCaptureField(capture)}.as.ref;`
         )
         continue
       }
 
       if (capture.valueType === 'object') {
         deps.registerObjectShape(context, capture.name, capture.shape)
-        lines.push(`ccjs_value ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+        lines.push(`inox_value ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
         continue
       }
     }
@@ -3188,21 +3188,21 @@ function emitRuntimeArrowCallbackParamPrelude(
     context.variables.set(name, param.valueType)
 
     if (param.nullable === true && isNullableScalarType(param.valueType)) {
-      lines.push(`ccjs_value ${name} = args[${index}];`)
+      lines.push(`inox_value ${name} = args[${index}];`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'string') {
       context.runtimeStrings.add(name)
-      lines.push(`ccjs_string* ${name} = (ccjs_string*)args[${index}].as.ref;`)
+      lines.push(`inox_string* ${name} = (inox_string*)args[${index}].as.ref;`)
       index = index + 1
       continue
     }
 
     if (param.valueType === 'object') {
       deps.registerObjectShape(context, name, param.shape)
-      lines.push(`ccjs_value ${name} = args[${index}];`)
+      lines.push(`inox_value ${name} = args[${index}];`)
       index = index + 1
       continue
     }
@@ -3230,7 +3230,7 @@ function runtimeArrowCallbackParamName(wrapper: CRuntimeArrowCallbackWrapper, in
     return param.name
   }
 
-  return `ccjs_arg_${index}`
+  return `inox_arg_${index}`
 }
 
 export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): string {
@@ -3240,16 +3240,16 @@ export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): str
     }
 
     if (isManagedRuntimeCallbackParamValueType(capture.valueType)) {
-      return 'ccjs_value*'
+      return 'inox_value*'
     }
   }
 
   if (isRetainedRuntimeArrowCapture(capture)) {
-    return 'ccjs_value'
+    return 'inox_value'
   }
 
   if (capture.valueType === 'promise-settlement') {
-    return 'ccjs_promise*'
+    return 'inox_promise*'
   }
 
   if (capture.valueType === 'string') {
@@ -3257,7 +3257,7 @@ export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): str
   }
 
   if (capture.valueType === 'timer') {
-    return 'ccjs_timer_handle*'
+    return 'inox_timer_handle*'
   }
 
   return 'double'
@@ -3305,24 +3305,24 @@ function emitRuntimeCallbackWrapperArgChecks(param: CFunctionParam, index: numbe
     const tag = cRuntimeValueTag(param.valueType)
 
     if (tag != null) {
-      return [`if (args[${index}].tag != CCJS_TAG_NULL && args[${index}].tag != ${tag}) return CCJS_ERR_TYPE;`]
+      return [`if (args[${index}].tag != INOX_TAG_NULL && args[${index}].tag != ${tag}) return INOX_ERR_TYPE;`]
     }
   }
 
   if (param.valueType === 'string') {
-    return [`if (args[${index}].tag != CCJS_TAG_STRING || args[${index}].as.ref == 0) return CCJS_ERR_TYPE;`]
+    return [`if (args[${index}].tag != INOX_TAG_STRING || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'object') {
-    return [`if (args[${index}].tag != CCJS_TAG_OBJECT || args[${index}].as.ref == 0) return CCJS_ERR_TYPE;`]
+    return [`if (args[${index}].tag != INOX_TAG_OBJECT || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'number') {
-    return [`if (args[${index}].tag != CCJS_TAG_NUMBER) return CCJS_ERR_TYPE;`]
+    return [`if (args[${index}].tag != INOX_TAG_NUMBER) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'boolean') {
-    return [`if (args[${index}].tag != CCJS_TAG_BOOL) return CCJS_ERR_TYPE;`]
+    return [`if (args[${index}].tag != INOX_TAG_BOOL) return INOX_ERR_TYPE;`]
   }
 
   return []
@@ -3421,7 +3421,7 @@ function appendFunctionPointerNamedParams(
   let index = 0
 
   for (const param of functionType.params) {
-    const name = `ccjs_arg_${index}`
+    const name = `inox_arg_${index}`
     const paramSeenTypes: string[] = []
 
     for (const seenType of seenTypes) {
@@ -3447,7 +3447,7 @@ function appendFunctionPointerParamNames(
   let index = 0
 
   for (const param of functionType.params) {
-    const name = `ccjs_arg_${index}`
+    const name = `inox_arg_${index}`
     const paramSeenTypes: string[] = []
 
     for (const seenType of seenTypes) {
@@ -3467,7 +3467,7 @@ function appendFunctionPointerParamNames(
 
 function emitFunctionPointerParamCType(param: CFunctionParam): string {
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
-    return 'ccjs_value'
+    return 'inox_value'
   }
 
   return emitCType(param.valueType)
@@ -3564,7 +3564,7 @@ function emitNamedFunctionPointerParam(
   seenTypes: string[]
 ): string {
   if (!isPlainFunctionPointerType(functionType, seen, seenTypes) && isRuntimeFunctionType(functionType)) {
-    return `ccjs_value ${name}`
+    return `inox_value ${name}`
   }
 
   return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType, seen, seenTypes)})`
@@ -3617,7 +3617,7 @@ function emitFunctionPointerParamType(
   seenTypes: string[] = []
 ): string {
   if (!isPlainFunctionPointerType(functionType, seen, seenTypes) && isRuntimeFunctionType(functionType)) {
-    return 'ccjs_value'
+    return 'inox_value'
   }
 
   return `${emitFunctionPointerReturnType(functionType)} (*)(${emitFunctionPointerParams(functionType, seen, seenTypes)})`

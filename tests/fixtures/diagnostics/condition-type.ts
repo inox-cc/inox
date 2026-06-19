@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_CONDITION_TYPE
+// @diagnostic INOX_CONDITION_TYPE
 
 export function main(): void {
   if (1) {

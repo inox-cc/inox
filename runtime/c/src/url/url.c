@@ -1,90 +1,90 @@
-#include "ccjs/url.h"
+#include "inox/url.h"
 
 #include <ctype.h>
 #include <string.h>
 #include <unistd.h>
-#include "ccjs/string.h"
+#include "inox/string.h"
 
 enum {
-  CCJS_URL_HREF_INDEX = 0,
-  CCJS_URL_PROTOCOL_INDEX = 1,
-  CCJS_URL_HOSTNAME_INDEX = 2,
-  CCJS_URL_PORT_INDEX = 3,
-  CCJS_URL_PATHNAME_INDEX = 4,
-  CCJS_URL_SEARCH_INDEX = 5,
-  CCJS_URL_HASH_INDEX = 6
+  INOX_URL_HREF_INDEX = 0,
+  INOX_URL_PROTOCOL_INDEX = 1,
+  INOX_URL_HOSTNAME_INDEX = 2,
+  INOX_URL_PORT_INDEX = 3,
+  INOX_URL_PATHNAME_INDEX = 4,
+  INOX_URL_SEARCH_INDEX = 5,
+  INOX_URL_HASH_INDEX = 6
 };
 
-enum { CCJS_URL_SEARCH_PARAMS_QUERY_INDEX = 0 };
+enum { INOX_URL_SEARCH_PARAMS_QUERY_INDEX = 0 };
 
-typedef struct ccjs_url_slice {
+typedef struct inox_url_slice {
   const char* bytes;
   size_t len;
-} ccjs_url_slice;
+} inox_url_slice;
 
-typedef struct ccjs_url_parts {
-  ccjs_url_slice href;
-  ccjs_url_slice protocol;
-  ccjs_url_slice hostname;
-  ccjs_url_slice port;
-  ccjs_url_slice pathname;
-  ccjs_url_slice search;
-  ccjs_url_slice hash;
-} ccjs_url_parts;
+typedef struct inox_url_parts {
+  inox_url_slice href;
+  inox_url_slice protocol;
+  inox_url_slice hostname;
+  inox_url_slice port;
+  inox_url_slice pathname;
+  inox_url_slice search;
+  inox_url_slice hash;
+} inox_url_parts;
 
-static ccjs_status ccjs_url_string(ccjs_value value, const char** bytes, size_t* len);
-static ccjs_status ccjs_url_value_string(ccjs_value value, uint32_t object_field, ccjs_value* retained, const char** bytes, size_t* len);
-static ccjs_status ccjs_url_parse(const char* bytes, size_t len, ccjs_url_parts* out);
-static int ccjs_url_is_absolute(const char* bytes, size_t len);
-static ccjs_status ccjs_url_object_from_parts(
-  ccjs_allocator* allocator,
-  const ccjs_shape* shape,
-  const ccjs_url_parts* parts,
-  ccjs_value* out
+static inox_status inox_url_string(inox_value value, const char** bytes, size_t* len);
+static inox_status inox_url_value_string(inox_value value, uint32_t object_field, inox_value* retained, const char** bytes, size_t* len);
+static inox_status inox_url_parse(const char* bytes, size_t len, inox_url_parts* out);
+static int inox_url_is_absolute(const char* bytes, size_t len);
+static inox_status inox_url_object_from_parts(
+  inox_allocator* allocator,
+  const inox_shape* shape,
+  const inox_url_parts* parts,
+  inox_value* out
 );
-static ccjs_status ccjs_url_init_string_field(
-  ccjs_allocator* allocator,
-  ccjs_value object,
+static inox_status inox_url_init_string_field(
+  inox_allocator* allocator,
+  inox_value object,
   uint32_t index,
   const char* bytes,
   size_t len
 );
-static ccjs_status ccjs_url_build_file_href(ccjs_allocator* allocator, const char* path, size_t path_len, char** out, size_t* out_len);
-static ccjs_status ccjs_url_build_relative_href(
-  ccjs_allocator* allocator,
+static inox_status inox_url_build_file_href(inox_allocator* allocator, const char* path, size_t path_len, char** out, size_t* out_len);
+static inox_status inox_url_build_relative_href(
+  inox_allocator* allocator,
   const char* input,
   size_t input_len,
-  const ccjs_url_parts* base,
+  const inox_url_parts* base,
   char** out,
   size_t* out_len
 );
-static ccjs_status ccjs_url_decode_file_path(
-  ccjs_allocator* allocator,
+static inox_status inox_url_decode_file_path(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 );
-static ccjs_status ccjs_url_normalized_field_value(
-  ccjs_allocator* allocator,
+static inox_status inox_url_normalized_field_value(
+  inox_allocator* allocator,
   uint32_t field_index,
   const char* bytes,
   size_t len,
-  ccjs_value* out
+  inox_value* out
 );
-static ccjs_status ccjs_url_rebuild_href(ccjs_allocator* allocator, ccjs_value url);
-static ccjs_status ccjs_url_search_params_query(ccjs_value params, ccjs_value* retained, const char** bytes, size_t* len);
-static ccjs_status ccjs_url_search_params_store_query(ccjs_allocator* allocator, ccjs_value params, const char* bytes, size_t len);
-static ccjs_status ccjs_url_search_params_from_string(
-  ccjs_allocator* allocator,
+static inox_status inox_url_rebuild_href(inox_allocator* allocator, inox_value url);
+static inox_status inox_url_search_params_query(inox_value params, inox_value* retained, const char** bytes, size_t* len);
+static inox_status inox_url_search_params_store_query(inox_allocator* allocator, inox_value params, const char* bytes, size_t len);
+static inox_status inox_url_search_params_from_string(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 );
-static ccjs_status ccjs_url_search_params_from_object(ccjs_allocator* allocator, ccjs_value init, char** out, size_t* out_len);
-static ccjs_status ccjs_url_search_params_append_pair(
-  ccjs_allocator* allocator,
+static inox_status inox_url_search_params_from_object(inox_allocator* allocator, inox_value init, char** out, size_t* out_len);
+static inox_status inox_url_search_params_append_pair(
+  inox_allocator* allocator,
   char** query,
   size_t* query_len,
   const char* name,
@@ -92,8 +92,8 @@ static ccjs_status ccjs_url_search_params_append_pair(
   const char* value,
   size_t value_len
 );
-static ccjs_status ccjs_url_search_params_remove_name(
-  ccjs_allocator* allocator,
+static inox_status inox_url_search_params_remove_name(
+  inox_allocator* allocator,
   const char* query,
   size_t query_len,
   const char* encoded_name,
@@ -102,7 +102,7 @@ static ccjs_status ccjs_url_search_params_remove_name(
   size_t* out_len,
   int* removed
 );
-static int ccjs_url_search_params_has_encoded_name(
+static int inox_url_search_params_has_encoded_name(
   const char* query,
   size_t query_len,
   const char* encoded_name,
@@ -110,39 +110,39 @@ static int ccjs_url_search_params_has_encoded_name(
   const char** value,
   size_t* value_len
 );
-static ccjs_status ccjs_url_encode_query_component(
-  ccjs_allocator* allocator,
+static inox_status inox_url_encode_query_component(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 );
-static ccjs_status ccjs_url_decode_query_component(
-  ccjs_allocator* allocator,
+static inox_status inox_url_decode_query_component(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 );
-static int ccjs_url_should_escape_query_char(unsigned char value);
-static char* ccjs_url_alloc(ccjs_allocator* allocator, size_t len);
-static int ccjs_url_hex_value(char value);
-static int ccjs_url_should_escape_path_char(unsigned char value);
-static void ccjs_url_write_hex(char* out, unsigned char value);
+static int inox_url_should_escape_query_char(unsigned char value);
+static char* inox_url_alloc(inox_allocator* allocator, size_t len);
+static int inox_url_hex_value(char value);
+static int inox_url_should_escape_path_char(unsigned char value);
+static void inox_url_write_hex(char* out, unsigned char value);
 
-ccjs_status ccjs_url_file_url_to_path(ccjs_allocator* allocator, ccjs_value url, ccjs_value* out) {
+inox_status inox_url_file_url_to_path(inox_allocator* allocator, inox_value url, inox_value* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_value retained = ccjs_undefined_value();
-  ccjs_status status = ccjs_url_value_string(url, CCJS_URL_HREF_INDEX, &retained, &bytes, &len);
+  inox_value retained = inox_undefined_value();
+  inox_status status = inox_url_value_string(url, INOX_URL_HREF_INDEX, &retained, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (len < 7 || strncmp(bytes, "file://", 7) != 0) {
-    ccjs_release(retained);
-    return CCJS_ERR_UNSUPPORTED;
+    inox_release(retained);
+    return INOX_ERR_UNSUPPORTED;
   }
 
   const char* path = bytes + 7;
@@ -154,58 +154,58 @@ ccjs_status ccjs_url_file_url_to_path(ccjs_allocator* allocator, ccjs_value url,
   }
 
   if (host_len != 0 && !(host_len == 9 && strncmp(path, "localhost", 9) == 0)) {
-    ccjs_release(retained);
-    return CCJS_ERR_UNSUPPORTED;
+    inox_release(retained);
+    return INOX_ERR_UNSUPPORTED;
   }
 
   path += host_len;
   path_len -= host_len;
 
   if (path_len == 0 || path[0] != '/') {
-    ccjs_release(retained);
-    return CCJS_ERR_UNSUPPORTED;
+    inox_release(retained);
+    return INOX_ERR_UNSUPPORTED;
   }
 
   char* decoded = 0;
   size_t decoded_len = 0;
 
-  status = ccjs_url_decode_file_path(allocator, path, path_len, &decoded, &decoded_len);
+  status = inox_url_decode_file_path(allocator, path, path_len, &decoded, &decoded_len);
 
-  if (status != CCJS_OK) {
-    ccjs_release(retained);
+  if (status != INOX_OK) {
+    inox_release(retained);
     return status;
   }
 
-  status = ccjs_string_from_literal(allocator, decoded, decoded_len, out);
+  status = inox_string_from_literal(allocator, decoded, decoded_len, out);
   allocator->free(allocator->user, decoded, decoded_len + 1, _Alignof(char));
-  ccjs_release(retained);
+  inox_release(retained);
 
   return status;
 }
 
-ccjs_status ccjs_url_path_to_file_url(ccjs_allocator* allocator, ccjs_value path, const ccjs_shape* shape, ccjs_value* out) {
+inox_status inox_url_path_to_file_url(inox_allocator* allocator, inox_value path, const inox_shape* shape, inox_value* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_url_string(path, &bytes, &len);
+  inox_status status = inox_url_string(path, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   char* href = 0;
   size_t href_len = 0;
 
-  status = ccjs_url_build_file_href(allocator, bytes, len, &href, &href_len);
+  status = inox_url_build_file_href(allocator, bytes, len, &href, &href_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_url_parts parts;
-  status = ccjs_url_parse(href, href_len, &parts);
+  inox_url_parts parts;
+  status = inox_url_parse(href, href_len, &parts);
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_object_from_parts(allocator, shape, &parts, out);
+  if (status == INOX_OK) {
+    status = inox_url_object_from_parts(allocator, shape, &parts, out);
   }
 
   allocator->free(allocator->user, href, href_len + 1, _Alignof(char));
@@ -213,265 +213,265 @@ ccjs_status ccjs_url_path_to_file_url(ccjs_allocator* allocator, ccjs_value path
   return status;
 }
 
-ccjs_status ccjs_url_new(
-  ccjs_allocator* allocator,
-  ccjs_value input,
-  ccjs_value base,
+inox_status inox_url_new(
+  inox_allocator* allocator,
+  inox_value input,
+  inox_value base,
   int has_base,
-  const ccjs_shape* shape,
-  ccjs_value* out
+  const inox_shape* shape,
+  inox_value* out
 ) {
   const char* input_bytes = 0;
   size_t input_len = 0;
-  ccjs_status status = ccjs_url_string(input, &input_bytes, &input_len);
+  inox_status status = inox_url_string(input, &input_bytes, &input_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  if (ccjs_url_is_absolute(input_bytes, input_len)) {
-    ccjs_url_parts parts;
-    status = ccjs_url_parse(input_bytes, input_len, &parts);
+  if (inox_url_is_absolute(input_bytes, input_len)) {
+    inox_url_parts parts;
+    status = inox_url_parse(input_bytes, input_len, &parts);
 
-    return status == CCJS_OK ? ccjs_url_object_from_parts(allocator, shape, &parts, out) : status;
+    return status == INOX_OK ? inox_url_object_from_parts(allocator, shape, &parts, out) : status;
   }
 
   if (!has_base) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   const char* base_bytes = 0;
   size_t base_len = 0;
-  ccjs_value retained_base = ccjs_undefined_value();
-  ccjs_url_parts base_parts;
+  inox_value retained_base = inox_undefined_value();
+  inox_url_parts base_parts;
 
-  status = ccjs_url_value_string(base, CCJS_URL_HREF_INDEX, &retained_base, &base_bytes, &base_len);
+  status = inox_url_value_string(base, INOX_URL_HREF_INDEX, &retained_base, &base_bytes, &base_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_url_parse(base_bytes, base_len, &base_parts);
+  status = inox_url_parse(base_bytes, base_len, &base_parts);
 
-  if (status != CCJS_OK) {
-    ccjs_release(retained_base);
+  if (status != INOX_OK) {
+    inox_release(retained_base);
     return status;
   }
 
   char* href = 0;
   size_t href_len = 0;
 
-  status = ccjs_url_build_relative_href(allocator, input_bytes, input_len, &base_parts, &href, &href_len);
+  status = inox_url_build_relative_href(allocator, input_bytes, input_len, &base_parts, &href, &href_len);
 
-  if (status != CCJS_OK) {
-    ccjs_release(retained_base);
+  if (status != INOX_OK) {
+    inox_release(retained_base);
     return status;
   }
 
-  ccjs_url_parts parts;
-  status = ccjs_url_parse(href, href_len, &parts);
+  inox_url_parts parts;
+  status = inox_url_parse(href, href_len, &parts);
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_object_from_parts(allocator, shape, &parts, out);
+  if (status == INOX_OK) {
+    status = inox_url_object_from_parts(allocator, shape, &parts, out);
   }
 
   allocator->free(allocator->user, href, href_len + 1, _Alignof(char));
-  ccjs_release(retained_base);
+  inox_release(retained_base);
 
   return status;
 }
 
-ccjs_status ccjs_url_set_field(ccjs_allocator* allocator, ccjs_value url, uint32_t field_index, ccjs_value value) {
-  if (field_index != CCJS_URL_PATHNAME_INDEX && field_index != CCJS_URL_SEARCH_INDEX && field_index != CCJS_URL_HASH_INDEX) {
-    return CCJS_ERR_UNSUPPORTED;
+inox_status inox_url_set_field(inox_allocator* allocator, inox_value url, uint32_t field_index, inox_value value) {
+  if (field_index != INOX_URL_PATHNAME_INDEX && field_index != INOX_URL_SEARCH_INDEX && field_index != INOX_URL_HASH_INDEX) {
+    return INOX_ERR_UNSUPPORTED;
   }
 
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_url_string(value, &bytes, &len);
+  inox_status status = inox_url_string(value, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_value normalized = ccjs_undefined_value();
-  status = ccjs_url_normalized_field_value(allocator, field_index, bytes, len, &normalized);
+  inox_value normalized = inox_undefined_value();
+  status = inox_url_normalized_field_value(allocator, field_index, bytes, len, &normalized);
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(url, field_index, normalized);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(url, field_index, normalized);
   }
 
-  ccjs_release(normalized);
+  inox_release(normalized);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  return ccjs_url_rebuild_href(allocator, url);
+  return inox_url_rebuild_href(allocator, url);
 }
 
-ccjs_status ccjs_url_search_params_new(ccjs_allocator* allocator, ccjs_value init, const ccjs_shape* shape, ccjs_value* out) {
-  ccjs_value object = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_new(allocator, shape, &object);
+inox_status inox_url_search_params_new(inox_allocator* allocator, inox_value init, const inox_shape* shape, inox_value* out) {
+  inox_value object = inox_undefined_value();
+  inox_status status = inox_object_new(allocator, shape, &object);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   char* query = 0;
   size_t query_len = 0;
 
-  if (init.tag == CCJS_TAG_UNDEFINED || init.tag == CCJS_TAG_NULL) {
-    query = ccjs_url_alloc(allocator, 0);
+  if (init.tag == INOX_TAG_UNDEFINED || init.tag == INOX_TAG_NULL) {
+    query = inox_url_alloc(allocator, 0);
 
     if (query == 0) {
-      status = CCJS_ERR_OOM;
+      status = INOX_ERR_OOM;
     }
-  } else if (init.tag == CCJS_TAG_STRING) {
+  } else if (init.tag == INOX_TAG_STRING) {
     const char* bytes = 0;
     size_t len = 0;
 
-    status = ccjs_url_string(init, &bytes, &len);
+    status = inox_url_string(init, &bytes, &len);
 
-    if (status == CCJS_OK) {
-      status = ccjs_url_search_params_from_string(allocator, bytes, len, &query, &query_len);
+    if (status == INOX_OK) {
+      status = inox_url_search_params_from_string(allocator, bytes, len, &query, &query_len);
     }
-  } else if (init.tag == CCJS_TAG_OBJECT) {
-    status = ccjs_url_search_params_from_object(allocator, init, &query, &query_len);
+  } else if (init.tag == INOX_TAG_OBJECT) {
+    status = inox_url_search_params_from_object(allocator, init, &query, &query_len);
   } else {
-    status = CCJS_ERR_TYPE;
+    status = INOX_ERR_TYPE;
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_search_params_store_query(allocator, object, query, query_len);
+  if (status == INOX_OK) {
+    status = inox_url_search_params_store_query(allocator, object, query, query_len);
   }
 
   if (query != 0) {
     allocator->free(allocator->user, query, query_len + 1, _Alignof(char));
   }
 
-  if (status == CCJS_OK) {
+  if (status == INOX_OK) {
     *out = object;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  ccjs_release(object);
-  *out = ccjs_undefined_value();
+  inox_release(object);
+  *out = inox_undefined_value();
 
   return status;
 }
 
-ccjs_status ccjs_url_search_params_get(
-  ccjs_allocator* allocator,
-  ccjs_value params,
+inox_status inox_url_search_params_get(
+  inox_allocator* allocator,
+  inox_value params,
   const char* name,
   size_t name_len,
-  ccjs_value* out
+  inox_value* out
 ) {
   char* encoded_name = 0;
   size_t encoded_name_len = 0;
-  ccjs_status status = ccjs_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
+  inox_status status = inox_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_value retained = ccjs_undefined_value();
+  inox_value retained = inox_undefined_value();
   const char* query = 0;
   size_t query_len = 0;
   const char* value = 0;
   size_t value_len = 0;
 
-  status = ccjs_url_search_params_query(params, &retained, &query, &query_len);
+  status = inox_url_search_params_query(params, &retained, &query, &query_len);
 
-  if (status == CCJS_OK && ccjs_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, &value, &value_len)) {
+  if (status == INOX_OK && inox_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, &value, &value_len)) {
     char* decoded = 0;
     size_t decoded_len = 0;
 
-    status = ccjs_url_decode_query_component(allocator, value, value_len, &decoded, &decoded_len);
+    status = inox_url_decode_query_component(allocator, value, value_len, &decoded, &decoded_len);
 
-    if (status == CCJS_OK) {
-      status = ccjs_string_from_literal(allocator, decoded, decoded_len, out);
+    if (status == INOX_OK) {
+      status = inox_string_from_literal(allocator, decoded, decoded_len, out);
     }
 
     if (decoded != 0) {
       allocator->free(allocator->user, decoded, decoded_len + 1, _Alignof(char));
     }
-  } else if (status == CCJS_OK) {
-    *out = ccjs_null_value();
+  } else if (status == INOX_OK) {
+    *out = inox_null_value();
   }
 
-  ccjs_release(retained);
+  inox_release(retained);
   allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
 
   return status;
 }
 
-ccjs_status ccjs_url_search_params_has(ccjs_value params, const char* name, size_t name_len, int* out) {
+inox_status inox_url_search_params_has(inox_value params, const char* name, size_t name_len, int* out) {
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (params.tag != CCJS_TAG_OBJECT || params.as.ref == 0 || params.as.ref->allocator == 0) {
-    return CCJS_ERR_TYPE;
+  if (params.tag != INOX_TAG_OBJECT || params.as.ref == 0 || params.as.ref->allocator == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_allocator* allocator = params.as.ref->allocator;
+  inox_allocator* allocator = params.as.ref->allocator;
   char* encoded_name = 0;
   size_t encoded_name_len = 0;
-  ccjs_status status = ccjs_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
+  inox_status status = inox_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_value retained = ccjs_undefined_value();
+  inox_value retained = inox_undefined_value();
   const char* query = 0;
   size_t query_len = 0;
 
-  status = ccjs_url_search_params_query(params, &retained, &query, &query_len);
+  status = inox_url_search_params_query(params, &retained, &query, &query_len);
 
-  if (status == CCJS_OK) {
-    *out = ccjs_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, 0, 0);
+  if (status == INOX_OK) {
+    *out = inox_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, 0, 0);
   }
 
-  ccjs_release(retained);
+  inox_release(retained);
   allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
 
   return status;
 }
 
-ccjs_status ccjs_url_search_params_append(
-  ccjs_allocator* allocator,
-  ccjs_value params,
+inox_status inox_url_search_params_append(
+  inox_allocator* allocator,
+  inox_value params,
   const char* name,
   size_t name_len,
   const char* value,
   size_t value_len
 ) {
-  ccjs_value retained = ccjs_undefined_value();
+  inox_value retained = inox_undefined_value();
   const char* query_bytes = 0;
   size_t query_len = 0;
-  ccjs_status status = ccjs_url_search_params_query(params, &retained, &query_bytes, &query_len);
+  inox_status status = inox_url_search_params_query(params, &retained, &query_bytes, &query_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  char* query = ccjs_url_alloc(allocator, query_len);
+  char* query = inox_url_alloc(allocator, query_len);
 
   if (query == 0) {
-    ccjs_release(retained);
-    return CCJS_ERR_OOM;
+    inox_release(retained);
+    return INOX_ERR_OOM;
   }
 
   memcpy(query, query_bytes, query_len);
-  ccjs_release(retained);
+  inox_release(retained);
 
-  status = ccjs_url_search_params_append_pair(allocator, &query, &query_len, name, name_len, value, value_len);
+  status = inox_url_search_params_append_pair(allocator, &query, &query_len, name, name_len, value, value_len);
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_search_params_store_query(allocator, params, query, query_len);
+  if (status == INOX_OK) {
+    status = inox_url_search_params_store_query(allocator, params, query, query_len);
   }
 
   allocator->free(allocator->user, query, query_len + 1, _Alignof(char));
@@ -479,122 +479,122 @@ ccjs_status ccjs_url_search_params_append(
   return status;
 }
 
-ccjs_status ccjs_url_search_params_delete(ccjs_allocator* allocator, ccjs_value params, const char* name, size_t name_len) {
+inox_status inox_url_search_params_delete(inox_allocator* allocator, inox_value params, const char* name, size_t name_len) {
   char* encoded_name = 0;
   size_t encoded_name_len = 0;
-  ccjs_status status = ccjs_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
+  inox_status status = inox_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_value retained = ccjs_undefined_value();
+  inox_value retained = inox_undefined_value();
   const char* query = 0;
   size_t query_len = 0;
 
-  status = ccjs_url_search_params_query(params, &retained, &query, &query_len);
+  status = inox_url_search_params_query(params, &retained, &query, &query_len);
 
   char* next = 0;
   size_t next_len = 0;
   int removed = 0;
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_search_params_remove_name(allocator, query, query_len, encoded_name, encoded_name_len, &next, &next_len, &removed);
+  if (status == INOX_OK) {
+    status = inox_url_search_params_remove_name(allocator, query, query_len, encoded_name, encoded_name_len, &next, &next_len, &removed);
   }
 
-  if (status == CCJS_OK && removed) {
-    status = ccjs_url_search_params_store_query(allocator, params, next, next_len);
+  if (status == INOX_OK && removed) {
+    status = inox_url_search_params_store_query(allocator, params, next, next_len);
   }
 
   if (next != 0) {
     allocator->free(allocator->user, next, next_len + 1, _Alignof(char));
   }
 
-  ccjs_release(retained);
+  inox_release(retained);
   allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
 
   return status;
 }
 
-ccjs_status ccjs_url_search_params_set(
-  ccjs_allocator* allocator,
-  ccjs_value params,
+inox_status inox_url_search_params_set(
+  inox_allocator* allocator,
+  inox_value params,
   const char* name,
   size_t name_len,
   const char* value,
   size_t value_len
 ) {
-  ccjs_status status = ccjs_url_search_params_delete(allocator, params, name, name_len);
+  inox_status status = inox_url_search_params_delete(allocator, params, name, name_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  return ccjs_url_search_params_append(allocator, params, name, name_len, value, value_len);
+  return inox_url_search_params_append(allocator, params, name, name_len, value, value_len);
 }
 
-ccjs_status ccjs_url_search_params_to_string(ccjs_allocator* allocator, ccjs_value params, ccjs_value* out) {
-  ccjs_value retained = ccjs_undefined_value();
+inox_status inox_url_search_params_to_string(inox_allocator* allocator, inox_value params, inox_value* out) {
+  inox_value retained = inox_undefined_value();
   const char* query = 0;
   size_t query_len = 0;
-  ccjs_status status = ccjs_url_search_params_query(params, &retained, &query, &query_len);
+  inox_status status = inox_url_search_params_query(params, &retained, &query, &query_len);
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, query, query_len, out);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, query, query_len, out);
   }
 
-  ccjs_release(retained);
+  inox_release(retained);
 
   return status;
 }
 
-static ccjs_status ccjs_url_string(ccjs_value value, const char** bytes, size_t* len) {
-  if (bytes == 0 || len == 0 || value.tag != CCJS_TAG_STRING || value.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+static inox_status inox_url_string(inox_value value, const char** bytes, size_t* len) {
+  if (bytes == 0 || len == 0 || value.tag != INOX_TAG_STRING || value.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_string* string = (ccjs_string*)value.as.ref;
+  inox_string* string = (inox_string*)value.as.ref;
   *bytes = string->bytes;
   *len = string->len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_value_string(ccjs_value value, uint32_t object_field, ccjs_value* retained, const char** bytes, size_t* len) {
+static inox_status inox_url_value_string(inox_value value, uint32_t object_field, inox_value* retained, const char** bytes, size_t* len) {
   if (retained == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *retained = ccjs_undefined_value();
+  *retained = inox_undefined_value();
 
-  if (value.tag == CCJS_TAG_OBJECT) {
-    ccjs_status status = ccjs_object_get_known(value, object_field, retained);
+  if (value.tag == INOX_TAG_OBJECT) {
+    inox_status status = inox_object_get_known(value, object_field, retained);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
 
-    return ccjs_url_string(*retained, bytes, len);
+    return inox_url_string(*retained, bytes, len);
   }
 
-  return ccjs_url_string(value, bytes, len);
+  return inox_url_string(value, bytes, len);
 }
 
-static ccjs_status ccjs_url_parse(const char* bytes, size_t len, ccjs_url_parts* out) {
+static inox_status inox_url_parse(const char* bytes, size_t len, inox_url_parts* out) {
   if (bytes == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   const char* colon = memchr(bytes, ':', len);
 
   if (colon == 0) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   size_t scheme_len = (size_t)(colon - bytes);
 
   if (scheme_len == 0 || scheme_len + 2 >= len || colon[1] != '/' || colon[2] != '/') {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   const char* authority = colon + 3;
@@ -657,10 +657,10 @@ static ccjs_status ccjs_url_parse(const char* bytes, size_t len, ccjs_url_parts*
   out->hash.bytes = hash < end ? hash : "";
   out->hash.len = hash < end ? (size_t)(end - hash) : 0;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static int ccjs_url_is_absolute(const char* bytes, size_t len) {
+static int inox_url_is_absolute(const char* bytes, size_t len) {
   for (size_t index = 0; index < len; index += 1) {
     char value = bytes[index];
 
@@ -676,75 +676,75 @@ static int ccjs_url_is_absolute(const char* bytes, size_t len) {
   return 0;
 }
 
-static ccjs_status ccjs_url_object_from_parts(
-  ccjs_allocator* allocator,
-  const ccjs_shape* shape,
-  const ccjs_url_parts* parts,
-  ccjs_value* out
+static inox_status inox_url_object_from_parts(
+  inox_allocator* allocator,
+  const inox_shape* shape,
+  const inox_url_parts* parts,
+  inox_value* out
 ) {
-  ccjs_value object = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_new(allocator, shape, &object);
+  inox_value object = inox_undefined_value();
+  inox_status status = inox_object_new(allocator, shape, &object);
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_init_string_field(allocator, object, CCJS_URL_HREF_INDEX, parts->href.bytes, parts->href.len);
+  if (status == INOX_OK) {
+    status = inox_url_init_string_field(allocator, object, INOX_URL_HREF_INDEX, parts->href.bytes, parts->href.len);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_init_string_field(allocator, object, CCJS_URL_PROTOCOL_INDEX, parts->protocol.bytes, parts->protocol.len);
+  if (status == INOX_OK) {
+    status = inox_url_init_string_field(allocator, object, INOX_URL_PROTOCOL_INDEX, parts->protocol.bytes, parts->protocol.len);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_init_string_field(allocator, object, CCJS_URL_HOSTNAME_INDEX, parts->hostname.bytes, parts->hostname.len);
+  if (status == INOX_OK) {
+    status = inox_url_init_string_field(allocator, object, INOX_URL_HOSTNAME_INDEX, parts->hostname.bytes, parts->hostname.len);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_init_string_field(allocator, object, CCJS_URL_PORT_INDEX, parts->port.bytes, parts->port.len);
+  if (status == INOX_OK) {
+    status = inox_url_init_string_field(allocator, object, INOX_URL_PORT_INDEX, parts->port.bytes, parts->port.len);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_init_string_field(allocator, object, CCJS_URL_PATHNAME_INDEX, parts->pathname.bytes, parts->pathname.len);
+  if (status == INOX_OK) {
+    status = inox_url_init_string_field(allocator, object, INOX_URL_PATHNAME_INDEX, parts->pathname.bytes, parts->pathname.len);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_init_string_field(allocator, object, CCJS_URL_SEARCH_INDEX, parts->search.bytes, parts->search.len);
+  if (status == INOX_OK) {
+    status = inox_url_init_string_field(allocator, object, INOX_URL_SEARCH_INDEX, parts->search.bytes, parts->search.len);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_url_init_string_field(allocator, object, CCJS_URL_HASH_INDEX, parts->hash.bytes, parts->hash.len);
+  if (status == INOX_OK) {
+    status = inox_url_init_string_field(allocator, object, INOX_URL_HASH_INDEX, parts->hash.bytes, parts->hash.len);
   }
 
-  if (status == CCJS_OK) {
+  if (status == INOX_OK) {
     *out = object;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  ccjs_release(object);
-  *out = ccjs_undefined_value();
+  inox_release(object);
+  *out = inox_undefined_value();
 
   return status;
 }
 
-static ccjs_status ccjs_url_init_string_field(
-  ccjs_allocator* allocator,
-  ccjs_value object,
+static inox_status inox_url_init_string_field(
+  inox_allocator* allocator,
+  inox_value object,
   uint32_t index,
   const char* bytes,
   size_t len
 ) {
-  ccjs_value value = ccjs_undefined_value();
-  ccjs_status status = ccjs_string_from_literal(allocator, bytes == 0 ? "" : bytes, len, &value);
+  inox_value value = inox_undefined_value();
+  inox_status status = inox_string_from_literal(allocator, bytes == 0 ? "" : bytes, len, &value);
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, index, value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, index, value);
   }
 
-  ccjs_release(value);
+  inox_release(value);
 
   return status;
 }
 
-static ccjs_status ccjs_url_build_file_href(
-  ccjs_allocator* allocator,
+static inox_status inox_url_build_file_href(
+  inox_allocator* allocator,
   const char* path,
   size_t path_len,
   char** out,
@@ -760,7 +760,7 @@ static ccjs_status ccjs_url_build_file_href(
 
   if (needs_cwd) {
     if (getcwd(cwd, sizeof(cwd)) == 0) {
-      return CCJS_ERR_UNSUPPORTED;
+      return INOX_ERR_UNSUPPORTED;
     }
 
     cwd_len = strlen(cwd);
@@ -769,14 +769,14 @@ static ccjs_status ccjs_url_build_file_href(
   size_t escaped_len = 0;
 
   for (size_t index = 0; index < base_len; index += 1) {
-    escaped_len += ccjs_url_should_escape_path_char((unsigned char)base[index]) ? 3 : 1;
+    escaped_len += inox_url_should_escape_path_char((unsigned char)base[index]) ? 3 : 1;
   }
 
   size_t total = prefix_len + cwd_len + (needs_cwd ? 1 : 0) + escaped_len;
-  char* href = ccjs_url_alloc(allocator, total);
+  char* href = inox_url_alloc(allocator, total);
 
   if (href == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -793,8 +793,8 @@ static ccjs_status ccjs_url_build_file_href(
   for (size_t index = 0; index < base_len; index += 1) {
     unsigned char value = (unsigned char)base[index];
 
-    if (ccjs_url_should_escape_path_char(value)) {
-      ccjs_url_write_hex(href + offset, value);
+    if (inox_url_should_escape_path_char(value)) {
+      inox_url_write_hex(href + offset, value);
       offset += 3;
     } else {
       href[offset] = (char)value;
@@ -805,14 +805,14 @@ static ccjs_status ccjs_url_build_file_href(
   *out = href;
   *out_len = offset;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_build_relative_href(
-  ccjs_allocator* allocator,
+static inox_status inox_url_build_relative_href(
+  inox_allocator* allocator,
   const char* input,
   size_t input_len,
-  const ccjs_url_parts* base,
+  const inox_url_parts* base,
   char** out,
   size_t* out_len
 ) {
@@ -833,10 +833,10 @@ static ccjs_status ccjs_url_build_relative_href(
   }
 
   size_t total = base_origin_len + (path_len != 0 && input[0] == '/' ? path_len : base_dir_len + path_len) + suffix_len;
-  char* href = ccjs_url_alloc(allocator, total);
+  char* href = inox_url_alloc(allocator, total);
 
   if (href == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -871,28 +871,28 @@ static ccjs_status ccjs_url_build_relative_href(
   *out = href;
   *out_len = offset;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_decode_file_path(
-  ccjs_allocator* allocator,
+static inox_status inox_url_decode_file_path(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 ) {
-  char* decoded = ccjs_url_alloc(allocator, len);
+  char* decoded = inox_url_alloc(allocator, len);
 
   if (decoded == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
 
   for (size_t index = 0; index < len; index += 1) {
     if (bytes[index] == '%' && index + 2 < len) {
-      int high = ccjs_url_hex_value(bytes[index + 1]);
-      int low = ccjs_url_hex_value(bytes[index + 2]);
+      int high = inox_url_hex_value(bytes[index + 1]);
+      int low = inox_url_hex_value(bytes[index + 2]);
 
       if (high >= 0 && low >= 0) {
         decoded[offset] = (char)((high << 4) | low);
@@ -909,76 +909,76 @@ static ccjs_status ccjs_url_decode_file_path(
   *out = decoded;
   *out_len = offset;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_normalized_field_value(
-  ccjs_allocator* allocator,
+static inox_status inox_url_normalized_field_value(
+  inox_allocator* allocator,
   uint32_t field_index,
   const char* bytes,
   size_t len,
-  ccjs_value* out
+  inox_value* out
 ) {
   char prefix = 0;
 
-  if (field_index == CCJS_URL_PATHNAME_INDEX) {
+  if (field_index == INOX_URL_PATHNAME_INDEX) {
     prefix = '/';
-  } else if (field_index == CCJS_URL_SEARCH_INDEX) {
+  } else if (field_index == INOX_URL_SEARCH_INDEX) {
     prefix = '?';
-  } else if (field_index == CCJS_URL_HASH_INDEX) {
+  } else if (field_index == INOX_URL_HASH_INDEX) {
     prefix = '#';
   }
 
-  if (field_index == CCJS_URL_PATHNAME_INDEX && len == 0) {
-    return ccjs_string_from_literal(allocator, "/", 1, out);
+  if (field_index == INOX_URL_PATHNAME_INDEX && len == 0) {
+    return inox_string_from_literal(allocator, "/", 1, out);
   }
 
   if (prefix == 0 || len == 0 || bytes[0] == prefix) {
-    return ccjs_string_from_literal(allocator, bytes, len, out);
+    return inox_string_from_literal(allocator, bytes, len, out);
   }
 
-  char* normalized = ccjs_url_alloc(allocator, len + 1);
+  char* normalized = inox_url_alloc(allocator, len + 1);
 
   if (normalized == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   normalized[0] = prefix;
   memcpy(normalized + 1, bytes, len);
-  ccjs_status status = ccjs_string_from_literal(allocator, normalized, len + 1, out);
+  inox_status status = inox_string_from_literal(allocator, normalized, len + 1, out);
   allocator->free(allocator->user, normalized, len + 2, _Alignof(char));
 
   return status;
 }
 
-static ccjs_status ccjs_url_rebuild_href(ccjs_allocator* allocator, ccjs_value url) {
+static inox_status inox_url_rebuild_href(inox_allocator* allocator, inox_value url) {
   enum { FIELD_COUNT = 6 };
   const uint32_t indexes[FIELD_COUNT] = {
-    CCJS_URL_PROTOCOL_INDEX,
-    CCJS_URL_HOSTNAME_INDEX,
-    CCJS_URL_PORT_INDEX,
-    CCJS_URL_PATHNAME_INDEX,
-    CCJS_URL_SEARCH_INDEX,
-    CCJS_URL_HASH_INDEX
+    INOX_URL_PROTOCOL_INDEX,
+    INOX_URL_HOSTNAME_INDEX,
+    INOX_URL_PORT_INDEX,
+    INOX_URL_PATHNAME_INDEX,
+    INOX_URL_SEARCH_INDEX,
+    INOX_URL_HASH_INDEX
   };
-  ccjs_value values[FIELD_COUNT];
+  inox_value values[FIELD_COUNT];
   const char* bytes[FIELD_COUNT];
   size_t lens[FIELD_COUNT];
 
   for (size_t index = 0; index < FIELD_COUNT; index += 1) {
-    values[index] = ccjs_undefined_value();
+    values[index] = inox_undefined_value();
     bytes[index] = 0;
     lens[index] = 0;
   }
 
-  ccjs_status status = CCJS_OK;
+  inox_status status = INOX_OK;
 
   for (size_t index = 0; index < FIELD_COUNT; index += 1) {
-    status = ccjs_url_value_string(url, indexes[index], &values[index], &bytes[index], &lens[index]);
+    status = inox_url_value_string(url, indexes[index], &values[index], &bytes[index], &lens[index]);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       for (size_t release_index = 0; release_index <= index; release_index += 1) {
-        ccjs_release(values[release_index]);
+        inox_release(values[release_index]);
       }
 
       return status;
@@ -986,14 +986,14 @@ static ccjs_status ccjs_url_rebuild_href(ccjs_allocator* allocator, ccjs_value u
   }
 
   size_t total = lens[0] + 2 + lens[1] + (lens[2] == 0 ? 0 : 1 + lens[2]) + lens[3] + lens[4] + lens[5];
-  char* href = ccjs_url_alloc(allocator, total);
+  char* href = inox_url_alloc(allocator, total);
 
   if (href == 0) {
     for (size_t index = 0; index < FIELD_COUNT; index += 1) {
-      ccjs_release(values[index]);
+      inox_release(values[index]);
     }
 
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -1017,49 +1017,49 @@ static ccjs_status ccjs_url_rebuild_href(ccjs_allocator* allocator, ccjs_value u
   memcpy(href + offset, bytes[5], lens[5]);
   offset += lens[5];
 
-  ccjs_value href_value = ccjs_undefined_value();
-  status = ccjs_string_from_literal(allocator, href, offset, &href_value);
+  inox_value href_value = inox_undefined_value();
+  status = inox_string_from_literal(allocator, href, offset, &href_value);
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(url, CCJS_URL_HREF_INDEX, href_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(url, INOX_URL_HREF_INDEX, href_value);
   }
 
-  ccjs_release(href_value);
+  inox_release(href_value);
   allocator->free(allocator->user, href, total + 1, _Alignof(char));
 
   for (size_t index = 0; index < FIELD_COUNT; index += 1) {
-    ccjs_release(values[index]);
+    inox_release(values[index]);
   }
 
   return status;
 }
 
-static ccjs_status ccjs_url_search_params_query(ccjs_value params, ccjs_value* retained, const char** bytes, size_t* len) {
-  return ccjs_url_value_string(params, CCJS_URL_SEARCH_PARAMS_QUERY_INDEX, retained, bytes, len);
+static inox_status inox_url_search_params_query(inox_value params, inox_value* retained, const char** bytes, size_t* len) {
+  return inox_url_value_string(params, INOX_URL_SEARCH_PARAMS_QUERY_INDEX, retained, bytes, len);
 }
 
-static ccjs_status ccjs_url_search_params_store_query(ccjs_allocator* allocator, ccjs_value params, const char* bytes, size_t len) {
-  ccjs_value value = ccjs_undefined_value();
-  ccjs_status status = ccjs_string_from_literal(allocator, bytes == 0 ? "" : bytes, len, &value);
+static inox_status inox_url_search_params_store_query(inox_allocator* allocator, inox_value params, const char* bytes, size_t len) {
+  inox_value value = inox_undefined_value();
+  inox_status status = inox_string_from_literal(allocator, bytes == 0 ? "" : bytes, len, &value);
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(params, CCJS_URL_SEARCH_PARAMS_QUERY_INDEX, value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(params, INOX_URL_SEARCH_PARAMS_QUERY_INDEX, value);
   }
 
-  ccjs_release(value);
+  inox_release(value);
 
   return status;
 }
 
-static ccjs_status ccjs_url_search_params_from_string(
-  ccjs_allocator* allocator,
+static inox_status inox_url_search_params_from_string(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 ) {
   if (bytes == 0 || out == 0 || out_len == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (len != 0 && bytes[0] == '?') {
@@ -1067,59 +1067,59 @@ static ccjs_status ccjs_url_search_params_from_string(
     len -= 1;
   }
 
-  char* query = ccjs_url_alloc(allocator, len);
+  char* query = inox_url_alloc(allocator, len);
 
   if (query == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   memcpy(query, bytes, len);
   *out = query;
   *out_len = len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_search_params_from_object(ccjs_allocator* allocator, ccjs_value init, char** out, size_t* out_len) {
-  if (init.tag != CCJS_TAG_OBJECT || init.as.ref == 0 || out == 0 || out_len == 0) {
-    return CCJS_ERR_TYPE;
+static inox_status inox_url_search_params_from_object(inox_allocator* allocator, inox_value init, char** out, size_t* out_len) {
+  if (init.tag != INOX_TAG_OBJECT || init.as.ref == 0 || out == 0 || out_len == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* object = (ccjs_object*)init.as.ref;
-  char* query = ccjs_url_alloc(allocator, 0);
+  inox_object* object = (inox_object*)init.as.ref;
+  char* query = inox_url_alloc(allocator, 0);
 
   if (query == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t query_len = 0;
-  ccjs_status status = CCJS_OK;
+  inox_status status = INOX_OK;
 
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
-    ccjs_value value = ccjs_undefined_value();
-    status = ccjs_object_get_known(init, index, &value);
+    inox_value value = inox_undefined_value();
+    status = inox_object_get_known(init, index, &value);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       break;
     }
 
     const char* value_bytes = 0;
     size_t value_len = 0;
-    status = ccjs_url_string(value, &value_bytes, &value_len);
+    status = inox_url_string(value, &value_bytes, &value_len);
 
-    if (status == CCJS_OK) {
+    if (status == INOX_OK) {
       const char* key = object->shape->fields[index].name == 0 ? "" : object->shape->fields[index].name;
-      status = ccjs_url_search_params_append_pair(allocator, &query, &query_len, key, strlen(key), value_bytes, value_len);
+      status = inox_url_search_params_append_pair(allocator, &query, &query_len, key, strlen(key), value_bytes, value_len);
     }
 
-    ccjs_release(value);
+    inox_release(value);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       break;
     }
   }
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     allocator->free(allocator->user, query, query_len + 1, _Alignof(char));
     return status;
   }
@@ -1127,11 +1127,11 @@ static ccjs_status ccjs_url_search_params_from_object(ccjs_allocator* allocator,
   *out = query;
   *out_len = query_len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_search_params_append_pair(
-  ccjs_allocator* allocator,
+static inox_status inox_url_search_params_append_pair(
+  inox_allocator* allocator,
   char** query,
   size_t* query_len,
   const char* name,
@@ -1141,17 +1141,17 @@ static ccjs_status ccjs_url_search_params_append_pair(
 ) {
   char* encoded_name = 0;
   size_t encoded_name_len = 0;
-  ccjs_status status = ccjs_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
+  inox_status status = inox_url_encode_query_component(allocator, name, name_len, &encoded_name, &encoded_name_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   char* encoded_value = 0;
   size_t encoded_value_len = 0;
-  status = ccjs_url_encode_query_component(allocator, value, value_len, &encoded_value, &encoded_value_len);
+  status = inox_url_encode_query_component(allocator, value, value_len, &encoded_value, &encoded_value_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
     return status;
   }
@@ -1159,12 +1159,12 @@ static ccjs_status ccjs_url_search_params_append_pair(
   size_t old_len = *query_len;
   size_t separator_len = old_len == 0 ? 0 : 1;
   size_t next_len = old_len + separator_len + encoded_name_len + 1 + encoded_value_len;
-  char* next = ccjs_url_alloc(allocator, next_len);
+  char* next = inox_url_alloc(allocator, next_len);
 
   if (next == 0) {
     allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
     allocator->free(allocator->user, encoded_value, encoded_value_len + 1, _Alignof(char));
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -1191,11 +1191,11 @@ static ccjs_status ccjs_url_search_params_append_pair(
   allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
   allocator->free(allocator->user, encoded_value, encoded_value_len + 1, _Alignof(char));
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_search_params_remove_name(
-  ccjs_allocator* allocator,
+static inox_status inox_url_search_params_remove_name(
+  inox_allocator* allocator,
   const char* query,
   size_t query_len,
   const char* encoded_name,
@@ -1204,10 +1204,10 @@ static ccjs_status ccjs_url_search_params_remove_name(
   size_t* out_len,
   int* removed
 ) {
-  char* next = ccjs_url_alloc(allocator, 0);
+  char* next = inox_url_alloc(allocator, 0);
 
   if (next == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t next_len = 0;
@@ -1237,11 +1237,11 @@ static ccjs_status ccjs_url_search_params_remove_name(
       size_t segment_len = pair_end - pair_start;
       size_t separator_len = next_len == 0 ? 0 : 1;
       size_t combined_len = next_len + separator_len + segment_len;
-      char* combined = ccjs_url_alloc(allocator, combined_len);
+      char* combined = inox_url_alloc(allocator, combined_len);
 
       if (combined == 0) {
         allocator->free(allocator->user, next, next_len + 1, _Alignof(char));
-        return CCJS_ERR_OOM;
+        return INOX_ERR_OOM;
       }
 
       size_t offset = 0;
@@ -1271,10 +1271,10 @@ static ccjs_status ccjs_url_search_params_remove_name(
     *removed = did_remove;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static int ccjs_url_search_params_has_encoded_name(
+static int inox_url_search_params_has_encoded_name(
   const char* query,
   size_t query_len,
   const char* encoded_name,
@@ -1320,8 +1320,8 @@ static int ccjs_url_search_params_has_encoded_name(
   return 0;
 }
 
-static ccjs_status ccjs_url_encode_query_component(
-  ccjs_allocator* allocator,
+static inox_status inox_url_encode_query_component(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
@@ -1331,13 +1331,13 @@ static ccjs_status ccjs_url_encode_query_component(
 
   for (size_t index = 0; index < len; index += 1) {
     unsigned char value = (unsigned char)bytes[index];
-    encoded_len += value == ' ' ? 1 : ccjs_url_should_escape_query_char(value) ? 3 : 1;
+    encoded_len += value == ' ' ? 1 : inox_url_should_escape_query_char(value) ? 3 : 1;
   }
 
-  char* encoded = ccjs_url_alloc(allocator, encoded_len);
+  char* encoded = inox_url_alloc(allocator, encoded_len);
 
   if (encoded == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -1347,8 +1347,8 @@ static ccjs_status ccjs_url_encode_query_component(
 
     if (value == ' ') {
       encoded[offset++] = '+';
-    } else if (ccjs_url_should_escape_query_char(value)) {
-      ccjs_url_write_hex(encoded + offset, value);
+    } else if (inox_url_should_escape_query_char(value)) {
+      inox_url_write_hex(encoded + offset, value);
       offset += 3;
     } else {
       encoded[offset++] = (char)value;
@@ -1358,20 +1358,20 @@ static ccjs_status ccjs_url_encode_query_component(
   *out = encoded;
   *out_len = offset;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_url_decode_query_component(
-  ccjs_allocator* allocator,
+static inox_status inox_url_decode_query_component(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 ) {
-  char* decoded = ccjs_url_alloc(allocator, len);
+  char* decoded = inox_url_alloc(allocator, len);
 
   if (decoded == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -1383,8 +1383,8 @@ static ccjs_status ccjs_url_decode_query_component(
     }
 
     if (bytes[index] == '%' && index + 2 < len) {
-      int high = ccjs_url_hex_value(bytes[index + 1]);
-      int low = ccjs_url_hex_value(bytes[index + 2]);
+      int high = inox_url_hex_value(bytes[index + 1]);
+      int low = inox_url_hex_value(bytes[index + 2]);
 
       if (high >= 0 && low >= 0) {
         decoded[offset++] = (char)((high << 4) | low);
@@ -1399,10 +1399,10 @@ static ccjs_status ccjs_url_decode_query_component(
   *out = decoded;
   *out_len = offset;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static char* ccjs_url_alloc(ccjs_allocator* allocator, size_t len) {
+static char* inox_url_alloc(inox_allocator* allocator, size_t len) {
   if (allocator == 0 || allocator->alloc == 0) {
     return 0;
   }
@@ -1416,7 +1416,7 @@ static char* ccjs_url_alloc(ccjs_allocator* allocator, size_t len) {
   return bytes;
 }
 
-static int ccjs_url_hex_value(char value) {
+static int inox_url_hex_value(char value) {
   if (value >= '0' && value <= '9') {
     return value - '0';
   }
@@ -1432,15 +1432,15 @@ static int ccjs_url_hex_value(char value) {
   return -1;
 }
 
-static int ccjs_url_should_escape_path_char(unsigned char value) {
+static int inox_url_should_escape_path_char(unsigned char value) {
   return !(isalnum(value) || value == '/' || value == '.' || value == '-' || value == '_' || value == '~');
 }
 
-static int ccjs_url_should_escape_query_char(unsigned char value) {
+static int inox_url_should_escape_query_char(unsigned char value) {
   return !(isalnum(value) || value == '*' || value == '-' || value == '.' || value == '_');
 }
 
-static void ccjs_url_write_hex(char* out, unsigned char value) {
+static void inox_url_write_hex(char* out, unsigned char value) {
   static const char* digits = "0123456789ABCDEF";
 
   out[0] = '%';

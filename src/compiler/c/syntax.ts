@@ -57,30 +57,30 @@ export function emitCOperator(operator: string): string {
 
 export function cUnsupportedExpressionCode(valueType: string): string {
   if (valueType === 'function') {
-    return 'CCJS_C_FUNCTION_VALUE'
+    return 'INOX_C_FUNCTION_VALUE'
   }
 
   if (valueType === 'optional') {
-    return 'CCJS_C_OPTIONAL_CHAINING'
+    return 'INOX_C_OPTIONAL_CHAINING'
   }
 
   if (valueType === 'class') {
-    return 'CCJS_C_CLASS'
+    return 'INOX_C_CLASS'
   }
 
   if (valueType === 'async' || valueType === 'promise') {
-    return 'CCJS_C_ASYNC'
+    return 'INOX_C_ASYNC'
   }
 
   if (valueType === 'js-global') {
-    return 'CCJS_C_JS_GLOBAL'
+    return 'INOX_C_JS_GLOBAL'
   }
 
   if (valueType === 'map' || valueType === 'set') {
-    return 'CCJS_C_COLLECTION'
+    return 'INOX_C_COLLECTION'
   }
 
-  return 'CCJS_C_UNSUPPORTED_EXPR'
+  return 'INOX_C_UNSUPPORTED_EXPR'
 }
 
 export function cUnsupportedVariableDeclarationCode(statement: AnyNode, valueType: string): string {
@@ -88,7 +88,7 @@ export function cUnsupportedVariableDeclarationCode(statement: AnyNode, valueTyp
   const init = declaration.init
 
   if (init != null && init.type === 'AwaitExpression') {
-    return 'CCJS_C_ASYNC'
+    return 'INOX_C_ASYNC'
   }
 
   return cUnsupportedExpressionCode(valueType)

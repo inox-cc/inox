@@ -156,30 +156,30 @@ function replaceNetKindSeparator(kind: string): string {
 
 export function emitNetHandlerHead(wrapper: CNetHandler): string {
   if (wrapper.kind === 'connection') {
-    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_server* ccjs_server, ccjs_net_socket* ccjs_socket)`
+    return `static inox_status ${wrapper.name}(void* user, inox_net_server* inox_server, inox_net_socket* inox_socket)`
   }
 
   if (wrapper.kind === 'socket-data') {
-    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket, const char* ccjs_bytes, size_t ccjs_len)`
+    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket, const char* inox_bytes, size_t inox_len)`
   }
 
   if (wrapper.kind === 'socket-write') {
-    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket, ccjs_status ccjs_write_status)`
+    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket, inox_status inox_write_status)`
   }
 
   if (wrapper.kind === 'socket-event') {
-    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket)`
+    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket)`
   }
 
   if (wrapper.kind === 'socket-error') {
-    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_socket* ccjs_socket, ccjs_status ccjs_error_status)`
+    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket, inox_status inox_error_status)`
   }
 
   if (wrapper.kind === 'error') {
-    return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_server* ccjs_server, ccjs_status ccjs_error_status)`
+    return `static inox_status ${wrapper.name}(void* user, inox_net_server* inox_server, inox_status inox_error_status)`
   }
 
-  return `static ccjs_status ${wrapper.name}(void* user, ccjs_net_server* ccjs_server)`
+  return `static inox_status ${wrapper.name}(void* user, inox_net_server* inox_server)`
 }
 
 export function emitNetHandlerDeclaration(
@@ -233,31 +233,31 @@ export function emitNetHandlerDeclaration(
   const lines = [`${emitNetHandlerHead(wrapper)} {`, '  (void)user;']
 
   if (wrapper.kind === 'connection' || wrapper.kind === 'event' || wrapper.kind === 'error') {
-    lines.push('  (void)ccjs_server;')
+    lines.push('  (void)inox_server;')
   }
 
   if (isSocketHandler && socketName == null) {
-    lines.push('  (void)ccjs_socket;')
+    lines.push('  (void)inox_socket;')
   }
 
   if (wrapper.kind === 'socket-data' && dataName == null) {
-    lines.push('  (void)ccjs_bytes;')
-    lines.push('  (void)ccjs_len;')
+    lines.push('  (void)inox_bytes;')
+    lines.push('  (void)inox_len;')
   }
 
   if (wrapper.kind === 'error' || wrapper.kind === 'socket-error') {
-    lines.push('  (void)ccjs_error_status;')
+    lines.push('  (void)inox_error_status;')
   }
 
   if (wrapper.kind === 'socket-write') {
-    lines.push('  (void)ccjs_write_status;')
+    lines.push('  (void)inox_write_status;')
   }
 
   for (const statement of body) {
     pushIndentedNetLines(lines, emitNetHandlerStatement(statement, netContext, context, deps))
   }
 
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -295,7 +295,7 @@ function emitNetHandlerStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_HANDLER',
+        'INOX_NET_HANDLER',
         'net event listeners in the C backend currently support only static string local declarations',
         statement.loc
       )
@@ -335,18 +335,18 @@ function emitNetHandlerStatement(
         const lines: string[] = []
 
         pushNetLines(lines, socketCall)
-        lines.push('return CCJS_OK;')
+        lines.push('return INOX_OK;')
 
         return lines
       }
     }
 
-    return ['return CCJS_OK;']
+    return ['return INOX_OK;']
   }
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_NET_HANDLER',
+      'INOX_NET_HANDLER',
       'this net event listener statement is not supported by the current C backend slice',
       statement.loc
     )
@@ -404,14 +404,14 @@ function emitNetHandlerSocketCallStatement(
 
     const body = emitNetBytesOperand(bodyArg, netContext, context, deps)
     const wrapper = findNetHandler(context, callback, 'socket-write')
-    let runtime = 'ccjs_net_socket_write'
+    let runtime = 'inox_net_socket_write'
 
     if (method === 'write' && wrapper != null) {
-      runtime = 'ccjs_net_socket_write_with_callback'
+      runtime = 'inox_net_socket_write_with_callback'
     } else if (method === 'end' && wrapper == null) {
-      runtime = 'ccjs_net_socket_end'
+      runtime = 'inox_net_socket_end'
     } else if (method === 'end') {
-      runtime = 'ccjs_net_socket_end_with_callback'
+      runtime = 'inox_net_socket_end_with_callback'
     }
 
     let callbackArgs = ''
@@ -423,22 +423,22 @@ function emitNetHandlerSocketCallStatement(
     const lines: string[] = []
 
     pushNetLines(lines, body.lines)
-    pushNetLines(lines, emitNetStatusCheck(`${runtime}(ccjs_socket, ${body.bytes}, ${body.length}${callbackArgs})`, context))
+    pushNetLines(lines, emitNetStatusCheck(`${runtime}(inox_socket, ${body.bytes}, ${body.length}${callbackArgs})`, context))
 
     return lines
   }
 
   if (method === 'destroy') {
-    return emitNetStatusCheck('ccjs_net_socket_destroy(ccjs_socket)', context)
+    return emitNetStatusCheck('inox_net_socket_destroy(inox_socket)', context)
   }
 
   if (method === 'close') {
-    return ['ccjs_net_socket_close(ccjs_socket);']
+    return ['inox_net_socket_close(inox_socket);']
   }
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_NET_HANDLER',
+      'INOX_NET_HANDLER',
       `socket.${method} is not supported inside net connection listeners by the current C backend slice`,
       netNodeLoc(callee)
     )
@@ -457,10 +457,10 @@ function emitNetHandlerConsoleLogStatement(
   }
 
   const callee = expression.callee
-  let stream = 'CCJS_CONSOLE_STDOUT'
+  let stream = 'INOX_CONSOLE_STDOUT'
 
   if (callee.property === 'warn' || callee.property === 'error') {
-    stream = 'CCJS_CONSOLE_STDERR'
+    stream = 'INOX_CONSOLE_STDERR'
   }
 
   let firstArg: AnyNode | null = null
@@ -477,11 +477,11 @@ function emitNetHandlerConsoleLogStatement(
     firstArg.path.length === 1 &&
     netReferenceName(firstArg) === netContext.dataName
   ) {
-    if (stream === 'CCJS_CONSOLE_STDOUT') {
-      return ['printf("%.*s\\n", (int)ccjs_len, ccjs_bytes);']
+    if (stream === 'INOX_CONSOLE_STDOUT') {
+      return ['printf("%.*s\\n", (int)inox_len, inox_bytes);']
     }
 
-    return [`if (ccjs_console_printf(${stream}, "%.*s\\n", (int)ccjs_len, ccjs_bytes) < 0) return CCJS_ERR_TYPE;`]
+    return [`if (inox_console_printf(${stream}, "%.*s\\n", (int)inox_len, inox_bytes) < 0) return INOX_ERR_TYPE;`]
   }
 
   return deps.emitConsoleLogStatement(callee.property, expression.args, context)
@@ -504,7 +504,7 @@ function emitNetHandlerServerCallStatement(expression: AnyNode, context: CFuncti
     return null
   }
 
-  return ['ccjs_net_server_close(ccjs_server);']
+  return ['inox_net_server_close(inox_server);']
 }
 
 export function emitNetSocketVariableDeclaration(
@@ -548,16 +548,16 @@ export function emitNetAddressVariableDeclaration(statement: AnyNode, context: C
     return null
   }
 
-  let runtime = 'ccjs_net_server_address'
+  let runtime = 'inox_net_server_address'
 
   if (context.variables.get(receiverName) === 'net-socket') {
-    runtime = 'ccjs_net_socket_address'
+    runtime = 'inox_net_socket_address'
   }
 
   context.variables.set(statement.name, 'net-address')
 
   return [
-    `ccjs_net_address ${statement.name};`,
+    `inox_net_address ${statement.name};`,
     emitStatusCheck(`${runtime}(${receiverName}, &${statement.name})`, context)
   ]
 }
@@ -570,7 +570,7 @@ export function emitNetAddressMemberVariableDeclaration(statement: AnyNode, cont
       context.variables.set(statement.name, 'string')
 
       return [
-        `ccjs_net_address ${member.tempName};`,
+        `inox_net_address ${member.tempName};`,
         emitStatusCheck(`${member.runtime}(${member.socketName}, &${member.tempName})`, context),
         `const char *${statement.name} = ${member.tempName}.${member.field};`
       ]
@@ -583,7 +583,7 @@ export function emitNetAddressMemberVariableDeclaration(statement: AnyNode, cont
     return [
       `double ${statement.name} = 0;`,
       '{',
-      `  ccjs_net_address ${member.tempName};`,
+      `  inox_net_address ${member.tempName};`,
       `  ${emitStatusCheck(statusCall, context)}`,
       `  ${statement.name} = (double)${member.tempName}.${member.field};`,
       '}'
@@ -602,14 +602,14 @@ export function emitNetNumberVariableDeclaration(statement: AnyNode, context: CF
 
   context.variables.set(statement.name, 'number')
 
-  const statusCall = `${counter.runtime}(${counter.socketName}, &ccjs_net_counter)`
+  const statusCall = `${counter.runtime}(${counter.socketName}, &inox_net_counter)`
 
   return [
     `double ${statement.name} = 0;`,
     '{',
-    `  size_t ccjs_net_counter = 0;`,
+    `  size_t inox_net_counter = 0;`,
     `  ${emitStatusCheck(statusCall, context)}`,
-    `  ${statement.name} = (double)ccjs_net_counter;`,
+    `  ${statement.name} = (double)inox_net_counter;`,
     '}'
   ]
 }
@@ -650,7 +650,7 @@ export function emitNetSocketCallStatement(
       return null
     }
 
-    return [emitStatusCheck(`ccjs_net_socket_destroy(${socketName})`, context)]
+    return [emitStatusCheck(`inox_net_socket_destroy(${socketName})`, context)]
   }
 
   if (isNetSocketMethodCall(expression, 'close', context)) {
@@ -658,7 +658,7 @@ export function emitNetSocketCallStatement(
       return null
     }
 
-    return [`ccjs_net_socket_close(${socketName});`]
+    return [`inox_net_socket_close(${socketName});`]
   }
 
   if (isNetSocketMethodCall(expression, 'setEncoding', context)) {
@@ -690,7 +690,7 @@ export function emitNetSocketCallStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SOCKET',
+        'INOX_NET_SOCKET',
         `socket.${property} is not supported by the current C net backend slice`,
         loc
       )
@@ -714,8 +714,8 @@ export function emitNetServerCallStatement(
     callee.property === 'listen' &&
     isNetCreateServerCall(callee.object, context)
   ) {
-    const serverName = nextCName(context, 'ccjs_net_server')
-    const lines = [`ccjs_net_server* ${serverName} = 0;`]
+    const serverName = nextCName(context, 'inox_net_server')
+    const lines = [`inox_net_server* ${serverName} = 0;`]
     registerEventLoop(context)
 
     pushNetLines(
@@ -775,7 +775,7 @@ export function emitNetServerCallStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SERVER',
+        'INOX_NET_SERVER',
         `server.${property} is not supported by the current C net backend slice`,
         loc
       )
@@ -825,14 +825,14 @@ function emitNetSocketConnectLines(
 
   if (portArg == null) {
     context.diagnostics.push(
-      diagnostic('CCJS_NET_SOCKET', 'net.connect in the C backend currently requires a port argument', expression.loc)
+      diagnostic('INOX_NET_SOCKET', 'net.connect in the C backend currently requires a port argument', expression.loc)
     )
   }
 
   if (callback != null && (callback.type !== 'ArrowFunctionExpression' || wrapper == null)) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SOCKET',
+        'INOX_NET_SOCKET',
         'net.connect callback in the C backend currently requires an inline listener',
         netNodeLoc(callback)
       )
@@ -852,19 +852,19 @@ function emitNetSocketConnectLines(
   const lines: string[] = []
 
   if (options == null || options.declare !== false) {
-    lines.push(`ccjs_net_socket* ${socketName} = 0;`)
+    lines.push(`inox_net_socket* ${socketName} = 0;`)
   }
 
   pushNetLines(lines, port.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_net_connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`,
+      `inox_net_connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`,
       context
     )
   )
 
   if (wrapper != null) {
-    lines.push(emitStatusCheck(`ccjs_net_socket_on_connect(${socketName}, ${wrapper.name}, 0)`, context))
+    lines.push(emitStatusCheck(`inox_net_socket_on_connect(${socketName}, ${wrapper.name}, 0)`, context))
   }
 
   return lines
@@ -896,7 +896,7 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
   if (kind === '') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SOCKET',
+        'INOX_NET_SOCKET',
         "socket.on in the C backend currently supports 'connect', 'ready', 'data', 'end', 'close', 'error' and 'drain'",
         netNodeLoc(eventArg)
       )
@@ -915,7 +915,7 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
   if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SOCKET',
+        'INOX_NET_SOCKET',
         `socket.on('${eventName}') in the C backend currently requires an inline listener`,
         netNodeLoc(listener)
       )
@@ -923,20 +923,20 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
     return []
   }
 
-  let runtime = 'ccjs_net_socket_on_drain'
+  let runtime = 'inox_net_socket_on_drain'
 
   if (eventName === 'connect') {
-    runtime = 'ccjs_net_socket_on_connect'
+    runtime = 'inox_net_socket_on_connect'
   } else if (eventName === 'ready') {
-    runtime = 'ccjs_net_socket_on_ready'
+    runtime = 'inox_net_socket_on_ready'
   } else if (eventName === 'data') {
-    runtime = 'ccjs_net_socket_on_data'
+    runtime = 'inox_net_socket_on_data'
   } else if (eventName === 'end') {
-    runtime = 'ccjs_net_socket_on_end'
+    runtime = 'inox_net_socket_on_end'
   } else if (eventName === 'close') {
-    runtime = 'ccjs_net_socket_on_close'
+    runtime = 'inox_net_socket_on_close'
   } else if (eventName === 'error') {
-    runtime = 'ccjs_net_socket_on_error'
+    runtime = 'inox_net_socket_on_error'
   }
 
   const lines = [emitStatusCheck(`${runtime}(${socketName}, ${wrapper.name}, 0)`, context)]
@@ -970,14 +970,14 @@ function emitNetSocketWriteLines(
 
   const body = emitNetBytesOperand(bodyArg, null, context, deps)
   const wrapper = findNetHandler(context, callback, 'socket-write')
-  let runtime = 'ccjs_net_socket_write'
+  let runtime = 'inox_net_socket_write'
 
   if (method === 'write' && wrapper != null) {
-    runtime = 'ccjs_net_socket_write_with_callback'
+    runtime = 'inox_net_socket_write_with_callback'
   } else if (method === 'end' && wrapper == null) {
-    runtime = 'ccjs_net_socket_end'
+    runtime = 'inox_net_socket_end'
   } else if (method === 'end') {
-    runtime = 'ccjs_net_socket_end_with_callback'
+    runtime = 'inox_net_socket_end_with_callback'
   }
 
   let callbackArgs = ''
@@ -989,7 +989,7 @@ function emitNetSocketWriteLines(
   if (callback != null && wrapper == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SOCKET',
+        'INOX_NET_SOCKET',
         `socket.${method} callback in the C backend currently requires an inline listener`,
         callback.loc
       )
@@ -1016,7 +1016,7 @@ function emitNetSocketSetEncodingLines(socketName: string, args: AnyNode[], cont
   if (value == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SOCKET',
+        'INOX_NET_SOCKET',
         'socket.setEncoding in the C backend currently requires a static string',
         netNodeLoc(firstArg)
       )
@@ -1026,7 +1026,7 @@ function emitNetSocketSetEncodingLines(socketName: string, args: AnyNode[], cont
 
   return [
     emitStatusCheck(
-      `ccjs_net_socket_set_encoding(${socketName}, ${cStringLiteral(value)}, ${utf8ByteLength(value)})`,
+      `inox_net_socket_set_encoding(${socketName}, ${cStringLiteral(value)}, ${utf8ByteLength(value)})`,
       context
     )
   ]
@@ -1062,7 +1062,7 @@ function emitNetSocketOptionCallStatement(
     const lines: string[] = []
 
     pushNetLines(lines, enabled.lines)
-    lines.push(emitStatusCheck(`ccjs_net_socket_set_no_delay(${socketName}, ${enabled.expression} ? 1 : 0)`, context))
+    lines.push(emitStatusCheck(`inox_net_socket_set_no_delay(${socketName}, ${enabled.expression} ? 1 : 0)`, context))
 
     return lines
   }
@@ -1091,7 +1091,7 @@ function emitNetSocketOptionCallStatement(
     pushNetLines(lines, delay.lines)
     lines.push(
       emitStatusCheck(
-        `ccjs_net_socket_set_keep_alive(${socketName}, ${enabled.expression} ? 1 : 0, (unsigned int)(${delay.expression}))`,
+        `inox_net_socket_set_keep_alive(${socketName}, ${enabled.expression} ? 1 : 0, (unsigned int)(${delay.expression}))`,
         context
       )
     )
@@ -1103,17 +1103,17 @@ function emitNetSocketOptionCallStatement(
     if (expression.args.length > 0) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_NET_SOCKET',
+          'INOX_NET_SOCKET',
           `socket.${method} in the C backend does not take arguments`,
           netNodeLoc(expression.args[0])
         )
       )
     }
 
-    let runtime = 'ccjs_net_socket_unref'
+    let runtime = 'inox_net_socket_unref'
 
     if (method === 'ref') {
-      runtime = 'ccjs_net_socket_ref'
+      runtime = 'inox_net_socket_ref'
     }
 
     return [emitStatusCheck(`${runtime}(${socketName})`, context)]
@@ -1129,7 +1129,7 @@ function emitNetSocketOptionCallStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SOCKET',
+        'INOX_NET_SOCKET',
         'socket.setTimeout is not supported by the current C net backend slice yet',
         loc
       )
@@ -1146,7 +1146,7 @@ function emitNetMaybeReadStartLines(socketName: string, context: CFunctionContex
   }
 
   context.netReadingSockets.add(socketName)
-  return [emitStatusCheck(`ccjs_net_socket_read_start(${socketName})`, context)]
+  return [emitStatusCheck(`inox_net_socket_read_start(${socketName})`, context)]
 }
 
 function emitNetServerCreateLines(
@@ -1161,7 +1161,7 @@ function emitNetServerCreateLines(
   if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SERVER',
+        'INOX_NET_SERVER',
         'net.createServer in the C backend currently requires an inline connection listener',
         netNodeLoc(listener)
       )
@@ -1171,7 +1171,7 @@ function emitNetServerCreateLines(
   const lines: string[] = []
 
   if (options == null || options.declare !== false) {
-    lines.push(`ccjs_net_server* ${serverName} = 0;`)
+    lines.push(`inox_net_server* ${serverName} = 0;`)
   }
 
   let wrapperName = '0'
@@ -1182,7 +1182,7 @@ function emitNetServerCreateLines(
 
   lines.push(
     emitStatusCheck(
-      `ccjs_net_server_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
+      `inox_net_server_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
       context
     )
   )
@@ -1222,7 +1222,7 @@ function emitNetServerListenLines(
   if (options != null && deps.findObjectLiteralPropertyValue(options, 'exclusive') != null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SERVER',
+        'INOX_NET_SERVER',
         'server.listen exclusive options are not supported by the current C net backend slice',
         options.loc
       )
@@ -1254,7 +1254,7 @@ function emitNetServerListenLines(
   pushNetLines(lines, backlog.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_net_server_listen(${serverName}, ${host}, (int)(${port.expression}), (int)(${backlog.expression}))`,
+      `inox_net_server_listen(${serverName}, ${host}, (int)(${port.expression}), (int)(${backlog.expression}))`,
       context
     )
   )
@@ -1289,7 +1289,7 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
   if (kind === '') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SERVER',
+        'INOX_NET_SERVER',
         "server.on in the C backend currently supports 'connection', 'listening', 'close' and 'error'",
         netNodeLoc(eventArg)
       )
@@ -1308,7 +1308,7 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
   if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SERVER',
+        'INOX_NET_SERVER',
         `server.on('${eventName}') in the C backend currently requires an inline listener`,
         netNodeLoc(listener)
       )
@@ -1316,14 +1316,14 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
     return []
   }
 
-  let runtime = 'ccjs_net_server_on_error'
+  let runtime = 'inox_net_server_on_error'
 
   if (eventName === 'connection') {
-    runtime = 'ccjs_net_server_on_connection'
+    runtime = 'inox_net_server_on_connection'
   } else if (eventName === 'listening') {
-    runtime = 'ccjs_net_server_on_listening'
+    runtime = 'inox_net_server_on_listening'
   } else if (eventName === 'close') {
-    runtime = 'ccjs_net_server_on_close'
+    runtime = 'inox_net_server_on_close'
   }
 
   return [emitStatusCheck(`${runtime}(${serverName}, ${wrapper.name}, 0)`, context)]
@@ -1337,11 +1337,11 @@ function emitNetServerCloseLines(
 ): string[] {
   if (args.length > 1) {
     context.diagnostics.push(
-      diagnostic('CCJS_NET_SERVER', 'server.close in the C backend supports only an optional callback', netNodeLoc(args[1]))
+      diagnostic('INOX_NET_SERVER', 'server.close in the C backend supports only an optional callback', netNodeLoc(args[1]))
     )
   }
 
-  const lines = [`ccjs_net_server_close(${serverName});`]
+  const lines = [`inox_net_server_close(${serverName});`]
   let callback: AnyNode | null = null
 
   if (args.length > 0) {
@@ -1365,7 +1365,7 @@ function emitNetZeroArgCallbackLines(
   if (callback.type !== 'ArrowFunctionExpression' || callback.params.length !== 0 || callback.async === true) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_NET_SERVER',
+        'INOX_NET_SERVER',
         'net server lifecycle callbacks in the C backend currently require a synchronous zero-argument arrow function',
         callback.loc
       )
@@ -1463,7 +1463,7 @@ function emitNetListenHostExpression(expression: AnyNode | null | undefined, con
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_NET_SERVER',
+      'INOX_NET_SERVER',
       'server.listen host in the C backend currently must be a string literal',
       expression.loc
     )
@@ -1502,8 +1502,8 @@ function emitNetBytesOperand(
   ) {
     return {
       lines: [],
-      bytes: 'ccjs_bytes',
-      length: 'ccjs_len'
+      bytes: 'inox_bytes',
+      length: 'inox_len'
     }
   }
 
@@ -1517,7 +1517,7 @@ function emitNetBytesOperand(
     }
   }
 
-  return deps.emitPreparedStringBytesOperand(expression, context, 'ccjs_net_string')
+  return deps.emitPreparedStringBytesOperand(expression, context, 'inox_net_string')
 }
 
 function emitNetStaticStringValue(
@@ -1556,9 +1556,9 @@ function emitNetStaticStringValue(
 }
 
 function emitNetStatusCheck(call: string, context: CFunctionContext): string[] {
-  const status = nextCName(context, 'ccjs_net_status')
+  const status = nextCName(context, 'inox_net_status')
 
-  return ['{', `  ccjs_status ${status} = ${call};`, `  if (${status} != CCJS_OK) return ${status};`, '}']
+  return ['{', `  inox_status ${status} = ${call};`, `  if (${status} != INOX_OK) return ${status};`, '}']
 }
 
 export function emitPreparedNetAddressPortExpression(
@@ -1670,10 +1670,10 @@ function resolveNetSocketAddressMember(
     return null
   }
 
-  let runtime = 'ccjs_net_socket_address'
+  let runtime = 'inox_net_socket_address'
 
   if (isRemote) {
-    runtime = 'ccjs_net_socket_remote_address'
+    runtime = 'inox_net_socket_remote_address'
   }
 
   let field: 'address' | 'port' = 'address'
@@ -1687,7 +1687,7 @@ function resolveNetSocketAddressMember(
   return {
     socketName,
     runtime: runtime,
-    tempName: nextCName(context, 'ccjs_net_address'),
+    tempName: nextCName(context, 'inox_net_address'),
     field: field,
     valueType: valueType
   }
@@ -1718,14 +1718,14 @@ function resolveNetSocketCounterMember(
   if (expression.property === 'bytesRead') {
     return {
       socketName,
-      runtime: 'ccjs_net_socket_get_bytes_read'
+      runtime: 'inox_net_socket_get_bytes_read'
     }
   }
 
   if (expression.property === 'bytesWritten') {
     return {
       socketName,
-      runtime: 'ccjs_net_socket_get_bytes_written'
+      runtime: 'inox_net_socket_get_bytes_written'
     }
   }
 
@@ -1946,7 +1946,7 @@ function registerNetHandler(
 
   handlers.set(`${kind}:${handlers.size}`, {
     kind: kind,
-    name: `ccjs_net_${cKind}_handler_${handlers.size}`,
+    name: `inox_net_${cKind}_handler_${handlers.size}`,
     expression: expression
   })
 }

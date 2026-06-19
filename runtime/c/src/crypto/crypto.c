@@ -1,22 +1,22 @@
-#include "ccjs/crypto.h"
+#include "inox/crypto.h"
 
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "ccjs/array.h"
-#include "ccjs/binary.h"
-#include "ccjs/string.h"
+#include "inox/array.h"
+#include "inox/binary.h"
+#include "inox/string.h"
 
-#if defined(CCJS_TLS_BACKEND_BORINGSSL) || defined(CCJS_TLS_BACKEND_OPENSSL)
+#if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
-#define CCJS_CRYPTO_HASH_HAS_EVP 1
+#define INOX_CRYPTO_HASH_HAS_EVP 1
 #else
-#define CCJS_CRYPTO_HASH_HAS_EVP 0
+#define INOX_CRYPTO_HASH_HAS_EVP 0
 #endif
 
-#if defined(CCJS_LOOP_BACKEND_LIBUV)
+#if defined(INOX_LOOP_BACKEND_LIBUV)
 #include <uv.h>
 #elif defined(_WIN32)
 #include <bcrypt.h>
@@ -28,177 +28,177 @@
 #include <unistd.h>
 #endif
 
-static ccjs_status ccjs_crypto_random_bytes_raw(uint8_t* out, size_t len);
-static int ccjs_crypto_number_to_size(ccjs_number value, size_t* out);
-static int ccjs_crypto_number_is_integer(ccjs_number value);
-static int ccjs_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t algorithm_len);
-static ccjs_status ccjs_crypto_hash_data(ccjs_value data, const uint8_t** bytes, size_t* len);
-static ccjs_status ccjs_crypto_hash_digest_raw(ccjs_crypto_hash* hash, uint8_t* digest, size_t* len);
-static ccjs_status ccjs_crypto_hmac_digest_raw(ccjs_crypto_hmac* hmac, uint8_t* digest, size_t* len);
-static char ccjs_crypto_hex_digit(uint8_t value);
+static inox_status inox_crypto_random_bytes_raw(uint8_t* out, size_t len);
+static int inox_crypto_number_to_size(inox_number value, size_t* out);
+static int inox_crypto_number_is_integer(inox_number value);
+static int inox_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t algorithm_len);
+static inox_status inox_crypto_hash_data(inox_value data, const uint8_t** bytes, size_t* len);
+static inox_status inox_crypto_hash_digest_raw(inox_crypto_hash* hash, uint8_t* digest, size_t* len);
+static inox_status inox_crypto_hmac_digest_raw(inox_crypto_hmac* hmac, uint8_t* digest, size_t* len);
+static char inox_crypto_hex_digit(uint8_t value);
 
-struct ccjs_crypto_hash {
-  ccjs_allocator* allocator;
-#if CCJS_CRYPTO_HASH_HAS_EVP
+struct inox_crypto_hash {
+  inox_allocator* allocator;
+#if INOX_CRYPTO_HASH_HAS_EVP
   EVP_MD_CTX* ctx;
 #endif
   int finalized;
 };
 
-struct ccjs_crypto_hmac {
-  ccjs_allocator* allocator;
-#if CCJS_CRYPTO_HASH_HAS_EVP
+struct inox_crypto_hmac {
+  inox_allocator* allocator;
+#if INOX_CRYPTO_HASH_HAS_EVP
   HMAC_CTX* ctx;
 #endif
   int finalized;
 };
 
-ccjs_status ccjs_crypto_get_hashes(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_crypto_get_hashes(inox_allocator* allocator, inox_value* out) {
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
-  ccjs_value hashes = ccjs_undefined_value();
-  ccjs_value sha256 = ccjs_undefined_value();
-  ccjs_status status = ccjs_array_new(allocator, 1, &hashes);
+#if INOX_CRYPTO_HASH_HAS_EVP
+  inox_value hashes = inox_undefined_value();
+  inox_value sha256 = inox_undefined_value();
+  inox_status status = inox_array_new(allocator, 1, &hashes);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_string_from_literal(allocator, "sha256", 6, &sha256);
+  status = inox_string_from_literal(allocator, "sha256", 6, &sha256);
 
-  if (status == CCJS_OK) {
-    status = ccjs_array_set(hashes, 0, sha256);
+  if (status == INOX_OK) {
+    status = inox_array_set(hashes, 0, sha256);
   }
 
-  ccjs_release(sha256);
+  inox_release(sha256);
 
-  if (status != CCJS_OK) {
-    ccjs_release(hashes);
+  if (status != INOX_OK) {
+    inox_release(hashes);
     return status;
   }
 
   *out = hashes;
 
-  return CCJS_OK;
+  return INOX_OK;
 #else
   (void)allocator;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_get_random_values(ccjs_value value) {
-  if (value.tag != CCJS_TAG_BYTES || value.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_crypto_get_random_values(inox_value value) {
+  if (value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_bytes* bytes = (ccjs_bytes*)value.as.ref;
+  inox_bytes* bytes = (inox_bytes*)value.as.ref;
 
-  return ccjs_crypto_random_bytes_raw(bytes->bytes, bytes->len);
+  return inox_crypto_random_bytes_raw(bytes->bytes, bytes->len);
 }
 
-ccjs_status ccjs_crypto_random_bytes(ccjs_allocator* allocator, ccjs_number size, ccjs_value* out) {
+inox_status inox_crypto_random_bytes(inox_allocator* allocator, inox_number size, inox_value* out) {
   size_t len = 0;
 
-  if (allocator == 0 || out == 0 || !ccjs_crypto_number_to_size(size, &len)) {
-    return CCJS_ERR_TYPE;
+  if (allocator == 0 || out == 0 || !inox_crypto_number_to_size(size, &len)) {
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-  ccjs_status status = ccjs_bytes_new(allocator, len, out);
+  inox_status status = inox_bytes_new(allocator, len, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_crypto_get_random_values(*out);
+  status = inox_crypto_get_random_values(*out);
 
-  if (status != CCJS_OK) {
-    ccjs_release(*out);
-    *out = ccjs_undefined_value();
+  if (status != INOX_OK) {
+    inox_release(*out);
+    *out = inox_undefined_value();
   }
 
   return status;
 }
 
-ccjs_status ccjs_crypto_random_fill(ccjs_value value, ccjs_number offset_value, ccjs_number size_value, int has_size) {
+inox_status inox_crypto_random_fill(inox_value value, inox_number offset_value, inox_number size_value, int has_size) {
   size_t offset = 0;
   size_t size = 0;
 
-  if (value.tag != CCJS_TAG_BYTES || value.as.ref == 0 || !ccjs_crypto_number_to_size(offset_value, &offset)) {
-    return CCJS_ERR_TYPE;
+  if (value.tag != INOX_TAG_BYTES || value.as.ref == 0 || !inox_crypto_number_to_size(offset_value, &offset)) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_bytes* bytes = (ccjs_bytes*)value.as.ref;
+  inox_bytes* bytes = (inox_bytes*)value.as.ref;
 
   if (offset > bytes->len) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
   if (has_size) {
-    if (!ccjs_crypto_number_to_size(size_value, &size)) {
-      return CCJS_ERR_TYPE;
+    if (!inox_crypto_number_to_size(size_value, &size)) {
+      return INOX_ERR_TYPE;
     }
   } else {
     size = bytes->len - offset;
   }
 
   if (size > bytes->len - offset) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-  return ccjs_crypto_random_bytes_raw(bytes->bytes + offset, size);
+  return inox_crypto_random_bytes_raw(bytes->bytes + offset, size);
 }
 
-ccjs_status ccjs_crypto_random_int(ccjs_number min, ccjs_number max, ccjs_number* out) {
-  if (out == 0 || !ccjs_crypto_number_is_integer(min) || !ccjs_crypto_number_is_integer(max) || !(max > min)) {
-    return CCJS_ERR_TYPE;
+inox_status inox_crypto_random_int(inox_number min, inox_number max, inox_number* out) {
+  if (out == 0 || !inox_crypto_number_is_integer(min) || !inox_crypto_number_is_integer(max) || !(max > min)) {
+    return INOX_ERR_TYPE;
   }
 
-  const ccjs_number range_double = max - min;
+  const inox_number range_double = max - min;
 
   if (range_double <= 0 || range_double > 281474976710656.0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   const uint64_t range = (uint64_t)range_double;
 
-  if (range == 0 || (ccjs_number)range != range_double) {
-    return CCJS_ERR_TYPE;
+  if (range == 0 || (inox_number)range != range_double) {
+    return INOX_ERR_TYPE;
   }
 
   const uint64_t threshold = (UINT64_C(0) - range) % range;
   uint64_t sample = 0;
 
   do {
-    ccjs_status status = ccjs_crypto_random_bytes_raw((uint8_t*)&sample, sizeof(sample));
+    inox_status status = inox_crypto_random_bytes_raw((uint8_t*)&sample, sizeof(sample));
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
   } while (sample < threshold);
 
-  *out = min + (ccjs_number)(sample % range);
+  *out = min + (inox_number)(sample % range);
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_crypto_random_uuid(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_crypto_random_uuid(inox_allocator* allocator, inox_value* out) {
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   uint8_t bytes[16];
-  ccjs_status status = ccjs_crypto_random_bytes_raw(bytes, sizeof(bytes));
+  inox_status status = inox_crypto_random_bytes_raw(bytes, sizeof(bytes));
 
-  if (status != CCJS_OK) {
-    *out = ccjs_undefined_value();
+  if (status != INOX_OK) {
+    *out = inox_undefined_value();
     return status;
   }
 
@@ -214,35 +214,35 @@ ccjs_status ccjs_crypto_random_uuid(ccjs_allocator* allocator, ccjs_value* out) 
       index += 1;
     }
 
-    uuid[index] = ccjs_crypto_hex_digit((uint8_t)(bytes[byte_index] >> 4));
-    uuid[index + 1] = ccjs_crypto_hex_digit((uint8_t)(bytes[byte_index] & 0x0fu));
+    uuid[index] = inox_crypto_hex_digit((uint8_t)(bytes[byte_index] >> 4));
+    uuid[index + 1] = inox_crypto_hex_digit((uint8_t)(bytes[byte_index] & 0x0fu));
     index += 2;
   }
 
-  return ccjs_string_from_literal(allocator, uuid, sizeof(uuid), out);
+  return inox_string_from_literal(allocator, uuid, sizeof(uuid), out);
 }
 
-ccjs_status ccjs_crypto_hash_create(
-  ccjs_allocator* allocator,
+inox_status inox_crypto_hash_create(
+  inox_allocator* allocator,
   const char* algorithm,
   size_t algorithm_len,
-  ccjs_crypto_hash** out
+  inox_crypto_hash** out
 ) {
   if (allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || algorithm == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
 
-  if (!ccjs_crypto_hash_algorithm_is_sha256(algorithm, algorithm_len)) {
-    return CCJS_ERR_UNSUPPORTED;
+  if (!inox_crypto_hash_algorithm_is_sha256(algorithm, algorithm_len)) {
+    return INOX_ERR_UNSUPPORTED;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
-  ccjs_crypto_hash* hash = allocator->alloc(allocator->user, sizeof(ccjs_crypto_hash), _Alignof(ccjs_crypto_hash));
+#if INOX_CRYPTO_HASH_HAS_EVP
+  inox_crypto_hash* hash = allocator->alloc(allocator->user, sizeof(inox_crypto_hash), _Alignof(inox_crypto_hash));
 
   if (hash == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   hash->allocator = allocator;
@@ -250,209 +250,209 @@ ccjs_status ccjs_crypto_hash_create(
   hash->finalized = 0;
 
   if (hash->ctx == 0) {
-    allocator->free(allocator->user, hash, sizeof(ccjs_crypto_hash), _Alignof(ccjs_crypto_hash));
-    return CCJS_ERR_OOM;
+    allocator->free(allocator->user, hash, sizeof(inox_crypto_hash), _Alignof(inox_crypto_hash));
+    return INOX_ERR_OOM;
   }
 
   if (EVP_DigestInit_ex(hash->ctx, EVP_sha256(), 0) != 1) {
-    ccjs_crypto_hash_free(hash);
-    return CCJS_ERR_UNSUPPORTED;
+    inox_crypto_hash_free(hash);
+    return INOX_ERR_UNSUPPORTED;
   }
 
   *out = hash;
 
-  return CCJS_OK;
+  return INOX_OK;
 #else
   (void)allocator;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_hash_update(ccjs_crypto_hash* hash, ccjs_value data) {
+inox_status inox_crypto_hash_update(inox_crypto_hash* hash, inox_value data) {
   if (hash == 0 || hash->finalized) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   const uint8_t* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_crypto_hash_data(data, &bytes, &len);
+  inox_status status = inox_crypto_hash_data(data, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  return EVP_DigestUpdate(hash->ctx, bytes, len) == 1 ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
+  return EVP_DigestUpdate(hash->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
 #else
   (void)data;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_hash_digest_bytes(ccjs_allocator* allocator, ccjs_crypto_hash* hash, ccjs_value* out) {
+inox_status inox_crypto_hash_digest_bytes(inox_allocator* allocator, inox_crypto_hash* hash, inox_value* out) {
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   size_t len = 0;
-  ccjs_status status = ccjs_crypto_hash_digest_raw(hash, digest, &len);
+  inox_status status = inox_crypto_hash_digest_raw(hash, digest, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  return ccjs_bytes_from_data(allocator, digest, len, out);
+  return inox_bytes_from_data(allocator, digest, len, out);
 #else
   (void)hash;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_hash_digest_hex(ccjs_allocator* allocator, ccjs_crypto_hash* hash, ccjs_value* out) {
+inox_status inox_crypto_hash_digest_hex(inox_allocator* allocator, inox_crypto_hash* hash, inox_value* out) {
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   char hex[EVP_MAX_MD_SIZE * 2];
   size_t len = 0;
-  ccjs_status status = ccjs_crypto_hash_digest_raw(hash, digest, &len);
+  inox_status status = inox_crypto_hash_digest_raw(hash, digest, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   for (size_t index = 0; index < len; index += 1) {
-    hex[index * 2] = ccjs_crypto_hex_digit((uint8_t)(digest[index] >> 4));
-    hex[index * 2 + 1] = ccjs_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
+    hex[index * 2] = inox_crypto_hex_digit((uint8_t)(digest[index] >> 4));
+    hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
   }
 
-  return ccjs_string_from_literal(allocator, hex, len * 2, out);
+  return inox_string_from_literal(allocator, hex, len * 2, out);
 #else
   (void)hash;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_hash_oneshot_bytes(
-  ccjs_allocator* allocator,
+inox_status inox_crypto_hash_oneshot_bytes(
+  inox_allocator* allocator,
   const char* algorithm,
   size_t algorithm_len,
-  ccjs_value data,
-  ccjs_value* out
+  inox_value data,
+  inox_value* out
 ) {
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-  ccjs_crypto_hash* hash = 0;
-  ccjs_status status = ccjs_crypto_hash_create(allocator, algorithm, algorithm_len, &hash);
+  inox_crypto_hash* hash = 0;
+  inox_status status = inox_crypto_hash_create(allocator, algorithm, algorithm_len, &hash);
 
-  if (status == CCJS_OK) {
-    status = ccjs_crypto_hash_update(hash, data);
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_update(hash, data);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_crypto_hash_digest_bytes(allocator, hash, out);
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_digest_bytes(allocator, hash, out);
   }
 
-  ccjs_crypto_hash_free(hash);
+  inox_crypto_hash_free(hash);
 
   return status;
 }
 
-ccjs_status ccjs_crypto_hash_oneshot_hex(
-  ccjs_allocator* allocator,
+inox_status inox_crypto_hash_oneshot_hex(
+  inox_allocator* allocator,
   const char* algorithm,
   size_t algorithm_len,
-  ccjs_value data,
-  ccjs_value* out
+  inox_value data,
+  inox_value* out
 ) {
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-  ccjs_crypto_hash* hash = 0;
-  ccjs_status status = ccjs_crypto_hash_create(allocator, algorithm, algorithm_len, &hash);
+  inox_crypto_hash* hash = 0;
+  inox_status status = inox_crypto_hash_create(allocator, algorithm, algorithm_len, &hash);
 
-  if (status == CCJS_OK) {
-    status = ccjs_crypto_hash_update(hash, data);
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_update(hash, data);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_crypto_hash_digest_hex(allocator, hash, out);
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_digest_hex(allocator, hash, out);
   }
 
-  ccjs_crypto_hash_free(hash);
+  inox_crypto_hash_free(hash);
 
   return status;
 }
 
-void ccjs_crypto_hash_free(ccjs_crypto_hash* hash) {
+void inox_crypto_hash_free(inox_crypto_hash* hash) {
   if (hash == 0) {
     return;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   if (hash->ctx != 0) {
     EVP_MD_CTX_free(hash->ctx);
   }
 #endif
 
   if (hash->allocator != 0 && hash->allocator->free != 0) {
-    hash->allocator->free(hash->allocator->user, hash, sizeof(ccjs_crypto_hash), _Alignof(ccjs_crypto_hash));
+    hash->allocator->free(hash->allocator->user, hash, sizeof(inox_crypto_hash), _Alignof(inox_crypto_hash));
   }
 }
 
-ccjs_status ccjs_crypto_hmac_create(
-  ccjs_allocator* allocator,
+inox_status inox_crypto_hmac_create(
+  inox_allocator* allocator,
   const char* algorithm,
   size_t algorithm_len,
-  ccjs_value key,
-  ccjs_crypto_hmac** out
+  inox_value key,
+  inox_crypto_hmac** out
 ) {
   if (allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || algorithm == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
 
-  if (!ccjs_crypto_hash_algorithm_is_sha256(algorithm, algorithm_len)) {
-    return CCJS_ERR_UNSUPPORTED;
+  if (!inox_crypto_hash_algorithm_is_sha256(algorithm, algorithm_len)) {
+    return INOX_ERR_UNSUPPORTED;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   const uint8_t* key_bytes = 0;
   size_t key_len = 0;
-  ccjs_status status = ccjs_crypto_hash_data(key, &key_bytes, &key_len);
+  inox_status status = inox_crypto_hash_data(key, &key_bytes, &key_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (key_len > (size_t)INT_MAX) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_crypto_hmac* hmac = allocator->alloc(allocator->user, sizeof(ccjs_crypto_hmac), _Alignof(ccjs_crypto_hmac));
+  inox_crypto_hmac* hmac = allocator->alloc(allocator->user, sizeof(inox_crypto_hmac), _Alignof(inox_crypto_hmac));
 
   if (hmac == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   hmac->allocator = allocator;
@@ -460,141 +460,141 @@ ccjs_status ccjs_crypto_hmac_create(
   hmac->finalized = 0;
 
   if (hmac->ctx == 0) {
-    allocator->free(allocator->user, hmac, sizeof(ccjs_crypto_hmac), _Alignof(ccjs_crypto_hmac));
-    return CCJS_ERR_OOM;
+    allocator->free(allocator->user, hmac, sizeof(inox_crypto_hmac), _Alignof(inox_crypto_hmac));
+    return INOX_ERR_OOM;
   }
 
   if (HMAC_Init_ex(hmac->ctx, key_bytes, (int)key_len, EVP_sha256(), 0) != 1) {
-    ccjs_crypto_hmac_free(hmac);
-    return CCJS_ERR_UNSUPPORTED;
+    inox_crypto_hmac_free(hmac);
+    return INOX_ERR_UNSUPPORTED;
   }
 
   *out = hmac;
 
-  return CCJS_OK;
+  return INOX_OK;
 #else
   (void)allocator;
   (void)key;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_hmac_update(ccjs_crypto_hmac* hmac, ccjs_value data) {
+inox_status inox_crypto_hmac_update(inox_crypto_hmac* hmac, inox_value data) {
   if (hmac == 0 || hmac->finalized) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   const uint8_t* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_crypto_hash_data(data, &bytes, &len);
+  inox_status status = inox_crypto_hash_data(data, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  return HMAC_Update(hmac->ctx, bytes, len) == 1 ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
+  return HMAC_Update(hmac->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
 #else
   (void)data;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_hmac_digest_bytes(ccjs_allocator* allocator, ccjs_crypto_hmac* hmac, ccjs_value* out) {
+inox_status inox_crypto_hmac_digest_bytes(inox_allocator* allocator, inox_crypto_hmac* hmac, inox_value* out) {
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   size_t len = 0;
-  ccjs_status status = ccjs_crypto_hmac_digest_raw(hmac, digest, &len);
+  inox_status status = inox_crypto_hmac_digest_raw(hmac, digest, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  return ccjs_bytes_from_data(allocator, digest, len, out);
+  return inox_bytes_from_data(allocator, digest, len, out);
 #else
   (void)hmac;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-ccjs_status ccjs_crypto_hmac_digest_hex(ccjs_allocator* allocator, ccjs_crypto_hmac* hmac, ccjs_value* out) {
+inox_status inox_crypto_hmac_digest_hex(inox_allocator* allocator, inox_crypto_hmac* hmac, inox_value* out) {
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   char hex[EVP_MAX_MD_SIZE * 2];
   size_t len = 0;
-  ccjs_status status = ccjs_crypto_hmac_digest_raw(hmac, digest, &len);
+  inox_status status = inox_crypto_hmac_digest_raw(hmac, digest, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   for (size_t index = 0; index < len; index += 1) {
-    hex[index * 2] = ccjs_crypto_hex_digit((uint8_t)(digest[index] >> 4));
-    hex[index * 2 + 1] = ccjs_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
+    hex[index * 2] = inox_crypto_hex_digit((uint8_t)(digest[index] >> 4));
+    hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
   }
 
-  return ccjs_string_from_literal(allocator, hex, len * 2, out);
+  return inox_string_from_literal(allocator, hex, len * 2, out);
 #else
   (void)hmac;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-void ccjs_crypto_hmac_free(ccjs_crypto_hmac* hmac) {
+void inox_crypto_hmac_free(inox_crypto_hmac* hmac) {
   if (hmac == 0) {
     return;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   if (hmac->ctx != 0) {
     HMAC_CTX_free(hmac->ctx);
   }
 #endif
 
   if (hmac->allocator != 0 && hmac->allocator->free != 0) {
-    hmac->allocator->free(hmac->allocator->user, hmac, sizeof(ccjs_crypto_hmac), _Alignof(ccjs_crypto_hmac));
+    hmac->allocator->free(hmac->allocator->user, hmac, sizeof(inox_crypto_hmac), _Alignof(inox_crypto_hmac));
   }
 }
 
-ccjs_status ccjs_crypto_timing_safe_equal(ccjs_value left, ccjs_value right, int* out) {
+inox_status inox_crypto_timing_safe_equal(inox_value left, inox_value right, int* out) {
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   const uint8_t* left_bytes = 0;
   const uint8_t* right_bytes = 0;
   size_t left_len = 0;
   size_t right_len = 0;
-  ccjs_status status = ccjs_crypto_hash_data(left, &left_bytes, &left_len);
+  inox_status status = inox_crypto_hash_data(left, &left_bytes, &left_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_crypto_hash_data(right, &right_bytes, &right_len);
+  status = inox_crypto_hash_data(right, &right_bytes, &right_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (left_len != right_len) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
   uint8_t diff = 0;
@@ -605,31 +605,31 @@ ccjs_status ccjs_crypto_timing_safe_equal(ccjs_value left, ccjs_value right, int
 
   *out = diff == 0 ? 1 : 0;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_crypto_random_bytes_raw(uint8_t* out, size_t len) {
+static inox_status inox_crypto_random_bytes_raw(uint8_t* out, size_t len) {
   if (out == 0 && len != 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (len == 0) {
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-#if defined(CCJS_LOOP_BACKEND_LIBUV)
-  return uv_random(0, 0, out, len, 0, 0) == 0 ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
+#if defined(INOX_LOOP_BACKEND_LIBUV)
+  return uv_random(0, 0, out, len, 0, 0) == 0 ? INOX_OK : INOX_ERR_UNSUPPORTED;
 #elif defined(_WIN32)
-  return BCryptGenRandom(0, out, (ULONG)len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0 ? CCJS_OK : CCJS_ERR_UNSUPPORTED;
+  return BCryptGenRandom(0, out, (ULONG)len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0 ? INOX_OK : INOX_ERR_UNSUPPORTED;
 #elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
   arc4random_buf(out, len);
 
-  return CCJS_OK;
+  return INOX_OK;
 #else
   int fd = open("/dev/urandom", O_RDONLY);
 
   if (fd < 0) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   size_t filled = 0;
@@ -639,7 +639,7 @@ static ccjs_status ccjs_crypto_random_bytes_raw(uint8_t* out, size_t len) {
 
     if (read_count <= 0) {
       close(fd);
-      return CCJS_ERR_UNSUPPORTED;
+      return INOX_ERR_UNSUPPORTED;
     }
 
     filled += (size_t)read_count;
@@ -647,18 +647,18 @@ static ccjs_status ccjs_crypto_random_bytes_raw(uint8_t* out, size_t len) {
 
   close(fd);
 
-  return CCJS_OK;
+  return INOX_OK;
 #endif
 }
 
-static int ccjs_crypto_number_to_size(ccjs_number value, size_t* out) {
-  if (out == 0 || !ccjs_crypto_number_is_integer(value) || value < 0 || value > (ccjs_number)SIZE_MAX) {
+static int inox_crypto_number_to_size(inox_number value, size_t* out) {
+  if (out == 0 || !inox_crypto_number_is_integer(value) || value < 0 || value > (inox_number)SIZE_MAX) {
     return 0;
   }
 
   size_t converted = (size_t)value;
 
-  if ((ccjs_number)converted != value) {
+  if ((inox_number)converted != value) {
     return 0;
   }
 
@@ -667,17 +667,17 @@ static int ccjs_crypto_number_to_size(ccjs_number value, size_t* out) {
   return 1;
 }
 
-static int ccjs_crypto_number_is_integer(ccjs_number value) {
+static int inox_crypto_number_is_integer(inox_number value) {
   if (value != value || value < -9007199254740991.0 || value > 9007199254740991.0) {
     return 0;
   }
 
   int64_t converted = (int64_t)value;
 
-  return (ccjs_number)converted == value;
+  return (inox_number)converted == value;
 }
 
-static int ccjs_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t algorithm_len) {
+static int inox_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t algorithm_len) {
   return algorithm_len == 6 &&
          algorithm[0] == 's' &&
          algorithm[1] == 'h' &&
@@ -687,50 +687,50 @@ static int ccjs_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t al
          algorithm[5] == '6';
 }
 
-static ccjs_status ccjs_crypto_hash_data(ccjs_value data, const uint8_t** bytes, size_t* len) {
+static inox_status inox_crypto_hash_data(inox_value data, const uint8_t** bytes, size_t* len) {
   if (bytes == 0 || len == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (data.tag == CCJS_TAG_STRING) {
+  if (data.tag == INOX_TAG_STRING) {
     if (data.as.ref == 0) {
-      return CCJS_ERR_TYPE;
+      return INOX_ERR_TYPE;
     }
 
-    ccjs_string* string = (ccjs_string*)data.as.ref;
+    inox_string* string = (inox_string*)data.as.ref;
 
     *bytes = (const uint8_t*)string->bytes;
     *len = string->len;
 
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  if (data.tag == CCJS_TAG_BYTES) {
+  if (data.tag == INOX_TAG_BYTES) {
     if (data.as.ref == 0) {
-      return CCJS_ERR_TYPE;
+      return INOX_ERR_TYPE;
     }
 
-    ccjs_bytes* buffer = (ccjs_bytes*)data.as.ref;
+    inox_bytes* buffer = (inox_bytes*)data.as.ref;
 
     *bytes = buffer->bytes;
     *len = buffer->len;
 
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  return CCJS_ERR_TYPE;
+  return INOX_ERR_TYPE;
 }
 
-static ccjs_status ccjs_crypto_hash_digest_raw(ccjs_crypto_hash* hash, uint8_t* digest, size_t* len) {
+static inox_status inox_crypto_hash_digest_raw(inox_crypto_hash* hash, uint8_t* digest, size_t* len) {
   if (hash == 0 || hash->finalized || digest == 0 || len == 0) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   unsigned int digest_len = 0;
 
   if (EVP_DigestFinal_ex(hash->ctx, digest, &digest_len) != 1) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   hash->finalized = 1;
@@ -742,26 +742,26 @@ static ccjs_status ccjs_crypto_hash_digest_raw(ccjs_crypto_hash* hash, uint8_t* 
 
   *len = (size_t)digest_len;
 
-  return CCJS_OK;
+  return INOX_OK;
 #else
   (void)hash;
   (void)digest;
   (void)len;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-static ccjs_status ccjs_crypto_hmac_digest_raw(ccjs_crypto_hmac* hmac, uint8_t* digest, size_t* len) {
+static inox_status inox_crypto_hmac_digest_raw(inox_crypto_hmac* hmac, uint8_t* digest, size_t* len) {
   if (hmac == 0 || hmac->finalized || digest == 0 || len == 0) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-#if CCJS_CRYPTO_HASH_HAS_EVP
+#if INOX_CRYPTO_HASH_HAS_EVP
   unsigned int digest_len = 0;
 
   if (HMAC_Final(hmac->ctx, digest, &digest_len) != 1) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   hmac->finalized = 1;
@@ -773,16 +773,16 @@ static ccjs_status ccjs_crypto_hmac_digest_raw(ccjs_crypto_hmac* hmac, uint8_t* 
 
   *len = (size_t)digest_len;
 
-  return CCJS_OK;
+  return INOX_OK;
 #else
   (void)hmac;
   (void)digest;
   (void)len;
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 #endif
 }
 
-static char ccjs_crypto_hex_digit(uint8_t value) {
+static char inox_crypto_hex_digit(uint8_t value) {
   return (char)(value < 10 ? ('0' + value) : ('a' + (value - 10)));
 }

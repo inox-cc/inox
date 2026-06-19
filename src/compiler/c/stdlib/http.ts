@@ -82,7 +82,7 @@ function pushIndentedHttpLines(target: string[], lines: string[]): void {
 }
 
 export function emitHttpHandlerHead(wrapper: CHttpHandler): string {
-  return `static ccjs_status ${wrapper.name}(void* user, const ccjs_http_request* ccjs_request, ccjs_http_response* ccjs_response)`
+  return `static inox_status ${wrapper.name}(void* user, const inox_http_request* inox_request, inox_http_response* inox_response)`
 }
 
 export function emitHttpHandlerDeclaration(
@@ -135,22 +135,22 @@ export function emitHttpHandlerDeclaration(
   const lines = [`${emitHttpHandlerHead(wrapper)} {`, '  (void)user;']
 
   if (requestName == null) {
-    lines.push('  (void)ccjs_request;')
+    lines.push('  (void)inox_request;')
   } else {
-    lines.push(`  const ccjs_http_request* ${requestName} = ccjs_request;`)
+    lines.push(`  const inox_http_request* ${requestName} = inox_request;`)
   }
 
   if (responseName == null) {
-    lines.push('  (void)ccjs_response;')
+    lines.push('  (void)inox_response;')
   } else {
-    lines.push(`  ccjs_http_response* ${responseName} = ccjs_response;`)
+    lines.push(`  inox_http_response* ${responseName} = inox_response;`)
   }
 
   for (const statement of body) {
     pushIndentedHttpLines(lines, emitHttpHandlerStatement(statement, httpContext, context, deps))
   }
 
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -206,7 +206,7 @@ function emitHttpHandlerStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_HANDLER',
+        'INOX_HTTP_HANDLER',
         'HTTP request listeners in the C backend currently support only static string local declarations',
         statement.loc
       )
@@ -233,7 +233,7 @@ function emitHttpHandlerStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_HANDLER',
+        'INOX_HTTP_HANDLER',
         'this HTTP request listener statement is not supported by the current C backend slice',
         statement.loc
       )
@@ -249,18 +249,18 @@ function emitHttpHandlerStatement(
         const lines: string[] = []
 
         pushHttpLines(lines, responseCall)
-        lines.push('return CCJS_OK;')
+        lines.push('return INOX_OK;')
 
         return lines
       }
     }
 
-    return ['return CCJS_OK;']
+    return ['return INOX_OK;']
   }
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_HTTP_HANDLER',
+      'INOX_HTTP_HANDLER',
       'this HTTP request listener statement is not supported by the current C backend slice',
       statement.loc
     )
@@ -284,7 +284,7 @@ function emitHttpResponseStatusAssignment(
 
   const status = emitHttpStatusCodeExpression(expression.value, context)
 
-  return emitHttpStatusCheck(`ccjs_http_response_set_status(${httpContext.responseName}, ${status})`, context)
+  return emitHttpStatusCheck(`inox_http_response_set_status(${httpContext.responseName}, ${status})`, context)
 }
 
 function emitHttpResponseCallStatement(
@@ -312,7 +312,7 @@ function emitHttpResponseCallStatement(
     pushHttpLines(
       lines,
       emitHttpStatusCheck(
-        `ccjs_http_response_set_header(${httpContext.responseName}, ${name.bytes}, ${name.length}, ${value.bytes}, ${value.length})`,
+        `inox_http_response_set_header(${httpContext.responseName}, ${name.bytes}, ${name.length}, ${value.bytes}, ${value.length})`,
         context
       )
     )
@@ -329,7 +329,7 @@ function emitHttpResponseCallStatement(
     pushHttpLines(
       lines,
       emitHttpStatusCheck(
-        `ccjs_http_response_write_head(${httpContext.responseName}, ${status}, ${headers.name}, ${headers.count})`,
+        `inox_http_response_write_head(${httpContext.responseName}, ${status}, ${headers.name}, ${headers.count})`,
         context
       )
     )
@@ -339,11 +339,11 @@ function emitHttpResponseCallStatement(
 
   if (method === 'write' || method === 'end') {
     const body = emitHttpStringBytesOperand(expression.args[0], httpContext, context)
-    let runtime = 'ccjs_http_response_end'
+    let runtime = 'inox_http_response_end'
     const lines: string[] = []
 
     if (method === 'write') {
-      runtime = 'ccjs_http_response_write'
+      runtime = 'inox_http_response_write'
     }
 
     pushHttpLines(lines, body.lines)
@@ -367,7 +367,7 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
   if (expression.type !== 'ObjectLiteral') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_HANDLER',
+        'INOX_HTTP_HANDLER',
         'HTTP response headers in the C backend must be an object literal',
         expression.loc
       )
@@ -388,9 +388,9 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
     }
   }
 
-  const name = nextCName(context, 'ccjs_http_headers')
+  const name = nextCName(context, 'inox_http_headers')
   const properties: HttpAstNode[] = expression.properties
-  const lines = [`ccjs_http_header ${name}[] = {`]
+  const lines = [`inox_http_header ${name}[] = {`]
   const staticContext: HttpStaticStringContext = {
     stringLocals: new Map()
   }
@@ -401,7 +401,7 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
     if (value == null) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_HTTP_HANDLER',
+          'INOX_HTTP_HANDLER',
           'HTTP response header values in the C backend must be static strings',
           property.loc
         )
@@ -431,7 +431,7 @@ function emitHttpConditionExpression(
   if (expression == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_HANDLER',
+        'INOX_HTTP_HANDLER',
         'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
         null
       )
@@ -465,7 +465,7 @@ function emitHttpConditionExpression(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_HTTP_HANDLER',
+      'INOX_HTTP_HANDLER',
       'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
       expression.loc
     )
@@ -506,10 +506,10 @@ function emitHttpRequestStringCompareExpression(
     return null
   }
 
-  let runtime = `ccjs_http_request_url_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
+  let runtime = `inox_http_request_url_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
 
   if (member === 'method') {
-    runtime = `ccjs_http_request_method_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
+    runtime = `inox_http_request_method_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
   }
 
   if (isHttpNegativeEqualityOperator(expression.operator)) {
@@ -562,7 +562,7 @@ function emitHttpStringBytesOperand(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_HTTP_HANDLER',
+      'INOX_HTTP_HANDLER',
       'HTTP response body expressions in the C backend currently support static strings, JSON.stringify(object literals), req.method and req.url',
       expression.loc
     )
@@ -724,7 +724,7 @@ function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, co
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_HTTP_HANDLER',
+      'INOX_HTTP_HANDLER',
       'HTTP status values in the C backend currently must be numeric literals',
       httpNodeLoc(expression)
     )
@@ -733,9 +733,9 @@ function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, co
 }
 
 function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] {
-  const status = nextCName(context, 'ccjs_http_status')
+  const status = nextCName(context, 'inox_http_status')
 
-  return ['{', `  ccjs_status ${status} = ${call};`, `  if (${status} != CCJS_OK) return ${status};`, '}']
+  return ['{', `  inox_status ${status} = ${call};`, `  if (${status} != INOX_OK) return ${status};`, '}']
 }
 
 function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
@@ -804,8 +804,8 @@ export function emitHttpServerCallStatement(
     callee.property === 'listen' &&
     isHttpCreateServerCall(callee.object, context)
   ) {
-    const serverName = nextCName(context, 'ccjs_http_server')
-    const lines = [`ccjs_http_server* ${serverName} = 0;`]
+    const serverName = nextCName(context, 'inox_http_server')
+    const lines = [`inox_http_server* ${serverName} = 0;`]
     registerEventLoop(context)
 
     pushHttpLines(
@@ -864,7 +864,7 @@ function emitHttpServerCreateLines(
   if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_SERVER',
+        'INOX_HTTP_SERVER',
         'http.createServer in the C backend currently requires an inline request listener',
         expression.loc
       )
@@ -874,7 +874,7 @@ function emitHttpServerCreateLines(
   const lines: string[] = []
 
   if (options == null || options.declare !== false) {
-    lines.push(`ccjs_http_server* ${serverName} = 0;`)
+    lines.push(`inox_http_server* ${serverName} = 0;`)
   }
 
   let wrapperName = '0'
@@ -885,7 +885,7 @@ function emitHttpServerCreateLines(
 
   lines.push(
     emitStatusCheck(
-      `ccjs_http_server_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
+      `inox_http_server_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
       context
     )
   )
@@ -901,7 +901,7 @@ function emitHttpServerListenLines(
 ): string[] {
   if (args.length < 1) {
     context.diagnostics.push(
-      diagnostic('CCJS_HTTP_SERVER', 'server.listen in the C backend currently requires a port argument')
+      diagnostic('INOX_HTTP_SERVER', 'server.listen in the C backend currently requires a port argument')
     )
 
     return []
@@ -924,7 +924,7 @@ function emitHttpServerListenLines(
   if (args.length > 3) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_SERVER',
+        'INOX_HTTP_SERVER',
         'server.listen in the C backend currently supports port, optional host and optional callback',
         httpNodeLoc(args[3])
       )
@@ -937,7 +937,7 @@ function emitHttpServerListenLines(
   const lines: string[] = []
 
   pushHttpLines(lines, port.lines)
-  lines.push(emitStatusCheck(`ccjs_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context))
+  lines.push(emitStatusCheck(`inox_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context))
   pushHttpLines(lines, emitHttpZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -953,7 +953,7 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
   if (eventArg == null || eventArg.type !== 'StringLiteral' || eventArg.value !== 'request') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_SERVER',
+        'INOX_HTTP_SERVER',
         "server.on in the C backend currently supports only the 'request' event",
         httpNodeLoc(eventArg)
       )
@@ -979,7 +979,7 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
   if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_SERVER',
+        'INOX_HTTP_SERVER',
         "server.on('request') in the C backend currently requires an inline request listener",
         httpNodeLoc(listener)
       )
@@ -987,7 +987,7 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     return []
   }
 
-  return [emitStatusCheck(`ccjs_http_server_on_request(${serverName}, ${wrapper.name}, 0)`, context)]
+  return [emitStatusCheck(`inox_http_server_on_request(${serverName}, ${wrapper.name}, 0)`, context)]
 }
 
 function emitHttpServerCloseLines(
@@ -999,14 +999,14 @@ function emitHttpServerCloseLines(
   if (args.length > 1) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_SERVER',
+        'INOX_HTTP_SERVER',
         'server.close in the C backend supports only an optional callback',
         httpNodeLoc(args[1])
       )
     )
   }
 
-  const lines = [`ccjs_http_server_close(${serverName});`]
+  const lines = [`inox_http_server_close(${serverName});`]
 
   pushHttpLines(lines, emitHttpZeroArgCallbackLines(args[0], context, deps))
 
@@ -1025,7 +1025,7 @@ function emitHttpZeroArgCallbackLines(
   if (callback.type !== 'ArrowFunctionExpression' || callback.params.length !== 0 || callback.async === true) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_HTTP_SERVER',
+        'INOX_HTTP_SERVER',
         'HTTP server lifecycle callbacks in the C backend currently require a synchronous zero-argument arrow function',
         callback.loc
       )
@@ -1063,7 +1063,7 @@ function emitHttpListenHostExpression(expression: AnyNode | null | undefined, co
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_HTTP_SERVER',
+      'INOX_HTTP_SERVER',
       'server.listen host in the C backend currently must be a string literal',
       expression.loc
     )
@@ -1182,7 +1182,7 @@ function registerHttpHandler(handlers: Map<string, CHttpHandler>, expression: An
     return
   }
 
-  const name = `ccjs_http_handler_${handlers.size}`
+  const name = `inox_http_handler_${handlers.size}`
   expression.httpHandlerName = name
 
   handlers.set(name, {

@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_REDECLARED_NAME
+// @diagnostic INOX_REDECLARED_NAME
 
 export function main(): void {
   const value = 1

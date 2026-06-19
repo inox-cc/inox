@@ -1,6 +1,5 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_NUMBER_EXPR
+// @expect pass
 
 const user = JSON.parse('{"name":"Ada"}')
 const text = JSON.stringify(user)

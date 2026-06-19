@@ -253,30 +253,30 @@ function isRuntimeReferenceEqualityType(valueType: string): boolean {
 
 function typeofRuntimeTagCheck(value: string, typeName: string): string | null {
   if (typeName === 'undefined') {
-    return `${value}.tag == CCJS_TAG_UNDEFINED`
+    return `${value}.tag == INOX_TAG_UNDEFINED`
   }
 
   if (typeName === 'object') {
     return (
-      `(${value}.tag == CCJS_TAG_NULL || ${value}.tag == CCJS_TAG_OBJECT || ${value}.tag == CCJS_TAG_ARRAY || ` +
-      `${value}.tag == CCJS_TAG_BYTES || ${value}.tag == CCJS_TAG_MAP || ${value}.tag == CCJS_TAG_SET)`
+      `(${value}.tag == INOX_TAG_NULL || ${value}.tag == INOX_TAG_OBJECT || ${value}.tag == INOX_TAG_ARRAY || ` +
+      `${value}.tag == INOX_TAG_BYTES || ${value}.tag == INOX_TAG_MAP || ${value}.tag == INOX_TAG_SET)`
     )
   }
 
   if (typeName === 'boolean') {
-    return `${value}.tag == CCJS_TAG_BOOL`
+    return `${value}.tag == INOX_TAG_BOOL`
   }
 
   if (typeName === 'number') {
-    return `${value}.tag == CCJS_TAG_NUMBER`
+    return `${value}.tag == INOX_TAG_NUMBER`
   }
 
   if (typeName === 'string') {
-    return `${value}.tag == CCJS_TAG_STRING`
+    return `${value}.tag == INOX_TAG_STRING`
   }
 
   if (typeName === 'function') {
-    return `${value}.tag == CCJS_TAG_FUNCTION`
+    return `${value}.tag == INOX_TAG_FUNCTION`
   }
 
   return null
@@ -364,10 +364,10 @@ function scalarRuntimeValueExpression(value: string, valueType: string): string 
 
 function boxedScalarRuntimeValueExpression(value: string, valueType: string): string {
   if (valueType === 'boolean') {
-    return `ccjs_bool_value((${value}) != 0)`
+    return `inox_bool_value((${value}) != 0)`
   }
 
-  return `ccjs_number_value(${value})`
+  return `inox_number_value(${value})`
 }
 
 function runtimeBoolValueExpression(value: boolean): string {
@@ -670,7 +670,7 @@ function objectShapeFieldAt(fields: CObjectShapeField[] | null | undefined, fiel
 
 function appendDefaultObjectFunctionFieldArgument(args: string[], field: CObjectShapeField): void {
   if (isRuntimeObjectFunctionField(field)) {
-    args.push('ccjs_null_value()')
+    args.push('inox_null_value()')
   } else {
     args.push('0')
   }
@@ -708,13 +708,13 @@ function emitObjectFunctionFieldArgument(
     if (field.optional === true) {
       return {
         lines: [],
-        expression: 'ccjs_null_value()'
+        expression: 'inox_null_value()'
       }
     }
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_FUNCTION_VALUE',
+        'INOX_C_FUNCTION_VALUE',
         `object function field ${field.name} is not available as a runtime C callback value`,
         source.loc
       )
@@ -722,7 +722,7 @@ function emitObjectFunctionFieldArgument(
 
     return {
       lines: [],
-      expression: 'ccjs_undefined_value()'
+      expression: 'inox_undefined_value()'
     }
   }
 
@@ -772,7 +772,7 @@ function emitObjectFunctionFieldArgument(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_C_FUNCTION_VALUE',
+      'INOX_C_FUNCTION_VALUE',
       `object function field ${field.name} is not available as a C function pointer`,
       source.loc
     )
@@ -1065,7 +1065,7 @@ function appendDefaultObjectShapeFunctionFieldArguments(
       }
 
       if (isRuntimeObjectFunctionField(field)) {
-        args.push('ccjs_null_value()')
+        args.push('inox_null_value()')
       } else {
         args.push('0')
       }
@@ -1412,17 +1412,17 @@ function emitRuntimeObjectFunctionFieldCall(
     args.push(value.expression)
   }
 
-  const out = nextCName(context, 'ccjs_callback_out')
+  const out = nextCName(context, 'inox_callback_out')
   registerOwnedValue(context, out)
   appendLines(lines, emitPrepareOwnedValueWrite(out))
 
   if (args.length === 0) {
-    lines.push(emitStatusCheck(`ccjs_callback_call(${callee.name}, 0, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_callback_call(${callee.name}, 0, 0, &${out})`, context))
   } else {
-    const argArray = nextCName(context, 'ccjs_callback_args')
+    const argArray = nextCName(context, 'inox_callback_args')
 
-    lines.push(`ccjs_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
-    lines.push(emitStatusCheck(`ccjs_callback_call(${callee.name}, ${argArray}, ${args.length}, &${out})`, context))
+    lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
+    lines.push(emitStatusCheck(`inox_callback_call(${callee.name}, ${argArray}, ${args.length}, &${out})`, context))
   }
 
   return {
@@ -1858,7 +1858,7 @@ function emitPreparedMathCallExpression(
 
   return {
     lines,
-    expression: `ccjs_math_${method}(${joinStrings(expressions, ', ')})`
+    expression: `inox_math_${method}(${joinStrings(expressions, ', ')})`
   }
 }
 
@@ -1969,11 +1969,11 @@ function appendPreparedCallArg(
 
 function emitDefaultOptionalArg(param: CFunctionParam): string {
   if (param.nullable === true && isRuntimeNullableType(param.valueType)) {
-    return 'ccjs_null_value()'
+    return 'inox_null_value()'
   }
 
   if (param.valueType === 'unknown' || isManagedRuntimeReturnType(param.valueType) || isOpaqueRuntimeValueType(param.valueType)) {
-    return 'ccjs_undefined_value()'
+    return 'inox_undefined_value()'
   }
 
   return '0'
@@ -2000,7 +2000,7 @@ function emitPreparedThrowingCallExpression(
   if (deps.currentErrorTarget(context) == null && !context.throwingFunction) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_THROW',
+        'INOX_C_THROW',
         'uncaught throwing function calls must be inside try/catch in the current C backend slice',
         expression.loc
       )
@@ -2008,7 +2008,7 @@ function emitPreparedThrowingCallExpression(
   }
 
   deps.registerErrorChannel(context)
-  appendLines(lines, emitPrepareOwnedValueWrite('ccjs_error'))
+  appendLines(lines, emitPrepareOwnedValueWrite('inox_error'))
 
   if (returnType !== 'void') {
     if (
@@ -2017,21 +2017,21 @@ function emitPreparedThrowingCallExpression(
       isOpaqueRuntimeValueType(returnType) ||
       (returnNullable && isNullableScalarType(returnType))
     ) {
-      result = nextCName(context, 'ccjs_call_result')
-      lines.push(`ccjs_value ${result} = ccjs_undefined_value();`)
+      result = nextCName(context, 'inox_call_result')
+      lines.push(`inox_value ${result} = inox_undefined_value();`)
     } else {
-      result = nextCName(context, 'ccjs_call_result')
+      result = nextCName(context, 'inox_call_result')
       lines.push(`double ${result} = 0;`)
     }
 
     callArgs.push(`&${result}`)
   }
 
-  callArgs.push('&ccjs_error')
+  callArgs.push('&inox_error')
 
-  const status = nextCName(context, 'ccjs_call_status')
+  const status = nextCName(context, 'inox_call_status')
 
-  lines.push(`ccjs_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')});`)
+  lines.push(`inox_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')});`)
   appendLines(lines, emitThrowingCallStatusCheck(status, context, deps))
 
   return {
@@ -2070,19 +2070,19 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
 
 function emitThrowingCallStatusCheck(status: string, context: CFunctionContext, deps: CCallExpressionDependencies): string[] {
   const target = deps.currentErrorTarget(context)
-  const lines = [`if (${status} == CCJS_ERR_THROW) {`, '  ccjs_error_active = 1;']
+  const lines = [`if (${status} == INOX_ERR_THROW) {`, '  inox_error_active = 1;']
 
   if (target != null) {
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
-    lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
-    lines.push('  goto ccjs_cleanup;')
+    lines.push('  inox_status_result = INOX_ERR_THROW;')
+    lines.push('  goto inox_cleanup;')
   } else {
     lines.push(`  ${emitFailureStatement(context)}`)
   }
 
   lines.push('}')
-  lines.push(`if (${status} != CCJS_OK) ${emitFailureStatement(context)}`)
+  lines.push(`if (${status} != INOX_OK) ${emitFailureStatement(context)}`)
 
   return lines
 }
@@ -2137,7 +2137,7 @@ export function emitCallee(callee: CValueNode, context: CFunctionContext): strin
   }
 
   context.diagnostics.push(
-    diagnostic('CCJS_C_CALL_EXPR', 'this call expression is not supported by the current C backend slice', callee.loc)
+    diagnostic('INOX_C_CALL_EXPR', 'this call expression is not supported by the current C backend slice', callee.loc)
   )
   return '_'
 }
@@ -2145,7 +2145,7 @@ export function emitCallee(callee: CValueNode, context: CFunctionContext): strin
 export function emitCExpression(expression: CValueNode, context: CFunctionContext, deps: CScalarExpressionDependencies): string {
   if (isNullishCoalescingExpression(expression)) {
     context.diagnostics.push(
-      diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
+      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
     )
     return '0'
   }
@@ -2159,7 +2159,7 @@ export function emitCExpression(expression: CValueNode, context: CFunctionContex
   if (valueType === 'function') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_FUNCTION_VALUE',
+        'INOX_C_FUNCTION_VALUE',
         'function values are not supported by the current C backend slice',
         expressionLocation(expression)
       )
@@ -2170,7 +2170,7 @@ export function emitCExpression(expression: CValueNode, context: CFunctionContex
   if (valueType === 'timer') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_TIMER_HANDLE',
+        'INOX_C_TIMER_HANDLE',
         'timer handles can only be stored or passed to clear timer functions in the current C backend slice',
         expressionLocation(expression)
       )
@@ -2181,7 +2181,7 @@ export function emitCExpression(expression: CValueNode, context: CFunctionContex
   if (valueType === 'crypto-hash') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_CRYPTO_HASH',
+        'INOX_C_CRYPTO_HASH',
         'crypto hash handles can only be stored or used through Hash.update() and Hash.digest() in the current C backend slice',
         expressionLocation(expression)
       )
@@ -2192,7 +2192,7 @@ export function emitCExpression(expression: CValueNode, context: CFunctionContex
   if (valueType === 'crypto-hmac') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_CRYPTO_HMAC',
+        'INOX_C_CRYPTO_HMAC',
         'crypto hmac handles can only be stored or used through Hmac.update() and Hmac.digest() in the current C backend slice',
         expressionLocation(expression)
       )
@@ -2203,7 +2203,7 @@ export function emitCExpression(expression: CValueNode, context: CFunctionContex
   if (valueType === 'optional') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_OPTIONAL_CHAINING',
+        'INOX_C_OPTIONAL_CHAINING',
         'optional chaining is not supported by the current C backend slice',
         expressionLocation(expression)
       )
@@ -2295,7 +2295,7 @@ export function emitPreparedNumberExpression(
   if (isNullableScalarRuntimeExpression(expression, context)) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_NULLISH',
+        'INOX_C_NULLISH',
         'nullable scalar values must be narrowed with ?? before scalar use in the current C backend slice',
         expression.loc
       )
@@ -2365,7 +2365,7 @@ export function emitPreparedNumberExpression(
     if (isNullishCoalescingExpression(expression)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_NULLISH',
+          'INOX_C_NULLISH',
           'nullish coalescing is not supported by the current C backend slice',
           expression.loc
         )
@@ -2462,7 +2462,7 @@ export function emitPreparedNumberExpression(
     if (leftType === 'string' || rightType === 'string') {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_STRING_EXPR',
+          'INOX_C_STRING_EXPR',
           'string binary expressions are not supported by the current C backend slice',
           expression.loc
         )
@@ -2603,9 +2603,9 @@ export function emitPreparedNumberExpression(
     const member = deps.resolveKnownObjectMember(expression, context)
 
     if (member != null && isNumberOrBooleanValueType(member.valueType)) {
-      const value = nextCName(context, 'ccjs_expr_value')
+      const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(member.objectName ?? '', context)
-      const getCall = `ccjs_object_get_known(${objectReference}, ${member.index}, &${value})`
+      const getCall = `inox_object_get_known(${objectReference}, ${member.index}, &${value})`
 
       return emitPreparedRuntimeNumberValue(member.valueType, value, getCall, context)
     }
@@ -2624,8 +2624,8 @@ export function emitPreparedNumberExpression(
     const element = deps.resolveKnownArrayIndex(expression, context)
 
     if (element != null && isNumberOrBooleanValueType(element.valueType)) {
-      const value = nextCName(context, 'ccjs_expr_value')
-      const getCall = `ccjs_array_get(${element.arrayName}, ${element.index}, &${value})`
+      const value = nextCName(context, 'inox_expr_value')
+      const getCall = `inox_array_get(${element.arrayName}, ${element.index}, &${value})`
 
       return emitPreparedRuntimeNumberValue(element.valueType, value, getCall, context)
     }
@@ -2633,9 +2633,9 @@ export function emitPreparedNumberExpression(
     const field = deps.resolveKnownObjectIndex(expression, context)
 
     if (field != null && isNumberOrBooleanValueType(field.valueType)) {
-      const value = nextCName(context, 'ccjs_expr_value')
+      const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(field.objectName ?? '', context)
-      const getCall = `ccjs_object_get(${objectReference}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
+      const getCall = `inox_object_get(${objectReference}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
 
       return emitPreparedRuntimeNumberValue(field.valueType, value, getCall, context)
     }
@@ -2652,7 +2652,7 @@ export function emitPreparedNumberExpression(
     const runtimeElement = deps.resolveRuntimeArrayIndex(expression, context)
 
     if (runtimeElement != null && isNumberOrBooleanValueType(runtimeElement.valueType)) {
-      const value = deps.emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'ccjs_expr_value')
+      const value = deps.emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_expr_value')
 
       return {
         lines: value.lines,
@@ -2686,7 +2686,7 @@ export function emitPreparedNumberExpression(
   if (isOptionalChainExpression(expression)) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_OPTIONAL_CHAINING',
+        'INOX_C_OPTIONAL_CHAINING',
         'optional chaining is not supported by the current C backend slice',
         expressionLocation(expression)
       )
@@ -2699,7 +2699,7 @@ export function emitPreparedNumberExpression(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_C_NUMBER_EXPR',
+      'INOX_C_NUMBER_EXPR',
       'this number expression is not supported by the current C backend slice',
       expressionLocation(expression)
     )
@@ -2734,7 +2734,7 @@ export function emitPreparedRuntimeTruthinessExpression(
 
     return {
       lines: value.lines,
-      expression: `ccjs_value_truthy(${value.expression}) ? 1 : 0`
+      expression: `inox_value_truthy(${value.expression}) ? 1 : 0`
     }
   }
 
@@ -2746,7 +2746,7 @@ export function emitPreparedRuntimeTruthinessExpression(
 
   return {
     lines: value.lines,
-    expression: `ccjs_value_truthy(${value.expression}) ? 1 : 0`
+    expression: `inox_value_truthy(${value.expression}) ? 1 : 0`
   }
 }
 
@@ -2777,20 +2777,20 @@ function emitPreparedOptionalRuntimeObjectFieldValueExpression(
   }
 
   const object = deps.emitCValueExpression(objectExpression, context)
-  const value = nextCName(context, 'ccjs_value')
-  const status = nextCName(context, 'ccjs_field_status')
+  const value = nextCName(context, 'inox_value')
+  const status = nextCName(context, 'inox_field_status')
   const lines: string[] = []
 
   registerOwnedValue(context, value)
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(value))
   lines.push(
-    `ccjs_status ${status} = ccjs_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value});`
+    `inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value});`
   )
-  lines.push(`if (${status} == CCJS_ERR_FIELD) {`)
-  lines.push(`  ${value} = ccjs_undefined_value();`)
+  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`  ${value} = inox_undefined_value();`)
   lines.push('}')
-  lines.push(`if (${status} != CCJS_OK && ${status} != CCJS_ERR_FIELD) ${emitFailureStatement(context)}`)
+  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
 
   return {
     lines,
@@ -2920,17 +2920,17 @@ function emitPreparedRuntimePreparedValueStringLiteralCompare(
   operator: string,
   context: CFunctionContext
 ): PreparedExpression {
-  const temp = nextCName(context, 'ccjs_string_cmp_value')
+  const temp = nextCName(context, 'inox_string_cmp_value')
   const literalLength = utf8ByteLength(literal)
-  const string = `((ccjs_string*)${temp}.as.ref)`
+  const string = `((inox_string*)${temp}.as.ref)`
   const equals =
-    `(${temp}.tag == CCJS_TAG_STRING && ${temp}.as.ref != 0 && ` +
+    `(${temp}.tag == INOX_TAG_STRING && ${temp}.as.ref != 0 && ` +
     `${string}->len == ${literalLength} && memcmp(${string}->bytes, ${cStringLiteral(literal)}, ${literalLength}) == 0)`
   const lines: string[] = []
   let resultExpression = `(!${equals})`
 
   appendLines(lines, value.lines)
-  lines.push(`ccjs_value ${temp} = ${value.expression};`)
+  lines.push(`inox_value ${temp} = ${value.expression};`)
 
   if (operator === '===' || operator === '==') {
     resultExpression = equals
@@ -2967,7 +2967,7 @@ function emitPreparedLogicalExpression(
 
   restoreNullableScalarNarrowing(context, snapshot)
 
-  const temp = nextCName(context, 'ccjs_logical')
+  const temp = nextCName(context, 'inox_logical')
 
   if (expression.operator === '&&') {
     const lines: string[] = []
@@ -3015,14 +3015,14 @@ function emitPreparedScalarNullishCoalescingExpression(
   const expectedTag = cRuntimeValueTag(valueType)
   const left = deps.emitCValueExpression(expression.left, context)
   const right = emitPreparedNumberExpression(expression.right, context, deps)
-  const temp = nextCName(context, 'ccjs_nullable_scalar')
+  const temp = nextCName(context, 'inox_nullable_scalar')
   const leftValue = scalarRuntimeValueExpression(left.expression, valueType)
   const leftTypeCheck = emitRuntimeTypeCheck(`${left.expression}.tag != ${expectedTag}`, context)
   const lines: string[] = []
 
   appendLines(lines, left.lines)
   lines.push(`double ${temp} = 0;`)
-  lines.push(`if (${left.expression}.tag == CCJS_TAG_NULL) {`)
+  lines.push(`if (${left.expression}.tag == INOX_TAG_NULL) {`)
   appendPrefixedLines(lines, right.lines, '  ')
   lines.push(`  ${temp} = ${right.expression};`)
   lines.push('} else {')
@@ -3058,7 +3058,7 @@ function emitPreparedNullableNullCompareExpression(
   }
 
   const value = deps.emitCValueExpression(nullable, context)
-  const equals = `(${value.expression}.tag == CCJS_TAG_NULL || ${value.expression}.tag == CCJS_TAG_UNDEFINED)`
+  const equals = `(${value.expression}.tag == INOX_TAG_NULL || ${value.expression}.tag == INOX_TAG_UNDEFINED)`
   let result = `(!${equals})`
 
   if (isPositiveEqualityOperator(expression.operator)) {
@@ -3104,7 +3104,7 @@ function emitPreparedNullableBooleanLiteralCompareExpression(
   }
 
   const equals =
-    `(${value.expression}.tag == CCJS_TAG_BOOL && (${value.expression}.as.boolean ? 1 : 0) == ${expected})`
+    `(${value.expression}.tag == INOX_TAG_BOOL && (${value.expression}.as.boolean ? 1 : 0) == ${expected})`
   let result = equals
 
   if (!isPositiveEqualityOperator(expression.operator)) {
@@ -3209,7 +3209,7 @@ function emitPreparedDynamicObjectNullCompareExpression(
     return null
   }
 
-  const equals = `(${value.expression}.tag == CCJS_TAG_NULL || ${value.expression}.tag == CCJS_TAG_UNDEFINED)`
+  const equals = `(${value.expression}.tag == INOX_TAG_NULL || ${value.expression}.tag == INOX_TAG_UNDEFINED)`
   let result = `(!${equals})`
 
   if (isPositiveEqualityOperator(expression.operator)) {
@@ -3250,7 +3250,7 @@ function emitPreparedDynamicObjectBooleanLiteralCompareExpression(
   }
 
   const expected = runtimeBoolValueExpression(literal)
-  const equals = `(${value.expression}.tag == CCJS_TAG_BOOL && ${value.expression}.as.boolean == ${expected})`
+  const equals = `(${value.expression}.tag == INOX_TAG_BOOL && ${value.expression}.as.boolean == ${expected})`
   let result = `(!${equals})`
 
   if (isPositiveEqualityOperator(expression.operator)) {
@@ -3414,21 +3414,21 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
     return null
   }
 
-  const value = nextCName(context, 'ccjs_value')
-  const status = nextCName(context, 'ccjs_field_status')
+  const value = nextCName(context, 'inox_value')
+  const status = nextCName(context, 'inox_field_status')
   const lines: string[] = []
 
   registerOwnedValue(context, value)
   appendLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != CCJS_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
   appendLines(lines, emitPrepareOwnedValueWrite(value))
   lines.push(
-    `ccjs_status ${status} = ccjs_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
+    `inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
   )
-  lines.push(`if (${status} == CCJS_ERR_FIELD) {`)
-  lines.push(`  ${value} = ccjs_undefined_value();`)
+  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`  ${value} = inox_undefined_value();`)
   lines.push('}')
-  lines.push(`if (${status} != CCJS_OK && ${status} != CCJS_ERR_FIELD) ${emitFailureStatement(context)}`)
+  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
 
   return {
     lines,
@@ -3458,9 +3458,9 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
     return null
   }
 
-  const array = nextCName(context, 'ccjs_array_value')
-  const value = nextCName(context, 'ccjs_value')
-  const status = nextCName(context, 'ccjs_array_status')
+  const array = nextCName(context, 'inox_array_value')
+  const value = nextCName(context, 'inox_value')
+  const status = nextCName(context, 'inox_array_status')
   const lines: string[] = []
 
   registerOwnedValue(context, array)
@@ -3470,17 +3470,17 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
   appendLines(lines, emitPrepareOwnedValueWrite(array))
   lines.push(
     emitStatusCheck(
-      `ccjs_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${array})`,
+      `inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${array})`,
       context
     )
   )
-  lines.push(emitRuntimeTypeCheck(`${array}.tag != CCJS_TAG_ARRAY || ${array}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${array}.tag != INOX_TAG_ARRAY || ${array}.as.ref == 0`, context))
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(`ccjs_status ${status} = ccjs_array_get(${array}, ${index.expression}, &${value});`)
-  lines.push(`if (${status} == CCJS_ERR_FIELD) {`)
-  lines.push(`  ${value} = ccjs_undefined_value();`)
+  lines.push(`inox_status ${status} = inox_array_get(${array}, ${index.expression}, &${value});`)
+  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`  ${value} = inox_undefined_value();`)
   lines.push('}')
-  lines.push(`if (${status} != CCJS_OK && ${status} != CCJS_ERR_FIELD) ${emitFailureStatement(context)}`)
+  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
 
   return {
     lines,
@@ -3694,7 +3694,7 @@ function emitPreparedNumericCastExpression(
   }
 
   if (cast === 'f32') {
-    const result = nextCName(context, 'ccjs_f32')
+    const result = nextCName(context, 'inox_f32')
     const lines: string[] = []
 
     appendLines(lines, value.lines)
@@ -3712,9 +3712,9 @@ function emitPreparedNumericCastExpression(
     return null
   }
 
-  const raw = nextCName(context, `ccjs_${cast}_value`)
-  const truncated = nextCName(context, `ccjs_${cast}_truncated`)
-  const result = nextCName(context, `ccjs_${cast}`)
+  const raw = nextCName(context, `inox_${cast}_value`)
+  const truncated = nextCName(context, `inox_${cast}_truncated`)
+  const result = nextCName(context, `inox_${cast}`)
   const lines: string[] = []
 
   appendLines(lines, value.lines)
@@ -3800,7 +3800,7 @@ export function emitPreparedUpdateExpression(
     }
   }
 
-  const previous = nextCName(context, 'ccjs_update_previous')
+  const previous = nextCName(context, 'inox_update_previous')
 
   return {
     lines: [`double ${previous} = ${reference};`, `${reference}${operator};`],
@@ -4130,14 +4130,14 @@ export function emitCValueExpression(
   }
 
   if (expression.type === 'StringLiteral') {
-    const temp = nextCName(context, 'ccjs_value')
+    const temp = nextCName(context, 'inox_value')
     registerOwnedValue(context, temp)
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
       emitStatusCheck(
-        `ccjs_string_from_literal(&ccjs_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
+        `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
         context
       )
     )
@@ -4151,21 +4151,21 @@ export function emitCValueExpression(
   if (expression.type === 'NumberLiteral') {
     return {
       lines: [],
-      expression: `ccjs_number_value(${expression.value})`
+      expression: `inox_number_value(${expression.value})`
     }
   }
 
   if (expression.type === 'BooleanLiteral') {
     return {
       lines: [],
-      expression: `ccjs_bool_value(${runtimeBoolValueExpression(expression.value)})`
+      expression: `inox_bool_value(${runtimeBoolValueExpression(expression.value)})`
     }
   }
 
   if (expression.type === 'NullLiteral') {
     return {
       lines: [],
-      expression: 'ccjs_null_value()'
+      expression: 'inox_null_value()'
     }
   }
 
@@ -4189,10 +4189,10 @@ export function emitCValueExpression(
     }
 
     if (deps.isBoxedRuntimeValueName(name, context)) {
-      let tag = 'CCJS_TAG_OBJECT'
+      let tag = 'INOX_TAG_OBJECT'
 
       if (valueType === 'string') {
-        tag = 'CCJS_TAG_STRING'
+        tag = 'INOX_TAG_STRING'
       }
 
       return {
@@ -4202,25 +4202,25 @@ export function emitCValueExpression(
     }
 
     if (valueType === 'string' && context.runtimeStrings.has(name)) {
-      const temp = nextCName(context, 'ccjs_value')
+      const temp = nextCName(context, 'inox_value')
 
       return {
         lines: [
-          `ccjs_value ${temp};`,
-          `${temp}.tag = CCJS_TAG_STRING;`,
-          `${temp}.as.ref = (ccjs_ref*)&${name}->header;`
+          `inox_value ${temp};`,
+          `${temp}.tag = INOX_TAG_STRING;`,
+          `${temp}.as.ref = (inox_ref*)&${name}->header;`
         ],
         expression: temp
       }
     }
 
     if (valueType === 'string') {
-      const temp = nextCName(context, 'ccjs_value')
+      const temp = nextCName(context, 'inox_value')
       const lines: string[] = []
 
       registerOwnedValue(context, temp)
       appendLines(lines, emitPrepareOwnedValueWrite(temp))
-      lines.push(emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, ${name}, strlen(${name}), &${temp})`, context))
+      lines.push(emitStatusCheck(`inox_string_from_literal(&inox_default_allocator, ${name}, strlen(${name}), &${temp})`, context))
 
       return {
         lines,
@@ -4256,14 +4256,14 @@ export function emitCValueExpression(
     if (valueType === 'number') {
       return {
         lines: [],
-        expression: `ccjs_number_value(${name})`
+        expression: `inox_number_value(${name})`
       }
     }
 
     if (valueType === 'boolean') {
       return {
         lines: [],
-        expression: `ccjs_bool_value(${name})`
+        expression: `inox_bool_value(${name})`
       }
     }
   }
@@ -4376,7 +4376,7 @@ export function emitCValueExpression(
       return classMethodCall
     }
 
-    const temp = nextCName(context, 'ccjs_value')
+    const temp = nextCName(context, 'inox_value')
     const tag = cRuntimeValueTag(valueType)
     registerOwnedValue(context, temp)
     const call = deps.emitPreparedCallExpression(expression, context)
@@ -4442,7 +4442,7 @@ function emitUnsupportedCValueExpression(
 
   return {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 }
 

@@ -13,6 +13,6 @@ const wall = Date.now()
 const monotonic = performance.now()
 const timeout = setTimeout(onTimer, 1)
 
-fs.promises.writeFile('/private/tmp/ccjs-embedded-profile.txt', 'saved')
+fs.promises.writeFile('/private/tmp/inox-embedded-profile.txt', 'saved')
 clearTimeout(timeout)
 console.log('ok', wall, monotonic)

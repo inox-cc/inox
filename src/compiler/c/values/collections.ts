@@ -84,7 +84,7 @@ function emitFallbackCollectionValueExpression(
 ): PreparedExpression {
   return {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 }
 
@@ -130,7 +130,7 @@ function emitCollectionValueExpression(
     return deps.emitCValueExpression(expression, context)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
   return emitFallbackCollectionValueExpression(expression, context)
 }
@@ -142,7 +142,7 @@ function inferCollectionExpressionType(expression: CollectionNode, context: Coll
     return deps.inferExpressionType(expression, context)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
   return inferFallbackCollectionExpressionType(expression, context)
 }
@@ -154,7 +154,7 @@ function isCollectionIndexAccessExpression(expression: CollectionNode, context: 
     return deps.isIndexAccessExpression(expression)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
   return isFallbackCollectionAccessExpression(expression)
 }
@@ -166,7 +166,7 @@ function isCollectionMemberAccessExpression(expression: CollectionNode, context:
     return deps.isMemberAccessExpression(expression)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
   return isFallbackCollectionAccessExpression(expression)
 }
@@ -185,7 +185,7 @@ function reportCollectionHashability(
     return
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
   reportFallbackCollectionHashability(checkedType, subject, loc, context)
 }
@@ -200,7 +200,7 @@ function resolveKnownCollectionObjectIndex(
     return deps.resolveKnownObjectIndex(expression, context)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
   return resolveFallbackCollectionObjectIndex(expression, context)
 }
@@ -215,7 +215,7 @@ function resolveKnownCollectionObjectMember(
     return deps.resolveKnownObjectMember(expression, context)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_COLLECTION', 'collection lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_COLLECTION', 'collection lowering dependencies are not configured'))
 
   return resolveFallbackCollectionObjectMember(expression, context)
 }
@@ -395,17 +395,17 @@ export function emitPreparedCollectionConstructorValueExpression(
   if (expression.args.length > 1) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_COLLECTION',
+        'INOX_C_COLLECTION',
         'C collection constructors currently support at most one array literal iterable',
         expression.loc
       )
     )
   }
 
-  let tempPrefix = 'ccjs_set'
+  let tempPrefix = 'inox_set'
 
   if (collectionConstructor === 'Map') {
-    tempPrefix = 'ccjs_map'
+    tempPrefix = 'inox_map'
   }
 
   const temp = nextCName(context, tempPrefix)
@@ -416,7 +416,7 @@ export function emitPreparedCollectionConstructorValueExpression(
 
   if (collectionConstructor === 'Map') {
     reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
-    lines.push(emitStatusCheck(`ccjs_map_new(&ccjs_default_allocator, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${temp})`, context))
     pushAllLines(lines, emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc))
 
     return {
@@ -426,7 +426,7 @@ export function emitPreparedCollectionConstructorValueExpression(
   }
 
   reportCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
-  lines.push(emitStatusCheck(`ccjs_set_new(&ccjs_default_allocator, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${temp})`, context))
   pushAllLines(lines, emitSetConstructorValueElements(temp, collectionNodeAt(expression.args, 0), context, expression.loc))
 
   return {
@@ -454,7 +454,7 @@ function emitMapConstructorValueEntries(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_COLLECTION',
+        'INOX_C_COLLECTION',
         'C Map constructor currently supports only array literal entries or Map copy sources',
         nodeLocOrFallback(expression, loc)
       )
@@ -468,7 +468,7 @@ function emitMapConstructorValueEntries(
     if (entry.type !== 'ArrayLiteral' || entry.elements.length !== 2) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_COLLECTION',
+          'INOX_C_COLLECTION',
           'C Map constructor entries must be [key, value] array literals',
           nodeLocOrFallback(entry, loc)
         )
@@ -490,7 +490,7 @@ function emitMapConstructorValueEntries(
 
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_map_set(${name}, ${key.expression}, ${value.expression})`, context))
   }
 
   return lines
@@ -501,16 +501,16 @@ function emitMapConstructorCopiedEntries(
   source: PreparedCollectionReceiver,
   context: CollectionFunctionContext
 ): string[] {
-  const sourceMap = nextCName(context, 'ccjs_map_source')
-  const index = nextCName(context, 'ccjs_map_source_index')
+  const sourceMap = nextCName(context, 'inox_map_source')
+  const index = nextCName(context, 'inox_map_source_index')
   const sourceExpression = source.expression
-  const setCall = `ccjs_map_set(${name}, ${sourceMap}->entries[${index}].key, ${sourceMap}->entries[${index}].value)`
+  const setCall = `inox_map_set(${name}, ${sourceMap}->entries[${index}].key, ${sourceMap}->entries[${index}].value)`
   const lines: string[] = []
 
   pushAllLines(lines, source.lines)
-  lines.push(`ccjs_map* ${sourceMap} = (ccjs_map*)${sourceExpression}.as.ref;`)
+  lines.push(`inox_map* ${sourceMap} = (inox_map*)${sourceExpression}.as.ref;`)
   lines.push(`for (size_t ${index} = 0; ${index} < ${sourceMap}->cap; ${index} += 1) {`)
-  lines.push(`  if (${sourceMap}->entries[${index}].state != CCJS_MAP_SLOT_OCCUPIED) {`)
+  lines.push(`  if (${sourceMap}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) {`)
   lines.push('    continue;')
   lines.push('  }')
   lines.push(`  ${emitStatusCheck(setCall, context)}`)
@@ -538,7 +538,7 @@ function emitSetConstructorValueElements(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_C_COLLECTION',
+        'INOX_C_COLLECTION',
         'C Set constructor currently supports only array literal values or Set copy sources',
         nodeLocOrFallback(expression, loc)
       )
@@ -559,7 +559,7 @@ function emitSetConstructorValueElements(
     )
 
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_set_add(${name}, ${value.expression})`, context))
   }
 
   return lines
@@ -570,16 +570,16 @@ function emitSetConstructorCopiedElements(
   source: PreparedCollectionReceiver,
   context: CollectionFunctionContext
 ): string[] {
-  const sourceSet = nextCName(context, 'ccjs_set_source')
-  const index = nextCName(context, 'ccjs_set_source_index')
+  const sourceSet = nextCName(context, 'inox_set_source')
+  const index = nextCName(context, 'inox_set_source_index')
   const sourceExpression = source.expression
-  const addCall = `ccjs_set_add(${name}, ${sourceSet}->entries[${index}].value)`
+  const addCall = `inox_set_add(${name}, ${sourceSet}->entries[${index}].value)`
   const lines: string[] = []
 
   pushAllLines(lines, source.lines)
-  lines.push(`ccjs_set* ${sourceSet} = (ccjs_set*)${sourceExpression}.as.ref;`)
+  lines.push(`inox_set* ${sourceSet} = (inox_set*)${sourceExpression}.as.ref;`)
   lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->cap; ${index} += 1) {`)
-  lines.push(`  if (${sourceSet}->entries[${index}].state != CCJS_SET_SLOT_OCCUPIED) {`)
+  lines.push(`  if (${sourceSet}->entries[${index}].state != INOX_SET_SLOT_OCCUPIED) {`)
   lines.push('    continue;')
   lines.push('  }')
   lines.push(`  ${emitStatusCheck(addCall, context)}`)
@@ -632,7 +632,7 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
 
   if (method === 'clear') {
     return {
-      lines: [emitStatusCheck(`ccjs_map_clear(${name})`, context)],
+      lines: [emitStatusCheck(`inox_map_clear(${name})`, context)],
       expression: ''
     }
   }
@@ -651,7 +651,7 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
     const lines: string[] = []
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_map_set(${name}, ${key.expression}, ${value.expression})`, context))
 
     return {
       lines,
@@ -670,13 +670,13 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
     const key = emitCollectionValueExpression(keyArg, context)
     const valueType = inferCollectionExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
-    const out = nextCName(context, 'ccjs_map_value')
+    const out = nextCName(context, 'inox_map_value')
     registerOwnedValue(context, out)
 
     const lines: string[] = []
     pushAllLines(lines, key.lines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_map_get(${name}, ${key.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_map_get(${name}, ${key.expression}, &${out})`, context))
     pushAllLines(lines, emitRuntimeNullableValueCheck(out, expectedTag, context))
 
     return {
@@ -686,12 +686,12 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (method === 'delete' || method === 'has') {
-    let callName = 'ccjs_map_has'
-    let tempPrefix = 'ccjs_map_has'
+    let callName = 'inox_map_has'
+    let tempPrefix = 'inox_map_has'
 
     if (method === 'delete') {
-      callName = 'ccjs_map_delete'
-      tempPrefix = 'ccjs_map_delete'
+      callName = 'inox_map_delete'
+      tempPrefix = 'inox_map_delete'
     }
 
     const keyArg = collectionNodeAt(expression.args, 0)
@@ -715,7 +715,7 @@ function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: C
   }
 
   context.diagnostics.push(
-    diagnostic('CCJS_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc)
+    diagnostic('INOX_C_COLLECTION', `Map.${method} is not supported by the current C backend slice`, expression.loc)
   )
 
   return {
@@ -740,14 +740,14 @@ export function emitPreparedMapIndexGetExpression(
     const key = emitCollectionValueExpression(mapIndex.key, context)
     const valueType = inferCollectionExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
-    const out = nextCName(context, 'ccjs_map_value')
+    const out = nextCName(context, 'inox_map_value')
     registerOwnedValue(context, out)
 
     const lines: string[] = []
     pushAllLines(lines, mapIndex.receiver.lines)
     pushAllLines(lines, key.lines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_map_get(${mapIndex.receiver.expression}, ${key.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_map_get(${mapIndex.receiver.expression}, ${key.expression}, &${out})`, context))
     pushAllLines(lines, emitRuntimeNullableValueCheck(out, expectedTag, context))
 
     return {
@@ -782,7 +782,7 @@ export function emitPreparedMapIndexAssignment(
     pushAllLines(lines, mapIndex.receiver.lines)
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context))
 
     return {
       lines,
@@ -818,7 +818,7 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
 
   if (method === 'clear') {
     return {
-      lines: [emitStatusCheck(`ccjs_set_clear(${name})`, context)],
+      lines: [emitStatusCheck(`inox_set_clear(${name})`, context)],
       expression: ''
     }
   }
@@ -834,7 +834,7 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
     const value = emitCollectionValueExpression(valueArg, context)
     const lines: string[] = []
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_set_add(${name}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_set_add(${name}, ${value.expression})`, context))
 
     return {
       lines,
@@ -843,12 +843,12 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
   }
 
   if (method === 'delete' || method === 'has') {
-    let callName = 'ccjs_set_has'
-    let tempPrefix = 'ccjs_set_has'
+    let callName = 'inox_set_has'
+    let tempPrefix = 'inox_set_has'
 
     if (method === 'delete') {
-      callName = 'ccjs_set_delete'
-      tempPrefix = 'ccjs_set_delete'
+      callName = 'inox_set_delete'
+      tempPrefix = 'inox_set_delete'
     }
 
     const valueArg = collectionNodeAt(expression.args, 0)
@@ -872,7 +872,7 @@ function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: C
   }
 
   context.diagnostics.push(
-    diagnostic('CCJS_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
+    diagnostic('INOX_C_COLLECTION', `Set.${method} is not supported by the current C backend slice`, expression.loc)
   )
 
   return {
@@ -892,12 +892,12 @@ export function emitPreparedCollectionSizeExpression(
   const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
   if (receiver != null) {
-    let callName = 'ccjs_set_size'
-    let tempPrefix = 'ccjs_set_size'
+    let callName = 'inox_set_size'
+    let tempPrefix = 'inox_set_size'
 
     if (receiver.type === 'map') {
-      callName = 'ccjs_map_size'
-      tempPrefix = 'ccjs_map_size'
+      callName = 'inox_map_size'
+      tempPrefix = 'inox_map_size'
     }
 
     const out = nextCName(context, tempPrefix)

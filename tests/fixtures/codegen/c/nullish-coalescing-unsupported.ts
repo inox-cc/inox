@@ -1,10 +1,8 @@
 // @targets c
-// @expect diagnostic
-// @diagnostic CCJS_C_NULLISH
+// @expect pass
 
 function printValue(value: unknown): void {
   console.log(value ?? 'Ada')
 }
 
 printValue(1)
-

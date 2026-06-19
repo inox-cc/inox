@@ -1,51 +1,51 @@
-#include "ccjs/path.h"
+#include "inox/path.h"
 
 #include <string.h>
 #include <unistd.h>
-#include "ccjs/object.h"
-#include "ccjs/string.h"
+#include "inox/object.h"
+#include "inox/string.h"
 
-typedef struct ccjs_path_span {
+typedef struct inox_path_span {
   const char* bytes;
   size_t len;
-} ccjs_path_span;
+} inox_path_span;
 
-static ccjs_status ccjs_path_string(ccjs_value value, const char** bytes, size_t* len);
-static ccjs_status ccjs_path_string_result(ccjs_allocator* allocator, char* bytes, size_t len, ccjs_value* out);
-static char* ccjs_path_alloc(ccjs_allocator* allocator, size_t len);
-static ccjs_status ccjs_path_copy(ccjs_allocator* allocator, const char* bytes, size_t len, char** out, size_t* out_len);
-static ccjs_status ccjs_path_normalize_bytes(
-  ccjs_allocator* allocator,
+static inox_status inox_path_string(inox_value value, const char** bytes, size_t* len);
+static inox_status inox_path_string_result(inox_allocator* allocator, char* bytes, size_t len, inox_value* out);
+static char* inox_path_alloc(inox_allocator* allocator, size_t len);
+static inox_status inox_path_copy(inox_allocator* allocator, const char* bytes, size_t len, char** out, size_t* out_len);
+static inox_status inox_path_normalize_bytes(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 );
-static ccjs_status ccjs_path_concat_values(
-  ccjs_allocator* allocator,
-  const ccjs_value* paths,
+static inox_status inox_path_concat_values(
+  inox_allocator* allocator,
+  const inox_value* paths,
   size_t path_count,
   char** out,
   size_t* out_len
 );
-static size_t ccjs_path_trim_trailing_slashes(const char* bytes, size_t len);
-static size_t ccjs_path_ext_offset(const char* bytes, size_t start, size_t len);
-static int ccjs_path_ends_with(const char* bytes, size_t len, const char* suffix, size_t suffix_len);
-static ccjs_status ccjs_path_object_string(
-  ccjs_value object,
+static size_t inox_path_trim_trailing_slashes(const char* bytes, size_t len);
+static size_t inox_path_ext_offset(const char* bytes, size_t start, size_t len);
+static int inox_path_ends_with(const char* bytes, size_t len, const char* suffix, size_t suffix_len);
+static inox_status inox_path_object_string(
+  inox_value object,
   const char* name,
   const char** bytes,
   size_t* len,
   int* present,
-  ccjs_value* value
+  inox_value* value
 );
 
-ccjs_status ccjs_path_basename(ccjs_allocator* allocator, ccjs_value path, ccjs_value suffix, int has_suffix, ccjs_value* out) {
+inox_status inox_path_basename(inox_allocator* allocator, inox_value path, inox_value suffix, int has_suffix, inox_value* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_path_string(path, &bytes, &len);
+  inox_status status = inox_path_string(path, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
@@ -53,17 +53,17 @@ ccjs_status ccjs_path_basename(ccjs_allocator* allocator, ccjs_value path, ccjs_
   size_t suffix_len = 0;
 
   if (has_suffix) {
-    status = ccjs_path_string(suffix, &suffix_bytes, &suffix_len);
+    status = inox_path_string(suffix, &suffix_bytes, &suffix_len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
   }
 
-  len = ccjs_path_trim_trailing_slashes(bytes, len);
+  len = inox_path_trim_trailing_slashes(bytes, len);
 
   if (len == 0) {
-    return ccjs_string_from_literal(allocator, "", 0, out);
+    return inox_string_from_literal(allocator, "", 0, out);
   }
 
   size_t start = len;
@@ -75,26 +75,26 @@ ccjs_status ccjs_path_basename(ccjs_allocator* allocator, ccjs_value path, ccjs_
   const char* base = bytes + start;
   size_t base_len = len - start;
 
-  if (has_suffix && suffix_len > 0 && suffix_len < base_len && ccjs_path_ends_with(base, base_len, suffix_bytes, suffix_len)) {
+  if (has_suffix && suffix_len > 0 && suffix_len < base_len && inox_path_ends_with(base, base_len, suffix_bytes, suffix_len)) {
     base_len -= suffix_len;
   }
 
-  return ccjs_string_from_literal(allocator, base, base_len, out);
+  return inox_string_from_literal(allocator, base, base_len, out);
 }
 
-ccjs_status ccjs_path_dirname(ccjs_allocator* allocator, ccjs_value path, ccjs_value* out) {
+inox_status inox_path_dirname(inox_allocator* allocator, inox_value path, inox_value* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_path_string(path, &bytes, &len);
+  inox_status status = inox_path_string(path, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  len = ccjs_path_trim_trailing_slashes(bytes, len);
+  len = inox_path_trim_trailing_slashes(bytes, len);
 
   if (len == 0) {
-    return ccjs_string_from_literal(allocator, ".", 1, out);
+    return inox_string_from_literal(allocator, ".", 1, out);
   }
 
   size_t slash = len;
@@ -104,26 +104,26 @@ ccjs_status ccjs_path_dirname(ccjs_allocator* allocator, ccjs_value path, ccjs_v
   }
 
   if (slash == 0) {
-    return ccjs_string_from_literal(allocator, ".", 1, out);
+    return inox_string_from_literal(allocator, ".", 1, out);
   }
 
   while (slash > 1 && bytes[slash - 1] == '/') {
     slash -= 1;
   }
 
-  return ccjs_string_from_literal(allocator, bytes, slash, out);
+  return inox_string_from_literal(allocator, bytes, slash, out);
 }
 
-ccjs_status ccjs_path_extname(ccjs_allocator* allocator, ccjs_value path, ccjs_value* out) {
+inox_status inox_path_extname(inox_allocator* allocator, inox_value path, inox_value* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_path_string(path, &bytes, &len);
+  inox_status status = inox_path_string(path, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  len = ccjs_path_trim_trailing_slashes(bytes, len);
+  len = inox_path_trim_trailing_slashes(bytes, len);
   size_t start = len;
 
   while (start > 0 && bytes[start - 1] != '/') {
@@ -146,49 +146,49 @@ ccjs_status ccjs_path_extname(ccjs_allocator* allocator, ccjs_value path, ccjs_v
   }
 
   if (dot == start || dot == start + 1 || dot == len || first_non_dot == len) {
-    return ccjs_string_from_literal(allocator, "", 0, out);
+    return inox_string_from_literal(allocator, "", 0, out);
   }
 
-  return ccjs_string_from_literal(allocator, bytes + dot - 1, len - dot + 1, out);
+  return inox_string_from_literal(allocator, bytes + dot - 1, len - dot + 1, out);
 }
 
-ccjs_status ccjs_path_is_absolute(ccjs_value path, int* out) {
+inox_status inox_path_is_absolute(inox_value path, int* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_path_string(path, &bytes, &len);
+  inox_status status = inox_path_string(path, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = len > 0 && bytes[0] == '/';
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_path_join(ccjs_allocator* allocator, const ccjs_value* paths, size_t path_count, ccjs_value* out) {
+inox_status inox_path_join(inox_allocator* allocator, const inox_value* paths, size_t path_count, inox_value* out) {
   char* joined = 0;
   size_t joined_len = 0;
-  ccjs_status status = ccjs_path_concat_values(allocator, paths, path_count, &joined, &joined_len);
+  inox_status status = inox_path_concat_values(allocator, paths, path_count, &joined, &joined_len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   char* normalized = 0;
   size_t normalized_len = 0;
 
-  status = ccjs_path_normalize_bytes(allocator, joined, joined_len, &normalized, &normalized_len);
+  status = inox_path_normalize_bytes(allocator, joined, joined_len, &normalized, &normalized_len);
   allocator->free(allocator->user, joined, joined_len + 1, _Alignof(char));
 
-  return status == CCJS_OK ? ccjs_path_string_result(allocator, normalized, normalized_len, out) : status;
+  return status == INOX_OK ? inox_path_string_result(allocator, normalized, normalized_len, out) : status;
 }
 
-ccjs_status ccjs_path_format(ccjs_allocator* allocator, ccjs_value path_object, ccjs_value* out) {
+inox_status inox_path_format(inox_allocator* allocator, inox_value path_object, inox_value* out) {
   const char* dir = "";
   const char* root = "";
   const char* base = "";
@@ -204,35 +204,35 @@ ccjs_status ccjs_path_format(ccjs_allocator* allocator, ccjs_value path_object, 
   int base_present = 0;
   int name_present = 0;
   int ext_present = 0;
-  ccjs_value dir_value = ccjs_undefined_value();
-  ccjs_value root_value = ccjs_undefined_value();
-  ccjs_value base_value = ccjs_undefined_value();
-  ccjs_value name_value = ccjs_undefined_value();
-  ccjs_value ext_value = ccjs_undefined_value();
-  ccjs_status status = ccjs_path_object_string(path_object, "dir", &dir, &dir_len, &dir_present, &dir_value);
+  inox_value dir_value = inox_undefined_value();
+  inox_value root_value = inox_undefined_value();
+  inox_value base_value = inox_undefined_value();
+  inox_value name_value = inox_undefined_value();
+  inox_value ext_value = inox_undefined_value();
+  inox_status status = inox_path_object_string(path_object, "dir", &dir, &dir_len, &dir_present, &dir_value);
 
-  if (status == CCJS_OK) {
-    status = ccjs_path_object_string(path_object, "root", &root, &root_len, &root_present, &root_value);
+  if (status == INOX_OK) {
+    status = inox_path_object_string(path_object, "root", &root, &root_len, &root_present, &root_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_path_object_string(path_object, "base", &base, &base_len, &base_present, &base_value);
+  if (status == INOX_OK) {
+    status = inox_path_object_string(path_object, "base", &base, &base_len, &base_present, &base_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_path_object_string(path_object, "name", &name, &name_len, &name_present, &name_value);
+  if (status == INOX_OK) {
+    status = inox_path_object_string(path_object, "name", &name, &name_len, &name_present, &name_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_path_object_string(path_object, "ext", &ext, &ext_len, &ext_present, &ext_value);
+  if (status == INOX_OK) {
+    status = inox_path_object_string(path_object, "ext", &ext, &ext_len, &ext_present, &ext_value);
   }
 
-  if (status != CCJS_OK) {
-    ccjs_release(dir_value);
-    ccjs_release(root_value);
-    ccjs_release(base_value);
-    ccjs_release(name_value);
-    ccjs_release(ext_value);
+  if (status != INOX_OK) {
+    inox_release(dir_value);
+    inox_release(root_value);
+    inox_release(base_value);
+    inox_release(name_value);
+    inox_release(ext_value);
     return status;
   }
 
@@ -244,15 +244,15 @@ ccjs_status ccjs_path_format(ccjs_allocator* allocator, ccjs_value path_object, 
   size_t parent_len = dir_present && dir_len > 0 ? dir_len : root_len;
   const int needs_slash = parent_len > 0 && file_len + (use_ext ? ext_len + (needs_dot ? 1 : 0) : 0) > 0 && parent[parent_len - 1] != '/';
   const size_t out_len = parent_len + (needs_slash ? 1 : 0) + file_len + (use_ext ? ext_len + (needs_dot ? 1 : 0) : 0);
-  char* result = ccjs_path_alloc(allocator, out_len);
+  char* result = inox_path_alloc(allocator, out_len);
 
   if (result == 0) {
-    ccjs_release(dir_value);
-    ccjs_release(root_value);
-    ccjs_release(base_value);
-    ccjs_release(name_value);
-    ccjs_release(ext_value);
-    return CCJS_ERR_OOM;
+    inox_release(dir_value);
+    inox_release(root_value);
+    inox_release(base_value);
+    inox_release(name_value);
+    inox_release(ext_value);
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -282,52 +282,52 @@ ccjs_status ccjs_path_format(ccjs_allocator* allocator, ccjs_value path_object, 
     offset += ext_len;
   }
 
-  ccjs_release(dir_value);
-  ccjs_release(root_value);
-  ccjs_release(base_value);
-  ccjs_release(name_value);
-  ccjs_release(ext_value);
+  inox_release(dir_value);
+  inox_release(root_value);
+  inox_release(base_value);
+  inox_release(name_value);
+  inox_release(ext_value);
 
-  return ccjs_path_string_result(allocator, result, offset, out);
+  return inox_path_string_result(allocator, result, offset, out);
 }
 
-ccjs_status ccjs_path_normalize(ccjs_allocator* allocator, ccjs_value path, ccjs_value* out) {
+inox_status inox_path_normalize(inox_allocator* allocator, inox_value path, inox_value* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_path_string(path, &bytes, &len);
+  inox_status status = inox_path_string(path, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   char* normalized = 0;
   size_t normalized_len = 0;
 
-  status = ccjs_path_normalize_bytes(allocator, bytes, len, &normalized, &normalized_len);
+  status = inox_path_normalize_bytes(allocator, bytes, len, &normalized, &normalized_len);
 
-  return status == CCJS_OK ? ccjs_path_string_result(allocator, normalized, normalized_len, out) : status;
+  return status == INOX_OK ? inox_path_string_result(allocator, normalized, normalized_len, out) : status;
 }
 
-ccjs_status ccjs_path_parse(ccjs_allocator* allocator, ccjs_value path, const ccjs_shape* shape, ccjs_value* out) {
+inox_status inox_path_parse(inox_allocator* allocator, inox_value path, const inox_shape* shape, inox_value* out) {
   const char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_path_string(path, &bytes, &len);
+  inox_status status = inox_path_string(path, &bytes, &len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   if (shape == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  status = ccjs_object_new(allocator, shape, out);
+  status = inox_object_new(allocator, shape, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  size_t trimmed_len = ccjs_path_trim_trailing_slashes(bytes, len);
+  size_t trimmed_len = inox_path_trim_trailing_slashes(bytes, len);
 
   if (trimmed_len == 0) {
     trimmed_len = len > 0 && bytes[0] == '/' ? 1 : 0;
@@ -353,108 +353,108 @@ ccjs_status ccjs_path_parse(ccjs_allocator* allocator, ccjs_value path, const cc
 
   const char* base = bytes + base_start;
   const size_t base_len = trimmed_len > base_start ? trimmed_len - base_start : 0;
-  const size_t ext_offset = ccjs_path_ext_offset(bytes, base_start, trimmed_len);
+  const size_t ext_offset = inox_path_ext_offset(bytes, base_start, trimmed_len);
   const size_t ext_len = ext_offset < trimmed_len ? trimmed_len - ext_offset : 0;
   const size_t name_len = ext_len > 0 ? ext_offset - base_start : base_len;
-  ccjs_value root_value = ccjs_undefined_value();
-  ccjs_value dir_value = ccjs_undefined_value();
-  ccjs_value base_value = ccjs_undefined_value();
-  ccjs_value ext_value = ccjs_undefined_value();
-  ccjs_value name_value = ccjs_undefined_value();
+  inox_value root_value = inox_undefined_value();
+  inox_value dir_value = inox_undefined_value();
+  inox_value base_value = inox_undefined_value();
+  inox_value ext_value = inox_undefined_value();
+  inox_value name_value = inox_undefined_value();
 
-  status = ccjs_string_from_literal(allocator, absolute ? "/" : "", absolute ? 1 : 0, &root_value);
+  status = inox_string_from_literal(allocator, absolute ? "/" : "", absolute ? 1 : 0, &root_value);
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, bytes, dir_len, &dir_value);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, bytes, dir_len, &dir_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, base, base_len, &base_value);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, base, base_len, &base_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, ext_len > 0 ? bytes + ext_offset : "", ext_len, &ext_value);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, ext_len > 0 ? bytes + ext_offset : "", ext_len, &ext_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, base, name_len, &name_value);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, base, name_len, &name_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(*out, 0, root_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(*out, 0, root_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(*out, 1, dir_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(*out, 1, dir_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(*out, 2, base_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(*out, 2, base_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(*out, 3, ext_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(*out, 3, ext_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(*out, 4, name_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(*out, 4, name_value);
   }
 
-  ccjs_release(root_value);
-  ccjs_release(dir_value);
-  ccjs_release(base_value);
-  ccjs_release(ext_value);
-  ccjs_release(name_value);
+  inox_release(root_value);
+  inox_release(dir_value);
+  inox_release(base_value);
+  inox_release(ext_value);
+  inox_release(name_value);
 
-  if (status != CCJS_OK) {
-    ccjs_release(*out);
-    *out = ccjs_undefined_value();
+  if (status != INOX_OK) {
+    inox_release(*out);
+    *out = inox_undefined_value();
   }
 
   return status;
 }
 
-ccjs_status ccjs_path_relative(ccjs_allocator* allocator, ccjs_value from, ccjs_value to, ccjs_value* out) {
-  ccjs_value values[1];
+inox_status inox_path_relative(inox_allocator* allocator, inox_value from, inox_value to, inox_value* out) {
+  inox_value values[1];
   const char* from_resolved = 0;
   const char* to_resolved = 0;
   size_t from_len = 0;
   size_t to_len = 0;
 
   values[0] = from;
-  ccjs_status status = ccjs_path_resolve(allocator, values, 1, &from);
+  inox_status status = inox_path_resolve(allocator, values, 1, &from);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_path_string(from, &from_resolved, &from_len);
+  status = inox_path_string(from, &from_resolved, &from_len);
 
-  if (status != CCJS_OK) {
-    ccjs_release(from);
+  if (status != INOX_OK) {
+    inox_release(from);
     return status;
   }
 
   values[0] = to;
-  status = ccjs_path_resolve(allocator, values, 1, &to);
+  status = inox_path_resolve(allocator, values, 1, &to);
 
-  if (status != CCJS_OK) {
-    ccjs_release(from);
+  if (status != INOX_OK) {
+    inox_release(from);
     return status;
   }
 
-  status = ccjs_path_string(to, &to_resolved, &to_len);
+  status = inox_path_string(to, &to_resolved, &to_len);
 
-  if (status != CCJS_OK) {
-    ccjs_release(from);
-    ccjs_release(to);
+  if (status != INOX_OK) {
+    inox_release(from);
+    inox_release(to);
     return status;
   }
 
   if (from_len == to_len && memcmp(from_resolved, to_resolved, from_len) == 0) {
-    ccjs_release(from);
-    ccjs_release(to);
-    return ccjs_string_from_literal(allocator, "", 0, out);
+    inox_release(from);
+    inox_release(to);
+    return inox_string_from_literal(allocator, "", 0, out);
   }
 
   size_t from_index = 1;
@@ -502,12 +502,12 @@ ccjs_status ccjs_path_relative(ccjs_allocator* allocator, ccjs_value from, ccjs_
   size_t down_len = to_index < to_len ? to_len - to_index : 0;
   size_t up_len = up_count == 0 ? 0 : up_count * 2 + up_count - 1;
   size_t out_len = up_len + (up_len > 0 && down_len > 0 ? 1 : 0) + down_len;
-  char* result = ccjs_path_alloc(allocator, out_len);
+  char* result = inox_path_alloc(allocator, out_len);
 
   if (result == 0) {
-    ccjs_release(from);
-    ccjs_release(to);
-    return CCJS_ERR_OOM;
+    inox_release(from);
+    inox_release(to);
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -533,13 +533,13 @@ ccjs_status ccjs_path_relative(ccjs_allocator* allocator, ccjs_value from, ccjs_
     offset += down_len;
   }
 
-  ccjs_release(from);
-  ccjs_release(to);
+  inox_release(from);
+  inox_release(to);
 
-  return ccjs_path_string_result(allocator, result, offset, out);
+  return inox_path_string_result(allocator, result, offset, out);
 }
 
-ccjs_status ccjs_path_resolve(ccjs_allocator* allocator, const ccjs_value* paths, size_t path_count, ccjs_value* out) {
+inox_status inox_path_resolve(inox_allocator* allocator, const inox_value* paths, size_t path_count, inox_value* out) {
   const char* start_bytes = 0;
   size_t start_len = 0;
   size_t start_index = 0;
@@ -548,9 +548,9 @@ ccjs_status ccjs_path_resolve(ccjs_allocator* allocator, const ccjs_value* paths
   for (size_t index = path_count; index > 0; index -= 1) {
     const char* bytes = 0;
     size_t len = 0;
-    ccjs_status status = ccjs_path_string(paths[index - 1], &bytes, &len);
+    inox_status status = inox_path_string(paths[index - 1], &bytes, &len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
 
@@ -567,7 +567,7 @@ ccjs_status ccjs_path_resolve(ccjs_allocator* allocator, const ccjs_value* paths
 
   if (!found_absolute) {
     if (getcwd(cwd, sizeof(cwd)) == 0) {
-      return CCJS_ERR_UNSUPPORTED;
+      return INOX_ERR_UNSUPPORTED;
     }
 
     start_bytes = cwd;
@@ -580,9 +580,9 @@ ccjs_status ccjs_path_resolve(ccjs_allocator* allocator, const ccjs_value* paths
   for (size_t index = start_index + (found_absolute ? 1 : 0); index < path_count; index += 1) {
     const char* bytes = 0;
     size_t len = 0;
-    ccjs_status status = ccjs_path_string(paths[index], &bytes, &len);
+    inox_status status = inox_path_string(paths[index], &bytes, &len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
 
@@ -591,10 +591,10 @@ ccjs_status ccjs_path_resolve(ccjs_allocator* allocator, const ccjs_value* paths
     }
   }
 
-  char* joined = ccjs_path_alloc(allocator, total);
+  char* joined = inox_path_alloc(allocator, total);
 
   if (joined == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -604,9 +604,9 @@ ccjs_status ccjs_path_resolve(ccjs_allocator* allocator, const ccjs_value* paths
   for (size_t index = start_index + (found_absolute ? 1 : 0); index < path_count; index += 1) {
     const char* bytes = 0;
     size_t len = 0;
-    ccjs_status status = ccjs_path_string(paths[index], &bytes, &len);
+    inox_status status = inox_path_string(paths[index], &bytes, &len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       allocator->free(allocator->user, joined, total + 1, _Alignof(char));
       return status;
     }
@@ -623,36 +623,36 @@ ccjs_status ccjs_path_resolve(ccjs_allocator* allocator, const ccjs_value* paths
 
   char* normalized = 0;
   size_t normalized_len = 0;
-  ccjs_status status = ccjs_path_normalize_bytes(allocator, joined, offset, &normalized, &normalized_len);
+  inox_status status = inox_path_normalize_bytes(allocator, joined, offset, &normalized, &normalized_len);
   allocator->free(allocator->user, joined, total + 1, _Alignof(char));
 
-  return status == CCJS_OK ? ccjs_path_string_result(allocator, normalized, normalized_len, out) : status;
+  return status == INOX_OK ? inox_path_string_result(allocator, normalized, normalized_len, out) : status;
 }
 
-static ccjs_status ccjs_path_string(ccjs_value value, const char** bytes, size_t* len) {
-  if (bytes == 0 || len == 0 || value.tag != CCJS_TAG_STRING || value.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+static inox_status inox_path_string(inox_value value, const char** bytes, size_t* len) {
+  if (bytes == 0 || len == 0 || value.tag != INOX_TAG_STRING || value.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_string* string = (ccjs_string*)value.as.ref;
+  inox_string* string = (inox_string*)value.as.ref;
   *bytes = string->bytes;
   *len = string->len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_path_string_result(ccjs_allocator* allocator, char* bytes, size_t len, ccjs_value* out) {
+static inox_status inox_path_string_result(inox_allocator* allocator, char* bytes, size_t len, inox_value* out) {
   if (bytes == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_status status = ccjs_string_from_literal(allocator, bytes, len, out);
+  inox_status status = inox_string_from_literal(allocator, bytes, len, out);
   allocator->free(allocator->user, bytes, len + 1, _Alignof(char));
 
   return status;
 }
 
-static char* ccjs_path_alloc(ccjs_allocator* allocator, size_t len) {
+static char* inox_path_alloc(inox_allocator* allocator, size_t len) {
   if (allocator == 0 || allocator->alloc == 0) {
     return 0;
   }
@@ -666,11 +666,11 @@ static char* ccjs_path_alloc(ccjs_allocator* allocator, size_t len) {
   return bytes;
 }
 
-static ccjs_status ccjs_path_copy(ccjs_allocator* allocator, const char* bytes, size_t len, char** out, size_t* out_len) {
-  char* copy = ccjs_path_alloc(allocator, len);
+static inox_status inox_path_copy(inox_allocator* allocator, const char* bytes, size_t len, char** out, size_t* out_len) {
+  char* copy = inox_path_alloc(allocator, len);
 
   if (copy == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   if (len != 0) {
@@ -680,28 +680,28 @@ static ccjs_status ccjs_path_copy(ccjs_allocator* allocator, const char* bytes, 
   *out = copy;
   *out_len = len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_path_normalize_bytes(
-  ccjs_allocator* allocator,
+static inox_status inox_path_normalize_bytes(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
   char** out,
   size_t* out_len
 ) {
   if (bytes == 0 && len != 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (len == 0) {
-    return ccjs_path_copy(allocator, ".", 1, out, out_len);
+    return inox_path_copy(allocator, ".", 1, out, out_len);
   }
 
-  ccjs_path_span* segments = allocator->alloc(allocator->user, sizeof(ccjs_path_span) * (len + 1), _Alignof(ccjs_path_span));
+  inox_path_span* segments = allocator->alloc(allocator->user, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
 
   if (segments == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   const int absolute = bytes[0] == '/';
@@ -742,8 +742,8 @@ static ccjs_status ccjs_path_normalize_bytes(
   }
 
   if (count == 0) {
-    allocator->free(allocator->user, segments, sizeof(ccjs_path_span) * (len + 1), _Alignof(ccjs_path_span));
-    return absolute ? ccjs_path_copy(allocator, "/", 1, out, out_len) : ccjs_path_copy(allocator, ".", 1, out, out_len);
+    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
+    return absolute ? inox_path_copy(allocator, "/", 1, out, out_len) : inox_path_copy(allocator, ".", 1, out, out_len);
   }
 
   size_t result_len = absolute ? 1 : 0;
@@ -752,11 +752,11 @@ static ccjs_status ccjs_path_normalize_bytes(
     result_len += segments[i].len + (i == 0 ? 0 : 1);
   }
 
-  char* result = ccjs_path_alloc(allocator, result_len);
+  char* result = inox_path_alloc(allocator, result_len);
 
   if (result == 0) {
-    allocator->free(allocator->user, segments, sizeof(ccjs_path_span) * (len + 1), _Alignof(ccjs_path_span));
-    return CCJS_ERR_OOM;
+    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -776,16 +776,16 @@ static ccjs_status ccjs_path_normalize_bytes(
     offset += segments[i].len;
   }
 
-  allocator->free(allocator->user, segments, sizeof(ccjs_path_span) * (len + 1), _Alignof(ccjs_path_span));
+  allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
   *out = result;
   *out_len = offset;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_path_concat_values(
-  ccjs_allocator* allocator,
-  const ccjs_value* paths,
+static inox_status inox_path_concat_values(
+  inox_allocator* allocator,
+  const inox_value* paths,
   size_t path_count,
   char** out,
   size_t* out_len
@@ -796,9 +796,9 @@ static ccjs_status ccjs_path_concat_values(
   for (size_t index = 0; index < path_count; index += 1) {
     const char* bytes = 0;
     size_t len = 0;
-    ccjs_status status = ccjs_path_string(paths[index], &bytes, &len);
+    inox_status status = inox_path_string(paths[index], &bytes, &len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
 
@@ -809,13 +809,13 @@ static ccjs_status ccjs_path_concat_values(
   }
 
   if (non_empty == 0) {
-    return ccjs_path_copy(allocator, ".", 1, out, out_len);
+    return inox_path_copy(allocator, ".", 1, out, out_len);
   }
 
-  char* joined = ccjs_path_alloc(allocator, total);
+  char* joined = inox_path_alloc(allocator, total);
 
   if (joined == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -824,9 +824,9 @@ static ccjs_status ccjs_path_concat_values(
   for (size_t index = 0; index < path_count; index += 1) {
     const char* bytes = 0;
     size_t len = 0;
-    ccjs_status status = ccjs_path_string(paths[index], &bytes, &len);
+    inox_status status = inox_path_string(paths[index], &bytes, &len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       allocator->free(allocator->user, joined, total + 1, _Alignof(char));
       return status;
     }
@@ -848,10 +848,10 @@ static ccjs_status ccjs_path_concat_values(
   *out = joined;
   *out_len = offset;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static size_t ccjs_path_trim_trailing_slashes(const char* bytes, size_t len) {
+static size_t inox_path_trim_trailing_slashes(const char* bytes, size_t len) {
   while (len > 1 && bytes[len - 1] == '/') {
     len -= 1;
   }
@@ -859,7 +859,7 @@ static size_t ccjs_path_trim_trailing_slashes(const char* bytes, size_t len) {
   return len;
 }
 
-static size_t ccjs_path_ext_offset(const char* bytes, size_t start, size_t len) {
+static size_t inox_path_ext_offset(const char* bytes, size_t start, size_t len) {
   size_t first_non_dot = len;
 
   for (size_t index = start; index < len; index += 1) {
@@ -882,48 +882,48 @@ static size_t ccjs_path_ext_offset(const char* bytes, size_t start, size_t len) 
   return dot - 1;
 }
 
-static int ccjs_path_ends_with(const char* bytes, size_t len, const char* suffix, size_t suffix_len) {
+static int inox_path_ends_with(const char* bytes, size_t len, const char* suffix, size_t suffix_len) {
   return suffix_len <= len && memcmp(bytes + len - suffix_len, suffix, suffix_len) == 0;
 }
 
-static ccjs_status ccjs_path_object_string(
-  ccjs_value object,
+static inox_status inox_path_object_string(
+  inox_value object,
   const char* name,
   const char** bytes,
   size_t* len,
   int* present,
-  ccjs_value* value
+  inox_value* value
 ) {
   if (bytes == 0 || len == 0 || present == 0 || value == 0 || name == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *bytes = "";
   *len = 0;
   *present = 0;
-  *value = ccjs_undefined_value();
+  *value = inox_undefined_value();
 
-  ccjs_status status = ccjs_object_get(object, name, strlen(name), value);
+  inox_status status = inox_object_get(object, name, strlen(name), value);
 
-  if (status == CCJS_ERR_FIELD) {
-    return CCJS_OK;
+  if (status == INOX_ERR_FIELD) {
+    return INOX_OK;
   }
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  if (value->tag == CCJS_TAG_UNDEFINED || value->tag == CCJS_TAG_NULL) {
-    return CCJS_OK;
+  if (value->tag == INOX_TAG_UNDEFINED || value->tag == INOX_TAG_NULL) {
+    return INOX_OK;
   }
 
-  status = ccjs_path_string(*value, bytes, len);
+  status = inox_path_string(*value, bytes, len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   *present = 1;
 
-  return CCJS_OK;
+  return INOX_OK;
 }

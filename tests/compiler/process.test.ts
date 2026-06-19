@@ -9,7 +9,7 @@ export function main(): void {
   process.exitCode = 7
   console.log(process.cwd())
   console.log(process.argv[1])
-  console.log(process.env.CCJS_PROCESS_TEST)
+  console.log(process.env.INOX_PROCESS_TEST)
   console.log(process.exitCode)
 }
 `,
@@ -20,17 +20,17 @@ export function main(): void {
 
   assert.deepEqual(result.ir.features, ['process', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['managed-values', 'process', 'string-bytes'])
-  assert.match(result.code, /#include "ccjs\/process\.h"/)
+  assert.match(result.code, /#include "inox\/process\.h"/)
   assert.match(result.code, /int main\(int argc, char\*\* argv\)/)
-  assert.match(result.code, /ccjs_process_init\(argc, argv\);/)
-  assert.match(result.code, /ccjs_process_set_exit_code\(\(int\)\(7\)\);/)
-  assert.match(result.code, /ccjs_process_cwd\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_argv\(&ccjs_default_allocator, \(int\)\(1\), &ccjs_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_init\(argc, argv\);/)
+  assert.match(result.code, /inox_process_set_exit_code\(\(int\)\(7\)\);/)
+  assert.match(result.code, /inox_process_cwd\(&inox_default_allocator, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_argv\(&inox_default_allocator, \(int\)\(1\), &inox_process_string_\d+\)/)
   assert.match(
     result.code,
-    /ccjs_process_env\(&ccjs_default_allocator, "CCJS_PROCESS_TEST", 17, &ccjs_process_string_\d+\)/
+    /inox_process_env\(&inox_default_allocator, "INOX_PROCESS_TEST", 17, &inox_process_string_\d+\)/
   )
-  assert.match(result.code, /return ccjs_process_get_exit_code\(\);/)
+  assert.match(result.code, /return inox_process_get_exit_code\(\);/)
 })
 
 test('lowers node:process read-only metadata properties', () => {
@@ -49,14 +49,14 @@ console.log(process.version, process.versions.node)
 
   assert.deepEqual(result.ir.features, ['process', 'runtime-values', 'string-bytes'])
   assert.deepEqual(result.ir.runtimeRequirements, ['managed-values', 'process', 'string-bytes'])
-  assert.match(result.code, /ccjs_process_argv_length\(\)/)
-  assert.match(result.code, /ccjs_process_argv0\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_execPath\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_pid\(\)/)
-  assert.match(result.code, /ccjs_process_platform\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_arch\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_version\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_versions_node\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_argv_length\(\)/)
+  assert.match(result.code, /inox_process_argv0\(&inox_default_allocator, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_execPath\(&inox_default_allocator, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_pid\(\)/)
+  assert.match(result.code, /inox_process_platform\(&inox_default_allocator, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_arch\(&inox_default_allocator, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_version\(&inox_default_allocator, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_versions_node\(&inox_default_allocator, &inox_process_string_\d+\)/)
 })
 
 test('lowers named node:process cwd import', () => {
@@ -70,14 +70,14 @@ console.log(cwd())
     }
   )
 
-  assert.match(result.code, /ccjs_process_cwd\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_cwd\(&inox_default_allocator, &inox_process_string_\d+\)/)
 })
 
 test('lowers named node:process property imports', () => {
   const result = compileSource(
     `import { arch, argv, argv0, env, execPath, pid, platform, version, versions } from 'node:process'
 
-console.log(argv[1], argv.length, argv0, env.CCJS_PROCESS_TEST)
+console.log(argv[1], argv.length, argv0, env.INOX_PROCESS_TEST)
 console.log(execPath, pid, platform, arch, version, versions.node)
 `,
     {
@@ -85,12 +85,12 @@ console.log(execPath, pid, platform, arch, version, versions.node)
     }
   )
 
-  assert.match(result.code, /ccjs_process_argv\(&ccjs_default_allocator, \(int\)\(1\), &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_argv_length\(\)/)
-  assert.match(result.code, /ccjs_process_env\(&ccjs_default_allocator, "CCJS_PROCESS_TEST", 17, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_execPath\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
-  assert.match(result.code, /ccjs_process_pid\(\)/)
-  assert.match(result.code, /ccjs_process_versions_node\(&ccjs_default_allocator, &ccjs_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_argv\(&inox_default_allocator, \(int\)\(1\), &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_argv_length\(\)/)
+  assert.match(result.code, /inox_process_env\(&inox_default_allocator, "INOX_PROCESS_TEST", 17, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_execPath\(&inox_default_allocator, &inox_process_string_\d+\)/)
+  assert.match(result.code, /inox_process_pid\(\)/)
+  assert.match(result.code, /inox_process_versions_node\(&inox_default_allocator, &inox_process_string_\d+\)/)
 })
 
 test('reports unsupported node:process methods at compile time only', () => {
@@ -112,7 +112,7 @@ process.chdir('/tmp')
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(
@@ -143,7 +143,7 @@ console.log(process.stdin)
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(

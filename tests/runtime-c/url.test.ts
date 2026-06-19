@@ -19,7 +19,7 @@ test('generated C node:url helpers compile and run with runtime sources', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-url-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-url-'))
   const source = join(dir, 'node-url.c')
   const output = join(dir, 'node-url')
 

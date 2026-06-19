@@ -19,7 +19,7 @@ test('generated C node:child_process sync helpers compile and run with runtime s
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-child-process-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-child-process-'))
   const source = join(dir, 'node-child-process.c')
   const output = join(dir, 'node-child-process')
 
@@ -29,7 +29,7 @@ test('generated C node:child_process sync helpers compile and run with runtime s
 
 console.log(execSync('printf exec', { encoding: 'utf8' }))
 console.log(execFileSync('printf', ['file'], { encoding: 'utf8' }))
-console.log(execSync('printf "$CCJS_STAGE"', { encoding: 'utf8', env: { CCJS_STAGE: 'env', PATH: '/bin:/usr/bin' } }))
+console.log(execSync('printf "$INOX_STAGE"', { encoding: 'utf8', env: { INOX_STAGE: 'env', PATH: '/bin:/usr/bin' } }))
 console.log(execSync('basename "$PWD" | tr -d "\\n"', { encoding: 'utf8', cwd: ${JSON.stringify(dir)} }))
 
 const spawned = spawnSync('/bin/sh', ['-c', 'printf out; printf err >&2; exit 3'], { encoding: 'utf8' })

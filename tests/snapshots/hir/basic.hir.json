@@ -108,6 +108,7 @@
             "type": "NumberLiteral",
             "value": "0",
             "valueType": "number",
+            "returnNullable": false,
             "loc": {
               "line": 8,
               "column": 13
@@ -130,13 +131,16 @@
               "expression": {
                 "type": "AssignmentExpression",
                 "valueType": "number",
+                "nullable": false,
+                "returnNullable": false,
                 "target": {
                   "type": "Reference",
                   "path": [
                     "sum"
                   ],
-                  "valueType": "unknown",
+                  "valueType": "number",
                   "nullable": false,
+                  "returnNullable": false,
                   "loc": {
                     "line": 11,
                     "column": 5
@@ -147,6 +151,7 @@
                   "operator": "+",
                   "valueType": "number",
                   "nullable": false,
+                  "returnNullable": false,
                   "left": {
                     "type": "Reference",
                     "path": [
@@ -154,6 +159,7 @@
                     ],
                     "valueType": "number",
                     "nullable": false,
+                    "returnNullable": false,
                     "loc": {
                       "line": 11,
                       "column": 11
@@ -166,6 +172,7 @@
                     ],
                     "valueType": "number",
                     "nullable": false,
+                    "returnNullable": false,
                     "loc": {
                       "line": 11,
                       "column": 17
@@ -190,6 +197,7 @@
             "nullable": false,
             "arrayElementType": "number",
             "arrayElementDeclaredType": "number",
+            "returnNullable": false,
             "object": {
               "type": "Reference",
               "path": [
@@ -197,6 +205,7 @@
               ],
               "valueType": "object",
               "nullable": false,
+              "returnNullable": false,
               "fields": [
                 {
                   "name": "id",
@@ -257,6 +266,7 @@
             ],
             "valueType": "number",
             "nullable": false,
+            "returnNullable": false,
             "loc": {
               "line": 14,
               "column": 10
@@ -320,6 +330,44 @@
       "init": {
         "type": "ObjectLiteral",
         "valueType": "object",
+        "nullable": false,
+        "returnNullable": false,
+        "fields": [
+          {
+            "name": "id",
+            "readonly": true,
+            "declaredType": "number",
+            "valueType": "number",
+            "nullable": false,
+            "loc": {
+              "line": 2,
+              "column": 12
+            }
+          },
+          {
+            "name": "name",
+            "readonly": false,
+            "declaredType": "string",
+            "valueType": "string",
+            "nullable": false,
+            "loc": {
+              "line": 3,
+              "column": 3
+            }
+          },
+          {
+            "name": "scores",
+            "readonly": false,
+            "declaredType": "array<number>",
+            "valueType": "array",
+            "nullable": false,
+            "arrayElementType": "number",
+            "loc": {
+              "line": 4,
+              "column": 3
+            }
+          }
+        ],
         "properties": [
           {
             "key": "id",
@@ -327,6 +375,7 @@
               "type": "NumberLiteral",
               "value": "1",
               "valueType": "number",
+              "returnNullable": false,
               "loc": {
                 "line": 17,
                 "column": 26
@@ -343,6 +392,7 @@
               "type": "StringLiteral",
               "value": "Ada",
               "valueType": "string",
+              "returnNullable": false,
               "loc": {
                 "line": 17,
                 "column": 35
@@ -358,13 +408,16 @@
             "value": {
               "type": "ArrayLiteral",
               "valueType": "array",
+              "nullable": false,
               "arrayElementType": "number",
               "arrayElementDeclaredType": "number",
+              "returnNullable": false,
               "elements": [
                 {
                   "type": "NumberLiteral",
                   "value": "2",
                   "valueType": "number",
+                  "returnNullable": false,
                   "loc": {
                     "line": 17,
                     "column": 51
@@ -374,6 +427,7 @@
                   "type": "NumberLiteral",
                   "value": "3",
                   "valueType": "number",
+                  "returnNullable": false,
                   "loc": {
                     "line": 17,
                     "column": 54
@@ -383,6 +437,7 @@
                   "type": "NumberLiteral",
                   "value": "5",
                   "valueType": "number",
+                  "returnNullable": false,
                   "loc": {
                     "line": 17,
                     "column": 57
@@ -421,6 +476,7 @@
         "type": "CallExpression",
         "valueType": "number",
         "nullable": false,
+        "returnNullable": false,
         "callee": {
           "type": "Reference",
           "path": [
@@ -428,6 +484,7 @@
           ],
           "valueType": "function",
           "nullable": false,
+          "returnNullable": false,
           "loc": {
             "line": 18,
             "column": 15
@@ -441,6 +498,7 @@
             ],
             "valueType": "object",
             "nullable": false,
+            "returnNullable": false,
             "fields": [
               {
                 "name": "id",
@@ -498,11 +556,14 @@
       "expression": {
         "type": "CallExpression",
         "valueType": "unknown",
+        "nullable": false,
+        "returnNullable": false,
         "callee": {
           "type": "MemberExpression",
           "property": "log",
           "valueType": "unknown",
           "nullable": false,
+          "returnNullable": false,
           "object": {
             "type": "Reference",
             "path": [
@@ -510,6 +571,7 @@
             ],
             "valueType": "object",
             "nullable": false,
+            "returnNullable": false,
             "loc": {
               "line": 20,
               "column": 1
@@ -525,6 +587,7 @@
             "type": "TemplateLiteral",
             "raw": "`${user.name} ${score}`",
             "valueType": "string",
+            "returnNullable": false,
             "loc": {
               "line": 20,
               "column": 13

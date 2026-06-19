@@ -27,7 +27,7 @@ test('C runtime fs adapter resolves async file promises through the loop', async
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-fs-runtime-'))
   const source = join(dir, 'fs-runtime.c')
   const output = join(dir, 'fs-runtime')
   const defaultPath = join(dir, 'default-fs.txt')
@@ -40,11 +40,11 @@ test('C runtime fs adapter resolves async file promises through the loop', async
       `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/array.h"
-#include "ccjs/fs.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/array.h"
+#include "inox/fs.h"
+#include "inox/object.h"
+#include "inox/string.h"
 
 typedef struct fs_state {
   int reads;
@@ -78,148 +78,148 @@ static int path_equals(const char* path, size_t path_len, const char* expected, 
   return path_len == expected_len && memcmp(path, expected, expected_len) == 0;
 }
 
-static ccjs_status read_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+static inox_status read_file(void* user, inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   fs_state* state = (fs_state*)user;
   state->reads += 1;
 
   if (path_equals(path, path_len, "missing", 7)) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-  return ccjs_string_from_literal(allocator, "hello fs", 8, out);
+  return inox_string_from_literal(allocator, "hello fs", 8, out);
 }
 
-static ccjs_status write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len) {
+static inox_status write_file(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   fs_state* state = (fs_state*)user;
   state->writes += 1;
 
   if (path == 0 || bytes == 0 || path_len == 0 || byte_len >= sizeof(state->written)) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   memcpy(state->written, bytes, byte_len);
   state->written[byte_len] = '\\0';
   state->written_len = byte_len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status read_dir(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+static inox_status read_dir(void* user, inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   fs_state* state = (fs_state*)user;
   state->dirs += 1;
 
   if (path == 0 || path_len == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_value entries = ccjs_undefined_value();
-  ccjs_value first = ccjs_undefined_value();
-  ccjs_value second = ccjs_undefined_value();
+  inox_value entries = inox_undefined_value();
+  inox_value first = inox_undefined_value();
+  inox_value second = inox_undefined_value();
 
-  if (ccjs_array_new(allocator, 0, &entries) != CCJS_OK) return CCJS_ERR_OOM;
-  if (ccjs_string_from_literal(allocator, "beta.txt", 8, &first) != CCJS_OK) return CCJS_ERR_OOM;
-  if (ccjs_array_push(entries, first) != CCJS_OK) return CCJS_ERR_OOM;
-  ccjs_release(first);
-  if (ccjs_string_from_literal(allocator, "alpha.txt", 9, &second) != CCJS_OK) return CCJS_ERR_OOM;
-  if (ccjs_array_push(entries, second) != CCJS_OK) return CCJS_ERR_OOM;
-  ccjs_release(second);
+  if (inox_array_new(allocator, 0, &entries) != INOX_OK) return INOX_ERR_OOM;
+  if (inox_string_from_literal(allocator, "beta.txt", 8, &first) != INOX_OK) return INOX_ERR_OOM;
+  if (inox_array_push(entries, first) != INOX_OK) return INOX_ERR_OOM;
+  inox_release(first);
+  if (inox_string_from_literal(allocator, "alpha.txt", 9, &second) != INOX_OK) return INOX_ERR_OOM;
+  if (inox_array_push(entries, second) != INOX_OK) return INOX_ERR_OOM;
+  inox_release(second);
   *out = entries;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
   fs_state state = { 0, 0, 0, { 0 }, 0 };
-  ccjs_fs_adapter adapter = {
+  inox_fs_adapter adapter = {
     .user = &state,
     .read_file = read_file,
     .write_file = write_file,
     .read_dir = read_dir
   };
-  ccjs_loop loop;
-  ccjs_promise* read_promise = 0;
-  ccjs_promise* dir_promise = 0;
-  ccjs_promise* write_promise = 0;
-  ccjs_promise* missing_promise = 0;
-  ccjs_value default_text = ccjs_undefined_value();
-  ccjs_value sync_text = ccjs_undefined_value();
-  ccjs_value sync_entries = ccjs_undefined_value();
-  ccjs_value async_text = ccjs_undefined_value();
-  ccjs_value async_entries = ccjs_undefined_value();
-  ccjs_value write_result = ccjs_undefined_value();
-  ccjs_value missing_error = ccjs_undefined_value();
-  ccjs_value missing_error_name = ccjs_undefined_value();
-  ccjs_value missing_error_message = ccjs_undefined_value();
-  ccjs_value missing_error_code = ccjs_undefined_value();
-  ccjs_value first_entry = ccjs_undefined_value();
+  inox_loop loop;
+  inox_promise* read_promise = 0;
+  inox_promise* dir_promise = 0;
+  inox_promise* write_promise = 0;
+  inox_promise* missing_promise = 0;
+  inox_value default_text = inox_undefined_value();
+  inox_value sync_text = inox_undefined_value();
+  inox_value sync_entries = inox_undefined_value();
+  inox_value async_text = inox_undefined_value();
+  inox_value async_entries = inox_undefined_value();
+  inox_value write_result = inox_undefined_value();
+  inox_value missing_error = inox_undefined_value();
+  inox_value missing_error_name = inox_undefined_value();
+  inox_value missing_error_message = inox_undefined_value();
+  inox_value missing_error_code = inox_undefined_value();
+  inox_value first_entry = inox_undefined_value();
   size_t sync_entry_count = 0;
   size_t async_entry_count = 0;
 
-  if (ccjs_fs_write_file_sync(${defaultPathLiteral}, ${defaultPathLen}, "default", 7) != CCJS_OK) return 1;
-  if (ccjs_fs_read_file_sync(&allocator, ${defaultPathLiteral}, ${defaultPathLen}, &default_text) != CCJS_OK) return 2;
-  if (default_text.tag != CCJS_TAG_STRING || default_text.as.ref == 0) return 3;
-  ccjs_string* default_string = (ccjs_string*)default_text.as.ref;
+  if (inox_fs_write_file_sync(${defaultPathLiteral}, ${defaultPathLen}, "default", 7) != INOX_OK) return 1;
+  if (inox_fs_read_file_sync(&allocator, ${defaultPathLiteral}, ${defaultPathLen}, &default_text) != INOX_OK) return 2;
+  if (default_text.tag != INOX_TAG_STRING || default_text.as.ref == 0) return 3;
+  inox_string* default_string = (inox_string*)default_text.as.ref;
   if (default_string->len != 7 || memcmp(default_string->bytes, "default", 7) != 0) return 4;
-  ccjs_release(default_text);
-  default_text = ccjs_undefined_value();
+  inox_release(default_text);
+  default_text = inox_undefined_value();
 
-  ccjs_fs_set_adapter(adapter);
-  if (ccjs_fs_read_file_sync(&allocator, "sync", 4, &sync_text) != CCJS_OK) return 5;
-  if (ccjs_fs_write_file_sync("sync-out", 8, "disk", 4) != CCJS_OK) return 6;
-  if (ccjs_fs_read_dir_sync(&allocator, "sync-dir", 8, &sync_entries) != CCJS_OK) return 7;
-  if (ccjs_array_len(sync_entries, &sync_entry_count) != CCJS_OK || sync_entry_count != 2) return 8;
+  inox_fs_set_adapter(adapter);
+  if (inox_fs_read_file_sync(&allocator, "sync", 4, &sync_text) != INOX_OK) return 5;
+  if (inox_fs_write_file_sync("sync-out", 8, "disk", 4) != INOX_OK) return 6;
+  if (inox_fs_read_dir_sync(&allocator, "sync-dir", 8, &sync_entries) != INOX_OK) return 7;
+  if (inox_array_len(sync_entries, &sync_entry_count) != INOX_OK || sync_entry_count != 2) return 8;
   if (state.reads != 1 || state.writes != 1 || state.dirs != 1) return 9;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 10;
-  if (ccjs_fs_read_file(&loop, "async", 5, &read_promise) != CCJS_OK) return 11;
-  if (ccjs_fs_read_dir(&loop, "async-dir", 9, &dir_promise) != CCJS_OK) return 12;
-  if (ccjs_fs_write_file(&loop, "async-out", 9, "saved", 5, &write_promise) != CCJS_OK) return 13;
-  if (ccjs_fs_read_file(&loop, "missing", 7, &missing_promise) != CCJS_OK) return 14;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 10;
+  if (inox_fs_read_file(&loop, "async", 5, &read_promise) != INOX_OK) return 11;
+  if (inox_fs_read_dir(&loop, "async-dir", 9, &dir_promise) != INOX_OK) return 12;
+  if (inox_fs_write_file(&loop, "async-out", 9, "saved", 5, &write_promise) != INOX_OK) return 13;
+  if (inox_fs_read_file(&loop, "missing", 7, &missing_promise) != INOX_OK) return 14;
   if (state.reads != 1 || state.writes != 1 || state.dirs != 1) return 15;
-  if (ccjs_loop_pending_immediates(&loop) != 4) return 16;
-  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 17;
-  if (ccjs_loop_has_work(&loop)) return 18;
-  if (ccjs_promise_get_state(read_promise) != CCJS_PROMISE_FULFILLED) return 19;
-  if (ccjs_promise_get_state(dir_promise) != CCJS_PROMISE_FULFILLED) return 20;
-  if (ccjs_promise_get_state(write_promise) != CCJS_PROMISE_FULFILLED) return 21;
-  if (ccjs_promise_get_state(missing_promise) != CCJS_PROMISE_REJECTED) return 22;
-  if (ccjs_promise_get_result(read_promise, &async_text) != CCJS_OK) return 23;
-  if (ccjs_promise_get_result(dir_promise, &async_entries) != CCJS_OK) return 24;
-  if (ccjs_array_len(async_entries, &async_entry_count) != CCJS_OK || async_entry_count != 2) return 25;
-  if (ccjs_array_get(async_entries, 0, &first_entry) != CCJS_OK) return 26;
-  if (ccjs_promise_get_result(write_promise, &write_result) != CCJS_OK) return 27;
-  if (write_result.tag != CCJS_TAG_UNDEFINED) return 28;
-  if (ccjs_promise_get_result(missing_promise, &missing_error) != CCJS_OK) return 29;
-  if (missing_error.tag != CCJS_TAG_OBJECT || missing_error.as.ref == 0) return 30;
-  if (ccjs_object_get(missing_error, "name", 4, &missing_error_name) != CCJS_OK) return 31;
-  if (ccjs_object_get(missing_error, "message", 7, &missing_error_message) != CCJS_OK) return 32;
-  if (ccjs_object_get(missing_error, "code", 4, &missing_error_code) != CCJS_OK) return 33;
+  if (inox_loop_pending_immediates(&loop) != 4) return 16;
+  if (inox_loop_poll(&loop, 0) != INOX_OK) return 17;
+  if (inox_loop_has_work(&loop)) return 18;
+  if (inox_promise_get_state(read_promise) != INOX_PROMISE_FULFILLED) return 19;
+  if (inox_promise_get_state(dir_promise) != INOX_PROMISE_FULFILLED) return 20;
+  if (inox_promise_get_state(write_promise) != INOX_PROMISE_FULFILLED) return 21;
+  if (inox_promise_get_state(missing_promise) != INOX_PROMISE_REJECTED) return 22;
+  if (inox_promise_get_result(read_promise, &async_text) != INOX_OK) return 23;
+  if (inox_promise_get_result(dir_promise, &async_entries) != INOX_OK) return 24;
+  if (inox_array_len(async_entries, &async_entry_count) != INOX_OK || async_entry_count != 2) return 25;
+  if (inox_array_get(async_entries, 0, &first_entry) != INOX_OK) return 26;
+  if (inox_promise_get_result(write_promise, &write_result) != INOX_OK) return 27;
+  if (write_result.tag != INOX_TAG_UNDEFINED) return 28;
+  if (inox_promise_get_result(missing_promise, &missing_error) != INOX_OK) return 29;
+  if (missing_error.tag != INOX_TAG_OBJECT || missing_error.as.ref == 0) return 30;
+  if (inox_object_get(missing_error, "name", 4, &missing_error_name) != INOX_OK) return 31;
+  if (inox_object_get(missing_error, "message", 7, &missing_error_message) != INOX_OK) return 32;
+  if (inox_object_get(missing_error, "code", 4, &missing_error_code) != INOX_OK) return 33;
 
-  ccjs_string* sync_string = (ccjs_string*)sync_text.as.ref;
-  ccjs_string* async_string = (ccjs_string*)async_text.as.ref;
-  ccjs_string* first_string = (ccjs_string*)first_entry.as.ref;
-  ccjs_string* error_name = (ccjs_string*)missing_error_name.as.ref;
-  ccjs_string* error_message = (ccjs_string*)missing_error_message.as.ref;
-  ccjs_string* error_code = (ccjs_string*)missing_error_code.as.ref;
+  inox_string* sync_string = (inox_string*)sync_text.as.ref;
+  inox_string* async_string = (inox_string*)async_text.as.ref;
+  inox_string* first_string = (inox_string*)first_entry.as.ref;
+  inox_string* error_name = (inox_string*)missing_error_name.as.ref;
+  inox_string* error_message = (inox_string*)missing_error_message.as.ref;
+  inox_string* error_code = (inox_string*)missing_error_code.as.ref;
   printf("%.*s %.*s %d %zu %zu %.*s %.*s %.*s %.*s %.*s\\n", (int)sync_string->len, sync_string->bytes, (int)async_string->len, async_string->bytes, state.writes, sync_entry_count, async_entry_count, (int)first_string->len, first_string->bytes, (int)state.written_len, state.written, (int)error_name->len, error_name->bytes, (int)error_code->len, error_code->bytes, (int)error_message->len, error_message->bytes);
 
-  ccjs_release(first_entry);
-  ccjs_release(missing_error_code);
-  ccjs_release(missing_error_message);
-  ccjs_release(missing_error_name);
-  ccjs_release(missing_error);
-  ccjs_release(write_result);
-  ccjs_release(async_entries);
-  ccjs_release(async_text);
-  ccjs_release(sync_entries);
-  ccjs_release(sync_text);
-  ccjs_promise_release(missing_promise);
-  ccjs_promise_release(write_promise);
-  ccjs_promise_release(dir_promise);
-  ccjs_promise_release(read_promise);
-  ccjs_loop_dispose(&loop);
-  ccjs_fs_clear_adapter();
+  inox_release(first_entry);
+  inox_release(missing_error_code);
+  inox_release(missing_error_message);
+  inox_release(missing_error_name);
+  inox_release(missing_error);
+  inox_release(write_result);
+  inox_release(async_entries);
+  inox_release(async_text);
+  inox_release(sync_entries);
+  inox_release(sync_text);
+  inox_promise_release(missing_promise);
+  inox_promise_release(write_promise);
+  inox_promise_release(dir_promise);
+  inox_promise_release(read_promise);
+  inox_loop_dispose(&loop);
+  inox_fs_clear_adapter();
   return 0;
 }
 `
@@ -253,7 +253,7 @@ test('C runtime fs adapter supports stat lstat access and Stats helpers', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-stat-adapter-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-fs-stat-adapter-'))
   const source = join(dir, 'fs-stat-adapter.c')
   const output = join(dir, 'fs-stat-adapter')
 
@@ -262,9 +262,9 @@ test('C runtime fs adapter supports stat lstat access and Stats helpers', async 
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/fs.h"
-#include "ccjs/promise.h"
+#include "inox/allocator.h"
+#include "inox/fs.h"
+#include "inox/promise.h"
 
 typedef struct fs_state {
   int stats;
@@ -292,76 +292,76 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status stat_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+static inox_status stat_file(void* user, inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   fs_state* state = (fs_state*)user;
   (void)path;
   (void)path_len;
   state->stats += 1;
-  return ccjs_fs_stats_new(allocator, 42, 33188, 1000, true, false, out);
+  return inox_fs_stats_new(allocator, 42, 33188, 1000, true, false, out);
 }
 
-static ccjs_status lstat_file(void* user, ccjs_allocator* allocator, const char* path, size_t path_len, ccjs_value* out) {
+static inox_status lstat_file(void* user, inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   fs_state* state = (fs_state*)user;
   (void)path;
   (void)path_len;
   state->lstats += 1;
-  return ccjs_fs_stats_new(allocator, 7, 16877, 2000, false, true, out);
+  return inox_fs_stats_new(allocator, 7, 16877, 2000, false, true, out);
 }
 
-static ccjs_status access_file(void* user, const char* path, size_t path_len, int mode) {
+static inox_status access_file(void* user, const char* path, size_t path_len, int mode) {
   fs_state* state = (fs_state*)user;
   (void)path;
   (void)path_len;
   state->accesses += 1;
-  return mode == CCJS_FS_R_OK ? CCJS_OK : CCJS_ERR_FIELD;
+  return mode == INOX_FS_R_OK ? INOX_OK : INOX_ERR_FIELD;
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
   fs_state state = { 0, 0, 0 };
-  ccjs_fs_adapter adapter = {
+  inox_fs_adapter adapter = {
     .user = &state,
     .stat = stat_file,
     .lstat = lstat_file,
     .access = access_file
   };
-  ccjs_loop loop;
-  ccjs_promise* stat_promise = 0;
-  ccjs_promise* lstat_promise = 0;
-  ccjs_promise* access_promise = 0;
-  ccjs_value sync_stat = ccjs_undefined_value();
-  ccjs_value sync_lstat = ccjs_undefined_value();
-  ccjs_value async_stat = ccjs_undefined_value();
-  ccjs_value async_lstat = ccjs_undefined_value();
+  inox_loop loop;
+  inox_promise* stat_promise = 0;
+  inox_promise* lstat_promise = 0;
+  inox_promise* access_promise = 0;
+  inox_value sync_stat = inox_undefined_value();
+  inox_value sync_lstat = inox_undefined_value();
+  inox_value async_stat = inox_undefined_value();
+  inox_value async_lstat = inox_undefined_value();
 
-  ccjs_fs_set_adapter(adapter);
-  if (ccjs_fs_stat_sync(&allocator, "file", 4, &sync_stat) != CCJS_OK) return 1;
-  if (ccjs_fs_lstat_sync(&allocator, "dir", 3, &sync_lstat) != CCJS_OK) return 2;
-  if (ccjs_fs_access_sync("file", 4, CCJS_FS_R_OK) != CCJS_OK) return 3;
-  if (!ccjs_fs_stats_is_file(sync_stat)) return 4;
-  if (!ccjs_fs_stats_is_directory(sync_lstat)) return 5;
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 6;
-  if (ccjs_fs_stat(&loop, "file", 4, &stat_promise) != CCJS_OK) return 7;
-  if (ccjs_fs_lstat(&loop, "dir", 3, &lstat_promise) != CCJS_OK) return 8;
-  if (ccjs_fs_access(&loop, "file", 4, CCJS_FS_R_OK, &access_promise) != CCJS_OK) return 9;
-  if (ccjs_loop_poll(&loop, 0) != CCJS_OK) return 10;
-  if (ccjs_promise_get_state(stat_promise) != CCJS_PROMISE_FULFILLED) return 11;
-  if (ccjs_promise_get_state(lstat_promise) != CCJS_PROMISE_FULFILLED) return 12;
-  if (ccjs_promise_get_state(access_promise) != CCJS_PROMISE_FULFILLED) return 13;
-  if (ccjs_promise_get_result(stat_promise, &async_stat) != CCJS_OK) return 14;
-  if (ccjs_promise_get_result(lstat_promise, &async_lstat) != CCJS_OK) return 15;
-  if (!ccjs_fs_stats_is_file(async_stat)) return 16;
-  if (!ccjs_fs_stats_is_directory(async_lstat)) return 17;
+  inox_fs_set_adapter(adapter);
+  if (inox_fs_stat_sync(&allocator, "file", 4, &sync_stat) != INOX_OK) return 1;
+  if (inox_fs_lstat_sync(&allocator, "dir", 3, &sync_lstat) != INOX_OK) return 2;
+  if (inox_fs_access_sync("file", 4, INOX_FS_R_OK) != INOX_OK) return 3;
+  if (!inox_fs_stats_is_file(sync_stat)) return 4;
+  if (!inox_fs_stats_is_directory(sync_lstat)) return 5;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 6;
+  if (inox_fs_stat(&loop, "file", 4, &stat_promise) != INOX_OK) return 7;
+  if (inox_fs_lstat(&loop, "dir", 3, &lstat_promise) != INOX_OK) return 8;
+  if (inox_fs_access(&loop, "file", 4, INOX_FS_R_OK, &access_promise) != INOX_OK) return 9;
+  if (inox_loop_poll(&loop, 0) != INOX_OK) return 10;
+  if (inox_promise_get_state(stat_promise) != INOX_PROMISE_FULFILLED) return 11;
+  if (inox_promise_get_state(lstat_promise) != INOX_PROMISE_FULFILLED) return 12;
+  if (inox_promise_get_state(access_promise) != INOX_PROMISE_FULFILLED) return 13;
+  if (inox_promise_get_result(stat_promise, &async_stat) != INOX_OK) return 14;
+  if (inox_promise_get_result(lstat_promise, &async_lstat) != INOX_OK) return 15;
+  if (!inox_fs_stats_is_file(async_stat)) return 16;
+  if (!inox_fs_stats_is_directory(async_lstat)) return 17;
   printf("%d %d %d\\n", state.stats, state.lstats, state.accesses);
-  ccjs_release(async_lstat);
-  ccjs_release(async_stat);
-  ccjs_release(sync_lstat);
-  ccjs_release(sync_stat);
-  ccjs_promise_release(access_promise);
-  ccjs_promise_release(lstat_promise);
-  ccjs_promise_release(stat_promise);
-  ccjs_loop_dispose(&loop);
-  ccjs_fs_clear_adapter();
+  inox_release(async_lstat);
+  inox_release(async_stat);
+  inox_release(sync_lstat);
+  inox_release(sync_stat);
+  inox_promise_release(access_promise);
+  inox_promise_release(lstat_promise);
+  inox_promise_release(stat_promise);
+  inox_loop_dispose(&loop);
+  inox_fs_clear_adapter();
   return 0;
 }
 `
@@ -392,7 +392,7 @@ test('generated C fs.promises calls compile and run without libuv', async (t) =>
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-codegen-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-fs-codegen-'))
   const source = join(dir, 'fs-codegen.c')
   const output = join(dir, 'fs-codegen')
   const input = join(dir, 'value.txt')
@@ -441,7 +441,7 @@ test('generated C fs.promises.readdir awaits hosted directory entries', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-readdir-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-fs-readdir-'))
   const entriesDir = join(dir, 'entries')
   const missingDir = join(dir, 'missing')
   const source = join(dir, 'fs-readdir.c')
@@ -498,7 +498,7 @@ test('generated C fs.promises binary read/write copies hosted bytes', async (t) 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-bytes-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-fs-bytes-'))
   const input = join(dir, 'input.bin')
   const copied = join(dir, 'copied.bin')
   const source = join(dir, 'fs-bytes.c')
@@ -547,7 +547,7 @@ test('generated C node:fs promises copy hosted files and read entries', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-node-promises-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-fs-node-promises-'))
   const entriesDir = join(dir, 'entries')
   const textInput = join(dir, 'input.txt')
   const textCopied = join(dir, 'copied.txt')
@@ -647,7 +647,7 @@ test('generated C fs sync helpers copy hosted files and read entries', async (t)
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-fs-sync-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-fs-sync-'))
   const entriesDir = join(dir, 'entries')
   const textInput = join(dir, 'input.txt')
   const textCopied = join(dir, 'copied.txt')
@@ -745,7 +745,7 @@ test('generated C async task frames await fs promises without libuv', async (t) 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-fs-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-fs-'))
   const textInput = join(dir, 'input.txt')
   const textCopied = join(dir, 'copied.txt')
   const bytesInput = join(dir, 'input.bin')

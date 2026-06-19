@@ -71,7 +71,7 @@ const cRuntimeSourceGroups = {
   time: ['runtime/c/src/time/time.c'],
   weak: ['runtime/c/src/core/weak.c']
 }
-const configFileNames = ['inox.config.json', 'inox.json', 'ccjs.config.json', 'ccjs.json']
+const configFileNames = ['inox.config.json', 'inox.json']
 
 const result = parseCliArgs(process.argv.slice(2))
 
@@ -406,11 +406,11 @@ function cRuntimeCFlagsForRequirements(
   flags.push(...cRuntimeCFlagsForTlsBackend(tlsBackend))
 
   if (runtimeRequirements.includes('weak-references')) {
-    flags.push('-DCCJS_ENABLE_WEAK=1')
+    flags.push('-DINOX_ENABLE_WEAK=1')
   }
 
   if (runtimeRequirements.includes('debug-memory')) {
-    flags.push('-DCCJS_DEBUG_MEMORY=1')
+    flags.push('-DINOX_DEBUG_MEMORY=1')
   }
 
   return flags
@@ -418,14 +418,14 @@ function cRuntimeCFlagsForRequirements(
 
 function cRuntimeCFlagsForTlsBackend(tlsBackend: TlsBackend): string[] {
   if (tlsBackend === 'boringssl') {
-    return ['-DCCJS_TLS_BACKEND_BORINGSSL=1', `-I${join(repoRoot, 'third_party/boringssl/include')}`]
+    return ['-DINOX_TLS_BACKEND_BORINGSSL=1', `-I${join(repoRoot, 'third_party/boringssl/include')}`]
   }
 
   if (tlsBackend === 'openssl') {
-    return ['-DCCJS_TLS_BACKEND_OPENSSL=1']
+    return ['-DINOX_TLS_BACKEND_OPENSSL=1']
   }
 
-  return ['-DCCJS_TLS_BACKEND_NONE=1']
+  return ['-DINOX_TLS_BACKEND_NONE=1']
 }
 
 function cRuntimeLdFlagsForTlsBackend(tlsBackend: TlsBackend): string[] {
@@ -445,7 +445,7 @@ function cRuntimeTlsSource(tlsBackend: TlsBackend): string {
 }
 
 function usesCHeader(code: string, name: string): boolean {
-  return code.includes(`#include "ccjs/${name}.h"`)
+  return code.includes(`#include "inox/${name}.h"`)
 }
 
 async function loadConfig(): Promise<CConfig> {

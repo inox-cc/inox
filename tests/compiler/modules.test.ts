@@ -34,7 +34,7 @@ import {
 
 
 test('module graph stores HIR and IR per module', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-modules-'))
 
   try {
     await writeFile(
@@ -95,7 +95,7 @@ export function main(): void {
 })
 
 test('module graph allows static ESM import cycles', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-cycles-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-module-cycles-'))
 
   try {
     await writeFile(
@@ -135,7 +135,7 @@ export function main(): void {
       result.graph.modules.some((module) => module.path.endsWith('/b.ts')),
       true
     )
-    assert.match(result.code, /ccjs_main/)
+    assert.match(result.code, /inox_main/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -145,7 +145,7 @@ export function main(): void {
 })
 
 test('module graph resolves named re-exports', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-reexports-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-reexports-'))
 
   try {
     await writeFile(
@@ -183,7 +183,7 @@ export function main(): void {
 
 
 test('collects target-neutral IR module records from stored IR without HIR', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ir-module-records-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-ir-module-records-'))
 
   try {
     await writeFile(
@@ -234,7 +234,7 @@ export function main(): void {
 
 
 test('does not rebuild IR module records from legacy HIR fallback', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-ir-module-no-hir-fallback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-ir-module-no-hir-fallback-'))
 
   try {
     await writeFile(
@@ -289,7 +289,7 @@ export function main(): void {
 
 
 test('emits C bundles directly from target-neutral IR module records', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-bundle-ir-entrypoints-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-bundle-ir-entrypoints-'))
 
   try {
     await writeFile(
@@ -333,9 +333,9 @@ export function main(): void {
       true
     )
     assert.match(c, /void greet\(void\);/)
-    assert.match(c, /void ccjs_main\(void\);/)
-    assert.doesNotMatch(c, /int main\(void\) \{[\s\S]*ccjs_main\(\);/)
-    assert.doesNotMatch(cWithLibEntry, /int main\(void\) \{\n {2}ccjs_main\(\);/)
+    assert.match(c, /void inox_main\(void\);/)
+    assert.doesNotMatch(c, /int main\(void\) \{[\s\S]*inox_main\(\);/)
+    assert.doesNotMatch(cWithLibEntry, /int main\(void\) \{\n {2}inox_main\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -346,7 +346,7 @@ export function main(): void {
 
 
 test('drives C bundle functions and main wrapper from stored target-neutral IR programs', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-bundle-ir-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-bundle-ir-'))
 
   try {
     await writeFile(
@@ -378,8 +378,8 @@ greet()
 
     assert.match(code, /void greet\(void\);/)
     assert.match(code, /void greet\(void\) \{/)
-    assert.doesNotMatch(code, /ccjs_main/)
-    assert.match(code, /int main\(void\) \{\n {2}double ccjs_return = 0;\n {2}greet\(\);/)
+    assert.doesNotMatch(code, /inox_main/)
+    assert.match(code, /int main\(void\) \{\n {2}double inox_return = 0;\n {2}greet\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -390,7 +390,7 @@ greet()
 
 
 test('compiles static ESM import aliases to C bundles', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-aliases-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-module-aliases-'))
 
   try {
     await writeFile(
@@ -416,7 +416,7 @@ export function main(): void {
 
     assert.match(c.code, /void sayHello\(void\);/)
     assert.match(c.code, /void sayHello\(void\) \{\n {2}greet\(\);/)
-    assert.match(c.code, /ccjs_main\(void\) \{\n {2}sayHello\(\);/)
+    assert.match(c.code, /inox_main\(void\) \{\n {2}sayHello\(\);/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -427,7 +427,7 @@ export function main(): void {
 
 
 test('compiles static ESM type imports before checking modules', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-type-imports-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-module-type-imports-'))
 
   try {
     await writeFile(
@@ -460,8 +460,8 @@ export function main(): void {
       target: 'c'
     })
 
-    assert.match(c.code, /static const ccjs_field_info ccjs_shape_user_\d+_fields\[\]/)
-    assert.match(c.code, /ccjs_object_get_known\(user, 0, &ccjs_log_value_\d+\)/)
+    assert.match(c.code, /static const inox_field_info inox_shape_user_\d+_fields\[\]/)
+    assert.match(c.code, /inox_object_get_known\(user, 0, &inox_log_value_\d+\)/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -471,7 +471,7 @@ export function main(): void {
 })
 
 test('carries transitive type-only imports through synthetic declarations', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-transitive-type-imports-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-module-transitive-type-imports-'))
 
   try {
     await writeFile(
@@ -506,7 +506,7 @@ export function main(): void {
       target: 'c'
     })
 
-    assert.match(c.code, /ccjs_object_get_known\(options, 1, &ccjs_log_value_\d+\)/)
+    assert.match(c.code, /inox_object_get_known\(options, 1, &inox_log_value_\d+\)/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -516,7 +516,7 @@ export function main(): void {
 })
 
 test('compiles cyclic transitive type-only imports', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-cyclic-type-imports-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-module-cyclic-type-imports-'))
 
   try {
     await writeFile(
@@ -663,7 +663,7 @@ test('deduplicates synthetic type declarations inserted by multiple type imports
 
 
 test('resolves static ESM directory index imports', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-module-index-imports-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-module-index-imports-'))
 
   try {
     await mkdir(join(dir, 'lib'))
@@ -703,7 +703,7 @@ export function main(): void {
 
 
 test('compiles a static ESM module graph to C bundle', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-modules-'))
 
   try {
     await writeFile(
@@ -728,7 +728,7 @@ export function main(): void {
     })
 
     assert.match(result.code, /void greet\(void\);/)
-    assert.match(result.code, /void ccjs_main\(void\);/)
+    assert.match(result.code, /void inox_main\(void\);/)
     assert.match(result.code, /void greet\(void\) \{/)
     assert.match(result.code, /greet\(\);/)
     assert.match(result.code, /int main\(void\) \{/)
@@ -742,7 +742,7 @@ export function main(): void {
 
 
 test('rejects unknown imported exports', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-modules-'))
 
   try {
     await writeFile(
@@ -773,7 +773,7 @@ export function main(): void {
         }
 
         assert.equal(
-          error.diagnostics.some((item) => item.code === 'CCJS_UNKNOWN_EXPORT'),
+          error.diagnostics.some((item) => item.code === 'INOX_UNKNOWN_EXPORT'),
           true
         )
         return true

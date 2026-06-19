@@ -110,41 +110,41 @@ function pushJsonParseStatusLines(
     return
   }
 
-  const status = nextCName(context, 'ccjs_json_status')
+  const status = nextCName(context, 'inox_json_status')
   const message = 'JSON.parse failed'
   const messageLiteral = cStringLiteral(message)
   const messageLength = utf8ByteLength(message)
   const failureStatement = emitFailureStatement(context)
-  const fallbackErrorLine = `if (ccjs_string_from_literal(&ccjs_default_allocator, ${messageLiteral}, ${messageLength}, &ccjs_error) != CCJS_OK) ${failureStatement}`
-  let gotoTarget = 'ccjs_cleanup'
+  const fallbackErrorLine = `if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, &inox_error) != INOX_OK) ${failureStatement}`
+  let gotoTarget = 'inox_cleanup'
 
   if (errorTarget != null) {
     gotoTarget = errorTarget
   }
 
-  target.push(`ccjs_status ${status} = ${call};`)
-  target.push(`if (${status} != CCJS_OK) {`)
-  target.push('  ccjs_release(ccjs_error);')
-  target.push('  ccjs_error = ccjs_undefined_value();')
+  target.push(`inox_status ${status} = ${call};`)
+  target.push(`if (${status} != INOX_OK) {`)
+  target.push('  inox_release(inox_error);')
+  target.push('  inox_error = inox_undefined_value();')
 
   if (detailedError != null) {
-    target.push(`  if (${detailedError}.tag == CCJS_TAG_STRING && ${detailedError}.as.ref != 0) {`)
-    target.push(`    ccjs_error = ${detailedError};`)
-    target.push(`    ${detailedError} = ccjs_undefined_value();`)
+    target.push(`  if (${detailedError}.tag == INOX_TAG_STRING && ${detailedError}.as.ref != 0) {`)
+    target.push(`    inox_error = ${detailedError};`)
+    target.push(`    ${detailedError} = inox_undefined_value();`)
     target.push('  } else {')
     target.push(`    ${fallbackErrorLine}`)
-    target.push(`    ccjs_release(${detailedError});`)
-    target.push(`    ${detailedError} = ccjs_undefined_value();`)
+    target.push(`    inox_release(${detailedError});`)
+    target.push(`    ${detailedError} = inox_undefined_value();`)
     target.push('  }')
   } else {
     target.push(`  ${fallbackErrorLine}`)
   }
 
   if (errorTarget == null) {
-    target.push('  ccjs_status_result = CCJS_ERR_THROW;')
+    target.push('  inox_status_result = INOX_ERR_THROW;')
   }
 
-  target.push('  ccjs_error_active = 1;')
+  target.push('  inox_error_active = 1;')
   target.push(`  goto ${gotoTarget};`)
   target.push('}')
 }
@@ -167,20 +167,20 @@ export function emitJsonParseVariableDeclaration(
   }
 
   const fields: CObjectShapeField[] = statement.shape.fields
-  const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
+  const shapeName = nextCName(context, `inox_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
-  const parsed = nextCName(context, 'ccjs_json_object')
+  const parsed = nextCName(context, 'inox_json_object')
   const parseCall = emitPreparedJsonCallExpression(statement.init, context, dependencies, {
     out: parsed
   })
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
     lines.push(`  { ${cStringLiteral(field.name)}, ${dependencies.emitCFieldFlags(field)} },`)
   }
 
   lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`static const inox_shape ${shapeName} = {`)
   lines.push(`  ${fields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
@@ -195,18 +195,18 @@ export function emitJsonParseVariableDeclaration(
     return null
   }
   pushJsonLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context))
+  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${statement.name})`, context))
 
   for (let index = 0; index < fields.length; index++) {
     const field = fields[index]
-    const value = nextCName(context, `ccjs_json_${emitCIdentifier(field.name)}`)
+    const value = nextCName(context, `inox_json_${emitCIdentifier(field.name)}`)
     const tag = cRuntimeValueTag(field.valueType)
 
     registerOwnedValue(context, value)
     pushJsonLines(lines, emitPrepareOwnedValueWrite(value))
     lines.push(
       emitStatusCheck(
-        `ccjs_object_get(${parsed}, ${cStringLiteral(field.name)}, ${utf8ByteLength(field.name)}, &${value})`,
+        `inox_object_get(${parsed}, ${cStringLiteral(field.name)}, ${utf8ByteLength(field.name)}, &${value})`,
         context
       )
     )
@@ -215,7 +215,7 @@ export function emitJsonParseVariableDeclaration(
     } else {
       pushJsonLines(lines, emitRuntimeValueCheckLines(value, tag, context))
     }
-    lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value})`, context))
+    lines.push(emitStatusCheck(`inox_object_init_known(${statement.name}, ${index}, ${value})`, context))
   }
 
   return lines
@@ -233,7 +233,7 @@ export function emitPreparedJsonCallExpression(
     return null
   }
 
-  let out = nextCName(context, 'ccjs_json_value')
+  let out = nextCName(context, 'inox_json_value')
 
   if (options != null && options.out != null) {
     out = options.out
@@ -244,7 +244,7 @@ export function emitPreparedJsonCallExpression(
   }
 
   if (method === 'parse') {
-    const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_json_text')
+    const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_json_text')
     const expectedTag = cRuntimeValueTag(dependencies.inferExpressionType(expression, context))
     let detailedError: string | null = null
 
@@ -254,15 +254,15 @@ export function emitPreparedJsonCallExpression(
     pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
 
     if (shouldUseDetailedJsonParseError(context)) {
-      detailedError = nextCName(context, 'ccjs_json_error')
+      detailedError = nextCName(context, 'inox_json_error')
       registerOwnedValue(context, detailedError)
       pushJsonLines(lines, emitPrepareOwnedValueWrite(detailedError))
     }
 
-    let parseCall = `ccjs_json_parse(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out})`
+    let parseCall = `inox_json_parse(&inox_default_allocator, ${text.bytes}, ${text.length}, &${out})`
 
     if (detailedError != null) {
-      parseCall = `ccjs_json_parse_with_error(&ccjs_default_allocator, ${text.bytes}, ${text.length}, &${out}, &${detailedError})`
+      parseCall = `inox_json_parse_with_error(&inox_default_allocator, ${text.bytes}, ${text.length}, &${out}, &${detailedError})`
     }
 
     pushJsonParseStatusLines(lines, parseCall, context, detailedError)
@@ -280,8 +280,8 @@ export function emitPreparedJsonCallExpression(
 
   pushJsonLines(lines, value.lines)
   pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`ccjs_json_stringify(&ccjs_default_allocator, ${value.expression}, &${out})`, context))
-  lines.push(emitRuntimeValueCheck(out, 'CCJS_TAG_STRING', context))
+  lines.push(emitStatusCheck(`inox_json_stringify(&inox_default_allocator, ${value.expression}, &${out})`, context))
+  lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
 
   return {
     lines: lines,

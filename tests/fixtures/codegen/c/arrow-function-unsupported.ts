@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_ARRAY_METHOD
+// @diagnostic INOX_C_ARRAY_METHOD
 
 function compare(left: number, right: number): number {
   return left - right

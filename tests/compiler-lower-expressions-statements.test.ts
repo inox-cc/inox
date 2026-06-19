@@ -286,7 +286,7 @@ test('lowers chained Array.filter and Array.map declarations through temporary a
 
   assert.equal(lowered.length, 4)
   assert.equal(lowered[0].type, 'VariableDeclaration')
-  assert.match(lowered[0].name, /^__ccjs_array_expr_\d+$/)
+  assert.match(lowered[0].name, /^__inox_array_expr_\d+$/)
   assert.equal(lowered[0].loweredArrayMethodName, 'filter')
   assert.equal(lowered[1].type, 'ForStatement')
   assert.equal(lowered[2].type, 'VariableDeclaration')

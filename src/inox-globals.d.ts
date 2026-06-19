@@ -53,7 +53,7 @@ type InoxDebugMemoryStats = {
   readonly oomFailureCount: number
 }
 
-declare const ccjs: {
+declare const inox: {
   readonly __debug: {
     memory(): InoxDebugMemoryStats
   }

@@ -131,7 +131,7 @@ function readSignature(name: string): number {
 })
 
 test('compiles module graphs to IR modules before target bundle emission', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-pipeline-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-pipeline-'))
 
   try {
     const entry = join(dir, 'index.ts')
@@ -162,7 +162,7 @@ export function main(): void {
       compiled.graph.modules.map((module) => module.path)
     )
     assert.match(result.code, /double value\(void\)/)
-    assert.match(result.code, /void ccjs_main\(void\)/)
+    assert.match(result.code, /void inox_main\(void\)/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

@@ -1,10 +1,10 @@
-#include "ccjs/fetch.h"
+#include "inox/fetch.h"
 
-#ifdef CCJS_LOOP_BACKEND_LIBUV
-#include "ccjs/net.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
-#include "ccjs/tls.h"
+#ifdef INOX_LOOP_BACKEND_LIBUV
+#include "inox/net.h"
+#include "inox/object.h"
+#include "inox/string.h"
+#include "inox/tls.h"
 
 #include <ctype.h>
 #include <stdint.h>
@@ -12,15 +12,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct ccjs_fetch_operation {
-  ccjs_loop* loop;
-  ccjs_allocator* allocator;
-  ccjs_net_socket* socket;
-  ccjs_tls_client* tls;
-  ccjs_timer_handle* abort_timer;
-  ccjs_fetch_done_fn done;
+typedef struct inox_fetch_operation {
+  inox_loop* loop;
+  inox_allocator* allocator;
+  inox_net_socket* socket;
+  inox_tls_client* tls;
+  inox_timer_handle* abort_timer;
+  inox_fetch_done_fn done;
   void* user;
-  ccjs_value signal;
+  inox_value signal;
   char url[1024];
   size_t url_len;
   char host[256];
@@ -37,79 +37,79 @@ typedef struct ccjs_fetch_operation {
   char response[8192];
   size_t response_len;
   int completed;
-} ccjs_fetch_operation;
+} inox_fetch_operation;
 
-typedef struct ccjs_fetch_promise_request {
-  ccjs_loop* loop;
-  ccjs_promise* promise;
+typedef struct inox_fetch_promise_request {
+  inox_loop* loop;
+  inox_promise* promise;
   char* url;
   size_t url_len;
-} ccjs_fetch_promise_request;
+} inox_fetch_promise_request;
 
 enum {
-  CCJS_FETCH_RESPONSE_STATUS_INDEX = 0,
-  CCJS_FETCH_RESPONSE_OK_INDEX = 1,
-  CCJS_FETCH_RESPONSE_URL_INDEX = 2,
-  CCJS_FETCH_RESPONSE_STATUS_TEXT_INDEX = 3,
-  CCJS_FETCH_RESPONSE_REDIRECTED_INDEX = 4,
-  CCJS_FETCH_RESPONSE_HEADERS_INDEX = 5,
-  CCJS_FETCH_RESPONSE_BODY_INDEX = 6
+  INOX_FETCH_RESPONSE_STATUS_INDEX = 0,
+  INOX_FETCH_RESPONSE_OK_INDEX = 1,
+  INOX_FETCH_RESPONSE_URL_INDEX = 2,
+  INOX_FETCH_RESPONSE_STATUS_TEXT_INDEX = 3,
+  INOX_FETCH_RESPONSE_REDIRECTED_INDEX = 4,
+  INOX_FETCH_RESPONSE_HEADERS_INDEX = 5,
+  INOX_FETCH_RESPONSE_BODY_INDEX = 6
 };
 
 enum {
-  CCJS_FETCH_HEADERS_RAW_INDEX = 0
+  INOX_FETCH_HEADERS_RAW_INDEX = 0
 };
 
 enum {
-  CCJS_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX = 0,
-  CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX = 0
+  INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX = 0,
+  INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX = 0
 };
 
 enum {
-  CCJS_FETCH_REDIRECT_FOLLOW = 0,
-  CCJS_FETCH_REDIRECT_ERROR = 1,
-  CCJS_FETCH_REDIRECT_MANUAL = 2
+  INOX_FETCH_REDIRECT_FOLLOW = 0,
+  INOX_FETCH_REDIRECT_ERROR = 1,
+  INOX_FETCH_REDIRECT_MANUAL = 2
 };
 
-#define CCJS_FETCH_MAX_REDIRECTS 20
+#define INOX_FETCH_MAX_REDIRECTS 20
 
-static ccjs_status
-ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len);
-static ccjs_status ccjs_fetch_copy_url(ccjs_allocator* allocator, const char* url, size_t url_len, char** out);
-static ccjs_status ccjs_fetch_set_url(ccjs_fetch_operation* request, const char* url);
-static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const ccjs_fetch_init* init);
-static ccjs_status ccjs_fetch_start_connection(ccjs_fetch_operation* request);
-static ccjs_status ccjs_fetch_operation_is_aborted(ccjs_fetch_operation* request, int* out);
-static void ccjs_fetch_operation_free(ccjs_fetch_operation* request);
-static ccjs_status ccjs_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len);
-static ccjs_status ccjs_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text);
-static ccjs_status ccjs_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value);
-static int ccjs_fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
-static int ccjs_fetch_headers_include(const ccjs_fetch_header* headers, size_t header_count, const char* name);
-static ccjs_status ccjs_fetch_redirect_mode_from_init(const ccjs_fetch_init* init, int* out);
-static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, ccjs_status status);
-static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len);
-static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket);
-static ccjs_status ccjs_fetch_on_tls_connect(void* user, ccjs_tls_client* client, ccjs_status status);
-static ccjs_status ccjs_fetch_on_tls_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len);
-static void ccjs_fetch_on_tls_close(void* user, ccjs_tls_client* client);
-static ccjs_status ccjs_fetch_on_transport_connect(ccjs_fetch_operation* request, ccjs_status status);
-static ccjs_status ccjs_fetch_on_transport_data(ccjs_fetch_operation* request, const char* bytes, size_t len);
-static void ccjs_fetch_on_transport_close(ccjs_fetch_operation* request);
-static ccjs_status ccjs_fetch_transport_write(ccjs_fetch_operation* request, const char* bytes, size_t len);
-static void ccjs_fetch_transport_close(ccjs_fetch_operation* request);
-static ccjs_status ccjs_fetch_abort_poll(void* user);
-static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request);
-static const char* ccjs_fetch_find_header_end(const char* bytes, size_t len);
-static int ccjs_fetch_parse_status_line(
+static inox_status
+inox_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len);
+static inox_status inox_fetch_copy_url(inox_allocator* allocator, const char* url, size_t url_len, char** out);
+static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url);
+static inox_status inox_fetch_build_request(inox_fetch_operation* request, const inox_fetch_init* init);
+static inox_status inox_fetch_start_connection(inox_fetch_operation* request);
+static inox_status inox_fetch_operation_is_aborted(inox_fetch_operation* request, int* out);
+static void inox_fetch_operation_free(inox_fetch_operation* request);
+static inox_status inox_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len);
+static inox_status inox_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text);
+static inox_status inox_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value);
+static int inox_fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
+static int inox_fetch_headers_include(const inox_fetch_header* headers, size_t header_count, const char* name);
+static inox_status inox_fetch_redirect_mode_from_init(const inox_fetch_init* init, int* out);
+static inox_status inox_fetch_on_connect(void* user, inox_net_socket* socket, inox_status status);
+static inox_status inox_fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len);
+static void inox_fetch_on_close(void* user, inox_net_socket* socket);
+static inox_status inox_fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status);
+static inox_status inox_fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len);
+static void inox_fetch_on_tls_close(void* user, inox_tls_client* client);
+static inox_status inox_fetch_on_transport_connect(inox_fetch_operation* request, inox_status status);
+static inox_status inox_fetch_on_transport_data(inox_fetch_operation* request, const char* bytes, size_t len);
+static void inox_fetch_on_transport_close(inox_fetch_operation* request);
+static inox_status inox_fetch_transport_write(inox_fetch_operation* request, const char* bytes, size_t len);
+static void inox_fetch_transport_close(inox_fetch_operation* request);
+static inox_status inox_fetch_abort_poll(void* user);
+static inox_status inox_fetch_try_complete(inox_fetch_operation* request);
+static const char* inox_fetch_find_header_end(const char* bytes, size_t len);
+static int inox_fetch_parse_status_line(
   const char* bytes,
   size_t len,
   int* status,
   const char** status_text,
   size_t* status_text_len
 );
-static int ccjs_fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out);
-static int ccjs_fetch_find_header_value(
+static int inox_fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out);
+static int inox_fetch_find_header_value(
   const char* bytes,
   size_t header_len,
   const char* name,
@@ -117,351 +117,351 @@ static int ccjs_fetch_find_header_value(
   const char** value,
   size_t* value_len
 );
-static int ccjs_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token);
-static ccjs_status ccjs_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete);
-static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode);
-static const char* ccjs_fetch_find_crlf(const char* bytes, size_t len);
-static int ccjs_fetch_hex_digit(char value);
-static int ccjs_fetch_is_redirect_status(int status);
-static ccjs_status ccjs_fetch_resolve_redirect_url(
-  ccjs_fetch_operation* request,
+static int inox_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token);
+static inox_status inox_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete);
+static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode);
+static const char* inox_fetch_find_crlf(const char* bytes, size_t len);
+static int inox_fetch_hex_digit(char value);
+static int inox_fetch_is_redirect_status(int status);
+static inox_status inox_fetch_resolve_redirect_url(
+  inox_fetch_operation* request,
   const char* location,
   size_t location_len,
   char* out,
   size_t out_len
 );
-static ccjs_status ccjs_fetch_follow_redirect(ccjs_fetch_operation* request, const char* location, size_t location_len);
-static ccjs_status ccjs_fetch_finish(ccjs_fetch_operation* request, ccjs_status status, const ccjs_fetch_response* response);
-static ccjs_status ccjs_fetch_promise_done(void* user, ccjs_status status, const ccjs_fetch_response* response);
-static ccjs_status ccjs_fetch_response_new(
-  ccjs_allocator* allocator,
+static inox_status inox_fetch_follow_redirect(inox_fetch_operation* request, const char* location, size_t location_len);
+static inox_status inox_fetch_finish(inox_fetch_operation* request, inox_status status, const inox_fetch_response* response);
+static inox_status inox_fetch_promise_done(void* user, inox_status status, const inox_fetch_response* response);
+static inox_status inox_fetch_response_new(
+  inox_allocator* allocator,
   const char* url,
   size_t url_len,
-  const ccjs_fetch_response* response,
-  ccjs_value* out
+  const inox_fetch_response* response,
+  inox_value* out
 );
-static ccjs_status ccjs_fetch_headers_new(ccjs_allocator* allocator, const char* headers, size_t headers_len, ccjs_value* out);
-static ccjs_status ccjs_fetch_headers_raw(ccjs_value headers, ccjs_value* out);
-static ccjs_status ccjs_fetch_reject_status(ccjs_loop* loop, ccjs_promise* promise, ccjs_status status);
-static ccjs_status ccjs_fetch_error_from_status(ccjs_allocator* allocator, ccjs_status status, ccjs_value* out);
-static ccjs_status ccjs_fetch_error_field(
-  ccjs_allocator* allocator,
-  ccjs_value error,
+static inox_status inox_fetch_headers_new(inox_allocator* allocator, const char* headers, size_t headers_len, inox_value* out);
+static inox_status inox_fetch_headers_raw(inox_value headers, inox_value* out);
+static inox_status inox_fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status);
+static inox_status inox_fetch_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out);
+static inox_status inox_fetch_error_field(
+  inox_allocator* allocator,
+  inox_value error,
   uint32_t index,
   const char* value,
   size_t value_len
 );
-static const char* ccjs_fetch_error_message(ccjs_status status);
-static void ccjs_fetch_promise_request_free(ccjs_fetch_promise_request* request);
+static const char* inox_fetch_error_message(inox_status status);
+static void inox_fetch_promise_request_free(inox_fetch_promise_request* request);
 
-ccjs_status ccjs_fetch_get(ccjs_loop* loop, const char* url, ccjs_fetch_done_fn done, void* user) {
-  return ccjs_fetch_request(loop, url, 0, done, user);
+inox_status inox_fetch_get(inox_loop* loop, const char* url, inox_fetch_done_fn done, void* user) {
+  return inox_fetch_request(loop, url, 0, done, user);
 }
 
-ccjs_status ccjs_fetch_request(ccjs_loop* loop, const char* url, const ccjs_fetch_init* init, ccjs_fetch_done_fn done, void* user) {
+inox_status inox_fetch_request(inox_loop* loop, const char* url, const inox_fetch_init* init, inox_fetch_done_fn done, void* user) {
   if (loop == 0 || loop->allocator == 0 || url == 0 || done == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_allocator* allocator = loop->allocator;
-  ccjs_fetch_operation* request =
-    allocator->alloc(allocator->user, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
+  inox_allocator* allocator = loop->allocator;
+  inox_fetch_operation* request =
+    allocator->alloc(allocator->user, sizeof(inox_fetch_operation), _Alignof(inox_fetch_operation));
 
   if (request == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(ccjs_fetch_operation));
+  memset(request, 0, sizeof(inox_fetch_operation));
   request->loop = loop;
   request->allocator = allocator;
   request->done = done;
   request->user = user;
-  request->signal = ccjs_undefined_value();
-  request->redirect_mode = CCJS_FETCH_REDIRECT_FOLLOW;
+  request->signal = inox_undefined_value();
+  request->redirect_mode = INOX_FETCH_REDIRECT_FOLLOW;
   request->replayable = 1;
 
-  ccjs_status status = ccjs_fetch_set_url(request, url);
+  inox_status status = inox_fetch_set_url(request, url);
 
-  if (status != CCJS_OK) {
-    ccjs_fetch_operation_free(request);
+  if (status != INOX_OK) {
+    inox_fetch_operation_free(request);
     return status;
   }
 
-  status = ccjs_fetch_build_request(request, init);
+  status = inox_fetch_build_request(request, init);
 
-  if (status != CCJS_OK) {
-    ccjs_fetch_operation_free(request);
+  if (status != INOX_OK) {
+    inox_fetch_operation_free(request);
     return status;
   }
 
   int aborted = 0;
-  status = ccjs_fetch_operation_is_aborted(request, &aborted);
+  status = inox_fetch_operation_is_aborted(request, &aborted);
 
-  if (status != CCJS_OK) {
-    ccjs_fetch_operation_free(request);
+  if (status != INOX_OK) {
+    inox_fetch_operation_free(request);
     return status;
   }
 
   if (aborted) {
-    ccjs_fetch_operation_free(request);
-    return CCJS_ERR_THROW;
+    inox_fetch_operation_free(request);
+    return INOX_ERR_THROW;
   }
 
-  if (request->signal.tag != CCJS_TAG_UNDEFINED && request->signal.tag != CCJS_TAG_NULL) {
-    status = ccjs_loop_set_interval(loop, 1, ccjs_fetch_abort_poll, request, 0, &request->abort_timer);
+  if (request->signal.tag != INOX_TAG_UNDEFINED && request->signal.tag != INOX_TAG_NULL) {
+    status = inox_loop_set_interval(loop, 1, inox_fetch_abort_poll, request, 0, &request->abort_timer);
 
-    if (status != CCJS_OK) {
-      ccjs_fetch_operation_free(request);
+    if (status != INOX_OK) {
+      inox_fetch_operation_free(request);
       return status;
     }
   }
 
-  status = ccjs_fetch_start_connection(request);
+  status = inox_fetch_start_connection(request);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     if (request->abort_timer != 0) {
-      ccjs_loop_clear_timer(request->abort_timer);
+      inox_loop_clear_timer(request->abort_timer);
       request->abort_timer = 0;
     }
 
-    ccjs_fetch_operation_free(request);
+    inox_fetch_operation_free(request);
     return status;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_fetch(ccjs_loop* loop, const char* url, size_t url_len, ccjs_promise** out) {
-  return ccjs_fetch_with_init(loop, url, url_len, 0, out);
+inox_status inox_fetch(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
+  return inox_fetch_with_init(loop, url, url_len, 0, out);
 }
 
-ccjs_status ccjs_fetch_with_init(
-  ccjs_loop* loop,
+inox_status inox_fetch_with_init(
+  inox_loop* loop,
   const char* url,
   size_t url_len,
-  const ccjs_fetch_init* init,
-  ccjs_promise** out
+  const inox_fetch_init* init,
+  inox_promise** out
 ) {
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
 
   if (loop == 0 || loop->allocator == 0 || url == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_promise* promise = 0;
-  ccjs_status status = ccjs_promise_new(loop, &promise);
+  inox_promise* promise = 0;
+  inox_status status = inox_promise_new(loop, &promise);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_allocator* allocator = loop->allocator;
-  ccjs_fetch_promise_request* request =
-    allocator->alloc(allocator->user, sizeof(ccjs_fetch_promise_request), _Alignof(ccjs_fetch_promise_request));
+  inox_allocator* allocator = loop->allocator;
+  inox_fetch_promise_request* request =
+    allocator->alloc(allocator->user, sizeof(inox_fetch_promise_request), _Alignof(inox_fetch_promise_request));
 
   if (request == 0) {
-    ccjs_promise_release(promise);
-    return CCJS_ERR_OOM;
+    inox_promise_release(promise);
+    return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(ccjs_fetch_promise_request));
+  memset(request, 0, sizeof(inox_fetch_promise_request));
   request->loop = loop;
   request->promise = promise;
   request->url_len = url_len;
-  ccjs_promise_retain(promise);
+  inox_promise_retain(promise);
 
-  status = ccjs_fetch_copy_url(allocator, url, url_len, &request->url);
+  status = inox_fetch_copy_url(allocator, url, url_len, &request->url);
 
-  if (status == CCJS_OK) {
-    status = ccjs_fetch_request(loop, request->url, init, ccjs_fetch_promise_done, request);
+  if (status == INOX_OK) {
+    status = inox_fetch_request(loop, request->url, init, inox_fetch_promise_done, request);
   }
 
-  if (status != CCJS_OK) {
-    ccjs_status reject_status = ccjs_fetch_reject_status(loop, promise, status);
-    ccjs_fetch_promise_request_free(request);
+  if (status != INOX_OK) {
+    inox_status reject_status = inox_fetch_reject_status(loop, promise, status);
+    inox_fetch_promise_request_free(request);
 
-    if (reject_status != CCJS_OK) {
-      ccjs_promise_release(promise);
+    if (reject_status != INOX_OK) {
+      inox_promise_release(promise);
       return reject_status;
     }
   }
 
   *out = promise;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_fetch_response_text(ccjs_loop* loop, ccjs_value response, ccjs_promise** out) {
+inox_status inox_fetch_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
   if (loop == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
 
-  ccjs_value body = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_get(response, "__ccjsBody", 10, &body);
+  inox_value body = inox_undefined_value();
+  inox_status status = inox_object_get(response, "__inoxBody", 10, &body);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  if (body.tag != CCJS_TAG_STRING || body.as.ref == 0) {
-    ccjs_release(body);
-    return CCJS_ERR_TYPE;
+  if (body.tag != INOX_TAG_STRING || body.as.ref == 0) {
+    inox_release(body);
+    return INOX_ERR_TYPE;
   }
 
-  status = ccjs_promise_resolved(loop, body, out);
-  ccjs_release(body);
+  status = inox_promise_resolved(loop, body, out);
+  inox_release(body);
 
   return status;
 }
 
-ccjs_status ccjs_fetch_headers_get(ccjs_allocator* allocator, ccjs_value headers, const char* name, size_t name_len, ccjs_value* out) {
+inox_status inox_fetch_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
   if (allocator == 0 || name == 0 || name_len == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  ccjs_value raw = ccjs_undefined_value();
-  ccjs_status status = ccjs_fetch_headers_raw(headers, &raw);
+  *out = inox_undefined_value();
+  inox_value raw = inox_undefined_value();
+  inox_status status = inox_fetch_headers_raw(headers, &raw);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  if (raw.tag != CCJS_TAG_STRING || raw.as.ref == 0) {
-    ccjs_release(raw);
-    return CCJS_ERR_TYPE;
+  if (raw.tag != INOX_TAG_STRING || raw.as.ref == 0) {
+    inox_release(raw);
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_string* raw_string = (ccjs_string*)raw.as.ref;
+  inox_string* raw_string = (inox_string*)raw.as.ref;
   const char* value = 0;
   size_t value_len = 0;
 
-  if (ccjs_fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len)) {
-    status = ccjs_string_from_literal(allocator, value, value_len, out);
+  if (inox_fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len)) {
+    status = inox_string_from_literal(allocator, value, value_len, out);
   } else {
-    *out = ccjs_null_value();
-    status = CCJS_OK;
+    *out = inox_null_value();
+    status = INOX_OK;
   }
 
-  ccjs_release(raw);
+  inox_release(raw);
   return status;
 }
 
-ccjs_status ccjs_fetch_headers_has(ccjs_value headers, const char* name, size_t name_len, int* out) {
+inox_status inox_fetch_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
   if (name == 0 || name_len == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
-  ccjs_value raw = ccjs_undefined_value();
-  ccjs_status status = ccjs_fetch_headers_raw(headers, &raw);
+  inox_value raw = inox_undefined_value();
+  inox_status status = inox_fetch_headers_raw(headers, &raw);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  if (raw.tag != CCJS_TAG_STRING || raw.as.ref == 0) {
-    ccjs_release(raw);
-    return CCJS_ERR_TYPE;
+  if (raw.tag != INOX_TAG_STRING || raw.as.ref == 0) {
+    inox_release(raw);
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_string* raw_string = (ccjs_string*)raw.as.ref;
+  inox_string* raw_string = (inox_string*)raw.as.ref;
   const char* value = 0;
   size_t value_len = 0;
-  *out = ccjs_fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len) ? 1 : 0;
+  *out = inox_fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len) ? 1 : 0;
 
-  ccjs_release(raw);
-  return CCJS_OK;
+  inox_release(raw);
+  return INOX_OK;
 }
 
-ccjs_status ccjs_fetch_abort_controller_new(ccjs_allocator* allocator, ccjs_value* out) {
-  static const ccjs_field_info signal_fields[] = { { "aborted", 0 } };
-  static const ccjs_shape signal_shape = { 1, signal_fields };
-  static const ccjs_field_info controller_fields[] = { { "signal", CCJS_FIELD_READONLY } };
-  static const ccjs_shape controller_shape = { 1, controller_fields };
+inox_status inox_fetch_abort_controller_new(inox_allocator* allocator, inox_value* out) {
+  static const inox_field_info signal_fields[] = { { "aborted", 0 } };
+  static const inox_shape signal_shape = { 1, signal_fields };
+  static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
+  static const inox_shape controller_shape = { 1, controller_fields };
 
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  ccjs_value signal = ccjs_undefined_value();
-  ccjs_value controller = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_new(allocator, &signal_shape, &signal);
+  *out = inox_undefined_value();
+  inox_value signal = inox_undefined_value();
+  inox_value controller = inox_undefined_value();
+  inox_status status = inox_object_new(allocator, &signal_shape, &signal);
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(signal, CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX, ccjs_bool_value(false));
+  if (status == INOX_OK) {
+    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(false));
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_new(allocator, &controller_shape, &controller);
+  if (status == INOX_OK) {
+    status = inox_object_new(allocator, &controller_shape, &controller);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(controller, CCJS_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
   }
 
-  ccjs_release(signal);
+  inox_release(signal);
 
-  if (status != CCJS_OK) {
-    ccjs_release(controller);
+  if (status != INOX_OK) {
+    inox_release(controller);
     return status;
   }
 
   *out = controller;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_fetch_abort_controller_signal(ccjs_value controller, ccjs_value* out) {
-  return ccjs_object_get_known(controller, CCJS_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out);
+inox_status inox_fetch_abort_controller_signal(inox_value controller, inox_value* out) {
+  return inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out);
 }
 
-ccjs_status ccjs_fetch_abort_controller_abort(ccjs_value controller) {
-  ccjs_value signal = ccjs_undefined_value();
-  ccjs_status status = ccjs_fetch_abort_controller_signal(controller, &signal);
+inox_status inox_fetch_abort_controller_abort(inox_value controller) {
+  inox_value signal = inox_undefined_value();
+  inox_status status = inox_fetch_abort_controller_signal(controller, &signal);
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(signal, CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX, ccjs_bool_value(true));
+  if (status == INOX_OK) {
+    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
   }
 
-  ccjs_release(signal);
+  inox_release(signal);
 
   return status;
 }
 
-ccjs_status ccjs_fetch_signal_aborted(ccjs_value signal, int* out) {
+inox_status inox_fetch_signal_aborted(inox_value signal, int* out) {
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
-  ccjs_value aborted = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_get_known(signal, CCJS_FETCH_ABORT_SIGNAL_ABORTED_INDEX, &aborted);
+  inox_value aborted = inox_undefined_value();
+  inox_status status = inox_object_get_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, &aborted);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  if (aborted.tag != CCJS_TAG_BOOL) {
-    ccjs_release(aborted);
-    return CCJS_ERR_TYPE;
+  if (aborted.tag != INOX_TAG_BOOL) {
+    inox_release(aborted);
+    return INOX_ERR_TYPE;
   }
 
   *out = aborted.as.boolean ? 1 : 0;
-  ccjs_release(aborted);
+  inox_release(aborted);
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status
-ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len) {
+static inox_status
+inox_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len) {
   const char* http_prefix = "http://";
   const char* https_prefix = "https://";
   size_t http_prefix_len = strlen(http_prefix);
@@ -469,7 +469,7 @@ ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
   size_t prefix_len = 0;
 
   if (url == 0 || secure == 0 || host == 0 || port == 0 || path == 0) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   if (strncmp(url, http_prefix, http_prefix_len) == 0) {
@@ -479,7 +479,7 @@ ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
     *secure = 1;
     prefix_len = https_prefix_len;
   } else {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   const char* cursor = url + prefix_len;
@@ -492,7 +492,7 @@ ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
   size_t parsed_host_len = (size_t)(cursor - host_start);
 
   if (parsed_host_len == 0 || parsed_host_len >= host_len) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   memcpy(host, host_start, parsed_host_len);
@@ -505,7 +505,7 @@ ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
     int parsed_port = 0;
 
     if (!isdigit((unsigned char)*cursor)) {
-      return CCJS_ERR_UNSUPPORTED;
+      return INOX_ERR_UNSUPPORTED;
     }
 
     while (isdigit((unsigned char)*cursor)) {
@@ -514,7 +514,7 @@ ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
     }
 
     if (parsed_port <= 0 || parsed_port > 65535) {
-      return CCJS_ERR_UNSUPPORTED;
+      return INOX_ERR_UNSUPPORTED;
     }
 
     *port = parsed_port;
@@ -529,7 +529,7 @@ ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
     size_t query_len = strlen(cursor);
 
     if (query_len + 2 > sizeof(query_path)) {
-      return CCJS_ERR_UNSUPPORTED;
+      return INOX_ERR_UNSUPPORTED;
     }
 
     query_path[0] = '/';
@@ -544,46 +544,46 @@ ccjs_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
   }
 
   if (parsed_path_len == 0 || parsed_path_len >= path_len) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   memcpy(path, parsed_path, parsed_path_len);
   path[parsed_path_len] = '\0';
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_copy_url(ccjs_allocator* allocator, const char* url, size_t url_len, char** out) {
+static inox_status inox_fetch_copy_url(inox_allocator* allocator, const char* url, size_t url_len, char** out) {
   if (allocator == 0 || url == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = allocator->alloc(allocator->user, url_len + 1, _Alignof(char));
 
   if (*out == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   memcpy(*out, url, url_len);
   (*out)[url_len] = '\0';
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_set_url(ccjs_fetch_operation* request, const char* url) {
+static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url) {
   if (request == 0 || url == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   size_t url_len = strlen(url);
 
   if (url_len == 0 || url_len >= sizeof(request->url)) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   memcpy(request->url, url, url_len + 1);
   request->url_len = url_len;
 
-  return ccjs_fetch_parse_url(
+  return inox_fetch_parse_url(
     request->url,
     &request->secure,
     request->host,
@@ -594,48 +594,48 @@ static ccjs_status ccjs_fetch_set_url(ccjs_fetch_operation* request, const char*
   );
 }
 
-static ccjs_status ccjs_fetch_start_connection(ccjs_fetch_operation* request) {
+static inox_status inox_fetch_start_connection(inox_fetch_operation* request) {
   if (request == 0 || request->loop == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   request->socket = 0;
   request->tls = 0;
 
   if (request->secure) {
-    return ccjs_tls_connect(
+    return inox_tls_connect(
       request->loop,
       request->host,
       request->port,
       request->host,
-      ccjs_fetch_on_tls_connect,
-      ccjs_fetch_on_tls_data,
-      ccjs_fetch_on_tls_close,
+      inox_fetch_on_tls_connect,
+      inox_fetch_on_tls_data,
+      inox_fetch_on_tls_close,
       request,
       &request->tls
     );
   }
 
-  return ccjs_net_connect(
+  return inox_net_connect(
     request->loop,
     request->host,
     request->port,
-    ccjs_fetch_on_connect,
-    ccjs_fetch_on_data,
-    ccjs_fetch_on_close,
+    inox_fetch_on_connect,
+    inox_fetch_on_data,
+    inox_fetch_on_close,
     request,
     &request->socket
   );
 }
 
-static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const ccjs_fetch_init* init) {
+static inox_status inox_fetch_build_request(inox_fetch_operation* request, const inox_fetch_init* init) {
   if (request == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   const char* method = "GET";
   size_t method_len = 3;
-  const ccjs_fetch_header* headers = 0;
+  const inox_fetch_header* headers = 0;
   size_t header_count = 0;
   const char* body = 0;
   size_t body_len = 0;
@@ -654,109 +654,109 @@ static ccjs_status ccjs_fetch_build_request(ccjs_fetch_operation* request, const
     body_len = init->body_len;
     request->replayable = method_len == 3 && strncasecmp(method, "GET", 3) == 0 && header_count == 0 && body_len == 0;
 
-    ccjs_status redirect_status = ccjs_fetch_redirect_mode_from_init(init, &request->redirect_mode);
+    inox_status redirect_status = inox_fetch_redirect_mode_from_init(init, &request->redirect_mode);
 
-    if (redirect_status != CCJS_OK) {
+    if (redirect_status != INOX_OK) {
       return redirect_status;
     }
 
-    if (init->signal.tag != CCJS_TAG_UNDEFINED && init->signal.tag != CCJS_TAG_NULL) {
-      if (init->signal.tag != CCJS_TAG_OBJECT || init->signal.as.ref == 0) {
-        return CCJS_ERR_TYPE;
+    if (init->signal.tag != INOX_TAG_UNDEFINED && init->signal.tag != INOX_TAG_NULL) {
+      if (init->signal.tag != INOX_TAG_OBJECT || init->signal.as.ref == 0) {
+        return INOX_ERR_TYPE;
       }
 
       request->signal = init->signal;
-      ccjs_retain(request->signal);
+      inox_retain(request->signal);
     }
   }
 
   if (method == 0 || method_len == 0 || method_len > 32) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   if (header_count > 0 && headers == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (body_len > 0 && body == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   size_t offset = 0;
-  ccjs_status status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, method, method_len);
+  inox_status status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, method, method_len);
 
-  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, " ");
-  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->path);
-  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, " HTTP/1.1\r\nHost: ");
-  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->host);
-  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, " ");
+  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->path);
+  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, " HTTP/1.1\r\nHost: ");
+  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->host);
+  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
 
-  for (size_t index = 0; status == CCJS_OK && index < header_count; index += 1) {
-    const ccjs_fetch_header* header = headers + index;
+  for (size_t index = 0; status == INOX_OK && index < header_count; index += 1) {
+    const inox_fetch_header* header = headers + index;
 
     if (header->name == 0 || header->name_len == 0 || header->value == 0) {
-      return CCJS_ERR_TYPE;
+      return INOX_ERR_TYPE;
     }
 
-    status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->name, header->name_len);
-    if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, ": ");
-    if (status == CCJS_OK) status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->value, header->value_len);
-    if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+    status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->name, header->name_len);
+    if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, ": ");
+    if (status == INOX_OK) status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->value, header->value_len);
+    if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
   }
 
-  if (status == CCJS_OK && body_len > 0 && !ccjs_fetch_headers_include(headers, header_count, "Content-Length")) {
-    status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Content-Length: ");
-    if (status == CCJS_OK) status = ccjs_fetch_append_size(request->request, sizeof(request->request), &offset, body_len);
-    if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  if (status == INOX_OK && body_len > 0 && !inox_fetch_headers_include(headers, header_count, "Content-Length")) {
+    status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Content-Length: ");
+    if (status == INOX_OK) status = inox_fetch_append_size(request->request, sizeof(request->request), &offset, body_len);
+    if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
   }
 
-  if (status == CCJS_OK && !ccjs_fetch_headers_include(headers, header_count, "Connection")) {
-    status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Connection: close\r\n");
+  if (status == INOX_OK && !inox_fetch_headers_include(headers, header_count, "Connection")) {
+    status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Connection: close\r\n");
   }
 
-  if (status == CCJS_OK) status = ccjs_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
-  if (status == CCJS_OK && body_len > 0) {
-    status = ccjs_fetch_append_bytes(request->request, sizeof(request->request), &offset, body, body_len);
+  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  if (status == INOX_OK && body_len > 0) {
+    status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, body, body_len);
   }
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   request->request_len = offset;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_operation_is_aborted(ccjs_fetch_operation* request, int* out) {
+static inox_status inox_fetch_operation_is_aborted(inox_fetch_operation* request, int* out) {
   if (request == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
 
-  if (request->signal.tag == CCJS_TAG_UNDEFINED || request->signal.tag == CCJS_TAG_NULL) {
-    return CCJS_OK;
+  if (request->signal.tag == INOX_TAG_UNDEFINED || request->signal.tag == INOX_TAG_NULL) {
+    return INOX_OK;
   }
 
-  return ccjs_fetch_signal_aborted(request->signal, out);
+  return inox_fetch_signal_aborted(request->signal, out);
 }
 
-static void ccjs_fetch_operation_free(ccjs_fetch_operation* request) {
+static void inox_fetch_operation_free(inox_fetch_operation* request) {
   if (request == 0 || request->allocator == 0) {
     return;
   }
 
-  ccjs_release(request->signal);
-  request->allocator->free(request->allocator->user, request, sizeof(ccjs_fetch_operation), _Alignof(ccjs_fetch_operation));
+  inox_release(request->signal);
+  request->allocator->free(request->allocator->user, request, sizeof(inox_fetch_operation), _Alignof(inox_fetch_operation));
 }
 
-static ccjs_status ccjs_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len) {
+static inox_status inox_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len) {
   if (out == 0 || offset == 0 || (len > 0 && bytes == 0)) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (*offset > out_size || len > out_size - *offset) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   if (len > 0) {
@@ -764,29 +764,29 @@ static ccjs_status ccjs_fetch_append_bytes(char* out, size_t out_size, size_t* o
   }
 
   *offset += len;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text) {
+static inox_status inox_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text) {
   if (text == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  return ccjs_fetch_append_bytes(out, out_size, offset, text, strlen(text));
+  return inox_fetch_append_bytes(out, out_size, offset, text, strlen(text));
 }
 
-static ccjs_status ccjs_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value) {
+static inox_status inox_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value) {
   char buffer[32];
   int written = snprintf(buffer, sizeof(buffer), "%zu", value);
 
   if (written < 0 || (size_t)written >= sizeof(buffer)) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-  return ccjs_fetch_append_bytes(out, out_size, offset, buffer, (size_t)written);
+  return inox_fetch_append_bytes(out, out_size, offset, buffer, (size_t)written);
 }
 
-static int ccjs_fetch_header_name_equals(const char* name, size_t name_len, const char* expected) {
+static int inox_fetch_header_name_equals(const char* name, size_t name_len, const char* expected) {
   if (name == 0 || expected == 0 || strlen(expected) != name_len) {
     return 0;
   }
@@ -800,13 +800,13 @@ static int ccjs_fetch_header_name_equals(const char* name, size_t name_len, cons
   return 1;
 }
 
-static int ccjs_fetch_headers_include(const ccjs_fetch_header* headers, size_t header_count, const char* name) {
+static int inox_fetch_headers_include(const inox_fetch_header* headers, size_t header_count, const char* name) {
   if (headers == 0 || name == 0) {
     return 0;
   }
 
   for (size_t index = 0; index < header_count; index += 1) {
-    if (ccjs_fetch_header_name_equals(headers[index].name, headers[index].name_len, name)) {
+    if (inox_fetch_header_name_equals(headers[index].name, headers[index].name_len, name)) {
       return 1;
     }
   }
@@ -814,121 +814,121 @@ static int ccjs_fetch_headers_include(const ccjs_fetch_header* headers, size_t h
   return 0;
 }
 
-static ccjs_status ccjs_fetch_redirect_mode_from_init(const ccjs_fetch_init* init, int* out) {
+static inox_status inox_fetch_redirect_mode_from_init(const inox_fetch_init* init, int* out) {
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (init == 0 || init->redirect == 0 || init->redirect_len == 0) {
-    *out = CCJS_FETCH_REDIRECT_FOLLOW;
-    return CCJS_OK;
+    *out = INOX_FETCH_REDIRECT_FOLLOW;
+    return INOX_OK;
   }
 
   if (init->redirect_len == 6 && strncasecmp(init->redirect, "follow", 6) == 0) {
-    *out = CCJS_FETCH_REDIRECT_FOLLOW;
-    return CCJS_OK;
+    *out = INOX_FETCH_REDIRECT_FOLLOW;
+    return INOX_OK;
   }
 
   if (init->redirect_len == 5 && strncasecmp(init->redirect, "error", 5) == 0) {
-    *out = CCJS_FETCH_REDIRECT_ERROR;
-    return CCJS_OK;
+    *out = INOX_FETCH_REDIRECT_ERROR;
+    return INOX_OK;
   }
 
   if (init->redirect_len == 6 && strncasecmp(init->redirect, "manual", 6) == 0) {
-    *out = CCJS_FETCH_REDIRECT_MANUAL;
-    return CCJS_OK;
+    *out = INOX_FETCH_REDIRECT_MANUAL;
+    return INOX_OK;
   }
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-static ccjs_status ccjs_fetch_on_connect(void* user, ccjs_net_socket* socket, ccjs_status status) {
-  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
+static inox_status inox_fetch_on_connect(void* user, inox_net_socket* socket, inox_status status) {
+  inox_fetch_operation* request = (inox_fetch_operation*)user;
 
-  if (status != CCJS_OK) {
-    return ccjs_fetch_on_transport_connect(request, status);
+  if (status != INOX_OK) {
+    return inox_fetch_on_transport_connect(request, status);
   }
 
-  if (ccjs_net_socket_read_start(socket) != CCJS_OK) {
-    return ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
+  if (inox_net_socket_read_start(socket) != INOX_OK) {
+    return inox_fetch_finish(request, INOX_ERR_FIELD, 0);
   }
 
-  return ccjs_fetch_on_transport_connect(request, CCJS_OK);
+  return inox_fetch_on_transport_connect(request, INOX_OK);
 }
 
-static ccjs_status ccjs_fetch_on_data(void* user, ccjs_net_socket* socket, const char* bytes, size_t len) {
+static inox_status inox_fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
-  return ccjs_fetch_on_transport_data((ccjs_fetch_operation*)user, bytes, len);
+  return inox_fetch_on_transport_data((inox_fetch_operation*)user, bytes, len);
 }
 
-static void ccjs_fetch_on_close(void* user, ccjs_net_socket* socket) {
+static void inox_fetch_on_close(void* user, inox_net_socket* socket) {
   (void)socket;
-  ccjs_fetch_on_transport_close((ccjs_fetch_operation*)user);
+  inox_fetch_on_transport_close((inox_fetch_operation*)user);
 }
 
-static ccjs_status ccjs_fetch_on_tls_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
+static inox_status inox_fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status) {
   (void)client;
-  return ccjs_fetch_on_transport_connect((ccjs_fetch_operation*)user, status);
+  return inox_fetch_on_transport_connect((inox_fetch_operation*)user, status);
 }
 
-static ccjs_status ccjs_fetch_on_tls_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
+static inox_status inox_fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len) {
   (void)client;
-  return ccjs_fetch_on_transport_data((ccjs_fetch_operation*)user, bytes, len);
+  return inox_fetch_on_transport_data((inox_fetch_operation*)user, bytes, len);
 }
 
-static void ccjs_fetch_on_tls_close(void* user, ccjs_tls_client* client) {
+static void inox_fetch_on_tls_close(void* user, inox_tls_client* client) {
   (void)client;
-  ccjs_fetch_on_transport_close((ccjs_fetch_operation*)user);
+  inox_fetch_on_transport_close((inox_fetch_operation*)user);
 }
 
-static ccjs_status ccjs_fetch_on_transport_connect(ccjs_fetch_operation* request, ccjs_status status) {
-  if (status != CCJS_OK) {
-    return ccjs_fetch_finish(request, status, 0);
+static inox_status inox_fetch_on_transport_connect(inox_fetch_operation* request, inox_status status) {
+  if (status != INOX_OK) {
+    return inox_fetch_finish(request, status, 0);
   }
 
   int aborted = 0;
-  status = ccjs_fetch_operation_is_aborted(request, &aborted);
+  status = inox_fetch_operation_is_aborted(request, &aborted);
 
-  if (status != CCJS_OK) {
-    return ccjs_fetch_finish(request, status, 0);
+  if (status != INOX_OK) {
+    return inox_fetch_finish(request, status, 0);
   }
 
   if (aborted) {
-    return ccjs_fetch_finish(request, CCJS_ERR_THROW, 0);
+    return inox_fetch_finish(request, INOX_ERR_THROW, 0);
   }
 
-  return ccjs_fetch_transport_write(request, request->request, request->request_len);
+  return inox_fetch_transport_write(request, request->request, request->request_len);
 }
 
-static ccjs_status ccjs_fetch_on_transport_data(ccjs_fetch_operation* request, const char* bytes, size_t len) {
+static inox_status inox_fetch_on_transport_data(inox_fetch_operation* request, const char* bytes, size_t len) {
   int aborted = 0;
-  ccjs_status status = ccjs_fetch_operation_is_aborted(request, &aborted);
+  inox_status status = inox_fetch_operation_is_aborted(request, &aborted);
 
-  if (status != CCJS_OK) {
-    return ccjs_fetch_finish(request, status, 0);
+  if (status != INOX_OK) {
+    return inox_fetch_finish(request, status, 0);
   }
 
   if (aborted) {
-    return ccjs_fetch_finish(request, CCJS_ERR_THROW, 0);
+    return inox_fetch_finish(request, INOX_ERR_THROW, 0);
   }
 
   if (request->response_len + len > sizeof(request->response)) {
-    return ccjs_fetch_finish(request, CCJS_ERR_UNSUPPORTED, 0);
+    return inox_fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
   }
 
   memcpy(request->response + request->response_len, bytes, len);
   request->response_len += len;
 
-  return ccjs_fetch_try_complete(request);
+  return inox_fetch_try_complete(request);
 }
 
-static void ccjs_fetch_on_transport_close(ccjs_fetch_operation* request) {
+static void inox_fetch_on_transport_close(inox_fetch_operation* request) {
   if (request == 0) {
     return;
   }
 
   if (request->completed) {
-    ccjs_fetch_operation_free(request);
+    inox_fetch_operation_free(request);
     return;
   }
 
@@ -936,85 +936,85 @@ static void ccjs_fetch_on_transport_close(ccjs_fetch_operation* request) {
     request->socket = 0;
     request->tls = 0;
     request->waiting_redirect_close = 0;
-    ccjs_status status = ccjs_fetch_start_connection(request);
+    inox_status status = inox_fetch_start_connection(request);
 
-    if (status != CCJS_OK) {
-      ccjs_fetch_finish(request, status, 0);
-      ccjs_fetch_operation_free(request);
+    if (status != INOX_OK) {
+      inox_fetch_finish(request, status, 0);
+      inox_fetch_operation_free(request);
     }
 
     return;
   }
 
-  ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
-  ccjs_fetch_operation_free(request);
+  inox_fetch_finish(request, INOX_ERR_FIELD, 0);
+  inox_fetch_operation_free(request);
 }
 
-static ccjs_status ccjs_fetch_transport_write(ccjs_fetch_operation* request, const char* bytes, size_t len) {
+static inox_status inox_fetch_transport_write(inox_fetch_operation* request, const char* bytes, size_t len) {
   if (request == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (request->secure) {
-    return request->tls == 0 ? CCJS_ERR_TYPE : ccjs_tls_client_write(request->tls, bytes, len);
+    return request->tls == 0 ? INOX_ERR_TYPE : inox_tls_client_write(request->tls, bytes, len);
   }
 
-  return request->socket == 0 ? CCJS_ERR_TYPE : ccjs_net_socket_write(request->socket, bytes, len);
+  return request->socket == 0 ? INOX_ERR_TYPE : inox_net_socket_write(request->socket, bytes, len);
 }
 
-static void ccjs_fetch_transport_close(ccjs_fetch_operation* request) {
+static void inox_fetch_transport_close(inox_fetch_operation* request) {
   if (request == 0) {
     return;
   }
 
   if (request->tls != 0) {
-    ccjs_tls_client_close(request->tls);
+    inox_tls_client_close(request->tls);
   } else if (request->socket != 0) {
-    ccjs_net_socket_close(request->socket);
+    inox_net_socket_close(request->socket);
   }
 }
 
-static ccjs_status ccjs_fetch_abort_poll(void* user) {
-  ccjs_fetch_operation* request = (ccjs_fetch_operation*)user;
+static inox_status inox_fetch_abort_poll(void* user) {
+  inox_fetch_operation* request = (inox_fetch_operation*)user;
 
   if (request == 0 || request->completed) {
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   int aborted = 0;
-  ccjs_status status = ccjs_fetch_operation_is_aborted(request, &aborted);
+  inox_status status = inox_fetch_operation_is_aborted(request, &aborted);
 
-  if (status != CCJS_OK) {
-    return ccjs_fetch_finish(request, status, 0);
+  if (status != INOX_OK) {
+    return inox_fetch_finish(request, status, 0);
   }
 
   if (aborted) {
-    return ccjs_fetch_finish(request, CCJS_ERR_THROW, 0);
+    return inox_fetch_finish(request, INOX_ERR_THROW, 0);
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request) {
-  const char* header_end = ccjs_fetch_find_header_end(request->response, request->response_len);
+static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
+  const char* header_end = inox_fetch_find_header_end(request->response, request->response_len);
 
   if (header_end == 0) {
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   size_t header_len = (size_t)(header_end - request->response);
   size_t content_len = 0;
 
-  if (ccjs_fetch_parse_content_length(request->response, header_len, &content_len)) {
+  if (inox_fetch_parse_content_length(request->response, header_len, &content_len)) {
     if (request->response_len < header_len + content_len) {
-      return CCJS_OK;
+      return INOX_OK;
     }
   } else {
     const char* transfer_encoding = 0;
     size_t transfer_encoding_len = 0;
 
     if (
-      !ccjs_fetch_find_header_value(
+      !inox_fetch_find_header_value(
         request->response,
         header_len,
         "Transfer-Encoding",
@@ -1022,25 +1022,25 @@ static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request) {
         &transfer_encoding,
         &transfer_encoding_len
       ) ||
-      !ccjs_fetch_header_value_contains_token(transfer_encoding, transfer_encoding_len, "chunked")
+      !inox_fetch_header_value_contains_token(transfer_encoding, transfer_encoding_len, "chunked")
     ) {
-      return CCJS_OK;
+      return INOX_OK;
     }
 
     int complete = 0;
-    ccjs_status chunked_status = ccjs_fetch_decode_chunked_body(
+    inox_status chunked_status = inox_fetch_decode_chunked_body(
       request->response + header_len,
       request->response_len - header_len,
       &content_len,
       &complete
     );
 
-    if (chunked_status != CCJS_OK) {
-      return ccjs_fetch_finish(request, chunked_status, 0);
+    if (chunked_status != INOX_OK) {
+      return inox_fetch_finish(request, chunked_status, 0);
     }
 
     if (!complete) {
-      return CCJS_OK;
+      return INOX_OK;
     }
   }
 
@@ -1048,27 +1048,27 @@ static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request) {
   const char* status_text = "";
   size_t status_text_len = 0;
 
-  if (!ccjs_fetch_parse_status_line(request->response, header_len, &status, &status_text, &status_text_len)) {
-    return ccjs_fetch_finish(request, CCJS_ERR_FIELD, 0);
+  if (!inox_fetch_parse_status_line(request->response, header_len, &status, &status_text, &status_text_len)) {
+    return inox_fetch_finish(request, INOX_ERR_FIELD, 0);
   }
 
-  if (ccjs_fetch_is_redirect_status(status)) {
+  if (inox_fetch_is_redirect_status(status)) {
     const char* location = 0;
     size_t location_len = 0;
 
-    if (request->redirect_mode == CCJS_FETCH_REDIRECT_ERROR) {
-      return ccjs_fetch_finish(request, CCJS_ERR_UNSUPPORTED, 0);
+    if (request->redirect_mode == INOX_FETCH_REDIRECT_ERROR) {
+      return inox_fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
     }
 
     if (
-      request->redirect_mode == CCJS_FETCH_REDIRECT_FOLLOW &&
-      ccjs_fetch_find_header_value(request->response, header_len, "Location", 8, &location, &location_len)
+      request->redirect_mode == INOX_FETCH_REDIRECT_FOLLOW &&
+      inox_fetch_find_header_value(request->response, header_len, "Location", 8, &location, &location_len)
     ) {
-      return ccjs_fetch_follow_redirect(request, location, location_len);
+      return inox_fetch_follow_redirect(request, location, location_len);
     }
   }
 
-  ccjs_fetch_response response = {
+  inox_fetch_response response = {
     status,
     status >= 200 && status < 300,
     request->redirected ? true : false,
@@ -1082,10 +1082,10 @@ static ccjs_status ccjs_fetch_try_complete(ccjs_fetch_operation* request) {
     content_len
   };
 
-  return ccjs_fetch_finish(request, CCJS_OK, &response);
+  return inox_fetch_finish(request, INOX_OK, &response);
 }
 
-static const char* ccjs_fetch_find_header_end(const char* bytes, size_t len) {
+static const char* inox_fetch_find_header_end(const char* bytes, size_t len) {
   if (bytes == 0 || len < 4) {
     return 0;
   }
@@ -1099,7 +1099,7 @@ static const char* ccjs_fetch_find_header_end(const char* bytes, size_t len) {
   return 0;
 }
 
-static int ccjs_fetch_parse_status_line(
+static int inox_fetch_parse_status_line(
   const char* bytes,
   size_t len,
   int* status_out,
@@ -1147,7 +1147,7 @@ static int ccjs_fetch_parse_status_line(
   return 1;
 }
 
-static int ccjs_fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out) {
+static int inox_fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out) {
   const char* key = "Content-Length:";
   size_t key_len = strlen(key);
 
@@ -1177,7 +1177,7 @@ static int ccjs_fetch_parse_content_length(const char* bytes, size_t header_len,
   return 0;
 }
 
-static int ccjs_fetch_find_header_value(
+static int inox_fetch_find_header_value(
   const char* bytes,
   size_t header_len,
   const char* name,
@@ -1235,7 +1235,7 @@ static int ccjs_fetch_find_header_value(
   return 0;
 }
 
-static int ccjs_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token) {
+static int inox_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token) {
   if (value == 0 || token == 0) {
     return 0;
   }
@@ -1268,19 +1268,19 @@ static int ccjs_fetch_header_value_contains_token(const char* value, size_t valu
   return 0;
 }
 
-static ccjs_status ccjs_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete) {
-  ccjs_status status = ccjs_fetch_scan_chunked_body(bytes, len, out_len, complete, 0);
+static inox_status inox_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete) {
+  inox_status status = inox_fetch_scan_chunked_body(bytes, len, out_len, complete, 0);
 
-  if (status != CCJS_OK || complete == 0 || !*complete) {
+  if (status != INOX_OK || complete == 0 || !*complete) {
     return status;
   }
 
-  return ccjs_fetch_scan_chunked_body(bytes, len, out_len, complete, 1);
+  return inox_fetch_scan_chunked_body(bytes, len, out_len, complete, 1);
 }
 
-static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode) {
+static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode) {
   if (bytes == 0 || out_len == 0 || complete == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   size_t read = 0;
@@ -1289,10 +1289,10 @@ static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
   *complete = 0;
 
   while (read < len) {
-    const char* line_end = ccjs_fetch_find_crlf(bytes + read, len - read);
+    const char* line_end = inox_fetch_find_crlf(bytes + read, len - read);
 
     if (line_end == 0) {
-      return CCJS_OK;
+      return INOX_OK;
     }
 
     size_t line_len = (size_t)(line_end - (bytes + read));
@@ -1301,14 +1301,14 @@ static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
     int saw_digit = 0;
 
     while (index < line_len) {
-      int digit = ccjs_fetch_hex_digit(bytes[read + index]);
+      int digit = inox_fetch_hex_digit(bytes[read + index]);
 
       if (digit < 0) {
         break;
       }
 
       if (chunk_size > (SIZE_MAX - (size_t)digit) / 16) {
-        return CCJS_ERR_UNSUPPORTED;
+        return INOX_ERR_UNSUPPORTED;
       }
 
       chunk_size = chunk_size * 16 + (size_t)digit;
@@ -1317,7 +1317,7 @@ static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
     }
 
     if (!saw_digit) {
-      return CCJS_ERR_FIELD;
+      return INOX_ERR_FIELD;
     }
 
     while (index < line_len && (bytes[read + index] == ' ' || bytes[read + index] == '\t')) {
@@ -1325,23 +1325,23 @@ static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
     }
 
     if (index < line_len && bytes[read + index] != ';') {
-      return CCJS_ERR_FIELD;
+      return INOX_ERR_FIELD;
     }
 
     read += line_len + 2;
 
     if (chunk_size == 0) {
       for (;;) {
-        const char* trailer_end = ccjs_fetch_find_crlf(bytes + read, len - read);
+        const char* trailer_end = inox_fetch_find_crlf(bytes + read, len - read);
 
         if (trailer_end == 0) {
-          return CCJS_OK;
+          return INOX_OK;
         }
 
         if (trailer_end == bytes + read) {
           *out_len = write;
           *complete = 1;
-          return CCJS_OK;
+          return INOX_OK;
         }
 
         read = (size_t)(trailer_end - bytes) + 2;
@@ -1349,11 +1349,11 @@ static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
     }
 
     if (chunk_size > len - read || len - read - chunk_size < 2) {
-      return CCJS_OK;
+      return INOX_OK;
     }
 
     if (bytes[read + chunk_size] != '\r' || bytes[read + chunk_size + 1] != '\n') {
-      return CCJS_ERR_FIELD;
+      return INOX_ERR_FIELD;
     }
 
     if (decode && chunk_size > 0 && write != read) {
@@ -1364,10 +1364,10 @@ static ccjs_status ccjs_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
     read += chunk_size + 2;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static const char* ccjs_fetch_find_crlf(const char* bytes, size_t len) {
+static const char* inox_fetch_find_crlf(const char* bytes, size_t len) {
   if (bytes == 0 || len < 2) {
     return 0;
   }
@@ -1381,7 +1381,7 @@ static const char* ccjs_fetch_find_crlf(const char* bytes, size_t len) {
   return 0;
 }
 
-static int ccjs_fetch_hex_digit(char value) {
+static int inox_fetch_hex_digit(char value) {
   if (value >= '0' && value <= '9') {
     return value - '0';
   }
@@ -1397,23 +1397,23 @@ static int ccjs_fetch_hex_digit(char value) {
   return -1;
 }
 
-static int ccjs_fetch_is_redirect_status(int status) {
+static int inox_fetch_is_redirect_status(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
 }
 
-static ccjs_status ccjs_fetch_resolve_redirect_url(
-  ccjs_fetch_operation* request,
+static inox_status inox_fetch_resolve_redirect_url(
+  inox_fetch_operation* request,
   const char* location,
   size_t location_len,
   char* out,
   size_t out_len
 ) {
   if (request == 0 || location == 0 || out == 0 || out_len == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (location_len >= out_len) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   if (
@@ -1422,11 +1422,11 @@ static ccjs_status ccjs_fetch_resolve_redirect_url(
   ) {
     memcpy(out, location, location_len);
     out[location_len] = '\0';
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   if (location_len == 0 || location[0] != '/') {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   char origin[512];
@@ -1437,46 +1437,46 @@ static ccjs_status ccjs_fetch_resolve_redirect_url(
                   : snprintf(origin, sizeof(origin), "%s://%s:%d", scheme, request->host, request->port);
 
   if (written < 0 || (size_t)written >= sizeof(origin)) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   size_t origin_len = (size_t)written;
 
   if (origin_len + location_len >= out_len) {
-    return CCJS_ERR_UNSUPPORTED;
+    return INOX_ERR_UNSUPPORTED;
   }
 
   memcpy(out, origin, origin_len);
   memcpy(out + origin_len, location, location_len);
   out[origin_len + location_len] = '\0';
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_follow_redirect(ccjs_fetch_operation* request, const char* location, size_t location_len) {
+static inox_status inox_fetch_follow_redirect(inox_fetch_operation* request, const char* location, size_t location_len) {
   if (request == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (!request->replayable || request->redirect_count >= CCJS_FETCH_MAX_REDIRECTS) {
-    return ccjs_fetch_finish(request, CCJS_ERR_UNSUPPORTED, 0);
+  if (!request->replayable || request->redirect_count >= INOX_FETCH_MAX_REDIRECTS) {
+    return inox_fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
   }
 
   char next_url[1024];
-  ccjs_status status = ccjs_fetch_resolve_redirect_url(request, location, location_len, next_url, sizeof(next_url));
+  inox_status status = inox_fetch_resolve_redirect_url(request, location, location_len, next_url, sizeof(next_url));
 
-  if (status != CCJS_OK) {
-    return ccjs_fetch_finish(request, status, 0);
+  if (status != INOX_OK) {
+    return inox_fetch_finish(request, status, 0);
   }
 
-  status = ccjs_fetch_set_url(request, next_url);
+  status = inox_fetch_set_url(request, next_url);
 
-  if (status == CCJS_OK) {
-    status = ccjs_fetch_build_request(request, 0);
+  if (status == INOX_OK) {
+    status = inox_fetch_build_request(request, 0);
   }
 
-  if (status != CCJS_OK) {
-    return ccjs_fetch_finish(request, status, 0);
+  if (status != INOX_OK) {
+    return inox_fetch_finish(request, status, 0);
   }
 
   request->response_len = 0;
@@ -1485,99 +1485,99 @@ static ccjs_status ccjs_fetch_follow_redirect(ccjs_fetch_operation* request, con
   request->waiting_redirect_close = 1;
 
   if (request->socket != 0 || request->tls != 0) {
-    ccjs_fetch_transport_close(request);
+    inox_fetch_transport_close(request);
   } else {
     request->waiting_redirect_close = 0;
-    status = ccjs_fetch_start_connection(request);
+    status = inox_fetch_start_connection(request);
 
-    if (status != CCJS_OK) {
-      ccjs_fetch_finish(request, status, 0);
-      ccjs_fetch_operation_free(request);
+    if (status != INOX_OK) {
+      inox_fetch_finish(request, status, 0);
+      inox_fetch_operation_free(request);
       return status;
     }
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_finish(ccjs_fetch_operation* request, ccjs_status status, const ccjs_fetch_response* response) {
+static inox_status inox_fetch_finish(inox_fetch_operation* request, inox_status status, const inox_fetch_response* response) {
   if (request->completed) {
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   request->completed = 1;
 
   if (request->abort_timer != 0) {
-    ccjs_loop_clear_timer(request->abort_timer);
+    inox_loop_clear_timer(request->abort_timer);
     request->abort_timer = 0;
   }
 
-  ccjs_status callback_status = request->done(request->user, status, response);
+  inox_status callback_status = request->done(request->user, status, response);
 
-  ccjs_fetch_transport_close(request);
+  inox_fetch_transport_close(request);
 
   return callback_status;
 }
 
-static ccjs_status ccjs_fetch_promise_done(void* user, ccjs_status status, const ccjs_fetch_response* response) {
-  ccjs_fetch_promise_request* request = (ccjs_fetch_promise_request*)user;
+static inox_status inox_fetch_promise_done(void* user, inox_status status, const inox_fetch_response* response) {
+  inox_fetch_promise_request* request = (inox_fetch_promise_request*)user;
 
   if (request == 0 || request->promise == 0 || request->loop == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_status result = CCJS_OK;
+  inox_status result = INOX_OK;
 
-  if (status != CCJS_OK || response == 0) {
-    result = ccjs_fetch_reject_status(request->loop, request->promise, status == CCJS_OK ? CCJS_ERR_FIELD : status);
+  if (status != INOX_OK || response == 0) {
+    result = inox_fetch_reject_status(request->loop, request->promise, status == INOX_OK ? INOX_ERR_FIELD : status);
   } else {
-    ccjs_value value = ccjs_undefined_value();
-    result = ccjs_fetch_response_new(request->loop->allocator, request->url, request->url_len, response, &value);
+    inox_value value = inox_undefined_value();
+    result = inox_fetch_response_new(request->loop->allocator, request->url, request->url_len, response, &value);
 
-    if (result == CCJS_OK) {
-      ccjs_status resolve_status = ccjs_promise_resolve(request->promise, value);
-      ccjs_release(value);
+    if (result == INOX_OK) {
+      inox_status resolve_status = inox_promise_resolve(request->promise, value);
+      inox_release(value);
       result = resolve_status;
     } else {
-      result = ccjs_fetch_reject_status(request->loop, request->promise, result);
+      result = inox_fetch_reject_status(request->loop, request->promise, result);
     }
   }
 
-  ccjs_fetch_promise_request_free(request);
+  inox_fetch_promise_request_free(request);
 
   return result;
 }
 
-static ccjs_status ccjs_fetch_response_new(
-  ccjs_allocator* allocator,
+static inox_status inox_fetch_response_new(
+  inox_allocator* allocator,
   const char* url,
   size_t url_len,
-  const ccjs_fetch_response* response,
-  ccjs_value* out
+  const inox_fetch_response* response,
+  inox_value* out
 ) {
-  static const ccjs_field_info fields[] = { { "status", CCJS_FIELD_READONLY },
-                                            { "ok", CCJS_FIELD_READONLY },
-                                            { "url", CCJS_FIELD_READONLY },
-                                            { "statusText", CCJS_FIELD_READONLY },
-                                            { "redirected", CCJS_FIELD_READONLY },
-                                            { "headers", CCJS_FIELD_READONLY },
-                                            { "__ccjsBody", CCJS_FIELD_READONLY } };
-  static const ccjs_shape shape = { 7, fields };
+  static const inox_field_info fields[] = { { "status", INOX_FIELD_READONLY },
+                                            { "ok", INOX_FIELD_READONLY },
+                                            { "url", INOX_FIELD_READONLY },
+                                            { "statusText", INOX_FIELD_READONLY },
+                                            { "redirected", INOX_FIELD_READONLY },
+                                            { "headers", INOX_FIELD_READONLY },
+                                            { "__inoxBody", INOX_FIELD_READONLY } };
+  static const inox_shape shape = { 7, fields };
 
   if (allocator == 0 || response == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  ccjs_value object = ccjs_undefined_value();
-  ccjs_value url_value = ccjs_undefined_value();
-  ccjs_value status_text_value = ccjs_undefined_value();
-  ccjs_value headers_value = ccjs_undefined_value();
-  ccjs_value body_value = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_new(allocator, &shape, &object);
+  *out = inox_undefined_value();
+  inox_value object = inox_undefined_value();
+  inox_value url_value = inox_undefined_value();
+  inox_value status_text_value = inox_undefined_value();
+  inox_value headers_value = inox_undefined_value();
+  inox_value body_value = inox_undefined_value();
+  inox_status status = inox_object_new(allocator, &shape, &object);
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(
       allocator,
       response->url == 0 ? (url == 0 ? "" : url) : response->url,
       response->url == 0 ? url_len : response->url_len,
@@ -1585,8 +1585,8 @@ static ccjs_status ccjs_fetch_response_new(
     );
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(
       allocator,
       response->status_text == 0 ? "" : response->status_text,
       response->status_text == 0 ? 0 : response->status_text_len,
@@ -1594,8 +1594,8 @@ static ccjs_status ccjs_fetch_response_new(
     );
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_fetch_headers_new(
+  if (status == INOX_OK) {
+    status = inox_fetch_headers_new(
       allocator,
       response->headers == 0 ? "" : response->headers,
       response->headers == 0 ? 0 : response->headers_len,
@@ -1603,8 +1603,8 @@ static ccjs_status ccjs_fetch_response_new(
     );
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(
       allocator,
       response->body == 0 ? "" : response->body,
       response->body == 0 ? 0 : response->body_len,
@@ -1612,222 +1612,222 @@ static ccjs_status ccjs_fetch_response_new(
     );
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_RESPONSE_STATUS_INDEX, ccjs_number_value((ccjs_number)response->status));
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_RESPONSE_STATUS_INDEX, inox_number_value((inox_number)response->status));
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_RESPONSE_OK_INDEX, ccjs_bool_value(response->ok));
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_RESPONSE_OK_INDEX, inox_bool_value(response->ok));
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_RESPONSE_URL_INDEX, url_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_RESPONSE_URL_INDEX, url_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_RESPONSE_STATUS_TEXT_INDEX, status_text_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_RESPONSE_STATUS_TEXT_INDEX, status_text_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_RESPONSE_REDIRECTED_INDEX, ccjs_bool_value(response->redirected));
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_RESPONSE_REDIRECTED_INDEX, inox_bool_value(response->redirected));
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_RESPONSE_HEADERS_INDEX, headers_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_RESPONSE_HEADERS_INDEX, headers_value);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_RESPONSE_BODY_INDEX, body_value);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_RESPONSE_BODY_INDEX, body_value);
   }
 
-  ccjs_release(url_value);
-  ccjs_release(status_text_value);
-  ccjs_release(headers_value);
-  ccjs_release(body_value);
+  inox_release(url_value);
+  inox_release(status_text_value);
+  inox_release(headers_value);
+  inox_release(body_value);
 
-  if (status != CCJS_OK) {
-    ccjs_release(object);
+  if (status != INOX_OK) {
+    inox_release(object);
     return status;
   }
 
   *out = object;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_headers_new(ccjs_allocator* allocator, const char* headers, size_t headers_len, ccjs_value* out) {
-  static const ccjs_field_info fields[] = { { "__ccjsHeaders", CCJS_FIELD_READONLY } };
-  static const ccjs_shape shape = { 1, fields };
+static inox_status inox_fetch_headers_new(inox_allocator* allocator, const char* headers, size_t headers_len, inox_value* out) {
+  static const inox_field_info fields[] = { { "__inoxHeaders", INOX_FIELD_READONLY } };
+  static const inox_shape shape = { 1, fields };
 
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  ccjs_value object = ccjs_undefined_value();
-  ccjs_value raw = ccjs_undefined_value();
-  ccjs_status status = ccjs_object_new(allocator, &shape, &object);
+  *out = inox_undefined_value();
+  inox_value object = inox_undefined_value();
+  inox_value raw = inox_undefined_value();
+  inox_status status = inox_object_new(allocator, &shape, &object);
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, headers == 0 ? "" : headers, headers == 0 ? 0 : headers_len, &raw);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, headers == 0 ? "" : headers, headers == 0 ? 0 : headers_len, &raw);
   }
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(object, CCJS_FETCH_HEADERS_RAW_INDEX, raw);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, INOX_FETCH_HEADERS_RAW_INDEX, raw);
   }
 
-  ccjs_release(raw);
+  inox_release(raw);
 
-  if (status != CCJS_OK) {
-    ccjs_release(object);
+  if (status != INOX_OK) {
+    inox_release(object);
     return status;
   }
 
   *out = object;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_headers_raw(ccjs_value headers, ccjs_value* out) {
-  return ccjs_object_get_known(headers, CCJS_FETCH_HEADERS_RAW_INDEX, out);
+static inox_status inox_fetch_headers_raw(inox_value headers, inox_value* out) {
+  return inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, out);
 }
 
-static ccjs_status ccjs_fetch_reject_status(ccjs_loop* loop, ccjs_promise* promise, ccjs_status status) {
+static inox_status inox_fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status) {
   if (loop == 0 || promise == 0 || loop->allocator == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_value error = ccjs_undefined_value();
-  ccjs_status error_status = ccjs_fetch_error_from_status(loop->allocator, status, &error);
+  inox_value error = inox_undefined_value();
+  inox_status error_status = inox_fetch_error_from_status(loop->allocator, status, &error);
 
-  if (error_status != CCJS_OK) {
-    return ccjs_promise_reject(promise, ccjs_number_value((ccjs_number)status));
+  if (error_status != INOX_OK) {
+    return inox_promise_reject(promise, inox_number_value((inox_number)status));
   }
 
-  ccjs_status reject_status = ccjs_promise_reject(promise, error);
-  ccjs_release(error);
+  inox_status reject_status = inox_promise_reject(promise, error);
+  inox_release(error);
 
-  return reject_status == CCJS_OK ? CCJS_OK : reject_status;
+  return reject_status == INOX_OK ? INOX_OK : reject_status;
 }
 
-static ccjs_status ccjs_fetch_error_from_status(ccjs_allocator* allocator, ccjs_status status, ccjs_value* out) {
-  static const ccjs_field_info fields[] = { { "name", CCJS_FIELD_READONLY },
-                                            { "message", CCJS_FIELD_READONLY },
-                                            { "code", CCJS_FIELD_READONLY } };
-  static const ccjs_shape shape = { 3, fields };
+static inox_status inox_fetch_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out) {
+  static const inox_field_info fields[] = { { "name", INOX_FIELD_READONLY },
+                                            { "message", INOX_FIELD_READONLY },
+                                            { "code", INOX_FIELD_READONLY } };
+  static const inox_shape shape = { 3, fields };
 
   if (allocator == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  ccjs_value error = ccjs_undefined_value();
-  const char* name_text = status == CCJS_ERR_THROW ? "AbortError" : "FetchError";
-  const char* code_text = status == CCJS_ERR_THROW ? "ABORT_ERR" : "ERR_FETCH";
-  const char* message_text = ccjs_fetch_error_message(status);
-  ccjs_status result = ccjs_object_new(allocator, &shape, &error);
+  *out = inox_undefined_value();
+  inox_value error = inox_undefined_value();
+  const char* name_text = status == INOX_ERR_THROW ? "AbortError" : "FetchError";
+  const char* code_text = status == INOX_ERR_THROW ? "ABORT_ERR" : "ERR_FETCH";
+  const char* message_text = inox_fetch_error_message(status);
+  inox_status result = inox_object_new(allocator, &shape, &error);
 
-  if (result == CCJS_OK) {
-    result = ccjs_fetch_error_field(allocator, error, 0, name_text, strlen(name_text));
+  if (result == INOX_OK) {
+    result = inox_fetch_error_field(allocator, error, 0, name_text, strlen(name_text));
   }
 
-  if (result == CCJS_OK) {
-    result = ccjs_fetch_error_field(allocator, error, 1, message_text, strlen(message_text));
+  if (result == INOX_OK) {
+    result = inox_fetch_error_field(allocator, error, 1, message_text, strlen(message_text));
   }
 
-  if (result == CCJS_OK) {
-    result = ccjs_fetch_error_field(allocator, error, 2, code_text, strlen(code_text));
+  if (result == INOX_OK) {
+    result = inox_fetch_error_field(allocator, error, 2, code_text, strlen(code_text));
   }
 
-  if (result != CCJS_OK) {
-    ccjs_release(error);
+  if (result != INOX_OK) {
+    inox_release(error);
     return result;
   }
 
   *out = error;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_fetch_error_field(
-  ccjs_allocator* allocator,
-  ccjs_value error,
+static inox_status inox_fetch_error_field(
+  inox_allocator* allocator,
+  inox_value error,
   uint32_t index,
   const char* value,
   size_t value_len
 ) {
-  ccjs_value field = ccjs_undefined_value();
-  ccjs_status status = ccjs_string_from_literal(allocator, value, value_len, &field);
+  inox_value field = inox_undefined_value();
+  inox_status status = inox_string_from_literal(allocator, value, value_len, &field);
 
-  if (status == CCJS_OK) {
-    status = ccjs_object_init_known(error, index, field);
+  if (status == INOX_OK) {
+    status = inox_object_init_known(error, index, field);
   }
 
-  ccjs_release(field);
+  inox_release(field);
 
   return status;
 }
 
-static const char* ccjs_fetch_error_message(ccjs_status status) {
-  if (status == CCJS_ERR_THROW) {
+static const char* inox_fetch_error_message(inox_status status) {
+  if (status == INOX_ERR_THROW) {
     return "fetch request aborted";
   }
 
-  if (status == CCJS_ERR_UNSUPPORTED) {
+  if (status == INOX_ERR_UNSUPPORTED) {
     return "unsupported fetch URL or response";
   }
 
-  if (status == CCJS_ERR_OOM) {
+  if (status == INOX_ERR_OOM) {
     return "fetch allocation failed";
   }
 
   return "fetch request failed";
 }
 
-static void ccjs_fetch_promise_request_free(ccjs_fetch_promise_request* request) {
+static void inox_fetch_promise_request_free(inox_fetch_promise_request* request) {
   if (request == 0 || request->loop == 0 || request->loop->allocator == 0) {
     return;
   }
 
-  ccjs_allocator* allocator = request->loop->allocator;
+  inox_allocator* allocator = request->loop->allocator;
 
   if (request->url != 0) {
     allocator->free(allocator->user, request->url, request->url_len + 1, _Alignof(char));
   }
 
-  ccjs_promise_release(request->promise);
-  allocator->free(allocator->user, request, sizeof(ccjs_fetch_promise_request), _Alignof(ccjs_fetch_promise_request));
+  inox_promise_release(request->promise);
+  allocator->free(allocator->user, request, sizeof(inox_fetch_promise_request), _Alignof(inox_fetch_promise_request));
 }
 
 #else
 
-ccjs_status ccjs_fetch_get(ccjs_loop* loop, const char* url, ccjs_fetch_done_fn done, void* user) {
+inox_status inox_fetch_get(inox_loop* loop, const char* url, inox_fetch_done_fn done, void* user) {
   (void)loop;
   (void)url;
   (void)done;
   (void)user;
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_request(ccjs_loop* loop, const char* url, const ccjs_fetch_init* init, ccjs_fetch_done_fn done, void* user) {
+inox_status inox_fetch_request(inox_loop* loop, const char* url, const inox_fetch_init* init, inox_fetch_done_fn done, void* user) {
   (void)loop;
   (void)url;
   (void)init;
   (void)done;
   (void)user;
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch(ccjs_loop* loop, const char* url, size_t url_len, ccjs_promise** out) {
-  return ccjs_fetch_with_init(loop, url, url_len, 0, out);
+inox_status inox_fetch(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
+  return inox_fetch_with_init(loop, url, url_len, 0, out);
 }
 
-ccjs_status ccjs_fetch_with_init(
-  ccjs_loop* loop,
+inox_status inox_fetch_with_init(
+  inox_loop* loop,
   const char* url,
   size_t url_len,
-  const ccjs_fetch_init* init,
-  ccjs_promise** out
+  const inox_fetch_init* init,
+  inox_promise** out
 ) {
   (void)loop;
   (void)url;
@@ -1835,88 +1835,88 @@ ccjs_status ccjs_fetch_with_init(
   (void)init;
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_response_text(ccjs_loop* loop, ccjs_value response, ccjs_promise** out) {
+inox_status inox_fetch_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
   (void)loop;
   (void)response;
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_headers_get(ccjs_allocator* allocator, ccjs_value headers, const char* name, size_t name_len, ccjs_value* out) {
+inox_status inox_fetch_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
   (void)allocator;
   (void)headers;
   (void)name;
   (void)name_len;
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  return CCJS_ERR_UNSUPPORTED;
+  *out = inox_undefined_value();
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_headers_has(ccjs_value headers, const char* name, size_t name_len, int* out) {
+inox_status inox_fetch_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
   (void)headers;
   (void)name;
   (void)name_len;
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_abort_controller_new(ccjs_allocator* allocator, ccjs_value* out) {
+inox_status inox_fetch_abort_controller_new(inox_allocator* allocator, inox_value* out) {
   (void)allocator;
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  return CCJS_ERR_UNSUPPORTED;
+  *out = inox_undefined_value();
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_abort_controller_signal(ccjs_value controller, ccjs_value* out) {
+inox_status inox_fetch_abort_controller_signal(inox_value controller, inox_value* out) {
   (void)controller;
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  return CCJS_ERR_UNSUPPORTED;
+  *out = inox_undefined_value();
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_abort_controller_abort(ccjs_value controller) {
+inox_status inox_fetch_abort_controller_abort(inox_value controller) {
   (void)controller;
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_fetch_signal_aborted(ccjs_value signal, int* out) {
+inox_status inox_fetch_signal_aborted(inox_value signal, int* out) {
   (void)signal;
 
   if (out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   *out = 0;
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
 #endif

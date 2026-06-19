@@ -19,7 +19,7 @@ test('generated C node:buffer helpers compile and run with runtime sources', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-buffer-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-buffer-'))
   const source = join(dir, 'node-buffer.c')
   const output = join(dir, 'node-buffer')
 

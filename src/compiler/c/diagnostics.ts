@@ -191,7 +191,7 @@ export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: Source
   }
 
   diagnostics.push(
-    diagnostic('CCJS_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', loc)
+    diagnostic('INOX_C_JS_GLOBAL', 'this JS global is not supported by the current C backend slice', loc)
   )
 }
 
@@ -199,7 +199,7 @@ function hasCJsGlobalDiagnosticAtLocation(diagnostics: Diagnostic[], loc: Source
   for (let index = 0; index < diagnostics.length; index = index + 1) {
     const item = diagnostics[index]
 
-    if (item.code === 'CCJS_C_JS_GLOBAL' && sameLocation(item, loc)) {
+    if (item.code === 'INOX_C_JS_GLOBAL' && sameLocation(item, loc)) {
       return true
     }
   }

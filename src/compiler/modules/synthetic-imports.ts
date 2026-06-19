@@ -119,7 +119,7 @@ export function createExportAliasDeclaration(specifier: AnyNode, importedProgram
 }
 
 export function reexportImportAliasName(name: string): string {
-  return `__ccjs_reexport_${name}`
+  return `__inox_reexport_${name}`
 }
 
 function createAliasDeclaration(

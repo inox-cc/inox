@@ -23,14 +23,14 @@ timers.clearImmediate(immediate)
   assert.deepEqual(result.ir.runtimeRequirements, ['async-runtime', 'callback-values', 'managed-values', 'timers'])
   assert.match(
     result.code,
-    /ccjs_loop_set_timeout\(&ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &timeout\)/
+    /inox_loop_set_timeout\(&inox_loop, 1, inox_timer_callback_run, inox_timer_ctx_\d+, inox_timer_callback_finalize, &timeout\)/
   )
   assert.match(
     result.code,
-    /ccjs_loop_queue_immediate\(&ccjs_loop, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &immediate\)/
+    /inox_loop_queue_immediate\(&inox_loop, inox_timer_callback_run, inox_timer_ctx_\d+, inox_timer_callback_finalize, &immediate\)/
   )
-  assert.match(result.code, /ccjs_loop_clear_timer\(timeout\);/)
-  assert.match(result.code, /ccjs_loop_clear_timer\(immediate\);/)
+  assert.match(result.code, /inox_loop_clear_timer\(timeout\);/)
+  assert.match(result.code, /inox_loop_clear_timer\(immediate\);/)
 })
 
 test('reports embedded timer capability diagnostics for node:timers imports', () => {
@@ -54,7 +54,7 @@ setTimeout(() => {
         return false
       }
 
-      assert.equal(error.diagnostics.some((item) => item.code === 'CCJS_CAPABILITY'), true)
+      assert.equal(error.diagnostics.some((item) => item.code === 'INOX_CAPABILITY'), true)
       assert.equal(
         error.diagnostics.some((item) =>
           item.message.includes('embedded profile requires timers capability for setTimeout')

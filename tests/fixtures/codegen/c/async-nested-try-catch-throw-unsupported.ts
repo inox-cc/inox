@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_ASYNC
+// @diagnostic INOX_C_ASYNC
 
 async function work(): Promise<number> {
   try {

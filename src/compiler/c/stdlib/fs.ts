@@ -61,14 +61,14 @@ type FsSyncStatementDescriptor = {
 }
 
 const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
-  appendFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_append_file_bytes_sync' },
-  appendFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_append_file_sync' },
-  copyFileSync: { kind: 'path-arg', callName: 'ccjs_fs_copy_file_sync', tempPrefix: 'ccjs_fs_dest_path' },
-  renameSync: { kind: 'path-arg', callName: 'ccjs_fs_rename_sync', tempPrefix: 'ccjs_fs_new_path' },
-  symlinkSync: { kind: 'path-arg', callName: 'ccjs_fs_symlink_sync', tempPrefix: 'ccjs_fs_link_path' },
-  unlinkSync: { kind: 'path', callName: 'ccjs_fs_unlink_sync' },
-  writeFileBytesSync: { kind: 'bytes-value', callName: 'ccjs_fs_write_file_bytes_sync' },
-  writeFileSync: { kind: 'string-bytes', callName: 'ccjs_fs_write_file_sync' }
+  appendFileBytesSync: { kind: 'bytes-value', callName: 'inox_fs_append_file_bytes_sync' },
+  appendFileSync: { kind: 'string-bytes', callName: 'inox_fs_append_file_sync' },
+  copyFileSync: { kind: 'path-arg', callName: 'inox_fs_copy_file_sync', tempPrefix: 'inox_fs_dest_path' },
+  renameSync: { kind: 'path-arg', callName: 'inox_fs_rename_sync', tempPrefix: 'inox_fs_new_path' },
+  symlinkSync: { kind: 'path-arg', callName: 'inox_fs_symlink_sync', tempPrefix: 'inox_fs_link_path' },
+  unlinkSync: { kind: 'path', callName: 'inox_fs_unlink_sync' },
+  writeFileBytesSync: { kind: 'bytes-value', callName: 'inox_fs_write_file_bytes_sync' },
+  writeFileSync: { kind: 'string-bytes', callName: 'inox_fs_write_file_sync' }
 }
 
 function fsPromiseResultTypeForMethod(method: string | null): string | null {
@@ -109,67 +109,67 @@ function fsPromiseResultTypeForMethod(method: string | null): string | null {
 
 function fsAsyncCallDescriptorForMethod(method: string | null): FsAsyncCallDescriptor | null {
   if (method === 'appendFile') {
-    return { kind: 'string-bytes-out', callName: 'ccjs_fs_append_file' }
+    return { kind: 'string-bytes-out', callName: 'inox_fs_append_file' }
   }
 
   if (method === 'appendFileBytes') {
-    return { kind: 'bytes-value-out', callName: 'ccjs_fs_append_file_bytes' }
+    return { kind: 'bytes-value-out', callName: 'inox_fs_append_file_bytes' }
   }
 
   if (method === 'copyFile') {
-    return { kind: 'path-arg-out', callName: 'ccjs_fs_copy_file', tempPrefix: 'ccjs_fs_dest_path' }
+    return { kind: 'path-arg-out', callName: 'inox_fs_copy_file', tempPrefix: 'inox_fs_dest_path' }
   }
 
   if (method === 'lstat') {
-    return { kind: 'path-out', callName: 'ccjs_fs_lstat' }
+    return { kind: 'path-out', callName: 'inox_fs_lstat' }
   }
 
   if (method === 'readDir') {
-    return { kind: 'path-out', callName: 'ccjs_fs_read_dir' }
+    return { kind: 'path-out', callName: 'inox_fs_read_dir' }
   }
 
   if (method === 'readDirDirents') {
-    return { kind: 'path-out', callName: 'ccjs_fs_read_dir_dirents' }
+    return { kind: 'path-out', callName: 'inox_fs_read_dir_dirents' }
   }
 
   if (method === 'readFile') {
-    return { kind: 'path-out', callName: 'ccjs_fs_read_file' }
+    return { kind: 'path-out', callName: 'inox_fs_read_file' }
   }
 
   if (method === 'readFileBytes') {
-    return { kind: 'path-out', callName: 'ccjs_fs_read_file_bytes' }
+    return { kind: 'path-out', callName: 'inox_fs_read_file_bytes' }
   }
 
   if (method === 'readlink') {
-    return { kind: 'path-out', callName: 'ccjs_fs_readlink' }
+    return { kind: 'path-out', callName: 'inox_fs_readlink' }
   }
 
   if (method === 'realpath') {
-    return { kind: 'path-out', callName: 'ccjs_fs_realpath' }
+    return { kind: 'path-out', callName: 'inox_fs_realpath' }
   }
 
   if (method === 'rename') {
-    return { kind: 'path-arg-out', callName: 'ccjs_fs_rename', tempPrefix: 'ccjs_fs_new_path' }
+    return { kind: 'path-arg-out', callName: 'inox_fs_rename', tempPrefix: 'inox_fs_new_path' }
   }
 
   if (method === 'stat') {
-    return { kind: 'path-out', callName: 'ccjs_fs_stat' }
+    return { kind: 'path-out', callName: 'inox_fs_stat' }
   }
 
   if (method === 'symlink') {
-    return { kind: 'path-arg-out', callName: 'ccjs_fs_symlink', tempPrefix: 'ccjs_fs_link_path' }
+    return { kind: 'path-arg-out', callName: 'inox_fs_symlink', tempPrefix: 'inox_fs_link_path' }
   }
 
   if (method === 'unlink') {
-    return { kind: 'path-out', callName: 'ccjs_fs_unlink' }
+    return { kind: 'path-out', callName: 'inox_fs_unlink' }
   }
 
   if (method === 'writeFile') {
-    return { kind: 'string-bytes-out', callName: 'ccjs_fs_write_file' }
+    return { kind: 'string-bytes-out', callName: 'inox_fs_write_file' }
   }
 
   if (method === 'writeFileBytes') {
-    return { kind: 'bytes-value-out', callName: 'ccjs_fs_write_file_bytes' }
+    return { kind: 'bytes-value-out', callName: 'inox_fs_write_file_bytes' }
   }
 
   return null
@@ -177,35 +177,35 @@ function fsAsyncCallDescriptorForMethod(method: string | null): FsAsyncCallDescr
 
 function fsSyncValueCallNameForMethod(method: string | null): string | null {
   if (method === 'lstatSync') {
-    return 'ccjs_fs_lstat_sync'
+    return 'inox_fs_lstat_sync'
   }
 
   if (method === 'readDirDirentsSync') {
-    return 'ccjs_fs_read_dir_dirents_sync'
+    return 'inox_fs_read_dir_dirents_sync'
   }
 
   if (method === 'readDirSync') {
-    return 'ccjs_fs_read_dir_sync'
+    return 'inox_fs_read_dir_sync'
   }
 
   if (method === 'readFileBytesSync') {
-    return 'ccjs_fs_read_file_bytes_sync'
+    return 'inox_fs_read_file_bytes_sync'
   }
 
   if (method === 'readFileSync') {
-    return 'ccjs_fs_read_file_sync'
+    return 'inox_fs_read_file_sync'
   }
 
   if (method === 'readlinkSync') {
-    return 'ccjs_fs_readlink_sync'
+    return 'inox_fs_readlink_sync'
   }
 
   if (method === 'realpathSync') {
-    return 'ccjs_fs_realpath_sync'
+    return 'inox_fs_realpath_sync'
   }
 
   if (method === 'statSync') {
-    return 'ccjs_fs_stat_sync'
+    return 'inox_fs_stat_sync'
   }
 
   return null
@@ -245,19 +245,19 @@ export function cFsRuntimeConstantExpression(expression: AnyNode | null | undefi
   const name = expression.fsRuntimeConstant
 
   if (name === 'F_OK') {
-    return 'CCJS_FS_F_OK'
+    return 'INOX_FS_F_OK'
   }
 
   if (name === 'R_OK') {
-    return 'CCJS_FS_R_OK'
+    return 'INOX_FS_R_OK'
   }
 
   if (name === 'W_OK') {
-    return 'CCJS_FS_W_OK'
+    return 'INOX_FS_W_OK'
   }
 
   if (name === 'X_OK') {
-    return 'CCJS_FS_X_OK'
+    return 'INOX_FS_X_OK'
   }
 
   return null
@@ -301,11 +301,11 @@ export function emitPreparedFsCallExpression(
 
   registerEventLoop(context)
 
-  const out = preparedFsCallOut(options, context, 'ccjs_promise')
+  const out = preparedFsCallOut(options, context, 'inox_promise')
   if (options.owned !== false) {
     registerOwnedPromise(context, out, fsPromiseValueType(expression, method), 'error')
   }
-  const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
+  const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
   const lines: string[] = []
   appendLines(lines, path.lines)
   const descriptor = fsAsyncCallDescriptorForMethod(method)
@@ -320,7 +320,7 @@ export function emitPreparedFsCallExpression(
     appendLines(lines, mode.lines)
     lines.push(
       emitStatusCheck(
-        `ccjs_fs_access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
+        `inox_fs_access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
         context
       )
     )
@@ -335,7 +335,7 @@ export function emitPreparedFsCallExpression(
   if (method === 'mkdir') {
     lines.push(
       emitStatusCheck(
-        `ccjs_fs_mkdir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &${out})`,
+        `inox_fs_mkdir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &${out})`,
         context
       )
     )
@@ -350,7 +350,7 @@ export function emitPreparedFsCallExpression(
   if (method === 'rm') {
     lines.push(
       emitStatusCheck(
-        `ccjs_fs_rm(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &${out})`,
+        `inox_fs_rm(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &${out})`,
         context
       )
     )
@@ -385,7 +385,7 @@ function emitPreparedFsAsyncDescriptorExpression(
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
     appendLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
     lines.push(
       emitStatusCheck(
         `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.expression}, &${out})`,
@@ -407,7 +407,7 @@ function emitPreparedFsAsyncDescriptorExpression(
       )
     )
   } else {
-    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
 
     appendLines(lines, bytes.lines)
     lines.push(
@@ -444,10 +444,10 @@ export function emitPreparedFsSyncValueExpression(
     return null
   }
 
-  const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
-  const out = nextCName(context, 'ccjs_fs_value')
+  const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
+  const out = nextCName(context, 'inox_fs_value')
   registerOwnedValue(context, out)
-  const call = `${callName}(&ccjs_default_allocator, ${path.bytes}, ${path.length}, &${out})`
+  const call = `${callName}(&inox_default_allocator, ${path.bytes}, ${path.length}, &${out})`
   const lines: string[] = []
   appendLines(lines, path.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(out))
@@ -473,7 +473,7 @@ export function emitPreparedFsSyncStatementExpression(
     return null
   }
 
-  const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_fs_path')
+  const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
   const lines: string[] = []
   appendLines(lines, path.lines)
 
@@ -485,7 +485,7 @@ export function emitPreparedFsSyncStatementExpression(
     const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
 
     appendLines(lines, mode.lines)
-    lines.push(emitStatusCheck(`ccjs_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
+    lines.push(emitStatusCheck(`inox_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
 
     return {
       lines
@@ -495,7 +495,7 @@ export function emitPreparedFsSyncStatementExpression(
   if (method === 'mkdirSync') {
     lines.push(
       emitStatusCheck(
-        `ccjs_fs_mkdir_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')})`,
+        `inox_fs_mkdir_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')})`,
         context
       )
     )
@@ -508,7 +508,7 @@ export function emitPreparedFsSyncStatementExpression(
   if (method === 'rmSync') {
     lines.push(
       emitStatusCheck(
-        `ccjs_fs_rm_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')})`,
+        `inox_fs_rm_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')})`,
         context
       )
     )
@@ -535,7 +535,7 @@ function emitPreparedFsSyncStatementDescriptor(
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
     appendLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'CCJS_TAG_BYTES', context))
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
     lines.push(emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.expression})`, context))
   } else if (descriptor.kind === 'path-arg') {
     const argumentPath = dependencies.emitPreparedStringBytesOperand(
@@ -552,7 +552,7 @@ function emitPreparedFsSyncStatementDescriptor(
       )
     )
   } else {
-    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_bytes')
+    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
 
     appendLines(lines, bytes.lines)
     lines.push(
@@ -576,7 +576,7 @@ export function emitPreparedFsAccessModeExpression(
   if (expression.args[1] == null) {
     return {
       lines: [],
-      expression: 'CCJS_FS_F_OK'
+      expression: 'INOX_FS_F_OK'
     }
   }
 
@@ -671,7 +671,7 @@ function fsDescriptorTempPrefix(descriptor: FsAsyncCallDescriptor | FsSyncStatem
     return descriptor.tempPrefix
   }
 
-  return 'ccjs_fs_path'
+  return 'inox_fs_path'
 }
 
 function isFsStatsRuntimeMethod(method: string | null): boolean {
@@ -685,16 +685,16 @@ function isFsStatsRuntimeMethod(method: string | null): boolean {
 
 function fsStatsRuntimeHelper(method: string | null): string {
   if (method === 'statsIsFile') {
-    return 'ccjs_fs_stats_is_file'
+    return 'inox_fs_stats_is_file'
   }
 
   if (method === 'statsIsDirectory') {
-    return 'ccjs_fs_stats_is_directory'
+    return 'inox_fs_stats_is_directory'
   }
 
   if (method === 'direntIsFile') {
-    return 'ccjs_fs_dirent_is_file'
+    return 'inox_fs_dirent_is_file'
   }
 
-  return 'ccjs_fs_dirent_is_directory'
+  return 'inox_fs_dirent_is_directory'
 }

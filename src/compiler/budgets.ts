@@ -33,7 +33,7 @@ function checkRequiredCCompileBudgets(
   if (exceedsFeatureBudget(features, maxFeatures)) {
     diagnostics.push(
       diagnostic(
-        'CCJS_BUDGET',
+        'INOX_BUDGET',
         `C target uses ${features.length} IR features (${features.join(', ')}), exceeding maxFeatures budget ${maxFeatures}`
       )
     )
@@ -42,7 +42,7 @@ function checkRequiredCCompileBudgets(
   if (exceedsRuntimeBudget(runtimeRequirements, maxRuntimeRequirements)) {
     diagnostics.push(
       diagnostic(
-        'CCJS_BUDGET',
+        'INOX_BUDGET',
         `C target uses ${runtimeRequirements.length} runtime requirements (${runtimeRequirements.join(', ')}), exceeding maxRuntimeRequirements budget ${maxRuntimeRequirements}`
       )
     )

@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_ASSIGN_READONLY_FIELD
+// @diagnostic INOX_ASSIGN_READONLY_FIELD
 
 type User = {
   readonly id: number,

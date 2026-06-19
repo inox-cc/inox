@@ -96,7 +96,7 @@ export function checkCProfileCapabilities(programs: IrProgram[], options: Compil
     }
 
     diagnostics.push(
-      diagnostic('CCJS_CAPABILITY', `embedded profile requires ${usage.name} capability for ${usage.path}`, usage.loc)
+      diagnostic('INOX_CAPABILITY', `embedded profile requires ${usage.name} capability for ${usage.path}`, usage.loc)
     )
     reported.add(key)
   }

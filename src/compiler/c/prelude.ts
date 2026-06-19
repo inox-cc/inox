@@ -75,27 +75,27 @@ export function emitCPrelude(
 
   if (needsConsoleRuntime) {
     lines.push('#include <stdlib.h>')
-    lines.push('#include "ccjs/console.h"')
+    lines.push('#include "inox/console.h"')
   }
 
   if (needsDgramRuntime) {
-    lines.push('#include "ccjs/dgram.h"')
+    lines.push('#include "inox/dgram.h"')
   }
 
   if (needsDebugMemoryRuntime) {
-    lines.push('#include "ccjs/debug.h"')
+    lines.push('#include "inox/debug.h"')
   }
 
   if (needsFetchRuntime) {
-    lines.push('#include "ccjs/fetch.h"')
+    lines.push('#include "inox/fetch.h"')
   }
 
   if (needsHttpRuntime) {
-    lines.push('#include "ccjs/http.h"')
+    lines.push('#include "inox/http.h"')
   }
 
   if (needsNetRuntime) {
-    lines.push('#include "ccjs/net.h"')
+    lines.push('#include "inox/net.h"')
   }
 
   if (needsMathRuntime || needsCryptoRuntime) {
@@ -115,59 +115,59 @@ export function emitCPrelude(
       lines.push('#include <stdlib.h>')
     }
     if (needsCollectionRuntime) {
-      lines.push('#include "ccjs/array.h"')
-      lines.push('#include "ccjs/hash.h"')
+      lines.push('#include "inox/array.h"')
+      lines.push('#include "inox/hash.h"')
     }
     if (needsAsyncRuntime) {
-      lines.push('#include "ccjs/loop.h"')
-      lines.push('#include "ccjs/promise.h"')
+      lines.push('#include "inox/loop.h"')
+      lines.push('#include "inox/promise.h"')
     }
     if (needsCallbackRuntime) {
-      lines.push('#include "ccjs/callback.h"')
+      lines.push('#include "inox/callback.h"')
     }
     if (needsBinaryRuntime) {
-      lines.push('#include "ccjs/binary.h"')
+      lines.push('#include "inox/binary.h"')
     }
     if (needsChildProcessRuntime) {
-      lines.push('#include "ccjs/child_process.h"')
+      lines.push('#include "inox/child_process.h"')
     }
     if (needsCryptoRuntime) {
-      lines.push('#include "ccjs/crypto.h"')
+      lines.push('#include "inox/crypto.h"')
     }
     if (needsFsRuntime) {
-      lines.push('#include "ccjs/fs.h"')
+      lines.push('#include "inox/fs.h"')
     }
     if (needsJsonRuntime) {
-      lines.push('#include "ccjs/json.h"')
+      lines.push('#include "inox/json.h"')
     }
     if (needsOsRuntime) {
-      lines.push('#include "ccjs/os.h"')
+      lines.push('#include "inox/os.h"')
     }
     if (needsPathRuntime) {
-      lines.push('#include "ccjs/path.h"')
+      lines.push('#include "inox/path.h"')
     }
     if (needsUrlRuntime) {
-      lines.push('#include "ccjs/url.h"')
+      lines.push('#include "inox/url.h"')
     }
     if (needsProcessRuntime) {
-      lines.push('#include "ccjs/process.h"')
+      lines.push('#include "inox/process.h"')
     }
     if (needsCollectionRuntime) {
-      lines.push('#include "ccjs/map.h"')
+      lines.push('#include "inox/map.h"')
     }
     if (needsObjectRuntime) {
-      lines.push('#include "ccjs/object.h"')
+      lines.push('#include "inox/object.h"')
     }
     if (needsCollectionRuntime) {
-      lines.push('#include "ccjs/set.h"')
+      lines.push('#include "inox/set.h"')
     }
-    lines.push('#include "ccjs/string.h"')
+    lines.push('#include "inox/string.h"')
   } else if (needsStringHeader) {
-    lines.push('#include "ccjs/string.h"')
+    lines.push('#include "inox/string.h"')
   }
 
   if (needsTimeRuntime) {
-    lines.push('#include "ccjs/time.h"')
+    lines.push('#include "inox/time.h"')
   }
 
   lines.push('')
@@ -183,14 +183,14 @@ export function emitCPrelude(
   }
 
   if (needsRuntime) {
-    lines.push('static void* ccjs_default_alloc(void* user, size_t size, size_t align) {')
+    lines.push('static void* inox_default_alloc(void* user, size_t size, size_t align) {')
     lines.push('  (void)user;')
     lines.push('  (void)align;')
     lines.push('  return calloc(1, size);')
     lines.push('}')
     lines.push('')
     lines.push(
-      'static void* ccjs_default_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {'
+      'static void* inox_default_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {'
     )
     lines.push('  (void)user;')
     lines.push('  (void)old_size;')
@@ -198,7 +198,7 @@ export function emitCPrelude(
     lines.push('  return realloc(ptr, new_size);')
     lines.push('}')
     lines.push('')
-    lines.push('static void ccjs_default_free(void* user, void* ptr, size_t size, size_t align) {')
+    lines.push('static void inox_default_free(void* user, void* ptr, size_t size, size_t align) {')
     lines.push('  (void)user;')
     lines.push('  (void)size;')
     lines.push('  (void)align;')
@@ -206,48 +206,48 @@ export function emitCPrelude(
     lines.push('}')
     lines.push('')
     if (needsDebugMemoryRuntime) {
-      lines.push('static ccjs_allocator ccjs_default_base_allocator = {')
+      lines.push('static inox_allocator inox_default_base_allocator = {')
       lines.push('  0,')
-      lines.push('  ccjs_default_alloc,')
-      lines.push('  ccjs_default_realloc,')
-      lines.push('  ccjs_default_free')
+      lines.push('  inox_default_alloc,')
+      lines.push('  inox_default_realloc,')
+      lines.push('  inox_default_free')
       lines.push('};')
       lines.push('')
     }
-    lines.push('static ccjs_allocator ccjs_default_allocator = {')
+    lines.push('static inox_allocator inox_default_allocator = {')
     lines.push('  0,')
-    lines.push('  ccjs_default_alloc,')
-    lines.push('  ccjs_default_realloc,')
-    lines.push('  ccjs_default_free')
+    lines.push('  inox_default_alloc,')
+    lines.push('  inox_default_realloc,')
+    lines.push('  inox_default_free')
     lines.push('};')
     lines.push('')
 
     if (needsDebugMemoryRuntime) {
-      lines.push('static int ccjs_debug_memory_allocator_initialized = 0;')
+      lines.push('static int inox_debug_memory_allocator_initialized = 0;')
       lines.push('')
-      lines.push('static void ccjs_debug_memory_ensure_allocator(void) {')
-      lines.push('  if (ccjs_debug_memory_allocator_initialized) return;')
-      lines.push('  ccjs_debug_memory_allocator_initialized = 1;')
-      lines.push('  ccjs_default_allocator = ccjs_debug_allocator(&ccjs_default_base_allocator);')
+      lines.push('static void inox_debug_memory_ensure_allocator(void) {')
+      lines.push('  if (inox_debug_memory_allocator_initialized) return;')
+      lines.push('  inox_debug_memory_allocator_initialized = 1;')
+      lines.push('  inox_default_allocator = inox_debug_allocator(&inox_default_base_allocator);')
       lines.push('}')
       lines.push('')
     }
 
     if (needsTimerRuntime) {
-      lines.push('static ccjs_status ccjs_timer_callback_run(void* context) {')
-      lines.push('  if (context == 0) return CCJS_ERR_TYPE;')
-      lines.push('  ccjs_value* callback = (ccjs_value*)context;')
-      lines.push('  ccjs_value result = ccjs_undefined_value();')
-      lines.push('  ccjs_status status = ccjs_callback_call(*callback, 0, 0, &result);')
-      lines.push('  ccjs_release(result);')
+      lines.push('static inox_status inox_timer_callback_run(void* context) {')
+      lines.push('  if (context == 0) return INOX_ERR_TYPE;')
+      lines.push('  inox_value* callback = (inox_value*)context;')
+      lines.push('  inox_value result = inox_undefined_value();')
+      lines.push('  inox_status status = inox_callback_call(*callback, 0, 0, &result);')
+      lines.push('  inox_release(result);')
       lines.push('  return status;')
       lines.push('}')
       lines.push('')
-      lines.push('static void ccjs_timer_callback_finalize(void* context) {')
+      lines.push('static void inox_timer_callback_finalize(void* context) {')
       lines.push('  if (context == 0) return;')
-      lines.push('  ccjs_value* callback = (ccjs_value*)context;')
-      lines.push('  ccjs_release(*callback);')
-      lines.push('  ccjs_default_free(0, context, sizeof(ccjs_value), _Alignof(ccjs_value));')
+      lines.push('  inox_value* callback = (inox_value*)context;')
+      lines.push('  inox_release(*callback);')
+      lines.push('  inox_default_free(0, context, sizeof(inox_value), _Alignof(inox_value));')
       lines.push('}')
       lines.push('')
     }
@@ -261,41 +261,41 @@ function emitMathHelpers(random: CPreludeRandomConfig): string[] {
   const randomBackend = random.backend
   const lines: string[] = []
 
-  lines.push('static double ccjs_math_abs(double value) {')
+  lines.push('static double inox_math_abs(double value) {')
   lines.push('  return value < 0 ? -value : value;')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_floor(double value) {')
+  lines.push('static double inox_math_floor(double value) {')
   lines.push('  long long truncated = (long long)value;')
   lines.push('  return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_ceil(double value) {')
+  lines.push('static double inox_math_ceil(double value) {')
   lines.push('  long long truncated = (long long)value;')
   lines.push('  return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_round(double value) {')
-  lines.push('  return ccjs_math_floor(value + 0.5);')
+  lines.push('static double inox_math_round(double value) {')
+  lines.push('  return inox_math_floor(value + 0.5);')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_trunc(double value) {')
+  lines.push('static double inox_math_trunc(double value) {')
   lines.push('  return (double)((long long)value);')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_fround(double value) {')
+  lines.push('static double inox_math_fround(double value) {')
   lines.push('  return (double)((float)value);')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_min(double left, double right) {')
+  lines.push('static double inox_math_min(double left, double right) {')
   lines.push('  return left < right ? left : right;')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_max(double left, double right) {')
+  lines.push('static double inox_math_max(double left, double right) {')
   lines.push('  return left > right ? left : right;')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_sqrt(double value) {')
+  lines.push('static double inox_math_sqrt(double value) {')
   lines.push('  if (value < 0) return 0.0/0.0;')
   lines.push('  if (value == 0) return 0;')
   lines.push('  double estimate = value < 1 ? 1 : value;')
@@ -305,7 +305,7 @@ function emitMathHelpers(random: CPreludeRandomConfig): string[] {
   lines.push('  return estimate;')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_reduce_radians(double value) {')
+  lines.push('static double inox_math_reduce_radians(double value) {')
   lines.push('  const double pi = 3.14159265358979323846;')
   lines.push('  const double tau = 6.28318530717958647692;')
   lines.push('  while (value > pi) value -= tau;')
@@ -313,19 +313,19 @@ function emitMathHelpers(random: CPreludeRandomConfig): string[] {
   lines.push('  return value;')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_sin(double value) {')
-  lines.push('  double x = ccjs_math_reduce_radians(value);')
+  lines.push('static double inox_math_sin(double value) {')
+  lines.push('  double x = inox_math_reduce_radians(value);')
   lines.push('  double x2 = x * x;')
   lines.push('  return x * (1 - x2/6 + (x2 * x2)/120 - (x2 * x2 * x2)/5040 + (x2 * x2 * x2 * x2)/362880);')
   lines.push('}')
   lines.push('')
-  lines.push('static double ccjs_math_cos(double value) {')
-  lines.push('  double x = ccjs_math_reduce_radians(value);')
+  lines.push('static double inox_math_cos(double value) {')
+  lines.push('  double x = inox_math_reduce_radians(value);')
   lines.push('  double x2 = x * x;')
   lines.push('  return 1 - x2/2 + (x2 * x2)/24 - (x2 * x2 * x2)/720 + (x2 * x2 * x2 * x2)/40320;')
   lines.push('}')
   lines.push('')
-  lines.push(`static uint32_t ccjs_math_random_state = ${randomSeed};`)
+  lines.push(`static uint32_t inox_math_random_state = ${randomSeed};`)
   lines.push('')
   pushCPreludeLines(lines, emitRandomBackendHelper(randomBackend))
 
@@ -353,7 +353,7 @@ function emitOsEntropyHeaders(): string[] {
 
 function emitOsEntropyHelper(): string[] {
   return [
-    'static int ccjs_os_random_bytes(uint8_t* out, size_t len) {',
+    'static int inox_os_random_bytes(uint8_t* out, size_t len) {',
     '  if (out == 0 && len != 0) return 0;',
     '#if defined(_WIN32) && defined(_MSC_VER)',
     '  size_t filled = 0;',
@@ -403,11 +403,11 @@ function emitOsEntropyHelper(): string[] {
 function emitRandomBackendHelper(backend: CRandomBackend): string[] {
   if (backend === 'os') {
     return [
-      'static double ccjs_math_random(void) {',
+      'static double inox_math_random(void) {',
       '  uint32_t value = 0;',
-      '  if (!ccjs_os_random_bytes((uint8_t*)&value, sizeof(value))) {',
-      '    ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
-      '    value = ccjs_math_random_state;',
+      '  if (!inox_os_random_bytes((uint8_t*)&value, sizeof(value))) {',
+      '    inox_math_random_state = inox_math_random_state * 1664525u + 1013904223u;',
+      '    value = inox_math_random_state;',
       '  }',
       '  return (double)(value >> 8) / 16777216.0;',
       '}'
@@ -416,22 +416,22 @@ function emitRandomBackendHelper(backend: CRandomBackend): string[] {
 
   if (backend === 'xorshift32') {
     return [
-      'static double ccjs_math_random(void) {',
-      '  if (ccjs_math_random_state == 0u) ccjs_math_random_state = 0x6d2b79f5u;',
-      '  uint32_t value = ccjs_math_random_state;',
+      'static double inox_math_random(void) {',
+      '  if (inox_math_random_state == 0u) inox_math_random_state = 0x6d2b79f5u;',
+      '  uint32_t value = inox_math_random_state;',
       '  value ^= value << 13;',
       '  value ^= value >> 17;',
       '  value ^= value << 5;',
-      '  ccjs_math_random_state = value;',
+      '  inox_math_random_state = value;',
       '  return (double)(value >> 8) / 16777216.0;',
       '}'
     ]
   }
 
   return [
-    'static double ccjs_math_random(void) {',
-    '  ccjs_math_random_state = ccjs_math_random_state * 1664525u + 1013904223u;',
-    '  return (double)(ccjs_math_random_state >> 8) / 16777216.0;',
+    'static double inox_math_random(void) {',
+    '  inox_math_random_state = inox_math_random_state * 1664525u + 1013904223u;',
+    '  return (double)(inox_math_random_state >> 8) / 16777216.0;',
     '}'
   ]
 }

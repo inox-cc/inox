@@ -78,24 +78,24 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_loadText_frame \{[\s\S]*ccjs_value param_path;[\s\S]*ccjs_value local_text;/
+    /typedef struct inox_async_task_loadText_frame \{[\s\S]*inox_value param_path;[\s\S]*inox_value local_text;/
   )
-  assert.match(result.code, /ccjs_retain\(frame->param_path\);/)
-  assert.match(result.code, /ccjs_string \*path = \(ccjs_string \*\)frame->param_path\.as\.ref;/)
-  assert.match(result.code, /status = ccjs_fs_read_file\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
-  assert.match(result.code, /frame->local_text = ccjs_value_input;\n {4}ccjs_retain\(frame->local_text\);/)
-  assert.match(result.code, /ccjs_string \*text = \(ccjs_string \*\)frame->local_text\.as\.ref;/)
-  assert.match(result.code, /status = ccjs_fs_read_file_bytes\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
-  assert.match(result.code, /status = ccjs_fs_read_dir\(ccjs_loop, path->bytes, path->len, &frame->awaited\);/)
+  assert.match(result.code, /inox_retain\(frame->param_path\);/)
+  assert.match(result.code, /inox_string \*path = \(inox_string \*\)frame->param_path\.as\.ref;/)
+  assert.match(result.code, /status = inox_fs_read_file\(inox_loop, path->bytes, path->len, &frame->awaited\);/)
+  assert.match(result.code, /frame->local_text = inox_value_input;\n {4}inox_retain\(frame->local_text\);/)
+  assert.match(result.code, /inox_string \*text = \(inox_string \*\)frame->local_text\.as\.ref;/)
+  assert.match(result.code, /status = inox_fs_read_file_bytes\(inox_loop, path->bytes, path->len, &frame->awaited\);/)
+  assert.match(result.code, /status = inox_fs_read_dir\(inox_loop, path->bytes, path->len, &frame->awaited\);/)
   assert.match(
     result.code,
-    /status = ccjs_fs_write_file\(ccjs_loop, path->bytes, path->len, text->bytes, text->len, &frame->awaited\);/
+    /status = inox_fs_write_file\(inox_loop, path->bytes, path->len, text->bytes, text->len, &frame->awaited\);/
   )
   assert.match(
     result.code,
-    /status = ccjs_fs_write_file_bytes\(ccjs_loop, path->bytes, path->len, bytes, &frame->awaited\);/
+    /status = inox_fs_write_file_bytes\(inox_loop, path->bytes, path->len, bytes, &frame->awaited\);/
   )
-  assert.match(result.code, /return ccjs_undefined_value\(\);/)
+  assert.match(result.code, /return inox_undefined_value\(\);/)
 })
 
 
@@ -104,8 +104,8 @@ test('collects node:fs global usages for fs references', () => {
     `import fs from 'node:fs'
 
 export async function main(): Promise<void> {
-  await fs.promises.writeFile('/private/tmp/ccjs-fs-smoke.txt', 'hello')
-  const text = await fs.promises.readFile('/private/tmp/ccjs-fs-smoke.txt', 'utf8')
+  await fs.promises.writeFile('/private/tmp/inox-fs-smoke.txt', 'hello')
+  const text = await fs.promises.readFile('/private/tmp/inox-fs-smoke.txt', 'utf8')
   console.log(text)
 }
 `,
@@ -160,10 +160,10 @@ export function main(): void {
   assert.equal(bytes?.promiseValueType, 'bytes')
   assert.equal(text?.promiseValueType, 'string')
   assert.equal(entries?.promiseValueType, 'array')
-  assert.match(c.code, /ccjs_fs_read_file_bytes\(&ccjs_loop, "\/tmp\/value\.bin", 14, &bytes\)/)
-  assert.match(c.code, /ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/value\.txt", 14, &text\)/)
-  assert.match(c.code, /ccjs_fs_read_dir\(&ccjs_loop, "\/tmp", 4, &entries\)/)
-  assert.match(c.code, /ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_read_file_bytes\(&inox_loop, "\/tmp\/value\.bin", 14, &bytes\)/)
+  assert.match(c.code, /inox_fs_read_file\(&inox_loop, "\/tmp\/value\.txt", 14, &text\)/)
+  assert.match(c.code, /inox_fs_read_dir\(&inox_loop, "\/tmp", 4, &entries\)/)
+  assert.match(c.code, /inox_fs_write_file\(&inox_loop, "\/tmp\/out\.txt", 12, "saved", 5, &inox_promise_\d+\)/)
 })
 
 
@@ -196,16 +196,16 @@ export async function main(): Promise<void> {
     stats?.init?.shape?.fields.map((field) => field.name),
     ['size', 'mode', 'mtimeMs']
   )
-  assert.match(c.code, /ccjs_fs_stat\(&ccjs_loop, "\/tmp\/value\.txt", 14, &ccjs_promise_\d+\)/)
-  assert.match(c.code, /ccjs_fs_lstat\(&ccjs_loop, "\/tmp\/link\.txt", 13, &ccjs_promise_\d+\)/)
-  assert.match(c.code, /ccjs_fs_access\(&ccjs_loop, "\/tmp\/value\.txt", 14, \(\(int\)CCJS_FS_R_OK\), &ccjs_promise_\d+\)/)
-  assert.match(c.code, /ccjs_fs_access_sync\("\/tmp\/value\.txt", 14, \(\(int\)CCJS_FS_W_OK\)\)/)
+  assert.match(c.code, /inox_fs_stat\(&inox_loop, "\/tmp\/value\.txt", 14, &inox_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_lstat\(&inox_loop, "\/tmp\/link\.txt", 13, &inox_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_access\(&inox_loop, "\/tmp\/value\.txt", 14, \(\(int\)INOX_FS_R_OK\), &inox_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_access_sync\("\/tmp\/value\.txt", 14, \(\(int\)INOX_FS_W_OK\)\)/)
   assert.match(
     c.code,
-    /if \(ccjs_fs_stat_sync\(&ccjs_default_allocator, "\/tmp\/value\.txt", 14, &ccjs_fs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_stat_sync\(&inox_default_allocator, "\/tmp\/value\.txt", 14, &inox_fs_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(c.code, /ccjs_fs_stats_is_file\(stats\)/)
-  assert.match(c.code, /ccjs_fs_stats_is_directory\(syncStats\)/)
+  assert.match(c.code, /inox_fs_stats_is_file\(stats\)/)
+  assert.match(c.code, /inox_fs_stats_is_directory\(syncStats\)/)
 })
 
 
@@ -214,14 +214,14 @@ test('lowers Node fs mutation helpers to the fs runtime', () => {
     `import fs from 'node:fs'
 
 export function main(): void {
-  const mkdirPromise = fs.promises.mkdir('/tmp/ccjs-dir/nested', { recursive: true })
+  const mkdirPromise = fs.promises.mkdir('/tmp/inox-dir/nested', { recursive: true })
   fs.promises.rename('/tmp/input.txt', '/tmp/renamed.txt')
   fs.promises.unlink('/tmp/renamed.txt')
-  fs.promises.rm('/tmp/ccjs-dir', { recursive: true, force: true })
-  fs.mkdirSync('/tmp/ccjs-sync/nested', { recursive: true })
+  fs.promises.rm('/tmp/inox-dir', { recursive: true, force: true })
+  fs.mkdirSync('/tmp/inox-sync/nested', { recursive: true })
   fs.renameSync('/tmp/sync-input.txt', '/tmp/sync-renamed.txt')
   fs.unlinkSync('/tmp/sync-renamed.txt')
-  fs.rmSync('/tmp/ccjs-sync', { recursive: true, force: true })
+  fs.rmSync('/tmp/inox-sync', { recursive: true, force: true })
 }
 `,
     {
@@ -235,27 +235,27 @@ export function main(): void {
   assert.equal(mkdirPromise?.promiseValueType, 'void')
   assert.equal(mkdirPromise?.init?.fsRecursive, true)
   assert.deepEqual(c.ir.runtimeRequirements, ['async-runtime', 'fs', 'managed-values', 'objects'])
-  assert.match(c.code, /ccjs_fs_mkdir\(&ccjs_loop, "\/tmp\/ccjs-dir\/nested", 20, true, &mkdirPromise\)/)
+  assert.match(c.code, /inox_fs_mkdir\(&inox_loop, "\/tmp\/inox-dir\/nested", 20, true, &mkdirPromise\)/)
   assert.match(
     c.code,
-    /ccjs_fs_rename\(&ccjs_loop, "\/tmp\/input\.txt", 14, "\/tmp\/renamed\.txt", 16, &ccjs_promise_\d+\)/
+    /inox_fs_rename\(&inox_loop, "\/tmp\/input\.txt", 14, "\/tmp\/renamed\.txt", 16, &inox_promise_\d+\)/
   )
-  assert.match(c.code, /ccjs_fs_unlink\(&ccjs_loop, "\/tmp\/renamed\.txt", 16, &ccjs_promise_\d+\)/)
-  assert.match(c.code, /ccjs_fs_rm\(&ccjs_loop, "\/tmp\/ccjs-dir", 13, true, true, &ccjs_promise_\d+\)/)
-  assert.match(c.code, /ccjs_fs_mkdir_sync\("\/tmp\/ccjs-sync\/nested", 21, true\)/)
-  assert.match(c.code, /ccjs_fs_rename_sync\("\/tmp\/sync-input\.txt", 19, "\/tmp\/sync-renamed\.txt", 21\)/)
-  assert.match(c.code, /ccjs_fs_unlink_sync\("\/tmp\/sync-renamed\.txt", 21\)/)
-  assert.match(c.code, /ccjs_fs_rm_sync\("\/tmp\/ccjs-sync", 14, true, true\)/)
+  assert.match(c.code, /inox_fs_unlink\(&inox_loop, "\/tmp\/renamed\.txt", 16, &inox_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_rm\(&inox_loop, "\/tmp\/inox-dir", 13, true, true, &inox_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_mkdir_sync\("\/tmp\/inox-sync\/nested", 21, true\)/)
+  assert.match(c.code, /inox_fs_rename_sync\("\/tmp\/sync-input\.txt", 19, "\/tmp\/sync-renamed\.txt", 21\)/)
+  assert.match(c.code, /inox_fs_unlink_sync\("\/tmp\/sync-renamed\.txt", 21\)/)
+  assert.match(c.code, /inox_fs_rm_sync\("\/tmp\/inox-sync", 14, true, true\)/)
 
   assertDiagnostic(
     `import fs from 'node:fs'
 
 export function main(): void {
   const recursive = true
-  fs.promises.mkdir('/tmp/ccjs-dir', { recursive })
+  fs.promises.mkdir('/tmp/inox-dir', { recursive })
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -282,14 +282,14 @@ export function main(): void {
   assert.equal(appendPromise?.valueType, 'promise')
   assert.equal(appendPromise?.promiseValueType, 'void')
   assert.equal(appendPromise?.init?.fsRuntimeMethod, 'appendFileBytes')
-  assert.match(c.code, /ccjs_fs_read_file_bytes_sync\(&ccjs_default_allocator, "\/tmp\/value\.bin", 14, &ccjs_fs_value_\d+\)/)
-  assert.match(c.code, /ccjs_fs_append_file_bytes\(&ccjs_loop, "\/tmp\/out\.bin", 12, bytes, &appendPromise\)/)
+  assert.match(c.code, /inox_fs_read_file_bytes_sync\(&inox_default_allocator, "\/tmp\/value\.bin", 14, &inox_fs_value_\d+\)/)
+  assert.match(c.code, /inox_fs_append_file_bytes\(&inox_loop, "\/tmp\/out\.bin", 12, bytes, &appendPromise\)/)
   assert.match(
     c.code,
-    /ccjs_fs_copy_file\(&ccjs_loop, "\/tmp\/out\.bin", 12, "\/tmp\/log\.copy\.txt", 17, &ccjs_promise_\d+\)/
+    /inox_fs_copy_file\(&inox_loop, "\/tmp\/out\.bin", 12, "\/tmp\/log\.copy\.txt", 17, &inox_promise_\d+\)/
   )
-  assert.match(c.code, /ccjs_fs_append_file_bytes_sync\("\/tmp\/sync\.bin", 13, bytes\)/)
-  assert.match(c.code, /ccjs_fs_copy_file_sync\("\/tmp\/sync\.bin", 13, "\/tmp\/sync-log\.copy\.txt", 22\)/)
+  assert.match(c.code, /inox_fs_append_file_bytes_sync\("\/tmp\/sync\.bin", 13, bytes\)/)
+  assert.match(c.code, /inox_fs_copy_file_sync\("\/tmp\/sync\.bin", 13, "\/tmp\/sync-log\.copy\.txt", 22\)/)
 
   assertDiagnostic(
     `import fs from 'node:fs'
@@ -298,7 +298,7 @@ export function main(): void {
   fs.promises.copyFile('/tmp/a', '/tmp/b', 1)
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -329,13 +329,13 @@ export function main(): void {
   assert.equal(syncEntries?.arrayElementDeclaredType, 'fs.Dirent')
   assert.equal(first?.arrayElementDeclaredType, 'fs.Dirent')
   assert.equal(first?.init?.shape?.builtin, 'fs.Dirent')
-  assert.match(c.code, /ccjs_fs_read_dir_dirents\(&ccjs_loop, "\/tmp", 4, &entries\)/)
+  assert.match(c.code, /inox_fs_read_dir_dirents\(&inox_loop, "\/tmp", 4, &entries\)/)
   assert.match(
     c.code,
-    /ccjs_fs_read_dir_dirents_sync\(&ccjs_default_allocator, "\/tmp", 4, &ccjs_fs_value_\d+\)/
+    /inox_fs_read_dir_dirents_sync\(&inox_default_allocator, "\/tmp", 4, &inox_fs_value_\d+\)/
   )
-  assert.match(c.code, /ccjs_fs_dirent_is_file\(first\)/)
-  assert.match(c.code, /ccjs_fs_dirent_is_directory\(first\)/)
+  assert.match(c.code, /inox_fs_dirent_is_file\(first\)/)
+  assert.match(c.code, /inox_fs_dirent_is_directory\(first\)/)
 
   assertDiagnostic(
     `import fs from 'node:fs'
@@ -344,7 +344,7 @@ export function main(): void {
   fs.promises.readdir('/tmp', { withFileTypes: true, recursive: true })
 }
 `,
-    'CCJS_UNKNOWN_FIELD'
+    'INOX_UNKNOWN_FIELD'
   )
 })
 
@@ -373,15 +373,15 @@ export function main(): void {
 
   assert.equal(real?.promiseValueType, 'string')
   assert.equal(link?.promiseValueType, 'string')
-  assert.match(c.code, /ccjs_fs_realpath\(&ccjs_loop, "\/tmp\/value\.txt", 14, &real\)/)
-  assert.match(c.code, /ccjs_fs_readlink\(&ccjs_loop, "\/tmp\/link\.txt", 13, &link\)/)
+  assert.match(c.code, /inox_fs_realpath\(&inox_loop, "\/tmp\/value\.txt", 14, &real\)/)
+  assert.match(c.code, /inox_fs_readlink\(&inox_loop, "\/tmp\/link\.txt", 13, &link\)/)
   assert.match(
     c.code,
-    /ccjs_fs_symlink\(&ccjs_loop, "\/tmp\/value\.txt", 14, "\/tmp\/link\.txt", 13, &ccjs_promise_\d+\)/
+    /inox_fs_symlink\(&inox_loop, "\/tmp\/value\.txt", 14, "\/tmp\/link\.txt", 13, &inox_promise_\d+\)/
   )
-  assert.match(c.code, /ccjs_fs_realpath_sync\(&ccjs_default_allocator, "\/tmp\/value\.txt", 14, &ccjs_fs_value_\d+\)/)
-  assert.match(c.code, /ccjs_fs_readlink_sync\(&ccjs_default_allocator, "\/tmp\/link\.txt", 13, &ccjs_fs_value_\d+\)/)
-  assert.match(c.code, /ccjs_fs_symlink_sync\("\/tmp\/value\.txt", 14, "\/tmp\/sync-link\.txt", 18\)/)
+  assert.match(c.code, /inox_fs_realpath_sync\(&inox_default_allocator, "\/tmp\/value\.txt", 14, &inox_fs_value_\d+\)/)
+  assert.match(c.code, /inox_fs_readlink_sync\(&inox_default_allocator, "\/tmp\/link\.txt", 13, &inox_fs_value_\d+\)/)
+  assert.match(c.code, /inox_fs_symlink_sync\("\/tmp\/value\.txt", 14, "\/tmp\/sync-link\.txt", 18\)/)
 
   assertDiagnostic(
     `import fs from 'node:fs'
@@ -390,7 +390,7 @@ export function main(): void {
   fs.promises.symlink('/tmp/value.txt')
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -411,10 +411,10 @@ export function main(): void {
     }
   )
 
-  assert.match(c.code, /ccjs_fs_read_file_bytes\(&ccjs_loop, "\/tmp\/value\.bin", 14, &bytes\)/)
-  assert.match(c.code, /ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/value\.txt", 14, &text\)/)
-  assert.match(c.code, /ccjs_fs_read_dir\(&ccjs_loop, "\/tmp", 4, &entries\)/)
-  assert.match(c.code, /ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_read_file_bytes\(&inox_loop, "\/tmp\/value\.bin", 14, &bytes\)/)
+  assert.match(c.code, /inox_fs_read_file\(&inox_loop, "\/tmp\/value\.txt", 14, &text\)/)
+  assert.match(c.code, /inox_fs_read_dir\(&inox_loop, "\/tmp", 4, &entries\)/)
+  assert.match(c.code, /inox_fs_write_file\(&inox_loop, "\/tmp\/out\.txt", 12, "saved", 5, &inox_promise_\d+\)/)
 })
 
 test('lowers named node:fs imports to the fs runtime', () => {
@@ -441,8 +441,8 @@ export async function load(path: string): Promise<string> {
   assert.equal(text?.init?.fsRuntimeMethod, 'readFileSync')
   assert.equal(asyncText?.valueType, 'string')
   assert.equal(asyncText?.init?.argument?.fsRuntimeMethod, 'readFile')
-  assert.match(c.code, /ccjs_fs_read_file_sync\(&ccjs_default_allocator, path->bytes, path->len, &ccjs_fs_value_\d+\)/)
-  assert.match(c.code, /ccjs_fs_read_file\(&ccjs_loop, path->bytes, path->len, &ccjs_promise_\d+\)/)
+  assert.match(c.code, /inox_fs_read_file_sync\(&inox_default_allocator, path->bytes, path->len, &inox_fs_value_\d+\)/)
+  assert.match(c.code, /inox_fs_read_file\(&inox_loop, path->bytes, path->len, &inox_promise_\d+\)/)
 })
 
 
@@ -464,16 +464,16 @@ export async function main(): Promise<void> {
 
   assert.ok(bytes)
   assert.equal(bytes.valueType, 'bytes')
-  assert.match(c.code, /#include "ccjs\/fs\.h"/)
-  assert.match(c.code, /ccjs_value bytes = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /#include "inox\/fs\.h"/)
+  assert.match(c.code, /inox_value bytes = inox_undefined_value\(\);/)
   assert.match(
     c.code,
-    /if \(ccjs_fs_read_file_bytes\(&ccjs_loop, "\/tmp\/value\.bin", 14, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_read_file_bytes\(&inox_loop, "\/tmp\/value\.bin", 14, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(c.code, /if \(bytes\.tag != CCJS_TAG_BYTES \|\| bytes\.as\.ref == 0\)\s+goto ccjs_cleanup;/)
+  assert.match(c.code, /if \(bytes\.tag != INOX_TAG_BYTES \|\| bytes\.as\.ref == 0\)\s+goto inox_cleanup;/)
   assert.match(
     c.code,
-    /if \(ccjs_fs_write_file_bytes\(&ccjs_loop, "\/tmp\/out\.bin", 12, bytes, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_write_file_bytes\(&inox_loop, "\/tmp\/out\.bin", 12, bytes, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 
   assertDiagnostic(
@@ -483,7 +483,7 @@ export async function main(): Promise<void> {
   await fs.writeFileBytes('/tmp/out.bin', Buffer.from('text'))
 }
 `,
-    'CCJS_FS_UNSUPPORTED'
+    'INOX_FS_UNSUPPORTED'
   )
 })
 
@@ -516,23 +516,23 @@ export function main(): void {
   assert.equal(entries?.arrayElementType, 'string')
   assert.match(
     c.code,
-    /if \(ccjs_fs_read_file_sync\(&ccjs_default_allocator, "\/tmp\/value\.txt", 14, &ccjs_fs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_read_file_sync\(&inox_default_allocator, "\/tmp\/value\.txt", 14, &inox_fs_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     c.code,
-    /if \(ccjs_fs_read_file_bytes_sync\(&ccjs_default_allocator, "\/tmp\/value\.bin", 14, &ccjs_fs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_read_file_bytes_sync\(&inox_default_allocator, "\/tmp\/value\.bin", 14, &inox_fs_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     c.code,
-    /if \(ccjs_fs_read_dir_sync\(&ccjs_default_allocator, "\/tmp", 4, &ccjs_fs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_read_dir_sync\(&inox_default_allocator, "\/tmp", 4, &inox_fs_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     c.code,
-    /if \(ccjs_fs_write_file_sync\("\/tmp\/out\.txt", 12, text->bytes, text->len\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_write_file_sync\("\/tmp\/out\.txt", 12, text->bytes, text->len\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     c.code,
-    /if \(ccjs_fs_write_file_bytes_sync\("\/tmp\/out\.bin", 12, bytes\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_write_file_bytes_sync\("\/tmp\/out\.bin", 12, bytes\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 
   assertDiagnostic(
@@ -542,7 +542,7 @@ export function main(): void {
   fs.writeFileBytesSync('/tmp/out.bin', Buffer.from('text'))
 }
 `,
-    'CCJS_FS_UNSUPPORTED'
+    'INOX_FS_UNSUPPORTED'
   )
 })
 
@@ -576,27 +576,27 @@ export function main(): void {
   assert.deepEqual(result.ir.features, ['async-runtime', 'fs'])
   assert.deepEqual(result.ir.runtimeRequirements, ['async-runtime', 'fs'])
   assert.match(result.code, /#include <string\.h>/)
-  assert.match(result.code, /#include "ccjs\/fs\.h"/)
-  assert.match(result.code, /ccjs_loop ccjs_loop;/)
-  assert.match(result.code, /ccjs_promise \*read = 0;/)
-  assert.match(result.code, /ccjs_promise \*entries = 0;/)
-  assert.match(result.code, /ccjs_promise \*ccjs_promise_\d+ = 0;/)
+  assert.match(result.code, /#include "inox\/fs\.h"/)
+  assert.match(result.code, /inox_loop inox_loop;/)
+  assert.match(result.code, /inox_promise \*read = 0;/)
+  assert.match(result.code, /inox_promise \*entries = 0;/)
+  assert.match(result.code, /inox_promise \*inox_promise_\d+ = 0;/)
   assert.match(
     result.code,
-    /if \(ccjs_loop_init\(&ccjs_loop, &ccjs_default_allocator\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_loop_init\(&inox_loop, &inox_default_allocator\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/value\.txt", 14, &read\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_read_file\(&inox_loop, "\/tmp\/value\.txt", 14, &read\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /if \(ccjs_fs_read_dir\(&ccjs_loop, "\/tmp", 4, &entries\) != CCJS_OK\)\s+goto ccjs_cleanup;/)
+  assert.match(result.code, /if \(inox_fs_read_dir\(&inox_loop, "\/tmp", 4, &entries\) != INOX_OK\)\s+goto inox_cleanup;/)
   assert.match(
     result.code,
-    /if \(ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_write_file\(&inox_loop, "\/tmp\/out\.txt", 12, "saved", 5, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /if \(read != 0\) ccjs_promise_release\(read\);/)
-  assert.match(result.code, /if \(entries != 0\) ccjs_promise_release\(entries\);/)
-  assert.match(result.code, /if \(ccjs_loop_active\) ccjs_loop_dispose\(&ccjs_loop\);/)
+  assert.match(result.code, /if \(read != 0\) inox_promise_release\(read\);/)
+  assert.match(result.code, /if \(entries != 0\) inox_promise_release\(entries\);/)
+  assert.match(result.code, /if \(inox_loop_active\) inox_loop_dispose\(&inox_loop\);/)
 
   assertDiagnostic(
     `import fs from 'node:fs'
@@ -605,7 +605,7 @@ export function main(): void {
   fs.promises.writeFile('/tmp/out.txt')
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -615,7 +615,7 @@ export function main(): void {
   fs.promises.readdir('/tmp', 'utf8', 'extra')
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -625,6 +625,6 @@ export function main(): void {
   fs.readFile('/tmp/value.txt', 'utf8')
 }
 `,
-    'CCJS_FS_UNSUPPORTED'
+    'INOX_FS_UNSUPPORTED'
   )
 })

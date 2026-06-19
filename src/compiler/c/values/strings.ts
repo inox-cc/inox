@@ -255,7 +255,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
 
   if (expression != null && isNullishCoalescingExpression(expression)) {
     pushStringDiagnostic(context,
-      diagnostic('CCJS_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
+      diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
     )
     return '""'
   }
@@ -266,7 +266,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     if (member != null && isNullableScalarType(member.valueType)) {
       pushStringDiagnostic(context,
         diagnostic(
-          'CCJS_C_UNSUPPORTED_EXPR',
+          'INOX_C_UNSUPPORTED_EXPR',
           'object field access must be assigned before it can be used by the current C backend slice',
           expression.loc
         )
@@ -277,7 +277,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
 
   if (expression != null && expression.type === 'AwaitExpression') {
     pushStringDiagnostic(context,
-      diagnostic('CCJS_C_ASYNC', 'async/await is not supported by the current C backend slice', nodeLocation(expression))
+      diagnostic('INOX_C_ASYNC', 'async/await is not supported by the current C backend slice', nodeLocation(expression))
     )
     return '""'
   }
@@ -285,7 +285,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
   if (expression != null && isOptionalChainExpression(expression)) {
     pushStringDiagnostic(context,
       diagnostic(
-        'CCJS_C_OPTIONAL_CHAINING',
+        'INOX_C_OPTIONAL_CHAINING',
         'optional chaining is not supported by the current C backend slice',
         nodeLocation(expression)
       )
@@ -295,7 +295,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
 
   pushStringDiagnostic(context,
     diagnostic(
-      'CCJS_C_STRING_EXPR',
+      'INOX_C_STRING_EXPR',
       'this string expression is not supported by the current C backend slice',
       nodeLocation(expression)
     )
@@ -320,12 +320,12 @@ export function emitPreparedStringLengthExpression(
     return null
   }
 
-  const operand = emitPreparedStringBytesOperand(expression.object, context, 'ccjs_length_string')
-  const length = nextCName(context, 'ccjs_string_length')
+  const operand = emitPreparedStringBytesOperand(expression.object, context, 'inox_length_string')
+  const length = nextCName(context, 'inox_string_length')
   const lines: string[] = []
 
   pushAllLines(lines, operand.lines)
-  lines.push(`size_t ${length} = ccjs_string_code_unit_length_parts(${operand.bytes}, ${operand.length});`)
+  lines.push(`size_t ${length} = inox_string_code_unit_length_parts(${operand.bytes}, ${operand.length});`)
 
   return {
     lines,
@@ -334,8 +334,8 @@ export function emitPreparedStringLengthExpression(
 }
 
 export function emitPreparedStringCompareExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const left = emitPreparedStringBytesOperand(expression.left, context, 'ccjs_cmp_string')
-  const right = emitPreparedStringBytesOperand(expression.right, context, 'ccjs_cmp_string')
+  const left = emitPreparedStringBytesOperand(expression.left, context, 'inox_cmp_string')
+  const right = emitPreparedStringBytesOperand(expression.right, context, 'inox_cmp_string')
   const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
   const lines: string[] = []
   let resultExpression = `(!${equals})`
@@ -388,8 +388,8 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
 }
 
 export function emitPreparedStringPredicateCall(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_string_method_value')
-  const search = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_string_method_search')
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_string_method_value')
+  const search = emitPreparedStringBytesOperand(expression.args[0], context, 'inox_string_method_search')
   const helper = cStringPredicateHelperName(expression.callee.property)
   const lines: string[] = []
   let helperCall = `${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length})`
@@ -400,13 +400,13 @@ export function emitPreparedStringPredicateCall(expression: AnyNode, context: St
   if (expression.callee.property === 'includes' && expression.args.length > 1) {
     const positionArgument = expression.args[1]
     const position = stringDeps(context).emitPreparedNumberExpression(positionArgument, context)
-    const positionRaw = nextCName(context, 'ccjs_string_includes_position_raw')
-    const positionIndex = nextCName(context, 'ccjs_string_includes_position')
+    const positionRaw = nextCName(context, 'inox_string_includes_position_raw')
+    const positionIndex = nextCName(context, 'inox_string_includes_position')
 
     pushAllLines(lines, position.lines)
     lines.push(`double ${positionRaw} = ${position.expression};`)
     pushAllLines(lines, emitNonNegativeStringPositionLines(positionRaw, positionIndex))
-    helperCall = `ccjs_string_includes_from_parts(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}, ${positionIndex})`
+    helperCall = `inox_string_includes_from_parts(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}, ${positionIndex})`
   }
 
   return {
@@ -442,9 +442,9 @@ export function emitPreparedStringCharCodeAtExpression(
     return null
   }
 
-  const value = emitPreparedStringBytesOperand(object, context, 'ccjs_string_char_code_value')
+  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_char_code_value')
   const index = stringDeps(context).emitPreparedNumberExpression(indexArgument, context)
-  const offset = nextCName(context, 'ccjs_string_char_code_index')
+  const offset = nextCName(context, 'inox_string_char_code_index')
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
@@ -490,8 +490,8 @@ export function emitPreparedStringIndexCallExpression(
     return null
   }
 
-  const value = emitPreparedStringBytesOperand(object, context, 'ccjs_string_index_value')
-  const search = emitPreparedStringBytesOperand(searchArgument, context, 'ccjs_string_index_search')
+  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_index_value')
+  const search = emitPreparedStringBytesOperand(searchArgument, context, 'inox_string_index_search')
   const lines: string[] = []
   let startExpression = '0'
 
@@ -506,15 +506,15 @@ export function emitPreparedStringIndexCallExpression(
     }
 
     const start = stringDeps(context).emitPreparedNumberExpression(startArgument, context)
-    const startRaw = nextCName(context, 'ccjs_string_index_start_raw')
-    const startIndex = nextCName(context, 'ccjs_string_index_start')
+    const startRaw = nextCName(context, 'inox_string_index_start_raw')
+    const startIndex = nextCName(context, 'inox_string_index_start')
 
     pushAllLines(lines, start.lines)
     lines.push(`double ${startRaw} = ${start.expression};`)
     pushAllLines(lines, emitNonNegativeStringPositionLines(startRaw, startIndex))
     startExpression = startIndex
   } else if (method === 'lastIndexOf') {
-    startExpression = `ccjs_string_code_unit_length_parts(${value.bytes}, ${value.length})`
+    startExpression = `inox_string_code_unit_length_parts(${value.bytes}, ${value.length})`
   }
 
   const helper = cStringIndexHelperName(method)
@@ -537,10 +537,10 @@ export function emitCStringIndexValueExpression(expression: StringIndexNode, con
     return null
   }
 
-  const value = emitPreparedStringBytesOperand(object, context, 'ccjs_string_index_value')
+  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_index_value')
   const index = stringDeps(context).emitPreparedNumberExpression(indexExpression, context)
-  const offset = nextCName(context, 'ccjs_string_index')
-  const temp = nextCName(context, 'ccjs_value')
+  const offset = nextCName(context, 'inox_string_index')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -550,7 +550,7 @@ export function emitCStringIndexValueExpression(expression: StringIndexNode, con
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_string_from_literal(&ccjs_default_allocator, (${offset} < ${value.length}) ? ${value.bytes} + ${offset} : "", (${offset} < ${value.length}) ? 1 : 0, &${temp})`,
+      `inox_string_from_literal(&inox_default_allocator, (${offset} < ${value.length}) ? ${value.bytes} + ${offset} : "", (${offset} < ${value.length}) ? 1 : 0, &${temp})`,
       context
     )
   )
@@ -650,7 +650,7 @@ export function emitPreparedStringBytesOperand(
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
-    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
+    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
     return {
       lines,
@@ -668,8 +668,8 @@ export function emitPreparedStringBytesOperand(
 
       return {
         lines: [
-          emitRuntimeTypeCheck(`${name}.tag != CCJS_TAG_STRING || ${name}.as.ref == 0`, context),
-          `ccjs_string* ${string} = (ccjs_string*)${name}.as.ref;`
+          emitRuntimeTypeCheck(`${name}.tag != INOX_TAG_STRING || ${name}.as.ref == 0`, context),
+          `inox_string* ${string} = (inox_string*)${name}.as.ref;`
         ],
         bytes: `${string}->bytes`,
         length: `${string}->len`
@@ -682,8 +682,8 @@ export function emitPreparedStringBytesOperand(
 
         return {
           lines: [
-            emitRuntimeTypeCheck(`(*${name}).tag != CCJS_TAG_STRING || (*${name}).as.ref == 0`, context),
-            `ccjs_string* ${string} = (ccjs_string*)(*${name}).as.ref;`
+            emitRuntimeTypeCheck(`(*${name}).tag != INOX_TAG_STRING || (*${name}).as.ref == 0`, context),
+            `inox_string* ${string} = (inox_string*)(*${name}).as.ref;`
           ],
           bytes: `${string}->bytes`,
           length: `${string}->len`
@@ -711,7 +711,7 @@ export function emitPreparedStringBytesOperand(
 
   if (expression == null) {
     pushStringDiagnostic(context,
-      diagnostic('CCJS_C_STRING_EXPR', 'this string operand is not supported by the current C backend slice', null)
+      diagnostic('INOX_C_STRING_EXPR', 'this string operand is not supported by the current C backend slice', null)
     )
 
     return {
@@ -755,7 +755,7 @@ export function emitPreparedStringBytesOperand(
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
-    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
+    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
     return {
       lines,
@@ -766,7 +766,7 @@ export function emitPreparedStringBytesOperand(
 
   pushStringDiagnostic(context,
     diagnostic(
-      'CCJS_C_STRING_EXPR',
+      'INOX_C_STRING_EXPR',
       'this string operand is not supported by the current C backend slice',
       nodeLocation(expression)
     )
@@ -808,22 +808,22 @@ function emitPreparedKnownObjectStringBytesOperand(
     return null
   }
 
-  const value = nextCName(context, 'ccjs_expr_value')
+  const value = nextCName(context, 'inox_expr_value')
   const string = nextCName(context, tempPrefix)
   const object = stringDeps(context).emitObjectValueReference(objectName, context)
   const lines: string[] = []
-  let getCall = `ccjs_object_get_known(${object}, ${field.index}, &${value})`
+  let getCall = `inox_object_get_known(${object}, ${field.index}, &${value})`
 
   if (field.key != null) {
-    getCall = `ccjs_object_get(${object}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
+    getCall = `inox_object_get(${object}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
   }
 
   registerOwnedValue(context, value)
 
   pushAllLines(lines, emitPrepareOwnedValueWrite(value))
   lines.push(emitStatusCheck(getCall, context))
-  lines.push(emitRuntimeTypeCheck(`${value}.tag != CCJS_TAG_STRING || ${value}.as.ref == 0`, context))
-  lines.push(`ccjs_string* ${string} = (ccjs_string*)${value}.as.ref;`)
+  lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
 
   return {
     lines,
@@ -869,8 +869,8 @@ function emitPreparedObjectExpressionStringBytesOperand(
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
-  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context))
-  lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
   return {
     lines,
@@ -893,8 +893,8 @@ function emitPreparedDynamicRuntimeStringBytesOperand(
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
-  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != CCJS_TAG_STRING || ${value.expression}.as.ref == 0`, context))
-  lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
   return {
     lines,
@@ -970,9 +970,9 @@ function dynamicRuntimeObjectFieldObject(expression: AnyNode): AnyNode | null {
 }
 
 export function emitCStringConcatValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const left = emitPreparedStringBytesOperand(expression.left, context, 'ccjs_cmp_string')
-  const right = emitPreparedStringBytesOperand(expression.right, context, 'ccjs_cmp_string')
-  const temp = nextCName(context, 'ccjs_value')
+  const left = emitPreparedStringBytesOperand(expression.left, context, 'inox_cmp_string')
+  const right = emitPreparedStringBytesOperand(expression.right, context, 'inox_cmp_string')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -981,7 +981,7 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: S
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_string_concat_parts(&ccjs_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`,
+      `inox_string_concat_parts(&inox_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`,
       context
     )
   )
@@ -1019,12 +1019,12 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
   }
 
   if (operands.length === 0) {
-    const temp = nextCName(context, 'ccjs_value')
+    const temp = nextCName(context, 'inox_value')
     const lines: string[] = []
     registerOwnedValue(context, temp)
 
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "", 0, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox_string_from_literal(&inox_default_allocator, "", 0, &${temp})`, context))
 
     return {
       lines,
@@ -1040,13 +1040,13 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
 
   if (operands.length === 1) {
     const operand = operands[0]
-    const temp = nextCName(context, 'ccjs_value')
+    const temp = nextCName(context, 'inox_value')
     registerOwnedValue(context, temp)
 
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
       emitStatusCheck(
-        `ccjs_string_from_literal(&ccjs_default_allocator, ${operand.bytes}, ${operand.length}, &${temp})`,
+        `inox_string_from_literal(&inox_default_allocator, ${operand.bytes}, ${operand.length}, &${temp})`,
         context
       )
     )
@@ -1062,13 +1062,13 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
 
   for (let index = 1; index < operands.length; index = index + 1) {
     const operand = operands[index]
-    const temp = nextCName(context, 'ccjs_value')
+    const temp = nextCName(context, 'inox_value')
     registerOwnedValue(context, temp)
 
     if (currentValue !== '') {
-      const string = nextCName(context, 'ccjs_template_string')
+      const string = nextCName(context, 'inox_template_string')
 
-      lines.push(`ccjs_string* ${string} = (ccjs_string*)${currentValue}.as.ref;`)
+      lines.push(`inox_string* ${string} = (inox_string*)${currentValue}.as.ref;`)
       current = {
         lines: [],
         bytes: `${string}->bytes`,
@@ -1079,7 +1079,7 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
       emitStatusCheck(
-        `ccjs_string_concat_parts(&ccjs_default_allocator, ${current.bytes}, ${current.length}, ${operand.bytes}, ${operand.length}, &${temp})`,
+        `inox_string_concat_parts(&inox_default_allocator, ${current.bytes}, ${current.length}, ${operand.bytes}, ${operand.length}, &${temp})`,
         context
       )
     )
@@ -1100,7 +1100,7 @@ function emitPreparedTemplatePlaceholderBytesOperand(
   const valueType = stringDeps(context).inferExpressionType(expression, context)
 
   if (valueType === 'string') {
-    return emitPreparedStringBytesOperand(expression, context, 'ccjs_template_string')
+    return emitPreparedStringBytesOperand(expression, context, 'inox_template_string')
   }
 
   if (isTemplatePlaceholderStringifiableValueType(valueType)) {
@@ -1117,11 +1117,11 @@ function emitPreparedTemplatePlaceholderBytesOperand(
       },
       context
     )
-    const string = nextCName(context, 'ccjs_template_string')
+    const string = nextCName(context, 'inox_template_string')
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
-    lines.push(`ccjs_string* ${string} = (ccjs_string*)${value.expression}.as.ref;`)
+    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
     return {
       lines,
@@ -1156,18 +1156,18 @@ function isTemplatePlaceholderStringifiableValueType(valueType: string): boolean
 export function emitCStringConversionValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   const arg = expression.args[0]
   const valueType = stringDeps(context).inferExpressionType(arg, context)
-  const temp = nextCName(context, 'ccjs_value')
+  const temp = nextCName(context, 'inox_value')
   registerOwnedValue(context, temp)
 
   if (valueType === 'string') {
-    const value = emitPreparedStringBytesOperand(arg, context, 'ccjs_string_conversion')
+    const value = emitPreparedStringBytesOperand(arg, context, 'inox_string_conversion')
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
       emitStatusCheck(
-        `ccjs_string_from_literal(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+        `inox_string_from_literal(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
         context
       )
     )
@@ -1182,7 +1182,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
     const lines: string[] = []
 
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`ccjs_string_from_literal(&ccjs_default_allocator, "null", 4, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox_string_from_literal(&inox_default_allocator, "null", 4, &${temp})`, context))
 
     return {
       lines,
@@ -1196,7 +1196,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
 
     pushAllLines(lines, value.lines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`ccjs_string_from_value(&ccjs_default_allocator, ${value.expression}, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox_string_from_value(&inox_default_allocator, ${value.expression}, &${temp})`, context))
 
     return {
       lines,
@@ -1205,11 +1205,11 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
   }
 
   const value = stringDeps(context).emitPreparedNumberExpression(arg, context)
-  let helper = `ccjs_string_from_number(&ccjs_default_allocator, ${value.expression}, &${temp})`
+  let helper = `inox_string_from_number(&inox_default_allocator, ${value.expression}, &${temp})`
   const lines: string[] = []
 
   if (valueType === 'boolean') {
-    helper = `ccjs_string_from_bool(&ccjs_default_allocator, (${value.expression}) != 0, &${temp})`
+    helper = `inox_string_from_bool(&inox_default_allocator, (${value.expression}) != 0, &${temp})`
   }
 
   pushAllLines(lines, value.lines)
@@ -1224,7 +1224,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
 
 export function emitCNumberToStringValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   const value = stringDeps(context).emitPreparedNumberExpression(expression.callee.object, context)
-  const temp = nextCName(context, 'ccjs_value')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -1232,7 +1232,7 @@ export function emitCNumberToStringValueExpression(expression: AnyNode, context:
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
 
   if (expression.args.length === 0) {
-    lines.push(emitStatusCheck(`ccjs_string_from_number(&ccjs_default_allocator, ${value.expression}, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox_string_from_number(&inox_default_allocator, ${value.expression}, &${temp})`, context))
 
     return {
       lines,
@@ -1245,7 +1245,7 @@ export function emitCNumberToStringValueExpression(expression: AnyNode, context:
   pushAllLines(lines, radix.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_string_from_number_radix(&ccjs_default_allocator, ${value.expression}, (int)(${radix.expression}), &${temp})`,
+      `inox_string_from_number_radix(&inox_default_allocator, ${value.expression}, (int)(${radix.expression}), &${temp})`,
       context
     )
   )
@@ -1264,14 +1264,14 @@ export function emitCNumberConversionValueExpression(
     return null
   }
 
-  const value = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_number_conversion')
-  const temp = nextCName(context, 'ccjs_value')
+  const value = emitPreparedStringBytesOperand(expression.args[0], context, 'inox_number_conversion')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`ccjs_string_to_number(${value.bytes}, ${value.length}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_string_to_number(${value.bytes}, ${value.length}, &${temp})`, context))
 
   return {
     lines,
@@ -1280,9 +1280,9 @@ export function emitCNumberConversionValueExpression(
 }
 
 export function emitCStringTrimValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_trim_string')
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_trim_string')
   const helper = cStringTrimHelperName(expression.callee.property)
-  const temp = nextCName(context, 'ccjs_value')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -1290,7 +1290,7 @@ export function emitCStringTrimValueExpression(expression: AnyNode, context: Str
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `${helper}(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+      `${helper}(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
       context
     )
   )
@@ -1302,8 +1302,8 @@ export function emitCStringTrimValueExpression(expression: AnyNode, context: Str
 }
 
 export function emitCStringCaseValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_case_string')
-  const temp = nextCName(context, 'ccjs_value')
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_case_string')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -1311,7 +1311,7 @@ export function emitCStringCaseValueExpression(expression: AnyNode, context: Str
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_string_to_upper_case_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+      `inox_string_to_upper_case_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
       context
     )
   )
@@ -1323,7 +1323,7 @@ export function emitCStringCaseValueExpression(expression: AnyNode, context: Str
 }
 
 export function emitCStringPadStartValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_pad_string')
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_pad_string')
   const targetLength = stringDeps(context).emitPreparedNumberExpression(expression.args[0], context)
   let pad: PreparedStringBytesOperand = {
     lines: [],
@@ -1332,12 +1332,12 @@ export function emitCStringPadStartValueExpression(expression: AnyNode, context:
   }
 
   if (expression.args[1] != null) {
-    pad = emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_pad_fill')
+    pad = emitPreparedStringBytesOperand(expression.args[1], context, 'inox_pad_fill')
   }
 
-  const targetLengthRaw = nextCName(context, 'ccjs_pad_target_length_raw')
-  const targetLengthIndex = nextCName(context, 'ccjs_pad_target_length')
-  const temp = nextCName(context, 'ccjs_value')
+  const targetLengthRaw = nextCName(context, 'inox_pad_target_length_raw')
+  const targetLengthIndex = nextCName(context, 'inox_pad_target_length')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -1349,7 +1349,7 @@ export function emitCStringPadStartValueExpression(expression: AnyNode, context:
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_string_pad_start_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${targetLengthIndex}, ${pad.bytes}, ${pad.length}, &${temp})`,
+      `inox_string_pad_start_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${targetLengthIndex}, ${pad.bytes}, ${pad.length}, &${temp})`,
       context
     )
   )
@@ -1361,18 +1361,18 @@ export function emitCStringPadStartValueExpression(expression: AnyNode, context:
 }
 
 export function emitCStringSliceValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_slice_string')
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_slice_string')
   const start = stringDeps(context).emitPreparedNumberExpression(expression.args[0], context)
-  const lengthName = nextCName(context, 'ccjs_slice_length')
-  const startRaw = nextCName(context, 'ccjs_slice_start_raw')
-  const startIndex = nextCName(context, 'ccjs_slice_start')
-  const endRaw = nextCName(context, 'ccjs_slice_end_raw')
-  const endIndex = nextCName(context, 'ccjs_slice_end')
+  const lengthName = nextCName(context, 'inox_slice_length')
+  const startRaw = nextCName(context, 'inox_slice_start_raw')
+  const startIndex = nextCName(context, 'inox_slice_start')
+  const endRaw = nextCName(context, 'inox_slice_end_raw')
+  const endIndex = nextCName(context, 'inox_slice_end')
   let end: PreparedExpression = {
     lines: [],
     expression: `((double)${lengthName})`
   }
-  const temp = nextCName(context, 'ccjs_value')
+  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
 
   if (expression.args[1] != null) {
@@ -1383,17 +1383,17 @@ export function emitCStringSliceValueExpression(expression: AnyNode, context: St
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, start.lines)
-  lines.push(`size_t ${lengthName} = ccjs_string_code_unit_length_parts(${value.bytes}, ${value.length});`)
+  lines.push(`size_t ${lengthName} = inox_string_code_unit_length_parts(${value.bytes}, ${value.length});`)
   pushAllLines(lines, end.lines)
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${end.expression};`)
-  pushAllLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'ccjs_slice_start'))
-  pushAllLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'ccjs_slice_end'))
+  pushAllLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_slice_start'))
+  pushAllLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_slice_end'))
   lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_string_slice_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${startIndex}, ${endIndex}, &${temp})`,
+      `inox_string_slice_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${startIndex}, ${endIndex}, &${temp})`,
       context
     )
   )
@@ -1408,9 +1408,9 @@ export function emitCStringSplitValueExpression(
   expression: AnyNode,
   context: StringCContext
 ): PreparedStringSplitExpression {
-  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'ccjs_split_string')
-  const separator = emitPreparedStringBytesOperand(expression.args[0], context, 'ccjs_split_separator')
-  const temp = nextCName(context, 'ccjs_split_array')
+  const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_split_string')
+  const separator = emitPreparedStringBytesOperand(expression.args[0], context, 'inox_split_separator')
+  const temp = nextCName(context, 'inox_split_array')
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -1419,11 +1419,11 @@ export function emitCStringSplitValueExpression(
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `ccjs_string_split_parts(&ccjs_default_allocator, ${value.bytes}, ${value.length}, ${separator.bytes}, ${separator.length}, &${temp})`,
+      `inox_string_split_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${separator.bytes}, ${separator.length}, &${temp})`,
       context
     )
   )
-  lines.push(emitRuntimeValueCheck(temp, 'CCJS_TAG_ARRAY', context))
+  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_ARRAY', context))
 
   return {
     lines,
@@ -1751,34 +1751,34 @@ export function isStringPredicateCall(expression: AnyNode | null | undefined, co
 
 function cStringPredicateHelperName(method: string): string {
   if (method === 'startsWith') {
-    return 'ccjs_string_starts_with_parts'
+    return 'inox_string_starts_with_parts'
   }
 
   if (method === 'endsWith') {
-    return 'ccjs_string_ends_with_parts'
+    return 'inox_string_ends_with_parts'
   }
 
-  return 'ccjs_string_includes_parts'
+  return 'inox_string_includes_parts'
 }
 
 function cStringIndexHelperName(method: string): string {
   if (method === 'lastIndexOf') {
-    return 'ccjs_string_last_index_of_parts'
+    return 'inox_string_last_index_of_parts'
   }
 
-  return 'ccjs_string_index_of_parts'
+  return 'inox_string_index_of_parts'
 }
 
 function cStringTrimHelperName(method: string): string {
   if (method === 'trimStart' || method === 'trimLeft') {
-    return 'ccjs_string_trim_start_parts'
+    return 'inox_string_trim_start_parts'
   }
 
   if (method === 'trimEnd' || method === 'trimRight') {
-    return 'ccjs_string_trim_end_parts'
+    return 'inox_string_trim_end_parts'
   }
 
-  return 'ccjs_string_trim_parts'
+  return 'inox_string_trim_parts'
 }
 
 function emitNonNegativeStringPositionLines(raw: string, target: string): string[] {
@@ -1946,7 +1946,7 @@ function parseTemplateLiteralParts(
 
       if (index >= end) {
         pushStringDiagnostic(context,
-          diagnostic('CCJS_C_STRING_EXPR', 'unterminated template placeholder in C template literal', loc)
+          diagnostic('INOX_C_STRING_EXPR', 'unterminated template placeholder in C template literal', loc)
         )
         return parts
       }
@@ -2063,7 +2063,7 @@ export function collectTemplatePlaceholderExpressions(expression: AnyNode | null
 }
 
 function parseTemplatePlaceholderCaptureExpression(value: string, loc: SourceLocation): AnyNode | null {
-  const prefix = 'const __ccjs_template = '
+  const prefix = 'const __inox_template = '
 
   try {
     const program = parse(tokenize(`${prefix}${value}`, tokenizeLocationOptions(loc)))
@@ -2098,11 +2098,11 @@ function parseTemplatePlaceholderExpression(
   context: StringCContext
 ): AnyNode | null {
   if (value === '') {
-    pushStringDiagnostic(context, diagnostic('CCJS_C_STRING_EXPR', 'empty template placeholder in C template literal', loc))
+    pushStringDiagnostic(context, diagnostic('INOX_C_STRING_EXPR', 'empty template placeholder in C template literal', loc))
     return null
   }
 
-  const prefix = 'const __ccjs_template = '
+  const prefix = 'const __inox_template = '
 
   try {
     const program = parse(tokenize(`${prefix}${value}`, tokenizeLocationOptions(loc)))
@@ -2115,14 +2115,14 @@ function parseTemplatePlaceholderExpression(
 
     if (program.body.length !== 1) {
       pushStringDiagnostic(context,
-        diagnostic('CCJS_C_STRING_EXPR', 'template placeholder must contain exactly one expression', loc)
+        diagnostic('INOX_C_STRING_EXPR', 'template placeholder must contain exactly one expression', loc)
       )
       return null
     }
 
     if (expression == null) {
       pushStringDiagnostic(context,
-        diagnostic('CCJS_C_STRING_EXPR', 'template placeholder must contain exactly one expression', loc)
+        diagnostic('INOX_C_STRING_EXPR', 'template placeholder must contain exactly one expression', loc)
       )
       return null
     }
@@ -2139,7 +2139,7 @@ function parseTemplatePlaceholderExpression(
 
     if (compileError != null) {
       const first = compileError.diagnostics[0]
-      let code = 'CCJS_C_STRING_EXPR'
+      let code = 'INOX_C_STRING_EXPR'
       let message = 'invalid template placeholder expression'
 
       if (compileError.diagnostics.length > 0) {
@@ -2225,7 +2225,7 @@ function reportUnknownTemplatePlaceholderReference(
 
   if (!state.reported.has(reportKey)) {
     state.reported.add(reportKey)
-    pushStringDiagnostic(state.context, diagnostic('CCJS_UNKNOWN_NAME', `unknown name ${name}`, node.loc))
+    pushStringDiagnostic(state.context, diagnostic('INOX_UNKNOWN_NAME', `unknown name ${name}`, node.loc))
   }
 
   state.valid = false

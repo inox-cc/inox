@@ -136,7 +136,7 @@ export function emitPreparedProcessStringExpression(
     return null
   }
 
-  let out = nextCName(context, 'ccjs_process_string')
+  let out = nextCName(context, 'inox_process_string')
   const lines: string[] = []
 
   if (options != null && options.out != null) {
@@ -149,14 +149,14 @@ export function emitPreparedProcessStringExpression(
 
   if (method === 'cwd') {
     pushLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_process_cwd(&ccjs_default_allocator, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_process_cwd(&inox_default_allocator, &${out})`, context))
   } else if (property === 'argv') {
     const index = dependencies.emitPreparedNumberExpression(expression.index, context)
 
     pushLines(lines, index.lines)
     pushLines(lines, emitPrepareOwnedValueWrite(out))
     lines.push(
-      emitStatusCheck(`ccjs_process_argv(&ccjs_default_allocator, (int)(${index.expression}), &${out})`, context)
+      emitStatusCheck(`inox_process_argv(&inox_default_allocator, (int)(${index.expression}), &${out})`, context)
     )
   } else if (stringProperty != null) {
     const functionName = cProcessRuntimeStringFunctionName(stringProperty)
@@ -166,7 +166,7 @@ export function emitPreparedProcessStringExpression(
     }
 
     pushLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`ccjs_process_${functionName}(&ccjs_default_allocator, &${out})`, context))
+    lines.push(emitStatusCheck(`inox_process_${functionName}(&inox_default_allocator, &${out})`, context))
   } else {
     let name = ''
 
@@ -177,7 +177,7 @@ export function emitPreparedProcessStringExpression(
     pushLines(lines, emitPrepareOwnedValueWrite(out))
     lines.push(
       emitStatusCheck(
-        `ccjs_process_env(&ccjs_default_allocator, ${cStringLiteral(name)}, ${utf8ByteLength(name)}, &${out})`,
+        `inox_process_env(&inox_default_allocator, ${cStringLiteral(name)}, ${utf8ByteLength(name)}, &${out})`,
         context
       )
     )
@@ -199,20 +199,20 @@ export function emitPreparedProcessNumberExpression(expression: AnyNode): Prepar
   if (property === 'argv.length') {
     return {
       lines: [],
-      expression: 'ccjs_process_argv_length()'
+      expression: 'inox_process_argv_length()'
     }
   }
 
   if (property === 'pid') {
     return {
       lines: [],
-      expression: 'ccjs_process_pid()'
+      expression: 'inox_process_pid()'
     }
   }
 
   return {
     lines: [],
-    expression: 'ccjs_process_get_exit_code()'
+    expression: 'inox_process_get_exit_code()'
   }
 }
 
@@ -236,7 +236,7 @@ export function emitProcessExitStatement(
 
   const lines: string[] = []
   pushLines(lines, code.lines)
-  lines.push(`ccjs_process_exit((int)(${code.expression}));`)
+  lines.push(`inox_process_exit((int)(${code.expression}));`)
 
   return lines
 }
@@ -254,7 +254,7 @@ export function emitProcessExitCodeAssignment(
   const lines: string[] = []
 
   pushLines(lines, value.lines)
-  lines.push(`ccjs_process_set_exit_code((int)(${value.expression}));`)
+  lines.push(`inox_process_set_exit_code((int)(${value.expression}));`)
 
   return lines
 }

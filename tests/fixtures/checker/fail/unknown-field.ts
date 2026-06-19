@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_UNKNOWN_FIELD
+// @diagnostic INOX_UNKNOWN_FIELD
 
 type User = {
   id: number

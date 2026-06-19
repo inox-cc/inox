@@ -466,7 +466,7 @@ export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, 
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
-    lines.push(`${statement.name} = ccjs_null_value();`)
+    lines.push(`${statement.name} = inox_null_value();`)
 
     return lines
   }
@@ -480,7 +480,7 @@ export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, 
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${value.expression};`)
   appendLines(lines, emitRuntimeNullableValueCheck(statement.name, expectedTag, context))
-  lines.push(`ccjs_retain(${statement.name});`)
+  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -527,7 +527,7 @@ export function emitCOptionalMemberValueExpression(expression: AnyNode, context:
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_C_OPTIONAL_CHAINING',
+      'INOX_C_OPTIONAL_CHAINING',
       'optional member access for this field is not supported by the current C backend slice',
       expression.loc
     )
@@ -535,7 +535,7 @@ export function emitCOptionalMemberValueExpression(expression: AnyNode, context:
 
   return {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 }
 
@@ -550,7 +550,7 @@ export function emitCOptionalIndexValueExpression(expression: AnyNode, context: 
     if (!isRuntimeNullableType(field.valueType)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_OPTIONAL_CHAINING',
+          'INOX_C_OPTIONAL_CHAINING',
           'optional object index access for this field is not supported by the current C backend slice',
           expression.loc
         )
@@ -558,7 +558,7 @@ export function emitCOptionalIndexValueExpression(expression: AnyNode, context: 
 
       return {
         lines: [],
-        expression: 'ccjs_undefined_value()'
+        expression: 'inox_undefined_value()'
       }
     }
 
@@ -579,7 +579,7 @@ export function emitCOptionalIndexValueExpression(expression: AnyNode, context: 
     if (!isRuntimeNullableType(element.valueType)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_C_OPTIONAL_CHAINING',
+          'INOX_C_OPTIONAL_CHAINING',
           'optional array index access for this element type is not supported by the current C backend slice',
           expression.loc
         )
@@ -587,7 +587,7 @@ export function emitCOptionalIndexValueExpression(expression: AnyNode, context: 
 
       return {
         lines: [],
-        expression: 'ccjs_undefined_value()'
+        expression: 'inox_undefined_value()'
       }
     }
 
@@ -596,7 +596,7 @@ export function emitCOptionalIndexValueExpression(expression: AnyNode, context: 
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_C_OPTIONAL_CHAINING',
+      'INOX_C_OPTIONAL_CHAINING',
       'optional index access is not supported by the current C backend slice',
       expression.loc
     )
@@ -604,7 +604,7 @@ export function emitCOptionalIndexValueExpression(expression: AnyNode, context: 
 
   return {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 }
 
@@ -615,10 +615,10 @@ function emitCOptionalObjectReadValueExpression(
   access: OptionalObjectReadAccess
 ): PreparedExpression {
   const object = nullableDeps(context).emitCValueExpression(objectExpression, context)
-  const temp = nextCName(context, 'ccjs_optional_value')
+  const temp = nextCName(context, 'inox_optional_value')
   const expectedTag = cRuntimeValueTag(valueType)
   const typeCheck = emitRuntimeTypeCheck(
-    `${object.expression}.tag != CCJS_TAG_OBJECT || ${object.expression}.as.ref == 0`,
+    `${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`,
     context
   )
   const getCall = optionalObjectReadGetCall(access, object.expression, temp, context)
@@ -629,8 +629,8 @@ function emitCOptionalObjectReadValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`if (${object.expression}.tag == CCJS_TAG_NULL) {`)
-  lines.push(`  ${temp} = ccjs_null_value();`)
+  lines.push(`if (${object.expression}.tag == INOX_TAG_NULL) {`)
+  lines.push(`  ${temp} = inox_null_value();`)
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
   lines.push(`  ${statusCheck}`)
@@ -656,10 +656,10 @@ function optionalObjectReadGetCall(
   }
 
   if (access.kind === 'known') {
-    return `ccjs_object_get_known(${object}, ${access.index}, &${temp})`
+    return `inox_object_get_known(${object}, ${access.index}, &${temp})`
   }
 
-  return `ccjs_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
+  return `inox_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
 }
 
 function emitCOptionalArrayIndexValueExpression(
@@ -668,21 +668,21 @@ function emitCOptionalArrayIndexValueExpression(
   context: NullableFunctionContext
 ): PreparedExpression {
   const array = nullableDeps(context).emitCValueExpression(arrayExpression, context)
-  const temp = nextCName(context, 'ccjs_optional_value')
+  const temp = nextCName(context, 'inox_optional_value')
   const expectedTag = cRuntimeValueTag(element.valueType)
   const typeCheck = emitRuntimeTypeCheck(
-    `${array.expression}.tag != CCJS_TAG_ARRAY || ${array.expression}.as.ref == 0`,
+    `${array.expression}.tag != INOX_TAG_ARRAY || ${array.expression}.as.ref == 0`,
     context
   )
-  const statusCheck = emitStatusCheck(`ccjs_array_get(${array.expression}, ${element.index}, &${temp})`, context)
+  const statusCheck = emitStatusCheck(`inox_array_get(${array.expression}, ${element.index}, &${temp})`, context)
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
 
   appendLines(lines, array.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`if (${array.expression}.tag == CCJS_TAG_NULL) {`)
-  lines.push(`  ${temp} = ccjs_null_value();`)
+  lines.push(`if (${array.expression}.tag == INOX_TAG_NULL) {`)
+  lines.push(`  ${temp} = inox_null_value();`)
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
   lines.push(`  ${statusCheck}`)

@@ -66,7 +66,7 @@ function emitFallbackClassValueExpression(
 ): PreparedExpression {
   return {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 }
 
@@ -88,7 +88,7 @@ function emitClassFieldFlags(context: ClassFunctionContext, field: CObjectShapeF
     return deps.emitCFieldFlags(field)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'class lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_CLASS', 'class lowering dependencies are not configured'))
 
   return emitFallbackClassFieldFlags(field)
 }
@@ -103,7 +103,7 @@ function emitClassValueExpression(
     return deps.emitCValueExpression(expression, context)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'class lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_CLASS', 'class lowering dependencies are not configured'))
 
   return emitFallbackClassValueExpression(expression, context)
 }
@@ -119,7 +119,7 @@ function emitPreparedClassCallArgs(
     return deps.emitPreparedCallArgs(expression, params, context)
   }
 
-  context.diagnostics.push(diagnostic('CCJS_C_CLASS', 'class lowering dependencies are not configured'))
+  context.diagnostics.push(diagnostic('INOX_C_CLASS', 'class lowering dependencies are not configured'))
 
   return emitFallbackPreparedClassCallArgs(expression, params, context)
 }
@@ -262,7 +262,7 @@ function collectClassConstructorAssignments(
 
       diagnostics.push(
         diagnostic(
-          'CCJS_C_CLASS',
+          'INOX_C_CLASS',
           `class ${classNode.name} constructor currently supports only this.field assignments in the C backend`,
           nodeLocOrFallback(statement, constructorMethod)
         )
@@ -456,13 +456,13 @@ export function emitClassObjectVariableDeclaration(statement: AnyNode, context: 
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_C_CLASS',
+      'INOX_C_CLASS',
       'this class constructor is not supported by the current C backend slice',
       nodeLocOrFallback(statement.init, statement)
     )
   )
 
-  return [`ccjs_value ${statement.name} = ccjs_undefined_value();`]
+  return [`inox_value ${statement.name} = inox_undefined_value();`]
 }
 
 function emitSupportedClassObjectVariableDeclaration(
@@ -488,7 +488,7 @@ function registerClassInstanceType(context: ClassFunctionContext, name: string, 
 
 export function emitCClassObjectValueExpression(expression: AnyNode, context: ClassFunctionContext): PreparedExpression {
   const info = resolveClassConstructorInfo(expression, context)
-  const temp = nextCName(context, 'ccjs_class_object')
+  const temp = nextCName(context, 'inox_class_object')
   registerOwnedValue(context, temp)
 
   if (info != null) {
@@ -500,7 +500,7 @@ export function emitCClassObjectValueExpression(expression: AnyNode, context: Cl
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_C_CLASS',
+      'INOX_C_CLASS',
       'this class constructor is not supported by the current C backend slice',
       nodeLocOrFallback(expression, null)
     )
@@ -508,7 +508,7 @@ export function emitCClassObjectValueExpression(expression: AnyNode, context: Cl
 
   const lines: string[] = []
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`${temp} = ccjs_undefined_value();`)
+  lines.push(`${temp} = inox_undefined_value();`)
 
   return {
     lines,
@@ -522,21 +522,21 @@ function emitCClassObjectInitLines(
   info: CClassInfo,
   context: ClassFunctionContext
 ): string[] {
-  const shapeName = nextCName(context, `ccjs_shape_${info.name}`)
+  const shapeName = nextCName(context, `inox_shape_${info.name}`)
   const fieldsName = `${shapeName}_fields`
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
 
   for (const field of info.fields) {
     lines.push(`  { ${cStringLiteral(field.name)}, ${emitClassFieldFlags(context, field)} },`)
   }
 
   lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`static const inox_shape ${shapeName} = {`)
   lines.push(`  ${info.fields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
   pushAllLines(lines, emitPrepareOwnedValueWrite(target))
-  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${target})`, context))
+  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${target})`, context))
 
   const constructorArgs = mapClassConstructorArgs(expression, info)
 
@@ -545,7 +545,7 @@ function emitCClassObjectInitLines(
 
     if (fieldIndex === -1) {
       context.diagnostics.push(
-        diagnostic('CCJS_UNKNOWN_FIELD', `unknown class field ${assignment.field}`, nodeLocOrFallback(assignment, expression))
+        diagnostic('INOX_UNKNOWN_FIELD', `unknown class field ${assignment.field}`, nodeLocOrFallback(assignment, expression))
       )
       continue
     }
@@ -553,7 +553,7 @@ function emitCClassObjectInitLines(
     const valueExpression = substituteClassConstructorParams(assignment.value, constructorArgs, target)
     const value = emitClassValueExpression(context, valueExpression)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`ccjs_object_init_known(${target}, ${fieldIndex}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_object_init_known(${target}, ${fieldIndex}, ${value.expression})`, context))
   }
 
   return lines
@@ -818,7 +818,7 @@ function emitPreparedResolvedClassMethodCallExpression(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_UNKNOWN_FIELD',
+      'INOX_UNKNOWN_FIELD',
       `unknown method ${call.methodName}`,
       nodeLocOrFallback(expression.callee, expression)
     )
@@ -840,7 +840,7 @@ function emitKnownPreparedClassMethodCallExpression(
   if (method.params.length !== expression.args.length) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_ARG_COUNT',
+        'INOX_ARG_COUNT',
         `method ${expression.callee.property} expects ${method.params.length} argument(s), got ${expression.args.length}`,
         expression.loc
       )
@@ -895,7 +895,7 @@ function emitKnownPreparedClassMethodCallExpression(
   }
 
   if (isManagedRuntimeReturnType(method.returnType)) {
-    const value = nextCName(context, 'ccjs_method_value')
+    const value = nextCName(context, 'inox_method_value')
     const tag = cRuntimeValueTag(method.returnType)
     registerOwnedValue(context, value)
     const lines: string[] = []
@@ -946,13 +946,13 @@ function emitPreparedThrowingClassMethodCallExpression(
 
   pushAllLines(lines, callLines)
   registerClassMethodErrorChannel(context)
-  pushAllLines(lines, emitPrepareOwnedValueWrite('ccjs_error'))
+  pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
 
   if (method.returnType !== 'void') {
-    result = nextCName(context, 'ccjs_method_result')
+    result = nextCName(context, 'inox_method_result')
 
     if (isThrowingClassMethodRuntimeOut(method)) {
-      lines.push(`ccjs_value ${result} = ccjs_undefined_value();`)
+      lines.push(`inox_value ${result} = inox_undefined_value();`)
     } else {
       lines.push(`double ${result} = 0;`)
     }
@@ -960,10 +960,10 @@ function emitPreparedThrowingClassMethodCallExpression(
     callArgs.push(`&${result}`)
   }
 
-  callArgs.push('&ccjs_error')
+  callArgs.push('&inox_error')
 
-  const status = nextCName(context, 'ccjs_method_status')
-  lines.push(`ccjs_status ${status} = ${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')});`)
+  const status = nextCName(context, 'inox_method_status')
+  lines.push(`inox_status ${status} = ${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')});`)
   pushAllLines(lines, emitThrowingClassMethodStatusCheck(status, context))
 
   return {
@@ -983,19 +983,19 @@ function isThrowingClassMethodRuntimeOut(method: AnyNode): boolean {
 
 function emitThrowingClassMethodStatusCheck(status: string, context: ClassFunctionContext): string[] {
   const target = currentClassErrorTarget(context)
-  const lines = [`if (${status} == CCJS_ERR_THROW) {`, '  ccjs_error_active = 1;']
+  const lines = [`if (${status} == INOX_ERR_THROW) {`, '  inox_error_active = 1;']
 
   if (target != null) {
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
-    lines.push('  ccjs_status_result = CCJS_ERR_THROW;')
-    lines.push('  goto ccjs_cleanup;')
+    lines.push('  inox_status_result = INOX_ERR_THROW;')
+    lines.push('  goto inox_cleanup;')
   } else {
     lines.push(`  ${emitFailureStatement(context)}`)
   }
 
   lines.push('}')
-  lines.push(`if (${status} != CCJS_OK) ${emitFailureStatement(context)}`)
+  lines.push(`if (${status} != INOX_OK) ${emitFailureStatement(context)}`)
 
   return lines
 }
@@ -1012,7 +1012,7 @@ function currentClassErrorTarget(context: ClassFunctionContext): string | null {
 
 function registerClassMethodErrorChannel(context: ClassFunctionContext): void {
   context.errorChannelUsed = true
-  registerOwnedValue(context, 'ccjs_error')
+  registerOwnedValue(context, 'inox_error')
 }
 
 function isThrowingClassMethod(info: CClassInfo, method: AnyNode, context: ClassFunctionContext): boolean {
@@ -1139,5 +1139,5 @@ function resolveClassMethod(info: CClassInfo, name: string): AnyNode | null {
 }
 
 export function emitCClassMethodName(className: string, methodName: string): string {
-  return `ccjs_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
+  return `inox_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
 }

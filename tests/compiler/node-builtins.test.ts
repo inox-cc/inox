@@ -26,7 +26,7 @@ console.log(builtin)
         }
 
         assert.equal(
-          error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+          error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
           true
         )
         assert.equal(

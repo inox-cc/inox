@@ -148,7 +148,7 @@ class Parser {
     }
 
     if (isAsync) {
-      this.report('CCJS_EXPECTED_FUNCTION', 'expected function after async', null)
+      this.report('INOX_EXPECTED_FUNCTION', 'expected function after async', null)
     }
 
     if (this.matchKeyword('class')) {
@@ -176,7 +176,7 @@ class Parser {
     }
 
     if (exported) {
-      this.report('CCJS_EXPECTED_EXPORT', 'expected exported function or variable declaration', null)
+      this.report('INOX_EXPECTED_EXPORT', 'expected exported function or variable declaration', null)
     }
 
     return this.parseStatement()
@@ -192,7 +192,7 @@ class Parser {
     const specifiers: AnyNode[] = []
 
     if (this.is('identifier')) {
-      const local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected default import name')
+      const local = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected default import name')
 
       specifiers.push(createImportSpecifier('default', local.value, local, true))
 
@@ -204,7 +204,7 @@ class Parser {
     }
 
     if (specifiers.length === 0) {
-      this.report('CCJS_UNSUPPORTED_IMPORT', 'expected ESM default or named import specifiers', null)
+      this.report('INOX_UNSUPPORTED_IMPORT', 'expected ESM default or named import specifiers', null)
       this.skipStatement()
 
       return {
@@ -212,8 +212,8 @@ class Parser {
       }
     }
 
-    this.expectKeyword('from', 'CCJS_EXPECTED_IMPORT', 'expected from after import specifiers')
-    const source = this.expect('string', 'CCJS_EXPECTED_IMPORT', 'expected import source string')
+    this.expectKeyword('from', 'INOX_EXPECTED_IMPORT', 'expected from after import specifiers')
+    const source = this.expect('string', 'INOX_EXPECTED_IMPORT', 'expected import source string')
     this.matchValue(';')
 
     return createImportDeclaration(importTypeOnly, specifiers, source)
@@ -227,7 +227,7 @@ class Parser {
     }
 
     if (specifiers.length === 0) {
-      this.report('CCJS_UNSUPPORTED_EXPORT', 'expected named export specifiers', null)
+      this.report('INOX_UNSUPPORTED_EXPORT', 'expected named export specifiers', null)
       this.skipStatement()
 
       return {
@@ -235,8 +235,8 @@ class Parser {
       }
     }
 
-    this.expectKeyword('from', 'CCJS_EXPECTED_EXPORT', 'expected from after export specifiers')
-    const source = this.expect('string', 'CCJS_EXPECTED_EXPORT', 'expected export source string')
+    this.expectKeyword('from', 'INOX_EXPECTED_EXPORT', 'expected from after export specifiers')
+    const source = this.expect('string', 'INOX_EXPECTED_EXPORT', 'expected export source string')
     this.matchValue(';')
 
     return createExportDeclaration(typeOnly, specifiers, source)
@@ -250,7 +250,7 @@ class Parser {
       let local = imported.value
 
       if (this.matchIdentifier('as')) {
-        local = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected local import name').value
+        local = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected local import name').value
       }
 
       specifiers.push(createImportSpecifier(imported.value, local, imported, false))
@@ -260,7 +260,7 @@ class Parser {
       }
     }
 
-    this.expectValue('}', 'CCJS_EXPECTED_IMPORT', 'expected } after import specifiers')
+    this.expectValue('}', 'INOX_EXPECTED_IMPORT', 'expected } after import specifiers')
 
     return specifiers
   }
@@ -270,14 +270,14 @@ class Parser {
       return this.advance()
     }
 
-    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected imported name')
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected imported name')
   }
 
   parseFunctionDeclaration(exported: boolean, isAsync: boolean): AnyNode {
-    const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected function name')
+    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected function name')
     const params: AnyNode[] = []
 
-    this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after function name')
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after function name')
 
     while (!this.isValue(')') && !this.is('eof')) {
       params.push(this.parseRuntimeParam())
@@ -287,7 +287,7 @@ class Parser {
       }
     }
 
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after function parameters')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after function parameters')
     let returnType = 'void'
 
     if (this.matchValue(':')) {
@@ -305,8 +305,8 @@ class Parser {
   }
 
   parseTypeAliasDeclaration(exported: boolean): AnyNode {
-    const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected type alias name')
-    this.expectValue('=', 'CCJS_EXPECTED_TYPE', 'expected = after type alias name')
+    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected type alias name')
+    this.expectValue('=', 'INOX_EXPECTED_TYPE', 'expected = after type alias name')
 
     if (this.isValue('(')) {
       return createTypeAliasDeclaration(exported, name, this.parseFunctionType(false))
@@ -331,12 +331,12 @@ class Parser {
   parseFunctionType(stopReturnAtLineBreak: boolean): AnyNode {
     const params: AnyNode[] = []
 
-    this.expectValue('(', 'CCJS_EXPECTED_TYPE', 'expected ( in function type')
+    this.expectValue('(', 'INOX_EXPECTED_TYPE', 'expected ( in function type')
 
     while (!this.isValue(')') && !this.is('eof')) {
-      const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected function type parameter name')
+      const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected function type parameter name')
       const optional = this.matchValue('?')
-      this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after function type parameter name')
+      this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after function type parameter name')
       const valueType = this.parseTypeAnnotation([',', ')'], null)
 
       params.push(createParam(name, valueType, optional))
@@ -346,8 +346,8 @@ class Parser {
       }
     }
 
-    this.expectValue(')', 'CCJS_EXPECTED_TYPE', 'expected ) after function type parameters')
-    this.expectValue('=>', 'CCJS_EXPECTED_ARROW', 'expected => in function type')
+    this.expectValue(')', 'INOX_EXPECTED_TYPE', 'expected ) after function type parameters')
+    this.expectValue('=>', 'INOX_EXPECTED_ARROW', 'expected => in function type')
     let returnTypeOptions: TypeAnnotationOptions = { stopAtStatementBoundary: true }
 
     if (stopReturnAtLineBreak) {
@@ -386,7 +386,7 @@ class Parser {
     let dynamic = false
     let dynamicField: AnyNode | null = null
 
-    this.expectValue('{', 'CCJS_EXPECTED_TYPE', 'expected { in object type')
+    this.expectValue('{', 'INOX_EXPECTED_TYPE', 'expected { in object type')
 
     while (!this.isValue('}') && !this.is('eof')) {
       if (this.isValue('[')) {
@@ -417,7 +417,7 @@ class Parser {
         continue
       }
 
-      this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after object type field name')
+      this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after object type field name')
       if (this.isValue('(')) {
         const field = createObjectTypeField(
           name,
@@ -454,7 +454,7 @@ class Parser {
       this.matchValue(';')
     }
 
-    this.expectValue('}', 'CCJS_EXPECTED_TYPE', 'expected } after object type')
+    this.expectValue('}', 'INOX_EXPECTED_TYPE', 'expected } after object type')
     this.matchValue(';')
 
     return createObjectType(fields, actualBaseTypes, dynamic, dynamicField)
@@ -463,12 +463,12 @@ class Parser {
   parseObjectTypeMethodSignature() {
     const params: AnyNode[] = []
 
-    this.expectValue('(', 'CCJS_EXPECTED_TYPE', 'expected ( in object type method')
+    this.expectValue('(', 'INOX_EXPECTED_TYPE', 'expected ( in object type method')
 
     while (!this.isValue(')') && !this.is('eof')) {
       const name = this.expectTypeParameterName()
       const optional = this.matchValue('?')
-      this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after method type parameter name')
+      this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after method type parameter name')
       const valueType = this.parseTypeAnnotation([',', ')'], null)
 
       params.push(createParam(name, valueType, optional))
@@ -478,8 +478,8 @@ class Parser {
       }
     }
 
-    this.expectValue(')', 'CCJS_EXPECTED_TYPE', 'expected ) after object type method parameters')
-    this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after object type method parameters')
+    this.expectValue(')', 'INOX_EXPECTED_TYPE', 'expected ) after object type method parameters')
+    this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after object type method parameters')
     const returnType = this.parseTypeAnnotation([',', ';', '}'], {
       stopAtLineBreak: true
     })
@@ -488,13 +488,13 @@ class Parser {
   }
 
   parseTypeIndexSignature(): AnyNode | null {
-    const start = this.expectValue('[', 'CCJS_EXPECTED_TYPE', 'expected [ in type index signature')
+    const start = this.expectValue('[', 'INOX_EXPECTED_TYPE', 'expected [ in type index signature')
 
     while (!this.is('eof') && !this.isValue(']')) {
       this.advance()
     }
 
-    this.expectValue(']', 'CCJS_EXPECTED_TYPE', 'expected ] after type index signature')
+    this.expectValue(']', 'INOX_EXPECTED_TYPE', 'expected ] after type index signature')
 
     let valueType = 'unknown'
 
@@ -519,7 +519,7 @@ class Parser {
       return this.advance()
     }
 
-    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected object type field name')
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected object type field name')
   }
 
   expectTypeParameterName(): Token {
@@ -527,11 +527,11 @@ class Parser {
       return this.advance()
     }
 
-    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected method type parameter name')
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected method type parameter name')
   }
 
   parseClassDeclaration(exported: boolean): AnyNode {
-    const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected class name')
+    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected class name')
     const fields: AnyNode[] = []
     const methods: AnyNode[] = []
     let extendsName: string | null = null
@@ -539,11 +539,11 @@ class Parser {
     const extendsToken = this.matchContextualKeyword('extends')
 
     if (extendsToken != null) {
-      const base = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected base class name')
+      const base = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected base class name')
       extendsName = base.value
     }
 
-    this.expectValue('{', 'CCJS_EXPECTED_BLOCK', 'expected { after class name')
+    this.expectValue('{', 'INOX_EXPECTED_BLOCK', 'expected { after class name')
 
     while (!this.isValue('}') && !this.is('eof')) {
       const member = this.parseClassMember()
@@ -555,7 +555,7 @@ class Parser {
       }
     }
 
-    this.expectValue('}', 'CCJS_EXPECTED_BLOCK', 'expected } after class body')
+    this.expectValue('}', 'INOX_EXPECTED_BLOCK', 'expected } after class body')
 
     return createClassDeclaration({
       exported,
@@ -577,10 +577,10 @@ class Parser {
     }
 
     if ((modifiers.readOnly || modifiers.weakToken != null) && this.isValue('(')) {
-      this.report('CCJS_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields', null)
+      this.report('INOX_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields', null)
     }
 
-    this.expectValue(':', 'CCJS_EXPECTED_TYPE', 'expected : after class field name')
+    this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after class field name')
     const valueType = this.parseTypeAnnotation([';', '}'], {
       stopAtLineBreak: true
     })
@@ -622,7 +622,7 @@ class Parser {
   parseClassMethod(name: Token, staticToken: Token | null): AnyNode {
     const params: AnyNode[] = []
 
-    this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after method name')
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after method name')
 
     while (!this.isValue(')') && !this.is('eof')) {
       params.push(this.parseRuntimeParam())
@@ -632,7 +632,7 @@ class Parser {
       }
     }
 
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after method parameters')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after method parameters')
     let returnType = 'unknown'
 
     if (name.value === 'constructor') {
@@ -657,7 +657,7 @@ class Parser {
       return this.advance()
     }
 
-    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected method name')
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected method name')
   }
 
   matchClassStaticModifier(): Token | null {
@@ -689,13 +689,13 @@ class Parser {
   parseBlock(): AnyNode[] {
     const body: AnyNode[] = []
 
-    this.expectValue('{', 'CCJS_EXPECTED_BLOCK', 'expected {')
+    this.expectValue('{', 'INOX_EXPECTED_BLOCK', 'expected {')
 
     while (!this.isValue('}') && !this.is('eof')) {
       body.push(this.parseStatement())
     }
 
-    this.expectValue('}', 'CCJS_EXPECTED_BLOCK', 'expected }')
+    this.expectValue('}', 'INOX_EXPECTED_BLOCK', 'expected }')
 
     return body
   }
@@ -709,7 +709,7 @@ class Parser {
     }
 
     if (this.matchKeyword('import')) {
-      this.report('CCJS_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports', null)
+      this.report('INOX_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports', null)
       this.skipStatement()
 
       return {
@@ -778,7 +778,7 @@ class Parser {
     }
 
     if (this.matchKeyword('var')) {
-      this.report('CCJS_NO_VAR', '`var` is not supported; use `let` or `const`', null)
+      this.report('INOX_NO_VAR', '`var` is not supported; use `let` or `const`', null)
       this.skipStatement()
 
       return {
@@ -812,9 +812,9 @@ class Parser {
   }
 
   parseIfStatement(start: Token): AnyNode {
-    this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after if')
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after if')
     const condition = this.parseExpression()
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after if condition')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after if condition')
     const consequent = this.parseStatement()
     let alternate: AnyNode | null = null
 
@@ -850,10 +850,10 @@ class Parser {
       let paramLoc: SourceLocation | null = null
 
       if (this.matchValue('(')) {
-        const paramToken = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected catch binding name')
+        const paramToken = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected catch binding name')
         param = paramToken.value
         paramLoc = locFromToken(paramToken)
-        this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after catch binding')
+        this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after catch binding')
       }
 
       handler = {
@@ -879,7 +879,7 @@ class Parser {
     }
 
     if (handler == null && finalizer == null) {
-      this.report('CCJS_EXPECTED_TRY_HANDLER', 'try must be followed by catch or finally', start)
+      this.report('INOX_EXPECTED_TRY_HANDLER', 'try must be followed by catch or finally', start)
     }
 
     return {
@@ -892,9 +892,9 @@ class Parser {
   }
 
   parseWhileStatement(start: Token): AnyNode {
-    this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after while')
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after while')
     const condition = this.parseExpression()
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after while condition')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after while condition')
 
     return {
       type: 'WhileStatement',
@@ -905,7 +905,7 @@ class Parser {
   }
 
   parseForStatement(start: Token): AnyNode {
-    this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after for')
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after for')
 
     if (this.isForInHeader()) {
       return this.parseUnsupportedForInStatement()
@@ -921,13 +921,13 @@ class Parser {
     if (!this.isValue(';')) {
       test = this.parseExpression()
     }
-    this.expectValue(';', 'CCJS_EXPECTED_SEMICOLON', 'expected ; after for condition')
+    this.expectValue(';', 'INOX_EXPECTED_SEMICOLON', 'expected ; after for condition')
     let update: AnyNode | null = null
 
     if (!this.isValue(')')) {
       update = this.parseExpression()
     }
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after for update')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after for update')
 
     return {
       type: 'ForStatement',
@@ -941,15 +941,15 @@ class Parser {
 
   parseForOfStatement(start: Token): AnyNode {
     const kindToken = this.advance()
-    const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected for-of binding name')
+    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected for-of binding name')
     let declaredType: string | null = null
 
     if (this.matchValue(':')) {
       declaredType = this.parseTypeAnnotation(['of'], null)
     }
-    this.expectKeyword('of', 'CCJS_EXPECTED_OF', 'expected of in for-of statement')
+    this.expectKeyword('of', 'INOX_EXPECTED_OF', 'expected of in for-of statement')
     const iterable = this.parseExpression()
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after for-of iterable')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after for-of iterable')
 
     return {
       type: 'ForOfStatement',
@@ -964,7 +964,7 @@ class Parser {
   }
 
   parseUnsupportedForInStatement(): AnyNode {
-    this.report('CCJS_NO_FOR_IN', 'for-in is not supported; use Object.keys/map helpers later', null)
+    this.report('INOX_NO_FOR_IN', 'for-in is not supported; use Object.keys/map helpers later', null)
 
     while (!this.isValue(')') && !this.is('eof')) {
       this.advance()
@@ -997,22 +997,22 @@ class Parser {
     }
 
     const expression = this.parseExpression()
-    this.expectValue(';', 'CCJS_EXPECTED_SEMICOLON', 'expected ; after for initializer')
+    this.expectValue(';', 'INOX_EXPECTED_SEMICOLON', 'expected ; after for initializer')
 
     return expression
   }
 
   parseSwitchStatement(start: Token): AnyNode {
-    this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after switch')
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after switch')
     const discriminant = this.parseExpression()
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after switch discriminant')
-    this.expectValue('{', 'CCJS_EXPECTED_BLOCK', 'expected { after switch')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after switch discriminant')
+    this.expectValue('{', 'INOX_EXPECTED_BLOCK', 'expected { after switch')
     const cases: AnyNode[] = []
 
     while (!this.isValue('}') && !this.is('eof')) {
       if (this.matchKeyword('case')) {
         const test = this.parseExpression()
-        this.expectValue(':', 'CCJS_EXPECTED_COLON', 'expected : after case expression')
+        this.expectValue(':', 'INOX_EXPECTED_COLON', 'expected : after case expression')
         cases.push({
           type: 'SwitchCase',
           test,
@@ -1024,7 +1024,7 @@ class Parser {
 
       if (this.matchKeyword('default')) {
         const token = this.previous()
-        this.expectValue(':', 'CCJS_EXPECTED_COLON', 'expected : after default')
+        this.expectValue(':', 'INOX_EXPECTED_COLON', 'expected : after default')
         cases.push({
           type: 'SwitchCase',
           test: null,
@@ -1034,11 +1034,11 @@ class Parser {
         continue
       }
 
-      this.report('CCJS_EXPECTED_SWITCH_CASE', 'expected case or default in switch', null)
+      this.report('INOX_EXPECTED_SWITCH_CASE', 'expected case or default in switch', null)
       this.advance()
     }
 
-    this.expectValue('}', 'CCJS_EXPECTED_BLOCK', 'expected } after switch')
+    this.expectValue('}', 'INOX_EXPECTED_BLOCK', 'expected } after switch')
 
     return {
       type: 'SwitchStatement',
@@ -1059,7 +1059,7 @@ class Parser {
   }
 
   parseVariableDeclaration(kind: string, exported: boolean): AnyNode {
-    const name = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected variable name')
+    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected variable name')
     let declaredType: string | null = null
 
     if (this.matchValue(':')) {
@@ -1121,11 +1121,11 @@ class Parser {
     const start = this.current()
 
     if (isAsync) {
-      this.expectKeyword('async', 'CCJS_EXPECTED_ARROW', 'expected async before async arrow function')
+      this.expectKeyword('async', 'INOX_EXPECTED_ARROW', 'expected async before async arrow function')
     }
 
     const params = this.parseArrowParameters()
-    this.expectValue('=>', 'CCJS_EXPECTED_ARROW', 'expected => in arrow function')
+    this.expectValue('=>', 'INOX_EXPECTED_ARROW', 'expected => in arrow function')
 
     if (this.isValue('{')) {
       const body = this.parseBlock()
@@ -1145,7 +1145,7 @@ class Parser {
     }
 
     const params: AnyNode[] = []
-    this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( before arrow parameters')
+    this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( before arrow parameters')
 
     while (!this.isValue(')') && !this.is('eof')) {
       params.push(this.parseRuntimeParam())
@@ -1155,13 +1155,13 @@ class Parser {
       }
     }
 
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after arrow parameters')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after arrow parameters')
 
     return params
   }
 
   parseRuntimeParam(): AnyNode {
-    const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
+    const param = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected parameter name')
     let optional = this.matchValue('?')
     let valueType = 'unknown'
     let defaultValue: AnyNode | null = null
@@ -1294,7 +1294,7 @@ class Parser {
         }
       }
 
-      this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after constructor arguments')
+      this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after constructor arguments')
     }
 
     return createNewExpression(start, callee, args)
@@ -1322,7 +1322,7 @@ class Parser {
 
       if (this.matchValue('[')) {
         const index = this.parseExpression()
-        this.expectValue(']', 'CCJS_EXPECTED_BRACKET', 'expected ] after index expression')
+        this.expectValue(']', 'INOX_EXPECTED_BRACKET', 'expected ] after index expression')
         expression = createIndexExpression(expression, index)
         continue
       }
@@ -1346,7 +1346,7 @@ class Parser {
 
     if (this.matchValue('[')) {
       const index = this.parseExpression()
-      this.expectValue(']', 'CCJS_EXPECTED_BRACKET', 'expected ] after optional index expression')
+      this.expectValue(']', 'INOX_EXPECTED_BRACKET', 'expected ] after optional index expression')
 
       return createOptionalIndexExpression(object, index)
     }
@@ -1367,14 +1367,14 @@ class Parser {
       }
     }
 
-    this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after call arguments')
+    this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after call arguments')
 
     return createCallExpression(callee, args)
   }
 
   parsePrimary(): AnyNode {
     if (this.matchKeyword('import')) {
-      this.report('CCJS_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports', null)
+      this.report('INOX_NO_DYNAMIC_IMPORT', 'dynamic import is not supported; use static ESM imports', null)
 
       if (this.matchValue('(')) {
         while (!this.isValue(')') && !this.is('eof')) {
@@ -1391,7 +1391,7 @@ class Parser {
 
     if (this.matchValue('(')) {
       const expression = this.parseExpression()
-      this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after expression')
+      this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after expression')
       return expression
     }
 
@@ -1444,7 +1444,7 @@ class Parser {
     }
 
     const token = this.current()
-    this.report('CCJS_EXPECTED_EXPRESSION', `expected expression, got ${quoteDiagnosticString(token.value)}`, null)
+    this.report('INOX_EXPECTED_EXPRESSION', `expected expression, got ${quoteDiagnosticString(token.value)}`, null)
     this.advance()
 
     return {
@@ -1453,7 +1453,7 @@ class Parser {
   }
 
   parseArrayLiteral(): AnyNode {
-    const start = this.expectValue('[', 'CCJS_EXPECTED_BRACKET', 'expected [')
+    const start = this.expectValue('[', 'INOX_EXPECTED_BRACKET', 'expected [')
     const elements: AnyNode[] = []
 
     while (!this.isValue(']') && !this.is('eof')) {
@@ -1464,13 +1464,13 @@ class Parser {
       }
     }
 
-    this.expectValue(']', 'CCJS_EXPECTED_BRACKET', 'expected ] after array literal')
+    this.expectValue(']', 'INOX_EXPECTED_BRACKET', 'expected ] after array literal')
 
     return createArrayLiteral(start, elements)
   }
 
   parseObjectLiteral(): AnyNode {
-    const start = this.expectValue('{', 'CCJS_EXPECTED_OBJECT', 'expected {')
+    const start = this.expectValue('{', 'INOX_EXPECTED_OBJECT', 'expected {')
     const properties: AnyNode[] = []
 
     while (!this.isValue('}') && !this.is('eof')) {
@@ -1484,7 +1484,7 @@ class Parser {
       } else if (key.kind === 'identifier') {
         value = createReferenceFromName(key.name, key.loc)
       } else {
-        this.report('CCJS_EXPECTED_OBJECT_VALUE', 'expected : after object property key', null)
+        this.report('INOX_EXPECTED_OBJECT_VALUE', 'expected : after object property key', null)
       }
 
       properties.push(createObjectProperty(key, value))
@@ -1494,7 +1494,7 @@ class Parser {
       }
     }
 
-    this.expectValue('}', 'CCJS_EXPECTED_OBJECT', 'expected } after object literal')
+    this.expectValue('}', 'INOX_EXPECTED_OBJECT', 'expected } after object literal')
 
     return createObjectLiteral(start, properties)
   }
@@ -1516,7 +1516,7 @@ class Parser {
     }
 
     const token = this.current()
-    this.report('CCJS_EXPECTED_OBJECT_KEY', 'expected object property key', token)
+    this.report('INOX_EXPECTED_OBJECT_KEY', 'expected object property key', token)
     this.advance()
 
     return {
@@ -1531,7 +1531,7 @@ class Parser {
       return this.advance()
     }
 
-    return this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected property name')
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected property name')
   }
 
   skipTypeUntil(values: string[]): void {

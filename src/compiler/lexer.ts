@@ -79,7 +79,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
     }
 
     state.diagnostics.push(
-      diagnostic('CCJS_UNKNOWN_CHAR', `unknown character ${quoteDiagnosticString(unit)}`, lexerLocation(state, state.line, state.column))
+      diagnostic('INOX_UNKNOWN_CHAR', `unknown character ${quoteDiagnosticString(unit)}`, lexerLocation(state, state.line, state.column))
     )
     advanceLexer(state, unit)
   }
@@ -128,7 +128,7 @@ function readStringToken(state: LexerState, quote: string): Token {
   }
 
   state.diagnostics.push(
-    diagnostic('CCJS_UNTERMINATED_STRING', 'unterminated string literal', lexerLocation(state, startLine, startColumn))
+    diagnostic('INOX_UNTERMINATED_STRING', 'unterminated string literal', lexerLocation(state, startLine, startColumn))
   )
 
   return makeToken('string', value, startLine, startColumn, startIndex, state.file)
@@ -168,7 +168,7 @@ function readTemplateToken(state: LexerState): Token {
   }
 
   state.diagnostics.push(
-    diagnostic('CCJS_UNTERMINATED_TEMPLATE', 'unterminated template literal', lexerLocation(state, startLine, startColumn))
+    diagnostic('INOX_UNTERMINATED_TEMPLATE', 'unterminated template literal', lexerLocation(state, startLine, startColumn))
   )
 
   return makeToken('template', raw, startLine, startColumn, startIndex, state.file)

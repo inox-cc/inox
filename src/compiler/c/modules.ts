@@ -137,7 +137,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
       } else {
         diagnostics.push(
           diagnostic(
-            'CCJS_C_MODULE_IMPORT',
+            'INOX_C_MODULE_IMPORT',
             `cannot resolve generated C module for ${declaration.source}`,
             declaration.loc
           )
@@ -212,7 +212,7 @@ function reportUnsupportedCModuleImports(
 
     diagnostics.push(
       diagnostic(
-        'CCJS_C_MODULE_IMPORT',
+        'INOX_C_MODULE_IMPORT',
         'modular C output currently supports importing exported functions only',
         specifier.loc
       )
@@ -302,7 +302,7 @@ function cModuleSymbolPrefix(
   sourcePath: string,
   host: CModuleHost
 ): string {
-  return `ccjs_mod_${emitCIdentifier(relativeSourcePath)}_${shortCModuleHash(sourcePath, host)}`
+  return `inox_mod_${emitCIdentifier(relativeSourcePath)}_${shortCModuleHash(sourcePath, host)}`
 }
 
 function shortCModuleHash(value: string, host: CModuleHost): string {

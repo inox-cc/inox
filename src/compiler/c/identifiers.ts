@@ -29,14 +29,14 @@ function isCIdentifierCode(code: number): boolean {
 
 export function emitCFunctionName(name: string): string {
   if (name === 'main') {
-    return 'ccjs_main'
+    return 'inox_main'
   }
 
   return name
 }
 
 export function emitCObjectFunctionFieldName(objectName: string, fieldName: string): string {
-  return `ccjs_objfn_${emitCIdentifier(objectName)}_${emitCIdentifier(fieldName)}`
+  return `inox_objfn_${emitCIdentifier(objectName)}_${emitCIdentifier(fieldName)}`
 }
 
 export function utf8ByteLength(value: string): number {

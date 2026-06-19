@@ -269,14 +269,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'ccjs',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
     'console',
     {
       kind: 'global',
@@ -557,7 +549,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
 
   if (
     name === 'inox' ||
-    name === 'ccjs' ||
     name === 'console' ||
     name === 'performance' ||
     name === 'Object' ||

@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_NOT_IMPLEMENTED
+// @diagnostic INOX_NOT_IMPLEMENTED
 
 const response = await fetch('data:text/plain,hello')
 const text = await response.text()

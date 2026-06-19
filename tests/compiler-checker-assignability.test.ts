@@ -124,7 +124,7 @@ export function main(): void {
     },
     (error: any) =>
       Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'CCJS_TYPE_MISMATCH')
+      error.diagnostics.some((item: any) => item.code === 'INOX_TYPE_MISMATCH')
   )
 })
 
@@ -196,7 +196,7 @@ function read(flag: boolean): string {
     },
     (error: any) =>
       Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'CCJS_WEAK_ACCESS')
+      error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
   )
 })
 
@@ -227,7 +227,7 @@ function read(flag: boolean): string {
     },
     (error: any) =>
       Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'CCJS_WEAK_ACCESS')
+      error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
   )
 })
 
@@ -278,6 +278,6 @@ function read(holder: Holder): string {
     },
     (error: any) =>
       Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'CCJS_WEAK_ACCESS')
+      error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
   )
 })

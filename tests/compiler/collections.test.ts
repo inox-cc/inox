@@ -40,11 +40,11 @@ test('lowers C array literals to runtime calls', () => {
     }
   )
 
-  assert.match(result.code, /#include "ccjs\/array\.h"/)
-  assert.match(result.code, /ccjs_value values = ccjs_undefined_value\(\);/)
-  assert.match(result.code, /ccjs_array_new\(&ccjs_default_allocator, 3, &values\)/)
-  assert.match(result.code, /ccjs_array_set\(values, 0, ccjs_number_value\(1\)\)/)
-  assert.match(result.code, /ccjs_array_set\(values, 2, ccjs_number_value\(3\)\)/)
+  assert.match(result.code, /#include "inox\/array\.h"/)
+  assert.match(result.code, /inox_value values = inox_undefined_value\(\);/)
+  assert.match(result.code, /inox_array_new\(&inox_default_allocator, 3, &values\)/)
+  assert.match(result.code, /inox_array_set\(values, 0, inox_number_value\(1\)\)/)
+  assert.match(result.code, /inox_array_set\(values, 2, inox_number_value\(3\)\)/)
 })
 
 
@@ -80,10 +80,10 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_array_new\(&ccjs_default_allocator, 3, &ccjs_array_\d+\)/)
-  assert.match(result.code, /ccjs_object_init_known\(box, 0, ccjs_array_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
+  assert.match(result.code, /inox_array_new\(&inox_default_allocator, 3, &inox_array_\d+\)/)
+  assert.match(result.code, /inox_object_init_known\(box, 0, inox_array_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_array_len_\d+\)/)
 })
 
 test('lowers C runtime array length as a numeric call argument', () => {
@@ -106,9 +106,9 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /size_t ccjs_array_len_\d+ = 0;/)
-  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
-  assert.match(result.code, /label\(ccjs_array_len_\d+\)/)
+  assert.match(result.code, /size_t inox_array_len_\d+ = 0;/)
+  assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_array_len_\d+\)/)
+  assert.match(result.code, /label\(inox_array_len_\d+\)/)
 })
 
 test('lowers C object identity equality as runtime reference comparison', () => {
@@ -129,7 +129,7 @@ export function main(): void {
   )
 
   assert.match(result.code, /ada\.tag == same\.tag && ada\.as\.ref == same\.as\.ref/)
-  assert.match(result.code, /!\(ada\.tag == ccjs_object_\d+\.tag && ada\.as\.ref == ccjs_object_\d+\.as\.ref\)/)
+  assert.match(result.code, /!\(ada\.tag == inox_object_\d+\.tag && ada\.as\.ref == inox_object_\d+\.as\.ref\)/)
 })
 
 
@@ -152,15 +152,15 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, 1, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(box, 1, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, 0, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(box, 2, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_get\(inox_value_\d+, 1, &inox_log_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 1, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_get\(inox_value_\d+, 0, &inox_log_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 2, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_get\(inox_value_\d+, 0, &inox_value_\d+\)/)
   assert.match(
     result.code,
-    /printf\("%g %g %\.\*s\\n", ccjs_log_value_\d+\.as\.number, \(\(double\)\(ccjs_log_value_\d+\.as\.boolean \? 1 : 0\)\), \(int\)name->len, name->bytes\);/
+    /printf\("%g %g %\.\*s\\n", inox_log_value_\d+\.as\.number, \(\(double\)\(inox_log_value_\d+\.as\.boolean \? 1 : 0\)\), \(int\)name->len, name->bytes\);/
   )
 })
 
@@ -179,9 +179,9 @@ console.log(user.name)
     }
   )
 
-  assert.match(result.code, /ccjs_array_get\(users, 0, &user\)/)
-  assert.match(result.code, /user\.tag != CCJS_TAG_OBJECT \|\| user\.as\.ref == 0/)
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_(?:log_)?value_\d+\)/)
+  assert.match(result.code, /inox_array_get\(users, 0, &user\)/)
+  assert.match(result.code, /user\.tag != INOX_TAG_OBJECT \|\| user\.as\.ref == 0/)
+  assert.match(result.code, /inox_object_get_known\(user, 0, &inox_(?:log_)?value_\d+\)/)
 })
 
 
@@ -204,12 +204,12 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(box, 0, &values\)/)
-  assert.match(result.code, /values\.tag != CCJS_TAG_ARRAY/)
-  assert.match(result.code, /ccjs_object_get_known\(box, 1, &names\)/)
-  assert.match(result.code, /names\.tag != CCJS_TAG_ARRAY/)
-  assert.match(result.code, /ccjs_array_get\(values, 1, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(names, 0, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 0, &values\)/)
+  assert.match(result.code, /values\.tag != INOX_TAG_ARRAY/)
+  assert.match(result.code, /inox_object_get_known\(box, 1, &names\)/)
+  assert.match(result.code, /names\.tag != INOX_TAG_ARRAY/)
+  assert.match(result.code, /inox_array_get\(values, 1, &inox_log_value_\d+\)/)
+  assert.match(result.code, /inox_array_get\(names, 0, &inox_log_value_\d+\)/)
 })
 
 
@@ -232,14 +232,14 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_map_set\(ccjs_value_\d+, ccjs_value_\d+, ccjs_number_value\(7\)\)/)
-  assert.match(result.code, /ccjs_map_get\(ccjs_value_\d+, ccjs_value_\d+, &ccjs_map_value_\d+\)/)
-  assert.match(result.code, /ccjs_map_size\(ccjs_value_\d+, &ccjs_map_size_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(box, 1, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_set_add\(ccjs_value_\d+, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_set_has\(ccjs_value_\d+, ccjs_value_\d+, &ccjs_set_has_\d+\)/)
-  assert.match(result.code, /ccjs_set_size\(ccjs_value_\d+, &ccjs_set_size_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_map_set\(inox_value_\d+, inox_value_\d+, inox_number_value\(7\)\)/)
+  assert.match(result.code, /inox_map_get\(inox_value_\d+, inox_value_\d+, &inox_map_value_\d+\)/)
+  assert.match(result.code, /inox_map_size\(inox_value_\d+, &inox_map_size_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 1, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_set_add\(inox_value_\d+, inox_value_\d+\)/)
+  assert.match(result.code, /inox_set_has\(inox_value_\d+, inox_value_\d+, &inox_set_has_\d+\)/)
+  assert.match(result.code, /inox_set_size\(inox_value_\d+, &inox_set_size_\d+\)/)
 })
 
 
@@ -270,11 +270,11 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_array_len\(values, &ccjs_for_length_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(values, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_len\(names, &ccjs_for_length_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(names, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
-  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_STRING/)
+  assert.match(result.code, /inox_array_len\(values, &inox_for_length_\d+\)/)
+  assert.match(result.code, /inox_array_get\(values, inox_for_index_\d+, &inox_for_value_\d+\)/)
+  assert.match(result.code, /inox_array_len\(names, &inox_for_length_\d+\)/)
+  assert.match(result.code, /inox_array_get\(names, inox_for_index_\d+, &inox_for_value_\d+\)/)
+  assert.match(result.code, /inox_for_value_\d+\.tag != INOX_TAG_STRING/)
 })
 
 
@@ -303,11 +303,11 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_for_length_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(box, 1, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_STRING/)
+  assert.match(result.code, /inox_object_get_known\(box, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_for_length_\d+\)/)
+  assert.match(result.code, /inox_array_get\(inox_value_\d+, inox_for_index_\d+, &inox_for_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 1, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_for_value_\d+\.tag != INOX_TAG_STRING/)
 })
 
 
@@ -337,10 +337,10 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_for_length_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(ccjs_value_\d+, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
-  assert.match(result.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
-  assert.match(result.code, /ccjs_value item = ccjs_for_value_\d+;/)
+  assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_for_length_\d+\)/)
+  assert.match(result.code, /inox_array_get\(inox_value_\d+, inox_for_index_\d+, &inox_for_value_\d+\)/)
+  assert.match(result.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
+  assert.match(result.code, /inox_value item = inox_for_value_\d+;/)
 })
 
 
@@ -365,14 +365,14 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_push\(ccjs_value_\d+, ccjs_number_value\(4\)\)/)
-  assert.match(result.code, /ccjs_array_pop\(ccjs_value_\d+, &ccjs_array_pop_\d+\)/)
-  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_sort_length_\d+\)/)
-  assert.match(result.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get\(box, "names", 5, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_slice_parts\(/)
-  assert.match(result.code, /ccjs_array_sort\(ccjs_map_array_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_push\(inox_value_\d+, inox_number_value\(4\)\)/)
+  assert.match(result.code, /inox_array_pop\(inox_value_\d+, &inox_array_pop_\d+\)/)
+  assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_sort_length_\d+\)/)
+  assert.match(result.code, /inox_array_push\(inox_filter_array_\d+, inox_filter_value_\d+\)/)
+  assert.match(result.code, /inox_object_get\(box, "names", 5, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_slice_parts\(/)
+  assert.match(result.code, /inox_array_sort\(inox_map_array_\d+\)/)
 })
 
 
@@ -406,14 +406,14 @@ export function main(): void {
   const hasTwo = main?.body.find((item) => item.name === 'hasTwo')
   assert.equal(hasValue?.returnType, 'boolean')
   assert.equal(hasTwo?.valueType, 'boolean')
-  assert.match(result.code, /#include "ccjs\/hash\.h"/)
-  assert.match(result.code, /ccjs_array_len\(values, &ccjs_array_includes_length_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(values, ccjs_array_includes_index_\d+, &ccjs_array_includes_value_\d+\)/)
-  assert.match(result.code, /ccjs_hash_value_equal\(ccjs_array_includes_value_\d+, ccjs_number_value\(value\)\)/)
-  assert.match(result.code, /ccjs_object_get_known\(box, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_hash_value_equal\(ccjs_array_includes_value_\d+, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get\(box, "flags", 5, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_hash_value_equal\(ccjs_array_includes_value_\d+, ccjs_bool_value\(\(1\) != 0\)\)/)
+  assert.match(result.code, /#include "inox\/hash\.h"/)
+  assert.match(result.code, /inox_array_len\(values, &inox_array_includes_length_\d+\)/)
+  assert.match(result.code, /inox_array_get\(values, inox_array_includes_index_\d+, &inox_array_includes_value_\d+\)/)
+  assert.match(result.code, /inox_hash_value_equal\(inox_array_includes_value_\d+, inox_number_value\(value\)\)/)
+  assert.match(result.code, /inox_object_get_known\(box, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_hash_value_equal\(inox_array_includes_value_\d+, inox_value_\d+\)/)
+  assert.match(result.code, /inox_object_get\(box, "flags", 5, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_hash_value_equal\(inox_array_includes_value_\d+, inox_bool_value\(\(1\) != 0\)\)/)
 })
 
 
@@ -441,7 +441,7 @@ export function main(): void {
   values.includes('2')
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -450,7 +450,7 @@ export function main(): void {
   values.includes()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -474,11 +474,11 @@ test('lowers C Array.unshift calls for primitive runtime arrays', () => {
   const length = main?.body.find((item) => item.name === 'length')
 
   assert.equal(length?.valueType, 'number')
-  assert.match(result.code, /ccjs_array_unshift\(values, ccjs_number_value\(1\), &ccjs_array_unshift_len_\d+\)/)
-  assert.match(result.code, /const double length = \(double\)ccjs_array_unshift_len_\d+;/)
-  assert.match(result.code, /ccjs_array_unshift\(names, ccjs_value_\d+, &ccjs_array_unshift_len_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_[a-z_]+_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(names, 0, &ccjs_[a-z_]+_\d+\)/)
+  assert.match(result.code, /inox_array_unshift\(values, inox_number_value\(1\), &inox_array_unshift_len_\d+\)/)
+  assert.match(result.code, /const double length = \(double\)inox_array_unshift_len_\d+;/)
+  assert.match(result.code, /inox_array_unshift\(names, inox_value_\d+, &inox_array_unshift_len_\d+\)/)
+  assert.match(result.code, /inox_array_get\(values, 0, &inox_[a-z_]+_\d+\)/)
+  assert.match(result.code, /inox_array_get\(names, 0, &inox_[a-z_]+_\d+\)/)
 })
 
 
@@ -502,14 +502,14 @@ test('lowers C Array.slice calls to runtime arrays', () => {
   assert.equal(result.hir.body[0].body.find((item) => item.name === 'middle')?.arrayElementType, 'number')
   assert.match(
     result.code,
-    /ccjs_array_slice\(&ccjs_default_allocator, values, ccjs_array_slice_start_\d+, ccjs_array_slice_end_\d+, &ccjs_array_slice_\d+\)/
+    /inox_array_slice\(&inox_default_allocator, values, inox_array_slice_start_\d+, inox_array_slice_end_\d+, &inox_array_slice_\d+\)/
   )
-  assert.match(result.code, /double ccjs_array_slice_start_raw_\d+ = 0;/)
-  assert.match(result.code, /double ccjs_array_slice_start_raw_\d+ = \(-2\);/)
-  assert.match(result.code, /double ccjs_array_slice_start_raw_\d+ = \(-99\);/)
+  assert.match(result.code, /double inox_array_slice_start_raw_\d+ = 0;/)
+  assert.match(result.code, /double inox_array_slice_start_raw_\d+ = \(-2\);/)
+  assert.match(result.code, /double inox_array_slice_start_raw_\d+ = \(-99\);/)
   assert.match(
     result.code,
-    /if \(ccjs_array_slice_end_\d+ < ccjs_array_slice_start_\d+\) ccjs_array_slice_end_\d+ = ccjs_array_slice_start_\d+;/
+    /if \(inox_array_slice_end_\d+ < inox_array_slice_start_\d+\) inox_array_slice_end_\d+ = inox_array_slice_start_\d+;/
   )
 })
 
@@ -530,15 +530,15 @@ test('lowers C Array.join calls for primitive arrays', () => {
   )
 
   assert.equal(result.hir.body[0].body.find((item) => item.name === 'joined')?.valueType, 'string')
-  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, parts, "\/", 1, &ccjs_array_join_\d+\)/)
-  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, ccjs_array_\d+, ",", 1, &ccjs_array_join_\d+\)/)
-  assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, ccjs_array_\d+, "\|", 1, &ccjs_array_join_\d+\)/)
-  assert.match(result.code, /ccjs_retain\(ccjs_array_join_\d+\);\n {2}joined_value_\d+ = ccjs_array_join_\d+;/)
-  assert.match(result.code, /ccjs_retain\(ccjs_array_join_\d+\);\n {2}digits_value_\d+ = ccjs_array_join_\d+;/)
-  assert.match(result.code, /ccjs_retain\(ccjs_array_join_\d+\);\n {2}flags_value_\d+ = ccjs_array_join_\d+;/)
-  assert.match(result.code, /const ccjs_string\* joined = \(ccjs_string\*\)joined_value_\d+\.as\.ref;/)
-  assert.match(result.code, /const ccjs_string\* digits = \(ccjs_string\*\)digits_value_\d+\.as\.ref;/)
-  assert.match(result.code, /const ccjs_string\* flags = \(ccjs_string\*\)flags_value_\d+\.as\.ref;/)
+  assert.match(result.code, /inox_array_join\(&inox_default_allocator, parts, "\/", 1, &inox_array_join_\d+\)/)
+  assert.match(result.code, /inox_array_join\(&inox_default_allocator, inox_array_\d+, ",", 1, &inox_array_join_\d+\)/)
+  assert.match(result.code, /inox_array_join\(&inox_default_allocator, inox_array_\d+, "\|", 1, &inox_array_join_\d+\)/)
+  assert.match(result.code, /inox_retain\(inox_array_join_\d+\);\n {2}joined_value_\d+ = inox_array_join_\d+;/)
+  assert.match(result.code, /inox_retain\(inox_array_join_\d+\);\n {2}digits_value_\d+ = inox_array_join_\d+;/)
+  assert.match(result.code, /inox_retain\(inox_array_join_\d+\);\n {2}flags_value_\d+ = inox_array_join_\d+;/)
+  assert.match(result.code, /const inox_string\* joined = \(inox_string\*\)joined_value_\d+\.as\.ref;/)
+  assert.match(result.code, /const inox_string\* digits = \(inox_string\*\)digits_value_\d+\.as\.ref;/)
+  assert.match(result.code, /const inox_string\* flags = \(inox_string\*\)flags_value_\d+\.as\.ref;/)
 })
 
 
@@ -569,15 +569,15 @@ export function main(): void {
   )
 
   assert.match(result.code, /#include <string\.h>/)
-  assert.match(result.code, /ccjs_string_code_unit_length_parts\(name->bytes, name->len\)/)
-  assert.match(result.code, /ccjs_return = \(\(double\)ccjs_string_length_\d+\);/)
-  assert.match(result.code, /ccjs_string \*ccjs_length_string_\d+ = \(ccjs_string \*\)ccjs_value_\d+\.as\.ref;/)
-  assert.match(result.code, /ccjs_string_code_unit_length_parts\("Ada", 3\)/)
+  assert.match(result.code, /inox_string_code_unit_length_parts\(name->bytes, name->len\)/)
+  assert.match(result.code, /inox_return = \(\(double\)inox_string_length_\d+\);/)
+  assert.match(result.code, /inox_string \*inox_length_string_\d+ = \(inox_string \*\)inox_value_\d+\.as\.ref;/)
+  assert.match(result.code, /inox_string_code_unit_length_parts\("Ada", 3\)/)
   assert.match(
     result.code,
-    /ccjs_string_code_unit_length_parts\(ccjs_length_string_\d+->bytes, ccjs_length_string_\d+->len\)/
+    /inox_string_code_unit_length_parts\(inox_length_string_\d+->bytes, inox_length_string_\d+->len\)/
   )
-  assert.match(result.code, /ccjs_string_code_unit_length_parts\(message->bytes, message->len\)/)
+  assert.match(result.code, /inox_string_code_unit_length_parts\(message->bytes, message->len\)/)
 })
 
 
@@ -607,12 +607,12 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /#include "ccjs\/string\.h"/)
-  assert.match(result.code, /ccjs_string_includes_from_parts\(name->bytes, name->len, "d", 1, ccjs_string_includes_position_\d+\)/)
-  assert.match(result.code, /ccjs_string_starts_with_parts\(name->bytes, name->len, "A", 1\)/)
-  assert.match(result.code, /ccjs_string_ends_with_parts\(name->bytes, name->len, "a", 1\)/)
-  assert.match(result.code, /ccjs_string_includes_parts\("Ada", 3, "d", 1\)/)
-  assert.match(result.code, /ccjs_string_ends_with_parts\(message->bytes, message->len, "!", 1\)/)
+  assert.match(result.code, /#include "inox\/string\.h"/)
+  assert.match(result.code, /inox_string_includes_from_parts\(name->bytes, name->len, "d", 1, inox_string_includes_position_\d+\)/)
+  assert.match(result.code, /inox_string_starts_with_parts\(name->bytes, name->len, "A", 1\)/)
+  assert.match(result.code, /inox_string_ends_with_parts\(name->bytes, name->len, "a", 1\)/)
+  assert.match(result.code, /inox_string_includes_parts\("Ada", 3, "d", 1\)/)
+  assert.match(result.code, /inox_string_ends_with_parts\(message->bytes, message->len, "!", 1\)/)
 })
 
 
@@ -657,23 +657,23 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /ccjs_string_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_index_start_\d+\)/
+    /inox_string_index_of_parts\(name->bytes, name->len, "a", 1, inox_string_index_start_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_last_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_index_start_\d+\)/
+    /inox_string_last_index_of_parts\(name->bytes, name->len, "a", 1, inox_string_index_start_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_last_index_of_parts\(name->bytes, name->len, "a", 1, ccjs_string_code_unit_length_parts\(name->bytes, name->len\)\)/
+    /inox_string_last_index_of_parts\(name->bytes, name->len, "a", 1, inox_string_code_unit_length_parts\(name->bytes, name->len\)\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_trim_start_parts\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/
+    /inox_string_trim_start_parts\(&inox_default_allocator, name->bytes, name->len, &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_trim_end_parts\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/
+    /inox_string_trim_end_parts\(&inox_default_allocator, name->bytes, name->len, &inox_value_\d+\)/
   )
 })
 
@@ -685,7 +685,7 @@ test('lowers C string case and padStart methods', () => {
 }
 
 export function main(): void {
-  console.log(symbolName('ccjs', 255), 'x'.padStart(3), 'B'.padStart(2, 'é'))
+  console.log(symbolName('inox', 255), 'x'.padStart(3), 'B'.padStart(2, 'é'))
 }
 `,
     {
@@ -695,19 +695,19 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /ccjs_string_to_upper_case_parts\(&ccjs_default_allocator, prefix->bytes, prefix->len, &ccjs_value_\d+\)/
+    /inox_string_to_upper_case_parts\(&inox_default_allocator, prefix->bytes, prefix->len, &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_pad_start_parts\(&ccjs_default_allocator, ccjs_pad_string_\d+->bytes, ccjs_pad_string_\d+->len, ccjs_pad_target_length_\d+, "0", 1, &ccjs_value_\d+\)/
+    /inox_string_pad_start_parts\(&inox_default_allocator, inox_pad_string_\d+->bytes, inox_pad_string_\d+->len, inox_pad_target_length_\d+, "0", 1, &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_pad_start_parts\(&ccjs_default_allocator, "x", 1, ccjs_pad_target_length_\d+, " ", 1, &ccjs_value_\d+\)/
+    /inox_string_pad_start_parts\(&inox_default_allocator, "x", 1, inox_pad_target_length_\d+, " ", 1, &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_pad_start_parts\(&ccjs_default_allocator, "B", 1, ccjs_pad_target_length_\d+, "é", 2, &ccjs_value_\d+\)/
+    /inox_string_pad_start_parts\(&inox_default_allocator, "B", 1, inox_pad_target_length_\d+, "é", 2, &inox_value_\d+\)/
   )
 })
 
@@ -736,13 +736,13 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get\(node, "raw", 3, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_includes_parts\(ccjs_string_method_value_\d+->bytes, ccjs_string_method_value_\d+->len, "\$\{", 2\)/)
-  assert.match(result.code, /ccjs_string_starts_with_parts\(ccjs_string_method_value_\d+->bytes, ccjs_string_method_value_\d+->len, "expr", 4\)/)
-  assert.match(result.code, /ccjs_string_ends_with_parts\(ccjs_string_method_value_\d+->bytes, ccjs_string_method_value_\d+->len, "}", 1\)/)
-  assert.match(result.code, /ccjs_string_slice_parts\(&ccjs_default_allocator, ccjs_slice_string_\d+->bytes, ccjs_slice_string_\d+->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, ccjs_trim_string_\d+->bytes, ccjs_trim_string_\d+->len, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_split_parts\(&ccjs_default_allocator, ccjs_split_string_\d+->bytes, ccjs_split_string_\d+->len, ",", 1, &ccjs_split_array_\d+\)/)
+  assert.match(result.code, /inox_object_get\(node, "raw", 3, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_includes_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "\$\{", 2\)/)
+  assert.match(result.code, /inox_string_starts_with_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "expr", 4\)/)
+  assert.match(result.code, /inox_string_ends_with_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "}", 1\)/)
+  assert.match(result.code, /inox_string_slice_parts\(&inox_default_allocator, inox_slice_string_\d+->bytes, inox_slice_string_\d+->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_trim_parts\(&inox_default_allocator, inox_trim_string_\d+->bytes, inox_trim_string_\d+->len, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_split_parts\(&inox_default_allocator, inox_split_string_\d+->bytes, inox_split_string_\d+->len, ",", 1, &inox_split_array_\d+\)/)
 })
 
 
@@ -763,10 +763,10 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_expr_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get\(user, "name", 4, &ccjs_expr_value_\d+\)/)
-  assert.match(result.code, /memcmp\(ccjs_cmp_string_\d+->bytes, target, ccjs_cmp_string_\d+->len\) == 0/)
-  assert.match(result.code, /!\(ccjs_cmp_string_\d+->len == 5 && memcmp\(ccjs_cmp_string_\d+->bytes, "Grace", ccjs_cmp_string_\d+->len\) == 0\)/)
+  assert.match(result.code, /inox_object_get_known\(user, 0, &inox_expr_value_\d+\)/)
+  assert.match(result.code, /inox_object_get\(user, "name", 4, &inox_expr_value_\d+\)/)
+  assert.match(result.code, /memcmp\(inox_cmp_string_\d+->bytes, target, inox_cmp_string_\d+->len\) == 0/)
+  assert.match(result.code, /!\(inox_cmp_string_\d+->len == 5 && memcmp\(inox_cmp_string_\d+->bytes, "Grace", inox_cmp_string_\d+->len\) == 0\)/)
 })
 
 
@@ -789,9 +789,9 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_cmp_string_\d+->len == 3 && memcmp\(ccjs_cmp_string_\d+->bytes, "Ada", ccjs_cmp_string_\d+->len\) == 0/)
-  assert.match(result.code, /!\(ccjs_cmp_string_\d+->len == 5 && memcmp\(ccjs_cmp_string_\d+->bytes, "Grace", ccjs_cmp_string_\d+->len\) == 0\)/)
+  assert.match(result.code, /inox_object_get_known\(inox_value_\d+, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_cmp_string_\d+->len == 3 && memcmp\(inox_cmp_string_\d+->bytes, "Ada", inox_cmp_string_\d+->len\) == 0/)
+  assert.match(result.code, /!\(inox_cmp_string_\d+->len == 5 && memcmp\(inox_cmp_string_\d+->bytes, "Grace", inox_cmp_string_\d+->len\) == 0\)/)
 })
 
 
@@ -806,9 +806,9 @@ test('lowers C dynamic object string literal comparisons without string guards',
     }
   )
 
-  assert.match(result.code, /ccjs_object_get\(node, "type", 4, &ccjs_value_\d+\)/)
-  assert.match(result.code, /!\(ccjs_string_cmp_value_\d+\.tag == CCJS_TAG_STRING/)
-  assert.doesNotMatch(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_value_\d+\.as\.ref == 0/)
+  assert.match(result.code, /inox_object_get\(node, "type", 4, &inox_value_\d+\)/)
+  assert.match(result.code, /!\(inox_string_cmp_value_\d+\.tag == INOX_TAG_STRING/)
+  assert.doesNotMatch(result.code, /inox_value_\d+\.tag != INOX_TAG_STRING \|\| inox_value_\d+\.as\.ref == 0/)
 })
 
 
@@ -832,9 +832,9 @@ if (item != null) {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get\(descriptors, "read", 4, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_value_\d+\.tag == CCJS_TAG_NULL \|\| ccjs_value_\d+\.tag == CCJS_TAG_UNDEFINED/)
-  assert.match(result.code, /item = ccjs_value_\d+/)
+  assert.match(result.code, /inox_object_get\(descriptors, "read", 4, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_value_\d+\.tag == INOX_TAG_NULL \|\| inox_value_\d+\.tag == INOX_TAG_UNDEFINED/)
+  assert.match(result.code, /item = inox_value_\d+/)
 })
 
 test('lowers C Record object reads through variable string keys', () => {
@@ -863,8 +863,8 @@ console.log(readCode('write'))
     }
   )
 
-  assert.match(result.code, /ccjs_object_get\(descriptors, method->bytes, method->len, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(item, 0, &ccjs_expr_value_\d+\)/)
+  assert.match(result.code, /inox_object_get\(descriptors, method->bytes, method->len, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(item, 0, &inox_expr_value_\d+\)/)
 })
 
 
@@ -887,9 +887,9 @@ console.log(maybe(1) === true, maybe(2) === true, maybe(3) !== false)
     }
   )
 
-  assert.match(result.code, /ccjs_nullable_value_\d+\.tag == CCJS_TAG_BOOL/)
-  assert.match(result.code, /\(ccjs_nullable_value_\d+\.as\.boolean \? 1 : 0\) == 1/)
-  assert.match(result.code, /!\(ccjs_nullable_value_\d+\.tag == CCJS_TAG_BOOL/)
+  assert.match(result.code, /inox_nullable_value_\d+\.tag == INOX_TAG_BOOL/)
+  assert.match(result.code, /\(inox_nullable_value_\d+\.as\.boolean \? 1 : 0\) == 1/)
+  assert.match(result.code, /!\(inox_nullable_value_\d+\.tag == INOX_TAG_BOOL/)
 })
 
 
@@ -918,11 +918,11 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /size_t ccjs_string_char_code_index_\d+ = \(size_t\)\(0\);/)
-  assert.match(result.code, /\(double\)\(\(unsigned char\)ch->bytes\[ccjs_string_char_code_index_\d+\]\)/)
-  assert.match(result.code, /const double code = \(\(ccjs_string_char_code_index_\d+ < ch->len\)/)
-  assert.match(result.code, /size_t ccjs_string_char_code_index_\d+ = \(size_t\)\(index\);/)
-  assert.match(result.code, /\(double\)\(\(unsigned char\)value->bytes\[ccjs_string_char_code_index_\d+\]\)/)
+  assert.match(result.code, /size_t inox_string_char_code_index_\d+ = \(size_t\)\(0\);/)
+  assert.match(result.code, /\(double\)\(\(unsigned char\)ch->bytes\[inox_string_char_code_index_\d+\]\)/)
+  assert.match(result.code, /const double code = \(\(inox_string_char_code_index_\d+ < ch->len\)/)
+  assert.match(result.code, /size_t inox_string_char_code_index_\d+ = \(size_t\)\(index\);/)
+  assert.match(result.code, /\(double\)\(\(unsigned char\)value->bytes\[inox_string_char_code_index_\d+\]\)/)
 })
 
 
@@ -948,11 +948,11 @@ console.log(first, second, third)
   assert.deepEqual(result.ir.runtimeRequirements, ['managed-values', 'string-bytes'])
   assert.match(
     result.code,
-    /ccjs_string_from_literal\(\n\s+&ccjs_default_allocator,\n\s+\(ccjs_string_index_\d+ < source->len\) \? source->bytes \+ ccjs_string_index_\d+ : "",\n\s+\(ccjs_string_index_\d+ < source->len\) \? 1 : 0,\n\s+&ccjs_value_\d+\n\s+\)/
+    /inox_string_from_literal\(\n\s+&inox_default_allocator,\n\s+\(inox_string_index_\d+ < source->len\) \? source->bytes \+ inox_string_index_\d+ : "",\n\s+\(inox_string_index_\d+ < source->len\) \? 1 : 0,\n\s+&inox_value_\d+\n\s+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_from_literal\(\n\s+&ccjs_default_allocator,\n\s+\(ccjs_string_index_\d+ < strlen\(name\)\) \? name \+ ccjs_string_index_\d+ : "",\n\s+\(ccjs_string_index_\d+ < strlen\(name\)\) \? 1 : 0,\n\s+&ccjs_value_\d+\n\s+\)/
+    /inox_string_from_literal\(\n\s+&inox_default_allocator,\n\s+\(inox_string_index_\d+ < strlen\(name\)\) \? name \+ inox_string_index_\d+ : "",\n\s+\(inox_string_index_\d+ < strlen\(name\)\) \? 1 : 0,\n\s+&inox_value_\d+\n\s+\)/
   )
 })
 
@@ -985,29 +985,29 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /size_t ccjs_slice_length_\d+ = ccjs_string_code_unit_length_parts\(name->bytes, name->len\);/
+    /size_t inox_slice_length_\d+ = inox_string_code_unit_length_parts\(name->bytes, name->len\);/
   )
-  assert.match(result.code, /double ccjs_slice_start_raw_\d+ = 1;/)
-  assert.match(result.code, /double ccjs_slice_start_raw_\d+ = \(-2\);/)
+  assert.match(result.code, /double inox_slice_start_raw_\d+ = 1;/)
+  assert.match(result.code, /double inox_slice_start_raw_\d+ = \(-2\);/)
   assert.match(
     result.code,
-    /if \(ccjs_slice_end_\d+ < ccjs_slice_start_\d+\) ccjs_slice_end_\d+ = ccjs_slice_start_\d+;/
-  )
-  assert.match(
-    result.code,
-    /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/
+    /if \(inox_slice_end_\d+ < inox_slice_start_\d+\) inox_slice_end_\d+ = inox_slice_start_\d+;/
   )
   assert.match(
     result.code,
-    /ccjs_string_slice_parts\(&ccjs_default_allocator, "Ada", 3, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/
+    /inox_string_slice_parts\(&inox_default_allocator, name->bytes, name->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_slice_parts\(&ccjs_default_allocator, ccjs_slice_string_\d+->bytes, ccjs_slice_string_\d+->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/
+    /inox_string_slice_parts\(&inox_default_allocator, "Ada", 3, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_slice_parts\(&ccjs_default_allocator, message->bytes, message->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/
+    /inox_string_slice_parts\(&inox_default_allocator, inox_slice_string_\d+->bytes, inox_slice_string_\d+->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /inox_string_slice_parts\(&inox_default_allocator, message->bytes, message->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/
   )
 })
 
@@ -1033,11 +1033,11 @@ export function main(): void {
   assert.deepEqual(result.ir.runtimeRequirements, ['collections', 'managed-values', 'objects', 'string-bytes'])
   assert.match(
     result.code,
-    /ccjs_string_split_parts\(&ccjs_default_allocator, ccjs_split_string_\d+->bytes, ccjs_split_string_\d+->len, ",", 1, &ccjs_split_array_\d+\)/
+    /inox_string_split_parts\(&inox_default_allocator, inox_split_string_\d+->bytes, inox_split_string_\d+->len, ",", 1, &inox_split_array_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_slice_parts\(&ccjs_default_allocator, name->bytes, name->len, ccjs_slice_start_\d+, ccjs_slice_end_\d+, &ccjs_value_\d+\)/
+    /inox_string_slice_parts\(&inox_default_allocator, name->bytes, name->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/
   )
 })
 
@@ -1070,16 +1070,16 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /ccjs_string_trim_parts\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/
+    /inox_string_trim_parts\(&inox_default_allocator, name->bytes, name->len, &inox_value_\d+\)/
   )
-  assert.match(result.code, /ccjs_string_trim_parts\(&ccjs_default_allocator, " Ada ", 5, &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_string_trim_parts\(&inox_default_allocator, " Ada ", 5, &inox_value_\d+\)/)
   assert.match(
     result.code,
-    /ccjs_string_trim_parts\(&ccjs_default_allocator, ccjs_trim_string_\d+->bytes, ccjs_trim_string_\d+->len, &ccjs_value_\d+\)/
+    /inox_string_trim_parts\(&inox_default_allocator, inox_trim_string_\d+->bytes, inox_trim_string_\d+->len, &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_trim_parts\(&ccjs_default_allocator, message->bytes, message->len, &ccjs_value_\d+\)/
+    /inox_string_trim_parts\(&inox_default_allocator, message->bytes, message->len, &inox_value_\d+\)/
   )
 })
 
@@ -1110,19 +1110,19 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3, &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "Ada", 3, &inox_value_\d+\)/)
   assert.match(
     result.code,
-    /ccjs_string_from_literal\(&ccjs_default_allocator, local, strlen\(local\), &ccjs_value_\d+\)/
+    /inox_string_from_literal\(&inox_default_allocator, local, strlen\(local\), &inox_value_\d+\)/
   )
   assert.match(
     result.code,
-    /ccjs_string_from_literal\(&ccjs_default_allocator, name->bytes, name->len, &ccjs_value_\d+\)/
+    /inox_string_from_literal\(&inox_default_allocator, name->bytes, name->len, &inox_value_\d+\)/
   )
-  assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, value, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(value\) != 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_bool\(&ccjs_default_allocator, \(0\) != 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "null", 4, &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_number\(&inox_default_allocator, value, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_bool\(&inox_default_allocator, \(value\) != 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_bool\(&inox_default_allocator, \(0\) != 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "null", 4, &inox_value_\d+\)/)
 })
 
 test('lowers C number toString calls with radix', () => {
@@ -1151,9 +1151,9 @@ export function main(): void {
   assert.equal(hex?.returnType, 'string')
   assert.equal(text?.valueType, 'string')
   assert.equal(padded?.valueType, 'string')
-  assert.match(result.code, /ccjs_string_from_number_radix\(&ccjs_default_allocator, value, \(int\)\(16\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, value, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_slice_parts\(/)
+  assert.match(result.code, /inox_string_from_number_radix\(&inox_default_allocator, value, \(int\)\(16\), &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_from_number\(&inox_default_allocator, value, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_slice_parts\(/)
 })
 
 
@@ -1171,8 +1171,8 @@ console.log(echo(local))
     }
   )
 
-  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, local, strlen\(local\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_value echo\(ccjs_value ccjs_param_value\);/)
+  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, local, strlen\(local\), &inox_value_\d+\)/)
+  assert.match(result.code, /inox_value echo\(inox_value inox_param_value\);/)
 })
 
 
@@ -1190,10 +1190,10 @@ test('lowers C Number conversion to nullable number parsing', () => {
   )
 
   assert.deepEqual(result.ir.features, ['number-from-string-null', 'runtime-values', 'string-bytes'])
-  assert.match(result.code, /ccjs_string_to_number\("8080", 4, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_to_number\("nope", 4, &ccjs_value_\d+\)/)
-  assert.match(result.code, /if \(ccjs_value_\d+\.tag == CCJS_TAG_NULL\) \{/)
-  assert.match(result.code, /ccjs_value_\d+\.tag != CCJS_TAG_NUMBER/)
+  assert.match(result.code, /inox_string_to_number\("8080", 4, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_to_number\("nope", 4, &inox_value_\d+\)/)
+  assert.match(result.code, /if \(inox_value_\d+\.tag == INOX_TAG_NULL\) \{/)
+  assert.match(result.code, /inox_value_\d+\.tag != INOX_TAG_NUMBER/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1201,7 +1201,7 @@ test('lowers C Number conversion to nullable number parsing', () => {
   console.log(port)
 }
 `,
-    'CCJS_C_NULLISH',
+    'INOX_C_NULLISH',
     {
       target: 'c'
     }
@@ -1223,10 +1223,10 @@ test('lowers known C array index access to runtime calls', () => {
     }
   )
 
-  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_item_\d+\)/)
-  assert.match(result.code, /const double score = ccjs_item_\d+\.as\.number;/)
-  assert.match(result.code, /ccjs_array_get\(values, 1, &ccjs_item_\d+\)/)
-  assert.match(result.code, /const double active = ccjs_item_\d+\.as\.boolean \? 1 : 0;/)
+  assert.match(result.code, /inox_array_get\(values, 0, &inox_item_\d+\)/)
+  assert.match(result.code, /const double score = inox_item_\d+\.as\.number;/)
+  assert.match(result.code, /inox_array_get\(values, 1, &inox_item_\d+\)/)
+  assert.match(result.code, /const double active = inox_item_\d+\.as\.boolean \? 1 : 0;/)
 })
 
 
@@ -1246,10 +1246,10 @@ test('lowers known C array index assignments to runtime calls', () => {
     }
   )
 
-  assert.match(result.code, /ccjs_array_set\(values, 0, ccjs_number_value\(42\)\)/)
-  assert.match(result.code, /ccjs_array_set\(values, 1, ccjs_bool_value\(true\)\)/)
-  assert.match(result.code, /const double score = ccjs_item_\d+\.as\.number;/)
-  assert.match(result.code, /const double active = ccjs_item_\d+\.as\.boolean \? 1 : 0;/)
+  assert.match(result.code, /inox_array_set\(values, 0, inox_number_value\(42\)\)/)
+  assert.match(result.code, /inox_array_set\(values, 1, inox_bool_value\(true\)\)/)
+  assert.match(result.code, /const double score = inox_item_\d+\.as\.number;/)
+  assert.match(result.code, /const double active = inox_item_\d+\.as\.boolean \? 1 : 0;/)
 })
 
 
@@ -1267,13 +1267,13 @@ test('lowers known C string array index reads to runtime strings', () => {
     }
   )
 
-  assert.match(result.code, /ccjs_array_set\(values, 0, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_item_\d+\)/)
+  assert.match(result.code, /inox_array_set\(values, 0, inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_get\(values, 0, &inox_item_\d+\)/)
   assert.match(
     result.code,
-    /if \(ccjs_item_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_item_\d+\.as\.ref == 0\)\s+goto ccjs_cleanup;/
+    /if \(inox_item_\d+\.tag != INOX_TAG_STRING \|\| inox_item_\d+\.as\.ref == 0\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /const ccjs_string \*name = \(ccjs_string \*\)ccjs_item_\d+\.as\.ref;/)
+  assert.match(result.code, /const inox_string \*name = \(inox_string \*\)inox_item_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
 
@@ -1299,10 +1299,10 @@ test('lowers C runtime string references for object and array assignments', () =
 
   assert.match(
     result.code,
-    /ccjs_value ccjs_value_\d+;\n {2}ccjs_value_\d+\.tag = CCJS_TAG_STRING;\n {2}ccjs_value_\d+\.as\.ref = \(ccjs_ref \*\)&name->header;/
+    /inox_value inox_value_\d+;\n {2}inox_value_\d+\.tag = INOX_TAG_STRING;\n {2}inox_value_\d+\.as\.ref = \(inox_ref \*\)&name->header;/
   )
-  assert.match(result.code, /ccjs_object_set_known\(target, 0, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_set\(values, 0, ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_object_set_known\(target, 0, inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_set\(values, 0, inox_value_\d+\)/)
   assert.match(
     result.code,
     /printf\("%\.\*s %\.\*s\\n", \(int\)objectName->len, objectName->bytes, \(int\)arrayName->len, arrayName->bytes\);/
@@ -1331,10 +1331,10 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get_known\(wrapper, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /returnType_value_\d+ = ccjs_value_\d+;/)
-  assert.match(result.code, /const ccjs_string\* returnType = \(ccjs_string\*\)returnType_value_\d+\.as\.ref;/)
+  assert.match(result.code, /inox_object_get_known\(wrapper, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(inox_value_\d+, 0, &inox_value_\d+\)/)
+  assert.match(result.code, /returnType_value_\d+ = inox_value_\d+;/)
+  assert.match(result.code, /const inox_string\* returnType = \(inox_string\*\)returnType_value_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)returnType->len, returnType->bytes\);/)
 })
 
@@ -1358,9 +1358,9 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_value_\d+ = getName\(\);/)
-  assert.match(result.code, /ccjs_object_set_known\(target, 0, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_set\(values, 0, ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_value_\d+ = getName\(\);/)
+  assert.match(result.code, /inox_object_set_known\(target, 0, inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_set\(values, 0, inox_value_\d+\)/)
   assert.match(result.code, /printf\("%\.\*s %\.\*s\\n"/)
 })
 
@@ -1381,9 +1381,9 @@ test('compiles for of loops over arrays to C', () => {
     target: 'c'
   })
 
-  assert.match(c.code, /for \(size_t ccjs_for_index_\d+ = 0; ccjs_for_index_\d+ < 3; ccjs_for_index_\d+ \+= 1\) \{/)
-  assert.match(c.code, /ccjs_array_get\(values, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
-  assert.match(c.code, /double value = ccjs_for_value_\d+\.as\.number;/)
+  assert.match(c.code, /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < 3; inox_for_index_\d+ \+= 1\) \{/)
+  assert.match(c.code, /inox_array_get\(values, inox_for_index_\d+, &inox_for_value_\d+\)/)
+  assert.match(c.code, /double value = inox_for_value_\d+\.as\.number;/)
 })
 
 
@@ -1402,12 +1402,12 @@ test('compiles for of loops over string arrays to C', () => {
     }
   )
 
-  assert.match(c.code, /ccjs_array_get\(names, ccjs_for_index_\d+, &ccjs_for_value_\d+\)/)
+  assert.match(c.code, /inox_array_get\(names, inox_for_index_\d+, &inox_for_value_\d+\)/)
   assert.match(
     c.code,
-    /if \(ccjs_for_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_for_value_\d+\.as\.ref == 0\)\s+goto ccjs_cleanup;/
+    /if \(inox_for_value_\d+\.tag != INOX_TAG_STRING \|\| inox_for_value_\d+\.as\.ref == 0\)\s+goto inox_cleanup;/
   )
-  assert.match(c.code, /ccjs_string \*name = \(ccjs_string \*\)ccjs_for_value_\d+\.as\.ref;/)
+  assert.match(c.code, /inox_string \*name = \(inox_string \*\)inox_for_value_\d+\.as\.ref;/)
   assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
 
@@ -1454,14 +1454,14 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /ccjs_set_add\(values, ccjs_number_value\(4\)\)/)
-  assert.match(c.code, /ccjs_set \*ccjs_for_set_\d+ = \(ccjs_set \*\)values\.as\.ref;/)
-  assert.match(c.code, /CCJS_SET_SLOT_OCCUPIED/)
-  assert.match(c.code, /ccjs_for_value_\d+ = ccjs_for_set_\d+->entries\[ccjs_for_set_index_\d+\]\.value;/)
-  assert.match(c.code, /ccjs_object_get\(bag, "names", 5, &ccjs_value_\d+\)/)
-  assert.match(c.code, /ccjs_string \*name = \(ccjs_string \*\)ccjs_for_value_\d+\.as\.ref;/)
-  assert.match(c.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
-  assert.match(c.code, /ccjs_value user = ccjs_for_value_\d+;/)
+  assert.match(c.code, /inox_set_add\(values, inox_number_value\(4\)\)/)
+  assert.match(c.code, /inox_set \*inox_for_set_\d+ = \(inox_set \*\)values\.as\.ref;/)
+  assert.match(c.code, /INOX_SET_SLOT_OCCUPIED/)
+  assert.match(c.code, /inox_for_value_\d+ = inox_for_set_\d+->entries\[inox_for_set_index_\d+\]\.value;/)
+  assert.match(c.code, /inox_object_get\(bag, "names", 5, &inox_value_\d+\)/)
+  assert.match(c.code, /inox_string \*name = \(inox_string \*\)inox_for_value_\d+\.as\.ref;/)
+  assert.match(c.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
+  assert.match(c.code, /inox_value user = inox_for_value_\d+;/)
 })
 
 
@@ -1488,13 +1488,13 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /ccjs_map \*ccjs_for_map_\d+ = \(ccjs_map \*\)ccjs_value_\d+\.as\.ref;/)
-  assert.match(c.code, /CCJS_MAP_SLOT_OCCUPIED/)
-  assert.match(c.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_map_entry_\d+, &entry\)/)
-  assert.match(c.code, /ccjs_object_init_known\(entry, 0, ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key\)/)
-  assert.match(c.code, /ccjs_object_init_known\(entry, 1, ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value\)/)
-  assert.match(c.code, /ccjs_object_get_known\(entry, 1, &ccjs_(?:expr_)?value_\d+\)/)
-  assert.match(c.code, /ccjs_object_get_known\(entry, 0, &ccjs_(?:expr_)?value_\d+\)/)
+  assert.match(c.code, /inox_map \*inox_for_map_\d+ = \(inox_map \*\)inox_value_\d+\.as\.ref;/)
+  assert.match(c.code, /INOX_MAP_SLOT_OCCUPIED/)
+  assert.match(c.code, /inox_object_new\(&inox_default_allocator, &inox_shape_map_entry_\d+, &entry\)/)
+  assert.match(c.code, /inox_object_init_known\(entry, 0, inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.key\)/)
+  assert.match(c.code, /inox_object_init_known\(entry, 1, inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.value\)/)
+  assert.match(c.code, /inox_object_get_known\(entry, 1, &inox_(?:expr_)?value_\d+\)/)
+  assert.match(c.code, /inox_object_get_known\(entry, 0, &inox_(?:expr_)?value_\d+\)/)
 
   const objectKeys = compileSource(
     `type User = {
@@ -1521,9 +1521,9 @@ export function main(): void {
     }
   )
 
-  assert.match(objectKeys.code, /ccjs_object_init_known\(entry, 0, ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key\)/)
-  assert.match(objectKeys.code, /ccjs_object_get_known\(entry, 0, &ccjs_(?:expr_)?value_\d+\)/)
-  assert.match(objectKeys.code, /ccjs_map_has\(scores, ccjs_(?:expr_)?value_\d+, &ccjs_map_has_\d+\)/)
+  assert.match(objectKeys.code, /inox_object_init_known\(entry, 0, inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.key\)/)
+  assert.match(objectKeys.code, /inox_object_get_known\(entry, 0, &inox_(?:expr_)?value_\d+\)/)
+  assert.match(objectKeys.code, /inox_map_has\(scores, inox_(?:expr_)?value_\d+, &inox_map_has_\d+\)/)
 })
 
 
@@ -1545,10 +1545,10 @@ test('compiles for of loops over Map.values iterables', () => {
     }
   )
 
-  assert.match(numbers.code, /ccjs_map \*ccjs_for_map_\d+ = \(ccjs_map \*\)scores\.as\.ref;/)
-  assert.match(numbers.code, /CCJS_MAP_SLOT_OCCUPIED/)
-  assert.match(numbers.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value;/)
-  assert.match(numbers.code, /double value = ccjs_for_value_\d+\.as\.number;/)
+  assert.match(numbers.code, /inox_map \*inox_for_map_\d+ = \(inox_map \*\)scores\.as\.ref;/)
+  assert.match(numbers.code, /INOX_MAP_SLOT_OCCUPIED/)
+  assert.match(numbers.code, /inox_for_value_\d+ = inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.value;/)
+  assert.match(numbers.code, /double value = inox_for_value_\d+\.as\.number;/)
 
   const objects = compileSource(
     `type User = {
@@ -1571,9 +1571,9 @@ export function main(): void {
     }
   )
 
-  assert.match(objects.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value;/)
-  assert.match(objects.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
-  assert.match(objects.code, /ccjs_value user = ccjs_for_value_\d+;/)
+  assert.match(objects.code, /inox_for_value_\d+ = inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.value;/)
+  assert.match(objects.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
+  assert.match(objects.code, /inox_value user = inox_for_value_\d+;/)
 
   const unionObjects = compileSource(
     `type Named = {
@@ -1609,9 +1609,9 @@ export function main(): void {
     }
   )
 
-  assert.match(unionObjects.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.value;/)
-  assert.match(unionObjects.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
-  assert.match(unionObjects.code, /ccjs_value item = ccjs_for_value_\d+;/)
+  assert.match(unionObjects.code, /inox_for_value_\d+ = inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.value;/)
+  assert.match(unionObjects.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
+  assert.match(unionObjects.code, /inox_value item = inox_for_value_\d+;/)
 })
 
 
@@ -1634,10 +1634,10 @@ test('compiles for of loops over Map.keys iterables', () => {
     }
   )
 
-  assert.match(strings.code, /ccjs_map \*ccjs_for_map_\d+ = \(ccjs_map \*\)copy\.as\.ref;/)
-  assert.match(strings.code, /CCJS_MAP_SLOT_OCCUPIED/)
-  assert.match(strings.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key;/)
-  assert.match(strings.code, /ccjs_string \*key = \(ccjs_string \*\)ccjs_for_value_\d+\.as\.ref;/)
+  assert.match(strings.code, /inox_map \*inox_for_map_\d+ = \(inox_map \*\)copy\.as\.ref;/)
+  assert.match(strings.code, /INOX_MAP_SLOT_OCCUPIED/)
+  assert.match(strings.code, /inox_for_value_\d+ = inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.key;/)
+  assert.match(strings.code, /inox_string \*key = \(inox_string \*\)inox_for_value_\d+\.as\.ref;/)
 
   const objects = compileSource(
     `type User = {
@@ -1664,10 +1664,10 @@ export function main(): void {
     }
   )
 
-  assert.match(objects.code, /ccjs_for_value_\d+ = ccjs_for_map_\d+->entries\[ccjs_for_map_index_\d+\]\.key;/)
-  assert.match(objects.code, /ccjs_for_value_\d+\.tag != CCJS_TAG_OBJECT/)
-  assert.match(objects.code, /ccjs_value user = ccjs_for_value_\d+;/)
-  assert.match(objects.code, /ccjs_map_has\(scores, user, &ccjs_map_has_\d+\)/)
+  assert.match(objects.code, /inox_for_value_\d+ = inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.key;/)
+  assert.match(objects.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
+  assert.match(objects.code, /inox_value user = inox_for_value_\d+;/)
+  assert.match(objects.code, /inox_map_has\(scores, user, &inox_map_has_\d+\)/)
 })
 
 
@@ -1688,9 +1688,9 @@ test('compiles for of loops over inline array literals to C', () => {
     }
   )
 
-  assert.match(c.code, /ccjs_array_new\(&ccjs_default_allocator, 3, &ccjs_for_array_\d+\)/)
-  assert.match(c.code, /for \(size_t ccjs_for_index_\d+ = 0; ccjs_for_index_\d+ < 3; ccjs_for_index_\d+ \+= 1\) \{/)
-  assert.match(c.code, /double value = ccjs_for_value_\d+\.as\.number;/)
+  assert.match(c.code, /inox_array_new\(&inox_default_allocator, 3, &inox_for_array_\d+\)/)
+  assert.match(c.code, /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < 3; inox_for_index_\d+ \+= 1\) \{/)
+  assert.match(c.code, /double value = inox_for_value_\d+\.as\.number;/)
 })
 
 
@@ -1707,8 +1707,8 @@ test('compiles for of loops over inline string array literals to C', () => {
     }
   )
 
-  assert.match(c.code, /ccjs_array_new\(&ccjs_default_allocator, 2, &ccjs_for_array_\d+\)/)
-  assert.match(c.code, /ccjs_string \*name = \(ccjs_string \*\)ccjs_for_value_\d+\.as\.ref;/)
+  assert.match(c.code, /inox_array_new\(&inox_default_allocator, 2, &inox_for_array_\d+\)/)
+  assert.match(c.code, /inox_string \*name = \(inox_string \*\)inox_for_value_\d+\.as\.ref;/)
   assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
 
@@ -1729,7 +1729,7 @@ export function main(): void {
   )
 
   assert.match(result.code, /void greet\(void\) \{/)
-  assert.match(result.code, /void ccjs_main\(void\) \{/)
+  assert.match(result.code, /void inox_main\(void\) \{/)
 
   const withoutIrBodyFunctions = emitCFromIr({
     ...result.ir,
@@ -1737,7 +1737,7 @@ export function main(): void {
   })
 
   assert.doesNotMatch(withoutIrBodyFunctions, /void greet\(void\) \{/)
-  assert.doesNotMatch(withoutIrBodyFunctions, /void ccjs_main\(void\) \{/)
+  assert.doesNotMatch(withoutIrBodyFunctions, /void inox_main\(void\) \{/)
 })
 
 
@@ -1805,17 +1805,17 @@ test('drives C collection headers from target-neutral IR requirements', () => {
   })
 
   assert.deepEqual(stringOnly.ir.runtimeRequirements, ['managed-values', 'string-bytes'])
-  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/array\.h"/)
-  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/map\.h"/)
-  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/object\.h"/)
-  assert.doesNotMatch(stringOnly.code, /#include "ccjs\/set\.h"/)
+  assert.doesNotMatch(stringOnly.code, /#include "inox\/array\.h"/)
+  assert.doesNotMatch(stringOnly.code, /#include "inox\/map\.h"/)
+  assert.doesNotMatch(stringOnly.code, /#include "inox\/object\.h"/)
+  assert.doesNotMatch(stringOnly.code, /#include "inox\/set\.h"/)
   assert.deepEqual(arrayResult.ir.runtimeRequirements, ['collections', 'managed-values', 'string-bytes'])
-  assert.match(arrayCode, /#include "ccjs\/array\.h"/)
-  assert.match(arrayCode, /#include "ccjs\/map\.h"/)
-  assert.match(arrayCode, /#include "ccjs\/set\.h"/)
-  assert.doesNotMatch(withoutCollections, /#include "ccjs\/array\.h"/)
-  assert.doesNotMatch(withoutCollections, /#include "ccjs\/map\.h"/)
-  assert.doesNotMatch(withoutCollections, /#include "ccjs\/set\.h"/)
+  assert.match(arrayCode, /#include "inox\/array\.h"/)
+  assert.match(arrayCode, /#include "inox\/map\.h"/)
+  assert.match(arrayCode, /#include "inox\/set\.h"/)
+  assert.doesNotMatch(withoutCollections, /#include "inox\/array\.h"/)
+  assert.doesNotMatch(withoutCollections, /#include "inox\/map\.h"/)
+  assert.doesNotMatch(withoutCollections, /#include "inox\/set\.h"/)
 })
 
 
@@ -1839,18 +1839,18 @@ test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
   assert.equal(result.hir.body[0].body.find((item) => item.name === 'bytes')?.valueType, 'bytes')
   assert.equal(result.hir.body[0].body.find((item) => item.name === 'out')?.valueType, 'bytes')
   assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'managed-values', 'string-bytes'])
-  assert.match(result.code, /#include "ccjs\/binary\.h"/)
+  assert.match(result.code, /#include "inox\/binary\.h"/)
   assert.match(
     result.code,
-    /ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"hi", 2, &ccjs_bytes_\d+\)/
+    /inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"hi", 2, &inox_bytes_\d+\)/
   )
-  assert.match(result.code, /ccjs_bytes_new\(&ccjs_default_allocator, \(size_t\)\(4\), &ccjs_bytes_\d+\)/)
-  assert.match(result.code, /ccjs_bytes_get\(bytes, \(size_t\)\(0\), &ccjs_byte_\d+\)/)
-  assert.match(result.code, /ccjs_bytes_set\(out, \(size_t\)\(1\), \(uint8_t\)\(7\)\)/)
-  assert.match(result.code, /double ccjs_bytes_start_raw_\d+ = 0;/)
-  assert.match(result.code, /double ccjs_bytes_end_raw_\d+ = 2;/)
-  assert.match(result.code, /ccjs_bytes_slice\(out, ccjs_bytes_start_\d+, ccjs_bytes_end_\d+, &ccjs_bytes_slice_\d+\)/)
-  assert.match(result.code, /ccjs_bytes_to_string\(&ccjs_default_allocator, bytes, &ccjs_bytes_string_\d+\)/)
+  assert.match(result.code, /inox_bytes_new\(&inox_default_allocator, \(size_t\)\(4\), &inox_bytes_\d+\)/)
+  assert.match(result.code, /inox_bytes_get\(bytes, \(size_t\)\(0\), &inox_byte_\d+\)/)
+  assert.match(result.code, /inox_bytes_set\(out, \(size_t\)\(1\), \(uint8_t\)\(7\)\)/)
+  assert.match(result.code, /double inox_bytes_start_raw_\d+ = 0;/)
+  assert.match(result.code, /double inox_bytes_end_raw_\d+ = 2;/)
+  assert.match(result.code, /inox_bytes_slice\(out, inox_bytes_start_\d+, inox_bytes_end_\d+, &inox_bytes_slice_\d+\)/)
+  assert.match(result.code, /inox_bytes_to_string\(&inox_default_allocator, bytes, &inox_bytes_string_\d+\)/)
 
   const arrayLiteral = compileSource(
     `export function main(): void {
@@ -1864,9 +1864,9 @@ test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
   )
 
   assert.deepEqual(arrayLiteral.ir.runtimeRequirements, ['binary', 'managed-values', 'string-bytes'])
-  assert.doesNotMatch(arrayLiteral.code, /#include "ccjs\/array\.h"/)
-  assert.match(arrayLiteral.code, /ccjs_bytes_new\(&ccjs_default_allocator, 3, &ccjs_bytes_\d+\)/)
-  assert.match(arrayLiteral.code, /ccjs_bytes_set\(ccjs_bytes_\d+, 2, \(uint8_t\)\(3\)\)/)
+  assert.doesNotMatch(arrayLiteral.code, /#include "inox\/array\.h"/)
+  assert.match(arrayLiteral.code, /inox_bytes_new\(&inox_default_allocator, 3, &inox_bytes_\d+\)/)
+  assert.match(arrayLiteral.code, /inox_bytes_set\(inox_bytes_\d+, 2, \(uint8_t\)\(3\)\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1874,7 +1874,7 @@ test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
   console.log(bytes.length)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -1900,7 +1900,7 @@ test('reports embedded heap capability diagnostics for array-producing methods',
       }
 
       assert.equal(
-        error.diagnostics.every((item) => item.code === 'CCJS_CAPABILITY'),
+        error.diagnostics.every((item) => item.code === 'INOX_CAPABILITY'),
         true
       )
       assert.deepEqual(
@@ -1922,10 +1922,10 @@ test('reports embedded heap capability diagnostics for array-producing methods',
     }
   })
 
-  assert.doesNotMatch(enabled.code, /ccjs_filter_array_\d+/)
-  assert.doesNotMatch(enabled.code, /ccjs_map_array_\d+/)
-  assert.match(enabled.code, /ccjs_array_push\(__ccjs_array_expr_\d+, ccjs_number_value/)
-  assert.match(enabled.code, /ccjs_array_push\(result, ccjs_number_value/)
+  assert.doesNotMatch(enabled.code, /inox_filter_array_\d+/)
+  assert.doesNotMatch(enabled.code, /inox_map_array_\d+/)
+  assert.match(enabled.code, /inox_array_push\(__inox_array_expr_\d+, inox_number_value/)
+  assert.match(enabled.code, /inox_array_push\(result, inox_number_value/)
 })
 
 
@@ -1945,7 +1945,7 @@ test('checks string length as a readonly number field', () => {
   const size = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'size')
 
   assert.equal(size?.valueType, 'number')
-  assert.match(result.code, /ccjs_string_code_unit_length_parts\(name, strlen\(name\)\)/)
+  assert.match(result.code, /inox_string_code_unit_length_parts\(name, strlen\(name\)\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1953,7 +1953,7 @@ test('checks string length as a readonly number field', () => {
   name.length = 4
 }
 `,
-    'CCJS_ASSIGN_READONLY_FIELD'
+    'INOX_ASSIGN_READONLY_FIELD'
   )
 })
 
@@ -1974,7 +1974,7 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_array_len\(values, &ccjs_array_len_\d+\)/)
+  assert.match(result.code, /inox_array_len\(values, &inox_array_len_\d+\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -1982,7 +1982,7 @@ export function main(): void {
   values.length = 4
 }
 `,
-    'CCJS_ASSIGN_READONLY_FIELD'
+    'INOX_ASSIGN_READONLY_FIELD'
   )
 })
 
@@ -2023,14 +2023,14 @@ export function main(): void {
   assert.equal(values.arrayElementType, 'number')
   assert.equal(names.valueType, 'array')
   assert.equal(names.arrayElementType, 'string')
-  assert.match(result.code, /ccjs_array_get\(values, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_array_get\(values, 0, &inox_value_\d+\)/)
 
   assertDiagnostic(
     `function first(values: number[]): string {
   return values[0]
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2039,7 +2039,7 @@ export function main(): void {
   console.log(values.length)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -2071,8 +2071,8 @@ test('checks Array sort filter map as typed chain calls', () => {
   assert.equal(filterCall.args[0].params[0].valueType, 'number')
   assert.equal(filterCall.args[0].params[1].valueType, 'number')
   assert.equal(mapCall.args[0].params[0].valueType, 'number')
-  assert.match(result.code, /ccjs_sort_compare_\d+ = \(left - right\);/)
-  assert.match(result.code, /ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
+  assert.match(result.code, /inox_sort_compare_\d+ = \(left - right\);/)
+  assert.match(result.code, /inox_array_push\(inox_filter_array_\d+, inox_filter_value_\d+\)/)
 
   const mapped = compileSource(
     `export function main(): void {
@@ -2115,9 +2115,9 @@ test('checks Array sort filter map as typed chain calls', () => {
     }
   )
 
-  assert.match(c.code, /ccjs_sort_compare_\d+ = \(left - right\);/)
+  assert.match(c.code, /inox_sort_compare_\d+ = \(left - right\);/)
   assert.match(c.code, /if \(value > index\) \{/)
-  assert.match(c.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 1\)\)\)/)
+  assert.match(c.code, /inox_array_push\(inox_map_array_\d+, inox_number_value\(\(value \+ 1\)\)\)/)
 
   const branchedC = compileSource(
     `export function main(): void {
@@ -2146,10 +2146,10 @@ test('checks Array sort filter map as typed chain calls', () => {
     }
   )
 
-  assert.match(branchedC.code, /ccjs_array_callback_done_\d+:;/)
-  assert.match(branchedC.code, /if \(1\) \{[\s\S]*ccjs_array_push\(ccjs_filter_array_\d+, ccjs_filter_value_\d+\)/)
-  assert.match(branchedC.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \* 10\)\)\)/)
-  assert.match(branchedC.code, /ccjs_array_push\(ccjs_map_array_\d+, ccjs_number_value\(\(value \+ 10\)\)\)/)
+  assert.match(branchedC.code, /inox_array_callback_done_\d+:;/)
+  assert.match(branchedC.code, /if \(1\) \{[\s\S]*inox_array_push\(inox_filter_array_\d+, inox_filter_value_\d+\)/)
+  assert.match(branchedC.code, /inox_array_push\(inox_map_array_\d+, inox_number_value\(\(value \* 10\)\)\)/)
+  assert.match(branchedC.code, /inox_array_push\(inox_map_array_\d+, inox_number_value\(\(value \+ 10\)\)\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -2157,7 +2157,7 @@ test('checks Array sort filter map as typed chain calls', () => {
   values.filter(value => value + 1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2166,7 +2166,7 @@ test('checks Array sort filter map as typed chain calls', () => {
   values.sort((left: string, right: string) => 0)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -2192,7 +2192,7 @@ test('lowers C Array.find declarations to nullable loop results', () => {
 
   const found = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'found')
   const loop = main.body.find(
-    (item) => item.type === 'ForStatement' && /^__ccjs_find_index_\d+$/.test(item.init.name)
+    (item) => item.type === 'ForStatement' && /^__inox_find_index_\d+$/.test(item.init.name)
   )
 
   assert.ok(found)
@@ -2201,12 +2201,12 @@ test('lowers C Array.find declarations to nullable loop results', () => {
   assert.equal(found.valueType, 'number')
   assert.equal(found.nullable, true)
   assert.equal(found.init.type, 'NullLiteral')
-  assert.match(result.code, /found = ccjs_null_value\(\);/)
+  assert.match(result.code, /found = inox_null_value\(\);/)
   assert.match(result.code, /for \(;;\) \{/)
-  assert.match(result.code, /if \(value > \(__ccjs_find_index_\d+ \+ 1\)\) \{/)
-  assert.match(result.code, /found = ccjs_nullable_value_\d+;/)
-  assert.match(result.code, /goto ccjs_break_\d+;/)
-  assert.doesNotMatch(result.code, /CCJS_C_ARRAY_METHOD/)
+  assert.match(result.code, /if \(value > \(__inox_find_index_\d+ \+ 1\)\) \{/)
+  assert.match(result.code, /found = inox_nullable_value_\d+;/)
+  assert.match(result.code, /goto inox_break_\d+;/)
+  assert.doesNotMatch(result.code, /INOX_C_ARRAY_METHOD/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -2214,7 +2214,7 @@ test('lowers C Array.find declarations to nullable loop results', () => {
   values.find(value => value + 1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -2236,7 +2236,7 @@ test('lowers C Array.find expression contexts to nullable temps', () => {
   assert.ok(main)
 
   const findTemps = main.body.filter(
-    (item) => item.type === 'VariableDeclaration' && /^__ccjs_find_expr_\d+$/.test(item.name)
+    (item) => item.type === 'VariableDeclaration' && /^__inox_find_expr_\d+$/.test(item.name)
   )
   const score = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'score')
 
@@ -2248,10 +2248,10 @@ test('lowers C Array.find expression contexts to nullable temps', () => {
   assert.ok(score)
   assert.equal(score.init.type, 'BinaryExpression')
   assert.equal(score.init.operator, '??')
-  assert.match(score.init.left.path[0], /^__ccjs_find_expr_\d+$/)
-  assert.match(result.code, /__ccjs_find_expr_\d+ = ccjs_null_value\(\);/)
-  assert.match(result.code, /if \(__ccjs_find_expr_\d+\.tag == CCJS_TAG_NULL\) \{/)
-  assert.doesNotMatch(result.code, /CCJS_C_ARRAY_METHOD/)
+  assert.match(score.init.left.path[0], /^__inox_find_expr_\d+$/)
+  assert.match(result.code, /__inox_find_expr_\d+ = inox_null_value\(\);/)
+  assert.match(result.code, /if \(__inox_find_expr_\d+\.tag == INOX_TAG_NULL\) \{/)
+  assert.doesNotMatch(result.code, /INOX_C_ARRAY_METHOD/)
 })
 
 
@@ -2287,18 +2287,18 @@ test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   assert.equal(presentNumbers.arrayElementType, 'number')
   assert.equal(presentFlags.arrayElementType, 'boolean')
   assert.equal(presentNames.loweredArrayMethod, true)
-  assert.doesNotMatch(result.code, /ccjs_filter_array_\d+/)
+  assert.doesNotMatch(result.code, /inox_filter_array_\d+/)
   assert.match(result.code, /for \(;;\) \{/)
-  assert.match(result.code, /ccjs_array_get\(names, \(size_t\)\(__ccjs_filter_index_\d+\), &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_string_code_unit_length_parts\(__ccjs_filter_item_\d+->bytes, __ccjs_filter_item_\d+->len\)/)
+  assert.match(result.code, /inox_array_get\(names, \(size_t\)\(__inox_filter_index_\d+\), &inox_value_\d+\)/)
+  assert.match(result.code, /inox_string_code_unit_length_parts\(__inox_filter_item_\d+->bytes, __inox_filter_item_\d+->len\)/)
   assert.match(
     result.code,
-    /if \(__ccjs_filter_item_\d+ == __ccjs_filter_item_\d+\) \{\s*ccjs_logical_\d+ = \(__ccjs_filter_item_\d+ != 0\);/s
+    /if \(__inox_filter_item_\d+ == __inox_filter_item_\d+\) \{\s*inox_logical_\d+ = \(__inox_filter_item_\d+ != 0\);/s
   )
-  assert.match(result.code, /if \(__ccjs_filter_item_\d+\) \{/)
-  assert.match(result.code, /ccjs_array_push\(presentNames, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_array_push\(presentNumbers, ccjs_number_value\(__ccjs_filter_item_\d+\)\)/)
-  assert.match(result.code, /ccjs_array_push\(presentFlags, ccjs_bool_value\(\(?__ccjs_filter_item_\d+\)?(?: != 0)?\)\)/)
+  assert.match(result.code, /if \(__inox_filter_item_\d+\) \{/)
+  assert.match(result.code, /inox_array_push\(presentNames, inox_value_\d+\)/)
+  assert.match(result.code, /inox_array_push\(presentNumbers, inox_number_value\(__inox_filter_item_\d+\)\)/)
+  assert.match(result.code, /inox_array_push\(presentFlags, inox_bool_value\(\(?__inox_filter_item_\d+\)?(?: != 0)?\)\)/)
 })
 
 
@@ -2332,15 +2332,15 @@ export function main(): void {
   assert.equal(selected.body[0].loweredArrayMethod, true)
   assert.equal(selected.body[1].type, 'ForStatement')
   assert.equal(selected.body[2].type, 'ReturnStatement')
-  assert.match(selected.body[2].argument.path[0], /^__ccjs_array_expr_\d+$/)
+  assert.match(selected.body[2].argument.path[0], /^__inox_array_expr_\d+$/)
 
   const scaled = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'scaled')
   const inlineCount = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'inlineCount')
   const chainTemp = main.body.find(
-    (item) => item.type === 'VariableDeclaration' && /^__ccjs_array_expr_\d+$/.test(item.name)
+    (item) => item.type === 'VariableDeclaration' && /^__inox_array_expr_\d+$/.test(item.name)
   )
   const inlineSource = main.body.find(
-    (item) => item.type === 'VariableDeclaration' && /^__ccjs_array_source_\d+$/.test(item.name)
+    (item) => item.type === 'VariableDeclaration' && /^__inox_array_source_\d+$/.test(item.name)
   )
 
   assert.ok(scaled)
@@ -2350,11 +2350,11 @@ export function main(): void {
   assert.equal(scaled.loweredArrayMethod, true)
   assert.equal(scaled.arrayElementType, 'number')
   assert.equal(inlineCount.init.args[0].type, 'Reference')
-  assert.match(inlineCount.init.args[0].path[0], /^__ccjs_array_expr_\d+$/)
-  assert.doesNotMatch(result.code, /ccjs_filter_array_\d+/)
-  assert.doesNotMatch(result.code, /ccjs_map_array_\d+/)
-  assert.match(result.code, /ccjs_array_push\(__ccjs_array_expr_\d+, ccjs_number_value/)
-  assert.match(result.code, /ccjs_array_push\(scaled, ccjs_number_value/)
+  assert.match(inlineCount.init.args[0].path[0], /^__inox_array_expr_\d+$/)
+  assert.doesNotMatch(result.code, /inox_filter_array_\d+/)
+  assert.doesNotMatch(result.code, /inox_map_array_\d+/)
+  assert.match(result.code, /inox_array_push\(__inox_array_expr_\d+, inox_number_value/)
+  assert.match(result.code, /inox_array_push\(scaled, inox_number_value/)
 })
 
 
@@ -2427,7 +2427,7 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   console.log(score)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2436,7 +2436,7 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   scores.get(1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2445,7 +2445,7 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   scores.set('Ada', '7')
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2454,7 +2454,7 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   names.add(1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2463,7 +2463,7 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   scores.size = 1
 }
 `,
-    'CCJS_ASSIGN_READONLY_FIELD'
+    'INOX_ASSIGN_READONLY_FIELD'
   )
 
   assertDiagnostic(
@@ -2472,7 +2472,7 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   scores.clear('Ada')
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -2481,7 +2481,7 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   names.clear('Ada')
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   const objectIdentityResult = compileSource(
@@ -2502,8 +2502,8 @@ export function main(): void {
     }
   )
 
-  assert.match(objectIdentityResult.code, /ccjs_map_set\(users, ada, ccjs_number_value\(7\)\)/)
-  assert.match(objectIdentityResult.code, /ccjs_map\* ccjs_map_source_\d+ = \(ccjs_map\*\)users\.as\.ref;/)
+  assert.match(objectIdentityResult.code, /inox_map_set\(users, ada, inox_number_value\(7\)\)/)
+  assert.match(objectIdentityResult.code, /inox_map\* inox_map_source_\d+ = \(inox_map\*\)users\.as\.ref;/)
 
   const objectSetResult = compileSource(
     `type User = {
@@ -2523,8 +2523,8 @@ export function main(): void {
     }
   )
 
-  assert.match(objectSetResult.code, /ccjs_set_add\(users, user\)/)
-  assert.match(objectSetResult.code, /ccjs_set\* ccjs_set_source_\d+ = \(ccjs_set\*\)users\.as\.ref;/)
+  assert.match(objectSetResult.code, /inox_set_add\(users, user\)/)
+  assert.match(objectSetResult.code, /inox_set\* inox_set_source_\d+ = \(inox_set\*\)users\.as\.ref;/)
 })
 
 
@@ -2564,12 +2564,12 @@ test('checks Map and Set copy constructors as typed collection values', () => {
   assert.equal(namesCopy.valueType, 'set')
   assert.equal(namesCopy.setElementType, 'string')
   assert.equal(assignedNames.setElementType, 'string')
-  assert.match(result.code, /ccjs_map\* ccjs_map_source_\d+ = \(ccjs_map\*\)scores\.as\.ref;/)
-  assert.match(result.code, /ccjs_map_set\(\s*ccjs_map_\d+,\s*ccjs_map_source_\d+->entries\[ccjs_map_source_index_\d+\]\.key,\s*ccjs_map_source_\d+->entries\[ccjs_map_source_index_\d+\]\.value\s*\)/)
-  assert.match(result.code, /copy = ccjs_map_\d+;/)
-  assert.match(result.code, /ccjs_set\* ccjs_set_source_\d+ = \(ccjs_set\*\)names\.as\.ref;/)
-  assert.match(result.code, /ccjs_set_add\(ccjs_set_\d+, ccjs_set_source_\d+->entries\[ccjs_set_source_index_\d+\]\.value\)/)
-  assert.match(result.code, /namesCopy = ccjs_set_\d+;/)
+  assert.match(result.code, /inox_map\* inox_map_source_\d+ = \(inox_map\*\)scores\.as\.ref;/)
+  assert.match(result.code, /inox_map_set\(\s*inox_map_\d+,\s*inox_map_source_\d+->entries\[inox_map_source_index_\d+\]\.key,\s*inox_map_source_\d+->entries\[inox_map_source_index_\d+\]\.value\s*\)/)
+  assert.match(result.code, /copy = inox_map_\d+;/)
+  assert.match(result.code, /inox_set\* inox_set_source_\d+ = \(inox_set\*\)names\.as\.ref;/)
+  assert.match(result.code, /inox_set_add\(inox_set_\d+, inox_set_source_\d+->entries\[inox_set_source_index_\d+\]\.value\)/)
+  assert.match(result.code, /namesCopy = inox_set_\d+;/)
 })
 
 
@@ -2657,18 +2657,18 @@ export function main(): void {
   assert.equal(makeScores?.returnMapValueType, 'number')
   assert.equal(makeSeen?.returnType, 'set')
   assert.equal(makeSeen?.returnSetElementType, 'string')
-  assert.match(result.code, /ccjs_value makeNums\(void\);/)
-  assert.match(result.code, /double sumNums\(ccjs_value nums\);/)
-  assert.match(result.code, /if \(nums\.tag != CCJS_TAG_ARRAY \|\| nums\.as\.ref == 0\)\s+goto ccjs_cleanup;/)
-  assert.match(result.code, /ccjs_value makeScores\(void\);/)
-  assert.match(result.code, /double totalScores\(ccjs_value scores\);/)
-  assert.match(result.code, /if \(scores\.tag != CCJS_TAG_MAP \|\| scores\.as\.ref == 0\)\s+goto ccjs_cleanup;/)
-  assert.match(result.code, /ccjs_value makeSeen\(void\);/)
-  assert.match(result.code, /double seenCount\(ccjs_value seen\);/)
-  assert.match(result.code, /if \(seen\.tag != CCJS_TAG_SET \|\| seen\.as\.ref == 0\)\s+goto ccjs_cleanup;/)
-  assert.match(result.code, /ccjs_array_len\(nums, &ccjs_for_length_\d+\)/)
-  assert.match(result.code, /ccjs_map \*ccjs_for_map_\d+ = \(ccjs_map \*\)scores\.as\.ref;/)
-  assert.match(result.code, /ccjs_set_has\(seen, ccjs_value_\d+, &ccjs_set_has_\d+\)/)
+  assert.match(result.code, /inox_value makeNums\(void\);/)
+  assert.match(result.code, /double sumNums\(inox_value nums\);/)
+  assert.match(result.code, /if \(nums\.tag != INOX_TAG_ARRAY \|\| nums\.as\.ref == 0\)\s+goto inox_cleanup;/)
+  assert.match(result.code, /inox_value makeScores\(void\);/)
+  assert.match(result.code, /double totalScores\(inox_value scores\);/)
+  assert.match(result.code, /if \(scores\.tag != INOX_TAG_MAP \|\| scores\.as\.ref == 0\)\s+goto inox_cleanup;/)
+  assert.match(result.code, /inox_value makeSeen\(void\);/)
+  assert.match(result.code, /double seenCount\(inox_value seen\);/)
+  assert.match(result.code, /if \(seen\.tag != INOX_TAG_SET \|\| seen\.as\.ref == 0\)\s+goto inox_cleanup;/)
+  assert.match(result.code, /inox_array_len\(nums, &inox_for_length_\d+\)/)
+  assert.match(result.code, /inox_map \*inox_for_map_\d+ = \(inox_map \*\)scores\.as\.ref;/)
+  assert.match(result.code, /inox_set_has\(seen, inox_value_\d+, &inox_set_has_\d+\)/)
 })
 
 
@@ -2719,7 +2719,7 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   console.log(contentType)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2728,7 +2728,7 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   headers[1] = 'application/json'
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2737,7 +2737,7 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   headers['content-type'] = 1
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -2766,7 +2766,7 @@ export function main(): void {
   name.includes(1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2775,7 +2775,7 @@ export function main(): void {
   name.includes('d', '1')
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2784,7 +2784,7 @@ export function main(): void {
   name.includes()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -2793,7 +2793,7 @@ export function main(): void {
   name.startsWith()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -2822,7 +2822,7 @@ export function main(): void {
   name.indexOf(1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2831,7 +2831,7 @@ export function main(): void {
   name.lastIndexOf('a', '1')
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2840,7 +2840,7 @@ export function main(): void {
   name.indexOf()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -2869,7 +2869,7 @@ export function main(): void {
   name.slice('1', 2)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2878,7 +2878,7 @@ export function main(): void {
   name.slice()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -2904,7 +2904,7 @@ test('checks string split as a string array call', () => {
   'Ada'.split(1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2912,7 +2912,7 @@ test('checks string split as a string array call', () => {
   'Ada'.split()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -2941,7 +2941,7 @@ export function main(): void {
   name.trimStart(1)
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 })
 
@@ -2953,7 +2953,7 @@ test('checks string case and padStart as string calls', () => {
 }
 
 export function main(): void {
-  console.log(symbolName('ccjs', 255))
+  console.log(symbolName('inox', 255))
 }
 `,
     {
@@ -2970,7 +2970,7 @@ export function main(): void {
   name.toUpperCase(1)
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -2979,7 +2979,7 @@ export function main(): void {
   name.padStart('3')
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -2988,7 +2988,7 @@ export function main(): void {
   name.padStart(3, 0)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -3016,7 +3016,7 @@ export function main(): void {
   String()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -3024,7 +3024,7 @@ export function main(): void {
   String({ name: 'Ada' })
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -3051,7 +3051,7 @@ export function main(): void {
   Number()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -3059,7 +3059,7 @@ export function main(): void {
   Number(42)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -3068,7 +3068,7 @@ export function main(): void {
   Number(text)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -3088,17 +3088,17 @@ export function main(): void {
   })
 
   assert.deepEqual(c.ir.features, ['numeric-casts'])
-  assert.match(c.code, /long long ccjs_i32_truncated_\d+ = \(long long\)ccjs_i32_value_\d+;/)
-  assert.match(c.code, /ccjs_u32_truncated_\d+ < 0LL \|\| ccjs_u32_truncated_\d+ > 4294967295LL/)
-  assert.match(c.code, /ccjs_u64_truncated_\d+ < 0LL \|\| ccjs_u64_truncated_\d+ > 9007199254740991LL/)
-  assert.match(c.code, /double ccjs_f32_\d+ = \(double\)\(\(float\)value\);/)
+  assert.match(c.code, /long long inox_i32_truncated_\d+ = \(long long\)inox_i32_value_\d+;/)
+  assert.match(c.code, /inox_u32_truncated_\d+ < 0LL \|\| inox_u32_truncated_\d+ > 4294967295LL/)
+  assert.match(c.code, /inox_u64_truncated_\d+ < 0LL \|\| inox_u64_truncated_\d+ > 9007199254740991LL/)
+  assert.match(c.code, /double inox_f32_\d+ = \(double\)\(\(float\)value\);/)
 
   assertDiagnostic(
     `export function main(): void {
   i32()
 }
 `,
-    'CCJS_ARG_COUNT'
+    'INOX_ARG_COUNT'
   )
 
   assertDiagnostic(
@@ -3106,7 +3106,7 @@ export function main(): void {
   i32('1')
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 
   assertDiagnostic(
@@ -3115,7 +3115,7 @@ export function main(): void {
   f64(value)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -3156,45 +3156,45 @@ clearImmediate(immediate)
 
   assert.deepEqual(result.ir.features, ['timers'])
   assert.deepEqual(result.ir.runtimeRequirements, ['async-runtime', 'callback-values', 'managed-values', 'timers'])
-  assert.match(result.code, /#include "ccjs\/loop\.h"/)
-  assert.match(result.code, /#include "ccjs\/callback\.h"/)
-  assert.match(result.code, /static ccjs_status ccjs_timer_callback_run\(void \*context\)/)
-  assert.match(result.code, /void schedule\(ccjs_loop \*ccjs_loop\);/)
+  assert.match(result.code, /#include "inox\/loop\.h"/)
+  assert.match(result.code, /#include "inox\/callback\.h"/)
+  assert.match(result.code, /static inox_status inox_timer_callback_run\(void \*context\)/)
+  assert.match(result.code, /void schedule\(inox_loop \*inox_loop\);/)
   assert.match(result.code, /int main\(void\) \{/)
-  assert.match(result.code, /schedule\(&ccjs_loop\);/)
-  assert.match(result.code, /ccjs_timer_handle \*timeout = 0;/)
-  assert.match(result.code, /ccjs_timer_handle \*interval = 0;/)
-  assert.match(result.code, /ccjs_timer_handle \*immediate = 0;/)
+  assert.match(result.code, /schedule\(&inox_loop\);/)
+  assert.match(result.code, /inox_timer_handle \*timeout = 0;/)
+  assert.match(result.code, /inox_timer_handle \*interval = 0;/)
+  assert.match(result.code, /inox_timer_handle \*immediate = 0;/)
   assert.match(
     result.code,
-    /ccjs_loop_set_timeout\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &timeout\)/
+    /inox_loop_set_timeout\(inox_loop, 1, inox_timer_callback_run, inox_timer_ctx_\d+, inox_timer_callback_finalize, &timeout\)/
   )
   assert.match(
     result.code,
-    /ccjs_loop_set_interval\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &interval\)/
+    /inox_loop_set_interval\(inox_loop, 1, inox_timer_callback_run, inox_timer_ctx_\d+, inox_timer_callback_finalize, &interval\)/
   )
   assert.match(
     result.code,
-    /ccjs_loop_queue_immediate\(&ccjs_loop, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, &immediate\)/
+    /inox_loop_queue_immediate\(&inox_loop, inox_timer_callback_run, inox_timer_ctx_\d+, inox_timer_callback_finalize, &immediate\)/
   )
-  assert.match(result.code, /ccjs_loop_clear_timer\(timeout\);/)
-  assert.match(result.code, /ccjs_loop_clear_timer\(interval\);/)
-  assert.match(result.code, /ccjs_loop_clear_timer\(immediate\);/)
-  assert.match(result.code, /scheduleLater\(\(ccjs_loop \*\)ccjs_context\);/)
+  assert.match(result.code, /inox_loop_clear_timer\(timeout\);/)
+  assert.match(result.code, /inox_loop_clear_timer\(interval\);/)
+  assert.match(result.code, /inox_loop_clear_timer\(immediate\);/)
+  assert.match(result.code, /scheduleLater\(\(inox_loop \*\)inox_context\);/)
   assert.match(
     result.code,
-    /ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_scheduleLater_\d+, &ccjs_loop, 0, &ccjs_callback_\d+\)/
+    /inox_callback_new\(&inox_default_allocator, inox_callback_scheduleLater_\d+, &inox_loop, 0, &inox_callback_\d+\)/
   )
-  assert.match(result.code, /#if !defined\(CCJS_LOOP_BACKEND_LIBUV\)[\s\S]*ccjs_time_sleep_ms[\s\S]*#endif/)
-  assert.match(result.code, /while \(ccjs_loop_has_work\(&ccjs_loop\)\) \{/)
-  assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_performance_now\(\)\)/)
+  assert.match(result.code, /#if !defined\(INOX_LOOP_BACKEND_LIBUV\)[\s\S]*inox_time_sleep_ms[\s\S]*#endif/)
+  assert.match(result.code, /while \(inox_loop_has_work\(&inox_loop\)\) \{/)
+  assert.match(result.code, /inox_loop_poll\(&inox_loop, inox_performance_now\(\)\)/)
 
   assertDiagnostic(
     `export function main(): void {
   setInterval(() => {}, 1)
 }
 `,
-    'CCJS_C_TIMER_HANDLE',
+    'INOX_C_TIMER_HANDLE',
     {
       target: 'c'
     }
@@ -3205,7 +3205,7 @@ clearImmediate(immediate)
   clearTimeout(1)
 }
 `,
-    'CCJS_TYPE_MISMATCH',
+    'INOX_TYPE_MISMATCH',
     {
       target: 'c'
     }
@@ -3217,7 +3217,7 @@ clearImmediate(immediate)
   timeout.unref()
 }
 `,
-    'CCJS_TIMER_REF_UNREF'
+    'INOX_TIMER_REF_UNREF'
   )
 
   assertDiagnostic(
@@ -3226,7 +3226,7 @@ clearImmediate(immediate)
   interval.ref()
 }
 `,
-    'CCJS_TIMER_REF_UNREF'
+    'INOX_TIMER_REF_UNREF'
   )
 
   assertDiagnostic(
@@ -3236,7 +3236,7 @@ clearImmediate(immediate)
   }, 1)
 }
 `,
-    'CCJS_ASYNC_TIMER_CALLBACK'
+    'INOX_ASYNC_TIMER_CALLBACK'
   )
 
   assertDiagnostic(
@@ -3248,6 +3248,6 @@ export function main(): void {
   setImmediate(later)
 }
 `,
-    'CCJS_ASYNC_TIMER_CALLBACK'
+    'INOX_ASYNC_TIMER_CALLBACK'
   )
 })

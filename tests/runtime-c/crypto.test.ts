@@ -19,7 +19,7 @@ test('generated C node:crypto random methods compile and run with runtime source
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-crypto-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-crypto-'))
   const source = join(dir, 'node-crypto.c')
   const output = join(dir, 'node-crypto')
 
@@ -64,7 +64,7 @@ test('generated C node:crypto createHash sha256 digest runs with OpenSSL crypto 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-crypto-hash-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-crypto-hash-'))
   const source = join(dir, 'node-crypto-hash.c')
   const output = join(dir, 'node-crypto-hash')
 
@@ -87,7 +87,7 @@ console.log(createHash('sha256').update('hello').digest().length)
 
     const compile = await runCommand('cc', [
       '-Iruntime/c/include',
-      '-DCCJS_TLS_BACKEND_OPENSSL=1',
+      '-DINOX_TLS_BACKEND_OPENSSL=1',
       source,
       'runtime/c/src/core/value.c',
       'runtime/c/src/core/allocator.c',
@@ -147,7 +147,7 @@ test('generated C node:crypto hash hmac and timing helpers run with OpenSSL cryp
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-node-crypto-hmac-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-node-crypto-hmac-'))
   const source = join(dir, 'node-crypto-hmac.c')
   const output = join(dir, 'node-crypto-hmac')
 
@@ -177,7 +177,7 @@ console.log(createHmac('sha256', 'secret').update('hello').digest().length)
 
     const compile = await runCommand('cc', [
       '-Iruntime/c/include',
-      '-DCCJS_TLS_BACKEND_OPENSSL=1',
+      '-DINOX_TLS_BACKEND_OPENSSL=1',
       source,
       'runtime/c/src/core/value.c',
       'runtime/c/src/core/allocator.c',

@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_TYPE_MISMATCH
+// @diagnostic INOX_TYPE_MISMATCH
 
 type User = {
   id: number

@@ -2,489 +2,489 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-#ifdef CCJS_DEBUG_MEMORY
-#include "ccjs/debug.h"
+#ifdef INOX_DEBUG_MEMORY
+#include "inox/debug.h"
 #endif
-#include "ccjs/array.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
-#ifdef CCJS_ENABLE_WEAK
-#include "ccjs/weak.h"
+#include "inox/array.h"
+#include "inox/object.h"
+#include "inox/string.h"
+#ifdef INOX_ENABLE_WEAK
+#include "inox/weak.h"
 #endif
 
-static bool ccjs_object_field_is_weak(const ccjs_object* object, uint32_t index) {
-  return object != 0 && index < object->shape->field_count && (object->shape->fields[index].flags & CCJS_FIELD_WEAK) != 0;
+static bool inox_object_field_is_weak(const inox_object* object, uint32_t index) {
+  return object != 0 && index < object->shape->field_count && (object->shape->fields[index].flags & INOX_FIELD_WEAK) != 0;
 }
 
-static void ccjs_object_init_field(ccjs_object* object, uint32_t index) {
-#ifdef CCJS_ENABLE_WEAK
-  if (ccjs_object_field_is_weak(object, index)) {
-    object->fields[index].weak = ccjs_weak_null();
+static void inox_object_init_field(inox_object* object, uint32_t index) {
+#ifdef INOX_ENABLE_WEAK
+  if (inox_object_field_is_weak(object, index)) {
+    object->fields[index].weak = inox_weak_null();
     return;
   }
 #endif
 
-  object->fields[index].strong = ccjs_undefined_value();
+  object->fields[index].strong = inox_undefined_value();
 }
 
-static void ccjs_object_release_field(ccjs_object* object, uint32_t index) {
-#ifdef CCJS_ENABLE_WEAK
-  if (ccjs_object_field_is_weak(object, index)) {
-    ccjs_weak_release(object->fields[index].weak);
-    object->fields[index].weak = ccjs_weak_null();
+static void inox_object_release_field(inox_object* object, uint32_t index) {
+#ifdef INOX_ENABLE_WEAK
+  if (inox_object_field_is_weak(object, index)) {
+    inox_weak_release(object->fields[index].weak);
+    object->fields[index].weak = inox_weak_null();
     return;
   }
 #endif
 
-  ccjs_release(object->fields[index].strong);
-  object->fields[index].strong = ccjs_undefined_value();
+  inox_release(object->fields[index].strong);
+  object->fields[index].strong = inox_undefined_value();
 }
 
-static ccjs_status ccjs_object_write_field(ccjs_object* object, uint32_t index, ccjs_value value) {
-#ifdef CCJS_ENABLE_WEAK
-  if (ccjs_object_field_is_weak(object, index)) {
-    ccjs_weak_ref weak = ccjs_weak_null();
-    ccjs_status status = ccjs_weak_from_value(value, &weak);
+static inox_status inox_object_write_field(inox_object* object, uint32_t index, inox_value value) {
+#ifdef INOX_ENABLE_WEAK
+  if (inox_object_field_is_weak(object, index)) {
+    inox_weak_ref weak = inox_weak_null();
+    inox_status status = inox_weak_from_value(value, &weak);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
 
-    ccjs_weak_release(object->fields[index].weak);
+    inox_weak_release(object->fields[index].weak);
     object->fields[index].weak = weak;
-    return CCJS_OK;
+    return INOX_OK;
   }
 #else
-  if (ccjs_object_field_is_weak(object, index)) {
-    return CCJS_ERR_UNSUPPORTED;
+  if (inox_object_field_is_weak(object, index)) {
+    return INOX_ERR_UNSUPPORTED;
   }
 #endif
 
-  ccjs_retain(value);
-  ccjs_release(object->fields[index].strong);
+  inox_retain(value);
+  inox_release(object->fields[index].strong);
   object->fields[index].strong = value;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_object_new(ccjs_allocator* allocator, const ccjs_shape* shape, ccjs_value* out) {
+inox_status inox_object_new(inox_allocator* allocator, const inox_shape* shape, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || shape == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  const size_t size = sizeof(ccjs_object) + sizeof(ccjs_object_field) * shape->field_count;
-  ccjs_object* object = allocator->alloc(allocator->user, size, _Alignof(ccjs_object));
+  const size_t size = sizeof(inox_object) + sizeof(inox_object_field) * shape->field_count;
+  inox_object* object = allocator->alloc(allocator->user, size, _Alignof(inox_object));
 
   if (object == 0) {
-    *out = ccjs_undefined_value();
-    return CCJS_ERR_OOM;
+    *out = inox_undefined_value();
+    return INOX_ERR_OOM;
   }
 
-  object->header.kind = CCJS_REF_OBJECT;
+  object->header.kind = INOX_REF_OBJECT;
   object->header.ref_count = 1;
   object->header.flags = 0;
   object->header.size = size;
-  object->header.align = _Alignof(ccjs_object);
+  object->header.align = _Alignof(inox_object);
   object->header.allocator = allocator;
-  ccjs_ref_init_weak(&object->header);
+  inox_ref_init_weak(&object->header);
   object->shape = shape;
 
   for (uint32_t index = 0; index < shape->field_count; index += 1) {
-    ccjs_object_init_field(object, index);
+    inox_object_init_field(object, index);
   }
 
-  out->tag = CCJS_TAG_OBJECT;
+  out->tag = INOX_TAG_OBJECT;
   out->as.ref = &object->header;
-#ifdef CCJS_DEBUG_MEMORY
-  ccjs_debug_memory_record_ref_created(CCJS_REF_OBJECT);
+#ifdef INOX_DEBUG_MEMORY
+  inox_debug_memory_record_ref_created(INOX_REF_OBJECT);
 #endif
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_object_get_known(ccjs_value object, uint32_t index, ccjs_value* out) {
-  if (out == 0 || object.tag != CCJS_TAG_OBJECT || object.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_object_get_known(inox_value object, uint32_t index, inox_value* out) {
+  if (out == 0 || object.tag != INOX_TAG_OBJECT || object.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
+  inox_object* instance = (inox_object*)object.as.ref;
 
   if (index >= instance->shape->field_count) {
-    *out = ccjs_undefined_value();
-    return CCJS_ERR_FIELD;
+    *out = inox_undefined_value();
+    return INOX_ERR_FIELD;
   }
 
-#ifdef CCJS_ENABLE_WEAK
-  if (ccjs_object_field_is_weak(instance, index)) {
-    return ccjs_weak_upgrade(instance->fields[index].weak, out);
+#ifdef INOX_ENABLE_WEAK
+  if (inox_object_field_is_weak(instance, index)) {
+    return inox_weak_upgrade(instance->fields[index].weak, out);
   }
 #else
-  if (ccjs_object_field_is_weak(instance, index)) {
-    *out = ccjs_undefined_value();
-    return CCJS_ERR_UNSUPPORTED;
+  if (inox_object_field_is_weak(instance, index)) {
+    *out = inox_undefined_value();
+    return INOX_ERR_UNSUPPORTED;
   }
 #endif
 
   *out = instance->fields[index].strong;
-  ccjs_retain(*out);
+  inox_retain(*out);
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_object_init_known(ccjs_value object, uint32_t index, ccjs_value value) {
-  if (object.tag != CCJS_TAG_OBJECT || object.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_object_init_known(inox_value object, uint32_t index, inox_value value) {
+  if (object.tag != INOX_TAG_OBJECT || object.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
+  inox_object* instance = (inox_object*)object.as.ref;
 
   if (index >= instance->shape->field_count) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-  return ccjs_object_write_field(instance, index, value);
+  return inox_object_write_field(instance, index, value);
 }
 
-ccjs_status ccjs_object_set_known(ccjs_value object, uint32_t index, ccjs_value value) {
-  if (object.tag != CCJS_TAG_OBJECT || object.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_object_set_known(inox_value object, uint32_t index, inox_value value) {
+  if (object.tag != INOX_TAG_OBJECT || object.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
+  inox_object* instance = (inox_object*)object.as.ref;
 
   if (index >= instance->shape->field_count) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-  if ((instance->shape->fields[index].flags & CCJS_FIELD_READONLY) != 0) {
-    return CCJS_ERR_READONLY;
+  if ((instance->shape->fields[index].flags & INOX_FIELD_READONLY) != 0) {
+    return INOX_ERR_READONLY;
   }
 
-  return ccjs_object_write_field(instance, index, value);
+  return inox_object_write_field(instance, index, value);
 }
 
-ccjs_status ccjs_object_get(ccjs_value object, const char* name, size_t len, ccjs_value* out) {
-  if (out == 0 || object.tag != CCJS_TAG_OBJECT || object.as.ref == 0 || name == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_object_get(inox_value object, const char* name, size_t len, inox_value* out) {
+  if (out == 0 || object.tag != INOX_TAG_OBJECT || object.as.ref == 0 || name == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
-  const ccjs_shape* shape = instance->shape;
+  inox_object* instance = (inox_object*)object.as.ref;
+  const inox_shape* shape = instance->shape;
 
   for (uint32_t index = 0; index < shape->field_count; index += 1) {
     const char* field = shape->fields[index].name;
 
     if (strlen(field) == len && strncmp(field, name, len) == 0) {
-      return ccjs_object_get_known(object, index, out);
+      return inox_object_get_known(object, index, out);
     }
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
-  return CCJS_ERR_FIELD;
+  return INOX_ERR_FIELD;
 }
 
-void ccjs_object_dispose_fields(ccjs_object* object) {
+void inox_object_dispose_fields(inox_object* object) {
   if (object == 0 || object->shape == 0) {
     return;
   }
 
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
-    ccjs_object_release_field(object, index);
+    inox_object_release_field(object, index);
   }
 }
 
-ccjs_status ccjs_object_set(ccjs_value object, const char* name, size_t len, ccjs_value value) {
-  if (object.tag != CCJS_TAG_OBJECT || object.as.ref == 0 || name == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_object_set(inox_value object, const char* name, size_t len, inox_value value) {
+  if (object.tag != INOX_TAG_OBJECT || object.as.ref == 0 || name == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
-  const ccjs_shape* shape = instance->shape;
+  inox_object* instance = (inox_object*)object.as.ref;
+  const inox_shape* shape = instance->shape;
 
   for (uint32_t index = 0; index < shape->field_count; index += 1) {
     const char* field = shape->fields[index].name;
 
     if (strlen(field) == len && strncmp(field, name, len) == 0) {
-      return ccjs_object_set_known(object, index, value);
+      return inox_object_set_known(object, index, value);
     }
   }
 
-  return CCJS_ERR_FIELD;
+  return INOX_ERR_FIELD;
 }
 
-static ccjs_status ccjs_array_object_values(ccjs_allocator* allocator, ccjs_value array, ccjs_value* out) {
-  if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+static inox_status inox_array_object_values(inox_allocator* allocator, inox_value array, inox_value* out) {
+  if (allocator == 0 || out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
-  ccjs_status status = ccjs_array_new(allocator, instance->len, out);
+  inox_array* instance = (inox_array*)array.as.ref;
+  inox_status status = inox_array_new(allocator, instance->len, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   for (size_t index = 0; index < instance->len; index += 1) {
-    ccjs_value value = ccjs_undefined_value();
+    inox_value value = inox_undefined_value();
 
-    status = ccjs_array_get(array, index, &value);
+    status = inox_array_get(array, index, &value);
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(*out, index, value);
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, index, value);
     }
 
-    ccjs_release(value);
+    inox_release(value);
 
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
       return status;
     }
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_array_object_keys(ccjs_allocator* allocator, ccjs_value array, ccjs_value* out) {
-  if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value array, inox_value* out) {
+  if (allocator == 0 || out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
-  ccjs_status status = ccjs_array_new(allocator, instance->len, out);
+  inox_array* instance = (inox_array*)array.as.ref;
+  inox_status status = inox_array_new(allocator, instance->len, out);
 
-  if (status != CCJS_OK) {
-    return status;
-  }
-
-  for (size_t index = 0; index < instance->len; index += 1) {
-    char key_bytes[64];
-    int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
-    ccjs_value key = ccjs_undefined_value();
-
-    if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
-      status = CCJS_ERR_TYPE;
-    } else {
-      status = ccjs_string_from_literal(allocator, key_bytes, (size_t)key_len, &key);
-    }
-
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(*out, index, key);
-    }
-
-    ccjs_release(key);
-
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
-      return status;
-    }
-  }
-
-  return CCJS_OK;
-}
-
-static ccjs_status ccjs_array_object_entries(ccjs_allocator* allocator, ccjs_value array, ccjs_value* out) {
-  if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
-  }
-
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
-  ccjs_status status = ccjs_array_new(allocator, instance->len, out);
-
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   for (size_t index = 0; index < instance->len; index += 1) {
     char key_bytes[64];
     int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
-    ccjs_value pair = ccjs_undefined_value();
-    ccjs_value key = ccjs_undefined_value();
-    ccjs_value value = ccjs_undefined_value();
+    inox_value key = inox_undefined_value();
 
     if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
-      status = CCJS_ERR_TYPE;
+      status = INOX_ERR_TYPE;
     } else {
-      status = ccjs_array_new(allocator, 2, &pair);
+      status = inox_string_from_literal(allocator, key_bytes, (size_t)key_len, &key);
     }
 
-    if (status == CCJS_OK) {
-      status = ccjs_string_from_literal(allocator, key_bytes, (size_t)key_len, &key);
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, index, key);
     }
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_get(array, index, &value);
-    }
+    inox_release(key);
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(pair, 0, key);
-    }
-
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(pair, 1, value);
-    }
-
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(*out, index, pair);
-    }
-
-    ccjs_release(value);
-    ccjs_release(key);
-    ccjs_release(pair);
-
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
       return status;
     }
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_object_keys(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out) {
+static inox_status inox_array_object_entries(inox_allocator* allocator, inox_value array, inox_value* out) {
+  if (allocator == 0 || out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_array* instance = (inox_array*)array.as.ref;
+  inox_status status = inox_array_new(allocator, instance->len, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  for (size_t index = 0; index < instance->len; index += 1) {
+    char key_bytes[64];
+    int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
+    inox_value pair = inox_undefined_value();
+    inox_value key = inox_undefined_value();
+    inox_value value = inox_undefined_value();
+
+    if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
+      status = INOX_ERR_TYPE;
+    } else {
+      status = inox_array_new(allocator, 2, &pair);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_string_from_literal(allocator, key_bytes, (size_t)key_len, &key);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_array_get(array, index, &value);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_array_set(pair, 0, key);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_array_set(pair, 1, value);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, index, pair);
+    }
+
+    inox_release(value);
+    inox_release(key);
+    inox_release(pair);
+
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
+      return status;
+    }
+  }
+
+  return INOX_OK;
+}
+
+inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_value* out) {
   if (allocator == 0 || out == 0 || object.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (object.tag == CCJS_TAG_ARRAY) {
-    return ccjs_array_object_keys(allocator, object, out);
+  if (object.tag == INOX_TAG_ARRAY) {
+    return inox_array_object_keys(allocator, object, out);
   }
 
-  if (object.tag != CCJS_TAG_OBJECT) {
-    return CCJS_ERR_TYPE;
+  if (object.tag != INOX_TAG_OBJECT) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
-  ccjs_status status = ccjs_array_new(allocator, instance->shape->field_count, out);
+  inox_object* instance = (inox_object*)object.as.ref;
+  inox_status status = inox_array_new(allocator, instance->shape->field_count, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
     const char* name = instance->shape->fields[index].name == 0 ? "" : instance->shape->fields[index].name;
-    ccjs_value key = ccjs_undefined_value();
+    inox_value key = inox_undefined_value();
 
-    status = ccjs_string_from_literal(allocator, name, strlen(name), &key);
+    status = inox_string_from_literal(allocator, name, strlen(name), &key);
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(*out, index, key);
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, index, key);
     }
 
-    ccjs_release(key);
+    inox_release(key);
 
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
       return status;
     }
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_object_values(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out) {
+inox_status inox_object_values(inox_allocator* allocator, inox_value object, inox_value* out) {
   if (allocator == 0 || out == 0 || object.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (object.tag == CCJS_TAG_ARRAY) {
-    return ccjs_array_object_values(allocator, object, out);
+  if (object.tag == INOX_TAG_ARRAY) {
+    return inox_array_object_values(allocator, object, out);
   }
 
-  if (object.tag != CCJS_TAG_OBJECT) {
-    return CCJS_ERR_TYPE;
+  if (object.tag != INOX_TAG_OBJECT) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
-  ccjs_status status = ccjs_array_new(allocator, instance->shape->field_count, out);
+  inox_object* instance = (inox_object*)object.as.ref;
+  inox_status status = inox_array_new(allocator, instance->shape->field_count, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
-    ccjs_value value = ccjs_undefined_value();
+    inox_value value = inox_undefined_value();
 
-    status = ccjs_object_get_known(object, index, &value);
+    status = inox_object_get_known(object, index, &value);
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(*out, index, value);
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, index, value);
     }
 
-    ccjs_release(value);
+    inox_release(value);
 
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
       return status;
     }
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_object_entries(ccjs_allocator* allocator, ccjs_value object, ccjs_value* out) {
+inox_status inox_object_entries(inox_allocator* allocator, inox_value object, inox_value* out) {
   if (allocator == 0 || out == 0 || object.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (object.tag == CCJS_TAG_ARRAY) {
-    return ccjs_array_object_entries(allocator, object, out);
+  if (object.tag == INOX_TAG_ARRAY) {
+    return inox_array_object_entries(allocator, object, out);
   }
 
-  if (object.tag != CCJS_TAG_OBJECT) {
-    return CCJS_ERR_TYPE;
+  if (object.tag != INOX_TAG_OBJECT) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_object* instance = (ccjs_object*)object.as.ref;
-  ccjs_status status = ccjs_array_new(allocator, instance->shape->field_count, out);
+  inox_object* instance = (inox_object*)object.as.ref;
+  inox_status status = inox_array_new(allocator, instance->shape->field_count, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
     const char* name = instance->shape->fields[index].name == 0 ? "" : instance->shape->fields[index].name;
-    ccjs_value pair = ccjs_undefined_value();
-    ccjs_value key = ccjs_undefined_value();
-    ccjs_value value = ccjs_undefined_value();
+    inox_value pair = inox_undefined_value();
+    inox_value key = inox_undefined_value();
+    inox_value value = inox_undefined_value();
 
-    status = ccjs_array_new(allocator, 2, &pair);
+    status = inox_array_new(allocator, 2, &pair);
 
-    if (status == CCJS_OK) {
-      status = ccjs_string_from_literal(allocator, name, strlen(name), &key);
+    if (status == INOX_OK) {
+      status = inox_string_from_literal(allocator, name, strlen(name), &key);
     }
 
-    if (status == CCJS_OK) {
-      status = ccjs_object_get_known(object, index, &value);
+    if (status == INOX_OK) {
+      status = inox_object_get_known(object, index, &value);
     }
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(pair, 0, key);
+    if (status == INOX_OK) {
+      status = inox_array_set(pair, 0, key);
     }
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(pair, 1, value);
+    if (status == INOX_OK) {
+      status = inox_array_set(pair, 1, value);
     }
 
-    if (status == CCJS_OK) {
-      status = ccjs_array_set(*out, index, pair);
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, index, pair);
     }
 
-    ccjs_release(value);
-    ccjs_release(key);
-    ccjs_release(pair);
+    inox_release(value);
+    inox_release(key);
+    inox_release(pair);
 
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
       return status;
     }
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }

@@ -44,14 +44,14 @@ test('maps crypto globals to runtime methods', () => {
 
 test('maps time globals to runtime methods and C functions', () => {
   assert.equal(timeRuntimeMethodNameFromPath(['Date', 'now']), 'dateNow')
-  assert.equal(timeRuntimeCFunctionNameFromPath(['Date', 'now']), 'ccjs_date_now')
+  assert.equal(timeRuntimeCFunctionNameFromPath(['Date', 'now']), 'inox_date_now')
   assert.deepEqual(timeRuntimeCapabilityFromPath(['Date', 'now']), {
     key: 'wallClock',
     name: 'wall-clock'
   })
 
   assert.equal(timeRuntimeMethodNameFromPath(['performance', 'now']), 'performanceNow')
-  assert.equal(timeRuntimeCFunctionNameFromPath(['performance', 'now']), 'ccjs_performance_now')
+  assert.equal(timeRuntimeCFunctionNameFromPath(['performance', 'now']), 'inox_performance_now')
   assert.deepEqual(timeRuntimeCapabilityFromPath(['performance', 'now']), {
     key: 'monotonicClock',
     name: 'monotonic-clock'

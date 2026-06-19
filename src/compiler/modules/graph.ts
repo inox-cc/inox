@@ -67,7 +67,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   const source = context.host.readFileSync(path)
 
   if (source == null) {
-    context.diagnostics.push(diagnostic('CCJS_MODULE_NOT_FOUND', `cannot read module ${path}`, { line: 1, column: 1 }))
+    context.diagnostics.push(diagnostic('INOX_MODULE_NOT_FOUND', `cannot read module ${path}`, { line: 1, column: 1 }))
     context.visiting.delete(path)
     return false
   }
@@ -130,7 +130,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     if (!isRelativeSpecifier(item.source)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_UNSUPPORTED_IMPORT_SOURCE',
+          'INOX_UNSUPPORTED_IMPORT_SOURCE',
           `only relative imports are implemented, got ${item.source}`,
           item.loc
         )
@@ -161,7 +161,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
       if (exported == null) {
         context.diagnostics.push(
-          diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
+          diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
         )
         continue
       }
@@ -170,7 +170,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
         if (exported.type !== 'TypeAliasDeclaration') {
           context.diagnostics.push(
             diagnostic(
-              'CCJS_UNKNOWN_EXPORT',
+              'INOX_UNKNOWN_EXPORT',
               `${item.source} does not export type ${specifier.imported}`,
               specifier.loc
             )
@@ -195,7 +195,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
       if (exported.type === 'TypeAliasDeclaration') {
         context.diagnostics.push(
           diagnostic(
-            'CCJS_UNKNOWN_EXPORT',
+            'INOX_UNKNOWN_EXPORT',
             `${item.source} exports ${specifier.imported} as a type; use import type`,
             specifier.loc
           )
@@ -229,7 +229,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     if (!isRelativeSpecifier(item.source)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_UNSUPPORTED_IMPORT_SOURCE',
+          'INOX_UNSUPPORTED_IMPORT_SOURCE',
           `only relative exports are implemented, got ${item.source}`,
           item.loc
         )
@@ -257,7 +257,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
       if (exported == null) {
         context.diagnostics.push(
-          diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
+          diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
         )
         continue
       }
@@ -265,7 +265,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
       if (item.typeOnly === true && exported.type !== 'TypeAliasDeclaration') {
         context.diagnostics.push(
           diagnostic(
-            'CCJS_UNKNOWN_EXPORT',
+            'INOX_UNKNOWN_EXPORT',
             `${item.source} does not export type ${specifier.imported}`,
             specifier.loc
           )
@@ -319,7 +319,7 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
     if (!isRelativeSpecifier(item.source)) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_UNSUPPORTED_IMPORT_SOURCE',
+          'INOX_UNSUPPORTED_IMPORT_SOURCE',
           `only relative imports are implemented, got ${item.source}`,
           item.loc
         )
@@ -353,7 +353,7 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
 
       if (exported == null) {
         context.diagnostics.push(
-          diagnostic('CCJS_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
+          diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
         )
         continue
       }
@@ -361,7 +361,7 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
       if (exported.type !== 'TypeAliasDeclaration') {
         context.diagnostics.push(
           diagnostic(
-            'CCJS_UNKNOWN_EXPORT',
+            'INOX_UNKNOWN_EXPORT',
             `${item.source} does not export type ${specifier.imported}`,
             specifier.loc
           )
@@ -470,7 +470,7 @@ function resolveModuleGraphImport(context: ModuleGraphContext, fromPath: string,
   try {
     return resolveImportSpecifier(fromPath, specifier, context.host)
   } catch {
-    context.diagnostics.push(diagnostic('CCJS_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
+    context.diagnostics.push(diagnostic('INOX_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
     return ''
   }
 }

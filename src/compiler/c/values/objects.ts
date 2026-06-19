@@ -685,8 +685,8 @@ function emitPreparedDynamicObjectIndexExpressionValueExpression(
   }
 
   const object = dependencies.emitCValueExpression(expression.object, context)
-  const key = dependencies.emitPreparedStringBytesOperand(expression.index, context, 'ccjs_object_key')
-  const temp = nextCName(context, 'ccjs_value')
+  const key = dependencies.emitPreparedStringBytesOperand(expression.index, context, 'inox_object_key')
+  const temp = nextCName(context, 'inox_value')
   const tag = cRuntimeValueTag(expression.valueType)
   const lines: string[] = []
 
@@ -695,7 +695,7 @@ function emitPreparedDynamicObjectIndexExpressionValueExpression(
   appendLines(lines, object.lines)
   appendLines(lines, key.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`ccjs_object_get(${object.expression}, ${key.bytes}, ${key.length}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_object_get(${object.expression}, ${key.bytes}, ${key.length}, &${temp})`, context))
   appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
   return {
@@ -787,7 +787,7 @@ function emitPreparedKnownObjectFieldValueExpression(
     return null
   }
 
-  const temp = nextCName(context, 'ccjs_value')
+  const temp = nextCName(context, 'inox_value')
   const tag = cRuntimeValueTag(field.valueType)
   const lines: string[] = []
 
@@ -815,7 +815,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
   }
 
   const object = dependencies.emitCValueExpression(objectExpression, context)
-  const temp = nextCName(context, 'ccjs_value')
+  const temp = nextCName(context, 'inox_value')
   const tag = cRuntimeValueTag(field.valueType)
   const lines: string[] = []
 
@@ -823,7 +823,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`ccjs_object_get_known(${object.expression}, ${field.index}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_object_get_known(${object.expression}, ${field.index}, &${temp})`, context))
   appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
   return {
@@ -845,7 +845,7 @@ function emitPreparedDynamicObjectFieldValueExpression(
   }
 
   const object = dependencies.emitCValueExpression(objectExpression, context)
-  const temp = nextCName(context, 'ccjs_value')
+  const temp = nextCName(context, 'inox_value')
   const tag = cRuntimeValueTag(expression.valueType)
   const lines: string[] = []
 
@@ -853,7 +853,7 @@ function emitPreparedDynamicObjectFieldValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`ccjs_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`, context))
   appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
   return {
@@ -882,7 +882,7 @@ function emitDynamicObjectFieldAssignmentLines(
   appendLines(lines, value.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_object_set(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
+      `inox_object_set(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
       context
     )
   )
@@ -906,11 +906,11 @@ function emitDynamicRuntimeObjectFieldAssignmentLines(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != CCJS_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
   appendLines(lines, value.lines)
   lines.push(
     emitStatusCheck(
-      `ccjs_object_set(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
+      `inox_object_set(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
       context
     )
   )
@@ -1057,7 +1057,7 @@ function unsupportedObjectFieldValueExpression(
 
   return {
     lines: [],
-    expression: 'ccjs_undefined_value()'
+    expression: 'inox_undefined_value()'
   }
 }
 
@@ -1070,7 +1070,7 @@ function emitObjectFieldInitializerValue(
   if (field.valueType === 'function') {
     return {
       lines: [],
-      expression: 'ccjs_undefined_value()'
+      expression: 'inox_undefined_value()'
     }
   }
 
@@ -1255,7 +1255,7 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
     ]
   }
 
-  context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, source.loc))
+  context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, source.loc))
 
   return [
     `${dependencies.emitFunctionPointerVariableWithCInitializer(
@@ -1290,7 +1290,7 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
 
     appendLines(lines, emitPrepareOwnedValueWrite(name))
     lines.push(`${name} = ${sourceName};`)
-    lines.push(`ccjs_retain(${name});`)
+    lines.push(`inox_retain(${name});`)
 
     return lines
   }
@@ -1299,17 +1299,17 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(name))
-    lines.push(`${name} = ccjs_null_value();`)
+    lines.push(`${name} = inox_null_value();`)
 
     return lines
   }
 
-  context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, source.loc))
+  context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, source.loc))
 
   const lines: string[] = []
 
   appendLines(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(`${name} = ccjs_undefined_value();`)
+  lines.push(`${name} = inox_undefined_value();`)
 
   return lines
 }
@@ -1322,10 +1322,10 @@ function knownObjectFieldReadCall(
   const object = emitObjectValueReference(access.objectName, context)
 
   if (access.kind === 'known') {
-    return `ccjs_object_get_known(${object}, ${access.index}, &${temp})`
+    return `inox_object_get_known(${object}, ${access.index}, &${temp})`
   }
 
-  return `ccjs_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
+  return `inox_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
 }
 
 export function registerObjectShape(
@@ -1358,24 +1358,24 @@ export function emitObjectVariableDeclaration(
   context: ObjectFunctionContext,
   dependencies: ObjectVariableDeclarationDependencies
 ): string[] {
-  const shapeName = nextCName(context, `ccjs_shape_${statement.name}`)
+  const shapeName = nextCName(context, `inox_shape_${statement.name}`)
   const fieldsName = `${shapeName}_fields`
   const fields = objectVariableShapeFields(statement, context, dependencies)
   const properties = statement.init.properties
-  const lines = [`static const ccjs_field_info ${fieldsName}[] = {`]
+  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
     lines.push(`  { ${cStringLiteral(field.name)}, ${dependencies.emitCFieldFlags(field)} },`)
   }
 
   lines.push('};')
-  lines.push(`static const ccjs_shape ${shapeName} = {`)
+  lines.push(`static const inox_shape ${shapeName} = {`)
   lines.push(`  ${fields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
   registerOwnedValue(context, statement.name)
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`ccjs_object_new(&ccjs_default_allocator, &${shapeName}, &${statement.name})`, context))
+  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${statement.name})`, context))
 
   context.variables.set(statement.name, 'object')
   registerObjectShapeFields(context, statement.name, fields, new Set())
@@ -1396,11 +1396,11 @@ export function emitObjectVariableDeclaration(
 
       const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
       appendLines(lines, value.lines)
-      lines.push(emitStatusCheck(`ccjs_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
+      lines.push(emitStatusCheck(`inox_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
       appendLines(lines, emitNestedObjectFunctionFieldVariableDeclarations(statement.name, field, property, context, dependencies, seenTypes))
     } else {
       if (field.optional !== true) {
-        context.diagnostics.push(diagnostic('CCJS_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
+        context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
       }
     }
   }

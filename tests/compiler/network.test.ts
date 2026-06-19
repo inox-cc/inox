@@ -38,7 +38,7 @@ export function main(): void {
     cLibuvOptions
   )
 
-  assert.match(result.code, /#include "ccjs\/dgram\.h"/)
+  assert.match(result.code, /#include "inox\/dgram\.h"/)
 })
 
 
@@ -58,13 +58,13 @@ server.bind(0, '127.0.0.1', () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /static ccjs_status ccjs_dgram_message_handler_\d+\(void\* user, ccjs_dgram_socket\* ccjs_socket, const char\* ccjs_bytes, size_t ccjs_len, const char\* ccjs_host, int ccjs_port\);/)
-  assert.match(result.code, /ccjs_dgram_socket_new\(&ccjs_loop, 0, 0, &server\)/)
-  assert.match(result.code, /ccjs_dgram_socket_on_message\(server, ccjs_dgram_message_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_dgram_bind_flags\(server, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
-  assert.match(result.code, /ccjs_dgram_recv_start\(server\)/)
-  assert.match(result.code, /ccjs_dgram_send\(ccjs_socket, ccjs_bytes, ccjs_len, ccjs_host, \(int\)\(ccjs_port\)\)/)
-  assert.match(result.code, /ccjs_dgram_socket_address\(server, &address\)/)
+  assert.match(result.code, /static inox_status inox_dgram_message_handler_\d+\(void\* user, inox_dgram_socket\* inox_socket, const char\* inox_bytes, size_t inox_len, const char\* inox_host, int inox_port\);/)
+  assert.match(result.code, /inox_dgram_socket_new\(&inox_loop, 0, 0, &server\)/)
+  assert.match(result.code, /inox_dgram_socket_on_message\(server, inox_dgram_message_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_dgram_bind_flags\(server, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
+  assert.match(result.code, /inox_dgram_recv_start\(server\)/)
+  assert.match(result.code, /inox_dgram_send\(inox_socket, inox_bytes, inox_len, inox_host, \(int\)\(inox_port\)\)/)
+  assert.match(result.code, /inox_dgram_socket_address\(server, &address\)/)
   assert.match(result.code, /printf\("%g\\n", \(\(double\)address\.port\)\)/)
 })
 
@@ -79,8 +79,8 @@ socket.bind({ port: 0, address: '127.0.0.1' })
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_dgram_socket_new\(&ccjs_loop, 0, 0, &socket\)/)
-  assert.match(result.code, /ccjs_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
+  assert.match(result.code, /inox_dgram_socket_new\(&inox_loop, 0, 0, &socket\)/)
+  assert.match(result.code, /inox_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
 })
 
 
@@ -99,10 +99,10 @@ socket.disconnect()
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_dgram_socket_connect\(socket, "127\.0\.0\.1", \(int\)\(41234\)\)/)
-  assert.match(result.code, /ccjs_dgram_socket_remote_address\(socket, &remote\)/)
-  assert.match(result.code, /ccjs_dgram_send_connected\(socket, "hello", 5\)/)
-  assert.match(result.code, /ccjs_dgram_socket_disconnect\(socket\)/)
+  assert.match(result.code, /inox_dgram_socket_connect\(socket, "127\.0\.0\.1", \(int\)\(41234\)\)/)
+  assert.match(result.code, /inox_dgram_socket_remote_address\(socket, &remote\)/)
+  assert.match(result.code, /inox_dgram_send_connected\(socket, "hello", 5\)/)
+  assert.match(result.code, /inox_dgram_socket_disconnect\(socket\)/)
 })
 
 
@@ -125,15 +125,15 @@ console.log(sendSize, recvSize)
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), CCJS_DGRAM_BIND_REUSEADDR\)/)
-  assert.match(result.code, /ccjs_dgram_set_broadcast\(socket, 0 \? 1 : 0\)/)
-  assert.match(result.code, /ccjs_dgram_set_ttl\(socket, \(int\)\(32\)\)/)
-  assert.match(result.code, /ccjs_dgram_set_send_buffer_size\(socket, \(int\)\(4096\)\)/)
-  assert.match(result.code, /ccjs_dgram_set_recv_buffer_size\(socket, \(int\)\(4096\)\)/)
-  assert.match(result.code, /ccjs_dgram_get_send_buffer_size\(socket, &ccjs_dgram_buffer_size_\d+\)/)
-  assert.match(result.code, /ccjs_dgram_get_recv_buffer_size\(socket, &ccjs_dgram_buffer_size_\d+\)/)
-  assert.match(result.code, /ccjs_dgram_unref\(socket\)/)
-  assert.match(result.code, /ccjs_dgram_ref\(socket\)/)
+  assert.match(result.code, /inox_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), INOX_DGRAM_BIND_REUSEADDR\)/)
+  assert.match(result.code, /inox_dgram_set_broadcast\(socket, 0 \? 1 : 0\)/)
+  assert.match(result.code, /inox_dgram_set_ttl\(socket, \(int\)\(32\)\)/)
+  assert.match(result.code, /inox_dgram_set_send_buffer_size\(socket, \(int\)\(4096\)\)/)
+  assert.match(result.code, /inox_dgram_set_recv_buffer_size\(socket, \(int\)\(4096\)\)/)
+  assert.match(result.code, /inox_dgram_get_send_buffer_size\(socket, &inox_dgram_buffer_size_\d+\)/)
+  assert.match(result.code, /inox_dgram_get_recv_buffer_size\(socket, &inox_dgram_buffer_size_\d+\)/)
+  assert.match(result.code, /inox_dgram_unref\(socket\)/)
+  assert.match(result.code, /inox_dgram_ref\(socket\)/)
 })
 
 
@@ -143,7 +143,7 @@ test('reports unsupported node:dgram compatibility shapes with dgram diagnostics
 
 const socket = dgram.createSocket('udp6')
 `,
-    'CCJS_DGRAM_SOCKET',
+    'INOX_DGRAM_SOCKET',
     cLibuvOptions
   )
 
@@ -153,7 +153,7 @@ const socket = dgram.createSocket('udp6')
 const socket = dgram.createSocket('udp4')
 socket.addMembership('224.0.0.1')
 `,
-    'CCJS_DGRAM_SOCKET',
+    'INOX_DGRAM_SOCKET',
     cLibuvOptions
   )
 })
@@ -169,7 +169,7 @@ export function main(): void {
     cLibuvOptions
   )
 
-  assert.match(result.code, /#include "ccjs\/net\.h"/)
+  assert.match(result.code, /#include "inox\/net\.h"/)
 })
 
 
@@ -198,17 +198,17 @@ server.listen({ port: 0, host: '127.0.0.1', backlog: 16 }, () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /static ccjs_status ccjs_net_connection_handler_\d+\(void\* user, ccjs_net_server\* ccjs_server, ccjs_net_socket\* ccjs_socket\);/)
-  assert.match(result.code, /static ccjs_status ccjs_net_event_handler_\d+\(void\* user, ccjs_net_server\* ccjs_server\);/)
-  assert.match(result.code, /static ccjs_status ccjs_net_error_handler_\d+\(void\* user, ccjs_net_server\* ccjs_server, ccjs_status ccjs_error_status\);/)
-  assert.match(result.code, /ccjs_net_server_new\(&ccjs_loop, ccjs_net_connection_handler_\d+, 0, &server\)/)
-  assert.match(result.code, /ccjs_net_server_on_listening\(server, ccjs_net_event_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_server_on_close\(server, ccjs_net_event_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_server_on_error\(server, ccjs_net_error_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_server_listen\(server, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(16\)\)/)
-  assert.match(result.code, /ccjs_net_socket_end\(ccjs_socket, "hello", 5\)/)
-  assert.match(result.code, /ccjs_net_address address;/)
-  assert.match(result.code, /ccjs_net_server_address\(server, &address\)/)
+  assert.match(result.code, /static inox_status inox_net_connection_handler_\d+\(void\* user, inox_net_server\* inox_server, inox_net_socket\* inox_socket\);/)
+  assert.match(result.code, /static inox_status inox_net_event_handler_\d+\(void\* user, inox_net_server\* inox_server\);/)
+  assert.match(result.code, /static inox_status inox_net_error_handler_\d+\(void\* user, inox_net_server\* inox_server, inox_status inox_error_status\);/)
+  assert.match(result.code, /inox_net_server_new\(&inox_loop, inox_net_connection_handler_\d+, 0, &server\)/)
+  assert.match(result.code, /inox_net_server_on_listening\(server, inox_net_event_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_server_on_close\(server, inox_net_event_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_server_on_error\(server, inox_net_error_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_server_listen\(server, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(16\)\)/)
+  assert.match(result.code, /inox_net_socket_end\(inox_socket, "hello", 5\)/)
+  assert.match(result.code, /inox_net_address address;/)
+  assert.match(result.code, /inox_net_server_address\(server, &address\)/)
   assert.match(result.code, /printf\("%s %s %g\\n", address\.address, address\.family, \(\(double\)address\.port\)\)/)
 })
 
@@ -222,10 +222,10 @@ createServer((socket) => socket.end('ok')).listen(0, '127.0.0.1')
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_net_server\* ccjs_net_server_\d+ = 0;/)
-  assert.match(result.code, /ccjs_net_server_new\(&ccjs_loop, ccjs_net_connection_handler_\d+, 0, &ccjs_net_server_\d+\)/)
-  assert.match(result.code, /ccjs_net_server_listen\(ccjs_net_server_\d+, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(128\)\)/)
-  assert.match(result.code, /ccjs_net_socket_end\(ccjs_socket, "ok", 2\)/)
+  assert.match(result.code, /inox_net_server\* inox_net_server_\d+ = 0;/)
+  assert.match(result.code, /inox_net_server_new\(&inox_loop, inox_net_connection_handler_\d+, 0, &inox_net_server_\d+\)/)
+  assert.match(result.code, /inox_net_server_listen\(inox_net_server_\d+, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(128\)\)/)
+  assert.match(result.code, /inox_net_socket_end\(inox_socket, "ok", 2\)/)
 })
 
 
@@ -264,23 +264,23 @@ client.on('drain', () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /static ccjs_status ccjs_net_socket_event_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket\);/)
-  assert.match(result.code, /static ccjs_status ccjs_net_socket_data_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket, const char\* ccjs_bytes, size_t ccjs_len\);/)
-  assert.match(result.code, /static ccjs_status ccjs_net_socket_write_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket, ccjs_status ccjs_write_status\);/)
-  assert.match(result.code, /static ccjs_status ccjs_net_socket_error_handler_\d+\(void\* user, ccjs_net_socket\* ccjs_socket, ccjs_status ccjs_error_status\);/)
-  assert.match(result.code, /ccjs_net_connect\(&ccjs_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
-  assert.match(result.code, /ccjs_net_socket_on_connect\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_socket_set_encoding\(client, "utf8", 4\)/)
-  assert.match(result.code, /ccjs_net_socket_on_data\(client, ccjs_net_socket_data_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_socket_read_start\(client\)/)
-  assert.match(result.code, /ccjs_net_socket_on_end\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_socket_on_close\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_socket_on_error\(client, ccjs_net_socket_error_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_socket_on_drain\(client, ccjs_net_socket_event_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_socket_write_with_callback\(ccjs_socket, "ping", 4, ccjs_net_socket_write_handler_\d+, 0\)/)
-  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)ccjs_len, ccjs_bytes\)/)
-  assert.match(result.code, /ccjs_net_socket_end_with_callback\(ccjs_socket, ccjs_bytes, ccjs_len, ccjs_net_socket_write_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_net_socket_destroy\(ccjs_socket\)/)
+  assert.match(result.code, /static inox_status inox_net_socket_event_handler_\d+\(void\* user, inox_net_socket\* inox_socket\);/)
+  assert.match(result.code, /static inox_status inox_net_socket_data_handler_\d+\(void\* user, inox_net_socket\* inox_socket, const char\* inox_bytes, size_t inox_len\);/)
+  assert.match(result.code, /static inox_status inox_net_socket_write_handler_\d+\(void\* user, inox_net_socket\* inox_socket, inox_status inox_write_status\);/)
+  assert.match(result.code, /static inox_status inox_net_socket_error_handler_\d+\(void\* user, inox_net_socket\* inox_socket, inox_status inox_error_status\);/)
+  assert.match(result.code, /inox_net_connect\(&inox_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
+  assert.match(result.code, /inox_net_socket_on_connect\(client, inox_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_socket_set_encoding\(client, "utf8", 4\)/)
+  assert.match(result.code, /inox_net_socket_on_data\(client, inox_net_socket_data_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_socket_read_start\(client\)/)
+  assert.match(result.code, /inox_net_socket_on_end\(client, inox_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_socket_on_close\(client, inox_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_socket_on_error\(client, inox_net_socket_error_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_socket_on_drain\(client, inox_net_socket_event_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_socket_write_with_callback\(inox_socket, "ping", 4, inox_net_socket_write_handler_\d+, 0\)/)
+  assert.match(result.code, /printf\("%\.\*s\\n", \(int\)inox_len, inox_bytes\)/)
+  assert.match(result.code, /inox_net_socket_end_with_callback\(inox_socket, inox_bytes, inox_len, inox_net_socket_write_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_net_socket_destroy\(inox_socket\)/)
 })
 
 
@@ -306,22 +306,22 @@ console.log(local.address, local.port, remoteAddress, remotePort, localAddress, 
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_net_connect\(&ccjs_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
-  assert.match(result.code, /ccjs_net_address local;/)
-  assert.match(result.code, /ccjs_net_socket_address\(client, &local\)/)
-  assert.match(result.code, /ccjs_net_socket_remote_address\(client, &ccjs_net_address_\d+\)/)
-  assert.match(result.code, /const char \*remoteAddress = ccjs_net_address_\d+\.address;/)
-  assert.match(result.code, /remotePort = \(double\)ccjs_net_address_\d+\.port;/)
-  assert.match(result.code, /ccjs_net_socket_address\(client, &ccjs_net_address_\d+\)/)
-  assert.match(result.code, /const char \*localAddress = ccjs_net_address_\d+\.address;/)
-  assert.match(result.code, /localPort = \(double\)ccjs_net_address_\d+\.port;/)
-  assert.match(result.code, /ccjs_net_socket_get_bytes_read\(client, &ccjs_net_counter\)/)
-  assert.match(result.code, /ccjs_net_socket_get_bytes_written\(client, &ccjs_net_counter\)/)
-  assert.match(result.code, /ccjs_net_socket_set_no_delay\(client, 1 \? 1 : 0\)/)
-  assert.match(result.code, /ccjs_net_socket_set_no_delay\(client, 0 \? 1 : 0\)/)
-  assert.match(result.code, /ccjs_net_socket_set_keep_alive\(client, 1 \? 1 : 0, \(unsigned int\)\(10\)\)/)
-  assert.match(result.code, /ccjs_net_socket_unref\(client\)/)
-  assert.match(result.code, /ccjs_net_socket_ref\(client\)/)
+  assert.match(result.code, /inox_net_connect\(&inox_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
+  assert.match(result.code, /inox_net_address local;/)
+  assert.match(result.code, /inox_net_socket_address\(client, &local\)/)
+  assert.match(result.code, /inox_net_socket_remote_address\(client, &inox_net_address_\d+\)/)
+  assert.match(result.code, /const char \*remoteAddress = inox_net_address_\d+\.address;/)
+  assert.match(result.code, /remotePort = \(double\)inox_net_address_\d+\.port;/)
+  assert.match(result.code, /inox_net_socket_address\(client, &inox_net_address_\d+\)/)
+  assert.match(result.code, /const char \*localAddress = inox_net_address_\d+\.address;/)
+  assert.match(result.code, /localPort = \(double\)inox_net_address_\d+\.port;/)
+  assert.match(result.code, /inox_net_socket_get_bytes_read\(client, &inox_net_counter\)/)
+  assert.match(result.code, /inox_net_socket_get_bytes_written\(client, &inox_net_counter\)/)
+  assert.match(result.code, /inox_net_socket_set_no_delay\(client, 1 \? 1 : 0\)/)
+  assert.match(result.code, /inox_net_socket_set_no_delay\(client, 0 \? 1 : 0\)/)
+  assert.match(result.code, /inox_net_socket_set_keep_alive\(client, 1 \? 1 : 0, \(unsigned int\)\(10\)\)/)
+  assert.match(result.code, /inox_net_socket_unref\(client\)/)
+  assert.match(result.code, /inox_net_socket_ref\(client\)/)
   assert.match(result.code, /printf\("%s %g %s %g %s %g %g %g\\n"/)
 })
 
@@ -333,7 +333,7 @@ test('reports unsupported node:net socket timeout with net diagnostics', () => {
 const client = net.connect(9000)
 client.setTimeout(1000)
 `,
-    'CCJS_NET_SOCKET',
+    'INOX_NET_SOCKET',
     cLibuvOptions
   )
 })
@@ -349,7 +349,7 @@ export function main(): void {
     cLibuvOptions
   )
 
-  assert.match(result.code, /#include "ccjs\/http\.h"/)
+  assert.match(result.code, /#include "inox\/http\.h"/)
 })
 
 
@@ -358,7 +358,7 @@ test('reports libuv-only C APIs when the loop backend is embedded', () => {
     `const response = await fetch('https://example.test/hello')
 console.log(response.status)
 `,
-    'CCJS_NOT_IMPLEMENTED',
+    'INOX_NOT_IMPLEMENTED',
     {
       target: 'c'
     }
@@ -368,7 +368,7 @@ console.log(response.status)
     `import dgram from 'node:dgram'
 console.log(dgram)
 `,
-    'CCJS_NOT_IMPLEMENTED',
+    'INOX_NOT_IMPLEMENTED',
     {
       target: 'c'
     }
@@ -378,7 +378,7 @@ console.log(dgram)
     `import net from 'node:net'
 console.log(net)
 `,
-    'CCJS_NOT_IMPLEMENTED',
+    'INOX_NOT_IMPLEMENTED',
     {
       target: 'c'
     }
@@ -388,7 +388,7 @@ console.log(net)
     `import http from 'node:http'
 console.log(http)
 `,
-    'CCJS_NOT_IMPLEMENTED',
+    'INOX_NOT_IMPLEMENTED',
     {
       target: 'c'
     }
@@ -410,7 +410,7 @@ console.log(response.status)
   }
 
   assert.ok(error instanceof CompileError)
-  assert.equal(error.diagnostics[0].code, 'CCJS_NOT_IMPLEMENTED')
+  assert.equal(error.diagnostics[0].code, 'INOX_NOT_IMPLEMENTED')
   assert.match(error.diagnostics[0].message, /fetch is not implemented for C without libuv/)
 })
 
@@ -424,13 +424,13 @@ console.log(response.status, response.ok, response.url, text)
     cLibuvOptions
   )
 
-  assert.match(result.code, /#include "ccjs\/fetch\.h"/)
-  assert.match(result.code, /#include "ccjs\/object\.h"/)
-  assert.match(result.code, /ccjs_fetch\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/hello", 27, &ccjs_promise_\d+\)/)
-  assert.match(result.code, /ccjs_fetch_response_text\(&ccjs_loop, response, &ccjs_promise_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(response, 0, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(response, 1, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(response, 2, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /#include "inox\/fetch\.h"/)
+  assert.match(result.code, /#include "inox\/object\.h"/)
+  assert.match(result.code, /inox_fetch\(&inox_loop, "http:\/\/127\.0\.0\.1:9000\/hello", 27, &inox_promise_\d+\)/)
+  assert.match(result.code, /inox_fetch_response_text\(&inox_loop, response, &inox_promise_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(response, 0, &inox_log_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(response, 1, &inox_log_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(response, 2, &inox_log_value_\d+\)/)
   assert.match(result.code, /printf\("%g %g %\.\*s %\.\*s\\n"/)
 })
 
@@ -441,7 +441,7 @@ test('lowers global fetch init options to the C fetch runtime', () => {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'X-CCJS': 'fetch'
+    'X-INOX': 'fetch'
   },
   body: '{"name":"Ada"}'
 })
@@ -450,9 +450,9 @@ console.log(response.status)
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_fetch_header ccjs_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-CCJS", 6, "fetch", 5 \} \};/)
-  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ "POST", 4, ccjs_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14, ccjs_undefined_value\(\), 0, 0 \};/)
-  assert.match(result.code, /ccjs_fetch_with_init\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/users", 27, &ccjs_fetch_init_\d+, &ccjs_promise_\d+\)/)
+  assert.match(result.code, /inox_fetch_header inox_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-INOX", 6, "fetch", 5 \} \};/)
+  assert.match(result.code, /inox_fetch_init inox_fetch_init_\d+ = \{ "POST", 4, inox_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14, inox_undefined_value\(\), 0, 0 \};/)
+  assert.match(result.code, /inox_fetch_with_init\(&inox_loop, "http:\/\/127\.0\.0\.1:9000\/users", 27, &inox_fetch_init_\d+, &inox_promise_\d+\)/)
 })
 
 
@@ -467,16 +467,16 @@ console.log(response.statusText, response.redirected, contentType ?? 'missing', 
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, ccjs_undefined_value\(\), "manual", 6 \};/)
-  assert.match(result.code, /ccjs_object_get_known\(response, 5, &headers\)/)
-  assert.match(result.code, /ccjs_fetch_headers_get\(&ccjs_default_allocator, headers, "content-type", 12, &ccjs_fetch_header_value_\d+\)/)
-  assert.match(result.code, /ccjs_nullable_value_\d+ = ccjs_fetch_header_value_\d+;/)
-  assert.match(result.code, /contentType = ccjs_nullable_value_\d+;/)
-  assert.match(result.code, /ccjs_retain\(contentType\);/)
-  assert.match(result.code, /ccjs_object_get_known\(response, 5, &ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_fetch_headers_has\(ccjs_value_\d+, "x-trace", 7, &hasTrace\)/)
-  assert.match(result.code, /ccjs_object_get_known\(response, 3, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(response, 4, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /inox_fetch_init inox_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, inox_undefined_value\(\), "manual", 6 \};/)
+  assert.match(result.code, /inox_object_get_known\(response, 5, &headers\)/)
+  assert.match(result.code, /inox_fetch_headers_get\(&inox_default_allocator, headers, "content-type", 12, &inox_fetch_header_value_\d+\)/)
+  assert.match(result.code, /inox_nullable_value_\d+ = inox_fetch_header_value_\d+;/)
+  assert.match(result.code, /contentType = inox_nullable_value_\d+;/)
+  assert.match(result.code, /inox_retain\(contentType\);/)
+  assert.match(result.code, /inox_object_get_known\(response, 5, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_fetch_headers_has\(inox_value_\d+, "x-trace", 7, &hasTrace\)/)
+  assert.match(result.code, /inox_object_get_known\(response, 3, &inox_log_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(response, 4, &inox_log_value_\d+\)/)
 })
 
 
@@ -490,11 +490,11 @@ console.log(response.status)
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_fetch_abort_controller_new\(&ccjs_default_allocator, &controller\)/)
-  assert.match(result.code, /ccjs_fetch_abort_controller_abort\(controller\)/)
-  assert.match(result.code, /ccjs_fetch_abort_controller_signal\(controller, &ccjs_fetch_signal_\d+\)/)
-  assert.match(result.code, /ccjs_fetch_init ccjs_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, ccjs_fetch_signal_\d+, 0, 0 \};/)
-  assert.match(result.code, /ccjs_fetch_with_init\(&ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/slow", 26, &ccjs_fetch_init_\d+, &ccjs_promise_\d+\)/)
+  assert.match(result.code, /inox_fetch_abort_controller_new\(&inox_default_allocator, &controller\)/)
+  assert.match(result.code, /inox_fetch_abort_controller_abort\(controller\)/)
+  assert.match(result.code, /inox_fetch_abort_controller_signal\(controller, &inox_fetch_signal_\d+\)/)
+  assert.match(result.code, /inox_fetch_init inox_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, inox_fetch_signal_\d+, 0, 0 \};/)
+  assert.match(result.code, /inox_fetch_with_init\(&inox_loop, "http:\/\/127\.0\.0\.1:9000\/slow", 26, &inox_fetch_init_\d+, &inox_promise_\d+\)/)
 })
 
 
@@ -512,11 +512,11 @@ test('lowers fetch rejections to Error-like catch bindings in C', () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\) goto ccjs_cleanup;/)
-  assert.match(result.code, /ccjs_value error = ccjs_error;/)
+  assert.match(result.code, /if \(inox_error\.tag != INOX_TAG_OBJECT \|\| inox_error\.as\.ref == 0\) goto inox_cleanup;/)
+  assert.match(result.code, /inox_value error = inox_error;/)
   assert.match(result.code, /printf\("%\.\*s: %\.\*s\\n"/)
   assert.match(result.code, /printf\("%s %\.\*s: %\.\*s\\n", "#error:"/)
-  assert.doesNotMatch(result.code, /ccjs_string\* error = \(ccjs_string\*\)ccjs_error\.as\.ref;/)
+  assert.doesNotMatch(result.code, /inox_string\* error = \(inox_string\*\)inox_error\.as\.ref;/)
 })
 
 
@@ -533,8 +533,8 @@ console.log(text)
     cLibuvOptions
   )
 
-  assert.match(result.code, /status = ccjs_fetch_with_init\(ccjs_loop, "http:\/\/127\.0\.0\.1:9000\/status", 28, &ccjs_fetch_init_\d+, &frame->awaited\);/)
-  assert.match(result.code, /ccjs_fetch_response_text\(ccjs_loop, response, &ccjs_promise_\d+\)/)
+  assert.match(result.code, /status = inox_fetch_with_init\(inox_loop, "http:\/\/127\.0\.0\.1:9000\/status", 28, &inox_fetch_init_\d+, &frame->awaited\);/)
+  assert.match(result.code, /inox_fetch_response_text\(inox_loop, response, &inox_promise_\d+\)/)
 })
 
 
@@ -543,7 +543,7 @@ test('reports unsupported fetch init and response body helpers with fetch diagno
     `const response = await fetch('http://127.0.0.1:9000/hello', { cache: 'no-store' })
 console.log(response.status)
 `,
-    'CCJS_FETCH',
+    'INOX_FETCH',
     cLibuvOptions
   )
 
@@ -551,7 +551,7 @@ console.log(response.status)
     `const response = await fetch('https://example.test/hello')
 console.log(response.status)
 `,
-    'CCJS_FETCH',
+    'INOX_FETCH',
     cLibuvOptions
   )
 
@@ -559,7 +559,7 @@ console.log(response.status)
     `const response = await fetch('HTTPS://example.test/hello')
 console.log(response.status)
 `,
-    'CCJS_FETCH',
+    'INOX_FETCH',
     cLibuvOptions
   )
 
@@ -567,7 +567,7 @@ console.log(response.status)
     `const response = await fetch('http://127.0.0.1:9000/hello', { redirect: 'same-origin' })
 console.log(response.status)
 `,
-    'CCJS_FETCH',
+    'INOX_FETCH',
     cLibuvOptions
   )
 
@@ -576,7 +576,7 @@ console.log(response.status)
 const data = await response.json()
 console.log(data)
 `,
-    'CCJS_FETCH',
+    'INOX_FETCH',
     cLibuvOptions
   )
 
@@ -585,7 +585,7 @@ console.log(data)
 const data = await response.arrayBuffer()
 console.log(data)
 `,
-    'CCJS_FETCH',
+    'INOX_FETCH',
     cLibuvOptions
   )
 
@@ -593,7 +593,7 @@ console.log(data)
     `const response = await fetch('http://127.0.0.1:9000/hello')
 console.log(response.body)
 `,
-    'CCJS_FETCH',
+    'INOX_FETCH',
     cLibuvOptions
   )
 })
@@ -610,7 +610,7 @@ console.log(response.status)
     }
   )
 
-  assert.match(result.code, /ccjs_fetch\(&ccjs_loop, "https:\/\/example\.test\/hello", \d+, &ccjs_promise_\d+\)/)
+  assert.match(result.code, /inox_fetch\(&inox_loop, "https:\/\/example\.test\/hello", \d+, &inox_promise_\d+\)/)
 })
 
 
@@ -628,11 +628,11 @@ server.listen(8080, '127.0.0.1')
     cLibuvOptions
   )
 
-  assert.match(result.code, /static ccjs_status ccjs_http_handler_\d+\(void\* user, const ccjs_http_request\* ccjs_request, ccjs_http_response\* ccjs_response\);/)
-  assert.match(result.code, /ccjs_http_server_new\(&ccjs_loop, ccjs_http_handler_\d+, 0, &server\)/)
-  assert.match(result.code, /ccjs_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
-  assert.match(result.code, /ccjs_http_response_write_head\(res, \(int\)\(200\), ccjs_http_headers_\d+, 1\)/)
-  assert.match(result.code, /ccjs_http_response_end\(res, "\{\\\"data\\\":\\\"Hello World!\\\"\}", 23\)/)
+  assert.match(result.code, /static inox_status inox_http_handler_\d+\(void\* user, const inox_http_request\* inox_request, inox_http_response\* inox_response\);/)
+  assert.match(result.code, /inox_http_server_new\(&inox_loop, inox_http_handler_\d+, 0, &server\)/)
+  assert.match(result.code, /inox_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
+  assert.match(result.code, /inox_http_response_write_head\(res, \(int\)\(200\), inox_http_headers_\d+, 1\)/)
+  assert.match(result.code, /inox_http_response_end\(res, "\{\\\"data\\\":\\\"Hello World!\\\"\}", 23\)/)
 })
 
 
@@ -656,13 +656,13 @@ server.listen(9000)
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_http_request_method_equals\(request, "GET", 3\)/)
-  assert.match(result.code, /ccjs_http_request_url_equals\(request, "\/health", 7\)/)
-  assert.match(result.code, /ccjs_http_response_set_status\(response, \(int\)\(204\)\)/)
-  assert.match(result.code, /ccjs_http_response_set_header\(response, "Content-Type", 12, "text\/plain", 10\)/)
-  assert.match(result.code, /ccjs_http_response_write\(response, "missing", 7\)/)
-  assert.match(result.code, /ccjs_http_response_end\(response, request->url, request->url_len\)/)
-  assert.match(result.code, /ccjs_http_server_listen\(server, 0, \(int\)\(9000\), 128\)/)
+  assert.match(result.code, /inox_http_request_method_equals\(request, "GET", 3\)/)
+  assert.match(result.code, /inox_http_request_url_equals\(request, "\/health", 7\)/)
+  assert.match(result.code, /inox_http_response_set_status\(response, \(int\)\(204\)\)/)
+  assert.match(result.code, /inox_http_response_set_header\(response, "Content-Type", 12, "text\/plain", 10\)/)
+  assert.match(result.code, /inox_http_response_write\(response, "missing", 7\)/)
+  assert.match(result.code, /inox_http_response_end\(response, request->url, request->url_len\)/)
+  assert.match(result.code, /inox_http_server_listen\(server, 0, \(int\)\(9000\), 128\)/)
 })
 
 
@@ -682,10 +682,10 @@ server.listen(8080, '127.0.0.1', () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /ccjs_http_server_new\(&ccjs_loop, 0, 0, &server\)/)
-  assert.match(result.code, /ccjs_http_server_on_request\(server, ccjs_http_handler_\d+, 0\)/)
-  assert.match(result.code, /ccjs_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
-  assert.match(result.code, /ccjs_http_server_close\(server\);/)
+  assert.match(result.code, /inox_http_server_new\(&inox_loop, 0, 0, &server\)/)
+  assert.match(result.code, /inox_http_server_on_request\(server, inox_http_handler_\d+, 0\)/)
+  assert.match(result.code, /inox_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
+  assert.match(result.code, /inox_http_server_close\(server\);/)
 })
 
 

@@ -27,7 +27,7 @@ test('C runtime console adapter captures stdout and stderr writes', async (t) =>
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-console-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-console-runtime-'))
   const source = join(dir, 'console-runtime.c')
   const output = join(dir, 'console-runtime')
 
@@ -36,7 +36,7 @@ test('C runtime console adapter captures stdout and stderr writes', async (t) =>
       source,
       `#include <stdio.h>
 #include <string.h>
-#include "ccjs/console.h"
+#include "inox/console.h"
 
 typedef struct capture {
   char out[64];
@@ -45,26 +45,26 @@ typedef struct capture {
   size_t err_len;
 } capture;
 
-static ccjs_status capture_write(void* user, ccjs_console_stream stream, const char* bytes, size_t len) {
+static inox_status capture_write(void* user, inox_console_stream stream, const char* bytes, size_t len) {
   capture* cap = (capture*)user;
-  char* target = stream == CCJS_CONSOLE_STDERR ? cap->err : cap->out;
-  size_t* target_len = stream == CCJS_CONSOLE_STDERR ? &cap->err_len : &cap->out_len;
+  char* target = stream == INOX_CONSOLE_STDERR ? cap->err : cap->out;
+  size_t* target_len = stream == INOX_CONSOLE_STDERR ? &cap->err_len : &cap->out_len;
 
-  if (*target_len + len >= 64) return CCJS_ERR_OOM;
+  if (*target_len + len >= 64) return INOX_ERR_OOM;
   memcpy(target + *target_len, bytes, len);
   *target_len += len;
   target[*target_len] = '\\0';
-  return CCJS_OK;
+  return INOX_OK;
 }
 
 int main(void) {
   capture cap = { 0 };
-  ccjs_console_set_adapter((ccjs_console_adapter){ &cap, capture_write });
+  inox_console_set_adapter((inox_console_adapter){ &cap, capture_write });
 
-  if (ccjs_console_write_line(CCJS_CONSOLE_STDOUT, "hello", 5) != CCJS_OK) return 1;
-  if (ccjs_console_printf(CCJS_CONSOLE_STDERR, "%s %d\\n", "bad", 7) < 0) return 2;
+  if (inox_console_write_line(INOX_CONSOLE_STDOUT, "hello", 5) != INOX_OK) return 1;
+  if (inox_console_printf(INOX_CONSOLE_STDERR, "%s %d\\n", "bad", 7) < 0) return 2;
 
-  ccjs_console_clear_adapter();
+  inox_console_clear_adapter();
   printf("%s|%s", cap.out, cap.err);
   return 0;
 }
@@ -110,7 +110,7 @@ test('generated C direct console log string return compiles and runs with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-direct-string-return-log-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-direct-string-return-log-'))
   const source = join(dir, 'direct-string-return-log.c')
   const output = join(dir, 'direct-string-return-log')
 
@@ -155,7 +155,7 @@ test('generated C direct console log member and index expressions compile and ru
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-direct-console-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-direct-console-'))
   const source = join(dir, 'direct-console.c')
   const output = join(dir, 'direct-console')
 

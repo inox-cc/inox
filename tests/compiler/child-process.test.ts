@@ -6,7 +6,7 @@ test('lowers node:child_process sync helpers to the C runtime', () => {
     `import { execFileSync, execSync, spawnSync } from 'node:child_process'
 
 export function main(): void {
-  console.log(execSync('printf ccjs', { encoding: 'utf8', cwd: '/tmp', env: { PATH: '/bin:/usr/bin' } }))
+  console.log(execSync('printf inox', { encoding: 'utf8', cwd: '/tmp', env: { PATH: '/bin:/usr/bin' } }))
   console.log(execFileSync('printf', ['child'], { encoding: 'utf8', stdio: 'pipe' }))
   const spawned = spawnSync('printf', ['spawn'], { encoding: 'utf8', timeout: 1000 })
   console.log(spawned.status, spawned.stdout, spawned.stderr)
@@ -25,11 +25,11 @@ export function main(): void {
     'objects',
     'string-bytes'
   ])
-  assert.match(result.code, /#include "ccjs\/child_process\.h"/)
-  assert.match(result.code, /ccjs_child_process_exec_sync\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_child_process_exec_file_sync\(&ccjs_default_allocator,/)
-  assert.match(result.code, /ccjs_child_process_spawn_sync\(&ccjs_default_allocator,/)
-  assert.match(result.code, /static const ccjs_field_info ccjs_shape_spawn_sync_\d+_fields\[\]/)
+  assert.match(result.code, /#include "inox\/child_process\.h"/)
+  assert.match(result.code, /inox_child_process_exec_sync\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_child_process_exec_file_sync\(&inox_default_allocator,/)
+  assert.match(result.code, /inox_child_process_spawn_sync\(&inox_default_allocator,/)
+  assert.match(result.code, /static const inox_field_info inox_shape_spawn_sync_\d+_fields\[\]/)
 })
 
 test('lowers default node:child_process namespace helper', () => {
@@ -43,7 +43,7 @@ console.log(childProcess.execSync('printf ns', { encoding: 'utf8' }))
     }
   )
 
-  assert.match(result.code, /ccjs_child_process_exec_sync\(&ccjs_default_allocator,/)
+  assert.match(result.code, /inox_child_process_exec_sync\(&inox_default_allocator,/)
 })
 
 test('requires utf8 encoding for node:child_process string output', () => {
@@ -52,7 +52,7 @@ test('requires utf8 encoding for node:child_process string output', () => {
       compileSource(
         `import { execSync } from 'node:child_process'
 
-execSync('printf ccjs')
+execSync('printf inox')
 `,
         {
           target: 'c'
@@ -65,7 +65,7 @@ execSync('printf ccjs')
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       return true
@@ -79,7 +79,7 @@ test('reports unsupported node:child_process sync options at compile time only',
       compileSource(
         `import { spawnSync } from 'node:child_process'
 
-spawnSync('printf', ['ccjs'], { encoding: 'utf8', shell: true })
+spawnSync('printf', ['inox'], { encoding: 'utf8', shell: true })
 `,
         {
           target: 'c'
@@ -92,7 +92,7 @@ spawnSync('printf', ['ccjs'], { encoding: 'utf8', shell: true })
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(
@@ -110,7 +110,7 @@ test('reports unsupported node:child_process methods at compile time only', () =
       compileSource(
         `import { spawn } from 'node:child_process'
 
-spawn('printf', ['ccjs'])
+spawn('printf', ['inox'])
 `,
         {
           target: 'c'
@@ -123,7 +123,7 @@ spawn('printf', ['ccjs'])
       }
 
       assert.equal(
-        error.diagnostics.some((item) => item.code === 'CCJS_NOT_IMPLEMENTED'),
+        error.diagnostics.some((item) => item.code === 'INOX_NOT_IMPLEMENTED'),
         true
       )
       assert.equal(

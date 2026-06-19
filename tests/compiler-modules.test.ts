@@ -159,12 +159,12 @@ export function main(): void {
   })
   const indexSource = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
 
-  assert.match(indexSource, /ccjs_string_code_unit_length_parts/)
-  assert.doesNotMatch(indexSource, /ccjs_array_len/)
+  assert.match(indexSource, /inox_string_code_unit_length_parts/)
+  assert.doesNotMatch(indexSource, /inox_array_len/)
 })
 
 test('resolves module sources and builds module graphs through split entrypoint', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-modules-'))
 
   try {
     const entry = join(dir, 'index.ts')
@@ -294,10 +294,10 @@ export function main(): void {
   const depSource = result.files.find((file) => file.path === 'dep.c')?.code ?? ''
   const indexSource = result.files.find((file) => file.path === 'index.c')?.code ?? ''
 
-  assert.match(depHeader, /extern double ccjs_mod_dep_ts_[a-f0-9]+_answer;/)
-  assert.match(depSource, /double ccjs_mod_dep_ts_[a-f0-9]+_answer = 0;/)
-  assert.match(indexSource, /ccjs_mod_dep_ts_[a-f0-9]+_init\(\);/)
-  assert.match(indexSource, /ccjs_mod_dep_ts_[a-f0-9]+_answer/)
+  assert.match(depHeader, /extern double inox_mod_dep_ts_[a-f0-9]+_answer;/)
+  assert.match(depSource, /double inox_mod_dep_ts_[a-f0-9]+_answer = 0;/)
+  assert.match(indexSource, /inox_mod_dep_ts_[a-f0-9]+_init\(\);/)
+  assert.match(indexSource, /inox_mod_dep_ts_[a-f0-9]+_answer/)
 })
 
 test('returns module-scope object constants through C module globals', async () => {
@@ -323,9 +323,9 @@ export function read(): Item {
   })
   const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
 
-  assert.match(source, /static ccjs_value ccjs_mod_index_ts_[a-f0-9]+_fallback;/)
-  assert.match(source, /ccjs_return = ccjs_mod_index_ts_[a-f0-9]+_fallback;/)
-  assert.doesNotMatch(source, /ccjs_return = fallback;/)
+  assert.match(source, /static inox_value inox_mod_index_ts_[a-f0-9]+_fallback;/)
+  assert.match(source, /inox_return = inox_mod_index_ts_[a-f0-9]+_fallback;/)
+  assert.doesNotMatch(source, /inox_return = fallback;/)
 })
 
 test('preserves createFunctionContext companion aliases for typed locals', async () => {
@@ -370,8 +370,8 @@ export function main(): void {
   })
   const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
 
-  assert.match(source, /take\(context, ccjs_objfn_baseContext_dep_run\)/)
-  assert.doesNotMatch(source, /take\(context, ccjs_objfn_context_dep_run\)/)
+  assert.match(source, /take\(context, inox_objfn_baseContext_dep_run\)/)
+  assert.doesNotMatch(source, /take\(context, inox_objfn_context_dep_run\)/)
 })
 
 test('emits C module wrappers for re-exported functions', async () => {
@@ -407,11 +407,11 @@ export function main(): void {
   const barrelSource = modules.files.find((file) => file.path === 'barrel.c')?.code ?? ''
   const indexSource = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
 
-  assert.match(barrelHeader, /double ccjs_mod_barrel_ts_[a-f0-9]+_value\(void\);/)
-  assert.match(barrelSource, /double ccjs_mod_barrel_ts_[a-f0-9]+_value\(void\) \{/)
-  assert.match(barrelSource, /ccjs_return = ccjs_mod_dep_ts_[a-f0-9]+_value\(\);/)
-  assert.match(indexSource, /ccjs_mod_barrel_ts_[a-f0-9]+_value\(\)/)
-  assert.doesNotMatch(barrelSource, /ccjs_return = ccjs_mod_barrel_ts_[a-f0-9]+_value\(\);/)
+  assert.match(barrelHeader, /double inox_mod_barrel_ts_[a-f0-9]+_value\(void\);/)
+  assert.match(barrelSource, /double inox_mod_barrel_ts_[a-f0-9]+_value\(void\) \{/)
+  assert.match(barrelSource, /inox_return = inox_mod_dep_ts_[a-f0-9]+_value\(\);/)
+  assert.match(indexSource, /inox_mod_barrel_ts_[a-f0-9]+_value\(\)/)
+  assert.doesNotMatch(barrelSource, /inox_return = inox_mod_barrel_ts_[a-f0-9]+_value\(\);/)
 })
 
 test('keeps local exported function names when an import uses the same imported name', async () => {
@@ -441,9 +441,9 @@ export function build(value: number): number {
   const header = modules.files.find((file) => file.path === 'index.h')?.code ?? ''
   const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
 
-  assert.match(header, /double ccjs_mod_index_ts_[a-f0-9]+_build\(double value\);/)
-  assert.doesNotMatch(header, /double ccjs_mod_dep_ts_[a-f0-9]+_build\(double value\);/)
-  assert.match(source, /ccjs_return = ccjs_mod_dep_ts_[a-f0-9]+_build\(value, 1\);/)
+  assert.match(header, /double inox_mod_index_ts_[a-f0-9]+_build\(double value\);/)
+  assert.doesNotMatch(header, /double inox_mod_dep_ts_[a-f0-9]+_build\(double value\);/)
+  assert.match(source, /inox_return = inox_mod_dep_ts_[a-f0-9]+_build\(value, 1\);/)
 })
 
 test('compiles memory packages through self-hosting entrypoints', async () => {
@@ -536,21 +536,21 @@ export function main(): void {
 
   assert.match(
     workerHeader,
-    /ccjs_status ccjs_mod_worker_ts_[a-f0-9]+_read\(ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\);/
+    /inox_status inox_mod_worker_ts_[a-f0-9]+_read\(inox_value\* inox_out, inox_value\* inox_error_out\);/
   )
   assert.match(
     workerSource,
-    /static ccjs_status ccjs_method_TicketWorker_read\(ccjs_value this, ccjs_value\* ccjs_out, ccjs_value\* ccjs_error_out\);/
+    /static inox_status inox_method_TicketWorker_read\(inox_value this, inox_value\* inox_out, inox_value\* inox_error_out\);/
   )
   assert.match(
     workerSource,
-    /ccjs_status ccjs_method_status_\d+ = ccjs_method_TicketWorker_read\(worker, &ccjs_method_result_\d+, &ccjs_error\);/
+    /inox_status inox_method_status_\d+ = inox_method_TicketWorker_read\(worker, &inox_method_result_\d+, &inox_error\);/
   )
   assert.match(
     indexSource,
-    /ccjs_status ccjs_call_status_\d+ = ccjs_mod_worker_ts_[a-f0-9]+_read\(&ccjs_call_result_\d+, &ccjs_error\);/
+    /inox_status inox_call_status_\d+ = inox_mod_worker_ts_[a-f0-9]+_read\(&inox_call_result_\d+, &inox_error\);/
   )
-  assert.doesNotMatch(indexSource, /ccjs_value_\d+ = ccjs_mod_worker_ts_[a-f0-9]+_read\(\);/)
+  assert.doesNotMatch(indexSource, /inox_value_\d+ = inox_mod_worker_ts_[a-f0-9]+_read\(\);/)
 })
 
 test('lowers module-scope captures in object function field arrows', async () => {
@@ -583,9 +583,9 @@ export function main(): void {
   })
   const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
 
-  assert.match(source, /static ccjs_value ccjs_mod_index_ts_[a-f0-9]+_base;/)
-  assert.match(source, /static ccjs_value ccjs_mod_index_ts_[a-f0-9]+_deps;/)
-  assert.match(source, /static double ccjs_callback_arrow_0\(void\)/)
-  assert.match(source, /ccjs_mod_index_ts_[a-f0-9]+_base/)
-  assert.match(source, /ccjs_objfn_deps_read/)
+  assert.match(source, /static inox_value inox_mod_index_ts_[a-f0-9]+_base;/)
+  assert.match(source, /static inox_value inox_mod_index_ts_[a-f0-9]+_deps;/)
+  assert.match(source, /static double inox_callback_arrow_0\(void\)/)
+  assert.match(source, /inox_mod_index_ts_[a-f0-9]+_base/)
+  assert.match(source, /inox_objfn_deps_read/)
 })

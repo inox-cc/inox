@@ -27,7 +27,7 @@ test('C runtime value/object/array skeleton compiles and runs', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-'))
   const source = join(dir, 'runtime-smoke.c')
   const output = join(dir, 'runtime-smoke')
 
@@ -36,10 +36,10 @@ test('C runtime value/object/array skeleton compiles and runs', async (t) => {
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/array.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/array.h"
+#include "inox/object.h"
+#include "inox/string.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -62,35 +62,35 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_field_info fields[] = {
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_field_info fields[] = {
     { "name", 0 },
     { "score", 0 }
   };
-  ccjs_shape shape = { 2, fields };
-  ccjs_value user;
-  ccjs_value name;
-  ccjs_value score;
-  ccjs_value array;
-  ccjs_value first;
-  ccjs_value popped;
-  ccjs_value missing;
+  inox_shape shape = { 2, fields };
+  inox_value user;
+  inox_value name;
+  inox_value score;
+  inox_value array;
+  inox_value first;
+  inox_value popped;
+  inox_value missing;
   size_t array_len;
 
-  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 1;
-  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 2;
-  if (ccjs_object_set_known(user, 0, name) != CCJS_OK) return 3;
-  if (ccjs_object_set(user, "score", 5, ccjs_number_value(42)) != CCJS_OK) return 4;
-  if (ccjs_object_get(user, "score", 5, &score) != CCJS_OK) return 5;
-  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 6;
-  if (ccjs_array_set(array, 0, ccjs_number_value(7)) != CCJS_OK) return 7;
-  if (ccjs_array_get(array, 0, &first) != CCJS_OK) return 8;
-  if (ccjs_array_pop(array, &popped) != CCJS_OK) return 9;
-  if (ccjs_array_len(array, &array_len) != CCJS_OK) return 10;
-  if (ccjs_array_pop(array, &missing) != CCJS_OK) return 11;
-  if (missing.tag != CCJS_TAG_NULL) return 12;
+  if (inox_object_new(&allocator, &shape, &user) != INOX_OK) return 1;
+  if (inox_string_from_literal(&allocator, "Ada", 3, &name) != INOX_OK) return 2;
+  if (inox_object_set_known(user, 0, name) != INOX_OK) return 3;
+  if (inox_object_set(user, "score", 5, inox_number_value(42)) != INOX_OK) return 4;
+  if (inox_object_get(user, "score", 5, &score) != INOX_OK) return 5;
+  if (inox_array_new(&allocator, 1, &array) != INOX_OK) return 6;
+  if (inox_array_set(array, 0, inox_number_value(7)) != INOX_OK) return 7;
+  if (inox_array_get(array, 0, &first) != INOX_OK) return 8;
+  if (inox_array_pop(array, &popped) != INOX_OK) return 9;
+  if (inox_array_len(array, &array_len) != INOX_OK) return 10;
+  if (inox_array_pop(array, &missing) != INOX_OK) return 11;
+  if (missing.tag != INOX_TAG_NULL) return 12;
 
-  ccjs_string* string = (ccjs_string*)name.as.ref;
+  inox_string* string = (inox_string*)name.as.ref;
   printf("%.*s %.0f %.0f %.0f %zu\\n", (int)string->len, string->bytes, score.as.number, first.as.number, popped.as.number, array_len);
   return 0;
 }
@@ -136,7 +136,7 @@ test('generated C Object.keys and Object.values compile and run with runtime sou
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-keys-values-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-keys-values-'))
   const source = join(dir, 'object-keys-values.c')
   const output = join(dir, 'object-keys-values')
 
@@ -187,7 +187,7 @@ test('generated C JSON.parse object arrays feed Object.values and Object.entries
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-object-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-json-object-array-'))
   const source = join(dir, 'json-object-array.c')
   const output = join(dir, 'json-object-array')
 
@@ -235,7 +235,7 @@ test('generated C JSON.parse object array fields feed Object.entries and for-of'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-object-array-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-json-object-array-field-'))
   const source = join(dir, 'json-object-array-field.c')
   const output = join(dir, 'json-object-array-field')
 
@@ -283,7 +283,7 @@ test('generated C invalid JSON.parse is caught and execution continues', async (
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-parse-catch-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-json-parse-catch-'))
   const source = join(dir, 'json-parse-catch.c')
   const output = join(dir, 'json-parse-catch')
 
@@ -334,7 +334,7 @@ test('C runtime JSON parse and stringify compiles and runs', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-json-runtime-'))
   const source = join(dir, 'json-runtime.c')
   const output = join(dir, 'json-runtime')
 
@@ -344,10 +344,10 @@ test('C runtime JSON parse and stringify compiles and runs', async (t) => {
       `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/json.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/json.h"
+#include "inox/object.h"
+#include "inox/string.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -369,42 +369,42 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static const ccjs_field_info cycle_fields[] = {
+static const inox_field_info cycle_fields[] = {
   { "self", 0 }
 };
-static const ccjs_shape cycle_shape = { 1, cycle_fields };
+static const inox_shape cycle_shape = { 1, cycle_fields };
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
   const char* source = "{\\"name\\":\\"Ada\\",\\"unicode\\":\\"\\\\u00e9 \\\\u0416 \\\\ud83d\\\\ude00\\",\\"scores\\":[3,4],\\"active\\":true}";
-  ccjs_value value;
-  ccjs_value name;
-  ccjs_value unicode;
-  ccjs_value text;
-  ccjs_value ignored;
-  ccjs_value cycle;
+  inox_value value;
+  inox_value name;
+  inox_value unicode;
+  inox_value text;
+  inox_value ignored;
+  inox_value cycle;
 
-  if (ccjs_json_parse(&allocator, source, strlen(source), &value) != CCJS_OK) return 1;
-  if (ccjs_object_get(value, "name", 4, &name) != CCJS_OK) return 2;
-  if (ccjs_object_get(value, "unicode", 7, &unicode) != CCJS_OK) return 3;
-  if (ccjs_json_stringify(&allocator, value, &text) != CCJS_OK) return 4;
-  if (ccjs_json_stringify(&allocator, ccjs_undefined_value(), &ignored) != CCJS_ERR_UNSUPPORTED) return 5;
-  if (ccjs_object_new(&allocator, &cycle_shape, &cycle) != CCJS_OK) return 6;
-  if (ccjs_object_init_known(cycle, 0, cycle) != CCJS_OK) return 7;
-  if (ccjs_json_stringify(&allocator, cycle, &ignored) != CCJS_ERR_UNSUPPORTED) return 8;
-  if (ccjs_object_set_known(cycle, 0, ccjs_null_value()) != CCJS_OK) return 9;
+  if (inox_json_parse(&allocator, source, strlen(source), &value) != INOX_OK) return 1;
+  if (inox_object_get(value, "name", 4, &name) != INOX_OK) return 2;
+  if (inox_object_get(value, "unicode", 7, &unicode) != INOX_OK) return 3;
+  if (inox_json_stringify(&allocator, value, &text) != INOX_OK) return 4;
+  if (inox_json_stringify(&allocator, inox_undefined_value(), &ignored) != INOX_ERR_UNSUPPORTED) return 5;
+  if (inox_object_new(&allocator, &cycle_shape, &cycle) != INOX_OK) return 6;
+  if (inox_object_init_known(cycle, 0, cycle) != INOX_OK) return 7;
+  if (inox_json_stringify(&allocator, cycle, &ignored) != INOX_ERR_UNSUPPORTED) return 8;
+  if (inox_object_set_known(cycle, 0, inox_null_value()) != INOX_OK) return 9;
 
-  ccjs_string* name_string = (ccjs_string*)name.as.ref;
-  ccjs_string* unicode_string = (ccjs_string*)unicode.as.ref;
-  ccjs_string* text_string = (ccjs_string*)text.as.ref;
+  inox_string* name_string = (inox_string*)name.as.ref;
+  inox_string* unicode_string = (inox_string*)unicode.as.ref;
+  inox_string* text_string = (inox_string*)text.as.ref;
   printf("%.*s %.*s %.*s\\n", (int)name_string->len, name_string->bytes, (int)unicode_string->len, unicode_string->bytes, (int)text_string->len, text_string->bytes);
 
-  ccjs_release(cycle);
-  ccjs_release(ignored);
-  ccjs_release(text);
-  ccjs_release(unicode);
-  ccjs_release(name);
-  ccjs_release(value);
+  inox_release(cycle);
+  inox_release(ignored);
+  inox_release(text);
+  inox_release(unicode);
+  inox_release(name);
+  inox_release(value);
   return 0;
 }
 `
@@ -435,7 +435,7 @@ test('C runtime binary bytes value compiles and runs', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-binary-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-binary-runtime-'))
   const source = join(dir, 'binary-runtime.c')
   const output = join(dir, 'binary-runtime')
 
@@ -445,8 +445,8 @@ test('C runtime binary bytes value compiles and runs', async (t) => {
       `#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/binary.h"
+#include "inox/allocator.h"
+#include "inox/binary.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -469,10 +469,10 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
   uint8_t data[] = { 1, 2, 3, 4 };
-  ccjs_value bytes = ccjs_undefined_value();
-  ccjs_value slice = ccjs_undefined_value();
+  inox_value bytes = inox_undefined_value();
+  inox_value slice = inox_undefined_value();
   size_t len = 0;
   size_t slice_len = 0;
   uint8_t first = 0;
@@ -481,21 +481,21 @@ int main(void) {
   uint8_t slice_second = 0;
   uint8_t slice_third = 0;
 
-  if (ccjs_bytes_from_data(&allocator, data, 4, &bytes) != CCJS_OK) return 1;
-  if (ccjs_bytes_len(bytes, &len) != CCJS_OK) return 2;
-  if (ccjs_bytes_get(bytes, 0, &first) != CCJS_OK) return 3;
-  if (ccjs_bytes_set(bytes, 2, 9) != CCJS_OK) return 4;
-  if (ccjs_bytes_get(bytes, 2, &changed) != CCJS_OK) return 5;
-  if (ccjs_bytes_slice(bytes, 1, 4, &slice) != CCJS_OK) return 6;
-  if (ccjs_bytes_len(slice, &slice_len) != CCJS_OK) return 7;
-  if (ccjs_bytes_get(slice, 0, &slice_first) != CCJS_OK) return 8;
-  if (ccjs_bytes_get(slice, 1, &slice_second) != CCJS_OK) return 9;
-  if (ccjs_bytes_get(slice, 2, &slice_third) != CCJS_OK) return 10;
+  if (inox_bytes_from_data(&allocator, data, 4, &bytes) != INOX_OK) return 1;
+  if (inox_bytes_len(bytes, &len) != INOX_OK) return 2;
+  if (inox_bytes_get(bytes, 0, &first) != INOX_OK) return 3;
+  if (inox_bytes_set(bytes, 2, 9) != INOX_OK) return 4;
+  if (inox_bytes_get(bytes, 2, &changed) != INOX_OK) return 5;
+  if (inox_bytes_slice(bytes, 1, 4, &slice) != INOX_OK) return 6;
+  if (inox_bytes_len(slice, &slice_len) != INOX_OK) return 7;
+  if (inox_bytes_get(slice, 0, &slice_first) != INOX_OK) return 8;
+  if (inox_bytes_get(slice, 1, &slice_second) != INOX_OK) return 9;
+  if (inox_bytes_get(slice, 2, &slice_third) != INOX_OK) return 10;
 
   printf("%zu %u %u %zu %u %u %u\\n", len, first, changed, slice_len, slice_first, slice_second, slice_third);
 
-  ccjs_release(slice);
-  ccjs_release(bytes);
+  inox_release(slice);
+  inox_release(bytes);
   return 0;
 }
 `
@@ -526,7 +526,7 @@ test('C runtime Map and Set helpers compile and run', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collections-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collections-runtime-'))
   const source = join(dir, 'collections-runtime.c')
   const output = join(dir, 'collections-runtime')
 
@@ -535,10 +535,10 @@ test('C runtime Map and Set helpers compile and run', async (t) => {
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/map.h"
-#include "ccjs/set.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/map.h"
+#include "inox/set.h"
+#include "inox/string.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -561,83 +561,83 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_value map = ccjs_undefined_value();
-  ccjs_value set = ccjs_undefined_value();
-  ccjs_value key = ccjs_undefined_value();
-  ccjs_value same_key = ccjs_undefined_value();
-  ccjs_value value = ccjs_undefined_value();
-  ccjs_value found = ccjs_undefined_value();
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_value map = inox_undefined_value();
+  inox_value set = inox_undefined_value();
+  inox_value key = inox_undefined_value();
+  inox_value same_key = inox_undefined_value();
+  inox_value value = inox_undefined_value();
+  inox_value found = inox_undefined_value();
   bool has = false;
   bool removed = false;
   size_t size = 0;
   size_t set_size = 0;
 
-  if (ccjs_map_new(&allocator, &map) != CCJS_OK) return 1;
-  if (ccjs_set_new(&allocator, &set) != CCJS_OK) return 1;
-  if (ccjs_string_from_literal(&allocator, "Ada", 3, &key) != CCJS_OK) return 1;
-  if (ccjs_string_from_literal(&allocator, "Ada", 3, &same_key) != CCJS_OK) return 1;
+  if (inox_map_new(&allocator, &map) != INOX_OK) return 1;
+  if (inox_set_new(&allocator, &set) != INOX_OK) return 1;
+  if (inox_string_from_literal(&allocator, "Ada", 3, &key) != INOX_OK) return 1;
+  if (inox_string_from_literal(&allocator, "Ada", 3, &same_key) != INOX_OK) return 1;
 
-  value = ccjs_number_value(7);
-  if (ccjs_map_set(map, key, value) != CCJS_OK) return 1;
-  if (ccjs_map_get(map, same_key, &found) != CCJS_OK) return 1;
-  if (ccjs_map_has(map, same_key, &has) != CCJS_OK) return 1;
-  if (ccjs_map_delete(map, same_key, &removed) != CCJS_OK) return 1;
-  if (ccjs_map_size(map, &size) != CCJS_OK) return 1;
+  value = inox_number_value(7);
+  if (inox_map_set(map, key, value) != INOX_OK) return 1;
+  if (inox_map_get(map, same_key, &found) != INOX_OK) return 1;
+  if (inox_map_has(map, same_key, &has) != INOX_OK) return 1;
+  if (inox_map_delete(map, same_key, &removed) != INOX_OK) return 1;
+  if (inox_map_size(map, &size) != INOX_OK) return 1;
   printf("%.0f %d %d %zu\\n", found.as.number, has ? 1 : 0, removed ? 1 : 0, size);
-  ccjs_release(found);
-  found = ccjs_undefined_value();
-  if (ccjs_map_get(map, same_key, &found) != CCJS_OK) return 1;
-  if (found.tag != CCJS_TAG_NULL) return 1;
-  ccjs_release(found);
-  found = ccjs_undefined_value();
+  inox_release(found);
+  found = inox_undefined_value();
+  if (inox_map_get(map, same_key, &found) != INOX_OK) return 1;
+  if (found.tag != INOX_TAG_NULL) return 1;
+  inox_release(found);
+  found = inox_undefined_value();
 
-  if (ccjs_set_add(set, key) != CCJS_OK) return 1;
-  if (ccjs_set_has(set, same_key, &has) != CCJS_OK) return 1;
-  if (ccjs_set_delete(set, same_key, &removed) != CCJS_OK) return 1;
-  if (ccjs_set_size(set, &size) != CCJS_OK) return 1;
+  if (inox_set_add(set, key) != INOX_OK) return 1;
+  if (inox_set_has(set, same_key, &has) != INOX_OK) return 1;
+  if (inox_set_delete(set, same_key, &removed) != INOX_OK) return 1;
+  if (inox_set_size(set, &size) != INOX_OK) return 1;
   printf("%d %d %zu\\n", has ? 1 : 0, removed ? 1 : 0, size);
 
   for (size_t index = 0; index < 40; index += 1) {
-    if (ccjs_map_set(map, ccjs_number_value((double)index), ccjs_number_value((double)(index * 10))) != CCJS_OK) return 1;
-    if (ccjs_set_add(set, ccjs_number_value((double)index)) != CCJS_OK) return 1;
+    if (inox_map_set(map, inox_number_value((double)index), inox_number_value((double)(index * 10))) != INOX_OK) return 1;
+    if (inox_set_add(set, inox_number_value((double)index)) != INOX_OK) return 1;
   }
 
   for (size_t index = 0; index < 20; index += 1) {
-    if (ccjs_map_delete(map, ccjs_number_value((double)index), &removed) != CCJS_OK) return 1;
+    if (inox_map_delete(map, inox_number_value((double)index), &removed) != INOX_OK) return 1;
     if (!removed) return 1;
-    if (ccjs_set_delete(set, ccjs_number_value((double)index), &removed) != CCJS_OK) return 1;
+    if (inox_set_delete(set, inox_number_value((double)index), &removed) != INOX_OK) return 1;
     if (!removed) return 1;
   }
 
   for (size_t index = 20; index < 40; index += 1) {
-    if (ccjs_map_get(map, ccjs_number_value((double)index), &found) != CCJS_OK) return 1;
-    if (found.tag != CCJS_TAG_NUMBER || found.as.number != (double)(index * 10)) return 1;
-    if (ccjs_set_has(set, ccjs_number_value((double)index), &has) != CCJS_OK) return 1;
+    if (inox_map_get(map, inox_number_value((double)index), &found) != INOX_OK) return 1;
+    if (found.tag != INOX_TAG_NUMBER || found.as.number != (double)(index * 10)) return 1;
+    if (inox_set_has(set, inox_number_value((double)index), &has) != INOX_OK) return 1;
     if (!has) return 1;
-    ccjs_release(found);
-    found = ccjs_undefined_value();
+    inox_release(found);
+    found = inox_undefined_value();
   }
 
-  if (ccjs_map_size(map, &size) != CCJS_OK) return 1;
-  if (ccjs_set_size(set, &set_size) != CCJS_OK) return 1;
+  if (inox_map_size(map, &size) != INOX_OK) return 1;
+  if (inox_set_size(set, &set_size) != INOX_OK) return 1;
   printf("%zu %zu\\n", size, set_size);
 
-  if (ccjs_map_clear(map) != CCJS_OK) return 1;
-  if (ccjs_set_clear(set) != CCJS_OK) return 1;
-  if (ccjs_map_get(map, ccjs_number_value(20), &found) != CCJS_OK) return 1;
-  if (found.tag != CCJS_TAG_NULL) return 1;
-  ccjs_release(found);
-  found = ccjs_undefined_value();
-  if (ccjs_set_has(set, ccjs_number_value(20), &has) != CCJS_OK) return 1;
-  if (ccjs_map_size(map, &size) != CCJS_OK) return 1;
-  if (ccjs_set_size(set, &set_size) != CCJS_OK) return 1;
+  if (inox_map_clear(map) != INOX_OK) return 1;
+  if (inox_set_clear(set) != INOX_OK) return 1;
+  if (inox_map_get(map, inox_number_value(20), &found) != INOX_OK) return 1;
+  if (found.tag != INOX_TAG_NULL) return 1;
+  inox_release(found);
+  found = inox_undefined_value();
+  if (inox_set_has(set, inox_number_value(20), &has) != INOX_OK) return 1;
+  if (inox_map_size(map, &size) != INOX_OK) return 1;
+  if (inox_set_size(set, &set_size) != INOX_OK) return 1;
   printf("%d %zu %zu\\n", has ? 1 : 0, size, set_size);
 
-  ccjs_release(same_key);
-  ccjs_release(key);
-  ccjs_release(set);
-  ccjs_release(map);
+  inox_release(same_key);
+  inox_release(key);
+  inox_release(set);
+  inox_release(map);
 
   return 0;
 }
@@ -669,7 +669,7 @@ test('C runtime release frees nested object and array references', async (t) => 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-release-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-release-'))
   const source = join(dir, 'release-smoke.c')
   const output = join(dir, 'release-smoke')
 
@@ -678,10 +678,10 @@ test('C runtime release frees nested object and array references', async (t) => 
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/array.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/array.h"
+#include "inox/object.h"
+#include "inox/string.h"
 
 typedef struct counters {
   int allocs;
@@ -712,26 +712,26 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
 
 int main(void) {
   counters state = { 0, 0 };
-  ccjs_allocator allocator = { &state, test_alloc, test_realloc, test_free };
-  ccjs_field_info fields[] = {
+  inox_allocator allocator = { &state, test_alloc, test_realloc, test_free };
+  inox_field_info fields[] = {
     { "name", 0 },
     { "items", 0 }
   };
-  ccjs_shape shape = { 2, fields };
-  ccjs_value name;
-  ccjs_value array;
-  ccjs_value user;
+  inox_shape shape = { 2, fields };
+  inox_value name;
+  inox_value array;
+  inox_value user;
 
-  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 1;
-  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 2;
-  if (ccjs_array_set(array, 0, name) != CCJS_OK) return 3;
-  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 4;
-  if (ccjs_object_init_known(user, 0, name) != CCJS_OK) return 5;
-  if (ccjs_object_init_known(user, 1, array) != CCJS_OK) return 6;
+  if (inox_string_from_literal(&allocator, "Ada", 3, &name) != INOX_OK) return 1;
+  if (inox_array_new(&allocator, 1, &array) != INOX_OK) return 2;
+  if (inox_array_set(array, 0, name) != INOX_OK) return 3;
+  if (inox_object_new(&allocator, &shape, &user) != INOX_OK) return 4;
+  if (inox_object_init_known(user, 0, name) != INOX_OK) return 5;
+  if (inox_object_init_known(user, 1, array) != INOX_OK) return 6;
 
-  ccjs_release(name);
-  ccjs_release(array);
-  ccjs_release(user);
+  inox_release(name);
+  inox_release(array);
+  inox_release(user);
 
   printf("%d %d %d\\n", state.allocs, state.frees, state.allocs - state.frees);
   return 0;
@@ -764,7 +764,7 @@ test('C runtime ownership ABI retains getters and releases container entries', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-ownership-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-ownership-'))
   const source = join(dir, 'ownership-smoke.c')
   const output = join(dir, 'ownership-smoke')
 
@@ -774,12 +774,12 @@ test('C runtime ownership ABI retains getters and releases container entries', a
       `#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/array.h"
-#include "ccjs/map.h"
-#include "ccjs/object.h"
-#include "ccjs/set.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/array.h"
+#include "inox/map.h"
+#include "inox/object.h"
+#include "inox/set.h"
+#include "inox/string.h"
 
 typedef struct counters {
   int allocs;
@@ -808,86 +808,86 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static int expect_ref(ccjs_value value, uint32_t expected) {
+static int expect_ref(inox_value value, uint32_t expected) {
   return value.as.ref != 0 && value.as.ref->ref_count == expected;
 }
 
 int main(void) {
   counters state = { 0, 0 };
-  ccjs_allocator allocator = { &state, test_alloc, test_realloc, test_free };
-  ccjs_field_info fields[] = {
+  inox_allocator allocator = { &state, test_alloc, test_realloc, test_free };
+  inox_field_info fields[] = {
     { "name", 0 }
   };
-  ccjs_shape shape = { 1, fields };
-  ccjs_value user;
-  ccjs_value name;
-  ccjs_value replacement;
-  ccjs_value got;
-  ccjs_value array;
-  ccjs_value popped;
-  ccjs_value map;
-  ccjs_value key;
-  ccjs_value map_value;
-  ccjs_value map_next;
-  ccjs_value map_found;
-  ccjs_value set;
-  ccjs_value set_value;
+  inox_shape shape = { 1, fields };
+  inox_value user;
+  inox_value name;
+  inox_value replacement;
+  inox_value got;
+  inox_value array;
+  inox_value popped;
+  inox_value map;
+  inox_value key;
+  inox_value map_value;
+  inox_value map_next;
+  inox_value map_found;
+  inox_value set;
+  inox_value set_value;
   bool removed = false;
 
-  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 1;
+  if (inox_string_from_literal(&allocator, "Ada", 3, &name) != INOX_OK) return 1;
   if (!expect_ref(name, 1)) return 2;
-  if (ccjs_string_from_literal(&allocator, "Grace", 5, &replacement) != CCJS_OK) return 3;
-  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 4;
-  if (ccjs_object_set_known(user, 0, name) != CCJS_OK) return 5;
+  if (inox_string_from_literal(&allocator, "Grace", 5, &replacement) != INOX_OK) return 3;
+  if (inox_object_new(&allocator, &shape, &user) != INOX_OK) return 4;
+  if (inox_object_set_known(user, 0, name) != INOX_OK) return 5;
   if (!expect_ref(name, 2)) return 6;
-  if (ccjs_object_get_known(user, 0, &got) != CCJS_OK) return 7;
+  if (inox_object_get_known(user, 0, &got) != INOX_OK) return 7;
   if (!expect_ref(name, 3)) return 8;
-  ccjs_release(got);
+  inox_release(got);
   if (!expect_ref(name, 2)) return 9;
-  if (ccjs_object_set_known(user, 0, replacement) != CCJS_OK) return 10;
+  if (inox_object_set_known(user, 0, replacement) != INOX_OK) return 10;
   if (!expect_ref(name, 1) || !expect_ref(replacement, 2)) return 11;
 
-  if (ccjs_array_new(&allocator, 1, &array) != CCJS_OK) return 12;
-  if (ccjs_array_set(array, 0, name) != CCJS_OK) return 13;
+  if (inox_array_new(&allocator, 1, &array) != INOX_OK) return 12;
+  if (inox_array_set(array, 0, name) != INOX_OK) return 13;
   if (!expect_ref(name, 2)) return 14;
-  if (ccjs_array_pop(array, &popped) != CCJS_OK) return 15;
+  if (inox_array_pop(array, &popped) != INOX_OK) return 15;
   if (popped.as.ref != name.as.ref || !expect_ref(name, 2)) return 16;
-  ccjs_release(popped);
+  inox_release(popped);
   if (!expect_ref(name, 1)) return 17;
 
-  if (ccjs_map_new(&allocator, &map) != CCJS_OK) return 18;
-  if (ccjs_string_from_literal(&allocator, "key", 3, &key) != CCJS_OK) return 19;
-  if (ccjs_string_from_literal(&allocator, "one", 3, &map_value) != CCJS_OK) return 20;
-  if (ccjs_string_from_literal(&allocator, "two", 3, &map_next) != CCJS_OK) return 21;
-  if (ccjs_map_set(map, key, map_value) != CCJS_OK) return 22;
+  if (inox_map_new(&allocator, &map) != INOX_OK) return 18;
+  if (inox_string_from_literal(&allocator, "key", 3, &key) != INOX_OK) return 19;
+  if (inox_string_from_literal(&allocator, "one", 3, &map_value) != INOX_OK) return 20;
+  if (inox_string_from_literal(&allocator, "two", 3, &map_next) != INOX_OK) return 21;
+  if (inox_map_set(map, key, map_value) != INOX_OK) return 22;
   if (!expect_ref(key, 2) || !expect_ref(map_value, 2)) return 23;
-  if (ccjs_map_get(map, key, &map_found) != CCJS_OK) return 24;
+  if (inox_map_get(map, key, &map_found) != INOX_OK) return 24;
   if (map_found.as.ref != map_value.as.ref || !expect_ref(map_value, 3)) return 25;
-  ccjs_release(map_found);
+  inox_release(map_found);
   if (!expect_ref(map_value, 2)) return 26;
-  if (ccjs_map_set(map, key, map_next) != CCJS_OK) return 27;
+  if (inox_map_set(map, key, map_next) != INOX_OK) return 27;
   if (!expect_ref(key, 2) || !expect_ref(map_value, 1) || !expect_ref(map_next, 2)) return 28;
-  if (ccjs_map_delete(map, key, &removed) != CCJS_OK || !removed) return 29;
+  if (inox_map_delete(map, key, &removed) != INOX_OK || !removed) return 29;
   if (!expect_ref(key, 1) || !expect_ref(map_next, 1)) return 30;
 
-  if (ccjs_set_new(&allocator, &set) != CCJS_OK) return 31;
-  if (ccjs_string_from_literal(&allocator, "member", 6, &set_value) != CCJS_OK) return 32;
-  if (ccjs_set_add(set, set_value) != CCJS_OK) return 33;
+  if (inox_set_new(&allocator, &set) != INOX_OK) return 31;
+  if (inox_string_from_literal(&allocator, "member", 6, &set_value) != INOX_OK) return 32;
+  if (inox_set_add(set, set_value) != INOX_OK) return 33;
   if (!expect_ref(set_value, 2)) return 34;
-  if (ccjs_set_delete(set, set_value, &removed) != CCJS_OK || !removed) return 35;
+  if (inox_set_delete(set, set_value, &removed) != INOX_OK || !removed) return 35;
   if (!expect_ref(set_value, 1)) return 36;
 
-  ccjs_release(user);
+  inox_release(user);
   if (!expect_ref(replacement, 1)) return 37;
-  ccjs_release(array);
-  ccjs_release(map);
-  ccjs_release(set);
-  ccjs_release(name);
-  ccjs_release(replacement);
-  ccjs_release(key);
-  ccjs_release(map_value);
-  ccjs_release(map_next);
-  ccjs_release(set_value);
+  inox_release(array);
+  inox_release(map);
+  inox_release(set);
+  inox_release(name);
+  inox_release(replacement);
+  inox_release(key);
+  inox_release(map_value);
+  inox_release(map_next);
+  inox_release(set_value);
 
   printf("%d %d %d\\n", state.allocs, state.frees, state.allocs - state.frees);
   return state.allocs == state.frees ? 0 : 38;
@@ -920,7 +920,7 @@ test('C runtime debug memory snapshots track refs promises callbacks and OOM', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-debug-memory-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-debug-memory-'))
   const source = join(dir, 'debug-memory-smoke.c')
   const output = join(dir, 'debug-memory-smoke')
 
@@ -929,13 +929,13 @@ test('C runtime debug memory snapshots track refs promises callbacks and OOM', a
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/callback.h"
-#include "ccjs/debug.h"
-#include "ccjs/loop.h"
-#include "ccjs/object.h"
-#include "ccjs/promise.h"
-#include "ccjs/string.h"
+#include "inox/allocator.h"
+#include "inox/callback.h"
+#include "inox/debug.h"
+#include "inox/loop.h"
+#include "inox/object.h"
+#include "inox/promise.h"
+#include "inox/string.h"
 
 static void* base_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -957,71 +957,71 @@ static void base_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status noop_callback(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out) {
+static inox_status noop_callback(void* context, const inox_value* args, size_t arg_count, inox_value* out) {
   (void)context;
   (void)args;
   (void)arg_count;
-  *out = ccjs_undefined_value();
-  return CCJS_OK;
+  *out = inox_undefined_value();
+  return INOX_OK;
 }
 
 int main(void) {
-  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
-  ccjs_allocator allocator = ccjs_debug_allocator(&base);
-  ccjs_field_info fields[] = {
+  inox_allocator base = { 0, base_alloc, base_realloc, base_free };
+  inox_allocator allocator = inox_debug_allocator(&base);
+  inox_field_info fields[] = {
     { "name", 0 }
   };
-  ccjs_shape shape = { 1, fields };
-  ccjs_debug_memory_stats stats;
-  ccjs_value name;
-  ccjs_value user;
-  ccjs_value callback;
-  ccjs_loop loop;
-  ccjs_promise* promise;
-  ccjs_value oom_value = ccjs_undefined_value();
+  inox_shape shape = { 1, fields };
+  inox_debug_memory_stats stats;
+  inox_value name;
+  inox_value user;
+  inox_value callback;
+  inox_loop loop;
+  inox_promise* promise;
+  inox_value oom_value = inox_undefined_value();
 
-  ccjs_debug_memory_reset();
-  ccjs_debug_memory_snapshot(&stats);
+  inox_debug_memory_reset();
+  inox_debug_memory_snapshot(&stats);
   if (stats.live_alloc_count != 0 || stats.live_bytes != 0) return 1;
 
-  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 2;
-  if (ccjs_object_new(&allocator, &shape, &user) != CCJS_OK) return 3;
-  if (ccjs_object_set_known(user, 0, name) != CCJS_OK) return 4;
-  ccjs_debug_memory_snapshot(&stats);
+  if (inox_string_from_literal(&allocator, "Ada", 3, &name) != INOX_OK) return 2;
+  if (inox_object_new(&allocator, &shape, &user) != INOX_OK) return 3;
+  if (inox_object_set_known(user, 0, name) != INOX_OK) return 4;
+  inox_debug_memory_snapshot(&stats);
   if (stats.alloc_count != 2 || stats.free_count != 0) return 5;
-  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 1 || stats.live_refs_by_kind[CCJS_REF_OBJECT] != 1) return 6;
+  if (stats.live_refs_by_kind[INOX_REF_STRING] != 1 || stats.live_refs_by_kind[INOX_REF_OBJECT] != 1) return 6;
   if (stats.retain_count != 1 || stats.release_count != 0) return 7;
   if (stats.live_alloc_count != 2 || stats.live_bytes == 0 || stats.peak_live_bytes < stats.live_bytes) return 8;
 
-  ccjs_release(name);
-  ccjs_release(user);
-  ccjs_debug_memory_snapshot(&stats);
-  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 0 || stats.live_refs_by_kind[CCJS_REF_OBJECT] != 0) return 9;
+  inox_release(name);
+  inox_release(user);
+  inox_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[INOX_REF_STRING] != 0 || stats.live_refs_by_kind[INOX_REF_OBJECT] != 0) return 9;
   if (stats.live_alloc_count != 0 || stats.live_bytes != 0 || stats.alloc_count != stats.free_count) return 10;
   if (stats.retain_count != 1 || stats.release_count != 3) return 11;
 
-  if (ccjs_callback_new(&allocator, noop_callback, 0, 0, &callback) != CCJS_OK) return 12;
-  ccjs_debug_memory_snapshot(&stats);
-  if (stats.live_callbacks != 1 || stats.live_refs_by_kind[CCJS_REF_FUNCTION] != 1) return 13;
-  ccjs_release(callback);
-  ccjs_debug_memory_snapshot(&stats);
-  if (stats.live_callbacks != 0 || stats.live_refs_by_kind[CCJS_REF_FUNCTION] != 0) return 14;
+  if (inox_callback_new(&allocator, noop_callback, 0, 0, &callback) != INOX_OK) return 12;
+  inox_debug_memory_snapshot(&stats);
+  if (stats.live_callbacks != 1 || stats.live_refs_by_kind[INOX_REF_FUNCTION] != 1) return 13;
+  inox_release(callback);
+  inox_debug_memory_snapshot(&stats);
+  if (stats.live_callbacks != 0 || stats.live_refs_by_kind[INOX_REF_FUNCTION] != 0) return 14;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 15;
-  if (ccjs_promise_new(&loop, &promise) != CCJS_OK) return 16;
-  ccjs_debug_memory_snapshot(&stats);
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 15;
+  if (inox_promise_new(&loop, &promise) != INOX_OK) return 16;
+  inox_debug_memory_snapshot(&stats);
   if (stats.live_promises != 1) return 17;
-  ccjs_promise_release(promise);
-  ccjs_debug_memory_snapshot(&stats);
+  inox_promise_release(promise);
+  inox_debug_memory_snapshot(&stats);
   if (stats.live_promises != 0 || stats.live_alloc_count != 0 || stats.alloc_count != stats.free_count) return 18;
 
-  ccjs_debug_memory_reset();
-  ccjs_debug_memory_set_oom_after(0);
-  if (ccjs_string_from_literal(&allocator, "boom", 4, &oom_value) != CCJS_ERR_OOM) return 19;
-  ccjs_debug_memory_snapshot(&stats);
+  inox_debug_memory_reset();
+  inox_debug_memory_set_oom_after(0);
+  if (inox_string_from_literal(&allocator, "boom", 4, &oom_value) != INOX_ERR_OOM) return 19;
+  inox_debug_memory_snapshot(&stats);
   if (stats.oom_failure_count != 1 || stats.alloc_count != 0 || stats.live_alloc_count != 0) return 20;
-  if (oom_value.tag != CCJS_TAG_UNDEFINED) return 21;
-  ccjs_debug_memory_clear_oom();
+  if (oom_value.tag != INOX_TAG_UNDEFINED) return 21;
+  inox_debug_memory_clear_oom();
 
   printf("%zu %zu %zu %zu\\n", stats.alloc_count, stats.free_count, stats.live_alloc_count, stats.oom_failure_count);
   return 0;
@@ -1029,7 +1029,7 @@ int main(void) {
 `
     )
 
-    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_DEBUG_MEMORY=1'])
+    const compile = await compileRuntimeProgram(source, output, ['-DINOX_DEBUG_MEMORY=1'])
 
     assert.equal(compile.code, 0, compile.stderr)
 
@@ -1054,7 +1054,7 @@ test('C runtime callback object invokes and releases context', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-callback-'))
   const source = join(dir, 'callback-smoke.c')
   const output = join(dir, 'callback-smoke')
 
@@ -1063,7 +1063,7 @@ test('C runtime callback object invokes and releases context', async (t) => {
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/callback.h"
+#include "inox/callback.h"
 
 typedef struct alloc_state {
   int allocs;
@@ -1098,16 +1098,16 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status add_values(void* context, const ccjs_value* args, size_t arg_count, ccjs_value* out) {
-  if (context == 0 || args == 0 || out == 0 || arg_count != 2) return CCJS_ERR_TYPE;
-  if (args[0].tag != CCJS_TAG_NUMBER || args[1].tag != CCJS_TAG_BOOL) return CCJS_ERR_TYPE;
+static inox_status add_values(void* context, const inox_value* args, size_t arg_count, inox_value* out) {
+  if (context == 0 || args == 0 || out == 0 || arg_count != 2) return INOX_ERR_TYPE;
+  if (args[0].tag != INOX_TAG_NUMBER || args[1].tag != INOX_TAG_BOOL) return INOX_ERR_TYPE;
 
   callback_state* state = (callback_state*)context;
   state->calls += 1;
   state->total += args[0].as.number + (args[1].as.boolean ? 1 : 0);
-  *out = ccjs_number_value(state->total);
+  *out = inox_number_value(state->total);
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
 static void finalize_callback(void* context) {
@@ -1118,22 +1118,22 @@ static void finalize_callback(void* context) {
 int main(void) {
   alloc_state alloc = { 0, 0 };
   callback_state callback = { 0, 0, 0 };
-  ccjs_allocator allocator = { &alloc, test_alloc, test_realloc, test_free };
-  ccjs_value fn;
-  ccjs_value out;
-  ccjs_value args[] = {
-    ccjs_number_value(3),
-    ccjs_bool_value(true)
+  inox_allocator allocator = { &alloc, test_alloc, test_realloc, test_free };
+  inox_value fn;
+  inox_value out;
+  inox_value args[] = {
+    inox_number_value(3),
+    inox_bool_value(true)
   };
 
-  if (ccjs_callback_new(&allocator, add_values, &callback, finalize_callback, &fn) != CCJS_OK) return 1;
-  if (ccjs_callback_call(fn, args, 2, &out) != CCJS_OK) return 2;
-  if (out.tag != CCJS_TAG_NUMBER) return 3;
+  if (inox_callback_new(&allocator, add_values, &callback, finalize_callback, &fn) != INOX_OK) return 1;
+  if (inox_callback_call(fn, args, 2, &out) != INOX_OK) return 2;
+  if (out.tag != INOX_TAG_NUMBER) return 3;
 
-  ccjs_retain(fn);
-  ccjs_release(fn);
+  inox_retain(fn);
+  inox_release(fn);
   if (callback.finalized != 0) return 4;
-  ccjs_release(fn);
+  inox_release(fn);
 
   printf("%d %d %.0f %.0f %d %d\\n", callback.calls, callback.finalized, callback.total, out.as.number, alloc.allocs, alloc.frees);
   return 0;
@@ -1166,7 +1166,7 @@ test('C runtime Promise microtasks settle asynchronously', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-promise-runtime-'))
   const source = join(dir, 'promise-runtime.c')
   const output = join(dir, 'promise-runtime')
 
@@ -1175,8 +1175,8 @@ test('C runtime Promise microtasks settle asynchronously', async (t) => {
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/promise.h"
+#include "inox/allocator.h"
+#include "inox/promise.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -1203,40 +1203,40 @@ typedef struct test_log {
   int values[4];
 } test_log;
 
-static ccjs_status on_value(void* context, ccjs_value value) {
+static inox_status on_value(void* context, inox_value value) {
   test_log* log = (test_log*)context;
   log->values[log->count] = (int)value.as.number;
   log->count += 1;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
-  ccjs_promise* promise = 0;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
+  inox_promise* promise = 0;
   test_log log = { 0, { 0, 0, 0, 0 } };
-  ccjs_value result;
+  inox_value result;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
-  if (ccjs_promise_new(&loop, &promise) != CCJS_OK) return 2;
-  if (ccjs_promise_then(promise, on_value, 0, &log, 0) != CCJS_OK) return 3;
-  if (ccjs_promise_then(promise, on_value, 0, &log, 0) != CCJS_OK) return 4;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
+  if (inox_promise_new(&loop, &promise) != INOX_OK) return 2;
+  if (inox_promise_then(promise, on_value, 0, &log, 0) != INOX_OK) return 3;
+  if (inox_promise_then(promise, on_value, 0, &log, 0) != INOX_OK) return 4;
   if (log.count != 0) return 5;
-  if (ccjs_promise_resolve(promise, ccjs_number_value(7)) != CCJS_OK) return 6;
+  if (inox_promise_resolve(promise, inox_number_value(7)) != INOX_OK) return 6;
   if (log.count != 0) return 7;
-  if (ccjs_loop_pending_microtasks(&loop) != 2) return 8;
-  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 9;
+  if (inox_loop_pending_microtasks(&loop) != 2) return 8;
+  if (inox_loop_drain_microtasks(&loop) != INOX_OK) return 9;
   if (log.count != 2 || log.values[0] != 7 || log.values[1] != 7) return 10;
-  if (ccjs_promise_get_result(promise, &result) != CCJS_OK) return 11;
+  if (inox_promise_get_result(promise, &result) != INOX_OK) return 11;
   if (result.as.number != 7) return 12;
-  if (ccjs_promise_then(promise, on_value, 0, &log, 0) != CCJS_OK) return 13;
+  if (inox_promise_then(promise, on_value, 0, &log, 0) != INOX_OK) return 13;
   if (log.count != 2) return 14;
-  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 15;
+  if (inox_loop_drain_microtasks(&loop) != INOX_OK) return 15;
   if (log.count != 3 || log.values[2] != 7) return 16;
 
-  ccjs_release(result);
-  ccjs_promise_release(promise);
-  ccjs_loop_dispose(&loop);
+  inox_release(result);
+  inox_promise_release(promise);
+  inox_loop_dispose(&loop);
   printf("%d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2]);
   return 0;
 }
@@ -1268,7 +1268,7 @@ test('C runtime Promise chains fulfillment and rejection recovery', async (t) =>
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-chain-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-promise-chain-runtime-'))
   const source = join(dir, 'promise-chain-runtime.c')
   const output = join(dir, 'promise-chain-runtime')
 
@@ -1277,8 +1277,8 @@ test('C runtime Promise chains fulfillment and rejection recovery', async (t) =>
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/promise.h"
+#include "inox/allocator.h"
+#include "inox/promise.h"
 
 static void* test_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -1306,32 +1306,32 @@ typedef struct test_log {
   int values[8];
 } test_log;
 
-static void push_value(test_log* log, ccjs_value value) {
+static void push_value(test_log* log, inox_value value) {
   log->values[log->count] = (int)value.as.number;
   log->count += 1;
 }
 
-static ccjs_status double_value(void* context, ccjs_value value, ccjs_value* out) {
-  if (value.tag != CCJS_TAG_NUMBER || out == 0) return CCJS_ERR_TYPE;
+static inox_status double_value(void* context, inox_value value, inox_value* out) {
+  if (value.tag != INOX_TAG_NUMBER || out == 0) return INOX_ERR_TYPE;
 
   push_value((test_log*)context, value);
-  *out = ccjs_number_value(value.as.number * 2);
-  return CCJS_OK;
+  *out = inox_number_value(value.as.number * 2);
+  return INOX_OK;
 }
 
-static ccjs_status recover_value(void* context, ccjs_value value, ccjs_value* out) {
-  if (value.tag != CCJS_TAG_NUMBER || out == 0) return CCJS_ERR_TYPE;
+static inox_status recover_value(void* context, inox_value value, inox_value* out) {
+  if (value.tag != INOX_TAG_NUMBER || out == 0) return INOX_ERR_TYPE;
 
   push_value((test_log*)context, value);
-  *out = ccjs_number_value(value.as.number + 90);
-  return CCJS_OK;
+  *out = inox_number_value(value.as.number + 90);
+  return INOX_OK;
 }
 
-static ccjs_status observe_value(void* context, ccjs_value value) {
-  if (value.tag != CCJS_TAG_NUMBER) return CCJS_ERR_TYPE;
+static inox_status observe_value(void* context, inox_value value) {
+  if (value.tag != INOX_TAG_NUMBER) return INOX_ERR_TYPE;
 
   push_value((test_log*)context, value);
-  return CCJS_OK;
+  return INOX_OK;
 }
 
 static void finalize_chain(void* context) {
@@ -1339,64 +1339,64 @@ static void finalize_chain(void* context) {
 }
 
 int main(void) {
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
-  ccjs_promise* fulfilled = 0;
-  ccjs_promise* doubled = 0;
-  ccjs_promise* rejected = 0;
-  ccjs_promise* recovered = 0;
-  ccjs_promise* rejected_factory = 0;
-  ccjs_promise* propagated = 0;
-  ccjs_value result = ccjs_undefined_value();
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
+  inox_promise* fulfilled = 0;
+  inox_promise* doubled = 0;
+  inox_promise* rejected = 0;
+  inox_promise* recovered = 0;
+  inox_promise* rejected_factory = 0;
+  inox_promise* propagated = 0;
+  inox_value result = inox_undefined_value();
   int propagated_value = 0;
   test_log log = { 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 1;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 1;
 
-  if (ccjs_promise_new(&loop, &fulfilled) != CCJS_OK) return 2;
-  if (ccjs_promise_chain(fulfilled, double_value, 0, &log, finalize_chain, &doubled) != CCJS_OK) return 3;
-  if (ccjs_promise_then(doubled, observe_value, 0, &log, 0) != CCJS_OK) return 4;
-  if (ccjs_promise_resolve(fulfilled, ccjs_number_value(4)) != CCJS_OK) return 5;
-  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 6;
+  if (inox_promise_new(&loop, &fulfilled) != INOX_OK) return 2;
+  if (inox_promise_chain(fulfilled, double_value, 0, &log, finalize_chain, &doubled) != INOX_OK) return 3;
+  if (inox_promise_then(doubled, observe_value, 0, &log, 0) != INOX_OK) return 4;
+  if (inox_promise_resolve(fulfilled, inox_number_value(4)) != INOX_OK) return 5;
+  if (inox_loop_drain_microtasks(&loop) != INOX_OK) return 6;
   if (log.count != 2 || log.values[0] != 4 || log.values[1] != 8 || log.finalized != 1) return 7;
-  if (ccjs_promise_get_result(doubled, &result) != CCJS_OK) return 8;
+  if (inox_promise_get_result(doubled, &result) != INOX_OK) return 8;
   if (result.as.number != 8) return 9;
-  ccjs_release(result);
-  result = ccjs_undefined_value();
+  inox_release(result);
+  result = inox_undefined_value();
 
-  if (ccjs_promise_new(&loop, &rejected) != CCJS_OK) return 10;
-  if (ccjs_promise_catch(rejected, recover_value, &log, finalize_chain, &recovered) != CCJS_OK) return 11;
-  if (ccjs_promise_then(recovered, observe_value, 0, &log, 0) != CCJS_OK) return 12;
-  if (ccjs_promise_reject(rejected, ccjs_number_value(5)) != CCJS_OK) return 13;
-  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 14;
+  if (inox_promise_new(&loop, &rejected) != INOX_OK) return 10;
+  if (inox_promise_catch(rejected, recover_value, &log, finalize_chain, &recovered) != INOX_OK) return 11;
+  if (inox_promise_then(recovered, observe_value, 0, &log, 0) != INOX_OK) return 12;
+  if (inox_promise_reject(rejected, inox_number_value(5)) != INOX_OK) return 13;
+  if (inox_loop_drain_microtasks(&loop) != INOX_OK) return 14;
   if (log.count != 4 || log.values[2] != 5 || log.values[3] != 95 || log.finalized != 2) return 15;
-  if (ccjs_promise_get_result(recovered, &result) != CCJS_OK) return 16;
+  if (inox_promise_get_result(recovered, &result) != INOX_OK) return 16;
   if (result.as.number != 95) return 17;
-  ccjs_release(result);
-  result = ccjs_undefined_value();
+  inox_release(result);
+  result = inox_undefined_value();
 
-  if (ccjs_promise_rejected(&loop, ccjs_number_value(6), &rejected_factory) != CCJS_OK) return 18;
-  if (!ccjs_promise_is_unhandled_rejection(rejected_factory)) return 19;
-  if (ccjs_promise_chain(rejected_factory, 0, 0, &log, finalize_chain, &propagated) != CCJS_OK) return 20;
-  if (ccjs_promise_is_unhandled_rejection(rejected_factory)) return 21;
-  if (ccjs_loop_drain_microtasks(&loop) != CCJS_OK) return 22;
-  if (ccjs_promise_get_state(propagated) != CCJS_PROMISE_REJECTED) return 23;
-  if (!ccjs_promise_is_unhandled_rejection(propagated)) return 24;
-  if (ccjs_promise_get_result(propagated, &result) != CCJS_OK) return 25;
-  if (ccjs_promise_is_unhandled_rejection(propagated)) return 26;
+  if (inox_promise_rejected(&loop, inox_number_value(6), &rejected_factory) != INOX_OK) return 18;
+  if (!inox_promise_is_unhandled_rejection(rejected_factory)) return 19;
+  if (inox_promise_chain(rejected_factory, 0, 0, &log, finalize_chain, &propagated) != INOX_OK) return 20;
+  if (inox_promise_is_unhandled_rejection(rejected_factory)) return 21;
+  if (inox_loop_drain_microtasks(&loop) != INOX_OK) return 22;
+  if (inox_promise_get_state(propagated) != INOX_PROMISE_REJECTED) return 23;
+  if (!inox_promise_is_unhandled_rejection(propagated)) return 24;
+  if (inox_promise_get_result(propagated, &result) != INOX_OK) return 25;
+  if (inox_promise_is_unhandled_rejection(propagated)) return 26;
   if (result.as.number != 6) return 27;
   propagated_value = (int)result.as.number;
-  ccjs_release(result);
-  result = ccjs_undefined_value();
+  inox_release(result);
+  result = inox_undefined_value();
   if (log.finalized != 3) return 28;
 
-  ccjs_promise_release(propagated);
-  ccjs_promise_release(rejected_factory);
-  ccjs_promise_release(recovered);
-  ccjs_promise_release(rejected);
-  ccjs_promise_release(doubled);
-  ccjs_promise_release(fulfilled);
-  ccjs_loop_dispose(&loop);
+  inox_promise_release(propagated);
+  inox_promise_release(rejected_factory);
+  inox_promise_release(recovered);
+  inox_promise_release(rejected);
+  inox_promise_release(doubled);
+  inox_promise_release(fulfilled);
+  inox_loop_dispose(&loop);
 
   printf("%d %d %d %d %d %d %d\\n", log.count, log.values[0], log.values[1], log.values[2], log.values[3], log.finalized, propagated_value);
   return 0;
@@ -1429,7 +1429,7 @@ test('generated C reports unhandled Promise rejections', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-unhandled-promise-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-unhandled-promise-'))
   const source = join(dir, 'unhandled-promise.c')
   const output = join(dir, 'unhandled-promise')
 
@@ -1471,7 +1471,7 @@ test('C runtime weak references upgrade and clear after target release', async (
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-weak-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-weak-runtime-'))
   const source = join(dir, 'weak-runtime-smoke.c')
   const output = join(dir, 'weak-runtime-smoke')
 
@@ -1480,10 +1480,10 @@ test('C runtime weak references upgrade and clear after target release', async (
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/debug.h"
-#include "ccjs/string.h"
-#include "ccjs/weak.h"
+#include "inox/allocator.h"
+#include "inox/debug.h"
+#include "inox/string.h"
+#include "inox/weak.h"
 
 static void* base_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -1505,52 +1505,52 @@ static void base_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static int expect_ref(ccjs_value value, uint32_t expected) {
+static int expect_ref(inox_value value, uint32_t expected) {
   return value.as.ref != 0 && value.as.ref->ref_count == expected;
 }
 
 int main(void) {
-  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
-  ccjs_allocator allocator = ccjs_debug_allocator(&base);
-  ccjs_debug_memory_stats stats;
-  ccjs_value name;
-  ccjs_value upgraded;
-  ccjs_weak_ref weak = ccjs_weak_null();
-  ccjs_weak_ref retained = ccjs_weak_null();
+  inox_allocator base = { 0, base_alloc, base_realloc, base_free };
+  inox_allocator allocator = inox_debug_allocator(&base);
+  inox_debug_memory_stats stats;
+  inox_value name;
+  inox_value upgraded;
+  inox_weak_ref weak = inox_weak_null();
+  inox_weak_ref retained = inox_weak_null();
 
-  ccjs_debug_memory_reset();
+  inox_debug_memory_reset();
 
-  if (!ccjs_weak_is_empty(weak)) return 1;
-  if (ccjs_string_from_literal(&allocator, "Ada", 3, &name) != CCJS_OK) return 2;
-  if (ccjs_weak_from_value(name, &weak) != CCJS_OK) return 3;
-  if (ccjs_weak_is_empty(weak) || weak.cell->weak_count != 1) return 4;
+  if (!inox_weak_is_empty(weak)) return 1;
+  if (inox_string_from_literal(&allocator, "Ada", 3, &name) != INOX_OK) return 2;
+  if (inox_weak_from_value(name, &weak) != INOX_OK) return 3;
+  if (inox_weak_is_empty(weak) || weak.cell->weak_count != 1) return 4;
   if (!expect_ref(name, 1)) return 5;
 
   retained = weak;
-  ccjs_weak_retain(retained);
+  inox_weak_retain(retained);
   if (retained.cell->weak_count != 2) return 6;
-  ccjs_weak_release(weak);
-  weak = ccjs_weak_null();
+  inox_weak_release(weak);
+  weak = inox_weak_null();
   if (retained.cell->weak_count != 1) return 7;
 
-  if (ccjs_weak_upgrade(retained, &upgraded) != CCJS_OK) return 8;
-  if (upgraded.tag != CCJS_TAG_STRING || upgraded.as.ref != name.as.ref || !expect_ref(name, 2)) return 9;
-  ccjs_release(upgraded);
+  if (inox_weak_upgrade(retained, &upgraded) != INOX_OK) return 8;
+  if (upgraded.tag != INOX_TAG_STRING || upgraded.as.ref != name.as.ref || !expect_ref(name, 2)) return 9;
+  inox_release(upgraded);
   if (!expect_ref(name, 1)) return 10;
 
-  ccjs_debug_memory_snapshot(&stats);
-  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 1 || stats.live_weak_cells != 1 || stats.live_alloc_count != 2) return 11;
+  inox_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[INOX_REF_STRING] != 1 || stats.live_weak_cells != 1 || stats.live_alloc_count != 2) return 11;
 
-  ccjs_release(name);
-  ccjs_debug_memory_snapshot(&stats);
-  if (stats.live_refs_by_kind[CCJS_REF_STRING] != 0 || stats.live_weak_cells != 1 || stats.live_alloc_count != 1) return 12;
+  inox_release(name);
+  inox_debug_memory_snapshot(&stats);
+  if (stats.live_refs_by_kind[INOX_REF_STRING] != 0 || stats.live_weak_cells != 1 || stats.live_alloc_count != 1) return 12;
 
-  if (ccjs_weak_upgrade(retained, &upgraded) != CCJS_OK) return 13;
-  if (upgraded.tag != CCJS_TAG_NULL) return 14;
+  if (inox_weak_upgrade(retained, &upgraded) != INOX_OK) return 13;
+  if (upgraded.tag != INOX_TAG_NULL) return 14;
 
-  ccjs_weak_release(retained);
-  retained = ccjs_weak_null();
-  ccjs_debug_memory_snapshot(&stats);
+  inox_weak_release(retained);
+  retained = inox_weak_null();
+  inox_debug_memory_snapshot(&stats);
   if (stats.live_weak_cells != 0 || stats.live_alloc_count != 0 || stats.alloc_count != stats.free_count) return 15;
 
   printf("weak ok\\n");
@@ -1559,7 +1559,7 @@ int main(void) {
 `
     )
 
-    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1', '-DCCJS_DEBUG_MEMORY=1'])
+    const compile = await compileRuntimeProgram(source, output, ['-DINOX_ENABLE_WEAK=1', '-DINOX_DEBUG_MEMORY=1'])
 
     assert.equal(compile.code, 0, compile.stderr)
 
@@ -1583,7 +1583,7 @@ test('C runtime weak object fields release and preserve old value on OOM', async
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-weak-object-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-weak-object-runtime-'))
   const source = join(dir, 'weak-object-runtime-smoke.c')
   const output = join(dir, 'weak-object-runtime-smoke')
 
@@ -1592,11 +1592,11 @@ test('C runtime weak object fields release and preserve old value on OOM', async
       source,
       `#include <stdio.h>
 #include <stdlib.h>
-#include "ccjs/allocator.h"
-#include "ccjs/debug.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
-#include "ccjs/weak.h"
+#include "inox/allocator.h"
+#include "inox/debug.h"
+#include "inox/object.h"
+#include "inox/string.h"
+#include "inox/weak.h"
 
 static void* base_alloc(void* user, size_t size, size_t align) {
   (void)user;
@@ -1618,66 +1618,66 @@ static void base_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static int expect_value_ref(ccjs_value value, ccjs_value expected) {
+static int expect_value_ref(inox_value value, inox_value expected) {
   return value.tag == expected.tag && value.as.ref == expected.as.ref;
 }
 
 int main(void) {
-  ccjs_allocator base = { 0, base_alloc, base_realloc, base_free };
-  ccjs_allocator allocator = ccjs_debug_allocator(&base);
-  static const ccjs_field_info fields[] = {
-    { "parent", CCJS_FIELD_WEAK }
+  inox_allocator base = { 0, base_alloc, base_realloc, base_free };
+  inox_allocator allocator = inox_debug_allocator(&base);
+  static const inox_field_info fields[] = {
+    { "parent", INOX_FIELD_WEAK }
   };
-  static const ccjs_shape shape = { 1, fields };
-  ccjs_debug_memory_stats stats;
-  ccjs_value old_name = ccjs_undefined_value();
-  ccjs_value new_name = ccjs_undefined_value();
-  ccjs_value holder = ccjs_undefined_value();
-  ccjs_value out = ccjs_undefined_value();
+  static const inox_shape shape = { 1, fields };
+  inox_debug_memory_stats stats;
+  inox_value old_name = inox_undefined_value();
+  inox_value new_name = inox_undefined_value();
+  inox_value holder = inox_undefined_value();
+  inox_value out = inox_undefined_value();
 
-  ccjs_debug_memory_reset();
+  inox_debug_memory_reset();
 
-  if (ccjs_string_from_literal(&allocator, "old", 3, &old_name) != CCJS_OK) return 1;
-  if (ccjs_string_from_literal(&allocator, "new", 3, &new_name) != CCJS_OK) return 2;
-  if (ccjs_object_new(&allocator, &shape, &holder) != CCJS_OK) return 3;
+  if (inox_string_from_literal(&allocator, "old", 3, &old_name) != INOX_OK) return 1;
+  if (inox_string_from_literal(&allocator, "new", 3, &new_name) != INOX_OK) return 2;
+  if (inox_object_new(&allocator, &shape, &holder) != INOX_OK) return 3;
 
-  if (ccjs_object_init_known(holder, 0, old_name) != CCJS_OK) return 4;
+  if (inox_object_init_known(holder, 0, old_name) != INOX_OK) return 4;
   if (old_name.as.ref->weak_cell == 0 || old_name.as.ref->weak_cell->weak_count != 1) return 5;
-  ccjs_debug_memory_snapshot(&stats);
+  inox_debug_memory_snapshot(&stats);
   if (stats.live_weak_cells != 1) return 6;
 
-  ccjs_debug_memory_set_oom_after(0);
-  if (ccjs_object_set_known(holder, 0, new_name) != CCJS_ERR_OOM) return 7;
-  ccjs_debug_memory_clear_oom();
+  inox_debug_memory_set_oom_after(0);
+  if (inox_object_set_known(holder, 0, new_name) != INOX_ERR_OOM) return 7;
+  inox_debug_memory_clear_oom();
   if (old_name.as.ref->weak_cell == 0 || old_name.as.ref->weak_cell->weak_count != 1) return 8;
   if (new_name.as.ref->weak_cell != 0) return 9;
-  if (ccjs_object_get_known(holder, 0, &out) != CCJS_OK) return 10;
+  if (inox_object_get_known(holder, 0, &out) != INOX_OK) return 10;
   if (!expect_value_ref(out, old_name)) return 11;
-  ccjs_release(out);
-  out = ccjs_undefined_value();
-  ccjs_debug_memory_snapshot(&stats);
+  inox_release(out);
+  out = inox_undefined_value();
+  inox_debug_memory_snapshot(&stats);
   if (stats.oom_failure_count != 1 || stats.live_weak_cells != 1) return 12;
 
-  if (ccjs_object_set_known(holder, 0, new_name) != CCJS_OK) return 13;
+  if (inox_object_set_known(holder, 0, new_name) != INOX_OK) return 13;
   if (old_name.as.ref->weak_cell == 0 || old_name.as.ref->weak_cell->weak_count != 0) return 14;
   if (new_name.as.ref->weak_cell == 0 || new_name.as.ref->weak_cell->weak_count != 1) return 15;
-  if (ccjs_object_get_known(holder, 0, &out) != CCJS_OK) return 16;
+  if (inox_object_get_known(holder, 0, &out) != INOX_OK) return 16;
   if (!expect_value_ref(out, new_name)) return 17;
-  ccjs_release(out);
-  out = ccjs_undefined_value();
+  inox_release(out);
+  out = inox_undefined_value();
 
-  ccjs_release(holder);
-  holder = ccjs_undefined_value();
+  inox_release(holder);
+  holder = inox_undefined_value();
   if (new_name.as.ref->weak_cell == 0 || new_name.as.ref->weak_cell->weak_count != 0) return 18;
 
-  ccjs_release(old_name);
-  old_name = ccjs_undefined_value();
-  ccjs_debug_memory_snapshot(&stats);
+  inox_release(old_name);
+  old_name = inox_undefined_value();
+  inox_debug_memory_snapshot(&stats);
   if (stats.live_weak_cells != 1) return 19;
 
-  ccjs_release(new_name);
-  new_name = ccjs_undefined_value();
-  ccjs_debug_memory_snapshot(&stats);
+  inox_release(new_name);
+  new_name = inox_undefined_value();
+  inox_debug_memory_snapshot(&stats);
   if (stats.live_weak_cells != 0 || stats.live_alloc_count != 0 || stats.alloc_count != stats.free_count) return 20;
 
   printf("weak object ok\\n");
@@ -1686,7 +1686,7 @@ int main(void) {
 `
     )
 
-    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1', '-DCCJS_DEBUG_MEMORY=1'])
+    const compile = await compileRuntimeProgram(source, output, ['-DINOX_ENABLE_WEAK=1', '-DINOX_DEBUG_MEMORY=1'])
 
     assert.equal(compile.code, 0, compile.stderr)
 
@@ -1711,7 +1711,7 @@ test('generated C weak object fields compile and run with weak runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-generated-weak-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-generated-weak-'))
   const source = join(dir, 'generated-weak.c')
   const output = join(dir, 'generated-weak')
 
@@ -1734,11 +1734,11 @@ if (maybe != null) {
 `)
 
     assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
-    assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+    assert.match(compiled.code, /INOX_FIELD_WEAK/)
 
     await writeFile(source, compiled.code)
 
-    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1'])
+    const compile = await compileRuntimeProgram(source, output, ['-DINOX_ENABLE_WEAK=1'])
 
     assert.equal(compile.code, 0, compile.stderr)
 
@@ -1762,7 +1762,7 @@ test('generated C weak object field access narrows and optional-chains safely', 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-generated-weak-access-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-generated-weak-access-'))
   const source = join(dir, 'generated-weak-access.c')
   const output = join(dir, 'generated-weak-access')
 
@@ -1801,11 +1801,11 @@ console.log(detached.parent?.name ?? 'gone')
     )
 
     assert.equal(compiled.ir.runtimeRequirements.includes('weak-references'), true)
-    assert.match(compiled.code, /CCJS_FIELD_WEAK/)
+    assert.match(compiled.code, /INOX_FIELD_WEAK/)
 
     await writeFile(source, compiled.code)
 
-    const compile = await compileRuntimeProgram(source, output, ['-DCCJS_ENABLE_WEAK=1'])
+    const compile = await compileRuntimeProgram(source, output, ['-DINOX_ENABLE_WEAK=1'])
 
     assert.equal(compile.code, 0, compile.stderr)
 
@@ -1830,7 +1830,7 @@ test('generated C simple classes compile and run with runtime sources', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-class-codegen-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-class-codegen-'))
   const source = join(dir, 'class-codegen.c')
   const output = join(dir, 'class-codegen')
 
@@ -1901,7 +1901,7 @@ test('generated C class method calls through class fields compile and run', asyn
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-class-field-method-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-class-field-method-'))
   const source = join(dir, 'class-field-method.c')
   const output = join(dir, 'class-field-method')
 
@@ -1967,7 +1967,7 @@ test('generated C class method assignment into runtime value local compiles and 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-class-runtime-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-class-runtime-assignment-'))
   const source = join(dir, 'class-runtime-assignment.c')
   const output = join(dir, 'class-runtime-assignment')
 
@@ -2026,7 +2026,7 @@ test('generated C async await over settled promises compiles and runs', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-await-codegen-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-await-codegen-'))
   const source = join(dir, 'await-codegen.c')
   const output = join(dir, 'await-codegen')
 
@@ -2051,7 +2051,7 @@ function failPromise(): Promise<string> {
 }
 
 async function loadText(): Promise<string> {
-  return fs.promises.readFile('/tmp/ccjs-async-load.txt', 'utf8')
+  return fs.promises.readFile('/tmp/inox-async-load.txt', 'utf8')
 }
 
 async function failText(): Promise<string> {
@@ -2117,7 +2117,7 @@ const branchRecoveredNumber = failedNumber.catch(error => {
 const chainedNumber = Promise.resolve(1)
   .then(value => value + 1)
   .then(value => value + 1)
-await fs.promises.writeFile('/tmp/ccjs-async-load.txt', 'loaded')
+await fs.promises.writeFile('/tmp/inox-async-load.txt', 'loaded')
 const loadedTextPromise = loadText()
 console.log(await Promise.resolve('ok'))
 console.log(value)
@@ -2213,7 +2213,7 @@ test('generated C captured Promise callbacks compile and run', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-callback-capture-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-promise-callback-capture-'))
   const source = join(dir, 'promise-callback-capture.c')
   const output = join(dir, 'promise-callback-capture')
 
@@ -2289,7 +2289,7 @@ test('generated C Promise callbacks with try catch finally compile and run', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-promise-callback-try-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-promise-callback-try-'))
   const source = join(dir, 'promise-callback-try.c')
   const output = join(dir, 'promise-callback-try')
 
@@ -2357,7 +2357,7 @@ test('generated C async task frame over awaited Promise.resolve compiles and run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-'))
   const source = join(dir, 'async-task-frame.c')
   const output = join(dir, 'async-task-frame')
 
@@ -2406,7 +2406,7 @@ test('generated C async task frame preserves parameters across resume', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-params-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-params-'))
   const source = join(dir, 'async-task-frame-params.c')
   const output = join(dir, 'async-task-frame-params')
 
@@ -2455,7 +2455,7 @@ test('generated C async task frame awaits local Promise variables', async (t) =>
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-local-promise-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-local-promise-'))
   const source = join(dir, 'async-task-frame-local-promise.c')
   const output = join(dir, 'async-task-frame-local-promise')
 
@@ -2505,7 +2505,7 @@ test('generated C boolean async task frame compiles and runs', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-bool-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-bool-'))
   const source = join(dir, 'async-task-frame-bool.c')
   const output = join(dir, 'async-task-frame-bool')
 
@@ -2553,7 +2553,7 @@ test('generated C async task frame awaits local Promise chains', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-chain-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-chain-'))
   const source = join(dir, 'async-task-frame-chain.c')
   const output = join(dir, 'async-task-frame-chain')
 
@@ -2603,7 +2603,7 @@ test('generated C async task frame awaits captured local Promise chains', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-captured-chain-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-captured-chain-'))
   const source = join(dir, 'async-task-frame-captured-chain.c')
   const output = join(dir, 'async-task-frame-captured-chain')
 
@@ -2653,7 +2653,7 @@ test('generated C async task frame direct return values compile and run', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-direct-return-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-direct-return-'))
   const source = join(dir, 'async-task-frame-direct-return.c')
   const output = join(dir, 'async-task-frame-direct-return')
 
@@ -2702,7 +2702,7 @@ test('generated C async task frame direct managed return values compile and run'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-direct-managed-return-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-direct-managed-return-'))
   const source = join(dir, 'async-task-frame-direct-managed-return.c')
   const output = join(dir, 'async-task-frame-direct-managed-return')
 
@@ -2757,7 +2757,7 @@ test('generated C multiple-await async task frame compiles and runs', async (t) 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-multi-await-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-multi-await-'))
   const source = join(dir, 'async-task-frame-multi-await.c')
   const output = join(dir, 'async-task-frame-multi-await')
 
@@ -2807,7 +2807,7 @@ test('generated C async task frame awaits local async tasks and plain Promise he
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-promise-sources-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-promise-sources-'))
   const source = join(dir, 'async-task-frame-promise-sources.c')
   const output = join(dir, 'async-task-frame-promise-sources')
 
@@ -2873,7 +2873,7 @@ test('generated C async task frame awaits managed immediate async helpers', asyn
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-managed-helper-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-managed-helper-'))
   const input = join(dir, 'input.bin')
   const source = join(dir, 'async-task-frame-managed-helper.c')
   const output = join(dir, 'async-task-frame-managed-helper')
@@ -2935,7 +2935,7 @@ test('generated C async task frame rejected awaits reject returned promises', as
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-reject-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-reject-'))
   const source = join(dir, 'async-task-frame-reject.c')
   const output = join(dir, 'async-task-frame-reject')
 
@@ -3003,7 +3003,7 @@ test('generated C async task frame try catch finally around awaited promises', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-try-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-try-'))
   const source = join(dir, 'async-task-frame-try.c')
   const output = join(dir, 'async-task-frame-try')
 
@@ -3074,7 +3074,7 @@ test('generated C async task frame string prefix locals compile and run', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-string-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-prefix-string-'))
   const source = join(dir, 'async-task-frame-prefix-string.c')
   const output = join(dir, 'async-task-frame-prefix-string')
 
@@ -3146,7 +3146,7 @@ test('generated C async task frame array prefix locals compile and run', async (
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-prefix-array-'))
   const source = join(dir, 'async-task-frame-prefix-array.c')
   const output = join(dir, 'async-task-frame-prefix-array')
 
@@ -3203,7 +3203,7 @@ test('generated C async task frame bytes prefix locals compile and run', async (
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-bytes-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-prefix-bytes-'))
   const source = join(dir, 'async-task-frame-prefix-bytes.c')
   const output = join(dir, 'async-task-frame-prefix-bytes')
 
@@ -3261,7 +3261,7 @@ test('generated C async task frame inner body prefix locals compile and run', as
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-inner-prefix-local-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-inner-prefix-local-'))
   const source = join(dir, 'async-task-frame-inner-prefix-local.c')
   const output = join(dir, 'async-task-frame-inner-prefix-local')
 
@@ -3318,7 +3318,7 @@ test('generated C async task frame post await inner managed locals compile and r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-inner-managed-local-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-inner-managed-local-'))
   const source = join(dir, 'async-task-frame-inner-managed-local.c')
   const output = join(dir, 'async-task-frame-inner-managed-local')
 
@@ -3375,7 +3375,7 @@ test('generated C async task frame post await inner scalar locals compile and ru
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-inner-scalar-local-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-inner-scalar-local-'))
   const source = join(dir, 'async-task-frame-inner-scalar-local.c')
   const output = join(dir, 'async-task-frame-inner-scalar-local')
 
@@ -3431,7 +3431,7 @@ test('generated C async task frame post await locals before post-nested returns 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-inner-local-before-post-return-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-inner-local-before-post-return-'))
   const source = join(dir, 'async-task-frame-inner-local-before-post-return.c')
   const output = join(dir, 'async-task-frame-inner-local-before-post-return')
 
@@ -3488,7 +3488,7 @@ test('generated C async task frame post await managed locals before post-nested 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-inner-managed-local-before-post-return-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-inner-managed-local-before-post-return-'))
   const source = join(dir, 'async-task-frame-inner-managed-local-before-post-return.c')
   const output = join(dir, 'async-task-frame-inner-managed-local-before-post-return')
 
@@ -3545,7 +3545,7 @@ test('generated C async task frame object prefix locals compile and run', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-object-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-prefix-object-'))
   const source = join(dir, 'async-task-frame-prefix-object.c')
   const output = join(dir, 'async-task-frame-prefix-object')
 
@@ -3607,7 +3607,7 @@ test('generated C async task frame Map prefix locals compile and run', async (t)
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-map-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-prefix-map-'))
   const source = join(dir, 'async-task-frame-prefix-map.c')
   const output = join(dir, 'async-task-frame-prefix-map')
 
@@ -3664,7 +3664,7 @@ test('generated C async task frame Set prefix locals compile and run', async (t)
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-prefix-set-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-prefix-set-'))
   const source = join(dir, 'async-task-frame-prefix-set.c')
   const output = join(dir, 'async-task-frame-prefix-set')
 
@@ -3721,7 +3721,7 @@ test('generated C async task frame post try managed locals compile and run', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-post-managed-local-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-post-managed-local-'))
   const source = join(dir, 'async-task-frame-post-managed-local.c')
   const output = join(dir, 'async-task-frame-post-managed-local')
 
@@ -3778,7 +3778,7 @@ test('generated C async task frame catch managed locals compile and run', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-catch-managed-local-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-catch-managed-local-'))
   const source = join(dir, 'async-task-frame-catch-managed-local.c')
   const output = join(dir, 'async-task-frame-catch-managed-local')
 
@@ -3838,7 +3838,7 @@ test('generated C async task frame catch direct managed returns compile and run'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-task-frame-catch-direct-managed-return-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-task-frame-catch-direct-managed-return-'))
   const source = join(dir, 'async-task-frame-catch-direct-managed-return.c')
   const output = join(dir, 'async-task-frame-catch-direct-managed-return')
 
@@ -3896,7 +3896,7 @@ test('generated C nested async finalizer throw fallback compiles and runs', asyn
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-async-finalizer-throw-fallback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-async-finalizer-throw-fallback-'))
   const source = join(dir, 'async-finalizer-throw-fallback.c')
   const output = join(dir, 'async-finalizer-throw-fallback')
 
@@ -3952,7 +3952,7 @@ test('generated C object literal lowering compiles and runs with runtime sources
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-'))
   const source = join(dir, 'object-literal.c')
   const output = join(dir, 'object-literal')
 
@@ -3994,7 +3994,7 @@ test('generated C object literal scalar expression boxing compiles and runs with
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-scalar-boxing-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-scalar-boxing-'))
   const source = join(dir, 'object-scalar-boxing.c')
   const output = join(dir, 'object-scalar-boxing')
 
@@ -4047,7 +4047,7 @@ test('generated C object literal collection constructors compile and run with ru
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-collection-constructors-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-collection-constructors-'))
   const source = join(dir, 'object-collection-constructors.c')
   const output = join(dir, 'object-collection-constructors')
 
@@ -4097,7 +4097,7 @@ test('generated C early return runs through cleanup label with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-early-return-cleanup-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-early-return-cleanup-'))
   const source = join(dir, 'early-return-cleanup.c')
   const output = join(dir, 'early-return-cleanup')
 
@@ -4142,7 +4142,7 @@ test('generated C top-level wrapper cleanup compiles and runs with runtime sourc
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-wrapper-cleanup-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-wrapper-cleanup-'))
   const source = join(dir, 'wrapper-cleanup.c')
   const output = join(dir, 'wrapper-cleanup')
 
@@ -4183,7 +4183,7 @@ test('generated C number return cleanup compiles and runs with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-number-return-cleanup-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-number-return-cleanup-'))
   const source = join(dir, 'number-return-cleanup.c')
   const output = join(dir, 'number-return-cleanup')
 
@@ -4230,7 +4230,7 @@ test('generated C prepared for clauses compile and run with runtime sources', as
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-prepared-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-prepared-'))
   const source = join(dir, 'for-prepared.c')
   const output = join(dir, 'for-prepared')
 
@@ -4289,7 +4289,7 @@ test('generated C continue statements compile and run with runtime sources', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-continue-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-continue-'))
   const source = join(dir, 'continue.c')
   const output = join(dir, 'continue')
 
@@ -4340,7 +4340,7 @@ test('generated C string-returning for initializer compiles and runs with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-string-init-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-string-init-'))
   const source = join(dir, 'for-string-init.c')
   const output = join(dir, 'for-string-init')
 
@@ -4389,7 +4389,7 @@ test('generated C prepared conditions compile and run with runtime sources', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-prepared-conditions-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-prepared-conditions-'))
   const source = join(dir, 'prepared-conditions.c')
   const output = join(dir, 'prepared-conditions')
 
@@ -4460,7 +4460,7 @@ test('generated C prepared scalar assignment compiles and runs with runtime sour
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-prepared-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-prepared-assignment-'))
   const source = join(dir, 'prepared-assignment.c')
   const output = join(dir, 'prepared-assignment')
 
@@ -4507,7 +4507,7 @@ test('generated C named callback values compile and run with runtime sources', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-callback-'))
   const source = join(dir, 'callback.c')
   const output = join(dir, 'callback')
 
@@ -4557,7 +4557,7 @@ test('generated C non-capturing inline callback values compile and run with runt
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-inline-pointer-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-inline-pointer-callback-'))
   const source = join(dir, 'inline-pointer-callback.c')
   const output = join(dir, 'inline-pointer-callback')
 
@@ -4604,7 +4604,7 @@ test('generated C capturing plain callback arguments compile and run with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-capturing-plain-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-capturing-plain-callback-'))
   const source = join(dir, 'capturing-plain-callback.c')
   const output = join(dir, 'capturing-plain-callback')
 
@@ -4662,7 +4662,7 @@ test('generated C captured callback variables compile and run with runtime sourc
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-captured-callback-variable-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-captured-callback-variable-'))
   const source = join(dir, 'captured-callback-variable.c')
   const output = join(dir, 'captured-callback-variable')
 
@@ -4723,7 +4723,7 @@ test('generated C mutable numeric callback captures compile and run with runtime
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-mutable-callback-capture-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-mutable-callback-capture-'))
   const source = join(dir, 'mutable-callback-capture.c')
   const output = join(dir, 'mutable-callback-capture')
 
@@ -4774,7 +4774,7 @@ test('generated C mutable numeric callback parameter captures compile and run wi
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-mutable-callback-param-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-mutable-callback-param-'))
   const source = join(dir, 'mutable-callback-param.c')
   const output = join(dir, 'mutable-callback-param')
 
@@ -4824,7 +4824,7 @@ test('generated C mutable string callback captures compile and run with runtime 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-mutable-string-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-mutable-string-callback-'))
   const source = join(dir, 'mutable-string-callback.c')
   const output = join(dir, 'mutable-string-callback')
 
@@ -4875,7 +4875,7 @@ test('generated C mutable object callback captures compile and run with runtime 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-mutable-object-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-mutable-object-callback-'))
   const source = join(dir, 'mutable-object-callback.c')
   const output = join(dir, 'mutable-object-callback')
 
@@ -4930,7 +4930,7 @@ test('generated C typed callback aliases compile and run with runtime sources', 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-typed-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-typed-callback-'))
   const source = join(dir, 'typed-callback.c')
   const output = join(dir, 'typed-callback')
 
@@ -4982,7 +4982,7 @@ test('generated C string callback aliases compile and run with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-callback-'))
   const source = join(dir, 'string-callback.c')
   const output = join(dir, 'string-callback')
 
@@ -5034,7 +5034,7 @@ test('generated C object callback aliases compile and run with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-callback-'))
   const source = join(dir, 'object-callback.c')
   const output = join(dir, 'object-callback')
 
@@ -5093,7 +5093,7 @@ test('generated C capturing runtime callback arrows compile and run with runtime
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-capturing-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-capturing-callback-'))
   const source = join(dir, 'capturing-callback.c')
   const output = join(dir, 'capturing-callback')
 
@@ -5144,7 +5144,7 @@ test('generated C inline runtime callback arguments compile and run with runtime
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-inline-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-inline-callback-'))
   const source = join(dir, 'inline-callback.c')
   const output = join(dir, 'inline-callback')
 
@@ -5194,7 +5194,7 @@ test('generated C retained runtime callback captures compile and run with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-retained-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-retained-callback-'))
   const source = join(dir, 'retained-callback.c')
   const output = join(dir, 'retained-callback')
 
@@ -5250,7 +5250,7 @@ test('generated C string equality comparisons compile and run with runtime sourc
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-equality-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-equality-'))
   const source = join(dir, 'string-equality.c')
   const output = join(dir, 'string-equality')
 
@@ -5305,7 +5305,7 @@ test('generated C string concatenation compiles and runs with runtime sources', 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-concat-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-concat-'))
   const source = join(dir, 'string-concat.c')
   const output = join(dir, 'string-concat')
 
@@ -5357,7 +5357,7 @@ test('generated C string length compiles and runs with runtime sources', async (
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-length-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-length-'))
   const source = join(dir, 'string-length.c')
   const output = join(dir, 'string-length')
 
@@ -5414,7 +5414,7 @@ test('generated C string predicate methods compile and run with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-predicates-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-predicates-'))
   const source = join(dir, 'string-predicates.c')
   const output = join(dir, 'string-predicates')
 
@@ -5470,7 +5470,7 @@ test('generated C string index and trim variants compile and run with UTF-8 stri
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-index-trim-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-index-trim-'))
   const source = join(dir, 'string-index-trim.c')
   const output = join(dir, 'string-index-trim')
 
@@ -5536,13 +5536,13 @@ test('generated C string case and padStart methods compile and run with runtime 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-case-pad-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-case-pad-'))
   const source = join(dir, 'string-case-pad.c')
   const output = join(dir, 'string-case-pad')
 
   try {
     const result = compileSource(
-      `const symbolPrefix = 'ccjs'
+      `const symbolPrefix = 'inox'
 const seed = 255
 console.log(
   symbolPrefix.toUpperCase(),
@@ -5566,7 +5566,7 @@ console.log(
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'CCJS 000000ff |  x| éB\n')
+    assert.equal(run.stdout, 'INOX 000000ff |  x| éB\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -5584,7 +5584,7 @@ test('generated C dynamic object string field methods compile and run with runti
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-string-fields-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-string-fields-'))
   const source = join(dir, 'dynamic-string-fields.c')
   const output = join(dir, 'dynamic-string-fields')
 
@@ -5639,7 +5639,7 @@ test('generated C known object string field comparisons compile and run with run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-known-string-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-known-string-field-'))
   const source = join(dir, 'known-string-field.c')
   const output = join(dir, 'known-string-field')
 
@@ -5688,7 +5688,7 @@ test('generated C string charCodeAt calls compile and run with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-char-code-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-char-code-'))
   const source = join(dir, 'string-char-code.c')
   const output = join(dir, 'string-char-code')
 
@@ -5743,7 +5743,7 @@ test('generated C string index expressions compile and run with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-index-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-index-'))
   const source = join(dir, 'string-index.c')
   const output = join(dir, 'string-index')
 
@@ -5793,7 +5793,7 @@ test('generated C string slice compiles and runs with runtime sources', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-slice-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-slice-'))
   const source = join(dir, 'string-slice.c')
   const output = join(dir, 'string-slice')
 
@@ -5850,7 +5850,7 @@ test('generated C string split compiles and runs with runtime sources', async (t
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-split-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-split-'))
   const source = join(dir, 'string-split.c')
   const output = join(dir, 'string-split')
 
@@ -5898,7 +5898,7 @@ test('generated C string trim compiles and runs with runtime sources', async (t)
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-trim-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-trim-'))
   const source = join(dir, 'string-trim.c')
   const output = join(dir, 'string-trim')
 
@@ -5956,7 +5956,7 @@ test('generated C String conversion compiles and runs with runtime sources', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-conversion-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-conversion-'))
   const source = join(dir, 'string-conversion.c')
   const output = join(dir, 'string-conversion')
 
@@ -6012,7 +6012,7 @@ test('generated C number toString radix compiles and runs with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-number-to-string-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-number-to-string-'))
   const source = join(dir, 'number-to-string.c')
   const output = join(dir, 'number-to-string')
 
@@ -6059,7 +6059,7 @@ test('generated C Number conversion compiles and runs with runtime sources', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-number-conversion-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-number-conversion-'))
   const source = join(dir, 'number-conversion.c')
   const output = join(dir, 'number-conversion')
 
@@ -6104,7 +6104,7 @@ test('generated C numeric casts compile and run with runtime sources', async (t)
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-numeric-casts-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-numeric-casts-'))
   const source = join(dir, 'numeric-casts.c')
   const output = join(dir, 'numeric-casts')
 
@@ -6151,7 +6151,7 @@ test('generated C Math.random os backend compiles and runs with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-random-os-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-random-os-'))
   const source = join(dir, 'random-os.c')
   const output = join(dir, 'random-os')
 
@@ -6196,7 +6196,7 @@ test('generated C array literal lowering compiles and runs with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-'))
   const source = join(dir, 'array-literal.c')
   const output = join(dir, 'array-literal')
 
@@ -6238,7 +6238,7 @@ test('generated C Array.slice lowering compiles and runs with runtime sources', 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-slice-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-slice-'))
   const source = join(dir, 'array-slice.c')
   const output = join(dir, 'array-slice')
 
@@ -6286,7 +6286,7 @@ test('generated C Array.push statements compile and run with runtime sources', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-push-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-push-'))
   const source = join(dir, 'array-push.c')
   const output = join(dir, 'array-push')
 
@@ -6334,7 +6334,7 @@ test('generated C Array.unshift expressions compile and run with runtime sources
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-unshift-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-unshift-'))
   const source = join(dir, 'array-unshift.c')
   const output = join(dir, 'array-unshift')
 
@@ -6381,7 +6381,7 @@ test('generated C Array.pop expressions compile and run with runtime sources', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-pop-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-pop-'))
   const source = join(dir, 'array-pop.c')
   const output = join(dir, 'array-pop')
 
@@ -6432,7 +6432,7 @@ test('generated C Array.sort without comparator compiles and runs with runtime s
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-sort-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-sort-'))
   const source = join(dir, 'array-sort.c')
   const output = join(dir, 'array-sort')
 
@@ -6479,7 +6479,7 @@ test('generated C Array.sort comparator callbacks compile and run with runtime s
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-sort-callback-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-sort-callback-'))
   const source = join(dir, 'array-sort-callback.c')
   const output = join(dir, 'array-sort-callback')
 
@@ -6541,7 +6541,7 @@ test('generated C Array.filter expression callbacks compile and run with runtime
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-filter-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-filter-'))
   const source = join(dir, 'array-filter.c')
   const output = join(dir, 'array-filter')
 
@@ -6613,7 +6613,7 @@ test('generated C Array.map expression callbacks compile and run with runtime so
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-map-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-map-'))
   const source = join(dir, 'array-map.c')
   const output = join(dir, 'array-map')
 
@@ -6672,7 +6672,7 @@ test('generated C Array block-body callbacks compile and run with runtime source
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-block-callbacks-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-block-callbacks-'))
   const source = join(dir, 'array-block-callbacks.c')
   const output = join(dir, 'array-block-callbacks')
 
@@ -6757,7 +6757,7 @@ test('generated C Array methods over object fields compile and run with runtime 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-field-methods-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-field-methods-'))
   const source = join(dir, 'array-field-methods.c')
   const output = join(dir, 'array-field-methods')
 
@@ -6809,7 +6809,7 @@ test('generated C Array.includes compiles and runs with runtime sources', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-includes-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-includes-'))
   const source = join(dir, 'array-includes.c')
   const output = join(dir, 'array-includes')
 
@@ -6859,7 +6859,7 @@ test('generated C array length lowering compiles and runs with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-length-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-length-'))
   const source = join(dir, 'array-length.c')
   const output = join(dir, 'array-length')
 
@@ -6901,7 +6901,7 @@ test('generated C runtime array length compiles and runs with runtime sources', 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-length-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-array-length-'))
   const source = join(dir, 'runtime-array-length.c')
   const output = join(dir, 'runtime-array-length')
 
@@ -6947,7 +6947,7 @@ test('generated C runtime array index reads compile and run with runtime sources
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-index-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-array-index-'))
   const source = join(dir, 'runtime-array-index.c')
   const output = join(dir, 'runtime-array-index')
 
@@ -6996,7 +6996,7 @@ test('generated C known object array index declarations compile and run with run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-array-index-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-array-index-'))
   const source = join(dir, 'object-array-index.c')
   const output = join(dir, 'object-array-index')
 
@@ -7043,7 +7043,7 @@ test('generated C runtime array locals compile and run with runtime sources', as
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-locals-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-array-locals-'))
   const source = join(dir, 'runtime-array-locals.c')
   const output = join(dir, 'runtime-array-locals')
 
@@ -7092,7 +7092,7 @@ test('generated C for of over runtime array locals compiles and runs with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-for-of-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-array-for-of-'))
   const source = join(dir, 'runtime-array-for-of.c')
   const output = join(dir, 'runtime-array-for-of')
 
@@ -7149,7 +7149,7 @@ test('generated C for of over runtime array expressions compiles and runs with r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-array-expression-for-of-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-array-expression-for-of-'))
   const source = join(dir, 'runtime-array-expression-for-of.c')
   const output = join(dir, 'runtime-array-expression-for-of')
 
@@ -7204,7 +7204,7 @@ test('generated C for of array lowering compiles and runs with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-of-array-'))
   const source = join(dir, 'for-of-array.c')
   const output = join(dir, 'for-of-array')
 
@@ -7252,7 +7252,7 @@ test('generated C for of string array lowering compiles and runs with runtime so
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-string-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-of-string-array-'))
   const source = join(dir, 'for-of-string-array.c')
   const output = join(dir, 'for-of-string-array')
 
@@ -7297,7 +7297,7 @@ test('generated C for of Set lowering compiles and runs with runtime sources', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-set-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-of-set-'))
   const source = join(dir, 'for-of-set.c')
   const output = join(dir, 'for-of-set')
 
@@ -7364,7 +7364,7 @@ test('generated C for of Map lowering compiles and runs with runtime sources', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-map-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-of-map-'))
   const source = join(dir, 'for-of-map.c')
   const output = join(dir, 'for-of-map')
 
@@ -7431,7 +7431,7 @@ test('generated C for of object Set and Map entries compiles and runs with runti
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-object-collections-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-of-object-collections-'))
   const source = join(dir, 'for-of-object-collections.c')
   const output = join(dir, 'for-of-object-collections')
 
@@ -7506,7 +7506,7 @@ test('generated C inline for of array lowering compiles and runs with runtime so
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-inline-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-of-inline-array-'))
   const source = join(dir, 'for-of-inline-array.c')
   const output = join(dir, 'for-of-inline-array')
 
@@ -7553,7 +7553,7 @@ test('generated C inline for of string array lowering compiles and runs with run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-for-of-inline-string-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-for-of-inline-string-array-'))
   const source = join(dir, 'for-of-inline-string-array.c')
   const output = join(dir, 'for-of-inline-string-array')
 
@@ -7596,7 +7596,7 @@ test('generated C object field access lowering compiles and runs with runtime so
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-field-'))
   const source = join(dir, 'object-field.c')
   const output = join(dir, 'object-field')
 
@@ -7640,7 +7640,7 @@ test('generated C object expression field access lowering compiles and runs with
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-expression-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-expression-field-'))
   const source = join(dir, 'object-expression-field.c')
   const output = join(dir, 'object-expression-field')
 
@@ -7692,7 +7692,7 @@ test('generated C dynamic object field access lowering compiles and runs with ru
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-field-'))
   const source = join(dir, 'dynamic-object-field.c')
   const output = join(dir, 'dynamic-object-field')
 
@@ -7742,7 +7742,7 @@ test('generated C dynamic object scalar field access lowering compiles and runs 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-scalar-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-scalar-field-'))
   const source = join(dir, 'dynamic-object-scalar-field.c')
   const output = join(dir, 'dynamic-object-scalar-field')
 
@@ -7789,7 +7789,7 @@ test('generated C dynamic object field truthiness conditions compile and run wit
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-truthiness-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-truthiness-'))
   const source = join(dir, 'dynamic-object-truthiness.c')
   const output = join(dir, 'dynamic-object-truthiness')
 
@@ -7876,7 +7876,7 @@ test('generated C dynamic object field assignment lowering compiles and runs wit
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-field-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-field-assignment-'))
   const source = join(dir, 'dynamic-object-field-assignment.c')
   const output = join(dir, 'dynamic-object-field-assignment')
 
@@ -7932,7 +7932,7 @@ test('generated C nested dynamic object scalar field access compiles and runs wi
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nested-dynamic-object-scalar-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nested-dynamic-object-scalar-'))
   const source = join(dir, 'nested-dynamic-object-scalar.c')
   const output = join(dir, 'nested-dynamic-object-scalar')
 
@@ -7980,7 +7980,7 @@ test('generated C dynamic runtime string literal comparisons compile and run wit
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-string-compare-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-string-compare-'))
   const source = join(dir, 'dynamic-string-compare.c')
   const output = join(dir, 'dynamic-string-compare')
 
@@ -8035,7 +8035,7 @@ test('generated C nested dynamic object field assignment lowering compiles and r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nested-dynamic-object-field-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nested-dynamic-object-field-assignment-'))
   const source = join(dir, 'nested-dynamic-object-field-assignment.c')
   const output = join(dir, 'nested-dynamic-object-field-assignment')
 
@@ -8089,7 +8089,7 @@ test('generated C unknown receiver field assignment lowering compiles and runs w
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-unknown-receiver-field-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-unknown-receiver-field-assignment-'))
   const source = join(dir, 'unknown-receiver-field-assignment.c')
   const output = join(dir, 'unknown-receiver-field-assignment')
 
@@ -8139,7 +8139,7 @@ test('generated C unknown call result field assignment compiles and runs with ru
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-unknown-call-result-field-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-unknown-call-result-field-assignment-'))
   const source = join(dir, 'unknown-call-result-field-assignment.c')
   const output = join(dir, 'unknown-call-result-field-assignment')
 
@@ -8186,7 +8186,7 @@ test('generated C dynamic object field null comparisons compile and run with run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-null-compare-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-null-compare-'))
   const source = join(dir, 'dynamic-object-null-compare.c')
   const output = join(dir, 'dynamic-object-null-compare')
 
@@ -8235,7 +8235,7 @@ test('generated C dynamic object field boolean literal comparisons compile and r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-bool-compare-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-bool-compare-'))
   const source = join(dir, 'dynamic-object-bool-compare.c')
   const output = join(dir, 'dynamic-object-bool-compare')
 
@@ -8291,7 +8291,7 @@ test('generated C dynamic object array length compiles and runs with runtime sou
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-array-length-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-array-length-'))
   const source = join(dir, 'dynamic-object-array-length.c')
   const output = join(dir, 'dynamic-object-array-length')
 
@@ -8345,7 +8345,7 @@ test('generated C for of over dynamic object array fields compiles and runs with
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-array-for-of-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-array-for-of-'))
   const source = join(dir, 'dynamic-object-array-for-of.c')
   const output = join(dir, 'dynamic-object-array-for-of')
 
@@ -8401,7 +8401,7 @@ test('generated C dynamic object array index null comparisons compile and run wi
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-array-index-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-array-index-'))
   const source = join(dir, 'dynamic-object-array-index.c')
   const output = join(dir, 'dynamic-object-array-index')
 
@@ -8446,7 +8446,7 @@ test('generated C dynamic object array item field comparisons compile and run wi
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-array-item-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-array-item-field-'))
   const source = join(dir, 'dynamic-object-array-item-field.c')
   const output = join(dir, 'dynamic-object-array-item-field')
 
@@ -8499,7 +8499,7 @@ test('generated C dynamic object array index variable declarations compile and r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-object-array-index-local-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-object-array-index-local-'))
   const source = join(dir, 'dynamic-object-array-index-local.c')
   const output = join(dir, 'dynamic-object-array-index-local')
 
@@ -8553,7 +8553,7 @@ test('generated C string object field access lowering compiles and runs with run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-string-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-string-field-'))
   const source = join(dir, 'object-string-field.c')
   const output = join(dir, 'object-string-field')
 
@@ -8596,7 +8596,7 @@ test('generated C object field assignment lowering compiles and runs with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-field-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-field-assignment-'))
   const source = join(dir, 'object-field-assignment.c')
   const output = join(dir, 'object-field-assignment')
 
@@ -8644,7 +8644,7 @@ test('generated C string index object field reads compile and run with runtime s
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-index-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-index-field-'))
   const source = join(dir, 'object-index-field.c')
   const output = join(dir, 'object-index-field')
 
@@ -8689,7 +8689,7 @@ test('generated C string index object field assignments compile and run with run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-object-index-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-object-index-assignment-'))
   const source = join(dir, 'object-index-assignment.c')
   const output = join(dir, 'object-index-assignment')
 
@@ -8737,7 +8737,7 @@ test('generated C array index access lowering compiles and runs with runtime sou
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-index-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-index-'))
   const source = join(dir, 'array-index.c')
   const output = join(dir, 'array-index')
 
@@ -8781,7 +8781,7 @@ test('generated C array index assignment lowering compiles and runs with runtime
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-assignment-'))
   const source = join(dir, 'array-assignment.c')
   const output = join(dir, 'array-assignment')
 
@@ -8826,7 +8826,7 @@ test('generated C dynamic array index assignment lowering compiles and runs with
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-dynamic-array-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-dynamic-array-assignment-'))
   const source = join(dir, 'dynamic-array-assignment.c')
   const output = join(dir, 'dynamic-array-assignment')
 
@@ -8872,7 +8872,7 @@ test('generated C string array index reads compile and run with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-array-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-array-'))
   const source = join(dir, 'string-array.c')
   const output = join(dir, 'string-array')
 
@@ -8916,7 +8916,7 @@ test('generated C runtime string local propagation compiles and runs with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-local-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-string-local-'))
   const source = join(dir, 'runtime-string-local.c')
   const output = join(dir, 'runtime-string-local')
 
@@ -8960,7 +8960,7 @@ test('generated C nullable string nullish coalescing compiles and runs with runt
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-string-nullish-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-string-nullish-'))
   const source = join(dir, 'nullable-string-nullish.c')
   const output = join(dir, 'nullable-string-nullish')
 
@@ -9005,7 +9005,7 @@ test('generated C opaque object index nullish coalescing compiles and runs with 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-opaque-nullish-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-opaque-nullish-'))
   const source = join(dir, 'opaque-nullish.c')
   const output = join(dir, 'opaque-nullish')
 
@@ -9056,7 +9056,7 @@ test('generated C Record object variable key reads compile and run with runtime 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-record-key-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-record-key-'))
   const source = join(dir, 'record-key.c')
   const output = join(dir, 'record-key')
 
@@ -9113,7 +9113,7 @@ test('generated C nullable runtime optional access compiles and runs with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-optional-access-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-optional-access-'))
   const source = join(dir, 'nullable-optional-access.c')
   const output = join(dir, 'nullable-optional-access')
 
@@ -9172,7 +9172,7 @@ test('generated C nullable scalar nullish coalescing compiles and runs with runt
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-nullish-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-scalar-nullish-'))
   const source = join(dir, 'nullable-scalar-nullish.c')
   const output = join(dir, 'nullable-scalar-nullish')
 
@@ -9235,7 +9235,7 @@ test('generated C nullable boolean literal comparisons compile and run with runt
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-boolean-compare-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-boolean-compare-'))
   const source = join(dir, 'nullable-boolean-compare.c')
   const output = join(dir, 'nullable-boolean-compare')
 
@@ -9295,7 +9295,7 @@ test('generated C nullable scalar truthiness compiles and runs with runtime sour
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-truthiness-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-scalar-truthiness-'))
   const source = join(dir, 'nullable-scalar-truthiness.c')
   const output = join(dir, 'nullable-scalar-truthiness')
 
@@ -9382,7 +9382,7 @@ test('generated C nullable scalar function ABI compiles and runs with runtime so
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-abi-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-scalar-abi-'))
   const source = join(dir, 'nullable-scalar-abi.c')
   const output = join(dir, 'nullable-scalar-abi')
 
@@ -9449,7 +9449,7 @@ test('generated C nullable scalar branch narrowing compiles and runs with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-branch-narrowing-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-scalar-branch-narrowing-'))
   const source = join(dir, 'nullable-scalar-branch-narrowing.c')
   const output = join(dir, 'nullable-scalar-branch-narrowing')
 
@@ -9512,7 +9512,7 @@ test('generated C nullable scalar logical narrowing compiles and runs with runti
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-logical-narrowing-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-scalar-logical-narrowing-'))
   const source = join(dir, 'nullable-scalar-logical-narrowing.c')
   const output = join(dir, 'nullable-scalar-logical-narrowing')
 
@@ -9569,7 +9569,7 @@ test('generated C nullable scalar early return narrowing compiles and runs with 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-early-return-narrowing-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-scalar-early-return-narrowing-'))
   const source = join(dir, 'nullable-scalar-early-return-narrowing.c')
   const output = join(dir, 'nullable-scalar-early-return-narrowing')
 
@@ -9637,7 +9637,7 @@ test('generated C nullable scalar loop narrowing compiles and runs with runtime 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-scalar-loop-narrowing-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-scalar-loop-narrowing-'))
   const source = join(dir, 'nullable-scalar-loop-narrowing.c')
   const output = join(dir, 'nullable-scalar-loop-narrowing')
 
@@ -9691,7 +9691,7 @@ test('generated C nullable callback optional calls compile and run with runtime 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-callback-optional-call-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-callback-optional-call-'))
   const source = join(dir, 'nullable-callback-optional-call.c')
   const output = join(dir, 'nullable-callback-optional-call')
 
@@ -9763,7 +9763,7 @@ test('generated C nullable callback optional call results compile and run with r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-callback-optional-call-result-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-callback-optional-call-result-'))
   const source = join(dir, 'nullable-callback-optional-call-result.c')
   const output = join(dir, 'nullable-callback-optional-call-result')
 
@@ -9822,7 +9822,7 @@ test('generated C nullable arrow callback optional call results compile and run 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-arrow-callback-optional-call-result-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-arrow-callback-optional-call-result-'))
   const source = join(dir, 'nullable-arrow-callback-optional-call-result.c')
   const output = join(dir, 'nullable-arrow-callback-optional-call-result')
 
@@ -9876,7 +9876,7 @@ test('generated C nullable block arrow callback optional call results compile an
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-block-arrow-callback-optional-call-result-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-block-arrow-callback-optional-call-result-'))
   const source = join(dir, 'nullable-block-arrow-callback-optional-call-result.c')
   const output = join(dir, 'nullable-block-arrow-callback-optional-call-result')
 
@@ -9943,7 +9943,7 @@ test('generated C runtime callback returns through finally compile and run with 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-callback-return-finally-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-callback-return-finally-'))
   const source = join(dir, 'callback-return-finally.c')
   const output = join(dir, 'callback-return-finally')
 
@@ -10016,7 +10016,7 @@ test('generated C nullable string callback optional call results compile and run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-string-callback-optional-call-result-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-string-callback-optional-call-result-'))
   const source = join(dir, 'nullable-string-callback-optional-call-result.c')
   const output = join(dir, 'nullable-string-callback-optional-call-result')
 
@@ -10072,7 +10072,7 @@ test('generated C nullable object callback optional call results compile and run
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nullable-object-callback-optional-call-result-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nullable-object-callback-optional-call-result-'))
   const source = join(dir, 'nullable-object-callback-optional-call-result.c')
   const output = join(dir, 'nullable-object-callback-optional-call-result')
 
@@ -10136,7 +10136,7 @@ test('generated C local string throw try catch finally compiles and runs with ru
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-try-catch-finally-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-try-catch-finally-'))
   const source = join(dir, 'try-catch-finally.c')
   const output = join(dir, 'try-catch-finally')
 
@@ -10182,7 +10182,7 @@ test('generated C lightweight Error objects compile and run with runtime sources
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-error-object-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-error-object-'))
   const source = join(dir, 'error-object.c')
   const output = join(dir, 'error-object')
 
@@ -10233,7 +10233,7 @@ test('generated C interfunction throws compile and run with runtime sources', as
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-interfunction-throw-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-interfunction-throw-'))
   const source = join(dir, 'interfunction-throw.c')
   const output = join(dir, 'interfunction-throw')
 
@@ -10308,7 +10308,7 @@ test('generated C return through finally compiles and runs with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-return-finally-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-return-finally-'))
   const source = join(dir, 'return-finally.c')
   const output = join(dir, 'return-finally')
 
@@ -10367,7 +10367,7 @@ test('generated C break and continue through finally compile and run with runtim
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-break-continue-finally-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-break-continue-finally-'))
   const source = join(dir, 'break-continue-finally.c')
   const output = join(dir, 'break-continue-finally')
 
@@ -10423,7 +10423,7 @@ test('generated C runtime string assignment references compile and run with runt
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-string-assignment-'))
   const source = join(dir, 'runtime-string-assignment.c')
   const output = join(dir, 'runtime-string-assignment')
 
@@ -10472,7 +10472,7 @@ test('generated C runtime string local assignments from dynamic object fields co
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-field-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-string-field-assignment-'))
   const source = join(dir, 'runtime-string-field-assignment.c')
   const output = join(dir, 'runtime-string-field-assignment')
 
@@ -10519,7 +10519,7 @@ test('generated C nested runtime string field reads compile and run with runtime
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-nested-runtime-string-field-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-nested-runtime-string-field-'))
   const source = join(dir, 'nested-runtime-string-field.c')
   const output = join(dir, 'nested-runtime-string-field')
 
@@ -10570,7 +10570,7 @@ test('generated C string-returning assignment calls compile and run with runtime
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-string-return-assignment-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-string-return-assignment-'))
   const source = join(dir, 'string-return-assignment.c')
   const output = join(dir, 'string-return-assignment')
 
@@ -10619,7 +10619,7 @@ test('generated C runtime string params compile and run with runtime sources', a
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-params-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-string-params-'))
   const source = join(dir, 'runtime-string-params.c')
   const output = join(dir, 'runtime-string-params')
 
@@ -10671,7 +10671,7 @@ test('generated C prepared string args in number expressions compile and run wit
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-prepared-number-calls-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-prepared-number-calls-'))
   const source = join(dir, 'prepared-number-calls.c')
   const output = join(dir, 'prepared-number-calls')
 
@@ -10718,7 +10718,7 @@ test('generated C Array.join compiles and runs with runtime sources', async (t) 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-array-join-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-array-join-'))
   const source = join(dir, 'array-join.c')
   const output = join(dir, 'array-join')
 
@@ -10763,7 +10763,7 @@ test('generated C plain string local params compile and run with runtime sources
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-plain-string-params-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-plain-string-params-'))
   const source = join(dir, 'plain-string-params.c')
   const output = join(dir, 'plain-string-params')
 
@@ -10814,7 +10814,7 @@ test('generated C runtime string return compiles and runs with runtime sources',
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-return-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-string-return-'))
   const source = join(dir, 'runtime-string-return.c')
   const output = join(dir, 'runtime-string-return')
 
@@ -10861,7 +10861,7 @@ test('generated C runtime string index returns compile and run with runtime sour
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-runtime-string-index-return-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-runtime-string-index-return-'))
   const source = join(dir, 'runtime-string-index-return.c')
   const output = join(dir, 'runtime-string-index-return')
 
@@ -10912,7 +10912,7 @@ test('generated C member and index reads inside scalar expressions compile and r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-scalar-member-expr-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-scalar-member-expr-'))
   const source = join(dir, 'scalar-member-expr.c')
   const output = join(dir, 'scalar-member-expr')
 
@@ -10957,7 +10957,7 @@ test('generated C optional object member and index access compile and run with r
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-optional-member-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-optional-member-'))
   const source = join(dir, 'optional-member.c')
   const output = join(dir, 'optional-member')
 
@@ -11000,7 +11000,7 @@ test('generated C typed object shape lowering compiles and runs with runtime sou
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-typed-object-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-typed-object-'))
   const source = join(dir, 'typed-object.c')
   const output = join(dir, 'typed-object')
 
@@ -11048,7 +11048,7 @@ test('generated C JSON parse and stringify compile and run with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-json-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-json-'))
   const source = join(dir, 'json.c')
   const output = join(dir, 'json')
 
@@ -11098,7 +11098,7 @@ test('generated C Buffer and Uint8Array APIs compile and run with runtime source
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-binary-api-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-binary-api-'))
   const source = join(dir, 'binary-api.c')
   const output = join(dir, 'binary-api')
 
@@ -11148,7 +11148,7 @@ test('generated C crypto.getRandomValues compiles and runs with runtime sources'
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-crypto-random-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-crypto-random-'))
   const source = join(dir, 'crypto-random.c')
   const output = join(dir, 'crypto-random')
 
@@ -11191,7 +11191,7 @@ test('generated C Map and Set methods compile and run with runtime sources', asy
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collections-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collections-'))
   const source = join(dir, 'collections.c')
   const output = join(dir, 'collections')
 
@@ -11252,7 +11252,7 @@ test('generated C Map and Set method chains compile and run with runtime sources
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-chains-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collection-chains-'))
   const source = join(dir, 'collection-chains.c')
   const output = join(dir, 'collection-chains')
 
@@ -11301,7 +11301,7 @@ test('generated C collection values cross function boundaries with runtime sourc
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-boundaries-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collection-boundaries-'))
   const source = join(dir, 'collection-boundaries.c')
   const output = join(dir, 'collection-boundaries')
 
@@ -11405,7 +11405,7 @@ test('generated C Map and Set array literal constructors compile and run with ru
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-constructors-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collection-constructors-'))
   const source = join(dir, 'collection-constructors.c')
   const output = join(dir, 'collection-constructors')
 
@@ -11451,7 +11451,7 @@ test('generated C Map and Set copy constructors compile and run with runtime sou
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-copy-constructors-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collection-copy-constructors-'))
   const source = join(dir, 'collection-copy-constructors.c')
   const output = join(dir, 'collection-copy-constructors')
 
@@ -11515,7 +11515,7 @@ test('generated C Map and Set copy constructors preserve object identity keys', 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-object-identity-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collection-object-identity-'))
   const source = join(dir, 'collection-object-identity.c')
   const output = join(dir, 'collection-object-identity')
 
@@ -11583,7 +11583,7 @@ test('generated C Map keys iterables compile and run with runtime sources', asyn
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-map-keys-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-map-keys-'))
   const source = join(dir, 'map-keys.c')
   const output = join(dir, 'map-keys')
 
@@ -11658,7 +11658,7 @@ test('generated C Map and Set object fields compile and run with runtime sources
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-collection-fields-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-collection-fields-'))
   const source = join(dir, 'collection-fields.c')
   const output = join(dir, 'collection-fields')
 
@@ -11716,7 +11716,7 @@ test('generated C Map bracket syntax compiles and runs with runtime sources', as
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-map-brackets-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-map-brackets-'))
   const source = join(dir, 'map-brackets.c')
   const output = join(dir, 'map-brackets')
 

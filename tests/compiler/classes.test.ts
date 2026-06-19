@@ -76,15 +76,15 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /\{\n\s+ccjs_release\(ccjs_value_\d+\);\n\s+ccjs_value_\d+ = ccjs_undefined_value\(\);\n\s+if \(ccjs_string_from_literal\(&ccjs_default_allocator, "start", 5, &ccjs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;\n\s+double index = start\(ccjs_value_\d+\);/
+    /\{\n\s+inox_release\(inox_value_\d+\);\n\s+inox_value_\d+ = inox_undefined_value\(\);\n\s+if \(inox_string_from_literal\(&inox_default_allocator, "start", 5, &inox_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;\n\s+double index = start\(inox_value_\d+\);/
   )
   assert.match(
     result.code,
-    /for \(;;\) \{\n\s+ccjs_release\(ccjs_value_\d+\);\n\s+ccjs_value_\d+ = ccjs_undefined_value\(\);\n\s+if \(ccjs_string_from_literal\(&ccjs_default_allocator, "limit", 5, &ccjs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;\n\s+if \(!\(keepGoing\(index, ccjs_value_\d+\)\)\) break;/
+    /for \(;;\) \{\n\s+inox_release\(inox_value_\d+\);\n\s+inox_value_\d+ = inox_undefined_value\(\);\n\s+if \(inox_string_from_literal\(&inox_default_allocator, "limit", 5, &inox_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;\n\s+if \(!\(keepGoing\(index, inox_value_\d+\)\)\) break;/
   )
   assert.match(
     result.code,
-    /ccjs_release\(ccjs_value_\d+\);\n\s+ccjs_value_\d+ = ccjs_undefined_value\(\);\n\s+if \(ccjs_string_from_literal\(&ccjs_default_allocator, "step", 4, &ccjs_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;\n\s+\(index = nextIndex\(index, ccjs_value_\d+\)\);/
+    /inox_release\(inox_value_\d+\);\n\s+inox_value_\d+ = inox_undefined_value\(\);\n\s+if \(inox_string_from_literal\(&inox_default_allocator, "step", 4, &inox_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;\n\s+\(index = nextIndex\(index, inox_value_\d+\)\);/
   )
 })
 
@@ -132,24 +132,24 @@ export function main(): void {
     c.ir.syntaxFeatures.map((item) => item.feature),
     ['class']
   )
-  assert.match(c.code, /#include "ccjs\/object\.h"/)
+  assert.match(c.code, /#include "inox\/object\.h"/)
   assert.match(
     c.code,
-    /static const ccjs_field_info ccjs_shape_User_\d+_fields\[\] = \{\n\s+\{ "id", CCJS_FIELD_READONLY \},\n\s+\{ "name", 0 \},/
+    /static const inox_field_info inox_shape_User_\d+_fields\[\] = \{\n\s+\{ "id", INOX_FIELD_READONLY \},\n\s+\{ "name", 0 \},/
   )
-  assert.match(c.code, /static void ccjs_method_User_rename\(ccjs_value this, ccjs_value ccjs_param_next\);/)
-  assert.match(c.code, /static double ccjs_method_User_score\(ccjs_value this, double extra\);/)
-  assert.match(c.code, /static double ccjs_method_User_total\(ccjs_value this, double extra\);/)
-  assert.match(c.code, /static ccjs_value ccjs_method_User_label\(ccjs_value this\);/)
-  assert.match(c.code, /ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_User_\d+, &user\)/)
-  assert.match(c.code, /ccjs_object_init_known\(user, 0, ccjs_number_value\(1\)\)/)
-  assert.match(c.code, /ccjs_object_init_known\(user, 1, ccjs_value_\d+\)/)
-  assert.match(c.code, /ccjs_object_get_known\(this, 0, &ccjs_expr_value_\d+\)/)
-  assert.match(c.code, /ccjs_method_User_rename\(user, ccjs_value_\d+\);/)
-  assert.match(c.code, /const double value = ccjs_method_User_total\(user, 2\);/)
-  assert.match(c.code, /ccjs_return = ccjs_method_User_score\(this, extra\);/)
-  assert.match(c.code, /ccjs_method_value_\d+ = ccjs_method_User_label\(user\);/)
-  assert.match(c.code, /ccjs_object_set_known\(this, 1, ccjs_value_\d+\)/)
+  assert.match(c.code, /static void inox_method_User_rename\(inox_value this, inox_value inox_param_next\);/)
+  assert.match(c.code, /static double inox_method_User_score\(inox_value this, double extra\);/)
+  assert.match(c.code, /static double inox_method_User_total\(inox_value this, double extra\);/)
+  assert.match(c.code, /static inox_value inox_method_User_label\(inox_value this\);/)
+  assert.match(c.code, /inox_object_new\(&inox_default_allocator, &inox_shape_User_\d+, &user\)/)
+  assert.match(c.code, /inox_object_init_known\(user, 0, inox_number_value\(1\)\)/)
+  assert.match(c.code, /inox_object_init_known\(user, 1, inox_value_\d+\)/)
+  assert.match(c.code, /inox_object_get_known\(this, 0, &inox_expr_value_\d+\)/)
+  assert.match(c.code, /inox_method_User_rename\(user, inox_value_\d+\);/)
+  assert.match(c.code, /const double value = inox_method_User_total\(user, 2\);/)
+  assert.match(c.code, /inox_return = inox_method_User_score\(this, extra\);/)
+  assert.match(c.code, /inox_method_value_\d+ = inox_method_User_label\(user\);/)
+  assert.match(c.code, /inox_object_set_known\(this, 1, inox_value_\d+\)/)
 })
 
 test('lowers constructor field reads through the current class object', () => {
@@ -180,10 +180,10 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /ccjs_object_init_known\(host, 0, ccjs_value_\d+\)/)
-  assert.match(c.code, /ccjs_object_get_known\(host, 0, &ccjs_value_\d+\)/)
-  assert.match(c.code, /normalizeRoot\(ccjs_value_\d+\)/)
-  assert.match(c.code, /ccjs_object_init_known\(host, 1, ccjs_value_\d+\)/)
+  assert.match(c.code, /inox_object_init_known\(host, 0, inox_value_\d+\)/)
+  assert.match(c.code, /inox_object_get_known\(host, 0, &inox_value_\d+\)/)
+  assert.match(c.code, /normalizeRoot\(inox_value_\d+\)/)
+  assert.match(c.code, /inox_object_init_known\(host, 1, inox_value_\d+\)/)
 })
 
 
@@ -221,9 +221,9 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /ccjs_object_get_known\(this, 0, &ccjs_value_\d+\)/)
-  assert.match(c.code, /ccjs_value_\d+\.tag != CCJS_TAG_OBJECT/)
-  assert.match(c.code, /ccjs_return = ccjs_method_Inner_read\(ccjs_value_\d+, 2\);/)
+  assert.match(c.code, /inox_object_get_known\(this, 0, &inox_value_\d+\)/)
+  assert.match(c.code, /inox_value_\d+\.tag != INOX_TAG_OBJECT/)
+  assert.match(c.code, /inox_return = inox_method_Inner_read\(inox_value_\d+, 2\);/)
 })
 
 
@@ -253,12 +253,12 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /ccjs_method_Reader_fallback\(this\)/)
-  assert.match(c.code, /ccjs_method_value_\d+ = ccjs_method_Reader_fallback\(this\);/)
-  assert.match(c.code, /ccjs_nullable_value_\d+ = ccjs_method_value_\d+;/)
-  assert.match(c.code, /ccjs_retain\(ccjs_nullable_value_\d+\);/)
-  assert.match(c.code, /ccjs_release\(value\);/)
-  assert.match(c.code, /value = ccjs_nullable_value_\d+;/)
+  assert.match(c.code, /inox_method_Reader_fallback\(this\)/)
+  assert.match(c.code, /inox_method_value_\d+ = inox_method_Reader_fallback\(this\);/)
+  assert.match(c.code, /inox_nullable_value_\d+ = inox_method_value_\d+;/)
+  assert.match(c.code, /inox_retain\(inox_nullable_value_\d+\);/)
+  assert.match(c.code, /inox_release\(value\);/)
+  assert.match(c.code, /value = inox_nullable_value_\d+;/)
 })
 
 
@@ -281,7 +281,7 @@ export function main(): void {
   user.rename()
 }
 `,
-    'CCJS_ASSIGN_READONLY_FIELD'
+    'INOX_ASSIGN_READONLY_FIELD'
   )
 })
 
@@ -305,7 +305,7 @@ class Admin extends User {
   }
 }
 `,
-    'CCJS_CLASS_EXTENDS'
+    'INOX_CLASS_EXTENDS'
   )
 })
 
@@ -318,7 +318,7 @@ test('rejects unsupported static class members with stable diagnostics', () => {
   }
 }
 `,
-    'CCJS_CLASS_STATIC'
+    'INOX_CLASS_STATIC'
   )
 
   assertDiagnostic(
@@ -326,7 +326,7 @@ test('rejects unsupported static class members with stable diagnostics', () => {
   static count: number
 }
 `,
-    'CCJS_CLASS_STATIC'
+    'INOX_CLASS_STATIC'
   )
 })
 
@@ -368,7 +368,7 @@ export function main(): void {
       }
     ]
   )
-  assert.equal((result.code.match(/CCJS_FIELD_READONLY/g) ?? []).length, 1)
+  assert.equal((result.code.match(/INOX_FIELD_READONLY/g) ?? []).length, 1)
 
   const withoutReturnShape = emitCFromIr({
     ...result.ir,
@@ -382,7 +382,7 @@ export function main(): void {
     )
   })
 
-  assert.equal((withoutReturnShape.match(/CCJS_FIELD_READONLY/g) ?? []).length, 0)
+  assert.equal((withoutReturnShape.match(/INOX_FIELD_READONLY/g) ?? []).length, 0)
 })
 
 
@@ -447,10 +447,10 @@ export function main(): void {
       }
     ]
   )
-  assert.match(c.code, /\{ "id", CCJS_FIELD_READONLY \}/)
+  assert.match(c.code, /\{ "id", INOX_FIELD_READONLY \}/)
   assert.match(c.code, /\{ "name", 0 \}/)
-  assert.match(c.code, /ccjs_object_init_known\(user, 0, ccjs_number_value\(1\)\)/)
-  assert.match(c.code, /ccjs_object_get_known\(user, 0, &ccjs_field_\d+\)/)
+  assert.match(c.code, /inox_object_init_known\(user, 0, inox_number_value\(1\)\)/)
+  assert.match(c.code, /inox_object_get_known\(user, 0, &inox_field_\d+\)/)
 })
 
 test('allows optional typed object fields to be omitted', () => {
@@ -491,7 +491,7 @@ export function main(): void {
       }
     ]
   )
-  assert.match(result.code, /ccjs_object_init_known\(options, 1, ccjs_number_value\(2\)\)/)
+  assert.match(result.code, /inox_object_init_known\(options, 1, inox_number_value\(2\)\)/)
 })
 
 test('allows trailing optional function arguments to be omitted', () => {
@@ -518,7 +518,7 @@ export function main(): void {
   assert.ok(lineOf)
   assert.equal(lineOf.params[0].optional, true)
   assert.equal(lineOf.params[0].nullable, true)
-  assert.match(result.code, /lineOf\(ccjs_null_value\(\)\)/)
+  assert.match(result.code, /lineOf\(inox_null_value\(\)\)/)
 })
 
 test('supports type-only aliases and intersection object type aliases', () => {
@@ -573,8 +573,8 @@ export function main(): void {
       { name: 'version', valueType: 'number' }
     ]
   )
-  assert.match(result.code, /ccjs_object_init_known\(token, 0, ccjs_number_value\(1\)\)/)
-  assert.match(result.code, /ccjs_object_init_known\(token, 2, ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_object_init_known\(token, 0, inox_number_value\(1\)\)/)
+  assert.match(result.code, /inox_object_init_known\(token, 2, inox_value_\d+\)/)
 })
 
 test('uses right-hand intersection field metadata when it overrides a base field', () => {
@@ -604,8 +604,8 @@ export function main(): void {
   const read = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'read')
   assert.ok(read)
   assert.equal(read.params[0].shape.fields[0].nullable, false)
-  assert.match(result.code, /ccjs_object_get_known\(member, 0, &ccjs_field_\d+\)/)
-  assert.doesNotMatch(result.code, /CCJS_TAG_NULL/)
+  assert.match(result.code, /inox_object_get_known\(member, 0, &inox_field_\d+\)/)
+  assert.doesNotMatch(result.code, /INOX_TAG_NULL/)
 })
 
 
@@ -621,7 +621,7 @@ export function main(): void {
   user.id = 2
 }
 `,
-    'CCJS_ASSIGN_READONLY_FIELD'
+    'INOX_ASSIGN_READONLY_FIELD'
   )
 })
 
@@ -644,7 +644,7 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_object_get\(user, "name", 4, &ccjs_field_\d+\)/)
+  assert.match(result.code, /inox_object_get\(user, "name", 4, &inox_field_\d+\)/)
 
   assertDiagnostic(
     `type User = {
@@ -657,7 +657,7 @@ export function main(): void {
   user['id'] = 2
 }
 `,
-    'CCJS_ASSIGN_READONLY_FIELD'
+    'INOX_ASSIGN_READONLY_FIELD'
   )
 })
 
@@ -674,7 +674,7 @@ export function main(): void {
   console.log(user)
 }
 `,
-    'CCJS_MISSING_FIELD'
+    'INOX_MISSING_FIELD'
   )
 
   assertDiagnostic(
@@ -687,7 +687,7 @@ export function main(): void {
   console.log(user)
 }
 `,
-    'CCJS_UNKNOWN_FIELD'
+    'INOX_UNKNOWN_FIELD'
   )
 
   assertDiagnostic(
@@ -700,7 +700,7 @@ export function main(): void {
   console.log(user)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -716,6 +716,6 @@ export function main(): void {
   console.log(user.age)
 }
 `,
-    'CCJS_UNKNOWN_FIELD'
+    'INOX_UNKNOWN_FIELD'
   )
 })

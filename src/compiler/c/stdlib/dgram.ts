@@ -98,7 +98,7 @@ function pushIndentedDgramLines(target: string[], lines: string[]): void {
 }
 
 export function emitDgramMessageHandlerHead(wrapper: CDgramMessageHandler): string {
-  return `static ccjs_status ${wrapper.name}(void* user, ccjs_dgram_socket* ccjs_socket, const char* ccjs_bytes, size_t ccjs_len, const char* ccjs_host, int ccjs_port)`
+  return `static inox_status ${wrapper.name}(void* user, inox_dgram_socket* inox_socket, const char* inox_bytes, size_t inox_len, const char* inox_host, int inox_port)`
 }
 
 export function emitDgramMessageHandlerDeclaration(
@@ -151,20 +151,20 @@ export function emitDgramMessageHandlerDeclaration(
   const lines = [`${emitDgramMessageHandlerHead(wrapper)} {`, '  (void)user;']
 
   if (messageName == null) {
-    lines.push('  (void)ccjs_bytes;')
-    lines.push('  (void)ccjs_len;')
+    lines.push('  (void)inox_bytes;')
+    lines.push('  (void)inox_len;')
   }
 
   if (rinfoName == null) {
-    lines.push('  (void)ccjs_host;')
-    lines.push('  (void)ccjs_port;')
+    lines.push('  (void)inox_host;')
+    lines.push('  (void)inox_port;')
   }
 
   for (const statement of body) {
     pushIndentedDgramLines(lines, emitDgramMessageHandlerStatement(statement, dgramContext, context, deps))
   }
 
-  lines.push('  return CCJS_OK;')
+  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -196,16 +196,16 @@ export function emitDgramAddressVariableDeclaration(statement: AnyNode, context:
     return null
   }
 
-  let runtime = 'ccjs_dgram_socket_address'
+  let runtime = 'inox_dgram_socket_address'
 
   if (statement.init.callee.property === 'remoteAddress') {
-    runtime = 'ccjs_dgram_socket_remote_address'
+    runtime = 'inox_dgram_socket_remote_address'
   }
 
   context.variables.set(statement.name, 'dgram-address')
 
   return [
-    `ccjs_dgram_address ${statement.name};`,
+    `inox_dgram_address ${statement.name};`,
     emitStatusCheck(`${runtime}(${socketName}, &${statement.name})`, context)
   ]
 }
@@ -236,9 +236,9 @@ export function emitDgramNumberVariableDeclaration(
   let runtime: string | null = null
 
   if (method === 'getSendBufferSize') {
-    runtime = 'ccjs_dgram_get_send_buffer_size'
+    runtime = 'inox_dgram_get_send_buffer_size'
   } else if (method === 'getRecvBufferSize') {
-    runtime = 'ccjs_dgram_get_recv_buffer_size'
+    runtime = 'inox_dgram_get_recv_buffer_size'
   }
 
   if (runtime == null) {
@@ -247,7 +247,7 @@ export function emitDgramNumberVariableDeclaration(
 
   context.variables.set(statement.name, 'number')
 
-  const size = nextCName(context, 'ccjs_dgram_buffer_size')
+  const size = nextCName(context, 'inox_dgram_buffer_size')
   const statusCall = `${runtime}(${socketName}, &${size})`
 
   return [
@@ -273,8 +273,8 @@ export function emitDgramSocketCallStatement(
     callee.property === 'bind' &&
     isDgramCreateSocketCall(callee.object, context)
   ) {
-    const socketName = nextCName(context, 'ccjs_dgram_socket')
-    const lines = [`ccjs_dgram_socket* ${socketName} = 0;`]
+    const socketName = nextCName(context, 'inox_dgram_socket')
+    const lines = [`inox_dgram_socket* ${socketName} = 0;`]
     registerEventLoop(context)
 
     pushDgramLines(
@@ -370,7 +370,7 @@ export function emitDgramSocketCallStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         `socket.${property} is not supported by the current C dgram backend slice`,
         loc
       )
@@ -448,7 +448,7 @@ function registerDgramMessageHandler(
     return
   }
 
-  const name = `ccjs_dgram_message_handler_${handlers.size}`
+  const name = `inox_dgram_message_handler_${handlers.size}`
   expression.dgramMessageHandlerName = name
 
   handlers.set(name, {
@@ -722,7 +722,7 @@ function emitDgramMessageHandlerStatement(
 
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_HANDLER',
+        'INOX_DGRAM_HANDLER',
         'dgram message listeners in the C backend currently support only static string local declarations',
         statement.loc
       )
@@ -750,18 +750,18 @@ function emitDgramMessageHandlerStatement(
         const lines: string[] = []
 
         pushDgramLines(lines, call)
-        lines.push('return CCJS_OK;')
+        lines.push('return INOX_OK;')
 
         return lines
       }
     }
 
-    return ['return CCJS_OK;']
+    return ['return INOX_OK;']
   }
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_DGRAM_HANDLER',
+      'INOX_DGRAM_HANDLER',
       'this dgram message listener statement is not supported by the current C backend slice',
       statement.loc
     )
@@ -785,11 +785,11 @@ function emitDgramMessageHandlerSocketCallStatement(
   }
 
   if (expression.callee.property === 'send') {
-    return emitDgramSendLines('ccjs_socket', expression.args, context, deps, dgramContext)
+    return emitDgramSendLines('inox_socket', expression.args, context, deps, dgramContext)
   }
 
   if (expression.callee.property === 'close') {
-    return ['ccjs_dgram_close(ccjs_socket);']
+    return ['inox_dgram_close(inox_socket);']
   }
 
   return null
@@ -818,7 +818,7 @@ function emitDgramSocketCreateLines(
   if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'dgram.createSocket in the C backend currently requires an inline message listener callback',
         listener.loc
       )
@@ -828,7 +828,7 @@ function emitDgramSocketCreateLines(
   const lines: string[] = []
 
   if (options == null || options.declare !== false) {
-    lines.push(`ccjs_dgram_socket* ${socketName} = 0;`)
+    lines.push(`inox_dgram_socket* ${socketName} = 0;`)
   }
 
   let wrapperName = '0'
@@ -839,7 +839,7 @@ function emitDgramSocketCreateLines(
 
   lines.push(
     emitStatusCheck(
-      `ccjs_dgram_socket_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${socketName})`,
+      `inox_dgram_socket_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${socketName})`,
       context
     )
   )
@@ -918,7 +918,7 @@ function emitDgramBindLines(
   if (args.length > maxArgCount) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'socket.bind in the C backend currently supports port, optional address and optional callback',
         dgramNodeLoc(lastDgramArgument(args))
       )
@@ -938,13 +938,13 @@ function emitDgramBindLines(
   let flags = '0'
 
   if (context.dgramReuseAddrSockets.has(socketName)) {
-    flags = 'CCJS_DGRAM_BIND_REUSEADDR'
+    flags = 'INOX_DGRAM_BIND_REUSEADDR'
   }
 
   const lines: string[] = []
 
   pushDgramLines(lines, port.lines)
-  lines.push(emitStatusCheck(`ccjs_dgram_bind_flags(${socketName}, ${host}, (int)(${port.expression}), ${flags})`, context))
+  lines.push(emitStatusCheck(`inox_dgram_bind_flags(${socketName}, ${host}, (int)(${port.expression}), ${flags})`, context))
 
   context.dgramBoundSockets.add(socketName)
   pushDgramLines(lines, emitDgramMaybeRecvStartLines(socketName, context))
@@ -963,7 +963,7 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
   if (eventArg == null || eventArg.type !== 'StringLiteral' || eventArg.value !== 'message') {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         "socket.on in the C backend currently supports only the 'message' event",
         dgramNodeLoc(eventArg)
       )
@@ -989,7 +989,7 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
   if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         "socket.on('message') in the C backend currently requires an inline message listener",
         dgramNodeLoc(listener)
       )
@@ -999,7 +999,7 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
 
   context.dgramMessageSockets.add(socketName)
 
-  const lines = [emitStatusCheck(`ccjs_dgram_socket_on_message(${socketName}, ${wrapper.name}, 0)`, context)]
+  const lines = [emitStatusCheck(`inox_dgram_socket_on_message(${socketName}, ${wrapper.name}, 0)`, context)]
 
   pushDgramLines(lines, emitDgramMaybeRecvStartLines(socketName, context))
 
@@ -1015,7 +1015,7 @@ function emitDgramConnectLines(
   if (args.length < 1) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'socket.connect in the C backend currently requires a port argument',
         dgramNodeLoc(args[0])
       )
@@ -1043,7 +1043,7 @@ function emitDgramConnectLines(
   if (args.length > 3) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'socket.connect in the C backend currently supports port, optional address and optional callback',
         dgramNodeLoc(args[3])
       )
@@ -1053,7 +1053,7 @@ function emitDgramConnectLines(
   const lines: string[] = []
 
   pushDgramLines(lines, port.lines)
-  lines.push(emitStatusCheck(`ccjs_dgram_socket_connect(${socketName}, ${host}, (int)(${port.expression}))`, context))
+  lines.push(emitStatusCheck(`inox_dgram_socket_connect(${socketName}, ${host}, (int)(${port.expression}))`, context))
   pushDgramLines(lines, emitDgramZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -1062,11 +1062,11 @@ function emitDgramConnectLines(
 function emitDgramDisconnectLines(socketName: string, args: AnyNode[], context: CFunctionContext): string[] {
   if (args.length > 0) {
     context.diagnostics.push(
-      diagnostic('CCJS_DGRAM_SOCKET', 'socket.disconnect in the C backend does not take arguments', dgramNodeLoc(args[0]))
+      diagnostic('INOX_DGRAM_SOCKET', 'socket.disconnect in the C backend does not take arguments', dgramNodeLoc(args[0]))
     )
   }
 
-  return [emitStatusCheck(`ccjs_dgram_socket_disconnect(${socketName})`, context)]
+  return [emitStatusCheck(`inox_dgram_socket_disconnect(${socketName})`, context)]
 }
 
 function emitDgramSocketOptionCallStatement(
@@ -1093,7 +1093,7 @@ function emitDgramSocketOptionCallStatement(
     const lines: string[] = []
 
     pushDgramLines(lines, enabled.lines)
-    lines.push(emitStatusCheck(`ccjs_dgram_set_broadcast(${socketName}, ${enabled.expression} ? 1 : 0)`, context))
+    lines.push(emitStatusCheck(`inox_dgram_set_broadcast(${socketName}, ${enabled.expression} ? 1 : 0)`, context))
 
     return lines
   }
@@ -1103,16 +1103,16 @@ function emitDgramSocketOptionCallStatement(
     const lines: string[] = []
 
     pushDgramLines(lines, ttl.lines)
-    lines.push(emitStatusCheck(`ccjs_dgram_set_ttl(${socketName}, (int)(${ttl.expression}))`, context))
+    lines.push(emitStatusCheck(`inox_dgram_set_ttl(${socketName}, (int)(${ttl.expression}))`, context))
 
     return lines
   }
 
   if (method === 'setSendBufferSize' || method === 'setRecvBufferSize') {
-    let runtime = 'ccjs_dgram_set_recv_buffer_size'
+    let runtime = 'inox_dgram_set_recv_buffer_size'
 
     if (method === 'setSendBufferSize') {
-      runtime = 'ccjs_dgram_set_send_buffer_size'
+      runtime = 'inox_dgram_set_send_buffer_size'
     }
 
     const size = deps.emitPreparedNumberExpression(expression.args[0], context)
@@ -1128,17 +1128,17 @@ function emitDgramSocketOptionCallStatement(
     if (expression.args.length > 0) {
       context.diagnostics.push(
         diagnostic(
-          'CCJS_DGRAM_SOCKET',
+          'INOX_DGRAM_SOCKET',
           `socket.${method} in the C backend does not take arguments`,
           dgramNodeLoc(expression.args[0])
         )
       )
     }
 
-    let runtime = 'ccjs_dgram_unref'
+    let runtime = 'inox_dgram_unref'
 
     if (method === 'ref') {
-      runtime = 'ccjs_dgram_ref'
+      runtime = 'inox_dgram_ref'
     }
 
     return [emitStatusCheck(`${runtime}(${socketName})`, context)]
@@ -1174,7 +1174,7 @@ function emitDgramSendLines(
     pushDgramLines(lines, body.lines)
     pushDgramLines(
       lines,
-      emitDgramStatusCheck(`ccjs_dgram_send_connected(${socketName}, ${body.bytes}, ${body.length})`, context, dgramContext)
+      emitDgramStatusCheck(`inox_dgram_send_connected(${socketName}, ${body.bytes}, ${body.length})`, context, dgramContext)
     )
     pushDgramLines(lines, emitDgramZeroArgCallbackLines(callback, context, deps))
 
@@ -1184,7 +1184,7 @@ function emitDgramSendLines(
   if (args.length < 3) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'socket.send in the C backend currently requires message, port and address arguments, or a connected socket message form',
         dgramNodeLoc(args[0])
       )
@@ -1210,7 +1210,7 @@ function emitDgramSendLines(
   if (hasOffsetLength) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'socket.send offset/length arguments are not supported by the current C backend slice yet',
         dgramNodeLoc(args[1])
       )
@@ -1227,7 +1227,7 @@ function emitDgramSendLines(
   pushDgramLines(
     lines,
     emitDgramStatusCheck(
-      `ccjs_dgram_send(${socketName}, ${body.bytes}, ${body.length}, ${host}, (int)(${port.expression}))`,
+      `inox_dgram_send(${socketName}, ${body.bytes}, ${body.length}, ${host}, (int)(${port.expression}))`,
       context,
       dgramContext
     )
@@ -1246,14 +1246,14 @@ function emitDgramCloseLines(
   if (args.length > 1) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'socket.close in the C backend supports only an optional callback',
         dgramNodeLoc(args[1])
       )
     )
   }
 
-  const lines = [`ccjs_dgram_close(${socketName});`]
+  const lines = [`inox_dgram_close(${socketName});`]
 
   pushDgramLines(lines, emitDgramZeroArgCallbackLines(args[0], context, deps))
 
@@ -1265,7 +1265,7 @@ function emitDgramMaybeRecvStartLines(socketName: string, context: CFunctionCont
     return []
   }
 
-  return [emitStatusCheck(`ccjs_dgram_recv_start(${socketName})`, context)]
+  return [emitStatusCheck(`inox_dgram_recv_start(${socketName})`, context)]
 }
 
 function emitDgramStatusCheck(
@@ -1277,9 +1277,9 @@ function emitDgramStatusCheck(
     return [emitStatusCheck(call, context)]
   }
 
-  const status = nextCName(context, 'ccjs_dgram_status')
+  const status = nextCName(context, 'inox_dgram_status')
 
-  return ['{', `  ccjs_status ${status} = ${call};`, `  if (${status} != CCJS_OK) return ${status};`, '}']
+  return ['{', `  inox_status ${status} = ${call};`, `  if (${status} != INOX_OK) return ${status};`, '}']
 }
 
 function emitDgramBytesOperand(
@@ -1297,8 +1297,8 @@ function emitDgramBytesOperand(
   ) {
     return {
       lines: [],
-      bytes: 'ccjs_bytes',
-      length: 'ccjs_len'
+      bytes: 'inox_bytes',
+      length: 'inox_len'
     }
   }
 
@@ -1312,7 +1312,7 @@ function emitDgramBytesOperand(
     }
   }
 
-  return deps.emitPreparedStringBytesOperand(expression, context, 'ccjs_dgram_string')
+  return deps.emitPreparedStringBytesOperand(expression, context, 'inox_dgram_string')
 }
 
 function emitDgramPortExpression(
@@ -1326,7 +1326,7 @@ function emitDgramPortExpression(
   if (rinfo === 'port') {
     return {
       lines: [],
-      expression: 'ccjs_port'
+      expression: 'inox_port'
     }
   }
 
@@ -1352,7 +1352,7 @@ function emitDgramHostExpression(
   const rinfo = resolveDgramRinfoMember(expression, dgramContext)
 
   if (rinfo === 'address') {
-    return 'ccjs_host'
+    return 'inox_host'
   }
 
   const addressMember = resolveDgramAddressStringMember(expression, context)
@@ -1377,7 +1377,7 @@ function emitDgramHostExpression(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_DGRAM_SOCKET',
+      'INOX_DGRAM_SOCKET',
       'socket host/address arguments in the C backend currently must be static strings or rinfo.address',
       expression.loc
     )
@@ -1492,7 +1492,7 @@ function emitDgramZeroArgCallbackLines(
   if (callback.type !== 'ArrowFunctionExpression' || callback.params.length !== 0 || callback.async === true) {
     context.diagnostics.push(
       diagnostic(
-        'CCJS_DGRAM_SOCKET',
+        'INOX_DGRAM_SOCKET',
         'dgram socket callbacks in the C backend currently require a synchronous zero-argument arrow function',
         callback.loc
       )
@@ -1616,7 +1616,7 @@ function emitDgramSocketTypeDiagnostics(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_DGRAM_SOCKET',
+      'INOX_DGRAM_SOCKET',
       "dgram.createSocket in the C backend currently supports only the 'udp4' socket type",
       dgramNodeLoc(expression)
     )

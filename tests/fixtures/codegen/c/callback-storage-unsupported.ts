@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_C_FUNCTION_VALUE
+// @diagnostic INOX_C_FUNCTION_VALUE
 
 type Task = () => void
 

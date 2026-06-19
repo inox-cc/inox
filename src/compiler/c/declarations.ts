@@ -228,8 +228,8 @@ export function emitFunctionDeclaration(
 
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
   context.externalEventLoop = functionTakesEventLoopParam(statement.name, context)
-  context.functionReturnOut = 'ccjs_out'
-  context.functionErrorOut = 'ccjs_error_out'
+  context.functionReturnOut = 'inox_out'
+  context.functionErrorOut = 'inox_error_out'
 
   if (baseContext.asyncTaskWrappers.has(statement.name)) {
     return emitAsyncTaskFunctionStubDeclaration(statement, context, deps.asyncTaskLoweringDependencies)
@@ -262,7 +262,7 @@ export function emitFunctionDeclaration(
   pushDeclarationLines(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('ccjs_cleanup:')
+    lines.push('inox_cleanup:')
     pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
@@ -385,17 +385,17 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
   }
 
   if (functionTakesEventLoopParam(statement.name, context)) {
-    params.unshift('ccjs_loop* ccjs_loop')
+    params.unshift('inox_loop* inox_loop')
   }
 
   if (isThrowingFunctionName(statement.name, context)) {
     if (returnType !== 'void') {
-      params.push(`${emitThrowingFunctionOutType(returnType, returnNullable)}* ccjs_out`)
+      params.push(`${emitThrowingFunctionOutType(returnType, returnNullable)}* inox_out`)
     }
 
-    params.push('ccjs_value* ccjs_error_out')
+    params.push('inox_value* inox_error_out')
 
-    return `ccjs_status ${name}(${declarationParamList(params)})`
+    return `inox_status ${name}(${declarationParamList(params)})`
   }
 
   return `${emitCReturnType(returnType, returnNullable)} ${name}(${declarationParamList(params)})`
@@ -591,28 +591,28 @@ function emitFunctionHeadParam(
   context: CEmitContext
 ): string {
   if (isNullableScalarParam(param)) {
-    return `ccjs_value ${emitCScalarParamName(param.name)}`
+    return `inox_value ${emitCScalarParamName(param.name)}`
   }
 
   if (param.valueType === 'string') {
-    return `ccjs_value ${emitCStringParamName(param.name)}`
+    return `inox_value ${emitCStringParamName(param.name)}`
   }
 
   if (param.valueType === 'object') {
     if (isBoxedFunctionParam(param, index, statement, context)) {
-      return `ccjs_value ${emitCObjectParamName(param.name)}`
+      return `inox_value ${emitCObjectParamName(param.name)}`
     }
 
-    return `ccjs_value ${param.name}`
+    return `inox_value ${param.name}`
   }
 
   if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
-    return `ccjs_value ${param.name}`
+    return `inox_value ${param.name}`
   }
 
   if (param.valueType === 'function') {
     if (resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null) {
-      return `ccjs_value ${param.name}`
+      return `inox_value ${param.name}`
     }
 
     return emitFunctionParameter(param.name, param.functionType, context, param.loc)
@@ -638,8 +638,8 @@ export function emitClassMethodDeclaration(
   context.returnShape = null
   context.throwingFunction = isThrowingClassMethod(info, method, baseContext)
   context.externalEventLoop = functionTakesEventLoopParam(methodEffectName, baseContext)
-  context.functionReturnOut = 'ccjs_out'
-  context.functionErrorOut = 'ccjs_error_out'
+  context.functionReturnOut = 'inox_out'
+  context.functionErrorOut = 'inox_error_out'
   context.variables.set('this', 'object')
   context.classInstanceTypes.set('this', info.name)
   registerClassObjectShape(context, 'this', info)
@@ -669,7 +669,7 @@ export function emitClassMethodDeclaration(
   pushDeclarationLines(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('ccjs_cleanup:')
+    lines.push('inox_cleanup:')
     pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
@@ -680,7 +680,7 @@ export function emitClassMethodDeclaration(
     let returnValue = '0'
 
     if (context.returnType === 'string') {
-      returnValue = 'ccjs_undefined_value()'
+      returnValue = 'inox_undefined_value()'
     }
 
     lines.push(`  return ${returnValue};`)
@@ -697,10 +697,10 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
   if (functionTakesEventLoopParam(methodEffectName, context)) {
-    params.push('ccjs_loop* ccjs_loop')
+    params.push('inox_loop* inox_loop')
   }
 
-  params.push('ccjs_value this')
+  params.push('inox_value this')
 
   for (let index = 0; index < method.params.length; index = index + 1) {
     params.push(emitClassMethodParam(method.params[index], index, method, context))
@@ -709,12 +709,12 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
 
   if (isThrowingClassMethod(info, method, context)) {
     if (method.returnType !== 'void') {
-      params.push(`${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true)}* ccjs_out`)
+      params.push(`${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true)}* inox_out`)
     }
 
-    params.push('ccjs_value* ccjs_error_out')
+    params.push('inox_value* inox_error_out')
 
-    return `static ccjs_status ${name}(${joinDeclarationParams(params)})`
+    return `static inox_status ${name}(${joinDeclarationParams(params)})`
   }
 
   return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${name}(${joinDeclarationParams(params)})`
@@ -727,28 +727,28 @@ function isThrowingClassMethod(info: CClassInfo, method: CNode, context: CEmitCo
 
 function emitClassMethodParam(param: CFunctionParam, index: number, method: CNode, context: CEmitContext): string {
   if (isNullableScalarParam(param)) {
-    return `ccjs_value ${emitCScalarParamName(param.name)}`
+    return `inox_value ${emitCScalarParamName(param.name)}`
   }
 
   if (param.valueType === 'string') {
-    return `ccjs_value ${emitCStringParamName(param.name)}`
+    return `inox_value ${emitCStringParamName(param.name)}`
   }
 
   if (param.valueType === 'object') {
     if (isBoxedFunctionParam(param, index, method, context)) {
-      return `ccjs_value ${emitCObjectParamName(param.name)}`
+      return `inox_value ${emitCObjectParamName(param.name)}`
     }
 
-    return `ccjs_value ${param.name}`
+    return `inox_value ${param.name}`
   }
 
   if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
-    return `ccjs_value ${param.name}`
+    return `inox_value ${param.name}`
   }
 
   if (param.valueType === 'function') {
     if (resolveFunctionParameterRuntimeType(method.name, index, param, context) != null) {
-      return `ccjs_value ${param.name}`
+      return `inox_value ${param.name}`
     }
 
     return emitFunctionParameter(param.name, param.functionType, context, param.loc)
@@ -801,7 +801,7 @@ export function emitFunctionParameter(
   reportUnsupportedCFunctionType(functionType, context, loc)
 
   if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
-    return `ccjs_value ${name}`
+    return `inox_value ${name}`
   }
 
   return emitFunctionPointerParameter(name, functionType, seenTypes)
@@ -830,7 +830,7 @@ export function reportUnsupportedCFunctionType(
 
   context.diagnostics.push(
     diagnostic(
-      'CCJS_C_FUNCTION_VALUE',
+      'INOX_C_FUNCTION_VALUE',
       'typed C callbacks currently support only void callbacks with number/boolean/string/object parameters',
       loc
     )
@@ -856,7 +856,7 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
   if (context.processRuntime) {
-    lines.push('  ccjs_process_init(argc, argv);')
+    lines.push('  inox_process_init(argc, argv);')
   }
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
@@ -871,7 +871,7 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(lines, emitEventLoopDrain(context))
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('ccjs_cleanup:')
+    lines.push('inox_cleanup:')
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
@@ -888,9 +888,9 @@ export function emitMainReturnExpression(context: CFunctionContext): string {
   let successReturn = '0'
 
   if (context.processRuntime) {
-    successReturn = 'ccjs_process_get_exit_code()'
+    successReturn = 'inox_process_get_exit_code()'
   } else if (context.returnType === 'number') {
-    successReturn = '(int)ccjs_return'
+    successReturn = '(int)inox_return'
   }
 
   if (context.unhandledRejectionFlag == null) {
@@ -923,24 +923,24 @@ function emitRuntimeParamPreludeForParam(
     const expectedTag = cRuntimeValueTag(param.valueType)
 
     pushDeclarationLines(lines, emitRuntimeNullableValueCheck(paramName, expectedTag, context))
-    lines.push(`ccjs_value ${param.name} = ${paramName};`)
+    lines.push(`inox_value ${param.name} = ${paramName};`)
     return lines
   }
 
   if (isBoxedFunctionParam(param, index, statement, context) && isBoxedRuntimeValueParamType(param.valueType)) {
     let paramName = emitCObjectParamName(param.name)
-    let tag = 'CCJS_TAG_OBJECT'
+    let tag = 'INOX_TAG_OBJECT'
 
     if (param.valueType === 'string') {
       paramName = emitCStringParamName(param.name)
-      tag = 'CCJS_TAG_STRING'
+      tag = 'INOX_TAG_STRING'
     }
 
     lines.push(emitRuntimeTypeCheck(`${paramName}.tag != ${tag} || ${paramName}.as.ref == 0`, context))
-    lines.push(`${param.name} = ccjs_default_alloc(0, sizeof(ccjs_value), _Alignof(ccjs_value));`)
+    lines.push(`${param.name} = inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
     lines.push(`if (${param.name} == 0) ${emitFailureStatement(context)}`)
     lines.push(`*${param.name} = ${paramName};`)
-    lines.push(`ccjs_retain(*${param.name});`)
+    lines.push(`inox_retain(*${param.name});`)
     return lines
   }
 
@@ -948,22 +948,22 @@ function emitRuntimeParamPreludeForParam(
     const paramName = emitCStringParamName(param.name)
 
     if (param.nullable === true) {
-      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(paramName, 'CCJS_TAG_STRING', context))
-      lines.push(`ccjs_value ${param.name} = ${paramName};`)
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(paramName, 'INOX_TAG_STRING', context))
+      lines.push(`inox_value ${param.name} = ${paramName};`)
       return lines
     }
 
-    lines.push(emitRuntimeTypeCheck(`${paramName}.tag != CCJS_TAG_STRING || ${paramName}.as.ref == 0`, context))
-    lines.push(`ccjs_string* ${param.name} = (ccjs_string*)${paramName}.as.ref;`)
+    lines.push(emitRuntimeTypeCheck(`${paramName}.tag != INOX_TAG_STRING || ${paramName}.as.ref == 0`, context))
+    lines.push(`inox_string* ${param.name} = (inox_string*)${paramName}.as.ref;`)
     return lines
   }
 
   if (param.valueType === 'object') {
     if (param.nullable === true) {
-      return emitRuntimeNullableValueCheck(param.name, 'CCJS_TAG_OBJECT', context)
+      return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_OBJECT', context)
     }
 
-    lines.push(emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_OBJECT || ${param.name}.as.ref == 0`, context))
+    lines.push(emitRuntimeTypeCheck(`${param.name}.tag != INOX_TAG_OBJECT || ${param.name}.as.ref == 0`, context))
     return lines
   }
 
@@ -983,15 +983,15 @@ function emitRuntimeParamPreludeForParam(
     resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null
   ) {
     if (param.nullable === true) {
-      return emitRuntimeNullableValueCheck(param.name, 'CCJS_TAG_FUNCTION', context)
+      return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context)
     }
 
-    lines.push(emitRuntimeTypeCheck(`${param.name}.tag != CCJS_TAG_FUNCTION || ${param.name}.as.ref == 0`, context))
+    lines.push(emitRuntimeTypeCheck(`${param.name}.tag != INOX_TAG_FUNCTION || ${param.name}.as.ref == 0`, context))
     return lines
   }
 
   if (isBoxedFunctionParam(param, index, statement, context) && isBoxedScalarParamValueType(param.valueType)) {
-    lines.push(`${param.name} = ccjs_default_alloc(0, sizeof(double), _Alignof(double));`)
+    lines.push(`${param.name} = inox_default_alloc(0, sizeof(double), _Alignof(double));`)
     lines.push(`if (${param.name} == 0) ${emitFailureStatement(context)}`)
     lines.push(`*${param.name} = ${emitCScalarParamName(param.name)};`)
   }
@@ -1011,14 +1011,14 @@ function emitThrowingFunctionPrelude(context: CFunctionContext): string[] {
     guard = `${guard} || ${context.functionReturnOut} == 0`
   }
 
-  lines.push(`${guard}) return CCJS_ERR_TYPE;`)
-  lines.push(`*${context.functionErrorOut} = ccjs_undefined_value();`)
+  lines.push(`${guard}) return INOX_ERR_TYPE;`)
+  lines.push(`*${context.functionErrorOut} = inox_undefined_value();`)
 
   if (context.returnType !== 'void') {
     let returnValue = '0'
 
     if (isThrowingFunctionRuntimeOut(context)) {
-      returnValue = 'ccjs_undefined_value()'
+      returnValue = 'inox_undefined_value()'
     }
 
     lines.push(`*${context.functionReturnOut} = ${returnValue};`)

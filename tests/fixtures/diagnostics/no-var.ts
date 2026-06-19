@@ -1,4 +1,4 @@
 // @expect diagnostic
-// @diagnostic CCJS_NO_VAR
+// @diagnostic INOX_NO_VAR
 
 var value = 1

@@ -27,7 +27,7 @@ test('C runtime TLS fallback reports unsupported backend', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-tls-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-tls-runtime-'))
   const source = join(dir, 'tls-runtime.c')
   const output = join(dir, 'tls-runtime')
 
@@ -35,35 +35,35 @@ test('C runtime TLS fallback reports unsupported backend', async (t) => {
     await writeFile(
       source,
       `#include <stdio.h>
-#include "ccjs/tls.h"
+#include "inox/tls.h"
 
-static ccjs_status on_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
+static inox_status on_connect(void* user, inox_tls_client* client, inox_status status) {
   (void)user;
   (void)client;
   (void)status;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status on_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
+static inox_status on_data(void* user, inox_tls_client* client, const char* bytes, size_t len) {
   (void)user;
   (void)client;
   (void)bytes;
   (void)len;
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void on_close(void* user, ccjs_tls_client* client) {
+static void on_close(void* user, inox_tls_client* client) {
   (void)user;
   (void)client;
 }
 
 int main(void) {
-  ccjs_loop loop = { 0 };
-  ccjs_tls_client* client = (ccjs_tls_client*)1;
+  inox_loop loop = { 0 };
+  inox_tls_client* client = (inox_tls_client*)1;
 
-  if (ccjs_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, &client) != CCJS_ERR_UNSUPPORTED) return 1;
+  if (inox_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, &client) != INOX_ERR_UNSUPPORTED) return 1;
   if (client != 0) return 2;
-  if (ccjs_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, 0) != CCJS_ERR_TYPE) return 3;
+  if (inox_tls_connect(&loop, "example.test", 443, "example.test", on_connect, on_data, on_close, 0, 0) != INOX_ERR_TYPE) return 3;
 
   printf("tls unsupported\\n");
   return 0;
@@ -95,8 +95,8 @@ int main(void) {
 
 
 test('C runtime BoringSSL TLS client connects to local TLS server', async (t) => {
-  if (process.env.CCJS_TEST_BORINGSSL_TLS !== '1') {
-    t.skip('set CCJS_TEST_BORINGSSL_TLS=1 to build BoringSSL TLS integration smoke')
+  if (process.env.INOX_TEST_BORINGSSL_TLS !== '1') {
+    t.skip('set INOX_TEST_BORINGSSL_TLS=1 to build BoringSSL TLS integration smoke')
     return
   }
 
@@ -109,7 +109,7 @@ test('C runtime BoringSSL TLS client connects to local TLS server', async (t) =>
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-boringssl-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-boringssl-runtime-'))
   const buildDir = join(dir, 'build')
   const goodKey = join(dir, 'good-key.pem')
   const goodCert = join(dir, 'good-cert.pem')
@@ -123,12 +123,12 @@ test('C runtime BoringSSL TLS client connects to local TLS server', async (t) =>
     await writeFile(
       join(dir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.22)
-project(ccjs_tls_smoke C CXX)
+project(inox_tls_smoke C CXX)
 
-add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
+add_subdirectory("${repoRoot}/runtime/c" inox_runtime_build)
 add_executable(tls-client tls-client.c)
 set_property(TARGET tls-client PROPERTY LINKER_LANGUAGE CXX)
-target_link_libraries(tls-client PRIVATE ccjs_runtime)
+target_link_libraries(tls-client PRIVATE inox_runtime)
 `
     )
     await writeFile(
@@ -136,16 +136,16 @@ target_link_libraries(tls-client PRIVATE ccjs_runtime)
       `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/allocator.h"
-#include "ccjs/loop.h"
-#include "ccjs/tls.h"
+#include "inox/allocator.h"
+#include "inox/loop.h"
+#include "inox/tls.h"
 
 typedef struct tls_state {
-  ccjs_tls_client* client;
+  inox_tls_client* client;
   char response[4096];
   size_t response_len;
   int done;
-  ccjs_status status;
+  inox_status status;
 } tls_state;
 
 static void* test_alloc(void* user, size_t size, size_t align) {
@@ -168,28 +168,28 @@ static void test_free(void* user, void* ptr, size_t size, size_t align) {
   free(ptr);
 }
 
-static ccjs_status on_connect(void* user, ccjs_tls_client* client, ccjs_status status) {
+static inox_status on_connect(void* user, inox_tls_client* client, inox_status status) {
   tls_state* state = (tls_state*)user;
   state->client = client;
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     state->status = status;
     state->done = 1;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   const char request[] = "GET / HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n";
-  return ccjs_tls_client_write(client, request, sizeof(request) - 1);
+  return inox_tls_client_write(client, request, sizeof(request) - 1);
 }
 
-static ccjs_status on_data(void* user, ccjs_tls_client* client, const char* bytes, size_t len) {
+static inox_status on_data(void* user, inox_tls_client* client, const char* bytes, size_t len) {
   tls_state* state = (tls_state*)user;
 
   if (state->response_len + len >= sizeof(state->response)) {
-    state->status = CCJS_ERR_UNSUPPORTED;
+    state->status = INOX_ERR_UNSUPPORTED;
     state->done = 1;
-    ccjs_tls_client_close(client);
-    return CCJS_OK;
+    inox_tls_client_close(client);
+    return INOX_OK;
   }
 
   memcpy(state->response + state->response_len, bytes, len);
@@ -197,20 +197,20 @@ static ccjs_status on_data(void* user, ccjs_tls_client* client, const char* byte
   state->response[state->response_len] = '\\0';
 
   if (strstr(state->response, "\\r\\n\\r\\nok") != 0) {
-    state->status = CCJS_OK;
+    state->status = INOX_OK;
     state->done = 1;
-    ccjs_tls_client_close(client);
+    inox_tls_client_close(client);
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void on_close(void* user, ccjs_tls_client* client) {
+static void on_close(void* user, inox_tls_client* client) {
   (void)client;
   tls_state* state = (tls_state*)user;
 
   if (!state->done) {
-    state->status = CCJS_ERR_FIELD;
+    state->status = INOX_ERR_FIELD;
     state->done = 1;
   }
 }
@@ -218,14 +218,14 @@ static void on_close(void* user, ccjs_tls_client* client) {
 int main(int argc, char** argv) {
   if (argc != 2) return 2;
 
-  ccjs_allocator allocator = { 0, test_alloc, test_realloc, test_free };
-  ccjs_loop loop;
+  inox_allocator allocator = { 0, test_alloc, test_realloc, test_free };
+  inox_loop loop;
   tls_state state = { 0 };
-  state.status = CCJS_ERR_FIELD;
+  state.status = INOX_ERR_FIELD;
 
-  if (ccjs_loop_init(&loop, &allocator) != CCJS_OK) return 3;
+  if (inox_loop_init(&loop, &allocator) != INOX_OK) return 3;
 
-  ccjs_status status = ccjs_tls_connect(
+  inox_status status = inox_tls_connect(
     &loop,
     "127.0.0.1",
     atoi(argv[1]),
@@ -237,28 +237,28 @@ int main(int argc, char** argv) {
     &state.client
   );
 
-  if (status != CCJS_OK) {
-    ccjs_loop_dispose(&loop);
+  if (status != INOX_OK) {
+    inox_loop_dispose(&loop);
     return 4;
   }
 
-  for (int spin = 0; !state.done && ccjs_loop_has_work(&loop) && spin < 1000000; spin += 1) {
-    status = ccjs_loop_poll(&loop, 0);
+  for (int spin = 0; !state.done && inox_loop_has_work(&loop) && spin < 1000000; spin += 1) {
+    status = inox_loop_poll(&loop, 0);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       state.status = status;
       state.done = 1;
     }
   }
 
   if (!state.done) {
-    state.status = CCJS_ERR_FIELD;
-    if (state.client != 0) ccjs_tls_client_close(state.client);
+    state.status = INOX_ERR_FIELD;
+    if (state.client != 0) inox_tls_client_close(state.client);
   }
 
-  ccjs_loop_dispose(&loop);
+  inox_loop_dispose(&loop);
 
-  if (state.status != CCJS_OK) {
+  if (state.status != INOX_OK) {
     printf("status %d\\n", (int)state.status);
     return 10 + (int)state.status;
   }
@@ -274,9 +274,9 @@ int main(int argc, char** argv) {
       dir,
       '-B',
       buildDir,
-      '-DCCJS_LOOP_BACKEND=libuv',
-      '-DCCJS_TLS_BACKEND=boringssl',
-      `-DCCJS_TLS_CA_BUNDLE=${goodCert}`
+      '-DINOX_LOOP_BACKEND=libuv',
+      '-DINOX_TLS_BACKEND=boringssl',
+      `-DINOX_TLS_CA_BUNDLE=${goodCert}`
     ])
 
     assert.equal(configure.code, 0, configure.stderr)
@@ -328,8 +328,8 @@ int main(int argc, char** argv) {
 
 
 test('generated C fetch uses BoringSSL TLS for HTTPS URLs', async (t) => {
-  if (process.env.CCJS_TEST_BORINGSSL_FETCH !== '1') {
-    t.skip('set CCJS_TEST_BORINGSSL_FETCH=1 to build BoringSSL HTTPS fetch smoke')
+  if (process.env.INOX_TEST_BORINGSSL_FETCH !== '1') {
+    t.skip('set INOX_TEST_BORINGSSL_FETCH=1 to build BoringSSL HTTPS fetch smoke')
     return
   }
 
@@ -342,7 +342,7 @@ test('generated C fetch uses BoringSSL TLS for HTTPS URLs', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-boringssl-fetch-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-boringssl-fetch-'))
   const buildDir = join(dir, 'build')
   const key = join(dir, 'key.pem')
   const cert = join(dir, 'cert.pem')
@@ -378,12 +378,12 @@ console.log(response.status, text)
     await writeFile(
       join(dir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.22)
-project(ccjs_https_fetch_smoke C CXX)
+project(inox_https_fetch_smoke C CXX)
 
-add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
+add_subdirectory("${repoRoot}/runtime/c" inox_runtime_build)
 add_executable(fetch-client main.c)
 set_property(TARGET fetch-client PROPERTY LINKER_LANGUAGE CXX)
-target_link_libraries(fetch-client PRIVATE ccjs_runtime)
+target_link_libraries(fetch-client PRIVATE inox_runtime)
 `
     )
 
@@ -392,9 +392,9 @@ target_link_libraries(fetch-client PRIVATE ccjs_runtime)
       dir,
       '-B',
       buildDir,
-      '-DCCJS_LOOP_BACKEND=libuv',
-      '-DCCJS_TLS_BACKEND=boringssl',
-      `-DCCJS_TLS_CA_BUNDLE=${cert}`
+      '-DINOX_LOOP_BACKEND=libuv',
+      '-DINOX_TLS_BACKEND=boringssl',
+      `-DINOX_TLS_CA_BUNDLE=${cert}`
     ])
 
     assert.equal(configure.code, 0, configure.stderr)
@@ -421,8 +421,8 @@ target_link_libraries(fetch-client PRIVATE ccjs_runtime)
 
 
 test('C runtime OpenSSL TLS backend builds when available', async (t) => {
-  if (process.env.CCJS_TEST_OPENSSL_TLS !== '1') {
-    t.skip('set CCJS_TEST_OPENSSL_TLS=1 to build OpenSSL TLS backend smoke')
+  if (process.env.INOX_TEST_OPENSSL_TLS !== '1') {
+    t.skip('set INOX_TEST_OPENSSL_TLS=1 to build OpenSSL TLS backend smoke')
     return
   }
 
@@ -433,16 +433,16 @@ test('C runtime OpenSSL TLS backend builds when available', async (t) => {
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-openssl-runtime-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-openssl-runtime-'))
   const buildDir = join(dir, 'build')
 
   try {
     await writeFile(
       join(dir, 'CMakeLists.txt'),
       `cmake_minimum_required(VERSION 3.20)
-project(ccjs_openssl_smoke C)
+project(inox_openssl_smoke C)
 
-add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
+add_subdirectory("${repoRoot}/runtime/c" inox_runtime_build)
 `
     )
 
@@ -451,8 +451,8 @@ add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
       dir,
       '-B',
       buildDir,
-      '-DCCJS_LOOP_BACKEND=libuv',
-      '-DCCJS_TLS_BACKEND=openssl'
+      '-DINOX_LOOP_BACKEND=libuv',
+      '-DINOX_TLS_BACKEND=openssl'
     ])
 
     if (configure.code !== 0 && /Could NOT find OpenSSL|OpenSSL.*NOTFOUND/i.test(configure.stderr)) {
@@ -462,7 +462,7 @@ add_subdirectory("${repoRoot}/runtime/c" ccjs_runtime_build)
 
     assert.equal(configure.code, 0, configure.stderr)
 
-    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'ccjs_runtime'])
+    const build = await runCommand('cmake', ['--build', buildDir, '--target', 'inox_runtime'])
 
     assert.equal(build.code, 0, build.stderr)
   } finally {

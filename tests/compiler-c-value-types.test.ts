@@ -20,9 +20,9 @@ test('treats named non-special C value types as opaque runtime values', () => {
 
     assert.equal(isOpaqueRuntimeValueType(name), true)
     assert.equal(isManagedRuntimeReturnType(name), false)
-    assert.equal(emitCType(name), 'ccjs_value')
-    assert.equal(emitCReturnType(name, false), 'ccjs_value')
-    assert.equal(emitThrowingFunctionOutType(name, false), 'ccjs_value')
+    assert.equal(emitCType(name), 'inox_value')
+    assert.equal(emitCReturnType(name, false), 'inox_value')
+    assert.equal(emitThrowingFunctionOutType(name, false), 'inox_value')
     assert.equal(cRuntimeValueTag(name), null)
   }
 
@@ -38,7 +38,7 @@ test('treats named non-special C value types as opaque runtime values', () => {
       returnNullable: false,
       returnType: 'CFunctionContext'
     } as never),
-    ['ccjs_value ccjs_return = ccjs_undefined_value();']
+    ['inox_value inox_return = inox_undefined_value();']
   )
 })
 

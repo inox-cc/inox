@@ -5,36 +5,36 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ccjs/array.h"
-#include "ccjs/json.h"
-#include "ccjs/object.h"
-#include "ccjs/string.h"
+#include "inox/array.h"
+#include "inox/json.h"
+#include "inox/object.h"
+#include "inox/string.h"
 
-#define CCJS_JSON_MAX_DEPTH 64
+#define INOX_JSON_MAX_DEPTH 64
 
-typedef struct ccjs_json_buffer {
-  ccjs_allocator* allocator;
+typedef struct inox_json_buffer {
+  inox_allocator* allocator;
   char* bytes;
   size_t len;
   size_t cap;
-} ccjs_json_buffer;
+} inox_json_buffer;
 
-typedef struct ccjs_json_parser {
-  ccjs_allocator* allocator;
+typedef struct inox_json_parser {
+  inox_allocator* allocator;
   const char* bytes;
   size_t len;
   size_t pos;
   const char* error_message;
   size_t error_pos;
   bool has_error;
-} ccjs_json_parser;
+} inox_json_parser;
 
-typedef struct ccjs_json_stringify_stack {
-  const ccjs_ref* refs[CCJS_JSON_MAX_DEPTH + 1];
+typedef struct inox_json_stringify_stack {
+  const inox_ref* refs[INOX_JSON_MAX_DEPTH + 1];
   size_t len;
-} ccjs_json_stringify_stack;
+} inox_json_stringify_stack;
 
-static void ccjs_json_buffer_dispose(ccjs_json_buffer* buffer) {
+static void inox_json_buffer_dispose(inox_json_buffer* buffer) {
   if (buffer == 0 || buffer->allocator == 0 || buffer->allocator->free == 0 || buffer->bytes == 0) {
     return;
   }
@@ -45,20 +45,20 @@ static void ccjs_json_buffer_dispose(ccjs_json_buffer* buffer) {
   buffer->cap = 0;
 }
 
-static ccjs_status ccjs_json_buffer_reserve(ccjs_json_buffer* buffer, size_t needed) {
+static inox_status inox_json_buffer_reserve(inox_json_buffer* buffer, size_t needed) {
   if (buffer == 0 || buffer->allocator == 0 || buffer->allocator->realloc == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (needed <= buffer->cap) {
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   size_t next_cap = buffer->cap == 0 ? 64 : buffer->cap;
 
   while (next_cap < needed) {
     if (next_cap > ((size_t)-1) / 2) {
-      return CCJS_ERR_OOM;
+      return INOX_ERR_OOM;
     }
 
     next_cap *= 2;
@@ -67,36 +67,36 @@ static ccjs_status ccjs_json_buffer_reserve(ccjs_json_buffer* buffer, size_t nee
   char* next = buffer->allocator->realloc(buffer->allocator->user, buffer->bytes, buffer->cap, next_cap, _Alignof(char));
 
   if (next == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   buffer->bytes = next;
   buffer->cap = next_cap;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_json_buffer_push_char(ccjs_json_buffer* buffer, char value) {
-  ccjs_status status = ccjs_json_buffer_reserve(buffer, buffer->len + 1);
+static inox_status inox_json_buffer_push_char(inox_json_buffer* buffer, char value) {
+  inox_status status = inox_json_buffer_reserve(buffer, buffer->len + 1);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
   buffer->bytes[buffer->len] = value;
   buffer->len += 1;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_json_buffer_push_bytes(ccjs_json_buffer* buffer, const char* bytes, size_t len) {
+static inox_status inox_json_buffer_push_bytes(inox_json_buffer* buffer, const char* bytes, size_t len) {
   if (bytes == 0 && len != 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_status status = ccjs_json_buffer_reserve(buffer, buffer->len + len);
+  inox_status status = inox_json_buffer_reserve(buffer, buffer->len + len);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
@@ -106,10 +106,10 @@ static ccjs_status ccjs_json_buffer_push_bytes(ccjs_json_buffer* buffer, const c
 
   buffer->len += len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void ccjs_json_skip_ws(ccjs_json_parser* parser) {
+static void inox_json_skip_ws(inox_json_parser* parser) {
   while (parser->pos < parser->len) {
     char value = parser->bytes[parser->pos];
 
@@ -121,7 +121,7 @@ static void ccjs_json_skip_ws(ccjs_json_parser* parser) {
   }
 }
 
-static bool ccjs_json_match_byte(ccjs_json_parser* parser, char value) {
+static bool inox_json_match_byte(inox_json_parser* parser, char value) {
   if (parser->pos >= parser->len || parser->bytes[parser->pos] != value) {
     return false;
   }
@@ -131,7 +131,7 @@ static bool ccjs_json_match_byte(ccjs_json_parser* parser, char value) {
   return true;
 }
 
-static bool ccjs_json_match_literal(ccjs_json_parser* parser, const char* literal, size_t len) {
+static bool inox_json_match_literal(inox_json_parser* parser, const char* literal, size_t len) {
   if (parser->pos + len > parser->len || memcmp(parser->bytes + parser->pos, literal, len) != 0) {
     return false;
   }
@@ -141,7 +141,7 @@ static bool ccjs_json_match_literal(ccjs_json_parser* parser, const char* litera
   return true;
 }
 
-static void ccjs_json_set_error_at(ccjs_json_parser* parser, const char* message, size_t pos) {
+static void inox_json_set_error_at(inox_json_parser* parser, const char* message, size_t pos) {
   if (parser == 0 || parser->has_error) {
     return;
   }
@@ -151,15 +151,15 @@ static void ccjs_json_set_error_at(ccjs_json_parser* parser, const char* message
   parser->has_error = true;
 }
 
-static void ccjs_json_set_error(ccjs_json_parser* parser, const char* message) {
+static void inox_json_set_error(inox_json_parser* parser, const char* message) {
   if (parser == 0) {
     return;
   }
 
-  ccjs_json_set_error_at(parser, message, parser->pos);
+  inox_json_set_error_at(parser, message, parser->pos);
 }
 
-static void ccjs_json_error_location(const char* bytes, size_t len, size_t pos, size_t* line_out, size_t* column_out) {
+static void inox_json_error_location(const char* bytes, size_t len, size_t pos, size_t* line_out, size_t* column_out) {
   size_t line = 1;
   size_t column = 1;
   size_t limit = pos > len ? len : pos;
@@ -182,9 +182,9 @@ static void ccjs_json_error_location(const char* bytes, size_t len, size_t pos, 
   }
 }
 
-static ccjs_status ccjs_json_make_syntax_error(ccjs_allocator* allocator, const ccjs_json_parser* parser, ccjs_value* out) {
+static inox_status inox_json_make_syntax_error(inox_allocator* allocator, const inox_json_parser* parser, inox_value* out) {
   if (allocator == 0 || parser == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   const char* message = parser->has_error ? parser->error_message : "Unexpected token";
@@ -197,7 +197,7 @@ static ccjs_status ccjs_json_make_syntax_error(ccjs_allocator* allocator, const 
     position = parser->len;
   }
 
-  ccjs_json_error_location(parser->bytes, parser->len, position, &line, &column);
+  inox_json_error_location(parser->bytes, parser->len, position, &line, &column);
 
   int written = snprintf(
     buffer,
@@ -210,13 +210,13 @@ static ccjs_status ccjs_json_make_syntax_error(ccjs_allocator* allocator, const 
   );
 
   if (written < 0 || (size_t)written >= sizeof(buffer)) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  return ccjs_string_from_literal(allocator, buffer, (size_t)written, out);
+  return inox_string_from_literal(allocator, buffer, (size_t)written, out);
 }
 
-static int ccjs_json_hex_value(char value) {
+static int inox_json_hex_value(char value) {
   if (value >= '0' && value <= '9') {
     return value - '0';
   }
@@ -232,15 +232,15 @@ static int ccjs_json_hex_value(char value) {
   return -1;
 }
 
-static bool ccjs_json_parse_hex4(const char* bytes, uint32_t* out) {
+static bool inox_json_parse_hex4(const char* bytes, uint32_t* out) {
   if (bytes == 0 || out == 0) {
     return false;
   }
 
-  int a = ccjs_json_hex_value(bytes[0]);
-  int b = ccjs_json_hex_value(bytes[1]);
-  int c = ccjs_json_hex_value(bytes[2]);
-  int d = ccjs_json_hex_value(bytes[3]);
+  int a = inox_json_hex_value(bytes[0]);
+  int b = inox_json_hex_value(bytes[1]);
+  int c = inox_json_hex_value(bytes[2]);
+  int d = inox_json_hex_value(bytes[3]);
 
   if (a < 0 || b < 0 || c < 0 || d < 0) {
     return false;
@@ -251,46 +251,46 @@ static bool ccjs_json_parse_hex4(const char* bytes, uint32_t* out) {
   return true;
 }
 
-static ccjs_status ccjs_json_buffer_push_utf8(ccjs_json_buffer* buffer, uint32_t codepoint) {
+static inox_status inox_json_buffer_push_utf8(inox_json_buffer* buffer, uint32_t codepoint) {
   if (codepoint <= 0x7f) {
-    return ccjs_json_buffer_push_char(buffer, (char)codepoint);
+    return inox_json_buffer_push_char(buffer, (char)codepoint);
   }
 
   if (codepoint <= 0x7ff) {
     char bytes[] = { (char)(0xc0 | (codepoint >> 6)), (char)(0x80 | (codepoint & 0x3f)) };
 
-    return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
+    return inox_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
   }
 
   if (codepoint <= 0xffff) {
     if (codepoint >= 0xd800 && codepoint <= 0xdfff) {
-      return CCJS_ERR_TYPE;
+      return INOX_ERR_TYPE;
     }
 
     char bytes[] = { (char)(0xe0 | (codepoint >> 12)), (char)(0x80 | ((codepoint >> 6) & 0x3f)),
                      (char)(0x80 | (codepoint & 0x3f)) };
 
-    return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
+    return inox_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
   }
 
   if (codepoint <= 0x10ffff) {
     char bytes[] = { (char)(0xf0 | (codepoint >> 18)), (char)(0x80 | ((codepoint >> 12) & 0x3f)),
                      (char)(0x80 | ((codepoint >> 6) & 0x3f)), (char)(0x80 | (codepoint & 0x3f)) };
 
-    return ccjs_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
+    return inox_json_buffer_push_bytes(buffer, bytes, sizeof(bytes));
   }
 
-  return CCJS_ERR_TYPE;
+  return INOX_ERR_TYPE;
 }
 
-static ccjs_status
-ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
-  if (parser == 0 || out_bytes == 0 || out_len == 0 || !ccjs_json_match_byte(parser, '"')) {
-    ccjs_json_set_error(parser, "Expected string");
-    return CCJS_ERR_TYPE;
+static inox_status
+inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
+  if (parser == 0 || out_bytes == 0 || out_len == 0 || !inox_json_match_byte(parser, '"')) {
+    inox_json_set_error(parser, "Expected string");
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_json_buffer buffer = { .allocator = parser->allocator };
+  inox_json_buffer buffer = { .allocator = parser->allocator };
 
   while (parser->pos < parser->len) {
     unsigned char value = (unsigned char)parser->bytes[parser->pos];
@@ -298,10 +298,10 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
 
     if (value == '"') {
       if (nul_terminated) {
-        ccjs_status status = ccjs_json_buffer_push_char(&buffer, '\0');
+        inox_status status = inox_json_buffer_push_char(&buffer, '\0');
 
-        if (status != CCJS_OK) {
-          ccjs_json_buffer_dispose(&buffer);
+        if (status != INOX_OK) {
+          inox_json_buffer_dispose(&buffer);
           return status;
         }
 
@@ -310,20 +310,20 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
 
       *out_bytes = buffer.bytes;
       *out_len = buffer.len;
-      return CCJS_OK;
+      return INOX_OK;
     }
 
     if (value < 0x20) {
-      ccjs_json_buffer_dispose(&buffer);
-      ccjs_json_set_error_at(parser, "Bad control character in string literal", parser->pos - 1);
-      return CCJS_ERR_TYPE;
+      inox_json_buffer_dispose(&buffer);
+      inox_json_set_error_at(parser, "Bad control character in string literal", parser->pos - 1);
+      return INOX_ERR_TYPE;
     }
 
     if (value != '\\') {
-      ccjs_status status = ccjs_json_buffer_push_char(&buffer, (char)value);
+      inox_status status = inox_json_buffer_push_char(&buffer, (char)value);
 
-      if (status != CCJS_OK) {
-        ccjs_json_buffer_dispose(&buffer);
+      if (status != INOX_OK) {
+        inox_json_buffer_dispose(&buffer);
         return status;
       }
 
@@ -331,9 +331,9 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
     }
 
     if (parser->pos >= parser->len) {
-      ccjs_json_buffer_dispose(&buffer);
-      ccjs_json_set_error(parser, "Unterminated string");
-      return CCJS_ERR_TYPE;
+      inox_json_buffer_dispose(&buffer);
+      inox_json_set_error(parser, "Unterminated string");
+      return INOX_ERR_TYPE;
     }
 
     char escaped = parser->bytes[parser->pos];
@@ -355,87 +355,87 @@ ccjs_json_parse_string_bytes(ccjs_json_parser* parser, char** out_bytes, size_t*
       output = '\t';
     } else if (escaped == 'u') {
       if (parser->pos + 4 > parser->len) {
-        ccjs_json_buffer_dispose(&buffer);
-        ccjs_json_set_error(parser, "Bad Unicode escape");
-        return CCJS_ERR_TYPE;
+        inox_json_buffer_dispose(&buffer);
+        inox_json_set_error(parser, "Bad Unicode escape");
+        return INOX_ERR_TYPE;
       }
 
       uint32_t codepoint = 0;
 
-      if (!ccjs_json_parse_hex4(parser->bytes + parser->pos, &codepoint)) {
-        ccjs_json_buffer_dispose(&buffer);
-        ccjs_json_set_error(parser, "Bad Unicode escape");
-        return CCJS_ERR_TYPE;
+      if (!inox_json_parse_hex4(parser->bytes + parser->pos, &codepoint)) {
+        inox_json_buffer_dispose(&buffer);
+        inox_json_set_error(parser, "Bad Unicode escape");
+        return INOX_ERR_TYPE;
       }
 
       parser->pos += 4;
 
       if (codepoint >= 0xd800 && codepoint <= 0xdbff) {
         if (parser->pos + 6 > parser->len || parser->bytes[parser->pos] != '\\' || parser->bytes[parser->pos + 1] != 'u') {
-          ccjs_json_buffer_dispose(&buffer);
-          ccjs_json_set_error(parser, "Bad Unicode escape");
-          return CCJS_ERR_TYPE;
+          inox_json_buffer_dispose(&buffer);
+          inox_json_set_error(parser, "Bad Unicode escape");
+          return INOX_ERR_TYPE;
         }
 
         uint32_t low = 0;
 
-        if (!ccjs_json_parse_hex4(parser->bytes + parser->pos + 2, &low) || low < 0xdc00 || low > 0xdfff) {
-          ccjs_json_buffer_dispose(&buffer);
-          ccjs_json_set_error(parser, "Bad Unicode escape");
-          return CCJS_ERR_TYPE;
+        if (!inox_json_parse_hex4(parser->bytes + parser->pos + 2, &low) || low < 0xdc00 || low > 0xdfff) {
+          inox_json_buffer_dispose(&buffer);
+          inox_json_set_error(parser, "Bad Unicode escape");
+          return INOX_ERR_TYPE;
         }
 
         parser->pos += 6;
         codepoint = 0x10000 + ((codepoint - 0xd800) << 10) + (low - 0xdc00);
       } else if (codepoint >= 0xdc00 && codepoint <= 0xdfff) {
-        ccjs_json_buffer_dispose(&buffer);
-        ccjs_json_set_error(parser, "Bad Unicode escape");
-        return CCJS_ERR_TYPE;
+        inox_json_buffer_dispose(&buffer);
+        inox_json_set_error(parser, "Bad Unicode escape");
+        return INOX_ERR_TYPE;
       }
 
-      ccjs_status status = ccjs_json_buffer_push_utf8(&buffer, codepoint);
+      inox_status status = inox_json_buffer_push_utf8(&buffer, codepoint);
 
-      if (status != CCJS_OK) {
-        ccjs_json_buffer_dispose(&buffer);
+      if (status != INOX_OK) {
+        inox_json_buffer_dispose(&buffer);
         return status;
       }
 
       has_output = false;
     } else {
-      ccjs_json_buffer_dispose(&buffer);
-      ccjs_json_set_error_at(parser, "Bad escaped character in JSON string", parser->pos - 1);
-      return CCJS_ERR_TYPE;
+      inox_json_buffer_dispose(&buffer);
+      inox_json_set_error_at(parser, "Bad escaped character in JSON string", parser->pos - 1);
+      return INOX_ERR_TYPE;
     }
 
     if (!has_output) {
       continue;
     }
 
-    ccjs_status status = ccjs_json_buffer_push_char(&buffer, output);
+    inox_status status = inox_json_buffer_push_char(&buffer, output);
 
-    if (status != CCJS_OK) {
-      ccjs_json_buffer_dispose(&buffer);
+    if (status != INOX_OK) {
+      inox_json_buffer_dispose(&buffer);
       return status;
     }
   }
 
-  ccjs_json_buffer_dispose(&buffer);
-  ccjs_json_set_error(parser, "Unterminated string");
-  return CCJS_ERR_TYPE;
+  inox_json_buffer_dispose(&buffer);
+  inox_json_set_error(parser, "Unterminated string");
+  return INOX_ERR_TYPE;
 }
 
-static ccjs_status ccjs_json_parse_value(ccjs_json_parser* parser, size_t depth, ccjs_value* out);
+static inox_status inox_json_parse_value(inox_json_parser* parser, size_t depth, inox_value* out);
 
-static ccjs_status ccjs_json_parse_string(ccjs_json_parser* parser, ccjs_value* out) {
+static inox_status inox_json_parse_string(inox_json_parser* parser, inox_value* out) {
   char* bytes = 0;
   size_t len = 0;
-  ccjs_status status = ccjs_json_parse_string_bytes(parser, &bytes, &len, false);
+  inox_status status = inox_json_parse_string_bytes(parser, &bytes, &len, false);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_string_from_literal(parser->allocator, bytes == 0 ? "" : bytes, len, out);
+  status = inox_string_from_literal(parser->allocator, bytes == 0 ? "" : bytes, len, out);
 
   if (parser->allocator != 0 && parser->allocator->free != 0 && bytes != 0) {
     parser->allocator->free(parser->allocator->user, bytes, len, _Alignof(char));
@@ -444,7 +444,7 @@ static ccjs_status ccjs_json_parse_string(ccjs_json_parser* parser, ccjs_value* 
   return status;
 }
 
-static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* out) {
+static inox_status inox_json_parse_number(inox_json_parser* parser, inox_value* out) {
   size_t start = parser->pos;
 
   if (parser->pos < parser->len && parser->bytes[parser->pos] == '-') {
@@ -452,8 +452,8 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
   }
 
   if (parser->pos >= parser->len) {
-    ccjs_json_set_error(parser, "No number after minus sign");
-    return CCJS_ERR_TYPE;
+    inox_json_set_error(parser, "No number after minus sign");
+    return INOX_ERR_TYPE;
   }
 
   if (parser->bytes[parser->pos] == '0') {
@@ -463,16 +463,16 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
       parser->pos += 1;
     }
   } else {
-    ccjs_json_set_error(parser, "Unexpected token");
-    return CCJS_ERR_TYPE;
+    inox_json_set_error(parser, "Unexpected token");
+    return INOX_ERR_TYPE;
   }
 
   if (parser->pos < parser->len && parser->bytes[parser->pos] == '.') {
     parser->pos += 1;
 
     if (parser->pos >= parser->len || parser->bytes[parser->pos] < '0' || parser->bytes[parser->pos] > '9') {
-      ccjs_json_set_error(parser, "Unterminated fractional number");
-      return CCJS_ERR_TYPE;
+      inox_json_set_error(parser, "Unterminated fractional number");
+      return INOX_ERR_TYPE;
     }
 
     while (parser->pos < parser->len && parser->bytes[parser->pos] >= '0' && parser->bytes[parser->pos] <= '9') {
@@ -488,8 +488,8 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
     }
 
     if (parser->pos >= parser->len || parser->bytes[parser->pos] < '0' || parser->bytes[parser->pos] > '9') {
-      ccjs_json_set_error(parser, "Exponent part is missing a number");
-      return CCJS_ERR_TYPE;
+      inox_json_set_error(parser, "Exponent part is missing a number");
+      return INOX_ERR_TYPE;
     }
 
     while (parser->pos < parser->len && parser->bytes[parser->pos] >= '0' && parser->bytes[parser->pos] <= '9') {
@@ -501,7 +501,7 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
   char* temp = parser->allocator->alloc(parser->allocator->user, len + 1, _Alignof(char));
 
   if (temp == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   memcpy(temp, parser->bytes + start, len);
@@ -513,15 +513,15 @@ static ccjs_status ccjs_json_parse_number(ccjs_json_parser* parser, ccjs_value* 
   parser->allocator->free(parser->allocator->user, temp, len + 1, _Alignof(char));
 
   if (errno != 0 || end == 0 || parsed_len != len) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_number_value(number);
+  *out = inox_number_value(number);
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void ccjs_json_free_names(ccjs_allocator* allocator, char** names, size_t count) {
+static void inox_json_free_names(inox_allocator* allocator, char** names, size_t count) {
   if (allocator == 0 || allocator->free == 0 || names == 0) {
     return;
   }
@@ -533,24 +533,24 @@ static void ccjs_json_free_names(ccjs_allocator* allocator, char** names, size_t
   }
 }
 
-static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth, ccjs_value* out) {
-  if (!ccjs_json_match_byte(parser, '{')) {
-    ccjs_json_set_error(parser, "Expected object");
-    return CCJS_ERR_TYPE;
+static inox_status inox_json_parse_object(inox_json_parser* parser, size_t depth, inox_value* out) {
+  if (!inox_json_match_byte(parser, '{')) {
+    inox_json_set_error(parser, "Expected object");
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_allocator* allocator = parser->allocator;
+  inox_allocator* allocator = parser->allocator;
   char** names = 0;
-  ccjs_value* values = 0;
+  inox_value* values = 0;
   size_t len = 0;
   size_t cap = 0;
-  ccjs_status status = CCJS_OK;
+  inox_status status = INOX_OK;
 
-  ccjs_json_skip_ws(parser);
+  inox_json_skip_ws(parser);
 
-  if (!ccjs_json_match_byte(parser, '}')) {
+  if (!inox_json_match_byte(parser, '}')) {
     while (true) {
-      ccjs_json_skip_ws(parser);
+      inox_json_skip_ws(parser);
 
       if (len == cap) {
         size_t next_cap = cap == 0 ? 4 : cap * 2;
@@ -558,17 +558,17 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
           allocator->realloc(allocator->user, names, sizeof(char*) * cap, sizeof(char*) * next_cap, _Alignof(char*));
 
         if (next_names == 0) {
-          status = CCJS_ERR_OOM;
+          status = INOX_ERR_OOM;
           break;
         }
 
         names = next_names;
-        ccjs_value* next_values = allocator->realloc(
-          allocator->user, values, sizeof(ccjs_value) * cap, sizeof(ccjs_value) * next_cap, _Alignof(ccjs_value)
+        inox_value* next_values = allocator->realloc(
+          allocator->user, values, sizeof(inox_value) * cap, sizeof(inox_value) * next_cap, _Alignof(inox_value)
         );
 
         if (next_values == 0) {
-          status = CCJS_ERR_OOM;
+          status = INOX_ERR_OOM;
           break;
         }
 
@@ -576,7 +576,7 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
 
         for (size_t index = cap; index < next_cap; index += 1) {
           names[index] = 0;
-          values[index] = ccjs_undefined_value();
+          values[index] = inox_undefined_value();
         }
 
         cap = next_cap;
@@ -586,37 +586,37 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
       size_t key_len = 0;
 
       if (parser->pos >= parser->len || parser->bytes[parser->pos] != '"') {
-        ccjs_json_set_error(parser, "Expected property name or '}'");
-        status = CCJS_ERR_TYPE;
+        inox_json_set_error(parser, "Expected property name or '}'");
+        status = INOX_ERR_TYPE;
         break;
       }
 
-      status = ccjs_json_parse_string_bytes(parser, &key, &key_len, true);
+      status = inox_json_parse_string_bytes(parser, &key, &key_len, true);
 
-      if (status != CCJS_OK) {
+      if (status != INOX_OK) {
         break;
       }
 
       if (memchr(key, '\0', key_len) != 0) {
         allocator->free(allocator->user, key, key_len + 1, _Alignof(char));
-        status = CCJS_ERR_UNSUPPORTED;
+        status = INOX_ERR_UNSUPPORTED;
         break;
       }
 
-      ccjs_json_skip_ws(parser);
+      inox_json_skip_ws(parser);
 
-      if (!ccjs_json_match_byte(parser, ':')) {
+      if (!inox_json_match_byte(parser, ':')) {
         allocator->free(allocator->user, key, key_len + 1, _Alignof(char));
-        ccjs_json_set_error(parser, "Expected ':' after property name");
-        status = CCJS_ERR_TYPE;
+        inox_json_set_error(parser, "Expected ':' after property name");
+        status = INOX_ERR_TYPE;
         break;
       }
 
-      ccjs_json_skip_ws(parser);
-      ccjs_value value = ccjs_undefined_value();
-      status = ccjs_json_parse_value(parser, depth + 1, &value);
+      inox_json_skip_ws(parser);
+      inox_value value = inox_undefined_value();
+      status = inox_json_parse_value(parser, depth + 1, &value);
 
-      if (status != CCJS_OK) {
+      if (status != INOX_OK) {
         allocator->free(allocator->user, key, key_len + 1, _Alignof(char));
         break;
       }
@@ -624,40 +624,40 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
       names[len] = key;
       values[len] = value;
       len += 1;
-      ccjs_json_skip_ws(parser);
+      inox_json_skip_ws(parser);
 
-      if (ccjs_json_match_byte(parser, '}')) {
+      if (inox_json_match_byte(parser, '}')) {
         break;
       }
 
-      if (!ccjs_json_match_byte(parser, ',')) {
-        ccjs_json_set_error(parser, "Expected ',' or '}' after property value");
-        status = CCJS_ERR_TYPE;
+      if (!inox_json_match_byte(parser, ',')) {
+        inox_json_set_error(parser, "Expected ',' or '}' after property value");
+        status = INOX_ERR_TYPE;
         break;
       }
     }
   }
 
-  if (status == CCJS_OK) {
+  if (status == INOX_OK) {
     if (len > UINT32_MAX) {
-      status = CCJS_ERR_UNSUPPORTED;
+      status = INOX_ERR_UNSUPPORTED;
     }
   }
 
   bool object_owns_shape = false;
 
-  if (status == CCJS_OK) {
-    ccjs_shape* shape = allocator->alloc(allocator->user, sizeof(ccjs_shape), _Alignof(ccjs_shape));
+  if (status == INOX_OK) {
+    inox_shape* shape = allocator->alloc(allocator->user, sizeof(inox_shape), _Alignof(inox_shape));
 
     if (shape == 0) {
-      status = CCJS_ERR_OOM;
+      status = INOX_ERR_OOM;
     } else {
-      ccjs_field_info* fields =
-        len == 0 ? 0 : allocator->alloc(allocator->user, sizeof(ccjs_field_info) * len, _Alignof(ccjs_field_info));
+      inox_field_info* fields =
+        len == 0 ? 0 : allocator->alloc(allocator->user, sizeof(inox_field_info) * len, _Alignof(inox_field_info));
 
       if (len != 0 && fields == 0) {
-        allocator->free(allocator->user, shape, sizeof(ccjs_shape), _Alignof(ccjs_shape));
-        status = CCJS_ERR_OOM;
+        allocator->free(allocator->user, shape, sizeof(inox_shape), _Alignof(inox_shape));
+        status = INOX_ERR_OOM;
       } else {
         for (size_t index = 0; index < len; index += 1) {
           fields[index].name = names[index];
@@ -667,26 +667,26 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
 
         shape->field_count = (uint32_t)len;
         shape->fields = fields;
-        status = ccjs_object_new(allocator, shape, out);
+        status = inox_object_new(allocator, shape, out);
 
-        if (status == CCJS_OK) {
-          ccjs_object* object = (ccjs_object*)out->as.ref;
-          object->header.flags |= CCJS_OBJECT_OWNED_SHAPE;
+        if (status == INOX_OK) {
+          inox_object* object = (inox_object*)out->as.ref;
+          object->header.flags |= INOX_OBJECT_OWNED_SHAPE;
           object_owns_shape = true;
 
           for (uint32_t index = 0; index < shape->field_count; index += 1) {
-            status = ccjs_object_init_known(*out, index, values[index]);
+            status = inox_object_init_known(*out, index, values[index]);
 
-            if (status != CCJS_OK) {
+            if (status != INOX_OK) {
               break;
             }
           }
         }
 
-        if (status != CCJS_OK) {
+        if (status != INOX_OK) {
           if (object_owns_shape) {
-            ccjs_release(*out);
-            *out = ccjs_undefined_value();
+            inox_release(*out);
+            *out = inox_undefined_value();
           } else {
             for (uint32_t index = 0; index < shape->field_count; index += 1) {
               if (shape->fields[index].name != 0) {
@@ -697,10 +697,10 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
             }
 
             if (fields != 0) {
-              allocator->free(allocator->user, fields, sizeof(ccjs_field_info) * len, _Alignof(ccjs_field_info));
+              allocator->free(allocator->user, fields, sizeof(inox_field_info) * len, _Alignof(inox_field_info));
             }
 
-            allocator->free(allocator->user, shape, sizeof(ccjs_shape), _Alignof(ccjs_shape));
+            allocator->free(allocator->user, shape, sizeof(inox_shape), _Alignof(inox_shape));
           }
         }
       }
@@ -708,10 +708,10 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
   }
 
   for (size_t index = 0; index < len; index += 1) {
-    ccjs_release(values[index]);
+    inox_release(values[index]);
   }
 
-  ccjs_json_free_names(allocator, names, cap);
+  inox_json_free_names(allocator, names, cap);
 
   if (allocator->free != 0) {
     if (names != 0) {
@@ -719,146 +719,146 @@ static ccjs_status ccjs_json_parse_object(ccjs_json_parser* parser, size_t depth
     }
 
     if (values != 0) {
-      allocator->free(allocator->user, values, sizeof(ccjs_value) * cap, _Alignof(ccjs_value));
+      allocator->free(allocator->user, values, sizeof(inox_value) * cap, _Alignof(inox_value));
     }
   }
 
   return status;
 }
 
-static ccjs_status ccjs_json_parse_array(ccjs_json_parser* parser, size_t depth, ccjs_value* out) {
-  if (!ccjs_json_match_byte(parser, '[')) {
-    ccjs_json_set_error(parser, "Expected array");
-    return CCJS_ERR_TYPE;
+static inox_status inox_json_parse_array(inox_json_parser* parser, size_t depth, inox_value* out) {
+  if (!inox_json_match_byte(parser, '[')) {
+    inox_json_set_error(parser, "Expected array");
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_status status = ccjs_array_new(parser->allocator, 0, out);
+  inox_status status = inox_array_new(parser->allocator, 0, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_json_skip_ws(parser);
+  inox_json_skip_ws(parser);
 
-  if (ccjs_json_match_byte(parser, ']')) {
-    return CCJS_OK;
+  if (inox_json_match_byte(parser, ']')) {
+    return INOX_OK;
   }
 
   while (true) {
-    ccjs_json_skip_ws(parser);
-    ccjs_value value = ccjs_undefined_value();
-    status = ccjs_json_parse_value(parser, depth + 1, &value);
+    inox_json_skip_ws(parser);
+    inox_value value = inox_undefined_value();
+    status = inox_json_parse_value(parser, depth + 1, &value);
 
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
       return status;
     }
 
-    status = ccjs_array_push(*out, value);
-    ccjs_release(value);
+    status = inox_array_push(*out, value);
+    inox_release(value);
 
-    if (status != CCJS_OK) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
       return status;
     }
 
-    ccjs_json_skip_ws(parser);
+    inox_json_skip_ws(parser);
 
-    if (ccjs_json_match_byte(parser, ']')) {
-      return CCJS_OK;
+    if (inox_json_match_byte(parser, ']')) {
+      return INOX_OK;
     }
 
-    if (!ccjs_json_match_byte(parser, ',')) {
-      ccjs_release(*out);
-      *out = ccjs_undefined_value();
-      ccjs_json_set_error(parser, "Expected ',' or ']' after array element");
-      return CCJS_ERR_TYPE;
+    if (!inox_json_match_byte(parser, ',')) {
+      inox_release(*out);
+      *out = inox_undefined_value();
+      inox_json_set_error(parser, "Expected ',' or ']' after array element");
+      return INOX_ERR_TYPE;
     }
   }
 }
 
-static ccjs_status ccjs_json_parse_value(ccjs_json_parser* parser, size_t depth, ccjs_value* out) {
-  if (depth > CCJS_JSON_MAX_DEPTH) {
-    return CCJS_ERR_UNSUPPORTED;
+static inox_status inox_json_parse_value(inox_json_parser* parser, size_t depth, inox_value* out) {
+  if (depth > INOX_JSON_MAX_DEPTH) {
+    return INOX_ERR_UNSUPPORTED;
   }
 
-  ccjs_json_skip_ws(parser);
+  inox_json_skip_ws(parser);
 
   if (parser->pos >= parser->len) {
-    ccjs_json_set_error(parser, "Unexpected end of JSON input");
-    return CCJS_ERR_TYPE;
+    inox_json_set_error(parser, "Unexpected end of JSON input");
+    return INOX_ERR_TYPE;
   }
 
   char value = parser->bytes[parser->pos];
 
   if (value == '"') {
-    return ccjs_json_parse_string(parser, out);
+    return inox_json_parse_string(parser, out);
   }
 
   if (value == '{') {
-    return ccjs_json_parse_object(parser, depth, out);
+    return inox_json_parse_object(parser, depth, out);
   }
 
   if (value == '[') {
-    return ccjs_json_parse_array(parser, depth, out);
+    return inox_json_parse_array(parser, depth, out);
   }
 
-  if (value == 't' && ccjs_json_match_literal(parser, "true", 4)) {
-    *out = ccjs_bool_value(true);
-    return CCJS_OK;
+  if (value == 't' && inox_json_match_literal(parser, "true", 4)) {
+    *out = inox_bool_value(true);
+    return INOX_OK;
   }
 
-  if (value == 'f' && ccjs_json_match_literal(parser, "false", 5)) {
-    *out = ccjs_bool_value(false);
-    return CCJS_OK;
+  if (value == 'f' && inox_json_match_literal(parser, "false", 5)) {
+    *out = inox_bool_value(false);
+    return INOX_OK;
   }
 
-  if (value == 'n' && ccjs_json_match_literal(parser, "null", 4)) {
-    *out = ccjs_null_value();
-    return CCJS_OK;
+  if (value == 'n' && inox_json_match_literal(parser, "null", 4)) {
+    *out = inox_null_value();
+    return INOX_OK;
   }
 
   if (value == '-' || (value >= '0' && value <= '9')) {
-    return ccjs_json_parse_number(parser, out);
+    return inox_json_parse_number(parser, out);
   }
 
-  ccjs_json_set_error(parser, "Unexpected token");
-  return CCJS_ERR_TYPE;
+  inox_json_set_error(parser, "Unexpected token");
+  return INOX_ERR_TYPE;
 }
 
-ccjs_status ccjs_json_parse_with_error(
-  ccjs_allocator* allocator,
+inox_status inox_json_parse_with_error(
+  inox_allocator* allocator,
   const char* bytes,
   size_t len,
-  ccjs_value* out,
-  ccjs_value* error_out
+  inox_value* out,
+  inox_value* error_out
 ) {
   if (
     allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0 ||
     (bytes == 0 && len != 0)
   ) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
+  *out = inox_undefined_value();
 
   if (error_out != 0) {
-    *error_out = ccjs_undefined_value();
+    *error_out = inox_undefined_value();
   }
 
-  ccjs_json_parser parser = { .allocator = allocator, .bytes = bytes == 0 ? "" : bytes, .len = len };
-  ccjs_status status = ccjs_json_parse_value(&parser, 0, out);
+  inox_json_parser parser = { .allocator = allocator, .bytes = bytes == 0 ? "" : bytes, .len = len };
+  inox_status status = inox_json_parse_value(&parser, 0, out);
 
-  if (status != CCJS_OK) {
-    ccjs_release(*out);
-    *out = ccjs_undefined_value();
+  if (status != INOX_OK) {
+    inox_release(*out);
+    *out = inox_undefined_value();
 
-    if (status == CCJS_ERR_TYPE && error_out != 0) {
-      ccjs_status error_status = ccjs_json_make_syntax_error(allocator, &parser, error_out);
+    if (status == INOX_ERR_TYPE && error_out != 0) {
+      inox_status error_status = inox_json_make_syntax_error(allocator, &parser, error_out);
 
-      if (error_status != CCJS_OK) {
+      if (error_status != INOX_OK) {
         return error_status;
       }
     }
@@ -866,35 +866,35 @@ ccjs_status ccjs_json_parse_with_error(
     return status;
   }
 
-  ccjs_json_skip_ws(&parser);
+  inox_json_skip_ws(&parser);
 
   if (parser.pos != parser.len) {
-    ccjs_release(*out);
-    *out = ccjs_undefined_value();
-    ccjs_json_set_error(&parser, "Unexpected non-whitespace character after JSON");
+    inox_release(*out);
+    *out = inox_undefined_value();
+    inox_json_set_error(&parser, "Unexpected non-whitespace character after JSON");
 
     if (error_out != 0) {
-      ccjs_status error_status = ccjs_json_make_syntax_error(allocator, &parser, error_out);
+      inox_status error_status = inox_json_make_syntax_error(allocator, &parser, error_out);
 
-      if (error_status != CCJS_OK) {
+      if (error_status != INOX_OK) {
         return error_status;
       }
     }
 
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_json_parse(ccjs_allocator* allocator, const char* bytes, size_t len, ccjs_value* out) {
-  return ccjs_json_parse_with_error(allocator, bytes, len, out, 0);
+inox_status inox_json_parse(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out) {
+  return inox_json_parse_with_error(allocator, bytes, len, out, 0);
 }
 
-static ccjs_status
-ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth);
+static inox_status
+inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth);
 
-static bool ccjs_json_stringify_stack_contains(const ccjs_json_stringify_stack* stack, const ccjs_ref* ref) {
+static bool inox_json_stringify_stack_contains(const inox_json_stringify_stack* stack, const inox_ref* ref) {
   if (stack == 0 || ref == 0) {
     return false;
   }
@@ -908,26 +908,26 @@ static bool ccjs_json_stringify_stack_contains(const ccjs_json_stringify_stack* 
   return false;
 }
 
-static ccjs_status ccjs_json_stringify_stack_push(ccjs_json_stringify_stack* stack, const ccjs_ref* ref) {
+static inox_status inox_json_stringify_stack_push(inox_json_stringify_stack* stack, const inox_ref* ref) {
   if (stack == 0 || ref == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (ccjs_json_stringify_stack_contains(stack, ref)) {
-    return CCJS_ERR_UNSUPPORTED;
+  if (inox_json_stringify_stack_contains(stack, ref)) {
+    return INOX_ERR_UNSUPPORTED;
   }
 
-  if (stack->len >= CCJS_JSON_MAX_DEPTH + 1) {
-    return CCJS_ERR_UNSUPPORTED;
+  if (stack->len >= INOX_JSON_MAX_DEPTH + 1) {
+    return INOX_ERR_UNSUPPORTED;
   }
 
   stack->refs[stack->len] = ref;
   stack->len += 1;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static void ccjs_json_stringify_stack_pop(ccjs_json_stringify_stack* stack, const ccjs_ref* ref) {
+static void inox_json_stringify_stack_pop(inox_json_stringify_stack* stack, const inox_ref* ref) {
   if (stack == 0 || ref == 0 || stack->len == 0) {
     return;
   }
@@ -937,10 +937,10 @@ static void ccjs_json_stringify_stack_pop(ccjs_json_stringify_stack* stack, cons
   }
 }
 
-static ccjs_status ccjs_json_stringify_string_bytes(ccjs_json_buffer* buffer, const char* bytes, size_t len) {
-  ccjs_status status = ccjs_json_buffer_push_char(buffer, '"');
+static inox_status inox_json_stringify_string_bytes(inox_json_buffer* buffer, const char* bytes, size_t len) {
+  inox_status status = inox_json_buffer_push_char(buffer, '"');
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
@@ -950,189 +950,189 @@ static ccjs_status ccjs_json_stringify_string_bytes(ccjs_json_buffer* buffer, co
     unsigned char value = (unsigned char)bytes[index];
 
     if (value == '"' || value == '\\') {
-      status = ccjs_json_buffer_push_char(buffer, '\\');
+      status = inox_json_buffer_push_char(buffer, '\\');
 
-      if (status == CCJS_OK) {
-        status = ccjs_json_buffer_push_char(buffer, (char)value);
+      if (status == INOX_OK) {
+        status = inox_json_buffer_push_char(buffer, (char)value);
       }
     } else if (value == '\b') {
-      status = ccjs_json_buffer_push_bytes(buffer, "\\b", 2);
+      status = inox_json_buffer_push_bytes(buffer, "\\b", 2);
     } else if (value == '\f') {
-      status = ccjs_json_buffer_push_bytes(buffer, "\\f", 2);
+      status = inox_json_buffer_push_bytes(buffer, "\\f", 2);
     } else if (value == '\n') {
-      status = ccjs_json_buffer_push_bytes(buffer, "\\n", 2);
+      status = inox_json_buffer_push_bytes(buffer, "\\n", 2);
     } else if (value == '\r') {
-      status = ccjs_json_buffer_push_bytes(buffer, "\\r", 2);
+      status = inox_json_buffer_push_bytes(buffer, "\\r", 2);
     } else if (value == '\t') {
-      status = ccjs_json_buffer_push_bytes(buffer, "\\t", 2);
+      status = inox_json_buffer_push_bytes(buffer, "\\t", 2);
     } else if (value < 0x20) {
       char escaped[] = { '\\', 'u', '0', '0', hex[value >> 4], hex[value & 0xf] };
-      status = ccjs_json_buffer_push_bytes(buffer, escaped, sizeof(escaped));
+      status = inox_json_buffer_push_bytes(buffer, escaped, sizeof(escaped));
     } else {
-      status = ccjs_json_buffer_push_char(buffer, (char)value);
+      status = inox_json_buffer_push_char(buffer, (char)value);
     }
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
   }
 
-  return ccjs_json_buffer_push_char(buffer, '"');
+  return inox_json_buffer_push_char(buffer, '"');
 }
 
-static ccjs_status ccjs_json_stringify_number(ccjs_json_buffer* buffer, double number) {
+static inox_status inox_json_stringify_number(inox_json_buffer* buffer, double number) {
   char temp[64];
   int written = snprintf(temp, sizeof(temp), "%.17g", number);
 
   if (written < 0 || (size_t)written >= sizeof(temp)) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  return ccjs_json_buffer_push_bytes(buffer, temp, (size_t)written);
+  return inox_json_buffer_push_bytes(buffer, temp, (size_t)written);
 }
 
-static ccjs_status
-ccjs_json_stringify_array(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
-  ccjs_array* array = (ccjs_array*)value.as.ref;
-  ccjs_status status = ccjs_json_stringify_stack_push(stack, value.as.ref);
+static inox_status
+inox_json_stringify_array(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth) {
+  inox_array* array = (inox_array*)value.as.ref;
+  inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_json_buffer_push_char(buffer, '[');
+  status = inox_json_buffer_push_char(buffer, '[');
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     goto done;
   }
 
   for (size_t index = 0; index < array->len; index += 1) {
     if (index != 0) {
-      status = ccjs_json_buffer_push_char(buffer, ',');
+      status = inox_json_buffer_push_char(buffer, ',');
 
-      if (status != CCJS_OK) {
+      if (status != INOX_OK) {
         goto done;
       }
     }
 
-    status = ccjs_json_stringify_value(buffer, stack, array->items[index], depth + 1);
+    status = inox_json_stringify_value(buffer, stack, array->items[index], depth + 1);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       goto done;
     }
   }
 
-  status = ccjs_json_buffer_push_char(buffer, ']');
+  status = inox_json_buffer_push_char(buffer, ']');
 
 done:
-  ccjs_json_stringify_stack_pop(stack, value.as.ref);
+  inox_json_stringify_stack_pop(stack, value.as.ref);
   return status;
 }
 
-static ccjs_status
-ccjs_json_stringify_object(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
-  ccjs_object* object = (ccjs_object*)value.as.ref;
-  ccjs_status status = ccjs_json_stringify_stack_push(stack, value.as.ref);
+static inox_status
+inox_json_stringify_object(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth) {
+  inox_object* object = (inox_object*)value.as.ref;
+  inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  status = ccjs_json_buffer_push_char(buffer, '{');
+  status = inox_json_buffer_push_char(buffer, '{');
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     goto done;
   }
 
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
     if (index != 0) {
-      status = ccjs_json_buffer_push_char(buffer, ',');
+      status = inox_json_buffer_push_char(buffer, ',');
 
-      if (status != CCJS_OK) {
+      if (status != INOX_OK) {
         goto done;
       }
     }
 
     const char* name = object->shape->fields[index].name;
-    status = ccjs_json_stringify_string_bytes(buffer, name, strlen(name));
+    status = inox_json_stringify_string_bytes(buffer, name, strlen(name));
 
-    if (status == CCJS_OK) {
-      status = ccjs_json_buffer_push_char(buffer, ':');
+    if (status == INOX_OK) {
+      status = inox_json_buffer_push_char(buffer, ':');
     }
 
-    if (status == CCJS_OK) {
-      ccjs_value field = ccjs_undefined_value();
-      status = ccjs_object_get_known(value, index, &field);
+    if (status == INOX_OK) {
+      inox_value field = inox_undefined_value();
+      status = inox_object_get_known(value, index, &field);
 
-      if (status == CCJS_OK) {
-        status = ccjs_json_stringify_value(buffer, stack, field, depth + 1);
+      if (status == INOX_OK) {
+        status = inox_json_stringify_value(buffer, stack, field, depth + 1);
       }
 
-      ccjs_release(field);
+      inox_release(field);
     }
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       goto done;
     }
   }
 
-  status = ccjs_json_buffer_push_char(buffer, '}');
+  status = inox_json_buffer_push_char(buffer, '}');
 
 done:
-  ccjs_json_stringify_stack_pop(stack, value.as.ref);
+  inox_json_stringify_stack_pop(stack, value.as.ref);
   return status;
 }
 
-static ccjs_status
-ccjs_json_stringify_value(ccjs_json_buffer* buffer, ccjs_json_stringify_stack* stack, ccjs_value value, size_t depth) {
-  if (depth > CCJS_JSON_MAX_DEPTH) {
-    return CCJS_ERR_UNSUPPORTED;
+static inox_status
+inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth) {
+  if (depth > INOX_JSON_MAX_DEPTH) {
+    return INOX_ERR_UNSUPPORTED;
   }
 
-  if (value.tag == CCJS_TAG_NULL) {
-    return ccjs_json_buffer_push_bytes(buffer, "null", 4);
+  if (value.tag == INOX_TAG_NULL) {
+    return inox_json_buffer_push_bytes(buffer, "null", 4);
   }
 
-  if (value.tag == CCJS_TAG_BOOL) {
-    return value.as.boolean ? ccjs_json_buffer_push_bytes(buffer, "true", 4) : ccjs_json_buffer_push_bytes(buffer, "false", 5);
+  if (value.tag == INOX_TAG_BOOL) {
+    return value.as.boolean ? inox_json_buffer_push_bytes(buffer, "true", 4) : inox_json_buffer_push_bytes(buffer, "false", 5);
   }
 
-  if (value.tag == CCJS_TAG_NUMBER) {
-    return ccjs_json_stringify_number(buffer, value.as.number);
+  if (value.tag == INOX_TAG_NUMBER) {
+    return inox_json_stringify_number(buffer, value.as.number);
   }
 
-  if (value.tag == CCJS_TAG_STRING && value.as.ref != 0) {
-    ccjs_string* string = (ccjs_string*)value.as.ref;
+  if (value.tag == INOX_TAG_STRING && value.as.ref != 0) {
+    inox_string* string = (inox_string*)value.as.ref;
 
-    return ccjs_json_stringify_string_bytes(buffer, string->bytes, string->len);
+    return inox_json_stringify_string_bytes(buffer, string->bytes, string->len);
   }
 
-  if (value.tag == CCJS_TAG_ARRAY && value.as.ref != 0) {
-    return ccjs_json_stringify_array(buffer, stack, value, depth);
+  if (value.tag == INOX_TAG_ARRAY && value.as.ref != 0) {
+    return inox_json_stringify_array(buffer, stack, value, depth);
   }
 
-  if (value.tag == CCJS_TAG_OBJECT && value.as.ref != 0) {
-    return ccjs_json_stringify_object(buffer, stack, value, depth);
+  if (value.tag == INOX_TAG_OBJECT && value.as.ref != 0) {
+    return inox_json_stringify_object(buffer, stack, value, depth);
   }
 
-  return CCJS_ERR_UNSUPPORTED;
+  return INOX_ERR_UNSUPPORTED;
 }
 
-ccjs_status ccjs_json_stringify(ccjs_allocator* allocator, ccjs_value value, ccjs_value* out) {
+inox_status inox_json_stringify(inox_allocator* allocator, inox_value value, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  *out = ccjs_undefined_value();
-  ccjs_json_buffer buffer = { .allocator = allocator };
-  ccjs_json_stringify_stack stack = { 0 };
-  ccjs_status status = ccjs_json_stringify_value(&buffer, &stack, value, 0);
+  *out = inox_undefined_value();
+  inox_json_buffer buffer = { .allocator = allocator };
+  inox_json_stringify_stack stack = { 0 };
+  inox_status status = inox_json_stringify_value(&buffer, &stack, value, 0);
 
-  if (status == CCJS_OK) {
-    status = ccjs_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
   }
 
-  ccjs_json_buffer_dispose(&buffer);
+  inox_json_buffer_dispose(&buffer);
 
   return status;
 }

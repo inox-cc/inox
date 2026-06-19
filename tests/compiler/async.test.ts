@@ -62,8 +62,8 @@ export async function main(): Promise<void> {
 
   assert.equal(getValue?.declaration.async, true)
   assert.equal(getValue?.node.async, false)
-  assert.match(code, /ccjs_async_task_getValue_frame/)
-  assert.match(code, /ccjs_async_task_getValue_start/)
+  assert.match(code, /inox_async_task_getValue_frame/)
+  assert.match(code, /inox_async_task_getValue_start/)
 })
 
 
@@ -86,13 +86,13 @@ test('drives C async runtime headers from target-neutral IR requirements', () =>
     runtimeRequirements: []
   })
 
-  assert.match(code, /#include "ccjs\/loop\.h"/)
-  assert.match(code, /#include "ccjs\/promise\.h"/)
-  assert.match(code, /#include "ccjs\/time\.h"/)
-  assert.match(code, /static ccjs_allocator ccjs_default_allocator = \{/)
-  assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/loop\.h"/)
-  assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/promise\.h"/)
-  assert.doesNotMatch(withoutAsyncRuntime, /#include "ccjs\/time\.h"/)
+  assert.match(code, /#include "inox\/loop\.h"/)
+  assert.match(code, /#include "inox\/promise\.h"/)
+  assert.match(code, /#include "inox\/time\.h"/)
+  assert.match(code, /static inox_allocator inox_default_allocator = \{/)
+  assert.doesNotMatch(withoutAsyncRuntime, /#include "inox\/loop\.h"/)
+  assert.doesNotMatch(withoutAsyncRuntime, /#include "inox\/promise\.h"/)
+  assert.doesNotMatch(withoutAsyncRuntime, /#include "inox\/time\.h"/)
 })
 
 
@@ -194,11 +194,11 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /double run\(ccjs_value deps, double \(\*ccjs_objfn_deps_add\)\(double, double\)\);/)
-  assert.match(c.code, /ccjs_return = ccjs_objfn_deps_add\(2, 3\);/)
-  assert.match(c.code, /double \(\*const ccjs_objfn_deps_add\)\(double, double\) = add;/)
-  assert.match(c.code, /run\(deps, ccjs_objfn_deps_add\)/)
-  assert.doesNotMatch(c.code, /ccjs_callback_call/)
+  assert.match(c.code, /double run\(inox_value deps, double \(\*inox_objfn_deps_add\)\(double, double\)\);/)
+  assert.match(c.code, /inox_return = inox_objfn_deps_add\(2, 3\);/)
+  assert.match(c.code, /double \(\*const inox_objfn_deps_add\)\(double, double\) = add;/)
+  assert.match(c.code, /run\(deps, inox_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /inox_callback_call/)
 })
 
 test('lowers colon function-typed object fields to C function pointer parameters', () => {
@@ -223,10 +223,10 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /double run\(ccjs_value deps, double \(\*ccjs_objfn_deps_add\)\(double, double\)\);/)
-  assert.match(c.code, /ccjs_return = ccjs_objfn_deps_add\(2, 3\);/)
-  assert.match(c.code, /run\(deps, ccjs_objfn_deps_add\)/)
-  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+  assert.match(c.code, /double run\(inox_value deps, double \(\*inox_objfn_deps_add\)\(double, double\)\);/)
+  assert.match(c.code, /inox_return = inox_objfn_deps_add\(2, 3\);/)
+  assert.match(c.code, /run\(deps, inox_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /INOX_C_CALL_EXPR/)
 })
 
 test('lowers newline-separated colon function-typed object fields', () => {
@@ -258,11 +258,11 @@ export function main(): void {
 
   assert.match(
     c.code,
-    /double run\(ccjs_value deps, double \(\*ccjs_objfn_deps_next\)\(double\), double \(\*ccjs_objfn_deps_add\)\(double, double\)\);/
+    /double run\(inox_value deps, double \(\*inox_objfn_deps_next\)\(double\), double \(\*inox_objfn_deps_add\)\(double, double\)\);/
   )
-  assert.match(c.code, /ccjs_objfn_deps_add\(ccjs_objfn_deps_next\(1\), 3\)/)
-  assert.match(c.code, /run\(deps, ccjs_objfn_deps_next, ccjs_objfn_deps_add\)/)
-  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+  assert.match(c.code, /inox_objfn_deps_add\(inox_objfn_deps_next\(1\), 3\)/)
+  assert.match(c.code, /run\(deps, inox_objfn_deps_next, inox_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /INOX_C_CALL_EXPR/)
 })
 
 test('lowers inline arrow object function fields with contextual types', () => {
@@ -285,12 +285,12 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /static double ccjs_callback_arrow_0\(double a, double b\);/)
-  assert.match(c.code, /ccjs_return = \(a \+ b\);/)
-  assert.match(c.code, /return ccjs_return;/)
-  assert.match(c.code, /double \(\*const ccjs_objfn_deps_add\)\(double, double\) = ccjs_callback_arrow_0;/)
-  assert.match(c.code, /run\(deps, ccjs_objfn_deps_add\)/)
-  assert.doesNotMatch(c.code, /CCJS_C_FUNCTION_VALUE/)
+  assert.match(c.code, /static double inox_callback_arrow_0\(double a, double b\);/)
+  assert.match(c.code, /inox_return = \(a \+ b\);/)
+  assert.match(c.code, /return inox_return;/)
+  assert.match(c.code, /double \(\*const inox_objfn_deps_add\)\(double, double\) = inox_callback_arrow_0;/)
+  assert.match(c.code, /run\(deps, inox_objfn_deps_add\)/)
+  assert.doesNotMatch(c.code, /INOX_C_FUNCTION_VALUE/)
 })
 
 test('lowers accessor-returned function-typed object fields to C function pointer parameters', () => {
@@ -324,10 +324,10 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /double run\(ccjs_value context, double \(\*ccjs_objfn_context_math_add\)\(double\)\);/)
-  assert.match(c.code, /ccjs_return = ccjs_objfn_context_math_add\(2\);/)
-  assert.match(c.code, /run\(context, ccjs_objfn_context_math_add\)/)
-  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+  assert.match(c.code, /double run\(inox_value context, double \(\*inox_objfn_context_math_add\)\(double\)\);/)
+  assert.match(c.code, /inox_return = inox_objfn_context_math_add\(2\);/)
+  assert.match(c.code, /run\(context, inox_objfn_context_math_add\)/)
+  assert.doesNotMatch(c.code, /INOX_C_CALL_EXPR/)
 })
 
 
@@ -368,10 +368,10 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /double run\(ccjs_value context, double \(\*ccjs_objfn_context_math_add\)\(double\)\);/)
-  assert.match(c.code, /ccjs_return = ccjs_objfn_context_math_add\(2\);/)
-  assert.match(c.code, /run\(context, ccjs_objfn_context_math_add\)/)
-  assert.doesNotMatch(c.code, /CCJS_C_CALL_EXPR/)
+  assert.match(c.code, /double run\(inox_value context, double \(\*inox_objfn_context_math_add\)\(double\)\);/)
+  assert.match(c.code, /inox_return = inox_objfn_context_math_add\(2\);/)
+  assert.match(c.code, /run\(context, inox_objfn_context_math_add\)/)
+  assert.doesNotMatch(c.code, /INOX_C_CALL_EXPR/)
 })
 
 
@@ -395,19 +395,19 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /void run\(ccjs_value callback\);/)
+  assert.match(c.code, /void run\(inox_value callback\);/)
   assert.match(
     c.code,
-    /static ccjs_status ccjs_callback_hello_0\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\);/
+    /static inox_status inox_callback_hello_0\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\);/
   )
   assert.match(
     c.code,
-    /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_hello_0, 0, 0, &callback\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_callback_new\(&inox_default_allocator, inox_callback_hello_0, 0, 0, &callback\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(c.code, /ccjs_value ccjs_callback_args_\d+\[\] = \{ ccjs_value_\d+ \};/)
+  assert.match(c.code, /inox_value inox_callback_args_\d+\[\] = \{ inox_value_\d+ \};/)
   assert.match(
     c.code,
-    /if \(ccjs_callback_call\(callback, ccjs_callback_args_\d+, 1, &ccjs_callback_out_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_callback_call\(callback, inox_callback_args_\d+, 1, &inox_callback_out_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
 
@@ -434,7 +434,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_hello_0\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\);/
+    /static inox_status inox_callback_hello_0\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\);/
   )
   const mainIndex = result.ir.body.findIndex((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   const withoutMainBodyCallbacks = emitCFromIr({
@@ -449,13 +449,13 @@ export function main(): void {
     )
   })
 
-  assert.doesNotMatch(withoutMainBodyCallbacks, /ccjs_callback_hello_0/)
+  assert.doesNotMatch(withoutMainBodyCallbacks, /inox_callback_hello_0/)
   assert.doesNotMatch(
     emitCFromIr({
       ...result.ir,
       body: []
     }),
-    /ccjs_callback_hello_0/
+    /inox_callback_hello_0/
   )
 })
 
@@ -487,10 +487,10 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /void run\(ccjs_value callback, ccjs_value person\);/)
-  assert.match(c.code, /if \(args\[0\]\.tag != CCJS_TAG_OBJECT \|\| args\[0\]\.as\.ref == 0\) return CCJS_ERR_TYPE;/)
-  assert.match(c.code, /ccjs_value ccjs_callback_args_\d+\[\] = \{ person \};/)
-  assert.match(c.code, /if \(ccjs_object_get_known\(value, 0, &ccjs_log_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/)
+  assert.match(c.code, /void run\(inox_value callback, inox_value person\);/)
+  assert.match(c.code, /if \(args\[0\]\.tag != INOX_TAG_OBJECT \|\| args\[0\]\.as\.ref == 0\) return INOX_ERR_TYPE;/)
+  assert.match(c.code, /inox_value inox_callback_args_\d+\[\] = \{ person \};/)
+  assert.match(c.code, /if \(inox_object_get_known\(value, 0, &inox_log_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/)
 })
 
 
@@ -515,23 +515,23 @@ export function main(): void {
 
   assert.match(
     c.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n {2}const char \*prefix;\n\} ccjs_callback_context_\d+;/
+    /typedef struct inox_callback_context_\d+ \{\n {2}const char \*prefix;\n\} inox_callback_context_\d+;/
   )
-  assert.match(c.code, /static void ccjs_callback_context_\d+_finalize\(void \*context\);/)
+  assert.match(c.code, /static void inox_callback_context_\d+_finalize\(void \*context\);/)
   assert.match(
     c.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static inox_status inox_callback_arrow_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\)/
   )
-  assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)(?:ccjs_)?context;/)
+  assert.match(c.code, /inox_callback_context_\d+\* captured = \(inox_callback_context_\d+\*\)(?:inox_)?context;/)
   assert.match(c.code, /const char \*prefix = captured->prefix;/)
   assert.match(
     c.code,
-    /ccjs_callback_context_\d+\* ccjs_callback_ctx_\d+ = ccjs_default_alloc\(0, sizeof\(ccjs_callback_context_\d+\), _Alignof\(ccjs_callback_context_\d+\)\);/
+    /inox_callback_context_\d+\* inox_callback_ctx_\d+ = inox_default_alloc\(0, sizeof\(inox_callback_context_\d+\), _Alignof\(inox_callback_context_\d+\)\);/
   )
-  assert.match(c.code, /ccjs_callback_ctx_\d+->prefix = prefix;/)
+  assert.match(c.code, /inox_callback_ctx_\d+->prefix = prefix;/)
   assert.match(
     c.code,
-    /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_arrow_\d+, ccjs_callback_ctx_\d+, ccjs_callback_context_\d+_finalize, &callback\) != CCJS_OK\) \{/
+    /if \(inox_callback_new\(&inox_default_allocator, inox_callback_arrow_\d+, inox_callback_ctx_\d+, inox_callback_context_\d+_finalize, &callback\) != INOX_OK\) \{/
   )
 })
 
@@ -562,19 +562,19 @@ export function main(): void {
 
   assert.match(
     c.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n {2}ccjs_value name;\n {2}ccjs_value user;\n\} ccjs_callback_context_\d+;/
+    /typedef struct inox_callback_context_\d+ \{\n {2}inox_value name;\n {2}inox_value user;\n\} inox_callback_context_\d+;/
   )
   assert.match(
     c.code,
-    /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;\n {2}ccjs_release\(captured->name\);\n {2}ccjs_release\(captured->user\);/
+    /inox_callback_context_\d+\* captured = \(inox_callback_context_\d+\*\)context;\n {2}inox_release\(captured->name\);\n {2}inox_release\(captured->user\);/
   )
-  assert.match(c.code, /ccjs_string \*name = \(ccjs_string \*\)captured->name\.as\.ref;/)
-  assert.match(c.code, /ccjs_value user = captured->user;/)
+  assert.match(c.code, /inox_string \*name = \(inox_string \*\)captured->name\.as\.ref;/)
+  assert.match(c.code, /inox_value user = captured->user;/)
   assert.match(
     c.code,
-    /ccjs_callback_ctx_\d+->name\.tag = CCJS_TAG_STRING;\n {2}ccjs_callback_ctx_\d+->name\.as\.ref = \(ccjs_ref \*\)&name->header;\n {2}ccjs_retain\(ccjs_callback_ctx_\d+->name\);/
+    /inox_callback_ctx_\d+->name\.tag = INOX_TAG_STRING;\n {2}inox_callback_ctx_\d+->name\.as\.ref = \(inox_ref \*\)&name->header;\n {2}inox_retain\(inox_callback_ctx_\d+->name\);/
   )
-  assert.match(c.code, /ccjs_callback_ctx_\d+->user = user;\n {2}ccjs_retain\(ccjs_callback_ctx_\d+->user\);/)
+  assert.match(c.code, /inox_callback_ctx_\d+->user = user;\n {2}inox_retain\(inox_callback_ctx_\d+->user\);/)
 })
 
 
@@ -586,7 +586,7 @@ function run(callback: NumberCallback): void {
   callback()
 }
 `,
-    'CCJS_ARG_COUNT',
+    'INOX_ARG_COUNT',
     {
       target: 'c'
     }
@@ -609,9 +609,9 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /static void ccjs_callback_arrow_\d+\(void\);/)
-  assert.match(c.code, /static void ccjs_callback_arrow_\d+\(void\) \{\n {2}printf\("%s\\n", "inline"\);/)
-  assert.match(c.code, /run\(ccjs_callback_arrow_\d+\);/)
+  assert.match(c.code, /static void inox_callback_arrow_\d+\(void\);/)
+  assert.match(c.code, /static void inox_callback_arrow_\d+\(void\) \{\n {2}printf\("%s\\n", "inline"\);/)
+  assert.match(c.code, /run\(inox_callback_arrow_\d+\);/)
 })
 
 
@@ -631,25 +631,25 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /void run\(ccjs_value callback\);/)
-  assert.match(c.code, /if \(callback\.tag != CCJS_TAG_FUNCTION \|\| callback\.as\.ref == 0\)\s+goto ccjs_cleanup;/)
+  assert.match(c.code, /void run\(inox_value callback\);/)
+  assert.match(c.code, /if \(callback\.tag != INOX_TAG_FUNCTION \|\| callback\.as\.ref == 0\)\s+goto inox_cleanup;/)
   assert.match(
     c.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n {2}const char \*label;\n\} ccjs_callback_context_\d+;/
+    /typedef struct inox_callback_context_\d+ \{\n {2}const char \*label;\n\} inox_callback_context_\d+;/
   )
   assert.match(
     c.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static inox_status inox_callback_arrow_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\)/
   )
   assert.match(
     c.code,
-    /if \(ccjs_callback_call\(callback, 0, 0, &ccjs_callback_out_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_callback_call\(callback, 0, 0, &inox_callback_out_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     c.code,
-    /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_arrow_\d+, ccjs_callback_ctx_\d+, ccjs_callback_context_\d+_finalize, &ccjs_callback_\d+\) != CCJS_OK\) \{/
+    /if \(inox_callback_new\(&inox_default_allocator, inox_callback_arrow_\d+, inox_callback_ctx_\d+, inox_callback_context_\d+_finalize, &inox_callback_\d+\) != INOX_OK\) \{/
   )
-  assert.match(c.code, /run\(ccjs_callback_\d+\);/)
+  assert.match(c.code, /run\(inox_callback_\d+\);/)
 })
 
 
@@ -671,12 +671,12 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /void run\(ccjs_value callback\);/)
-  assert.match(c.code, /if \(callback\.tag != CCJS_TAG_FUNCTION \|\| callback\.as\.ref == 0\)\s+goto ccjs_cleanup;/)
-  assert.match(c.code, /ccjs_value ccjs_callback_args_\d+\[\] = \{ ccjs_number_value\(7\) \};/)
+  assert.match(c.code, /void run\(inox_value callback\);/)
+  assert.match(c.code, /if \(callback\.tag != INOX_TAG_FUNCTION \|\| callback\.as\.ref == 0\)\s+goto inox_cleanup;/)
+  assert.match(c.code, /inox_value inox_callback_args_\d+\[\] = \{ inox_number_value\(7\) \};/)
   assert.match(
     c.code,
-    /if \(ccjs_callback_call\(callback, ccjs_callback_args_\d+, 1, &ccjs_callback_out_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_callback_call\(callback, inox_callback_args_\d+, 1, &inox_callback_out_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(c.code, /double value = args\[0\]\.as\.number;/)
   assert.match(c.code, /double offset = captured->offset;/)
@@ -712,13 +712,13 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /void run\(ccjs_value callback\);/)
-  assert.match(c.code, /void runNumber\(ccjs_value callback\);/)
-  assert.match(c.code, /ccjs_value callback = ccjs_undefined_value\(\);/)
-  assert.match(c.code, /ccjs_value numberCallback = ccjs_undefined_value\(\);/)
+  assert.match(c.code, /void run\(inox_value callback\);/)
+  assert.match(c.code, /void runNumber\(inox_value callback\);/)
+  assert.match(c.code, /inox_value callback = inox_undefined_value\(\);/)
+  assert.match(c.code, /inox_value numberCallback = inox_undefined_value\(\);/)
   assert.match(
     c.code,
-    /if \(ccjs_callback_call\(callback, 0, 0, &ccjs_callback_out_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_callback_call\(callback, 0, 0, &inox_callback_out_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(c.code, /run\(callback\);/)
   assert.match(c.code, /runNumber\(numberCallback\);/)
@@ -739,7 +739,7 @@ export function main(): void {
   task()
 }
 `,
-    'CCJS_C_FUNCTION_VALUE',
+    'INOX_C_FUNCTION_VALUE',
     {
       target: 'c'
     }
@@ -758,7 +758,7 @@ export function main(): void {
   task?.()
 }
 `,
-    'CCJS_C_FUNCTION_VALUE',
+    'INOX_C_FUNCTION_VALUE',
     {
       target: 'c'
     }
@@ -778,7 +778,7 @@ export function main(): void {
   task()
 }
 `,
-    'CCJS_C_FUNCTION_VALUE',
+    'INOX_C_FUNCTION_VALUE',
     {
       target: 'c'
     }
@@ -806,13 +806,13 @@ export function main(): void {
   })
 
   assert.match(c.code, /double \*count = 0;/)
-  assert.match(c.code, /count = ccjs_default_alloc\(0, sizeof\(double\), _Alignof\(double\)\);/)
+  assert.match(c.code, /count = inox_default_alloc\(0, sizeof\(double\), _Alignof\(double\)\);/)
   assert.match(c.code, /\*count = 0;/)
   assert.match(c.code, /double \*count = captured->count;/)
   assert.match(c.code, /\(\*count\) = \(\(\*count\) \+ 1\);/)
   assert.match(c.code, /run\(callback\);/)
   assert.match(c.code, /printf\("%g\\n", \(\(double\)\(\*count\)\)\);/)
-  assert.match(c.code, /if \(count != 0\) ccjs_default_free\(0, count, sizeof\(double\), _Alignof\(double\)\);/)
+  assert.match(c.code, /if \(count != 0\) inox_default_free\(0, count, sizeof\(double\), _Alignof\(double\)\);/)
 })
 
 
@@ -834,13 +834,13 @@ export function main(): void {
     target: 'c'
   })
 
-  assert.match(c.code, /void run\(double ccjs_param_seed\);/)
+  assert.match(c.code, /void run\(double inox_param_seed\);/)
   assert.match(c.code, /double \*seed = 0;/)
-  assert.match(c.code, /seed = ccjs_default_alloc\(0, sizeof\(double\), _Alignof\(double\)\);/)
-  assert.match(c.code, /\*seed = ccjs_param_seed;/)
+  assert.match(c.code, /seed = inox_default_alloc\(0, sizeof\(double\), _Alignof\(double\)\);/)
+  assert.match(c.code, /\*seed = inox_param_seed;/)
   assert.match(c.code, /double \*seed = captured->seed;/)
   assert.match(c.code, /\(\*seed\) = \(\(\*seed\) \+ 1\);/)
-  assert.match(c.code, /if \(seed != 0\) ccjs_default_free\(0, seed, sizeof\(double\), _Alignof\(double\)\);/)
+  assert.match(c.code, /if \(seed != 0\) inox_default_free\(0, seed, sizeof\(double\), _Alignof\(double\)\);/)
 })
 
 
@@ -871,25 +871,25 @@ export function main(): void {
 
   assert.match(
     c.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n {2}ccjs_value \*label;\n {2}ccjs_value \*person;\n\} ccjs_callback_context_\d+;/
+    /typedef struct inox_callback_context_\d+ \{\n {2}inox_value \*label;\n {2}inox_value \*person;\n\} inox_callback_context_\d+;/
   )
-  assert.match(c.code, /ccjs_value \*label = 0;/)
-  assert.match(c.code, /ccjs_value \*person = 0;/)
-  assert.match(c.code, /ccjs_value \*label = captured->label;/)
-  assert.match(c.code, /ccjs_value \*person = captured->person;/)
-  assert.match(c.code, /ccjs_value ccjs_box_value_\d+ = ccjs_value_\d+;/)
+  assert.match(c.code, /inox_value \*label = 0;/)
+  assert.match(c.code, /inox_value \*person = 0;/)
+  assert.match(c.code, /inox_value \*label = captured->label;/)
+  assert.match(c.code, /inox_value \*person = captured->person;/)
+  assert.match(c.code, /inox_value inox_box_value_\d+ = inox_value_\d+;/)
   assert.match(
     c.code,
-    /ccjs_retain\(ccjs_box_value_\d+\);\n {2}ccjs_release\(\*label\);\n {2}\*label = ccjs_box_value_\d+;/
+    /inox_retain\(inox_box_value_\d+\);\n {2}inox_release\(\*label\);\n {2}\*label = inox_box_value_\d+;/
   )
-  assert.match(c.code, /ccjs_object_set_known\(\(\*person\), 0, \(\*label\)\)/)
+  assert.match(c.code, /inox_object_set_known\(\(\*person\), 0, \(\*label\)\)/)
   assert.match(
     c.code,
-    /if \(label != 0\) \{\n {4}ccjs_release\(\*label\);\n {4}ccjs_default_free\(0, label, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n {2}\}/
+    /if \(label != 0\) \{\n {4}inox_release\(\*label\);\n {4}inox_default_free\(0, label, sizeof\(inox_value\), _Alignof\(inox_value\)\);\n {2}\}/
   )
   assert.match(
     c.code,
-    /if \(person != 0\) \{\n {4}ccjs_release\(\*person\);\n {4}ccjs_default_free\(0, person, sizeof\(ccjs_value\), _Alignof\(ccjs_value\)\);\n {2}\}/
+    /if \(person != 0\) \{\n {4}inox_release\(\*person\);\n {4}inox_default_free\(0, person, sizeof\(inox_value\), _Alignof\(inox_value\)\);\n {2}\}/
   )
 })
 
@@ -932,13 +932,13 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /void maybeLog\(ccjs_value callback\)/)
-  assert.match(result.code, /void maybeNamed\(ccjs_value callback\)/)
-  assert.match(result.code, /if \(callback\.tag != CCJS_TAG_NULL\) \{/)
-  assert.match(result.code, /ccjs_callback_call\(callback, 0, 0, &ccjs_callback_out_\d+\)/)
-  assert.match(result.code, /ccjs_callback_call\(namedCallback, ccjs_callback_args_\d+, 1, &ccjs_callback_out_\d+\)/)
-  assert.match(result.code, /maybeLog\(ccjs_null_value\(\)\);/)
-  assert.match(result.code, /namedCallback = ccjs_nullable_value_\d+;/)
+  assert.match(result.code, /void maybeLog\(inox_value callback\)/)
+  assert.match(result.code, /void maybeNamed\(inox_value callback\)/)
+  assert.match(result.code, /if \(callback\.tag != INOX_TAG_NULL\) \{/)
+  assert.match(result.code, /inox_callback_call\(callback, 0, 0, &inox_callback_out_\d+\)/)
+  assert.match(result.code, /inox_callback_call\(namedCallback, inox_callback_args_\d+, 1, &inox_callback_out_\d+\)/)
+  assert.match(result.code, /maybeLog\(inox_null_value\(\)\);/)
+  assert.match(result.code, /namedCallback = inox_nullable_value_\d+;/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -946,7 +946,7 @@ export function main(): void {
   value?.()
 }
 `,
-    'CCJS_C_OPTIONAL_CHAINING',
+    'INOX_C_OPTIONAL_CHAINING',
     {
       target: 'c'
     }
@@ -985,13 +985,13 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_addOne_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static inox_status inox_callback_addOne_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\)/
   )
-  assert.match(result.code, /\*out = ccjs_number_value\(addOne\(args\[0\]\.as\.number\)\);/)
-  assert.match(result.code, /\*out = ccjs_bool_value\(\(isReady\(\)\) != 0\);/)
-  assert.match(result.code, /ccjs_optional_call_\d+ = ccjs_null_value\(\);/)
-  assert.match(result.code, /ccjs_callback_call\(score, ccjs_callback_args_\d+, 1, &ccjs_optional_call_\d+\)/)
-  assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
+  assert.match(result.code, /\*out = inox_number_value\(addOne\(args\[0\]\.as\.number\)\);/)
+  assert.match(result.code, /\*out = inox_bool_value\(\(isReady\(\)\) != 0\);/)
+  assert.match(result.code, /inox_optional_call_\d+ = inox_null_value\(\);/)
+  assert.match(result.code, /inox_callback_call\(score, inox_callback_args_\d+, 1, &inox_optional_call_\d+\)/)
+  assert.match(result.code, /inox_callback_call\(ready, 0, 0, &inox_optional_call_\d+\)/)
 })
 
 
@@ -1016,12 +1016,12 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static inox_status inox_callback_arrow_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\)/
   )
-  assert.match(result.code, /\*out = ccjs_number_value\(\(value \+ bonus\)\);/)
-  assert.match(result.code, /\*out = ccjs_bool_value\(\(\(bonus == 3\)\) != 0\);/)
-  assert.match(result.code, /ccjs_callback_call\(score, ccjs_callback_args_\d+, 1, &ccjs_optional_call_\d+\)/)
-  assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
+  assert.match(result.code, /\*out = inox_number_value\(\(value \+ bonus\)\);/)
+  assert.match(result.code, /\*out = inox_bool_value\(\(\(bonus == 3\)\) != 0\);/)
+  assert.match(result.code, /inox_callback_call\(score, inox_callback_args_\d+, 1, &inox_optional_call_\d+\)/)
+  assert.match(result.code, /inox_callback_call\(ready, 0, 0, &inox_optional_call_\d+\)/)
 })
 
 
@@ -1059,14 +1059,14 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static inox_status inox_callback_arrow_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\)/
   )
-  assert.match(result.code, /\(\*out\) = ccjs_number_value\(\(doubled \+ bonus\)\);/)
-  assert.match(result.code, /\(\*out\) = ccjs_bool_value\(\(1\) != 0\);/)
-  assert.match(result.code, /goto ccjs_callback_cleanup;/)
-  assert.match(result.code, /ccjs_callback_cleanup:/)
-  assert.match(result.code, /ccjs_callback_call\(score, ccjs_callback_args_\d+, 1, &ccjs_optional_call_\d+\)/)
-  assert.match(result.code, /ccjs_callback_call\(ready, 0, 0, &ccjs_optional_call_\d+\)/)
+  assert.match(result.code, /\(\*out\) = inox_number_value\(\(doubled \+ bonus\)\);/)
+  assert.match(result.code, /\(\*out\) = inox_bool_value\(\(1\) != 0\);/)
+  assert.match(result.code, /goto inox_callback_cleanup;/)
+  assert.match(result.code, /inox_callback_cleanup:/)
+  assert.match(result.code, /inox_callback_call\(score, inox_callback_args_\d+, 1, &inox_optional_call_\d+\)/)
+  assert.match(result.code, /inox_callback_call\(ready, 0, 0, &inox_optional_call_\d+\)/)
 })
 
 
@@ -1104,23 +1104,23 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\) \{\n {2}\(void\)(?:ccjs_)?context;\n {2}if \(out == 0 \|\| arg_count != 1 \|\| args == 0\) return CCJS_ERR_TYPE;\n {2}\*out = ccjs_undefined_value\(\);\n {2}if \(args\[0\]\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n {2}double value = args\[0\]\.as\.number;\n {2}int ccjs_return_active = 0;/
+    /static inox_status inox_callback_arrow_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\) \{\n {2}\(void\)(?:inox_)?context;\n {2}if \(out == 0 \|\| arg_count != 1 \|\| args == 0\) return INOX_ERR_TYPE;\n {2}\*out = inox_undefined_value\(\);\n {2}if \(args\[0\]\.tag != INOX_TAG_NUMBER\) return INOX_ERR_TYPE;\n {2}double value = args\[0\]\.as\.number;\n {2}int inox_return_active = 0;/
   )
   assert.match(
     result.code,
-    /\(\*out\) = ccjs_number_value\(\(value \+ 3\)\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/
+    /\(\*out\) = inox_number_value\(\(value \+ 3\)\);\n\s+inox_return_active = 1;\n\s+goto inox_try_\d+_finally;/
   )
   assert.match(
     result.code,
-    /printf\("%s %g\\n", "score finally", .*value.*\);\n\s+if \(ccjs_error_active\) return CCJS_ERR_TYPE;\n\s+if \(ccjs_return_active\) goto ccjs_callback_cleanup;/
+    /printf\("%s %g\\n", "score finally", .*value.*\);\n\s+if \(inox_error_active\) return INOX_ERR_TYPE;\n\s+if \(inox_return_active\) goto inox_callback_cleanup;/
   )
   assert.match(
     result.code,
-    /\(\*out\) = ccjs_value_\d+;\n\s+if \(\(\*out\)\.tag != CCJS_TAG_STRING \|\| \(\*out\)\.as\.ref == 0\) return CCJS_ERR_TYPE;\n\s+ccjs_retain\(\(\*out\)\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/
+    /\(\*out\) = inox_value_\d+;\n\s+if \(\(\*out\)\.tag != INOX_TAG_STRING \|\| \(\*out\)\.as\.ref == 0\) return INOX_ERR_TYPE;\n\s+inox_retain\(\(\*out\)\);\n\s+inox_return_active = 1;\n\s+goto inox_try_\d+_finally;/
   )
   assert.match(
     result.code,
-    /ccjs_callback_cleanup:\n {2}ccjs_release\(ccjs_value_\d+\);\n {2}ccjs_release\(ccjs_error\);\n {2}return CCJS_OK;/
+    /inox_callback_cleanup:\n {2}inox_release\(inox_value_\d+\);\n {2}inox_release\(inox_error\);\n {2}return INOX_OK;/
   )
 })
 
@@ -1153,13 +1153,13 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_getName_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static inox_status inox_callback_getName_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\)/
   )
   assert.match(result.code, /\*out = getName\(\);/)
-  assert.match(result.code, /\(\*out\) = ccjs_value_\d+;/)
-  assert.match(result.code, /ccjs_retain\(\(\*out\)\);/)
-  assert.match(result.code, /ccjs_callback_call\(callback, 0, 0, &ccjs_optional_call_\d+\)/)
-  assert.match(result.code, /ccjs_optional_call_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_optional_call_\d+\.as\.ref == 0/)
+  assert.match(result.code, /\(\*out\) = inox_value_\d+;/)
+  assert.match(result.code, /inox_retain\(\(\*out\)\);/)
+  assert.match(result.code, /inox_callback_call\(callback, 0, 0, &inox_optional_call_\d+\)/)
+  assert.match(result.code, /inox_optional_call_\d+\.tag != INOX_TAG_STRING \|\| inox_optional_call_\d+\.as\.ref == 0/)
 })
 
 
@@ -1197,17 +1197,17 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /ccjs_value getUser\(void\) \{/)
+  assert.match(result.code, /inox_value getUser\(void\) \{/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_getUser_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static inox_status inox_callback_getUser_\d+\(void \*(?:inox_)?context, const inox_value \*args, size_t arg_count, inox_value \*out\)/
   )
   assert.match(result.code, /\*out = getUser\(\);/)
-  assert.match(result.code, /\(\*out\) = ccjs_object_\d+;/)
-  assert.match(result.code, /ccjs_callback_call\(callback, 0, 0, &ccjs_optional_call_\d+\)/)
-  assert.match(result.code, /ccjs_optional_call_\d+\.tag != CCJS_TAG_OBJECT \|\| ccjs_optional_call_\d+\.as\.ref == 0/)
-  assert.match(result.code, /ccjs_object_get_known\(user, 0, &ccjs_optional_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(user, 1, &ccjs_optional_value_\d+\)/)
+  assert.match(result.code, /\(\*out\) = inox_object_\d+;/)
+  assert.match(result.code, /inox_callback_call\(callback, 0, 0, &inox_optional_call_\d+\)/)
+  assert.match(result.code, /inox_optional_call_\d+\.tag != INOX_TAG_OBJECT \|\| inox_optional_call_\d+\.as\.ref == 0/)
+  assert.match(result.code, /inox_object_get_known\(user, 0, &inox_optional_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(user, 1, &inox_optional_value_\d+\)/)
 })
 
 
@@ -1237,11 +1237,11 @@ export async function main(): Promise<void> {
   )
 
   assert.match(c.code, /double getValue\(void\)/)
-  assert.match(c.code, /ccjs_value getText\(void\)/)
-  assert.match(c.code, /ccjs_return = ccjs_await_value_\d+\.as\.number;/)
-  assert.match(c.code, /ccjs_return = ccjs_await_value_\d+;/)
-  assert.match(c.code, /ccjs_await_value_\d+ = ccjs_number_value\(getValue\(\)\);/)
-  assert.match(c.code, /ccjs_await_value_\d+ = getText\(\);/)
+  assert.match(c.code, /inox_value getText\(void\)/)
+  assert.match(c.code, /inox_return = inox_await_value_\d+\.as\.number;/)
+  assert.match(c.code, /inox_return = inox_await_value_\d+;/)
+  assert.match(c.code, /inox_await_value_\d+ = inox_number_value\(getValue\(\)\);/)
+  assert.match(c.code, /inox_await_value_\d+ = getText\(\);/)
 })
 
 
@@ -1261,14 +1261,14 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /ccjs_promise \*promise = 0;/)
+  assert.match(result.code, /inox_promise \*promise = 0;/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(getValue\(\)\), &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_resolved\(&inox_loop, inox_number_value\(getValue\(\)\), &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /while \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/
+    /while \(inox_promise_get_state\(promise\) == INOX_PROMISE_PENDING && inox_loop_has_work\(&inox_loop\)\) \{/
   )
   const managed = compileSource(
     `async function getText(): Promise<string> {
@@ -1285,19 +1285,19 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(managed.code, /ccjs_value ccjs_async_value_\d+ = ccjs_undefined_value\(\);/)
-  assert.match(managed.code, /ccjs_async_value_\d+ = getText\(\);/)
+  assert.match(managed.code, /inox_value inox_async_value_\d+ = inox_undefined_value\(\);/)
+  assert.match(managed.code, /inox_async_value_\d+ = getText\(\);/)
   assert.match(
     managed.code,
-    /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_value_\d+\.as\.ref == 0\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_value_\d+\.tag != INOX_TAG_STRING \|\| inox_async_value_\d+\.as\.ref == 0\)\s+goto inox_cleanup;/
   )
   assert.match(
     managed.code,
-    /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_async_value_\d+, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_resolved\(&inox_loop, inox_async_value_\d+, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     managed.code,
-    /ccjs_release\(ccjs_async_value_\d+\);\n {2}ccjs_async_value_\d+ = ccjs_undefined_value\(\);/
+    /inox_release\(inox_async_value_\d+\);\n {2}inox_async_value_\d+ = inox_undefined_value\(\);/
   )
 
   const throwing = compileSource(
@@ -1320,25 +1320,25 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(throwing.code, /ccjs_status failText\(ccjs_value \*ccjs_out, ccjs_value \*ccjs_error_out\);/)
-  assert.match(throwing.code, /ccjs_value ccjs_async_result_\d+ = ccjs_undefined_value\(\);/)
-  assert.match(throwing.code, /ccjs_status ccjs_async_status_\d+ = failText\(&ccjs_async_result_\d+, &ccjs_error\);/)
+  assert.match(throwing.code, /inox_status failText\(inox_value \*inox_out, inox_value \*inox_error_out\);/)
+  assert.match(throwing.code, /inox_value inox_async_result_\d+ = inox_undefined_value\(\);/)
+  assert.match(throwing.code, /inox_status inox_async_status_\d+ = failText\(&inox_async_result_\d+, &inox_error\);/)
   assert.match(
     throwing.code,
-    /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n {4}if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_status_\d+ == INOX_ERR_THROW\) \{\n {4}if \(inox_promise_rejected\(&inox_loop, inox_error, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(throwing.code, /ccjs_release\(ccjs_error\);\n {4}ccjs_error = ccjs_undefined_value\(\);/)
+  assert.match(throwing.code, /inox_release\(inox_error\);\n {4}inox_error = inox_undefined_value\(\);/)
   assert.match(
     throwing.code,
-    /if \(ccjs_async_result_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_result_\d+\.as\.ref == 0\)\s+goto ccjs_cleanup;/
-  )
-  assert.match(
-    throwing.code,
-    /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_async_result_\d+, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_result_\d+\.tag != INOX_TAG_STRING \|\| inox_async_result_\d+\.as\.ref == 0\)\s+goto inox_cleanup;/
   )
   assert.match(
     throwing.code,
-    /ccjs_release\(ccjs_async_result_\d+\);\n {4}ccjs_async_result_\d+ = ccjs_undefined_value\(\);/
+    /if \(inox_promise_resolved\(&inox_loop, inox_async_result_\d+, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
+  )
+  assert.match(
+    throwing.code,
+    /inox_release\(inox_async_result_\d+\);\n {4}inox_async_result_\d+ = inox_undefined_value\(\);/
   )
 })
 
@@ -1361,10 +1361,10 @@ const promise = host.readFile('ok')
 
   assert.match(
     result.code,
-    /static ccjs_promise\* ccjs_method_SourceHost_readFile\(ccjs_loop\* ccjs_loop, ccjs_value this, ccjs_value ccjs_param_path\)/
+    /static inox_promise\* inox_method_SourceHost_readFile\(inox_loop\* inox_loop, inox_value this, inox_value inox_param_path\)/
   )
-  assert.match(result.code, /ccjs_promise_resolved\(ccjs_loop, ccjs_value_\d+, &ccjs_return\)/)
-  assert.match(result.code, /ccjs_method_SourceHost_readFile\(&ccjs_loop, host, ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_promise_resolved\(inox_loop, inox_value_\d+, &inox_return\)/)
+  assert.match(result.code, /inox_method_SourceHost_readFile\(&inox_loop, host, inox_value_\d+\)/)
 })
 
 
@@ -1387,35 +1387,35 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /typedef struct ccjs_async_task_compute_frame \{/)
-  assert.match(result.code, /ccjs_promise \*awaited;/)
+  assert.match(result.code, /typedef struct inox_async_task_compute_frame \{/)
+  assert.match(result.code, /inox_promise \*awaited;/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_compute_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\);/
+    /static inox_status inox_async_task_compute_start\(inox_loop \*inox_loop, inox_promise \*\* out\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_compute_resume\(void \*context, ccjs_value ccjs_value_input\);/
+    /static inox_status inox_async_task_compute_resume\(void \*context, inox_value inox_value_input\);/
   )
-  assert.match(result.code, /status = ccjs_promise_new\(ccjs_loop, &frame->awaited\);/)
+  assert.match(result.code, /status = inox_promise_new\(inox_loop, &frame->awaited\);/)
   assert.match(
     result.code,
-    /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_compute_resume, ccjs_async_task_compute_reject, frame, ccjs_async_task_compute_finalize\);/
+    /status = inox_promise_then\(frame->awaited, inox_async_task_compute_resume, inox_async_task_compute_reject, frame, inox_async_task_compute_finalize\);/
   )
-  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(2\)\);/)
-  assert.match(result.code, /frame->local_value = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /status = inox_promise_resolve\(frame->awaited, inox_number_value\(2\)\);/)
+  assert.match(result.code, /frame->local_value = inox_value_input\.as\.number;/)
   assert.match(result.code, /double value = frame->local_value;/)
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ 3\)\)\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ 3\)\)\);/)
   assert.match(
     result.code,
-    /if \(ccjs_async_task_compute_start\(&ccjs_loop, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_task_compute_start\(&inox_loop, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_async_task_compute_start\(&ccjs_loop, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_task_compute_start\(&inox_loop, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.doesNotMatch(result.code, /ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(compute\(\)\), &promise\)/)
-  assert.doesNotMatch(result.code, /ccjs_await_value_\d+ = ccjs_number_value\(compute\(\)\);/)
+  assert.doesNotMatch(result.code, /inox_promise_resolved\(&inox_loop, inox_number_value\(compute\(\)\), &promise\)/)
+  assert.doesNotMatch(result.code, /inox_await_value_\d+ = inox_number_value\(compute\(\)\);/)
 })
 
 
@@ -1440,23 +1440,23 @@ export async function main(): Promise<void> {
   assert.match(result.code, /double param_delta;/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_addLater_start\(ccjs_loop \*ccjs_loop, double ccjs_arg_input, double ccjs_arg_delta, ccjs_promise \*\* out\);/
+    /static inox_status inox_async_task_addLater_start\(inox_loop \*inox_loop, double inox_arg_input, double inox_arg_delta, inox_promise \*\* out\);/
   )
   assert.match(result.code, /double input = frame->param_input;/)
   assert.match(result.code, /double delta = frame->param_delta;/)
-  assert.match(result.code, /frame->param_input = ccjs_arg_input;/)
-  assert.match(result.code, /frame->param_delta = ccjs_arg_delta;/)
-  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(input\)\);/)
+  assert.match(result.code, /frame->param_input = inox_arg_input;/)
+  assert.match(result.code, /frame->param_delta = inox_arg_delta;/)
+  assert.match(result.code, /status = inox_promise_resolve\(frame->awaited, inox_number_value\(input\)\);/)
   assert.match(result.code, /double input = frame->param_input;/)
   assert.match(result.code, /double delta = frame->param_delta;/)
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
   assert.match(
     result.code,
-    /if \(ccjs_async_task_addLater_start\(&ccjs_loop, 2, 4, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_task_addLater_start\(&inox_loop, 2, 4, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.doesNotMatch(
     result.code,
-    /ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(addLater\(2, 4\)\), &ccjs_promise_\d+\)/
+    /inox_promise_resolved\(&inox_loop, inox_number_value\(addLater\(2, 4\)\), &inox_promise_\d+\)/
   )
 })
 
@@ -1479,16 +1479,16 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(input\), &frame->awaited\);/)
+  assert.match(result.code, /status = inox_promise_resolved\(inox_loop, inox_number_value\(input\), &frame->awaited\);/)
   assert.match(
     result.code,
-    /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_addLater_resume, ccjs_async_task_addLater_reject, frame, ccjs_async_task_addLater_finalize\);/
+    /status = inox_promise_then\(frame->awaited, inox_async_task_addLater_resume, inox_async_task_addLater_reject, frame, inox_async_task_addLater_finalize\);/
   )
-  assert.doesNotMatch(result.code, /status = ccjs_promise_new\(ccjs_loop, &frame->awaited\);/)
-  assert.doesNotMatch(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(input\)\);/)
+  assert.doesNotMatch(result.code, /status = inox_promise_new\(inox_loop, &frame->awaited\);/)
+  assert.doesNotMatch(result.code, /status = inox_promise_resolve\(frame->awaited, inox_number_value\(input\)\);/)
   assert.match(result.code, /double input = frame->param_input;/)
   assert.match(result.code, /double delta = frame->param_delta;/)
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
 })
 
 
@@ -1511,21 +1511,21 @@ export async function main(): Promise<void> {
   )
 
   assert.match(result.code, /double param_flag;/)
-  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_bool_value\(\(flag\) != 0\)\);/)
+  assert.match(result.code, /status = inox_promise_resolve\(frame->awaited, inox_bool_value\(\(flag\) != 0\)\);/)
   assert.match(
     result.code,
-    /if \(ccjs_value_input\.tag != CCJS_TAG_BOOL\) \{\n {6}ccjs_status reject_status = ccjs_promise_reject\(frame->promise, ccjs_number_value\(\(ccjs_number\)CCJS_ERR_TYPE\)\);\n {6}return reject_status;\n {4}\}/
+    /if \(inox_value_input\.tag != INOX_TAG_BOOL\) \{\n {6}inox_status reject_status = inox_promise_reject\(frame->promise, inox_number_value\(\(inox_number\)INOX_ERR_TYPE\)\);\n {6}return reject_status;\n {4}\}/
   )
-  assert.match(result.code, /frame->local_value = ccjs_value_input\.as\.boolean \? 1 : 0;/)
+  assert.match(result.code, /frame->local_value = inox_value_input\.as\.boolean \? 1 : 0;/)
   assert.match(result.code, /double value = frame->local_value;/)
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_bool_value\(\(\(!value\)\) != 0\)\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_bool_value\(\(\(!value\)\) != 0\)\);/)
   assert.match(
     result.code,
-    /if \(ccjs_async_task_flip_start\(&ccjs_loop, 0, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_task_flip_start\(&inox_loop, 0, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_async_task_flip_start\(&ccjs_loop, 1, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_task_flip_start\(&inox_loop, 1, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
 
@@ -1550,23 +1550,23 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_promise_chain_arrow_\d+\(void \*context, ccjs_value ccjs_value_input, ccjs_value \*out\);/
+    /static inox_status inox_promise_chain_arrow_\d+\(void \*context, inox_value inox_value_input, inox_value \*out\);/
   )
-  assert.match(result.code, /ccjs_promise \*ccjs_async_task_source_\d+ = 0;/)
+  assert.match(result.code, /inox_promise \*inox_async_task_source_\d+ = 0;/)
   assert.match(
     result.code,
-    /status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(input\), &ccjs_async_task_source_\d+\);/
+    /status = inox_promise_resolved\(inox_loop, inox_number_value\(input\), &inox_async_task_source_\d+\);/
   )
   assert.match(
     result.code,
-    /status = ccjs_promise_chain\(ccjs_async_task_source_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &frame->awaited\);/
+    /status = inox_promise_chain\(inox_async_task_source_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &frame->awaited\);/
   )
-  assert.match(result.code, /ccjs_promise_release\(ccjs_async_task_source_\d+\);/)
+  assert.match(result.code, /inox_promise_release\(inox_async_task_source_\d+\);/)
   assert.match(
     result.code,
-    /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_addChain_resume, ccjs_async_task_addChain_reject, frame, ccjs_async_task_addChain_finalize\);/
+    /status = inox_promise_then\(frame->awaited, inox_async_task_addChain_resume, inox_async_task_addChain_reject, frame, inox_async_task_addChain_finalize\);/
   )
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
 })
 
 
@@ -1590,23 +1590,23 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}double delta;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct inox_promise_chain_context_\d+ \{\n {2}double delta;\n\} inox_promise_chain_context_\d+;/
   )
-  assert.match(result.code, /static void ccjs_promise_chain_context_\d+_finalize\(void \*context\);/)
+  assert.match(result.code, /static void inox_promise_chain_context_\d+_finalize\(void \*context\);/)
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}double delta = captured->delta;/
+    /inox_promise_chain_context_\d+\* captured = \(inox_promise_chain_context_\d+\*\)context;\n {2}double delta = captured->delta;/
   )
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* ccjs_promise_callback_ctx_\d+ = ccjs_default_alloc\(0, sizeof\(ccjs_promise_chain_context_\d+\), _Alignof\(ccjs_promise_chain_context_\d+\)\);/
+    /inox_promise_chain_context_\d+\* inox_promise_callback_ctx_\d+ = inox_default_alloc\(0, sizeof\(inox_promise_chain_context_\d+\), _Alignof\(inox_promise_chain_context_\d+\)\);/
   )
-  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->delta = delta;/)
+  assert.match(result.code, /inox_promise_callback_ctx_\d+->delta = delta;/)
   assert.match(
     result.code,
-    /status = ccjs_promise_chain\(ccjs_async_task_source_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &frame->awaited\);/
+    /status = inox_promise_chain\(inox_async_task_source_\d+, inox_promise_chain_arrow_\d+, 0, inox_promise_callback_ctx_\d+, inox_promise_chain_context_\d+_finalize, &frame->awaited\);/
   )
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
 })
 
 
@@ -1627,9 +1627,9 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /typedef struct ccjs_async_task_addLater_frame \{/)
-  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(input\)\);/)
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(value \+ delta\)\)\);/)
+  assert.match(result.code, /typedef struct inox_async_task_addLater_frame \{/)
+  assert.match(result.code, /status = inox_promise_resolve\(frame->awaited, inox_number_value\(input\)\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
   assert.doesNotMatch(result.code, /return Promise\.resolve/)
   assert.doesNotMatch(result.code, /addLater\(2, 4\)/)
 })
@@ -1662,7 +1662,7 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value ccjs_bytes_\d+ = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_bytes_\d+\);[\s\S]*ccjs_release\(ccjs_bytes_\d+\);[\s\S]*return status;/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value inox_bytes_\d+ = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_bytes_\d+\);[\s\S]*inox_release\(inox_bytes_\d+\);[\s\S]*return status;/
   )
 })
 
@@ -1690,16 +1690,16 @@ export async function main(): Promise<void> {
   assert.match(result.code, /double local_second;/)
   assert.match(result.code, /switch \(frame->state\) \{/)
   assert.match(result.code, /case 0: \{/)
-  assert.match(result.code, /frame->local_first = ccjs_value_input\.as\.number;/)
+  assert.match(result.code, /frame->local_first = inox_value_input\.as\.number;/)
   assert.match(result.code, /frame->state = 1;/)
   assert.match(
     result.code,
-    /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_addTwo_resume, ccjs_async_task_addTwo_reject, frame, 0\);/
+    /status = inox_promise_then\(frame->awaited, inox_async_task_addTwo_resume, inox_async_task_addTwo_reject, frame, 0\);/
   )
-  assert.match(result.code, /status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(\(first \+ delta\)\)\);/)
+  assert.match(result.code, /status = inox_promise_resolve\(frame->awaited, inox_number_value\(\(first \+ delta\)\)\);/)
   assert.match(result.code, /case 1: \{/)
-  assert.match(result.code, /frame->local_second = ccjs_value_input\.as\.number;/)
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(first \+ second\)\)\);/)
+  assert.match(result.code, /frame->local_second = inox_value_input\.as\.number;/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(first \+ second\)\)\);/)
 })
 
 
@@ -1737,19 +1737,19 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /ccjs_promise \*same\(ccjs_loop \*ccjs_loop, double input\);/)
+  assert.match(result.code, /inox_promise \*same\(inox_loop \*inox_loop, double input\);/)
   assert.match(
     result.code,
-    /status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(immediate\(input\)\), &frame->awaited\);/
+    /status = inox_promise_resolved\(inox_loop, inox_number_value\(immediate\(input\)\), &frame->awaited\);/
   )
   assert.match(result.code, /frame->state = 1;/)
-  assert.match(result.code, /frame->awaited = same\(ccjs_loop, zero\);/)
-  assert.match(result.code, /status = frame->awaited == 0 \? CCJS_ERR_TYPE : CCJS_OK;/)
+  assert.match(result.code, /frame->awaited = same\(inox_loop, zero\);/)
+  assert.match(result.code, /status = frame->awaited == 0 \? INOX_ERR_TYPE : INOX_OK;/)
   assert.match(result.code, /frame->state = 2;/)
-  assert.match(result.code, /status = ccjs_async_task_addLater_start\(ccjs_loop, first, &frame->awaited\);/)
+  assert.match(result.code, /status = inox_async_task_addLater_start\(inox_loop, first, &frame->awaited\);/)
   assert.match(result.code, /frame->state = 3;/)
-  assert.match(result.code, /frame->awaited = same\(ccjs_loop, second\);/)
-  assert.match(result.code, /return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(\(third \+ 1\)\)\);/)
+  assert.match(result.code, /frame->awaited = same\(inox_loop, second\);/)
+  assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(third \+ 1\)\)\);/)
 })
 
 
@@ -1782,18 +1782,18 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /ccjs_value ccjs_async_value_\d+ = sameText\(ccjs_value_\d+\);/)
+  assert.match(result.code, /inox_value inox_async_value_\d+ = sameText\(inox_value_\d+\);/)
   assert.match(
     result.code,
-    /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_STRING \|\| ccjs_async_value_\d+\.as\.ref == 0\) goto ccjs_start_error;/
+    /if \(inox_async_value_\d+\.tag != INOX_TAG_STRING \|\| inox_async_value_\d+\.as\.ref == 0\) goto inox_start_error;/
   )
-  assert.match(result.code, /status = ccjs_promise_resolved\(ccjs_loop, ccjs_async_value_\d+, &frame->awaited\);/)
-  assert.match(result.code, /ccjs_release\(ccjs_async_value_\d+\);/)
-  assert.match(result.code, /ccjs_start_error:\n {2}ccjs_promise_release\(\*out\);/)
-  assert.match(result.code, /ccjs_value ccjs_async_value_\d+ = sameBytes\(bytes\);/)
+  assert.match(result.code, /status = inox_promise_resolved\(inox_loop, inox_async_value_\d+, &frame->awaited\);/)
+  assert.match(result.code, /inox_release\(inox_async_value_\d+\);/)
+  assert.match(result.code, /inox_start_error:\n {2}inox_promise_release\(\*out\);/)
+  assert.match(result.code, /inox_value inox_async_value_\d+ = sameBytes\(bytes\);/)
   assert.match(
     result.code,
-    /if \(ccjs_async_value_\d+\.tag != CCJS_TAG_BYTES \|\| ccjs_async_value_\d+\.as\.ref == 0\) return CCJS_ERR_TYPE;/
+    /if \(inox_async_value_\d+\.tag != INOX_TAG_BYTES \|\| inox_async_value_\d+\.as\.ref == 0\) return INOX_ERR_TYPE;/
   )
 })
 
@@ -1836,15 +1836,15 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /frame->awaited = failNumber\(ccjs_loop\);/)
+  assert.match(result.code, /frame->awaited = failNumber\(inox_loop\);/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_compute_reject\(void \*context, ccjs_value ccjs_error\) \{\n {2}ccjs_async_task_compute_frame \*frame = \(ccjs_async_task_compute_frame \*\)context;\n {2}if \(frame == 0 \|\| frame->promise == 0\) return CCJS_ERR_TYPE;\n {2}ccjs_status status = ccjs_promise_reject\(frame->promise, ccjs_error\);\n {2}if \(frame->state < 1\) \{\n {4}ccjs_async_task_compute_finalize\(frame\);\n {2}\}\n {2}return status;\n\}/
+    /static inox_status inox_async_task_compute_reject\(void \*context, inox_value inox_error\) \{\n {2}inox_async_task_compute_frame \*frame = \(inox_async_task_compute_frame \*\)context;\n {2}if \(frame == 0 \|\| frame->promise == 0\) return INOX_ERR_TYPE;\n {2}inox_status status = inox_promise_reject\(frame->promise, inox_error\);\n {2}if \(frame->state < 1\) \{\n {4}inox_async_task_compute_finalize\(frame\);\n {2}\}\n {2}return status;\n\}/
   )
-  assert.match(result.code, /status = ccjs_promise_rejected\(ccjs_loop, ccjs_reject_value_\d+, &frame->awaited\);/)
+  assert.match(result.code, /status = inox_promise_rejected\(inox_loop, inox_reject_value_\d+, &frame->awaited\);/)
   assert.match(
     result.code,
-    /status = ccjs_promise_then\(frame->awaited, ccjs_async_task_failDirect_resume, ccjs_async_task_failDirect_reject, frame, ccjs_async_task_failDirect_finalize\);/
+    /status = inox_promise_then\(frame->awaited, inox_async_task_failDirect_resume, inox_async_task_failDirect_reject, frame, inox_async_task_failDirect_finalize\);/
   )
 })
 
@@ -1892,19 +1892,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_recover_reject\(void \*context, ccjs_value ccjs_error\) \{/
+    /static inox_status inox_async_task_recover_reject\(void \*context, inox_value inox_error\) \{/
   )
   assert.match(
     result.code,
-    /case 0: \{\n {4}if \(ccjs_error\.tag != CCJS_TAG_STRING \|\| ccjs_error\.as\.ref == 0\) \{/
+    /case 0: \{\n {4}if \(inox_error\.tag != INOX_TAG_STRING \|\| inox_error\.as\.ref == 0\) \{/
   )
-  assert.match(result.code, /ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;/)
+  assert.match(result.code, /inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;/)
   assert.match(result.code, /printf\("%s %\.\*s\\n", "caught", \(int\)error->len, error->bytes\);/)
   assert.match(result.code, /printf\("%s\\n", "finally recover"\);/)
-  assert.match(result.code, /status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/)
+  assert.match(result.code, /status = inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_propagate_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "finally propagate"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/
+    /static inox_status inox_async_task_propagate_reject\(void \*context, inox_value inox_error\) \{[\s\S]*printf\("%s\\n", "finally propagate"\);[\s\S]*status = inox_promise_reject\(frame->promise, inox_error\);/
   )
 })
 
@@ -1936,15 +1936,15 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_compute_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\);/
+    /static inox_status inox_async_task_compute_start\(inox_loop \*inox_loop, inox_promise \*\* out\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_compute_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/
+    /static inox_status inox_async_task_compute_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(value\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_compute_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/
+    /static inox_status inox_async_task_compute_reject\(void \*context, inox_value inox_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = inox_promise_reject\(frame->promise, inox_error\);/
   )
 })
 
@@ -1965,19 +1965,19 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /ccjs_promise \*getPromise\(ccjs_loop \*ccjs_loop\);/)
+  assert.match(result.code, /inox_promise \*getPromise\(inox_loop \*inox_loop\);/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(2\), &ccjs_return\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_resolved\(inox_loop, inox_number_value\(2\), &inox_return\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /ccjs_promise_\d+ = getPromise\(&ccjs_loop\);/)
+  assert.match(result.code, /inox_promise_\d+ = getPromise\(&inox_loop\);/)
   assert.match(
     result.code,
-    /while \(ccjs_promise_get_state\(ccjs_promise_\d+\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/
+    /while \(inox_promise_get_state\(inox_promise_\d+\) == INOX_PROMISE_PENDING && inox_loop_has_work\(&inox_loop\)\) \{/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_get_result\(ccjs_promise_\d+, &ccjs_await_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_get_result\(inox_promise_\d+, &inox_await_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
 
@@ -2010,19 +2010,19 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /ccjs_promise \*failPromise\(ccjs_loop \*ccjs_loop\);/)
+  assert.match(result.code, /inox_promise \*failPromise\(inox_loop \*inox_loop\);/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_rejected\(ccjs_loop, ccjs_value_\d+, &ccjs_return\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_rejected\(inox_loop, inox_value_\d+, &inox_return\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /ccjs_promise \*loadText\(ccjs_loop \*ccjs_loop\);/)
+  assert.match(result.code, /inox_promise \*loadText\(inox_loop \*inox_loop\);/)
   assert.match(
     result.code,
-    /if \(ccjs_fs_read_file\(ccjs_loop, "\/tmp\/value\.txt", 14, &ccjs_return\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_read_file\(inox_loop, "\/tmp\/value\.txt", 14, &inox_return\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /ccjs_promise_\d+ = failPromise\(&ccjs_loop\);/)
-  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
-  assert.match(result.code, /ccjs_promise_\d+ = loadText\(&ccjs_loop\);/)
+  assert.match(result.code, /inox_promise_\d+ = failPromise\(&inox_loop\);/)
+  assert.match(result.code, /goto inox_try_\d+_catch;/)
+  assert.match(result.code, /inox_promise_\d+ = loadText\(&inox_loop\);/)
 })
 
 
@@ -2037,12 +2037,12 @@ test('reports unhandled owned Promise rejections from generated C main', () => {
     }
   )
 
-  assert.match(result.code, /static int ccjs_unhandled_rejection = 0;/)
+  assert.match(result.code, /static int inox_unhandled_rejection = 0;/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_\d+ != 0 && ccjs_promise_is_unhandled_rejection\(ccjs_promise_\d+\)\) \{\n {4}fprintf\(stderr, "Unhandled Promise rejection\\n"\);\n {4}ccjs_unhandled_rejection = 1;\n {2}\}/
+    /if \(inox_promise_\d+ != 0 && inox_promise_is_unhandled_rejection\(inox_promise_\d+\)\) \{\n {4}fprintf\(stderr, "Unhandled Promise rejection\\n"\);\n {4}inox_unhandled_rejection = 1;\n {2}\}/
   )
-  assert.match(result.code, /return ccjs_unhandled_rejection == 0 \? \(int\)ccjs_return : 1;/)
+  assert.match(result.code, /return inox_unhandled_rejection == 0 \? \(int\)inox_return : 1;/)
 })
 
 
@@ -2071,40 +2071,40 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /ccjs_value loadText\(void\);/)
-  assert.match(result.code, /void ccjs_main\(void\)/)
-  assert.match(result.code, /ccjs_promise \*promise = 0;/)
+  assert.match(result.code, /inox_value loadText\(void\);/)
+  assert.match(result.code, /void inox_main\(void\)/)
+  assert.match(result.code, /inox_promise \*promise = 0;/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_number_value\(2\), &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_resolved\(&inox_loop, inox_number_value\(2\), &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /while \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/
+    /while \(inox_promise_get_state\(promise\) == INOX_PROMISE_PENDING && inox_loop_has_work\(&inox_loop\)\) \{/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_get_result\(promise, &ccjs_await_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_get_result\(promise, &inox_await_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_value_\d+, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_resolved\(&inox_loop, inox_value_\d+, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_write_file\(&inox_loop, "\/tmp\/out\.txt", 12, "saved", 5, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_fs_read_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, &ccjs_promise_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_fs_read_file\(&inox_loop, "\/tmp\/out\.txt", 12, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /ccjs_async_value_\d+ = loadText\(\);/)
+  assert.match(result.code, /inox_async_value_\d+ = loadText\(\);/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_async_value_\d+, &loaded\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_resolved\(&inox_loop, inox_async_value_\d+, &loaded\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /ccjs_retain\(ccjs_await_value_\d+\);\n {2}text_value_\d+ = ccjs_await_value_\d+;/)
-  assert.match(result.code, /const ccjs_string \*text = \(ccjs_string \*\)text_value_\d+\.as\.ref;/)
+  assert.match(result.code, /inox_retain\(inox_await_value_\d+\);\n {2}text_value_\d+ = inox_await_value_\d+;/)
+  assert.match(result.code, /const inox_string \*text = \(inox_string \*\)text_value_\d+\.as\.ref;/)
 })
 
 
@@ -2127,12 +2127,12 @@ test('lowers awaited rejected promises into C try catch', () => {
 
   assert.match(
     result.code,
-    /if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_value_\d+, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_rejected\(&inox_loop, inox_value_\d+, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /if \(ccjs_promise_get_state\(promise\) == CCJS_PROMISE_REJECTED\) \{/)
-  assert.match(result.code, /if \(ccjs_promise_get_result\(promise, &ccjs_error\) != CCJS_OK\)\s+goto ccjs_cleanup;/)
-  assert.match(result.code, /ccjs_error_active = 1;/)
-  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
+  assert.match(result.code, /if \(inox_promise_get_state\(promise\) == INOX_PROMISE_REJECTED\) \{/)
+  assert.match(result.code, /if \(inox_promise_get_result\(promise, &inox_error\) != INOX_OK\)\s+goto inox_cleanup;/)
+  assert.match(result.code, /inox_error_active = 1;/)
+  assert.match(result.code, /goto inox_try_\d+_catch;/)
 })
 
 
@@ -2155,19 +2155,19 @@ test('lowers awaited Error rejected promises into C try catch', () => {
 
   assert.match(
     result.code,
-    /if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error_object_\d+, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_rejected\(&inox_loop, inox_error_object_\d+, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\)\s+goto ccjs_cleanup;/
+    /if \(inox_error\.tag != INOX_TAG_OBJECT \|\| inox_error\.as\.ref == 0\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /ccjs_try_\d+_catch:\n {4}if \(ccjs_error\.tag != CCJS_TAG_OBJECT \|\| ccjs_error\.as\.ref == 0\)\s+goto ccjs_cleanup;/
+    /inox_try_\d+_catch:\n {4}if \(inox_error\.tag != INOX_TAG_OBJECT \|\| inox_error\.as\.ref == 0\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /ccjs_value error = ccjs_error;/)
-  assert.match(result.code, /ccjs_object_get_known\(error, 0, &ccjs_log_value_\d+\)/)
-  assert.match(result.code, /ccjs_object_get_known\(error, 1, &ccjs_log_value_\d+\)/)
+  assert.match(result.code, /inox_value error = inox_error;/)
+  assert.match(result.code, /inox_object_get_known\(error, 0, &inox_log_value_\d+\)/)
+  assert.match(result.code, /inox_object_get_known\(error, 1, &inox_log_value_\d+\)/)
 })
 
 
@@ -2191,12 +2191,12 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(result.code, /ccjs_status failText\(ccjs_value \*ccjs_out, ccjs_value \*ccjs_error_out\);/)
-  assert.match(result.code, /ccjs_value ccjs_call_result_\d+ = ccjs_undefined_value\(\);/)
-  assert.match(result.code, /ccjs_status ccjs_call_status_\d+ = failText\(&ccjs_call_result_\d+, &ccjs_error\);/)
-  assert.doesNotMatch(result.code, /double ccjs_call_result_\d+ = 0;\n\s+ccjs_status ccjs_call_status_\d+ = failText/)
-  assert.match(result.code, /if \(ccjs_call_status_\d+ == CCJS_ERR_THROW\) \{/)
-  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
+  assert.match(result.code, /inox_status failText\(inox_value \*inox_out, inox_value \*inox_error_out\);/)
+  assert.match(result.code, /inox_value inox_call_result_\d+ = inox_undefined_value\(\);/)
+  assert.match(result.code, /inox_status inox_call_status_\d+ = failText\(&inox_call_result_\d+, &inox_error\);/)
+  assert.doesNotMatch(result.code, /double inox_call_result_\d+ = 0;\n\s+inox_status inox_call_status_\d+ = failText/)
+  assert.match(result.code, /if \(inox_call_status_\d+ == INOX_ERR_THROW\) \{/)
+  assert.match(result.code, /goto inox_try_\d+_catch;/)
 })
 
 
@@ -2225,17 +2225,17 @@ export async function main(): Promise<void> {
 
   assert.match(
     stringResult.code,
-    /ccjs_status ccjs_async_status_\d+ = failString\(&ccjs_async_result_\d+, &ccjs_error\);/
+    /inox_status inox_async_status_\d+ = failString\(&inox_async_result_\d+, &inox_error\);/
   )
   assert.match(
     stringResult.code,
-    /if \(ccjs_async_status_\d+ == CCJS_ERR_THROW\) \{\n {4}if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_async_status_\d+ == INOX_ERR_THROW\) \{\n {4}if \(inox_promise_rejected\(&inox_loop, inox_error, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     stringResult.code,
-    /if \(ccjs_promise_get_result\(promise, &ccjs_error\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_get_result\(promise, &inox_error\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(stringResult.code, /goto ccjs_try_\d+_catch;/)
+  assert.match(stringResult.code, /goto inox_try_\d+_catch;/)
 
   const errorResult = compileSource(
     `async function failError(): Promise<string> {
@@ -2259,18 +2259,18 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.match(errorResult.code, /ccjs_value ccjs_error_object_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(errorResult.code, /inox_value inox_error_object_\d+ = inox_undefined_value\(\);/)
   assert.match(
     errorResult.code,
-    /ccjs_status ccjs_async_status_\d+ = failError\(&ccjs_async_result_\d+, &ccjs_error\);/
+    /inox_status inox_async_status_\d+ = failError\(&inox_async_result_\d+, &inox_error\);/
   )
   assert.match(
     errorResult.code,
-    /if \(ccjs_promise_rejected\(&ccjs_loop, ccjs_error, &promise\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_rejected\(&inox_loop, inox_error, &promise\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     errorResult.code,
-    /if \(ccjs_object_get_known\(error, 1, &ccjs_log_value_\d+\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_object_get_known\(error, 1, &inox_log_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
 
@@ -2303,15 +2303,15 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(value\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
 })
 
@@ -2344,15 +2344,15 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(value\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
 })
 
@@ -2386,13 +2386,13 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
-  assert.doesNotMatch(result.code, /ccjs_number_value\(9\)/)
+  assert.doesNotMatch(result.code, /inox_number_value\(9\)/)
 })
 
 
@@ -2430,15 +2430,15 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "middle finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "middle finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(value\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "middle finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "middle finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
 })
 
@@ -2476,11 +2476,11 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*printf\("%s\\n", "outer prefix"\);[\s\S]*printf\("%s\\n", "middle prefix"\);[\s\S]*status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(3\)\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*printf\("%s\\n", "outer prefix"\);[\s\S]*printf\("%s\\n", "middle prefix"\);[\s\S]*status = inox_promise_resolve\(frame->awaited, inox_number_value\(3\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "middle finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "middle finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(value\)\);/
   )
 })
 
@@ -2513,12 +2513,12 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*double seed = 3;[\s\S]*status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(seed\)\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*double seed = 3;[\s\S]*status = inox_promise_resolve\(frame->awaited, inox_number_value\(seed\)\);/
   )
   assert.doesNotMatch(result.code, /prefix_seed/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*printf\("%s\\n", "done"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(value\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*printf\("%s\\n", "done"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(value\)\);/
   )
 })
 
@@ -2552,19 +2552,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*double local_value;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value prefix_prefix;[\s\S]*double local_value;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);[\s\S]*ccjs_bytes_len\(prefix, &ccjs_bytes_len_\d+\)[\s\S]*status = ccjs_promise_resolved\(ccjs_loop, ccjs_number_value\(\(\(double\)ccjs_bytes_len_\d+\)\), &frame->awaited\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*inox_value prefix = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*inox_retain\(frame->prefix_prefix\);[\s\S]*inox_bytes_len\(prefix, &inox_bytes_len_\d+\)[\s\S]*status = inox_promise_resolved\(inox_loop, inox_number_value\(\(\(double\)inox_bytes_len_\d+\)\), &frame->awaited\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value prefix = frame->prefix_prefix;[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return inox_promise_resolve\(frame->promise, prefix\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -2598,11 +2598,11 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*double local_value;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*double local_value;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*ccjs_value suffix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*printf\("%g\\n", \(\(double\)value\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, suffix\);[\s\S]*ccjs_release\(suffix\);[\s\S]*return status;/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*inox_value suffix = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*printf\("%g\\n", \(\(double\)value\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, suffix\);[\s\S]*inox_release\(suffix\);[\s\S]*return status;/
   )
 })
 
@@ -2635,11 +2635,11 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*double local_value;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*double local_value;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*const double total = \(value \+ 4\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(total\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*const double total = \(value \+ 4\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(total\)\);/
   )
 })
 
@@ -2673,7 +2673,7 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*const double total = \(value \+ 4\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "after"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(9\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*const double total = \(value \+ 4\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "after"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(9\)\);/
   )
 })
 
@@ -2707,7 +2707,7 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*ccjs_value scratch = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*ccjs_bytes_len\(scratch, &ccjs_bytes_len_\d+\)[\s\S]*printf\("%g %g\\n", \(\(double\)value\), \(\(double\)\(\(double\)ccjs_bytes_len_\d+\)\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "after"\);[\s\S]*ccjs_release\(scratch\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(9\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*inox_value scratch = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*inox_bytes_len\(scratch, &inox_bytes_len_\d+\)[\s\S]*printf\("%g %g\\n", \(\(double\)value\), \(\(double\)\(\(double\)inox_bytes_len_\d+\)\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "after"\);[\s\S]*inox_release\(scratch\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(9\)\);/
   )
 })
 
@@ -2740,11 +2740,11 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_reject\(frame->promise, ccjs_error\);/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = inox_promise_reject\(frame->promise, inox_error\);/
   )
 })
 
@@ -2781,11 +2781,11 @@ export async function main(): Promise<void> {
   assert.equal((result.code.match(/printf\("%s\\n", "inner finally"\);/g) ?? []).length, 2)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(9\)\);/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(9\)\);/
   )
 })
 
@@ -2822,11 +2822,11 @@ export async function main(): Promise<void> {
   assert.equal((result.code.match(/printf\("%s\\n", "inner finally"\);/g) ?? []).length, 2)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(7\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "after inner"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_number_value\(9\)\);/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(9\)\);/
   )
 })
 
@@ -2861,15 +2861,15 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*double prefix_seed;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*double prefix_seed;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*const double seed = 4;[\s\S]*frame->prefix_seed = seed;[\s\S]*status = ccjs_promise_resolve\(frame->awaited, ccjs_number_value\(3\)\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*const double seed = 4;[\s\S]*frame->prefix_seed = seed;[\s\S]*status = inox_promise_resolve\(frame->awaited, inox_number_value\(3\)\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*double seed = frame->prefix_seed;[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*const double total = \(seed \+ 5\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_number_value\(seed\)\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*double seed = frame->prefix_seed;[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*const double total = \(seed \+ 5\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(seed\)\);/
   )
 })
 
@@ -2903,19 +2903,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value param_label;[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value param_label;[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_value ccjs_arg_label, ccjs_promise \*\* out\) \{[\s\S]*const ccjs_string \*prefix = label;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref \*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_value inox_arg_label, inox_promise \*\* out\) \{[\s\S]*const inox_string \*prefix = label;[\s\S]*frame->prefix_prefix\.tag = INOX_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(inox_ref \*\)&prefix->header;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_string \*prefix = \(ccjs_string \*\)frame->prefix_prefix\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_value_\d+\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_string \*prefix = \(inox_string \*\)frame->prefix_prefix\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_value_\d+\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->param_label\);[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->param_label\);[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -2949,19 +2949,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*double param_count;[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*double param_count;[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, double ccjs_arg_count, ccjs_promise \*\* out\) \{[\s\S]*ccjs_retain\(ccjs_value_\d+\);[\s\S]*prefix_value_\d+ = ccjs_value_\d+;[\s\S]*const ccjs_string \*prefix = \(ccjs_string \*\)prefix_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref \*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, double inox_arg_count, inox_promise \*\* out\) \{[\s\S]*inox_retain\(inox_value_\d+\);[\s\S]*prefix_value_\d+ = inox_value_\d+;[\s\S]*const inox_string \*prefix = \(inox_string \*\)prefix_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = INOX_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(inox_ref \*\)&prefix->header;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_string \*prefix = \(ccjs_string \*\)frame->prefix_prefix\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_value_\d+\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_string \*prefix = \(inox_string \*\)frame->prefix_prefix\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_value_\d+\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -2995,19 +2995,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);[\s\S]*ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3, &ccjs_value_\d+\)[\s\S]*ccjs_retain\(ccjs_value_\d+\);[\s\S]*prefix_value_\d+ = ccjs_value_\d+;[\s\S]*const ccjs_string \*prefix = \(ccjs_string \*\)prefix_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref \*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*inox_value inox_value_\d+ = inox_undefined_value\(\);[\s\S]*inox_string_from_literal\(&inox_default_allocator, "Ada", 3, &inox_value_\d+\)[\s\S]*inox_retain\(inox_value_\d+\);[\s\S]*prefix_value_\d+ = inox_value_\d+;[\s\S]*const inox_string \*prefix = \(inox_string \*\)prefix_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = INOX_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(inox_ref \*\)&prefix->header;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_string \*prefix = \(ccjs_string \*\)frame->prefix_prefix\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*return ccjs_promise_resolve\(frame->promise, ccjs_value_\d+\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_string \*prefix = \(inox_string \*\)frame->prefix_prefix\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*printf\("%\.\*s\\n", \(int\)prefix->len, prefix->bytes\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_value_\d+\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -3042,19 +3042,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_array_new\(&ccjs_default_allocator, 2, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*inox_value prefix = inox_undefined_value\(\);[\s\S]*inox_array_new\(&inox_default_allocator, 2, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*ccjs_array_len\(prefix, &ccjs_array_len_\d+\)[\s\S]*ccjs_array_get\(prefix, 1, &ccjs_log_value_\d+\)[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value prefix = frame->prefix_prefix;[\s\S]*inox_array_len\(prefix, &inox_array_len_\d+\)[\s\S]*inox_array_get\(prefix, 1, &inox_log_value_\d+\)[\s\S]*return inox_promise_resolve\(frame->promise, prefix\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -3089,19 +3089,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"abc", 3, &ccjs_bytes_\d+\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*inox_value prefix = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"abc", 3, &inox_bytes_\d+\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*ccjs_bytes_len\(prefix, &ccjs_bytes_len_\d+\)[\s\S]*ccjs_bytes_get\(prefix, \(size_t\)\(1\), &ccjs_byte_\d+\)[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value prefix = frame->prefix_prefix;[\s\S]*inox_bytes_len\(prefix, &inox_bytes_len_\d+\)[\s\S]*inox_bytes_get\(prefix, \(size_t\)\(1\), &inox_byte_\d+\)[\s\S]*return inox_promise_resolve\(frame->promise, prefix\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -3140,19 +3140,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_object_new\(&ccjs_default_allocator, &ccjs_shape_prefix_\d+, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*inox_value prefix = inox_undefined_value\(\);[\s\S]*inox_object_new\(&inox_default_allocator, &inox_shape_prefix_\d+, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*ccjs_object_get_known\(prefix, 0, &ccjs_log_value_\d+\)[\s\S]*ccjs_object_get_known\(prefix, 1, &ccjs_log_value_\d+\)[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value prefix = frame->prefix_prefix;[\s\S]*inox_object_get_known\(prefix, 0, &inox_log_value_\d+\)[\s\S]*inox_object_get_known\(prefix, 1, &inox_log_value_\d+\)[\s\S]*return inox_promise_resolve\(frame->promise, prefix\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -3186,19 +3186,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_map_new\(&ccjs_default_allocator, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*inox_value prefix = inox_undefined_value\(\);[\s\S]*inox_map_new\(&inox_default_allocator, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*ccjs_map_get\(prefix, ccjs_value_\d+, &ccjs_map_value_\d+\)[\s\S]*ccjs_map_get\(prefix, ccjs_value_\d+, &ccjs_map_value_\d+\)[\s\S]*ccjs_map_size\(prefix, &ccjs_map_size_\d+\)[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value prefix = frame->prefix_prefix;[\s\S]*inox_map_get\(prefix, inox_value_\d+, &inox_map_value_\d+\)[\s\S]*inox_map_get\(prefix, inox_value_\d+, &inox_map_value_\d+\)[\s\S]*inox_map_size\(prefix, &inox_map_size_\d+\)[\s\S]*return inox_promise_resolve\(frame->promise, prefix\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -3232,19 +3232,19 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_async_task_work_frame \{[\s\S]*ccjs_value prefix_prefix;[\s\S]*\} ccjs_async_task_work_frame;/
+    /typedef struct inox_async_task_work_frame \{[\s\S]*inox_value prefix_prefix;[\s\S]*\} inox_async_task_work_frame;/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value prefix = ccjs_undefined_value\(\);[\s\S]*ccjs_set_new\(&ccjs_default_allocator, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static inox_status inox_async_task_work_start\(inox_loop \*inox_loop, inox_promise \*\* out\) \{[\s\S]*inox_value prefix = inox_undefined_value\(\);[\s\S]*inox_set_new\(&inox_default_allocator, &prefix\)[\s\S]*frame->prefix_prefix = prefix;[\s\S]*inox_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value prefix = frame->prefix_prefix;[\s\S]*ccjs_set_has\(prefix, ccjs_value_\d+, &ccjs_set_has_\d+\)[\s\S]*ccjs_set_has\(prefix, ccjs_value_\d+, &ccjs_set_has_\d+\)[\s\S]*ccjs_set_size\(prefix, &ccjs_set_size_\d+\)[\s\S]*return ccjs_promise_resolve\(frame->promise, prefix\);/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value prefix = frame->prefix_prefix;[\s\S]*inox_set_has\(prefix, inox_value_\d+, &inox_set_has_\d+\)[\s\S]*inox_set_has\(prefix, inox_value_\d+, &inox_set_has_\d+\)[\s\S]*inox_set_size\(prefix, &inox_set_size_\d+\)[\s\S]*return inox_promise_resolve\(frame->promise, prefix\);/
   )
   assert.match(
     result.code,
-    /static void ccjs_async_task_work_finalize\(void \*context\) \{[\s\S]*ccjs_release\(frame->prefix_prefix\);/
+    /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
 
@@ -3278,7 +3278,7 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_resume\(void \*context, ccjs_value ccjs_value_input\) \{[\s\S]*ccjs_value suffix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*ccjs_bytes_len\(suffix, &ccjs_bytes_len_\d+\)[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, suffix\);[\s\S]*ccjs_release\(suffix\);[\s\S]*return status;/
+    /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value suffix = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*inox_bytes_len\(suffix, &inox_bytes_len_\d+\)[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, suffix\);[\s\S]*inox_release\(suffix\);[\s\S]*return status;/
   )
 })
 
@@ -3315,7 +3315,7 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*ccjs_value suffix = ccjs_undefined_value\(\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*ccjs_bytes_len\(suffix, &ccjs_bytes_len_\d+\)[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, suffix\);[\s\S]*ccjs_release\(suffix\);[\s\S]*return status;/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*inox_value suffix = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*inox_bytes_len\(suffix, &inox_bytes_len_\d+\)[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, suffix\);[\s\S]*inox_release\(suffix\);[\s\S]*return status;/
   )
 })
 
@@ -3350,7 +3350,7 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_reject\(void \*context, ccjs_value ccjs_error\) \{[\s\S]*ccjs_string \*error = \(ccjs_string \*\)ccjs_error\.as\.ref;[\s\S]*ccjs_value ccjs_bytes_\d+ = ccjs_undefined_value\(\);[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*ccjs_bytes_from_data\(&ccjs_default_allocator, \(const uint8_t \*\)"ok", 2, &ccjs_bytes_\d+\)[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = ccjs_promise_resolve\(frame->promise, ccjs_bytes_\d+\);[\s\S]*ccjs_release\(ccjs_bytes_\d+\);[\s\S]*return status;/
+    /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*inox_value inox_bytes_\d+ = inox_undefined_value\(\);[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_bytes_\d+\);[\s\S]*inox_release\(inox_bytes_\d+\);[\s\S]*return status;/
   )
 })
 
@@ -3375,7 +3375,7 @@ export async function main(): Promise<void> {
   console.log(await work())
 }
 `,
-    'CCJS_C_ASYNC',
+    'INOX_C_ASYNC',
     {
       target: 'c'
     }
@@ -3409,9 +3409,9 @@ export async function main(): Promise<void> {
     }
   )
 
-  assert.doesNotMatch(result.code, /ccjs_async_task_work/)
-  assert.match(result.code, /ccjs_try_\d+_finally:/)
-  assert.match(result.code, /goto ccjs_try_\d+_catch;/)
+  assert.doesNotMatch(result.code, /inox_async_task_work/)
+  assert.match(result.code, /inox_try_\d+_finally:/)
+  assert.match(result.code, /goto inox_try_\d+_catch;/)
 })
 
 
@@ -3455,7 +3455,7 @@ export function main(): void {
   console.log(value)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -3487,7 +3487,7 @@ export async function main(): Promise<void> {
   assert.equal(returnStatement.argument.promiseValueType, 'string')
   assert.equal(makeTextDeclaration?.returnType, 'promise')
   assert.equal(makeTextDeclaration?.returnPromiseValueType, 'string')
-  assert.match(result.code, /ccjs_promise_new\(ccjs_loop, &ccjs_return\)/)
+  assert.match(result.code, /inox_promise_new\(inox_loop, &inox_return\)/)
 
   assertDiagnostic(
     `export function main(): void {
@@ -3497,7 +3497,7 @@ export async function main(): Promise<void> {
   console.log(value)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
 })
 
@@ -3524,11 +3524,11 @@ console.log(text, \`interval \${++i}\`)
     }
   )
 
-  assert.match(result.code, /ccjs_promise \*resolve;/)
-  assert.match(result.code, /ccjs_promise_retain\(ccjs_callback_ctx_\d+->resolve\);/)
-  assert.match(result.code, /ccjs_promise_resolve\(resolve, ccjs_value_\d+\)/)
-  assert.match(result.code, /ccjs_loop_poll\(&ccjs_loop, ccjs_performance_now\(\)\)/)
-  assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, \(\+\+i\), &ccjs_value_\d+\)/)
+  assert.match(result.code, /inox_promise \*resolve;/)
+  assert.match(result.code, /inox_promise_retain\(inox_callback_ctx_\d+->resolve\);/)
+  assert.match(result.code, /inox_promise_resolve\(resolve, inox_value_\d+\)/)
+  assert.match(result.code, /inox_loop_poll\(&inox_loop, inox_performance_now\(\)\)/)
+  assert.match(result.code, /inox_string_from_number\(&inox_default_allocator, \(\+\+i\), &inox_value_\d+\)/)
 })
 
 
@@ -3640,7 +3640,7 @@ test('checks Promise then catch as typed chain calls', () => {
   source.then((value: string) => value)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
   assertDiagnostic(
     `export function main(): void {
@@ -3648,7 +3648,7 @@ test('checks Promise then catch as typed chain calls', () => {
   failed.catch(error => 1)
 }
 `,
-    'CCJS_TYPE_MISMATCH'
+    'INOX_TYPE_MISMATCH'
   )
   assertDiagnostic(
     `export function main(): void {
@@ -3662,7 +3662,7 @@ test('checks Promise then catch as typed chain calls', () => {
   console.log(promise)
 }
 `,
-    'CCJS_C_ASYNC',
+    'INOX_C_ASYNC',
     {
       target: 'c'
     }
@@ -3727,82 +3727,82 @@ test('lowers Promise then catch chains to C runtime promises', () => {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_promise_chain_arrow_\d+\(void \*context, ccjs_value ccjs_value_input, ccjs_value \*out\);/
+    /static inox_status inox_promise_chain_arrow_\d+\(void \*context, inox_value inox_value_input, inox_value \*out\);/
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_promise_chain_arrow_\d+\(void \*context, ccjs_value ccjs_value_input, ccjs_value \*out\) \{\n {2}\(void\)context;\n {2}if \(out == 0\) return CCJS_ERR_TYPE;\n {2}\*out = ccjs_undefined_value\(\);\n {2}if \(ccjs_value_input\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n {2}double value = ccjs_value_input\.as\.number;/
+    /static inox_status inox_promise_chain_arrow_\d+\(void \*context, inox_value inox_value_input, inox_value \*out\) \{\n {2}\(void\)context;\n {2}if \(out == 0\) return INOX_ERR_TYPE;\n {2}\*out = inox_undefined_value\(\);\n {2}if \(inox_value_input\.tag != INOX_TAG_NUMBER\) return INOX_ERR_TYPE;\n {2}double value = inox_value_input\.as\.number;/
   )
-  assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 2\)\);/)
-  assert.match(result.code, /\*out = ccjs_number_value\(\(value \* 3\)\);/)
+  assert.match(result.code, /\*out = inox_number_value\(\(value \* 2\)\);/)
+  assert.match(result.code, /\*out = inox_number_value\(\(value \* 3\)\);/)
   assert.match(result.code, /const double doubled = \(value \* 2\);/)
-  assert.match(result.code, /\*out = ccjs_number_value\(doubled\);/)
+  assert.match(result.code, /\*out = inox_number_value\(doubled\);/)
   assert.match(
     result.code,
-    /if \(value > 5\) \{\n {4}\(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n {4}goto ccjs_promise_callback_cleanup;\n {2}\}/
+    /if \(value > 5\) \{\n {4}\(\*out\) = inox_number_value\(\(value \* 2\)\);\n {4}goto inox_promise_callback_cleanup;\n {2}\}/
   )
   assert.match(
     result.code,
-    /\(\*out\) = ccjs_number_value\(value\);\n {2}goto ccjs_promise_callback_cleanup;\nccjs_promise_callback_cleanup:/
+    /\(\*out\) = inox_number_value\(value\);\n {2}goto inox_promise_callback_cleanup;\ninox_promise_callback_cleanup:/
   )
   assert.match(
     result.code,
-    /switch \(\(int\)value\) \{\n {4}case \(int\)2: \{\n {6}\(\*out\) = ccjs_number_value\(\(value \* 10\)\);\n {6}goto ccjs_promise_callback_cleanup;/
+    /switch \(\(int\)value\) \{\n {4}case \(int\)2: \{\n {6}\(\*out\) = inox_number_value\(\(value \* 10\)\);\n {6}goto inox_promise_callback_cleanup;/
   )
-  assert.match(result.code, /\*out = ccjs_number_value\(96\);/)
+  assert.match(result.code, /\*out = inox_number_value\(96\);/)
   assert.match(result.code, /const double recovered = 97;/)
-  assert.match(result.code, /\*out = ccjs_number_value\(recovered\);/)
+  assert.match(result.code, /\*out = inox_number_value\(recovered\);/)
   assert.match(
     result.code,
-    /if \(1 == 1\) \{\n {4}\(\*out\) = ccjs_number_value\(98\);\n {4}goto ccjs_promise_callback_cleanup;\n {2}\}/
+    /if \(1 == 1\) \{\n {4}\(\*out\) = inox_number_value\(98\);\n {4}goto inox_promise_callback_cleanup;\n {2}\}/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &doubled\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &doubled\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &blockDoubled\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &blockDoubled\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &multiDoubled\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &multiDoubled\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &branchDoubled\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &branchDoubled\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &switchDoubled\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &switchDoubled\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &recovered\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_catch\(failed, inox_promise_chain_arrow_\d+, 0, 0, &recovered\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &blockRecovered\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_catch\(failed, inox_promise_chain_arrow_\d+, 0, 0, &blockRecovered\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &multiRecovered\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_catch\(failed, inox_promise_chain_arrow_\d+, 0, 0, &multiRecovered\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_catch\(failed, ccjs_promise_chain_arrow_\d+, 0, 0, &branchRecovered\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_catch\(failed, inox_promise_chain_arrow_\d+, 0, 0, &branchRecovered\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /while \(ccjs_promise_get_state\(doubled\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/
+    /while \(inox_promise_get_state\(doubled\) == INOX_PROMISE_PENDING && inox_loop_has_work\(&inox_loop\)\) \{/
   )
   assert.match(
     result.code,
-    /while \(ccjs_promise_get_state\(blockDoubled\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/
+    /while \(inox_promise_get_state\(blockDoubled\) == INOX_PROMISE_PENDING && inox_loop_has_work\(&inox_loop\)\) \{/
   )
   assert.match(
     result.code,
-    /while \(ccjs_promise_get_state\(recovered\) == CCJS_PROMISE_PENDING && ccjs_loop_has_work\(&ccjs_loop\)\) \{/
+    /while \(inox_promise_get_state\(recovered\) == INOX_PROMISE_PENDING && inox_loop_has_work\(&inox_loop\)\) \{/
   )
 })
 
@@ -3844,8 +3844,8 @@ test('lowers Promise callback loop bodies to C runtime promises', () => {
 
   assert.match(result.code, /while \(value > 0\) \{/)
   assert.match(result.code, /for \(double index = 0; \(index < value\); \(index = \(index \+ 1\)\)\) \{/)
-  assert.match(result.code, /goto ccjs_continue_\d+;/)
-  assert.match(result.code, /\(\*out\) = ccjs_number_value\(total\);\n {2}goto ccjs_promise_callback_cleanup;/)
+  assert.match(result.code, /goto inox_continue_\d+;/)
+  assert.match(result.code, /\(\*out\) = inox_number_value\(total\);\n {2}goto inox_promise_callback_cleanup;/)
 })
 
 
@@ -3892,62 +3892,62 @@ export async function main(): Promise<void> {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct inox_promise_chain_context_\d+ \{\n {2}double extra;\n\} inox_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}const char \*literal;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct inox_promise_chain_context_\d+ \{\n {2}const char \*literal;\n {2}double extra;\n\} inox_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}ccjs_value label;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct inox_promise_chain_context_\d+ \{\n {2}inox_value label;\n {2}double extra;\n\} inox_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}double ok;\n {2}ccjs_value user;\n {2}double extra;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct inox_promise_chain_context_\d+ \{\n {2}double ok;\n {2}inox_value user;\n {2}double extra;\n\} inox_promise_chain_context_\d+;/
   )
-  assert.match(result.code, /static void ccjs_promise_chain_context_\d+_finalize\(void \*context\);/)
+  assert.match(result.code, /static void inox_promise_chain_context_\d+_finalize\(void \*context\);/)
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}ccjs_release\(captured->label\);/
-  )
-  assert.match(
-    result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}ccjs_release\(captured->user\);/
+    /inox_promise_chain_context_\d+\* captured = \(inox_promise_chain_context_\d+\*\)context;\n {2}inox_release\(captured->label\);/
   )
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}double extra = captured->extra;/
+    /inox_promise_chain_context_\d+\* captured = \(inox_promise_chain_context_\d+\*\)context;\n {2}inox_release\(captured->user\);/
+  )
+  assert.match(
+    result.code,
+    /inox_promise_chain_context_\d+\* captured = \(inox_promise_chain_context_\d+\*\)context;\n {2}double extra = captured->extra;/
   )
   assert.match(result.code, /double ok = captured->ok;/)
   assert.match(result.code, /const char \*literal = captured->literal;/)
-  assert.match(result.code, /ccjs_string \*label = \(ccjs_string \*\)captured->label\.as\.ref;/)
-  assert.match(result.code, /ccjs_value user = captured->user;/)
-  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->literal = literal;/)
+  assert.match(result.code, /inox_string \*label = \(inox_string \*\)captured->label\.as\.ref;/)
+  assert.match(result.code, /inox_value user = captured->user;/)
+  assert.match(result.code, /inox_promise_callback_ctx_\d+->literal = literal;/)
   assert.match(
     result.code,
-    /ccjs_promise_callback_ctx_\d+->label\.tag = CCJS_TAG_STRING;\n {2}ccjs_promise_callback_ctx_\d+->label\.as\.ref = \(ccjs_ref \*\)&label->header;\n {2}ccjs_retain\(ccjs_promise_callback_ctx_\d+->label\);/
+    /inox_promise_callback_ctx_\d+->label\.tag = INOX_TAG_STRING;\n {2}inox_promise_callback_ctx_\d+->label\.as\.ref = \(inox_ref \*\)&label->header;\n {2}inox_retain\(inox_promise_callback_ctx_\d+->label\);/
   )
-  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->ok = ok;/)
+  assert.match(result.code, /inox_promise_callback_ctx_\d+->ok = ok;/)
   assert.match(
     result.code,
-    /ccjs_promise_callback_ctx_\d+->user = user;\n {2}ccjs_retain\(ccjs_promise_callback_ctx_\d+->user\);/
-  )
-  assert.match(
-    result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &raw\) != CCJS_OK\) \{/
+    /inox_promise_callback_ctx_\d+->user = user;\n {2}inox_retain\(inox_promise_callback_ctx_\d+->user\);/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &added\) != CCJS_OK\) \{/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, inox_promise_callback_ctx_\d+, inox_promise_chain_context_\d+_finalize, &raw\) != INOX_OK\) \{/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &logged\) != CCJS_OK\) \{/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, inox_promise_callback_ctx_\d+, inox_promise_chain_context_\d+_finalize, &added\) != INOX_OK\) \{/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &objectLogged\) != CCJS_OK\) \{/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, inox_promise_callback_ctx_\d+, inox_promise_chain_context_\d+_finalize, &logged\) != INOX_OK\) \{/
+  )
+  assert.match(
+    result.code,
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, inox_promise_callback_ctx_\d+, inox_promise_chain_context_\d+_finalize, &objectLogged\) != INOX_OK\) \{/
   )
 })
 
@@ -3963,7 +3963,7 @@ test('rejects mutable Promise callback captures in C with stable diagnostics', (
   })
 }
 `,
-    'CCJS_C_ASYNC',
+    'INOX_C_ASYNC',
     {
       target: 'c'
     }
@@ -3979,7 +3979,7 @@ test('rejects mutable Promise callback captures in C with stable diagnostics', (
   })
 }
 `,
-    'CCJS_C_ASYNC',
+    'INOX_C_ASYNC',
     {
       target: 'c'
     }
@@ -4000,7 +4000,7 @@ export async function main(): Promise<void> {
   console.log(await make())
 }
 `,
-    'CCJS_C_ASYNC',
+    'INOX_C_ASYNC',
     {
       target: 'c'
     }
@@ -4048,27 +4048,27 @@ test('lowers Promise callbacks with try catch finally to C runtime promises', ()
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_promise_chain_arrow_\d+\(void \*context, ccjs_value ccjs_value_input, ccjs_value \*out\) \{[\s\S]*ccjs_try_\d+_catch:/
+    /static inox_status inox_promise_chain_arrow_\d+\(void \*context, inox_value inox_value_input, inox_value \*out\) \{[\s\S]*inox_try_\d+_catch:/
   )
-  assert.match(result.code, /ccjs_error_active = 1;\n\s+goto ccjs_try_\d+_catch;/)
+  assert.match(result.code, /inox_error_active = 1;\n\s+goto inox_try_\d+_catch;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);/)
   assert.match(
     result.code,
-    /\(\*out\) = ccjs_number_value\(7\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/
+    /\(\*out\) = inox_number_value\(7\);\n\s+inox_return_active = 1;\n\s+goto inox_try_\d+_finally;/
   )
   assert.match(result.code, /printf\("%s\\n", "chain finally"\);/)
   assert.match(
     result.code,
-    /\(\*out\) = ccjs_number_value\(\(value \* 2\)\);\n\s+ccjs_return_active = 1;\n\s+goto ccjs_try_\d+_finally;/
+    /\(\*out\) = inox_number_value\(\(value \* 2\)\);\n\s+inox_return_active = 1;\n\s+goto inox_try_\d+_finally;/
   )
   assert.match(result.code, /printf\("%s\\n", "return finally"\);/)
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &handled\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &handled\) != INOX_OK\)\s+goto inox_cleanup;/
   )
   assert.match(
     result.code,
-    /if \(ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, 0, 0, &finalized\) != CCJS_OK\)\s+goto ccjs_cleanup;/
+    /if \(inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, 0, 0, &finalized\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
 
@@ -4092,25 +4092,25 @@ test('passes loop context to C Promise callbacks that schedule timers', () => {
 
   assert.match(
     result.code,
-    /typedef struct ccjs_promise_chain_context_\d+ \{\n {2}ccjs_loop \*ccjs_loop;\n\} ccjs_promise_chain_context_\d+;/
+    /typedef struct inox_promise_chain_context_\d+ \{\n {2}inox_loop \*inox_loop;\n\} inox_promise_chain_context_\d+;/
   )
   assert.match(
     result.code,
-    /ccjs_promise_chain_context_\d+\* captured = \(ccjs_promise_chain_context_\d+\*\)context;\n {2}if \(captured->ccjs_loop == 0\) return CCJS_ERR_TYPE;\n {2}ccjs_loop \*ccjs_loop = captured->ccjs_loop;/
+    /inox_promise_chain_context_\d+\* captured = \(inox_promise_chain_context_\d+\*\)context;\n {2}if \(captured->inox_loop == 0\) return INOX_ERR_TYPE;\n {2}inox_loop \*inox_loop = captured->inox_loop;/
   )
   assert.match(
     result.code,
-    /typedef struct ccjs_callback_context_\d+ \{\n {2}double value;\n\} ccjs_callback_context_\d+;/
+    /typedef struct inox_callback_context_\d+ \{\n {2}double value;\n\} inox_callback_context_\d+;/
   )
-  assert.match(result.code, /ccjs_promise_callback_ctx_\d+->ccjs_loop = ccjs_loop;/)
-  assert.match(result.code, /ccjs_callback_ctx_\d+->value = value;/)
+  assert.match(result.code, /inox_promise_callback_ctx_\d+->inox_loop = inox_loop;/)
+  assert.match(result.code, /inox_callback_ctx_\d+->value = value;/)
   assert.match(
     result.code,
-    /ccjs_loop_set_timeout\(ccjs_loop, 1, ccjs_timer_callback_run, ccjs_timer_ctx_\d+, ccjs_timer_callback_finalize, 0\)/
+    /inox_loop_set_timeout\(inox_loop, 1, inox_timer_callback_run, inox_timer_ctx_\d+, inox_timer_callback_finalize, 0\)/
   )
   assert.match(
     result.code,
-    /ccjs_promise_chain\(ccjs_promise_\d+, ccjs_promise_chain_arrow_\d+, 0, ccjs_promise_callback_ctx_\d+, ccjs_promise_chain_context_\d+_finalize, &pending\)/
+    /inox_promise_chain\(inox_promise_\d+, inox_promise_chain_arrow_\d+, 0, inox_promise_callback_ctx_\d+, inox_promise_chain_context_\d+_finalize, &pending\)/
   )
 })
 
@@ -4122,7 +4122,7 @@ test('rejects await outside async functions', () => {
   console.log(value)
 }
 `,
-    'CCJS_AWAIT_OUTSIDE_ASYNC'
+    'INOX_AWAIT_OUTSIDE_ASYNC'
   )
 })
 

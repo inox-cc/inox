@@ -353,7 +353,7 @@ export function emitCUnit(
   const needsNetRuntime: boolean = preludeRequirements.needsNetRuntime
   baseContext.processRuntime = needsProcessRuntime
   if (needsAsyncRuntime) {
-    baseContext.unhandledRejectionFlag = 'ccjs_unhandled_rejection'
+    baseContext.unhandledRejectionFlag = 'inox_unhandled_rejection'
   } else {
     baseContext.unhandledRejectionFlag = null
   }

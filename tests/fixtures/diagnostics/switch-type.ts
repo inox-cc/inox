@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_SWITCH_TYPE
+// @diagnostic INOX_SWITCH_TYPE
 
 export function main(): void {
   switch (1) {

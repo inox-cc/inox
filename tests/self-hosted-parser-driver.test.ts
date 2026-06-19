@@ -118,8 +118,8 @@ try {
     const exe = join(dir, 'selfhost-parser')
     const compile = await runCommand('cc', [
       '-std=c11',
-      '-DCCJS_LOOP_BACKEND_EMBEDDED=1',
-      '-DCCJS_TLS_BACKEND_NONE=1',
+      '-DINOX_LOOP_BACKEND_EMBEDDED=1',
+      '-DINOX_TLS_BACKEND_NONE=1',
       '-Iruntime/c/include',
       `-I${dir}`,
       ...generatedSources,

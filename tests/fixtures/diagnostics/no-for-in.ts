@@ -1,5 +1,5 @@
 // @expect diagnostic
-// @diagnostic CCJS_NO_FOR_IN
+// @diagnostic INOX_NO_FOR_IN
 
 export function main(): void {
   const value = { name: 'Ada' }

@@ -1,40 +1,40 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-#include "ccjs/array.h"
-#ifdef CCJS_DEBUG_MEMORY
-#include "ccjs/debug.h"
+#include "inox/array.h"
+#ifdef INOX_DEBUG_MEMORY
+#include "inox/debug.h"
 #endif
-#include "ccjs/string.h"
+#include "inox/string.h"
 
-static void ccjs_array_sort_key(ccjs_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
-  if (value.tag == CCJS_TAG_STRING && value.as.ref != 0) {
-    ccjs_string* string = (ccjs_string*)value.as.ref;
+static void inox_array_sort_key(inox_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
+  if (value.tag == INOX_TAG_STRING && value.as.ref != 0) {
+    inox_string* string = (inox_string*)value.as.ref;
     *bytes = string->bytes;
     *len = string->len;
     return;
   }
 
-  if (value.tag == CCJS_TAG_NUMBER) {
+  if (value.tag == INOX_TAG_NUMBER) {
     int written = snprintf(buffer, buffer_len, "%.15g", value.as.number);
     *bytes = buffer;
     *len = written < 0 ? 0 : (size_t)written;
     return;
   }
 
-  if (value.tag == CCJS_TAG_BOOL) {
+  if (value.tag == INOX_TAG_BOOL) {
     *bytes = value.as.boolean ? "true" : "false";
     *len = value.as.boolean ? 4 : 5;
     return;
   }
 
-  if (value.tag == CCJS_TAG_NULL) {
+  if (value.tag == INOX_TAG_NULL) {
     *bytes = "null";
     *len = 4;
     return;
   }
 
-  if (value.tag == CCJS_TAG_UNDEFINED) {
+  if (value.tag == INOX_TAG_UNDEFINED) {
     *bytes = "undefined";
     *len = 9;
     return;
@@ -44,9 +44,9 @@ static void ccjs_array_sort_key(ccjs_value value, char* buffer, size_t buffer_le
   *len = 0;
 }
 
-static int ccjs_array_sort_compare(const void* left_ptr, const void* right_ptr) {
-  const ccjs_value* left = (const ccjs_value*)left_ptr;
-  const ccjs_value* right = (const ccjs_value*)right_ptr;
+static int inox_array_sort_compare(const void* left_ptr, const void* right_ptr) {
+  const inox_value* left = (const inox_value*)left_ptr;
+  const inox_value* right = (const inox_value*)right_ptr;
   char left_buffer[64];
   char right_buffer[64];
   const char* left_bytes = "";
@@ -54,8 +54,8 @@ static int ccjs_array_sort_compare(const void* left_ptr, const void* right_ptr) 
   size_t left_len = 0;
   size_t right_len = 0;
 
-  ccjs_array_sort_key(*left, left_buffer, sizeof(left_buffer), &left_bytes, &left_len);
-  ccjs_array_sort_key(*right, right_buffer, sizeof(right_buffer), &right_bytes, &right_len);
+  inox_array_sort_key(*left, left_buffer, sizeof(left_buffer), &left_bytes, &left_len);
+  inox_array_sort_key(*right, right_buffer, sizeof(right_buffer), &right_bytes, &right_len);
 
   size_t min_len = left_len < right_len ? left_len : right_len;
   int result = memcmp(left_bytes, right_bytes, min_len);
@@ -75,13 +75,13 @@ static int ccjs_array_sort_compare(const void* left_ptr, const void* right_ptr) 
   return 0;
 }
 
-static ccjs_status ccjs_array_reserve(ccjs_array* array, size_t cap) {
+static inox_status inox_array_reserve(inox_array* array, size_t cap) {
   if (array == 0 || array->header.allocator == 0 || array->header.allocator->realloc == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
   if (cap <= array->cap) {
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   size_t next_cap = array->cap == 0 ? 4 : array->cap;
@@ -90,99 +90,99 @@ static ccjs_status ccjs_array_reserve(ccjs_array* array, size_t cap) {
     next_cap *= 2;
   }
 
-  ccjs_value* items = array->header.allocator->realloc(
-    array->header.allocator->user, array->items, sizeof(ccjs_value) * array->cap, sizeof(ccjs_value) * next_cap,
-    _Alignof(ccjs_value)
+  inox_value* items = array->header.allocator->realloc(
+    array->header.allocator->user, array->items, sizeof(inox_value) * array->cap, sizeof(inox_value) * next_cap,
+    _Alignof(inox_value)
   );
 
   if (items == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   array->items = items;
 
   for (size_t index = array->cap; index < next_cap; index += 1) {
-    array->items[index] = ccjs_undefined_value();
+    array->items[index] = inox_undefined_value();
   }
 
   array->cap = next_cap;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_new(ccjs_allocator* allocator, size_t len, ccjs_value* out) {
+inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || out == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* array = allocator->alloc(allocator->user, sizeof(ccjs_array), _Alignof(ccjs_array));
+  inox_array* array = allocator->alloc(allocator->user, sizeof(inox_array), _Alignof(inox_array));
 
   if (array == 0) {
-    *out = ccjs_undefined_value();
-    return CCJS_ERR_OOM;
+    *out = inox_undefined_value();
+    return INOX_ERR_OOM;
   }
 
-  array->items = len == 0 ? 0 : allocator->alloc(allocator->user, sizeof(ccjs_value) * len, _Alignof(ccjs_value));
+  array->items = len == 0 ? 0 : allocator->alloc(allocator->user, sizeof(inox_value) * len, _Alignof(inox_value));
 
   if (len > 0 && array->items == 0) {
-    *out = ccjs_undefined_value();
+    *out = inox_undefined_value();
     if (allocator->free != 0) {
-      allocator->free(allocator->user, array, sizeof(ccjs_array), _Alignof(ccjs_array));
+      allocator->free(allocator->user, array, sizeof(inox_array), _Alignof(inox_array));
     }
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
-  array->header.kind = CCJS_REF_ARRAY;
+  array->header.kind = INOX_REF_ARRAY;
   array->header.ref_count = 1;
   array->header.flags = 0;
-  array->header.size = sizeof(ccjs_array);
-  array->header.align = _Alignof(ccjs_array);
+  array->header.size = sizeof(inox_array);
+  array->header.align = _Alignof(inox_array);
   array->header.allocator = allocator;
-  ccjs_ref_init_weak(&array->header);
+  inox_ref_init_weak(&array->header);
   array->len = len;
   array->cap = len;
 
   for (size_t index = 0; index < len; index += 1) {
-    array->items[index] = ccjs_undefined_value();
+    array->items[index] = inox_undefined_value();
   }
 
-  out->tag = CCJS_TAG_ARRAY;
+  out->tag = INOX_TAG_ARRAY;
   out->as.ref = &array->header;
-#ifdef CCJS_DEBUG_MEMORY
-  ccjs_debug_memory_record_ref_created(CCJS_REF_ARRAY);
+#ifdef INOX_DEBUG_MEMORY
+  inox_debug_memory_record_ref_created(INOX_REF_ARRAY);
 #endif
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_push(ccjs_value array, ccjs_value value) {
-  if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_push(inox_value array, inox_value value) {
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
-  ccjs_status status = ccjs_array_reserve(instance, instance->len + 1);
+  inox_array* instance = (inox_array*)array.as.ref;
+  inox_status status = inox_array_reserve(instance, instance->len + 1);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_retain(value);
+  inox_retain(value);
   instance->items[instance->len] = value;
   instance->len += 1;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_unshift(ccjs_value array, ccjs_value value, size_t* out) {
-  if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out) {
+  if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
-  ccjs_status status = ccjs_array_reserve(instance, instance->len + 1);
+  inox_array* instance = (inox_array*)array.as.ref;
+  inox_status status = inox_array_reserve(instance, instance->len + 1);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
@@ -190,138 +190,138 @@ ccjs_status ccjs_array_unshift(ccjs_value array, ccjs_value value, size_t* out) 
     instance->items[index] = instance->items[index - 1];
   }
 
-  ccjs_retain(value);
+  inox_retain(value);
   instance->items[0] = value;
   instance->len += 1;
   *out = instance->len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_get(ccjs_value array, size_t index, ccjs_value* out) {
-  if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_get(inox_value array, size_t index, inox_value* out) {
+  if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  inox_array* instance = (inox_array*)array.as.ref;
 
   if (index >= instance->len) {
-    *out = ccjs_undefined_value();
-    return CCJS_ERR_FIELD;
+    *out = inox_undefined_value();
+    return INOX_ERR_FIELD;
   }
 
   *out = instance->items[index];
-  ccjs_retain(*out);
+  inox_retain(*out);
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_len(ccjs_value array, size_t* out) {
-  if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_len(inox_value array, size_t* out) {
+  if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  inox_array* instance = (inox_array*)array.as.ref;
   *out = instance->len;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_pop(ccjs_value array, ccjs_value* out) {
-  if (out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_pop(inox_value array, inox_value* out) {
+  if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  inox_array* instance = (inox_array*)array.as.ref;
 
   if (instance->len == 0) {
-    *out = ccjs_null_value();
-    return CCJS_OK;
+    *out = inox_null_value();
+    return INOX_OK;
   }
 
   instance->len -= 1;
   *out = instance->items[instance->len];
-  instance->items[instance->len] = ccjs_undefined_value();
+  instance->items[instance->len] = inox_undefined_value();
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_set(ccjs_value array, size_t index, ccjs_value value) {
-  if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_set(inox_value array, size_t index, inox_value value) {
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  inox_array* instance = (inox_array*)array.as.ref;
 
   if (index >= instance->len) {
-    return CCJS_ERR_FIELD;
+    return INOX_ERR_FIELD;
   }
 
-  ccjs_retain(value);
-  ccjs_release(instance->items[index]);
+  inox_retain(value);
+  inox_release(instance->items[index]);
   instance->items[index] = value;
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-static ccjs_status ccjs_array_join_part(ccjs_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
+static inox_status inox_array_join_part(inox_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
   if (bytes == 0 || len == 0) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  if (value.tag == CCJS_TAG_STRING && value.as.ref != 0) {
-    ccjs_string* string = (ccjs_string*)value.as.ref;
+  if (value.tag == INOX_TAG_STRING && value.as.ref != 0) {
+    inox_string* string = (inox_string*)value.as.ref;
     *bytes = string->bytes;
     *len = string->len;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  if (value.tag == CCJS_TAG_NUMBER) {
+  if (value.tag == INOX_TAG_NUMBER) {
     int written = snprintf(buffer, buffer_len, "%.17g", value.as.number);
 
     if (written < 0 || (size_t)written >= buffer_len) {
-      return CCJS_ERR_TYPE;
+      return INOX_ERR_TYPE;
     }
 
     *bytes = buffer;
     *len = (size_t)written;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  if (value.tag == CCJS_TAG_BOOL) {
+  if (value.tag == INOX_TAG_BOOL) {
     *bytes = value.as.boolean ? "true" : "false";
     *len = value.as.boolean ? 4 : 5;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  if (value.tag == CCJS_TAG_NULL || value.tag == CCJS_TAG_UNDEFINED) {
+  if (value.tag == INOX_TAG_NULL || value.tag == INOX_TAG_UNDEFINED) {
     *bytes = "";
     *len = 0;
-    return CCJS_OK;
+    return INOX_OK;
   }
 
-  return CCJS_ERR_TYPE;
+  return INOX_ERR_TYPE;
 }
 
-ccjs_status ccjs_array_join(
-  ccjs_allocator* allocator,
-  ccjs_value array,
+inox_status inox_array_join(
+  inox_allocator* allocator,
+  inox_value array,
   const char* separator_bytes,
   size_t separator_len,
-  ccjs_value* out
+  inox_value* out
 ) {
   if (out != 0) {
-    *out = ccjs_undefined_value();
+    *out = inox_undefined_value();
   }
 
   if (
     allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || out == 0 ||
-    array.tag != CCJS_TAG_ARRAY || array.as.ref == 0 || (separator_bytes == 0 && separator_len != 0)
+    array.tag != INOX_TAG_ARRAY || array.as.ref == 0 || (separator_bytes == 0 && separator_len != 0)
   ) {
-    return CCJS_ERR_TYPE;
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  inox_array* instance = (inox_array*)array.as.ref;
   const char* separator = separator_bytes == 0 ? "" : separator_bytes;
   size_t total_len = 0;
 
@@ -329,35 +329,35 @@ ccjs_status ccjs_array_join(
     char buffer[64];
     const char* bytes = "";
     size_t len = 0;
-    ccjs_status status = ccjs_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
+    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       return status;
     }
 
     if (index > 0) {
       if (total_len > (size_t)-1 - separator_len) {
-        return CCJS_ERR_OOM;
+        return INOX_ERR_OOM;
       }
 
       total_len += separator_len;
     }
 
     if (total_len > (size_t)-1 - len) {
-      return CCJS_ERR_OOM;
+      return INOX_ERR_OOM;
     }
 
     total_len += len;
   }
 
   if (total_len == 0) {
-    return ccjs_string_from_literal(allocator, "", 0, out);
+    return inox_string_from_literal(allocator, "", 0, out);
   }
 
   char* joined = allocator->alloc(allocator->user, total_len, _Alignof(char));
 
   if (joined == 0) {
-    return CCJS_ERR_OOM;
+    return INOX_ERR_OOM;
   }
 
   size_t offset = 0;
@@ -366,9 +366,9 @@ ccjs_status ccjs_array_join(
     char buffer[64];
     const char* bytes = "";
     size_t len = 0;
-    ccjs_status status = ccjs_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
+    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
 
-    if (status != CCJS_OK) {
+    if (status != INOX_OK) {
       allocator->free(allocator->user, joined, total_len, _Alignof(char));
       return status;
     }
@@ -384,18 +384,18 @@ ccjs_status ccjs_array_join(
     }
   }
 
-  ccjs_status status = ccjs_string_from_literal(allocator, joined, total_len, out);
+  inox_status status = inox_string_from_literal(allocator, joined, total_len, out);
   allocator->free(allocator->user, joined, total_len, _Alignof(char));
 
   return status;
 }
 
-ccjs_status ccjs_array_slice(ccjs_allocator* allocator, ccjs_value array, size_t start, size_t end, ccjs_value* out) {
-  if (allocator == 0 || out == 0 || array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) {
+  if (allocator == 0 || out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* source = (ccjs_array*)array.as.ref;
+  inox_array* source = (inox_array*)array.as.ref;
 
   if (start > source->len) {
     start = source->len;
@@ -409,41 +409,41 @@ ccjs_status ccjs_array_slice(ccjs_allocator* allocator, ccjs_value array, size_t
     end = start;
   }
 
-  ccjs_status status = ccjs_array_new(allocator, end - start, out);
+  inox_status status = inox_array_new(allocator, end - start, out);
 
-  if (status != CCJS_OK) {
+  if (status != INOX_OK) {
     return status;
   }
 
-  ccjs_array* target = (ccjs_array*)out->as.ref;
+  inox_array* target = (inox_array*)out->as.ref;
 
   for (size_t index = 0; index < target->len; index += 1) {
-    ccjs_value value = source->items[start + index];
+    inox_value value = source->items[start + index];
 
-    ccjs_retain(value);
-    ccjs_release(target->items[index]);
+    inox_retain(value);
+    inox_release(target->items[index]);
     target->items[index] = value;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }
 
-ccjs_status ccjs_array_sort(ccjs_value array) {
-  if (array.tag != CCJS_TAG_ARRAY || array.as.ref == 0) {
-    return CCJS_ERR_TYPE;
+inox_status inox_array_sort(inox_value array) {
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    return INOX_ERR_TYPE;
   }
 
-  ccjs_array* instance = (ccjs_array*)array.as.ref;
+  inox_array* instance = (inox_array*)array.as.ref;
 
   if (instance->len < 2) {
-    return CCJS_OK;
+    return INOX_OK;
   }
 
   for (size_t index = 1; index < instance->len; index += 1) {
-    ccjs_value value = instance->items[index];
+    inox_value value = instance->items[index];
     size_t scan = index;
 
-    while (scan > 0 && ccjs_array_sort_compare(&instance->items[scan - 1], &value) > 0) {
+    while (scan > 0 && inox_array_sort_compare(&instance->items[scan - 1], &value) > 0) {
       instance->items[scan] = instance->items[scan - 1];
       scan -= 1;
     }
@@ -451,5 +451,5 @@ ccjs_status ccjs_array_sort(ccjs_value array) {
     instance->items[scan] = value;
   }
 
-  return CCJS_OK;
+  return INOX_OK;
 }

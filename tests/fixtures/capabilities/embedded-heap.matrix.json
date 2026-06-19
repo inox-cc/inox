@@ -2,7 +2,7 @@
   "targets": {
     "c": {
       "expect": "diagnostic",
-      "diagnostic": "CCJS_CAPABILITY",
+      "diagnostic": "INOX_CAPABILITY",
       "options": {
         "profile": "embedded"
       }

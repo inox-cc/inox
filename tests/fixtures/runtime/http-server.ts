@@ -1,6 +1,6 @@
 // @targets c
 // @expect diagnostic
-// @diagnostic CCJS_NOT_IMPLEMENTED
+// @diagnostic INOX_NOT_IMPLEMENTED
 
 const server = http.createServer((request, response) => {
   response.end('ok')

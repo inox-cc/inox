@@ -811,7 +811,7 @@ function lowerArrayOutputMethodExpressionToTemp(expression: LowerNode, context: 
     return null
   }
 
-  const name = nextLowerName(context, 'ccjs_array_expr')
+  const name = nextLowerName(context, 'inox_array_expr')
   const target = createArrayTempDeclaration(name, expression, expression.loc)
   const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
 
@@ -836,7 +836,7 @@ function lowerArrayFindMethodExpressionToTemp(expression: LowerNode, context: Lo
     return null
   }
 
-  const name = nextLowerName(context, 'ccjs_find_expr')
+  const name = nextLowerName(context, 'inox_find_expr')
   const target = createFindTempDeclaration(name, expression, expression.loc)
   const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
 
@@ -878,7 +878,7 @@ function lowerArrayMethodReceiver(receiver: LowerNode, context: LowerContext): A
   }
 
   if (receiver.type === 'ArrayLiteral') {
-    const name = nextLowerName(context, 'ccjs_array_source')
+    const name = nextLowerName(context, 'inox_array_source')
     const declaration = createArrayTempDeclaration(name, receiver, receiver.loc)
 
     return {
@@ -1383,10 +1383,10 @@ function lowerArrayFilterVariableDeclaration(
     return null
   }
 
-  const indexName = nextLowerName(context, 'ccjs_filter_index')
+  const indexName = nextLowerName(context, 'inox_filter_index')
   const valueParam = arrowCallbackParam(callback, 0)
   const indexParam = arrowCallbackParam(callback, 1)
-  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'ccjs_filter_item')
+  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'inox_filter_item')
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   let predicate: LowerNode | null = null
 
@@ -1443,10 +1443,10 @@ function lowerArrayFindVariableDeclaration(
     return null
   }
 
-  const indexName = nextLowerName(context, 'ccjs_find_index')
+  const indexName = nextLowerName(context, 'inox_find_index')
   const valueParam = arrowCallbackParam(callback, 0)
   const indexParam = arrowCallbackParam(callback, 1)
-  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'ccjs_find_item')
+  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'inox_find_item')
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   let predicate: LowerNode | null = null
 
@@ -1514,10 +1514,10 @@ function lowerArrayMapVariableDeclaration(
     return null
   }
 
-  const indexName = nextLowerName(context, 'ccjs_map_index')
+  const indexName = nextLowerName(context, 'inox_map_index')
   const valueParam = arrowCallbackParam(callback, 0)
   const indexParam = arrowCallbackParam(callback, 1)
-  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'ccjs_map_item')
+  const itemName = arrayMethodItemName(valueParam, statement.name, context, 'inox_map_item')
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   const mappedValue = lowerStatementExpression(replaceExpressionReferences(mapped, replacements), context)
   const mappedElementType = arrayMapElementType(statement, init, mappedValue)
