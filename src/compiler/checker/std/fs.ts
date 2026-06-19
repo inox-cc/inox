@@ -7,6 +7,38 @@ export function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
   return fsRuntimeCallInfoFromPath(memberExpressionPath(callee))
 }
 
+export function fsRuntimeCallInfoFromImportSymbol(callee: AnyNode, symbol: SymbolInfo | null): FsRuntimeCallInfo | null {
+  if (callee.type !== 'Reference' || callee.path.length !== 1 || symbol == null || symbol.kind !== 'import') {
+    return null
+  }
+
+  if (!isFsRuntimeImportSource(symbol.importSource) || symbol.importedName == null) {
+    return null
+  }
+
+  const root = callee.path[0]
+  let path = [root, symbol.importedName]
+
+  if (symbol.importSource === 'node:fs/promises') {
+    path = [root, 'promises', symbol.importedName]
+  }
+
+  const info = fsRuntimeCallInfoFromPath(path)
+
+  if (info == null) {
+    return null
+  }
+
+  return {
+    method: info.method,
+    nodeName: info.nodeName,
+    path: [root],
+    root,
+    viaPromises: info.viaPromises,
+    mode: info.mode
+  }
+}
+
 export function removedFsRuntimeMethodInfo(callee: AnyNode): RemovedFsRuntimeMethodInfo | null {
   return removedFsRuntimeMethodInfoFromPath(memberExpressionPath(callee))
 }

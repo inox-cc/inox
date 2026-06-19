@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
 import { readFileSync as readNodeFileSync } from 'node:fs'
-import { readFile as readNodeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, normalize, posix, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { CompilerHost, CompilerHostPosixPath } from './host.ts'
@@ -48,7 +47,13 @@ class NodeCompilerHost {
   }
 
   readFile(path: string): Promise<string> {
-    return readNodeFile(path, 'utf8')
+    const source = this.readFileSync(path)
+
+    if (source != null) {
+      return Promise.resolve(source)
+    }
+
+    return Promise.reject(new Error(`source not found: ${path}`))
   }
 
   readFileSync(path: string): string | null {

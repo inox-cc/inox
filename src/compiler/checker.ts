@@ -25,7 +25,12 @@ import {
   urlObjectShape,
   urlSearchParamsObjectShape
 } from './checker/builtins.ts'
-import { fsRuntimeCallInfo, isFsRuntimeImportSymbol, removedFsRuntimeMethodInfo } from './checker/std/fs.ts'
+import {
+  fsRuntimeCallInfo,
+  fsRuntimeCallInfoFromImportSymbol,
+  isFsRuntimeImportSymbol,
+  removedFsRuntimeMethodInfo
+} from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
 import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
@@ -6474,10 +6479,24 @@ class Checker {
       return 'unknown'
     }
 
-    const info = fsRuntimeCallInfo(expression.callee)
+    let info = fsRuntimeCallInfo(expression.callee)
 
-    if (info == null || !this.isFsRuntimeRoot(info)) {
-      return null
+    if (info != null) {
+      if (!this.isFsRuntimeRoot(info)) {
+        return null
+      }
+    } else {
+      let symbol: SymbolInfo | null = null
+
+      if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+        symbol = this.scope.resolve(expression.callee.path[0])
+      }
+
+      info = fsRuntimeCallInfoFromImportSymbol(expression.callee, symbol)
+
+      if (info == null) {
+        return null
+      }
     }
 
     const method = info.method

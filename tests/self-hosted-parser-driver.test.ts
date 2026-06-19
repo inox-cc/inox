@@ -36,6 +36,37 @@ const runtimeSources = [
   'runtime/c/src/url/url.c'
 ]
 
+test('emits C modules for the inox compileSource facade driver', { timeout: 180_000 }, async () => {
+  const files = await readCompilerSources()
+  files.push({
+    path: '/project/selfhost-compile-driver.ts',
+    source: `import { compileSource } from './src/compiler/index.ts'
+
+try {
+  const result = compileSource('const value: number = 1\\n', {
+    target: 'c',
+    loopBackend: 'libuv',
+    tlsBackend: 'boringssl'
+  })
+
+  console.log(result.code.length)
+} catch (error) {
+  console.log('compile failed')
+}
+`
+  })
+
+  const modules = await compileMemoryPackageToCModules('/project/selfhost-compile-driver.ts', files, {
+    sourceRoot: '/project',
+    target: 'c',
+    loopBackend: 'libuv',
+    tlsBackend: 'boringssl'
+  })
+
+  assert.ok(modules.files.length > 0)
+  assert.ok(modules.files.some((file) => file.path === 'selfhost-compile-driver.c'))
+})
+
 test('links and runs the inox self-hosted parser driver', { timeout: 180_000 }, async (t) => {
   const cc = await runCommand('cc', ['--version'])
 

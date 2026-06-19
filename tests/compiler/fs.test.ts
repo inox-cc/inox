@@ -417,6 +417,34 @@ export function main(): void {
   assert.match(c.code, /ccjs_fs_write_file\(&ccjs_loop, "\/tmp\/out\.txt", 12, "saved", 5, &ccjs_promise_\d+\)/)
 })
 
+test('lowers named node:fs imports to the fs runtime', () => {
+  const c = compileSource(
+    `import { readFileSync as readNodeFileSync } from 'node:fs'
+import { readFile as readNodeFile } from 'node:fs/promises'
+
+export async function load(path: string): Promise<string> {
+  const text = readNodeFileSync(path, 'utf8')
+  const asyncText = await readNodeFile(path, 'utf8')
+
+  return text + asyncText
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const load = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'load')
+  const text = load?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'text')
+  const asyncText = load?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'asyncText')
+
+  assert.equal(text?.valueType, 'string')
+  assert.equal(text?.init?.fsRuntimeMethod, 'readFileSync')
+  assert.equal(asyncText?.valueType, 'string')
+  assert.equal(asyncText?.init?.argument?.fsRuntimeMethod, 'readFile')
+  assert.match(c.code, /ccjs_fs_read_file_sync\(&ccjs_default_allocator, path->bytes, path->len, &ccjs_fs_value_\d+\)/)
+  assert.match(c.code, /ccjs_fs_read_file\(&ccjs_loop, path->bytes, path->len, &ccjs_promise_\d+\)/)
+})
+
 
 test('maps Node fs binary reads to Buffer-compatible C runtime calls', () => {
   const c = compileSource(
