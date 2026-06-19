@@ -107,7 +107,7 @@ async function checkFixtureStdout(file: string, rel: string, target: CompileTarg
 }
 
 async function canRunTarget(target: CompileTarget): Promise<boolean> {
-  if (cRunnerAvailable == null) {
+  if (!cRunnerAvailable) {
     try {
       cRunnerAvailable = (await runCommand('cc', ['--version'])).code === 0
     } catch {

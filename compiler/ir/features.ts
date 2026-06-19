@@ -13,7 +13,6 @@ import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
-import { isNullish, isPresent } from '../nullish.ts'
 
 type FeatureRawNode = AnyNode
 
@@ -603,14 +602,14 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     features.add('collections')
   }
 
-  if (node.type === 'NewExpression' && isPresent(runtimeConstructorName(node))) {
+  if (node.type === 'NewExpression' && runtimeConstructorName(node)) {
     features.add('runtime-values')
 
-    if (isPresent(collectionConstructorName(node))) {
+    if (collectionConstructorName(node)) {
       features.add('collections')
-    } else if (isPresent(binaryConstructorName(node))) {
+    } else if (binaryConstructorName(node)) {
       features.add('binary')
-    } else if (isPresent(objectConstructorName(node))) {
+    } else if (objectConstructorName(node)) {
       features.add('objects')
     }
   }
@@ -746,52 +745,52 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
 function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): void {
   const callee = expression.callee
 
-  if (callee !== null && typeof callee !== 'undefined' && isPresent(timeRuntimeCallName(callee))) {
+  if (callee !== null && typeof callee !== 'undefined' && timeRuntimeCallName(callee)) {
     features.add('clocks')
   }
 
   if (
     (expression.fsRuntimeMethod !== null && typeof expression.fsRuntimeMethod !== 'undefined') ||
-    isPresent(fsRuntimeMethodForPath(memberExpressionPath(callee)))
+    fsRuntimeMethodForPath(memberExpressionPath(callee))
   ) {
     features.add('fs')
   }
 
-  if (callee !== null && typeof callee !== 'undefined' && isPresent(jsonRuntimeCallName(callee))) {
+  if (callee !== null && typeof callee !== 'undefined' && jsonRuntimeCallName(callee)) {
     features.add('json')
     features.add('runtime-values')
   }
 
-  if (isPresent(cryptoRuntimeMethodName(expression))) {
+  if (cryptoRuntimeMethodName(expression)) {
     features.add('crypto')
     features.add('runtime-values')
   }
 
-  if (isPresent(debugRuntimeMethodName(expression))) {
+  if (debugRuntimeMethodName(expression)) {
     features.add('debug-memory')
     features.add('objects')
     features.add('runtime-values')
   }
 
-  if (isPresent(pathRuntimeMethodName(expression))) {
+  if (pathRuntimeMethodName(expression)) {
     features.add('path')
     features.add('runtime-values')
     features.add('string-bytes')
   }
 
-  if (isPresent(urlRuntimeMethodName(expression))) {
+  if (urlRuntimeMethodName(expression)) {
     features.add('url')
     features.add('runtime-values')
     features.add('string-bytes')
   }
 
-  if (isPresent(processRuntimeMethodName(expression))) {
+  if (processRuntimeMethodName(expression)) {
     features.add('process')
     features.add('runtime-values')
     features.add('string-bytes')
   }
 
-  if (isPresent(childProcessRuntimeMethodName(expression))) {
+  if (childProcessRuntimeMethodName(expression)) {
     features.add('child-process')
     features.add('runtime-values')
     features.add('string-bytes')
@@ -802,7 +801,7 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     features.add('string-bytes')
   }
 
-  if (isPresent(timerRuntimeCallName(expression))) {
+  if (timerRuntimeCallName(expression)) {
     features.add('timers')
   }
 
@@ -841,7 +840,7 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     features.add('numeric-casts')
   }
 
-  if (isPresent(binaryRuntimeMethodName(expression))) {
+  if (binaryRuntimeMethodName(expression)) {
     features.add('binary')
     features.add('runtime-values')
   }
@@ -869,7 +868,7 @@ function plainFunctionCallHasStringArgument(expression: FeatureNode): boolean {
     isStringConversionCall(expression) ||
     isNumberConversionCall(expression) ||
     isNumericCastCall(expression) ||
-    isPresent(timerRuntimeCallName(expression))
+    timerRuntimeCallName(expression)
   ) {
     return false
   }
@@ -954,7 +953,7 @@ function binaryConstructorName(expression: FeatureNode): string | null {
 function isBinaryArrayLiteralConstructor(expression: FeatureNode): boolean {
   const args = expression.args
 
-  if (isNullish(binaryConstructorName(expression)) || args === null || typeof args === 'undefined') {
+  if (!binaryConstructorName(expression) || args === null || typeof args === 'undefined') {
     return false
   }
 

@@ -17,7 +17,6 @@ import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type TimerFunctionContext = {
   cleanupEnabled: boolean
@@ -81,7 +80,7 @@ export function isTimerStartCallExpression(expression: AnyNode | null | undefine
     return false
   }
 
-  return isPresent(cTimerStartCallName(expression.callee)) || timerRuntimeMethodStartsWithSet(expression)
+  return !!cTimerStartCallName(expression.callee) || timerRuntimeMethodStartsWithSet(expression)
 }
 
 function timerStartCallNameFor(method: string | null): string | null {
@@ -209,7 +208,7 @@ export function emitTimerVariableDeclaration(
       init !== null &&
       typeof init !== 'undefined' &&
       init.type === 'CallExpression' &&
-      isPresent(cTimerClearCallName(init.callee))
+      cTimerClearCallName(init.callee)
     ) {
       context.diagnostics.push(
         diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls return void and cannot initialize a value', statement.loc)
@@ -380,7 +379,7 @@ export function emitPreparedTimerHandleExpression(
     expression !== null &&
     typeof expression !== 'undefined' &&
     expression.type === 'CallExpression' &&
-    (isPresent(cTimerStartCallName(expression.callee)) || timerRuntimeMethodStartsWithSet(expression))
+    (!!cTimerStartCallName(expression.callee) || timerRuntimeMethodStartsWithSet(expression))
   ) {
     const call = emitPreparedTimerCallExpression(expression, context, dependencies, {
       asValue: true

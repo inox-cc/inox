@@ -8,7 +8,6 @@ import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
-import { isPresent } from '../nullish.ts'
 
 type CGlobalNameSet = Set<string>
 
@@ -46,7 +45,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
   const path = joinStrings(usage.path, '.')
 
   return (
-    isPresent(timeRuntimeMethodNameFromPath(usage.path)) ||
+    !!timeRuntimeMethodNameFromPath(usage.path) ||
     path === 'Error' ||
     path === 'Promise' ||
     path === 'Promise.resolve' ||
@@ -89,7 +88,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'fs.constants.R_OK' ||
     path === 'fs.constants.W_OK' ||
     path === 'fs.constants.X_OK' ||
-    isPresent(jsonRuntimeMethodNameFromPath(usage.path)) ||
+    !!jsonRuntimeMethodNameFromPath(usage.path) ||
     isBinaryGlobalUsagePath(usage.path) ||
     path === 'clearImmediate' ||
     path === 'clearInterval' ||
@@ -180,7 +179,7 @@ export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
 }
 
 export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
-  return isPresent(mathRuntimeMethodNameFromPath(usage.path))
+  return !!mathRuntimeMethodNameFromPath(usage.path)
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): void {

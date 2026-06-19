@@ -191,7 +191,7 @@ export function main(): void {
       graph.modules.map((module) => module.path),
       [dep, entry]
     )
-    assert.ok(graph.modules.every((module) => module.hir != null && module.ir != null))
+    assert.ok(graph.modules.every((module) => module.hir && module.ir))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -230,7 +230,7 @@ export function main(): void {
     graph.modules.map((module) => module.path),
     ['/project/dep.ts', '/project/index.ts']
   )
-  assert.ok(graph.modules.every((module) => module.hir != null && module.ir != null))
+  assert.ok(graph.modules.every((module) => module.hir && module.ir))
 })
 
 test('emits C module files through an in-memory compiler host', async () => {

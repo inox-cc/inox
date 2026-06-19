@@ -1,5 +1,4 @@
 import type { CompilerHost } from '../host.ts'
-import { isPresent } from '../nullish.ts'
 
 const sourceExtensions = ['', '.ts', '.js']
 
@@ -28,7 +27,7 @@ export function resolveExistingSource(path: string, host: CompilerHost): string 
   for (let index = 0; index < candidates.length; index = index + 1) {
     const candidate = candidates[index]
 
-    if (isPresent(host.readFileSync(candidate))) {
+    if (host.readFileSync(candidate)) {
       return candidate
     }
   }

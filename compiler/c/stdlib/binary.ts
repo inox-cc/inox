@@ -15,7 +15,6 @@ import type {
   CPreparedStatement as PreparedStatement,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 export type BinaryLoweringDependencies = {
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
@@ -97,7 +96,7 @@ export function isBinaryConstructorExpression(expression: AnyNode): boolean {
   return (
     expression.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
-    isPresent(binaryConstructorNameFromPath(expression.callee.path)) &&
+    !!binaryConstructorNameFromPath(expression.callee.path) &&
     expression.valueType === 'bytes'
   )
 }

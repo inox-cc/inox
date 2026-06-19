@@ -24,7 +24,7 @@ export function runCommand(
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd ?? rootDir,
-      env: options.env == null ? undefined : { ...process.env, ...options.env },
+      env: options.env === null || typeof options.env === 'undefined' ? undefined : { ...process.env, ...options.env },
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let stdout = ''

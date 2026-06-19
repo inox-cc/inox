@@ -1,4 +1,3 @@
-import { isPresent } from '../nullish.ts'
 export type CValueTypeInput = string | null | undefined
 
 export type CReturnTypeContext = {
@@ -13,7 +12,7 @@ export type CNullableScalarParam = {
 
 export type CNullableScalarParamInput = CNullableScalarParam | null | undefined
 
-type CPresentNullableScalarParam = {
+type CNullableScalarParamRecord = {
   nullable: boolean
   valueType?: string
 }
@@ -174,7 +173,7 @@ export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {
 }
 
 export function isRuntimeNullableType(valueType: CValueTypeInput): boolean {
-  return isPresent(cRuntimeValueTag(valueType))
+  return !!cRuntimeValueTag(valueType)
 }
 
 export function isNullableScalarParam(param: CNullableScalarParamInput): boolean {
@@ -182,10 +181,10 @@ export function isNullableScalarParam(param: CNullableScalarParamInput): boolean
     return false
   }
 
-  return isPresentNullableScalarParam(param as CPresentNullableScalarParam)
+  return isNullableScalarParamRecord(param as CNullableScalarParamRecord)
 }
 
-function isPresentNullableScalarParam(param: CPresentNullableScalarParam): boolean {
+function isNullableScalarParamRecord(param: CNullableScalarParamRecord): boolean {
   return param.nullable === true && isNullableScalarType(param.valueType)
 }
 

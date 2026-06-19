@@ -147,7 +147,18 @@ import type {
   TypeAliasInfo,
   ValueType
 } from './types.ts'
-import { isNullish, isPresent } from './nullish.ts'
+import { name, length } from 'assert'
+import { info } from 'console'
+import { resolve } from 'dns'
+import { get } from 'http'
+import test from 'node:test'
+import { type } from 'os'
+import path from 'path'
+import { report } from 'process'
+import { from, push } from 'stream/iter'
+import { types } from 'util'
+import { isRuntimeNullableType } from './c/value-types.ts'
+import { resolveDeclaredType } from './lower/type-resolution.ts'
 
 type ResolvedTypeInfo = {
   valueType: ValueType
@@ -6091,7 +6102,7 @@ class Checker {
   }
 
   checkMathCall(expression: AnyNode): ValueType | null {
-    if (!isMathRuntimeMethod(expression.callee) || isPresent(this.scope.resolve('Math'))) {
+    if (!isMathRuntimeMethod(expression.callee) || this.scope.resolve('Math')) {
       return null
     }
 
@@ -6131,7 +6142,7 @@ class Checker {
       return null
     }
 
-    if (isPresent(this.scope.resolve('Array'))) {
+    if (this.scope.resolve('Array')) {
       return null
     }
 
@@ -6165,7 +6176,7 @@ class Checker {
       return null
     }
 
-    if (isPresent(this.scope.resolve('Object'))) {
+    if (this.scope.resolve('Object')) {
       return null
     }
 
@@ -6327,7 +6338,7 @@ class Checker {
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
       calleeName !== 'fetch' ||
-      isPresent(this.scope.resolve('fetch'))
+      this.scope.resolve('fetch')
     ) {
       return null
     }
@@ -7610,7 +7621,7 @@ class Checker {
       return null
     }
 
-    if (isPresent(this.scope.resolve('JSON'))) {
+    if (this.scope.resolve('JSON')) {
       return null
     }
 
@@ -8142,7 +8153,7 @@ class Checker {
       return null
     }
 
-    if (isPresent(this.scope.resolve('Promise'))) {
+    if (this.scope.resolve('Promise')) {
       return null
     }
 
@@ -8586,7 +8597,7 @@ class Checker {
 
     expression.timerRuntimeMethod = method
 
-    if (isPresent(timerClearMethodName(method))) {
+    if (timerClearMethodName(method)) {
       if (expression.args.length !== 1) {
         this.report(
           'INOX_ARG_COUNT',
@@ -9821,7 +9832,7 @@ class Checker {
       return 'set'
     }
 
-    if (constructorName === 'AbortController' && isNullish(this.scope.resolve('AbortController'))) {
+    if (constructorName === 'AbortController' && !this.scope.resolve('AbortController')) {
       this.requireLibuvBackend('AbortController', expression.loc)
 
       if (expression.args.length !== 0) {
@@ -10086,7 +10097,7 @@ class Checker {
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
       firstPathSegment(expression.callee.path) !== 'Promise' ||
-      isPresent(this.scope.resolve('Promise'))
+      this.scope.resolve('Promise')
     ) {
       return null
     }
@@ -11065,7 +11076,7 @@ class Checker {
     }
 
     for (const property of expression.properties) {
-      if (shape.dynamic !== true && isNullish(this.findShapeField(shape, property.key))) {
+      if (shape.dynamic !== true && !this.findShapeField(shape, property.key)) {
         this.report('INOX_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
       }
     }
@@ -11628,7 +11639,7 @@ class Checker {
   checkBooleanCondition(expression: AnyNode): void {
     const conditionType = this.checkExpression(expression)
 
-    if (!isConditionValueType(conditionType)) {
+    if (!isConditionValueType(conditionType) && !(expression.nullable === true && this.isRuntimeNullableType(conditionType))) {
       this.report(
         'INOX_CONDITION_TYPE',
         `condition must be boolean or truthy-compatible, got ${conditionType}`,
@@ -13966,6 +13977,7 @@ function asciiLowerCharCode(value: string, index: number): number {
 function isConditionValueType(valueType: ValueType): boolean {
   return (
     valueType === 'boolean' ||
+    valueType === 'number' ||
     valueType === 'unknown' ||
     valueType === 'string' ||
     valueType === 'object' ||

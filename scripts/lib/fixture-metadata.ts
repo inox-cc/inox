@@ -53,20 +53,20 @@ export function validateFixtureMetadata(source: string): { metadata: Map<string,
 
   const expectation = metadata.get('expect')
 
-  if (expectation == null) {
+  if (!expectation) {
     failures.push('missing @expect metadata')
   } else if (!knownExpectations.has(expectation)) {
     failures.push(`unknown @expect value ${JSON.stringify(expectation)}`)
   }
 
-  if (expectation === 'diagnostic' && metadata.get('diagnostic') == null) {
+  if (expectation === 'diagnostic' && !metadata.get('diagnostic')) {
     failures.push('diagnostic fixtures must include @diagnostic')
   }
 
   for (const key of ['targets', 'platforms', 'features']) {
     const value = metadata.get(key)
 
-    if (value != null && parseMetadataList(value).length === 0) {
+    if (value && parseMetadataList(value).length === 0) {
       failures.push(`@${key} must contain at least one value`)
     }
   }

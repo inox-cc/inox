@@ -8,7 +8,6 @@ import {
   nullableTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
-import { isPresent } from '../nullish.ts'
 
 type ValueTypeList = ValueType[]
 
@@ -145,7 +144,7 @@ function assignabilityBaseType(valueType: ValueType): ValueType {
     return 'array'
   }
 
-  if (isPresent(mapTypeNamesFromTypeName(valueType))) {
+  if (mapTypeNamesFromTypeName(valueType)) {
     return 'map'
   }
 

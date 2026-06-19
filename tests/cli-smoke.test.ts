@@ -1722,7 +1722,7 @@ function runCli(args: string[], options: RunOptions = {}): Promise<CommandResult
   return runCommand(process.execPath, [cliPath, ...args], {
     cwd: options.cwd ?? repoRoot,
     env:
-      options.env == null
+      options.env === null || typeof options.env === 'undefined'
         ? undefined
         : {
             ...process.env,

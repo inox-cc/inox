@@ -121,7 +121,7 @@ export async function collectRepoChecks(): Promise<string[]> {
 
   await checkDocIndex(failures, 'docs/language')
   await checkDocIndex(failures, 'docs/stdlib')
-  await checkCompilerLooseEquality(failures)
+  await checkSourceLooseEquality(failures)
 
   return failures
 }
@@ -160,8 +160,19 @@ async function checkDocIndex(failures: string[], dir: string): Promise<void> {
   }
 }
 
-async function checkCompilerLooseEquality(failures: string[]): Promise<void> {
-  const files = await findFiles(join(rootDir, 'compiler'), (file) => file.endsWith('.ts'))
+async function checkSourceLooseEquality(failures: string[]): Promise<void> {
+  const roots = ['bin', 'compiler', 'scripts', 'tests']
+  const files: string[] = []
+
+  for (const sourceRoot of roots) {
+    files.push(
+      ...(await findFiles(join(rootDir, sourceRoot), (file) => {
+        const rel = relative(rootDir, file)
+
+        return file.endsWith('.ts') && !rel.startsWith('tests/fixtures/')
+      }))
+    )
+  }
 
   for (const file of files.sort()) {
     const source = await readFile(file, 'utf8')
@@ -176,7 +187,7 @@ async function checkCompilerLooseEquality(failures: string[]): Promise<void> {
         const operator = node.operatorToken.getText(sourceFile)
 
         failures.push(
-          `${rel}:${pos.line + 1}:${pos.character + 1} uses forbidden loose equality operator \`${operator}\`; use strict equality or nullish helpers`
+          `${rel}:${pos.line + 1}:${pos.character + 1} uses forbidden loose equality operator \`${operator}\`; use strict equality or explicit null/undefined checks`
         )
       }
 

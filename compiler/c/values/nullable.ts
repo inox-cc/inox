@@ -9,7 +9,7 @@ import {
 import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
-import { isNullishCoalescingExpression } from '../syntax.ts'
+import { isCoalesceExpression } from '../syntax.ts'
 import {
   cRuntimeValueTag,
   isNullableScalarType,
@@ -224,8 +224,17 @@ export function resolveNullableScalarConditionNarrowing(
   expression: AnyNode,
   context: NullableFunctionContext
 ): NullableScalarNarrowing {
+  if (expression.type === 'UnaryExpression' && expression.operator === '!') {
+    const argument = resolveNullableScalarConditionNarrowing(expression.argument, context)
+
+    return {
+      trueNames: argument.falseNames,
+      falseNames: argument.trueNames
+    }
+  }
+
   if (expression.type !== 'BinaryExpression') {
-    return emptyNullableScalarNarrowing()
+    return resolveNullableScalarTruthinessNarrowing(expression, context)
   }
 
   if (expression.operator === '&&') {
@@ -255,6 +264,26 @@ export function resolveNullableScalarConditionNarrowing(
   }
 
   return resolveNullableScalarNullCheckNarrowing(expression, context)
+}
+
+function resolveNullableScalarTruthinessNarrowing(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): NullableScalarNarrowing {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return emptyNullableScalarNarrowing()
+  }
+
+  const name = nullableStringAt(expression.path, 0)
+
+  if (!context.nullableVariables.has(name) || !isRuntimeNullableType(context.variables.get(name))) {
+    return emptyNullableScalarNarrowing()
+  }
+
+  return {
+    trueNames: [name],
+    falseNames: []
+  }
 }
 
 function resolveNullableScalarNullCheckNarrowing(
@@ -361,7 +390,7 @@ export function clearNullableScalarNarrowing(name: string, context: NullableFunc
 }
 
 export function canLowerCNullishCoalescingExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
-  if (!isNullishCoalescingExpression(expression)) {
+  if (!isCoalesceExpression(expression)) {
     return false
   }
 
@@ -374,7 +403,7 @@ export function canLowerCScalarNullishCoalescingExpression(
   expression: AnyNode,
   context: NullableFunctionContext
 ): boolean {
-  if (!isNullishCoalescingExpression(expression)) {
+  if (!isCoalesceExpression(expression)) {
     return false
   }
 
@@ -416,7 +445,7 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     )
   }
 
-  if (isNullishCoalescingExpression(expression)) {
+  if (isCoalesceExpression(expression)) {
     return false
   }
 

@@ -32,7 +32,6 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedCallArgs as PreparedCallArgs
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
@@ -417,7 +416,7 @@ function findClassParam(params: AnyNode[], name: string): AnyNode | null {
 }
 
 function isThisFieldExpression(expression: ClassMaybeNode): boolean {
-  return isPresent(thisFieldName(expression))
+  return !!thisFieldName(expression)
 }
 
 function thisFieldName(expression: ClassMaybeNode): string | null {
@@ -803,7 +802,7 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
 }
 
 export function isClassConstructorExpression(expression: AnyNode, context: ClassFunctionContext): boolean {
-  return isPresent(resolveClassConstructorInfo(expression, context))
+  return !!resolveClassConstructorInfo(expression, context)
 }
 
 export function emitPreparedClassMethodCallExpression(

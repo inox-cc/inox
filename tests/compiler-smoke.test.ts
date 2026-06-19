@@ -3585,6 +3585,80 @@ export function main(): void {
 })
 
 
+test('narrows C nullable scalar values through truthiness guards', () => {
+  const result = compileSource(
+    `function printScore(score: number | null): void {
+  if (score) {
+    console.log(score + 1)
+  } else {
+    console.log(0)
+  }
+}
+
+function printPresentScore(score: number | null): void {
+  if (!score) {
+    return
+  }
+
+  console.log(score + 2)
+}
+
+export function main(): void {
+  printScore(4)
+  printScore(null)
+  printPresentScore(5)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /if \(inox_value_truthy\(score\) \? 1 : 0\) \{/)
+  assert.match(result.code, /\(score\.as\.number \+ 1\)/)
+  assert.match(result.code, /if \(!\(inox_value_truthy\(score\) \? 1 : 0\)\) \{/)
+  assert.match(result.code, /\(score\.as\.number \+ 2\)/)
+})
+
+
+test('narrows C nullable object values through truthiness guards', () => {
+  const result = compileSource(
+    `type User = {
+  name: string
+}
+
+function readName(user: User | null): string {
+  if (user) {
+    return user.name
+  }
+
+  return 'none'
+}
+
+function readNameAfterGuard(user: User | null): string {
+  if (!user) {
+    return 'none'
+  }
+
+  return user.name
+}
+
+export function main(): void {
+  const user: User = { name: 'Ada' }
+  console.log(readName(user), readNameAfterGuard(user))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /if \(inox_value_truthy\(user\) \? 1 : 0\) \{/)
+  assert.match(result.code, /if \(!\(inox_value_truthy\(user\) \? 1 : 0\)\) \{/)
+  assert.match(result.code, /inox_object_get_known\(user, 0, &inox_\w+_\d+\)/)
+})
+
+
 test('lowers C nullable scalar function params and returns', () => {
   const result = compileSource(
     `function maybeScore(seed: number): number | null {
@@ -4383,7 +4457,7 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
 
 
 function stripCryptoRuntimeMetadata(node: unknown): void {
-  if (node == null || typeof node !== 'object') {
+  if (!node || typeof node !== 'object') {
     return
   }
 
@@ -5173,36 +5247,32 @@ test('rejects continue outside loops', () => {
 })
 
 
-test('rejects numeric conditions', () => {
-  assertDiagnostic(
+test('allows numeric truthiness conditions', () => {
+  const result = compileSource(
     `export function main(): void {
   if (1) {
-    console.log('bad')
+    console.log('one')
   }
-}
-`,
-    'INOX_CONDITION_TYPE'
-  )
 
-  assertDiagnostic(
-    `export function main(): void {
-  while (1) {
-    console.log('bad')
+  let count = 1
+
+  while (count) {
+    count = count - 1
   }
-}
-`,
-    'INOX_CONDITION_TYPE'
-  )
 
-  assertDiagnostic(
-    `export function main(): void {
-  for (let index = 0; 1; index = index + 1) {
+  for (let index = 1; index; index = index - 1) {
     console.log(index)
   }
 }
 `,
-    'INOX_CONDITION_TYPE'
+    {
+      target: 'c'
+    }
   )
+
+  assert.match(result.code, /if \(1\) \{/)
+  assert.match(result.code, /while \(count\) \{/)
+  assert.match(result.code, /for \(double index = 1; index; \(index = \(index - 1\)\)\) \{/)
 })
 
 

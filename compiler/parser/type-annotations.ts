@@ -336,7 +336,7 @@ function normalizeUnionTypeNames(unionArgs: string[]): string {
     const normalizedArg = normalizeTypeName(arg)
     normalized.push(normalizedArg)
 
-    if (!isNullishTypeName(normalizedArg)) {
+    if (!isAbsentTypeName(normalizedArg)) {
       withoutNullish.push(normalizedArg)
     }
   }
@@ -376,7 +376,7 @@ function allStringsSame(values: string[]): boolean {
   return true
 }
 
-function isNullishTypeName(name: string): boolean {
+function isAbsentTypeName(name: string): boolean {
   return name === 'null' || name === 'undefined'
 }
 

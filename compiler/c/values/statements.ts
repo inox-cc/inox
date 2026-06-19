@@ -61,7 +61,6 @@ import type {
   CPreparedStatement as PreparedStatement,
   CRuntimeArrayElement
 } from '../types.ts'
-import { isNullish, isPresent } from '../../nullish.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -1036,7 +1035,7 @@ function isDynamicObjectScalarFieldInitializer(expression: StatementNode, contex
 
   if (deps.isMemberAccessExpression(expression)) {
     if (
-      isNullish(deps.resolveKnownObjectMember(expression, context)) &&
+      !deps.resolveKnownObjectMember(expression, context) &&
       deps.inferExpressionType(expression.object, context) === 'object'
     ) {
       return true
@@ -1047,7 +1046,7 @@ function isDynamicObjectScalarFieldInitializer(expression: StatementNode, contex
 
   if (deps.isIndexAccessExpression(expression) && expression.index.type === 'StringLiteral') {
     if (
-      isNullish(deps.resolveKnownObjectIndex(expression, context)) &&
+      !deps.resolveKnownObjectIndex(expression, context) &&
       deps.inferExpressionType(expression.object, context) === 'object'
     ) {
       return true
@@ -2504,7 +2503,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
   if (
     statement.handler !== null &&
     typeof statement.handler !== 'undefined' &&
-    isPresent(currentErrorTarget(context)) &&
+    currentErrorTarget(context) &&
     containsAwaitExpression(statement.block)
   ) {
     pushDiagnostic(

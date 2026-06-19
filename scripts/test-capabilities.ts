@@ -78,7 +78,7 @@ async function checkTarget(
       return
     }
 
-    if (expectation.diagnostic != null && !error.diagnostics.some((item) => item.code === expectation.diagnostic)) {
+    if (expectation.diagnostic && !error.diagnostics.some((item) => item.code === expectation.diagnostic)) {
       failures.push(
         `${matrixRel}: expected diagnostic ${expectation.diagnostic} for target ${target}, got ${error.diagnostics.map((item) => item.code).join(', ')}`
       )
@@ -89,13 +89,13 @@ async function checkTarget(
 function parseMatrix(source: string, rel: string): CapabilityMatrix {
   const value = JSON.parse(source)
 
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${rel}: matrix root must be an object`)
   }
 
   const targets = (value as CapabilityMatrix).targets
 
-  if (targets == null || typeof targets !== 'object' || Array.isArray(targets)) {
+  if (!targets || typeof targets !== 'object' || Array.isArray(targets)) {
     throw new Error(`${rel}: targets must be an object`)
   }
 
@@ -104,7 +104,7 @@ function parseMatrix(source: string, rel: string): CapabilityMatrix {
       throw new Error(`${rel}: unknown target ${JSON.stringify(target)}`)
     }
 
-    if (expectation == null || typeof expectation !== 'object' || Array.isArray(expectation)) {
+    if (!expectation || typeof expectation !== 'object' || Array.isArray(expectation)) {
       throw new Error(`${rel}: target ${target} expectation must be an object`)
     }
 
@@ -129,7 +129,7 @@ function isCompileTarget(value: string): value is CompileTarget {
 }
 
 function validateCompileOptions(value: unknown, rel: string, target: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -139,7 +139,7 @@ function validateCompileOptions(value: unknown, rel: string, target: string): vo
 
   const options = value as CapabilityCompileOptions
 
-  if (options.profile != null && options.profile !== 'hosted' && options.profile !== 'embedded') {
+  if (options.profile && options.profile !== 'hosted' && options.profile !== 'embedded') {
     throw new Error(`${rel}: target ${target} options.profile must be "hosted" or "embedded"`)
   }
 
@@ -148,7 +148,7 @@ function validateCompileOptions(value: unknown, rel: string, target: string): vo
 }
 
 function validateBudgets(value: unknown, rel: string, target: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -171,7 +171,7 @@ function validateBudgets(value: unknown, rel: string, target: string): void {
 }
 
 function validateCapabilities(value: unknown, rel: string, target: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 

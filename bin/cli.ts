@@ -91,7 +91,7 @@ try {
     process.exitCode = await spawnAndWait('pnpm', ['run', 'check'])
   } else if (plan.command === 'run') {
     await runEntry(plan)
-  } else if (plan.command === 'emit' && plan.emit != null) {
+  } else if (plan.command === 'emit' && plan.emit) {
     await writeCompiledSource(plan)
   } else if (plan.command === 'build') {
     if (plan.target === 'c') {
@@ -146,7 +146,7 @@ async function writeCompiledSource(plan: CliPlan): Promise<void> {
   const entry = requireEntry(plan)
   const config = await loadConfig()
 
-  if (plan.outDir != null && plan.entryMode) {
+  if (plan.outDir && plan.entryMode) {
     const result = await compileFileToCModules(entry, {
       target: 'c',
       callMain: false,
@@ -222,8 +222,8 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
     })
   })
   const dir = dirname(out)
-  const tempDir = options.source == null ? await mkdtemp(join(tmpdir(), 'inox-c-build-')) : null
-  const source = options.source ?? join(tempDir as string, 'main.c')
+  const tempDir = options.source ? null : await mkdtemp(join(tmpdir(), 'inox-c-build-'))
+  const source = options.source || join(tempDir as string, 'main.c')
 
   if (dir !== '.') {
     await mkdir(dir, {
@@ -254,7 +254,7 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
       out
     ])
   } finally {
-    if (tempDir != null) {
+    if (tempDir) {
       await rm(tempDir, {
         recursive: true,
         force: true
@@ -474,7 +474,7 @@ async function loadConfig(): Promise<CConfig> {
 function validateConfig(config: unknown, fileName: string): CConfig {
   const invalidConfig = (message: string): Error => new Error(`invalid ${fileName}: ${message}`)
 
-  if (config == null || typeof config !== 'object' || Array.isArray(config)) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
     throw invalidConfig('root value must be an object')
   }
 
@@ -485,7 +485,7 @@ function validateConfig(config: unknown, fileName: string): CConfig {
   validateCapabilitiesConfig(value.capabilities, fileName)
   validateRandomConfig(value.random, fileName)
 
-  if (value.c == null) {
+  if (!value.c) {
     return value
   }
 
@@ -493,7 +493,7 @@ function validateConfig(config: unknown, fileName: string): CConfig {
     throw invalidConfig('c must be an object')
   }
 
-  if (value.c.cc != null && typeof value.c.cc !== 'string') {
+  if (value.c.cc && typeof value.c.cc !== 'string') {
     throw invalidConfig('c.cc must be a string')
   }
 
@@ -523,7 +523,7 @@ function cCompileOptions(
 }
 
 function validateProfileConfig(value: unknown, fileName: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -533,7 +533,7 @@ function validateProfileConfig(value: unknown, fileName: string): void {
 }
 
 function validateBudgetsConfig(value: unknown, fileName: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -556,7 +556,7 @@ function validateBudgetsConfig(value: unknown, fileName: string): void {
 }
 
 function validateCapabilitiesConfig(value: unknown, fileName: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -581,7 +581,7 @@ function validateCapabilitiesConfig(value: unknown, fileName: string): void {
 function validateRandomConfig(value: unknown, fileName: string): void {
   const invalidConfig = (message: string): Error => new Error(`invalid ${fileName}: ${message}`)
 
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -591,17 +591,17 @@ function validateRandomConfig(value: unknown, fileName: string): void {
 
   const random = value as CConfig['random']
 
-  if (random?.backend != null && !['simple', 'xorshift32', 'os'].includes(random.backend)) {
+  if (random?.backend && !['simple', 'xorshift32', 'os'].includes(random.backend)) {
     throw invalidConfig('random.backend must be "simple", "xorshift32" or "os"')
   }
 
-  if (random?.seed != null && (!Number.isInteger(random.seed) || random.seed < 0 || random.seed > 0xffffffff)) {
+  if (random?.seed && (!Number.isInteger(random.seed) || random.seed < 0 || random.seed > 0xffffffff)) {
     throw invalidConfig('random.seed must be an integer from 0 to 4294967295')
   }
 }
 
 function validateLoopBackendConfig(value: unknown, fileName: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -611,7 +611,7 @@ function validateLoopBackendConfig(value: unknown, fileName: string): void {
 }
 
 function validateTlsBackendConfig(value: unknown, fileName: string): void {
-  if (value == null) {
+  if (!value) {
     return
   }
 
@@ -621,7 +621,7 @@ function validateTlsBackendConfig(value: unknown, fileName: string): void {
 }
 
 function validateConfigFlags(value: unknown, path: string, fileName: string): void {
-  if (value == null || typeof value === 'string') {
+  if (!value || typeof value === 'string') {
     return
   }
 
@@ -633,9 +633,9 @@ function validateConfigFlags(value: unknown, path: string, fileName: string): vo
 function cCompilerCommand(config: CConfig): { command: string; args: string[] } {
   const envValue = process.env.CC?.trim()
   const configValue = typeof config?.c?.cc === 'string' ? config.c.cc.trim() : ''
-  const value = envValue == null || envValue === '' ? configValue : envValue
+  const value = !envValue ? configValue : envValue
 
-  if (value == null || value === '') {
+  if (!value) {
     return {
       command: 'cc',
       args: []
@@ -673,7 +673,7 @@ function configFlags(value: string | string[] | undefined): string[] {
 function splitCommandWords(value: string | undefined): string[] {
   const trimmed = value?.trim()
 
-  if (trimmed == null || trimmed === '') {
+  if (!trimmed) {
     return []
   }
 
@@ -695,7 +695,7 @@ function splitCommandWords(value: string | undefined): string[] {
       continue
     }
 
-    if (quote != null) {
+    if (quote) {
       if (char === quote) {
         quote = null
         hasQuotedPart = true
@@ -724,7 +724,7 @@ function splitCommandWords(value: string | undefined): string[] {
     current += '\\'
   }
 
-  if (quote != null) {
+  if (quote) {
     throw new Error(`unterminated quote in command flags: ${trimmed}`)
   }
 
@@ -756,7 +756,7 @@ function spawnAndWait(command: string, args: string[]): Promise<number> {
 }
 
 function requireEntry(plan: CliPlan): string {
-  if (plan.entry == null) {
+  if (!plan.entry) {
     throw new Error(`${plan.command} requires an entry file`)
   }
 

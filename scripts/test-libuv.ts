@@ -1165,7 +1165,7 @@ async function checkLibuvCompiledDgramConnectedClient(workDir: string): Promise<
 
   const address = server.address()
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     server.close()
     throw new Error('Expected UDP server address with a numeric port')
   }
@@ -1718,7 +1718,7 @@ async function checkLibuvCompiledNetClient(workDir: string): Promise<void> {
 
   const address = server.address()
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     server.close()
     throw new Error('Expected TCP address with a numeric port')
   }
@@ -2232,7 +2232,7 @@ async function checkLibuvCompiledFetchClient(workDir: string): Promise<void> {
 
   const address = server.address()
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     server.close()
     throw new Error('Expected HTTP address with a numeric port')
   }
@@ -2329,7 +2329,7 @@ async function checkLibuvCompiledFetchChunked(workDir: string): Promise<void> {
 
   const address = server.address()
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     server.close()
     throw new Error('Expected HTTP address with a numeric port')
   }
@@ -2412,7 +2412,7 @@ async function checkLibuvCompiledFetchAbort(workDir: string): Promise<void> {
 
   const address = server.address()
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     server.close()
     throw new Error('Expected HTTP address with a numeric port')
   }
@@ -2523,7 +2523,7 @@ async function checkLibuvCompiledFetchRedirectMetadata(workDir: string): Promise
 
   const address = server.address()
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     server.close()
     throw new Error('Expected HTTP address with a numeric port')
   }
@@ -2749,10 +2749,10 @@ async function reserveTcpPort(): Promise<number> {
   const address = server.address()
 
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error == null ? resolve() : reject(error)))
+    server.close((error) => (!error ? resolve() : reject(error)))
   })
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     throw new Error('Expected TCP address with a numeric port')
   }
 
@@ -2773,7 +2773,7 @@ async function reserveUdpPort(): Promise<number> {
     socket.close(() => resolve())
   })
 
-  if (address == null || typeof address === 'string') {
+  if (!address || typeof address === 'string') {
     throw new Error('Expected UDP address with a numeric port')
   }
 
@@ -2895,7 +2895,7 @@ function requestUdp(port: number, message: string): Promise<string> {
       clearTimeout(timer)
       socket.close()
 
-      if (error != null) {
+      if (error) {
         reject(error)
       } else {
         resolve(value)
@@ -2912,7 +2912,7 @@ function requestUdp(port: number, message: string): Promise<string> {
       finish(error)
     })
     socket.send(Buffer.from(message), port, '127.0.0.1', (error) => {
-      if (error != null) {
+      if (error) {
         finish(error)
       }
     })
@@ -2930,7 +2930,7 @@ function receiveUdpMessage(socket: ReturnType<typeof createUdpSocket>, timeoutMs
       settled = true
       clearTimeout(timer)
 
-      if (error != null) {
+      if (error) {
         reject(error)
       } else {
         resolve(value)

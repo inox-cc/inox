@@ -13,7 +13,6 @@ import type {
 } from '../types.ts'
 import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import type { CallbackLoweringDependencies, CallbackScope, CallbackScopeBinding } from './callbacks.ts'
-import { isNullish } from '../../nullish.ts'
 
 type PromiseNode = AnyNode
 type PromiseAnyNodeWrapperMap = Map<AnyNode, CPromiseChainWrapper>
@@ -1662,7 +1661,7 @@ function registerPromiseChainExpression(
     return
   }
 
-  if (isNullish(resolvePromiseChainArrowBody(callback))) {
+  if (!resolvePromiseChainArrowBody(callback)) {
     return
   }
 

@@ -1,5 +1,4 @@
 import { stringListIncludes } from './string-list.ts'
-import { isPresent } from '../../nullish.ts'
 
 export const arrayMethods: string[] = [
   'filter',
@@ -99,7 +98,7 @@ export function isCollectionConstructorName(name: string): boolean {
 }
 
 export function isCollectionConstructorGlobalUsagePath(path: string[]): boolean {
-  return isPresent(collectionConstructorNameFromPath(path))
+  return !!collectionConstructorNameFromPath(path)
 }
 
 export function isMapMethod(method: string): boolean {

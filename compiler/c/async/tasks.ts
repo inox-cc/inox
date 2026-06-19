@@ -54,7 +54,6 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type AsyncTaskAstNode = AnyNode
 type AsyncTaskLoopFlowTarget = {
@@ -1776,7 +1775,7 @@ function isRuntimeStringPrefixLocalDeclaration(statement: AsyncTaskAstNode, cont
   const expression = statement.init
 
   if (
-    isPresent(asyncTaskDeps(context).resolveRuntimeStringReference(expression, context)) ||
+    asyncTaskDeps(context).resolveRuntimeStringReference(expression, context) ||
     asyncTaskDeps(context).isRuntimeProducedStringExpression(expression, context) ||
     isRawStringLiteralExpression(expression)
   ) {

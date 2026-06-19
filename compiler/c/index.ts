@@ -272,7 +272,7 @@ import type { UrlLoweringDependencies } from './stdlib/url.ts'
 import {
   cUnsupportedExpressionCode,
   cUnsupportedVariableDeclarationCode,
-  isNullishCoalescingExpression,
+  isCoalesceExpression,
   isOptionalChainExpression
 } from './syntax.ts'
 import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir/top-level.ts'
@@ -527,7 +527,6 @@ import type {
   ModuleGraph,
   SourceLocation
 } from '../types.ts'
-import { isNullish, isPresent } from '../nullish.ts'
 export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
@@ -1250,6 +1249,7 @@ const cScalarExpressionDependencies = {
   inferExpressionType,
   isIndexAccessExpression,
   isMemberAccessExpression,
+  isNullableRuntimeExpression,
   isNullableScalarRuntimeExpression,
   isStringPredicateCall,
   reportCJsGlobalDiagnostic,
@@ -2960,11 +2960,11 @@ function inferPromiseRejectionValueType(
     return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames)
   }
 
-  if (expression.type === 'CallExpression' && isPresent(cFsRuntimeExpressionMethod(expression))) {
+  if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression)) {
     return 'error'
   }
 
-  if (expression.type === 'CallExpression' && isPresent(cFetchRuntimeExpressionMethod(expression))) {
+  if (expression.type === 'CallExpression' && cFetchRuntimeExpressionMethod(expression)) {
     return 'error'
   }
 
@@ -3126,7 +3126,7 @@ function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionCo
 function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, context: CFunctionContext): boolean {
   if (isMemberAccessExpression(expression)) {
     if (
-      isNullish(resolveKnownObjectMember(expression, context)) &&
+      !resolveKnownObjectMember(expression, context) &&
       inferExpressionType(expression.object, context) === 'object'
     ) {
       return true
@@ -3137,7 +3137,7 @@ function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, co
 
   if (isIndexAccessExpression(expression) && expression.index.type === 'StringLiteral') {
     if (
-      isNullish(resolveKnownObjectIndex(expression, context)) &&
+      !resolveKnownObjectIndex(expression, context) &&
       inferExpressionType(expression.object, context) === 'object'
     ) {
       return true
@@ -5067,7 +5067,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     }
   }
 
-  if (isNullishCoalescingExpression(expression) && canLowerCNullishCoalescingExpression(expression, context)) {
+  if (isCoalesceExpression(expression) && canLowerCNullishCoalescingExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
     const string = nextCName(context, 'inox_log_string')
     const lines: string[] = []

@@ -110,7 +110,7 @@ export async function startLocalTlsServer(
   })
 
   const address = server.address()
-  const port = typeof address === 'object' && address != null ? address.port : 0
+  const port = typeof address === 'object' && address ? address.port : 0
 
   assert.notEqual(port, 0)
 
@@ -119,7 +119,7 @@ export async function startLocalTlsServer(
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => {
-          if (error != null) {
+          if (error) {
             reject(error)
           } else {
             resolve()

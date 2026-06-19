@@ -266,7 +266,10 @@ function renderMatrix(report: AuditReport): string {
         .slice(0, 5)
         .map(([file, count]) => `\`${file}\` (${count})`)
         .join('<br>')
-      const baseline = summary.info.maxAllowedMatches == null ? '-' : `<= ${summary.info.maxAllowedMatches}`
+      const baseline =
+        summary.info.maxAllowedMatches === null || typeof summary.info.maxAllowedMatches === 'undefined'
+          ? '-'
+          : `<= ${summary.info.maxAllowedMatches}`
 
       return `| ${summary.info.name} | ${summary.info.decision} | ${summary.count} | ${baseline} | ${hotFiles || '-'} | ${summary.info.note} |`
     }),
@@ -290,7 +293,7 @@ function collectGateFailures(report: AuditReport): string[] {
   for (const summary of report.summaries) {
     const max = summary.info.maxAllowedMatches
 
-    if (max == null || summary.count <= max) {
+    if (max === null || typeof max === 'undefined' || summary.count <= max) {
       continue
     }
 
@@ -304,7 +307,7 @@ function collectGateFailures(report: AuditReport): string[] {
     const allowedFiles = allowedHostImports.get(module)
 
     for (const file of files) {
-      if (allowedFiles != null && allowedFiles.has(file)) {
+      if (allowedFiles !== null && typeof allowedFiles !== 'undefined' && allowedFiles.has(file)) {
         continue
       }
 
@@ -320,7 +323,7 @@ function collectGateFailures(report: AuditReport): string[] {
 function hostImportDecision(module: string, files: Set<string>): string {
   const allowedFiles = allowedHostImports.get(module)
 
-  if (allowedFiles == null) {
+  if (allowedFiles === null || typeof allowedFiles === 'undefined') {
     return 'unapproved host dependency'
   }
 

@@ -27,7 +27,6 @@ import type {
 } from '../types.ts'
 import type { AnyNode, IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type CallbackNode = AnyNode
 type CallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
@@ -893,7 +892,7 @@ export function collectCallbackWrappers(
   for (let pendingIndex = 0; pendingIndex < pendingPlainFunctionArgs.length; pendingIndex = pendingIndex + 1) {
     const pending = pendingPlainFunctionArgs[pendingIndex]
     if (
-      isPresent(
+      !!(
         resolveRuntimeFunctionArgumentType(
           pending.callee,
           pending.index,
@@ -2359,7 +2358,7 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
   const name = reference.path[0]
 
   if (
-    isPresent(lookupCallbackBinding(name, state.localScopes)) ||
+    lookupCallbackBinding(name, state.localScopes) ||
     state.context.functionNames.has(name) ||
     isCJsGlobalRoot(name, state.context)
   ) {

@@ -57,7 +57,6 @@ import {
 import { emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
 import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
-import { isPresent } from '../nullish.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -608,7 +607,7 @@ function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: 
   }
 
   if (param.valueType === 'function') {
-    if (isPresent(resolveFunctionParameterRuntimeType(statement.name, index, param, context))) {
+    if (resolveFunctionParameterRuntimeType(statement.name, index, param, context)) {
       return `inox_value ${param.name}`
     }
 
@@ -748,7 +747,7 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
   }
 
   if (param.valueType === 'function') {
-    if (isPresent(resolveFunctionParameterRuntimeType(method.name, index, param, context))) {
+    if (resolveFunctionParameterRuntimeType(method.name, index, param, context)) {
       return `inox_value ${param.name}`
     }
 
@@ -982,7 +981,7 @@ function emitRuntimeParamPreludeForParam(
 
   if (
     param.valueType === 'function' &&
-    isPresent(resolveFunctionParameterRuntimeType(statement.name, index, param, context))
+    resolveFunctionParameterRuntimeType(statement.name, index, param, context)
   ) {
     if (param.nullable === true) {
       return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context)

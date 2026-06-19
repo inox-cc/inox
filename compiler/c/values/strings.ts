@@ -19,7 +19,7 @@ import {
   cProcessRuntimePropertyName,
   cProcessRuntimeStringPropertyName
 } from '../stdlib/process.ts'
-import { cUnsupportedExpressionCode, isNullishCoalescingExpression, isOptionalChainExpression } from '../syntax.ts'
+import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import {
   isStringIndexMethod,
@@ -33,7 +33,6 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type StringDiagnosticContext = {
   diagnostics: Diagnostic[]
@@ -274,7 +273,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     return stringDeps(context).emitCallExpression(expression, context)
   }
 
-  if (expression !== null && typeof expression !== 'undefined' && isNullishCoalescingExpression(expression)) {
+  if (expression !== null && typeof expression !== 'undefined' && isCoalesceExpression(expression)) {
     pushStringDiagnostic(
       context,
       diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
@@ -410,11 +409,11 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     }
   }
 
-  if (isPresent(stringDeps(context).resolveNetAddressStringMember(expression, context))) {
+  if (stringDeps(context).resolveNetAddressStringMember(expression, context)) {
     return true
   }
 
-  if (isPresent(knownObjectStringField(expression, context))) {
+  if (knownObjectStringField(expression, context)) {
     return true
   }
 
@@ -980,7 +979,7 @@ function isDynamicRuntimeStringFieldExpression(expression: AnyNode, context: Str
     return false
   }
 
-  if (isPresent(knownObjectFieldValueType(expression, context))) {
+  if (knownObjectFieldValueType(expression, context)) {
     return false
   }
 
@@ -1532,19 +1531,19 @@ export function isRuntimeProducedStringExpression(
     return true
   }
 
-  if (isPresent(cOsRuntimeConstantName(expression))) {
+  if (cOsRuntimeConstantName(expression)) {
     return true
   }
 
-  if (isPresent(cPathRuntimeConstantName(expression))) {
+  if (cPathRuntimeConstantName(expression)) {
     return true
   }
 
-  if (isPresent(cProcessRuntimeStringPropertyName(expression))) {
+  if (cProcessRuntimeStringPropertyName(expression)) {
     return true
   }
 
-  if (isPresent(cProcessRuntimeEnvName(expression))) {
+  if (cProcessRuntimeEnvName(expression)) {
     return true
   }
 
@@ -1579,7 +1578,7 @@ export function isRuntimeProducedStringExpression(
   }
 
   if (
-    isNullishCoalescingExpression(expression) &&
+    isCoalesceExpression(expression) &&
     stringDeps(context).canLowerCNullishCoalescingExpression(expression, context)
   ) {
     return true

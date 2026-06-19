@@ -178,7 +178,7 @@ export function isOptionalChainExpression(expression: AnyNode | null | undefined
   )
 }
 
-export function isNullishCoalescingExpression(expression: AnyNode | null | undefined): boolean {
+export function isCoalesceExpression(expression: AnyNode | null | undefined): boolean {
   return (
     expression !== null &&
     typeof expression !== 'undefined' &&

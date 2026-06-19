@@ -9,7 +9,6 @@ import type {
   CPreparedExpression,
   CRuntimeArrayElement
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
@@ -193,7 +192,7 @@ export function inferExpressionType(
     return 'string'
   }
 
-  if (isPresent(deps.cOsRuntimeConstantName(expression)) || isPresent(deps.cOsRuntimeMethodName(expression))) {
+  if (deps.cOsRuntimeConstantName(expression) || deps.cOsRuntimeMethodName(expression)) {
     return 'string'
   }
 
@@ -219,7 +218,7 @@ export function inferExpressionType(
     return processPropertyType
   }
 
-  if (isPresent(deps.cProcessRuntimeEnvName(expression))) {
+  if (deps.cProcessRuntimeEnvName(expression)) {
     return 'string'
   }
 
@@ -269,11 +268,11 @@ export function inferExpressionType(
     return 'string'
   }
 
-  if (expression.type === 'CallExpression' && isPresent(deps.cTimeRuntimeCallName(expression.callee))) {
+  if (expression.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee)) {
     return 'number'
   }
 
-  if (expression.type === 'CallExpression' && isPresent(deps.cFsRuntimeExpressionMethod(expression))) {
+  if (expression.type === 'CallExpression' && deps.cFsRuntimeExpressionMethod(expression)) {
     if (expression.valueType === 'promise') {
       return 'promise'
     }
@@ -281,7 +280,7 @@ export function inferExpressionType(
     return cValueTypeOrUnknown(expression)
   }
 
-  if (expression.type === 'CallExpression' && isPresent(deps.cFetchRuntimeExpressionMethod(expression))) {
+  if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression)) {
     if (expression.valueType === 'promise') {
       return 'promise'
     }
@@ -345,7 +344,7 @@ export function inferExpressionType(
 
   if (
     expression.type === 'CallExpression' &&
-    isPresent(deps.cPromiseRuntimeCallName(expression.callee)) &&
+    deps.cPromiseRuntimeCallName(expression.callee) &&
     expression.valueType === 'promise'
   ) {
     return 'promise'
@@ -359,7 +358,7 @@ export function inferExpressionType(
     return 'promise'
   }
 
-  if (expression.type === 'CallExpression' && isPresent(deps.mathRuntimeMethodName(expression.callee))) {
+  if (expression.type === 'CallExpression' && deps.mathRuntimeMethodName(expression.callee)) {
     return 'number'
   }
 
@@ -572,11 +571,11 @@ export function inferExpressionType(
   }
 
   if (deps.isMemberAccessExpression(expression)) {
-    if (isPresent(deps.emitPreparedNetAddressPortExpression(expression, context))) {
+    if (deps.emitPreparedNetAddressPortExpression(expression, context)) {
       return 'number'
     }
 
-    if (isPresent(deps.resolveNetAddressStringMember(expression, context))) {
+    if (deps.resolveNetAddressStringMember(expression, context)) {
       return 'string'
     }
 

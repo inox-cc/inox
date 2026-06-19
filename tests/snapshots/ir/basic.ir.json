@@ -50,7 +50,6 @@
           "name": "user",
           "declaredType": "User",
           "valueType": "object",
-          "nullable": false,
           "shape": {
             "kind": "object",
             "fields": [
@@ -59,7 +58,6 @@
                 "readonly": true,
                 "declaredType": "number",
                 "valueType": "number",
-                "nullable": false,
                 "loc": {
                   "line": 2,
                   "column": 12
@@ -67,10 +65,8 @@
               },
               {
                 "name": "name",
-                "readonly": false,
                 "declaredType": "string",
                 "valueType": "string",
-                "nullable": false,
                 "loc": {
                   "line": 3,
                   "column": 3
@@ -115,7 +111,6 @@
         },
         {
           "name": "name",
-          "readonly": false,
           "valueType": "string",
           "loc": {
             "line": 3,

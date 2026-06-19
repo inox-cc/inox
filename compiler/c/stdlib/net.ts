@@ -10,7 +10,6 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type NetAstNode = AnyNode
 
@@ -1251,7 +1250,7 @@ function emitNetServerListenLines(
   if (
     options !== null &&
     typeof options !== 'undefined' &&
-    isPresent(deps.findObjectLiteralPropertyValue(options, 'exclusive'))
+    deps.findObjectLiteralPropertyValue(options, 'exclusive')
   ) {
     context.diagnostics.push(
       diagnostic(

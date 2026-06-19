@@ -408,7 +408,7 @@ target_link_libraries(fetch-client PRIVATE inox_runtime)
     assert.equal(run.code, 0, run.stderr)
     assert.equal(run.stdout, '200 ok\n')
   } finally {
-    if (server != null) {
+    if (server !== null && typeof server !== 'undefined') {
       await server.close()
     }
 

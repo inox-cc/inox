@@ -12,7 +12,6 @@ import type {
   CObjectShapeField,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type PreparedCollectionCall = PreparedExpression
 type CollectionNode = AnyNode
@@ -358,7 +357,7 @@ export function emitPreparedCollectionReceiver(
 }
 
 export function isCollectionConstructorExpression(expression: AnyNode | null | undefined): boolean {
-  return isPresent(collectionConstructorName(expression))
+  return !!collectionConstructorName(expression)
 }
 
 export function collectionConstructorName(expression: AnyNode | null | undefined): string | null {

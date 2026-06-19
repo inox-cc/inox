@@ -32,7 +32,6 @@ import type {
   CPromiseConstructorHandler,
   CRuntimeArrayElement
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
@@ -439,7 +438,7 @@ export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
     return false
   }
 
-  return isPresent(arrayRuntimeMethodName(callee.property))
+  return !!arrayRuntimeMethodName(callee.property)
 }
 
 export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {

@@ -122,28 +122,28 @@ export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   const target = options.target ?? emit ?? null
   const outDir = options.outDir ?? null
   const entryMode = options.entryMode ?? false
-  const out = options.out ?? (emit == null || outDir != null ? null : defaultEmitOutput(entry, emit))
-  const finalCommand: CliCommand = emit == null ? command : 'emit'
+  const out = options.out || (!emit || outDir ? null : defaultEmitOutput(entry, emit))
+  const finalCommand: CliCommand = !emit ? command : 'emit'
   const loopBackend = options.loopBackend ?? null
   const tlsBackend = options.tlsBackend ?? null
 
-  if (command === 'build' && target == null) {
+  if (command === 'build' && !target) {
     return fail('build requires --target c')
   }
 
-  if (options.out != null && outDir != null) {
+  if (options.out && outDir) {
     return fail('use either -o/--out or --out-dir')
   }
 
-  if (outDir != null && emit !== 'c') {
+  if (outDir && emit !== 'c') {
     return fail('--out-dir requires --emit c')
   }
 
-  if (outDir != null && !entryMode) {
+  if (outDir && !entryMode) {
     return fail('--out-dir requires --entry')
   }
 
-  if (entryMode && outDir == null) {
+  if (entryMode && !outDir) {
     return fail('--entry requires --out-dir')
   }
 
@@ -219,7 +219,7 @@ function parseOptions(tokens: string[]): ParseResult<ParsedOptions> {
       const value = tokens[i + 1]
       i += 1
 
-      if (value == null || value.startsWith('-')) {
+      if (!value || value.startsWith('-')) {
         return fail(`${token} expects a path`)
       }
 
@@ -228,7 +228,7 @@ function parseOptions(tokens: string[]): ParseResult<ParsedOptions> {
       const value = tokens[i + 1]
       i += 1
 
-      if (value == null || value.startsWith('-')) {
+      if (!value || value.startsWith('-')) {
         return fail(`${token} expects a path`)
       }
 
@@ -282,17 +282,17 @@ function fail(error: string): ParseResult<never> {
 }
 
 function isCliTarget(value: string | undefined): value is CliTarget {
-  return value != null && emitTargets.has(value)
+  return !!value && emitTargets.has(value)
 }
 
 function isCliLoopBackend(value: string | undefined): value is CliLoopBackend {
-  return value != null && loopBackends.has(value)
+  return !!value && loopBackends.has(value)
 }
 
 function isCliTlsBackend(value: string | undefined): value is CliTlsBackend {
-  return value != null && tlsBackends.has(value)
+  return !!value && tlsBackends.has(value)
 }
 
 function isCliCommand(value: string | undefined): value is CliCommand {
-  return value != null && commands.has(value)
+  return !!value && commands.has(value)
 }

@@ -129,19 +129,19 @@ function snapshotScalarFields(node: AnyNode): Partial<SnapshotNode> {
 
 function snapshotTypeFields(node: AnyNode): Partial<SnapshotNode> {
   return {
-    ...(node.declaredType == null ? {} : { declaredType: String(node.declaredType) }),
+    ...(!node.declaredType ? {} : { declaredType: String(node.declaredType) }),
     ...(typeof node.valueType !== 'string' ? {} : { valueType: node.valueType }),
-    ...(node.nullable == null ? {} : { nullable: Boolean(node.nullable) }),
-    ...(node.arrayElementType == null ? {} : { arrayElementType: stringOrNull(node.arrayElementType) }),
-    ...(node.arrayElementDeclaredType == null
+    ...(!node.nullable ? {} : { nullable: Boolean(node.nullable) }),
+    ...(!node.arrayElementType ? {} : { arrayElementType: stringOrNull(node.arrayElementType) }),
+    ...(!node.arrayElementDeclaredType
       ? {}
       : { arrayElementDeclaredType: stringOrNull(node.arrayElementDeclaredType) }),
-    ...(node.mapKeyType == null ? {} : { mapKeyType: stringOrNull(node.mapKeyType) }),
-    ...(node.mapValueType == null ? {} : { mapValueType: stringOrNull(node.mapValueType) }),
-    ...(node.setElementType == null ? {} : { setElementType: stringOrNull(node.setElementType) }),
-    ...(node.declaredReturnType == null ? {} : { declaredReturnType: String(node.declaredReturnType) }),
-    ...(node.returnType == null ? {} : { returnType: String(node.returnType) }),
-    ...(node.returnNullable == null ? {} : { returnNullable: Boolean(node.returnNullable) }),
+    ...(!node.mapKeyType ? {} : { mapKeyType: stringOrNull(node.mapKeyType) }),
+    ...(!node.mapValueType ? {} : { mapValueType: stringOrNull(node.mapValueType) }),
+    ...(!node.setElementType ? {} : { setElementType: stringOrNull(node.setElementType) }),
+    ...(!node.declaredReturnType ? {} : { declaredReturnType: String(node.declaredReturnType) }),
+    ...(!node.returnType ? {} : { returnType: String(node.returnType) }),
+    ...(!node.returnNullable ? {} : { returnNullable: Boolean(node.returnNullable) }),
     ...snapshotShapeFields(node)
   }
 }
@@ -153,20 +153,20 @@ function snapshotChildren(node: AnyNode): Partial<SnapshotNode> {
     ...snapshotBody(node),
     ...(Array.isArray(node.properties) ? { properties: node.properties.map(snapshotProperty) } : {}),
     ...(Array.isArray(node.elements) ? { elements: node.elements.map(snapshotNode) } : {}),
-    ...(node.expression == null ? {} : { expression: snapshotNode(node.expression) }),
-    ...(node.init === undefined ? {} : { init: node.init == null ? null : snapshotNode(node.init) }),
-    ...(node.callee == null ? {} : { callee: snapshotNode(node.callee) }),
-    ...(node.object == null ? {} : { object: snapshotNode(node.object) }),
+    ...(!node.expression ? {} : { expression: snapshotNode(node.expression) }),
+    ...(node.init === undefined ? {} : { init: !node.init ? null : snapshotNode(node.init) }),
+    ...(!node.callee ? {} : { callee: snapshotNode(node.callee) }),
+    ...(!node.object ? {} : { object: snapshotNode(node.object) }),
     ...(Array.isArray(node.args) ? { args: node.args.map(snapshotNode) } : {}),
-    ...(node.left == null ? {} : { left: snapshotNode(node.left) }),
-    ...(node.right == null ? {} : { right: snapshotNode(node.right) }),
-    ...(node.target == null ? {} : { target: snapshotNode(node.target) }),
-    ...(node.value == null || isSnapshotScalar(node.value) ? {} : { value: snapshotNode(node.value) }),
-    ...(node.argument == null ? {} : { argument: snapshotNode(node.argument) }),
-    ...(node.condition == null ? {} : { condition: snapshotNode(node.condition) }),
-    ...(node.consequent == null ? {} : { consequent: snapshotNode(node.consequent) }),
-    ...(node.alternate == null ? {} : { alternate: snapshotNode(node.alternate) }),
-    ...(node.iterable == null ? {} : { iterable: snapshotNode(node.iterable) })
+    ...(!node.left ? {} : { left: snapshotNode(node.left) }),
+    ...(!node.right ? {} : { right: snapshotNode(node.right) }),
+    ...(!node.target ? {} : { target: snapshotNode(node.target) }),
+    ...(!node.value || isSnapshotScalar(node.value) ? {} : { value: snapshotNode(node.value) }),
+    ...(!node.argument ? {} : { argument: snapshotNode(node.argument) }),
+    ...(!node.condition ? {} : { condition: snapshotNode(node.condition) }),
+    ...(!node.consequent ? {} : { consequent: snapshotNode(node.consequent) }),
+    ...(!node.alternate ? {} : { alternate: snapshotNode(node.alternate) }),
+    ...(!node.iterable ? {} : { iterable: snapshotNode(node.iterable) })
   }
 }
 
@@ -177,7 +177,7 @@ function snapshotBody(node: AnyNode): Pick<SnapshotNode, 'body'> {
     }
   }
 
-  if (node.body != null && Array.isArray(node.body.body)) {
+  if (node.body && Array.isArray(node.body.body)) {
     return {
       body: node.body.body.map(snapshotNode)
     }
@@ -212,32 +212,32 @@ function snapshotField(field: AnyNode): SnapshotField {
   return withLocation(
     {
       name: String(field.name ?? '<anonymous>'),
-      ...(field.readonly == null ? {} : { readonly: Boolean(field.readonly) }),
-      ...(field.declaredType == null ? {} : { declaredType: String(field.declaredType) }),
-      ...(field.valueType == null ? {} : { valueType: String(field.valueType) }),
-      ...(field.nullable == null ? {} : { nullable: Boolean(field.nullable) }),
-      ...(field.arrayElementType == null ? {} : { arrayElementType: stringOrNull(field.arrayElementType) }),
-      ...(field.mapKeyType == null ? {} : { mapKeyType: stringOrNull(field.mapKeyType) }),
-      ...(field.mapValueType == null ? {} : { mapValueType: stringOrNull(field.mapValueType) }),
-      ...(field.setElementType == null ? {} : { setElementType: stringOrNull(field.setElementType) })
+      ...(!field.readonly ? {} : { readonly: Boolean(field.readonly) }),
+      ...(!field.declaredType ? {} : { declaredType: String(field.declaredType) }),
+      ...(!field.valueType ? {} : { valueType: String(field.valueType) }),
+      ...(!field.nullable ? {} : { nullable: Boolean(field.nullable) }),
+      ...(!field.arrayElementType ? {} : { arrayElementType: stringOrNull(field.arrayElementType) }),
+      ...(!field.mapKeyType ? {} : { mapKeyType: stringOrNull(field.mapKeyType) }),
+      ...(!field.mapValueType ? {} : { mapValueType: stringOrNull(field.mapValueType) }),
+      ...(!field.setElementType ? {} : { setElementType: stringOrNull(field.setElementType) })
     },
     field.loc
   )
 }
 
-function isSnapshotScalar(value: unknown): value is string | number | boolean | null {
-  return value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+function isSnapshotScalar(value: unknown): value is string | number | boolean | null | undefined {
+  return !value || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
 }
 
 function stringOrNull(value: unknown): string | null {
-  return value == null ? null : String(value)
+  return !value ? null : String(value)
 }
 
 function withLocation<T extends Record<string, unknown>>(
   value: T,
   loc: SourceLocation | undefined
 ): T & { loc?: SourceLocation } {
-  return loc == null
+  return !loc
     ? value
     : {
         ...value,

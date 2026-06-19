@@ -33,7 +33,7 @@ import { cTimeRuntimeCallName } from '../stdlib/time.ts'
 import {
   cUnsupportedExpressionCode,
   emitCOperator,
-  isNullishCoalescingExpression,
+  isCoalesceExpression,
   isOptionalChainExpression
 } from '../syntax.ts'
 import {
@@ -67,7 +67,6 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand,
   CRuntimeArrayElement
 } from '../types.ts'
-import { isNullish, isPresent } from '../../nullish.ts'
 
 type CBooleanMap = Map<string, boolean>
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
@@ -799,11 +798,11 @@ function objectFunctionArgumentSourceShapeKnown(
   context: CFunctionContext
 ): boolean {
   if (pathName !== null && typeof pathName !== 'undefined') {
-    if (isPresent(context.objectShapes.get(pathName))) {
+    if (context.objectShapes.get(pathName)) {
       return true
     }
 
-    if (isPresent(context.moduleObjectShapes.get(pathName))) {
+    if (context.moduleObjectShapes.get(pathName)) {
       return true
     }
   }
@@ -991,7 +990,7 @@ function objectFunctionArgumentSourceSeenTypes(
   expectedSeenTypes: string[]
 ): string[] {
   if (source.pathName !== null && typeof source.pathName !== 'undefined') {
-    if (isPresent(context.moduleObjectShapes.get(source.pathName))) {
+    if (context.moduleObjectShapes.get(source.pathName)) {
       return ['CFunctionContext']
     }
 
@@ -1088,7 +1087,7 @@ function appendObjectShapeFunctionFieldArguments(
         continue
       }
 
-      if (source.shapeKnown && isNullish(objectFunctionFieldAt(source.shape?.fields, field.name))) {
+      if (source.shapeKnown && !objectFunctionFieldAt(source.shape?.fields, field.name)) {
         appendDefaultObjectFunctionFieldArgument(args, field)
         continue
       }
@@ -1181,7 +1180,7 @@ function emitDependencyObjectFunctionFieldArgumentNameForRoot(
   const objectName = `${rootName}_${suffix}`
   const fields = context.objectShapes.get(objectName)
 
-  if (isNullish(objectFunctionFieldAt(fields, fieldName))) {
+  if (!objectFunctionFieldAt(fields, fieldName)) {
     return null
   }
 
@@ -1196,7 +1195,7 @@ function isMissingOptionalObjectLiteralField(source: ObjectFunctionArgumentSourc
     expression !== null &&
     typeof expression !== 'undefined' &&
     expression.type === 'ObjectLiteral' &&
-    isNullish(objectLiteralPropertyValue(expression, field.name))
+    !objectLiteralPropertyValue(expression, field.name)
   )
 }
 
@@ -1214,7 +1213,7 @@ function isUnavailableOptionalObjectFieldSource(
   }
 
   return (
-    context.moduleValueNames.has(source.pathName) && isNullish(objectShapeFieldAt(source.shape?.fields, field.name))
+    context.moduleValueNames.has(source.pathName) && !objectShapeFieldAt(source.shape?.fields, field.name)
   )
 }
 
@@ -1312,7 +1311,7 @@ function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext
     }
   }
 
-  if (isNullish(objectFunctionFieldAt(fields, fieldName))) {
+  if (!objectFunctionFieldAt(fields, fieldName)) {
     return null
   }
 
@@ -1749,6 +1748,7 @@ export type CScalarExpressionDependencies = {
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
   isIndexAccessExpression(expression: CValueNode): boolean
   isMemberAccessExpression(expression: CValueNode): boolean
+  isNullableRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isNullableScalarRuntimeExpression(expression: CValueNode, context: CFunctionContext): boolean
   isStringPredicateCall(expression: CValueNode, context: CFunctionContext): boolean
   reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | undefined): void
@@ -2228,7 +2228,7 @@ function emitPreparedThrowingCallExpression(
   appendLines(callArgs, args)
   appendLines(lines, preparedLines)
 
-  if (isNullish(deps.currentErrorTarget(context)) && !context.throwingFunction) {
+  if (!deps.currentErrorTarget(context) && !context.throwingFunction) {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_THROW',
@@ -2382,7 +2382,7 @@ export function emitCExpression(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): string {
-  if (isNullishCoalescingExpression(expression)) {
+  if (isCoalesceExpression(expression)) {
     context.diagnostics.push(
       diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
     )
@@ -2605,7 +2605,7 @@ export function emitPreparedNumberExpression(
       return scalarNullish
     }
 
-    if (isNullishCoalescingExpression(expression)) {
+    if (isCoalesceExpression(expression)) {
       context.diagnostics.push(
         diagnostic(
           'INOX_C_NULLISH',
@@ -2972,8 +2972,8 @@ export function emitPreparedRuntimeTruthinessExpression(
     }
   }
 
-  if (deps.isNullableScalarRuntimeExpression(expression, context)) {
-    const value = deps.emitPreparedNullableScalarRuntimeValueExpression(expression, context)
+  if (deps.isNullableRuntimeExpression(expression, context)) {
+    const value = deps.emitCValueExpression(expression, context)
 
     return {
       lines: value.lines,
@@ -3155,11 +3155,11 @@ function isDynamicReferenceObjectFieldExpression(
     return false
   }
 
-  if (isPresent(deps.resolveKnownObjectMember(expression, context))) {
+  if (deps.resolveKnownObjectMember(expression, context)) {
     return false
   }
 
-  return isNullish(deps.resolveKnownObjectIndex(expression, context))
+  return !deps.resolveKnownObjectIndex(expression, context)
 }
 
 function emitPreparedRuntimePreparedValueStringLiteralCompare(
@@ -3786,7 +3786,7 @@ function isDynamicObjectArrayIndexValueExpression(
     return false
   }
 
-  if (isNullish(dynamicObjectFieldAccess(expression.object, context, deps))) {
+  if (!dynamicObjectFieldAccess(expression.object, context, deps)) {
     return false
   }
 
@@ -3806,7 +3806,7 @@ function isDynamicArrayIndexExpression(
 }
 
 function isRuntimeValueReferenceExpression(expression: CValueNode, context: CFunctionContext): boolean {
-  return isPresent(runtimeValueReferenceName(expression, context))
+  return !!runtimeValueReferenceName(expression, context)
 }
 
 function runtimeValueReferenceName(expression: CValueNode, context: CFunctionContext): string | null {
@@ -4200,7 +4200,7 @@ export function emitCValueExpression(
   context: CFunctionContext,
   deps: CValueExpressionDependencies
 ): PreparedExpression {
-  if (isNullishCoalescingExpression(expression)) {
+  if (isCoalesceExpression(expression)) {
     return deps.emitCNullishCoalescingValueExpression(expression, context)
   }
 

@@ -18,7 +18,6 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
-import { isPresent } from '../../nullish.ts'
 
 type JsonMemberExpressionNode = {
   object?: JsonReferenceNode | null
@@ -99,7 +98,7 @@ function currentJsonErrorTarget(context: CFunctionContext): string | null {
 }
 
 function shouldUseDetailedJsonParseError(context: CFunctionContext): boolean {
-  return isPresent(currentJsonErrorTarget(context)) || context.throwingFunction === true
+  return !!currentJsonErrorTarget(context) || context.throwingFunction === true
 }
 
 function pushJsonParseStatusLines(
