@@ -30,6 +30,16 @@ test('reads type annotations through nested generics until a stop token', () => 
   assert.equal(tokens[result.position].value, '=')
 })
 
+test('stops type assertion annotations before chained as expressions', () => {
+  const tokens = tokenize('context as unknown as StringDiagnosticContext, item', {})
+  const start = tokens.findIndex((token) => token.value === 'unknown')
+
+  const result = readTypeAnnotation(tokens, start, ['as', ','], null)
+
+  assert.equal(result.typeName, 'unknown')
+  assert.equal(tokens[result.position].value, 'as')
+})
+
 test('reads readonly array annotations as plain array metadata', () => {
   const tokens = tokenize('function f(path: readonly string[] | null | undefined): void {}', {})
   const start = tokens.findIndex((token) => token.value === 'readonly')

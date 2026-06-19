@@ -504,12 +504,12 @@ function variableDeclarationShape(
     return declared.shape
   }
 
-  if (statement.shape != null) {
-    return statement.shape
-  }
-
   if (init != null && init.shape != null) {
     return init.shape
+  }
+
+  if (statement.shape != null) {
+    return statement.shape
   }
 
   return null

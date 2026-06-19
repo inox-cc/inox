@@ -4078,6 +4078,12 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
     return emitPreparedNullableScalarRuntimeValueExpression(expression, context)
   }
 
+  const fieldValue = emitPreparedNullableScalarFieldValueExpression(expression, context)
+
+  if (fieldValue != null) {
+    return fieldValue
+  }
+
   const valueType = inferExpressionType(expression, context)
 
   if (valueType === 'string') {

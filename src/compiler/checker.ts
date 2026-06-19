@@ -1560,58 +1560,88 @@ class Checker {
     }
 
     if (expression.type === 'TypeAssertionExpression') {
-      const valueType = this.checkExpression(expression.expression)
+      const sourceValueType = this.checkExpression(expression.expression)
       const asserted = expression.expression
+      let declaredType = expression.valueType
 
-      expression.nullable = asserted.nullable === true
-      expression.valueType = valueType
-      expression.arrayElementType = null
-      expression.arrayElementDeclaredType = null
-      expression.mapKeyType = null
-      expression.mapValueType = null
-      expression.promiseValueType = null
-      expression.setElementType = null
-      expression.functionType = null
-      expression.shape = null
-      expression.className = null
+      if (expression.declaredType != null) {
+        declaredType = expression.declaredType
+      }
 
-      if (asserted.arrayElementType != null) {
+      if (declaredType === 'const') {
+        expression.declaredType = declaredType
+        expression.nullable = asserted.nullable === true
+        expression.valueType = sourceValueType
         expression.arrayElementType = asserted.arrayElementType
-      }
-
-      if (asserted.arrayElementDeclaredType != null) {
         expression.arrayElementDeclaredType = asserted.arrayElementDeclaredType
-      }
-
-      if (asserted.mapKeyType != null) {
         expression.mapKeyType = asserted.mapKeyType
-      }
-
-      if (asserted.mapValueType != null) {
         expression.mapValueType = asserted.mapValueType
-      }
-
-      if (asserted.promiseValueType != null) {
         expression.promiseValueType = asserted.promiseValueType
-      }
-
-      if (asserted.setElementType != null) {
         expression.setElementType = asserted.setElementType
-      }
-
-      if (asserted.functionType != null) {
         expression.functionType = asserted.functionType
-      }
-
-      if (asserted.shape != null) {
         expression.shape = asserted.shape
-      }
-
-      if (asserted.className != null) {
         expression.className = asserted.className
+
+        return sourceValueType
       }
 
-      return valueType
+      const declared = this.resolveDeclaredType(declaredType, expression.loc as SourceLocation)
+      let arrayElementType = asserted.arrayElementType
+      let arrayElementDeclaredType = asserted.arrayElementDeclaredType
+      let mapKeyType = asserted.mapKeyType
+      let mapValueType = asserted.mapValueType
+      let promiseValueType = asserted.promiseValueType
+      let setElementType = asserted.setElementType
+      let functionType = asserted.functionType
+      let shape = asserted.shape
+      let className = asserted.className
+
+      if (declared.arrayElementType != null) {
+        arrayElementType = declared.arrayElementType
+      }
+
+      if (declared.arrayElementDeclaredType != null) {
+        arrayElementDeclaredType = declared.arrayElementDeclaredType
+      }
+
+      if (declared.mapKeyType != null) {
+        mapKeyType = declared.mapKeyType
+      }
+
+      if (declared.mapValueType != null) {
+        mapValueType = declared.mapValueType
+      }
+
+      if (declared.promiseValueType != null) {
+        promiseValueType = declared.promiseValueType
+      }
+
+      if (declared.setElementType != null) {
+        setElementType = declared.setElementType
+      }
+
+      if (declared.functionType != null) {
+        functionType = declared.functionType
+      }
+
+      if (declared.shape != null) {
+        shape = declared.shape
+      }
+
+      expression.declaredType = declaredType
+      expression.nullable = declared.nullable
+      expression.valueType = declared.valueType
+      expression.arrayElementType = arrayElementType
+      expression.arrayElementDeclaredType = arrayElementDeclaredType
+      expression.mapKeyType = mapKeyType
+      expression.mapValueType = mapValueType
+      expression.promiseValueType = promiseValueType
+      expression.setElementType = setElementType
+      expression.functionType = functionType
+      expression.shape = shape
+      expression.className = className
+
+      return declared.valueType
     }
 
     if (expression.type === 'ThisExpression') {

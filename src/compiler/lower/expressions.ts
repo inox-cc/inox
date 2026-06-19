@@ -167,6 +167,10 @@ function lowerTypeAssertionExpression(expression: LowerExpressionNode, context: 
     declaredType = expression.declaredType
   }
 
+  if (declaredType === 'const') {
+    return lowered
+  }
+
   const declared = resolveDeclaredType(declaredType, context)
 
   return applyResolvedTypeAssertion(lowered, declaredType, declared)

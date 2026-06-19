@@ -398,8 +398,9 @@ test('erases TypeScript as expressions before C emission', () => {
     `export function main(): void {
   const value = 42 as number
   const label = 'answer' as string
+  const chained = label as unknown as string
   const record = { kind: 'ready' as const, value }
-  console.log(label, record.value)
+  console.log(label, chained, record.value)
 }
 `,
     {
@@ -409,7 +410,72 @@ test('erases TypeScript as expressions before C emission', () => {
 
   assert.match(result.code, /const double value = 42;/)
   assert.match(result.code, /const char \*label = "answer";/)
+  assert.match(result.code, /const char \*chained = label;/)
   assert.match(result.code, /ccjs_object_init_known\(record, 1, ccjs_number_value\(value\)\)/)
+})
+
+test('uses TypeScript as expression object metadata for field access', () => {
+  const result = compileSource(
+    `type Base = {
+  value: string
+}
+
+type Exact = {
+  exact: string
+}
+
+function read(base: Base): string {
+  const exact = base as Exact
+  return exact.exact
+}
+
+export function main(): void {
+  console.log(read({ exact: 'fine' } as Exact))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(exact, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_string\* ccjs_log_string_\d+ = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+})
+
+test('uses TypeScript as expression metadata for nullable string fields', () => {
+  const result = compileSource(
+    `type CapabilityNode = {
+  type?: string | null
+}
+
+type CapabilityArrayDeclarationNode = {
+  loweredArrayMethodName?: string | null
+}
+
+function methodName(expression: CapabilityNode): string | null {
+  const declaration = expression as CapabilityArrayDeclarationNode
+  const method = declaration.loweredArrayMethodName
+
+  if (method === 'filter' || method === 'map') {
+    return method
+  }
+
+  return null
+}
+
+export function main(): void {
+  console.log(methodName({ loweredArrayMethodName: 'map' } as CapabilityArrayDeclarationNode) ?? 'none')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(declaration, 0, &ccjs_value_\d+\)/)
+  assert.match(result.code, /method = ccjs_value_\d+;/)
+  assert.match(result.code, /ccjs_return = method;/)
+  assert.doesNotMatch(result.code, /unknownas/)
 })
 
 

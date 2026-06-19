@@ -1108,7 +1108,7 @@ class Parser {
     let expression = this.parseNullish()
 
     while (this.matchIdentifier('as')) {
-      const valueType = this.parseTypeAnnotation([',', ')', ']', ';', '}', ':'], {
+      const valueType = this.parseTypeAnnotation(['as', ',', ')', ']', ';', '}', ':'], {
         stopAtLineBreak: true
       })
       expression = createTypeAssertionExpression(expression, valueType)
