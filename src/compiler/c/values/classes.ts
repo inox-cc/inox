@@ -1,11 +1,16 @@
 import { diagnostic } from '../../diagnostics.ts'
 import {
+  emitEventLoopReference,
   emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
+  registerEventLoop,
+  registerOwnedPromise,
   registerOwnedValue
 } from '../context.ts'
+import { irClassMethodEffectName } from '../../ir.ts'
+import { functionTakesEventLoopParam } from '../async/promises.ts'
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
@@ -18,6 +23,7 @@ import type {
   CClassMethod,
   CFunctionParam,
   CObjectShapeField,
+  CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CPreparedCallArgs as PreparedCallArgs
 } from '../types.ts'
@@ -786,12 +792,13 @@ export function isClassConstructorExpression(expression: AnyNode, context: Class
 
 export function emitPreparedClassMethodCallExpression(
   expression: AnyNode,
-  context: ClassFunctionContext
+  context: ClassFunctionContext,
+  options: PreparedCallOptions = {}
 ): PreparedExpression | null {
   const call = resolveClassMethodCallInfo(expression, context)
 
   if (call != null) {
-    return emitPreparedResolvedClassMethodCallExpression(expression, context, call)
+    return emitPreparedResolvedClassMethodCallExpression(expression, context, call, options)
   }
 
   return null
@@ -800,12 +807,13 @@ export function emitPreparedClassMethodCallExpression(
 function emitPreparedResolvedClassMethodCallExpression(
   expression: AnyNode,
   context: ClassFunctionContext,
-  call: ClassMethodCallInfo
+  call: ClassMethodCallInfo,
+  options: PreparedCallOptions
 ): PreparedExpression {
   const method = resolveClassMethod(call.info, call.methodName)
 
   if (method != null) {
-    return emitKnownPreparedClassMethodCallExpression(expression, context, call, method)
+    return emitKnownPreparedClassMethodCallExpression(expression, context, call, method, options)
   }
 
   context.diagnostics.push(
@@ -826,7 +834,8 @@ function emitKnownPreparedClassMethodCallExpression(
   expression: AnyNode,
   context: ClassFunctionContext,
   call: ClassMethodCallInfo,
-  method: AnyNode
+  method: AnyNode,
+  options: PreparedCallOptions
 ): PreparedExpression {
   if (method.params.length !== expression.args.length) {
     context.diagnostics.push(
@@ -839,7 +848,6 @@ function emitKnownPreparedClassMethodCallExpression(
   }
 
   const prepared = emitPreparedClassCallArgs(context, expression, method.params)
-  const callExpression = emitClassMethodCallExpression(call, method, prepared)
   const callLines: string[] = []
 
   pushAllLines(callLines, call.objectLines)
@@ -847,6 +855,43 @@ function emitKnownPreparedClassMethodCallExpression(
 
   if (isThrowingClassMethod(call.info, method, context)) {
     return emitPreparedThrowingClassMethodCallExpression(call, method, callLines, prepared, context)
+  }
+
+  const callExpression = emitClassMethodCallExpression(call, method, prepared, context)
+
+  if (method.returnType === 'promise') {
+    let out = callExpression
+    let promiseValueType = method.returnPromiseValueType
+
+    if (promiseValueType == null) {
+      promiseValueType = 'unknown'
+    }
+
+    if (options.out != null) {
+      out = options.out
+    }
+
+    registerOwnedPromise(context, out, promiseValueType, 'unknown')
+
+    if (out === callExpression) {
+      return {
+        lines: callLines,
+        expression: out,
+        valueType: 'promise',
+        rejectionValueType: 'unknown'
+      }
+    }
+
+    const lines: string[] = []
+    pushAllLines(lines, callLines)
+    lines.push(`${out} = ${callExpression};`)
+
+    return {
+      lines,
+      expression: out,
+      valueType: 'promise',
+      rejectionValueType: 'unknown'
+    }
   }
 
   if (isManagedRuntimeReturnType(method.returnType)) {
@@ -884,9 +929,16 @@ function emitPreparedThrowingClassMethodCallExpression(
   prepared: PreparedCallArgs,
   context: ClassFunctionContext
 ): PreparedExpression {
-  const callArgs: string[] = [call.objectExpression]
+  const callArgs: string[] = []
   const lines: string[] = []
   let result = ''
+
+  if (classMethodTakesEventLoopParam(call.info, method, context)) {
+    registerEventLoop(context)
+    callArgs.push(emitEventLoopReference(context))
+  }
+
+  callArgs.push(call.objectExpression)
 
   for (const arg of prepared.args) {
     callArgs.push(arg)
@@ -970,18 +1022,34 @@ function isThrowingClassMethod(info: CClassInfo, method: AnyNode, context: Class
     return false
   }
 
-  const methodEffectName = `${info.name}.${method.name}`
+  const methodEffectName = irClassMethodEffectName(info.name, method.name)
   return throwingFunctions.has(methodEffectName)
 }
 
-function emitClassMethodCallExpression(call: ClassMethodCallInfo, method: AnyNode, prepared: PreparedCallArgs): string {
-  const args: string[] = [call.objectExpression]
+function emitClassMethodCallExpression(
+  call: ClassMethodCallInfo,
+  method: AnyNode,
+  prepared: PreparedCallArgs,
+  context: ClassFunctionContext
+): string {
+  const args: string[] = []
+
+  if (classMethodTakesEventLoopParam(call.info, method, context)) {
+    registerEventLoop(context)
+    args.push(emitEventLoopReference(context))
+  }
+
+  args.push(call.objectExpression)
 
   for (const arg of prepared.args) {
     args.push(arg)
   }
 
   return `${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(args, ', ')})`
+}
+
+function classMethodTakesEventLoopParam(info: CClassInfo, method: AnyNode, context: ClassFunctionContext): boolean {
+  return functionTakesEventLoopParam(irClassMethodEffectName(info.name, method.name), context)
 }
 
 function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFunctionContext): ClassMethodCallInfo | null {

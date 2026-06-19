@@ -150,7 +150,11 @@ export async function compileFileToCModules(
   entry: string,
   options: CModuleCompileOptions = {}
 ): Promise<CModuleCompileResult> {
-  const host = requireCompilerHost(options.host, 'compileFileToCModules')
+  if (options.host == null) {
+    throw new Error('compileFileToCModules requires a compiler host')
+  }
+
+  const host = options.host
   const compiled = await compileGraphToIrModules(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'))
   const irModules: IrProgram[] = []
 
@@ -163,7 +167,7 @@ export async function compileFileToCModules(
   runCStaticChecks(irModules, options)
 
   const emitOptions: CModuleEmitOptions = {
-    host,
+    host: options.host,
     random: options.random,
     sourceRoot: options.sourceRoot
   }
@@ -200,7 +204,12 @@ export async function compileGraphToIrModules(
   options: CompileOptions = {}
 ): Promise<GraphIrCompileResult> {
   const target = resolveCompileTarget(options)
-  const host = requireCompilerHost(options.host, 'compileGraphToIrModules')
+
+  if (options.host == null) {
+    throw new Error('compileGraphToIrModules requires a compiler host')
+  }
+
+  const host = options.host
   const graph = await buildModuleGraph(entry, compileOptionsWithHostAndTarget(options, host, target))
 
   return {
@@ -275,7 +284,7 @@ function cModuleOptionsWithHostAndTarget(
   }
 }
 
-function memoryCompileOptions(options: MemoryCompileOptions, host: CompilerHost): CompileOptions {
+function memoryCompileOptions(options: MemoryCompileOptions, host: any): CompileOptions {
   return {
     target: options.target,
     callMain: options.callMain,
@@ -291,7 +300,7 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: CompilerHost)
 
 function memoryCModuleCompileOptions(
   options: MemoryCModuleCompileOptions,
-  host: CompilerHost
+  host: any
 ): CModuleCompileOptions {
   const base = memoryCompileOptions(options, host)
 

@@ -82,7 +82,7 @@ const requiredFiles: string[] = [
   'src/compiler/lexer.ts',
   'src/compiler/lower.ts',
   'src/compiler/parser.ts',
-  'src/ccjs-globals.d.ts',
+  'src/inox-globals.d.ts',
   'scripts/lib/run-command.ts',
   'scripts/lib/snapshot-runner.ts',
   'scripts/bootstrap-boringssl.ts',

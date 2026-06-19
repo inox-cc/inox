@@ -11,16 +11,16 @@ import {
 } from './checker/assignability.ts'
 import {
   childProcessSpawnSyncResultShape,
+  builtinGlobalSymbol,
   debugMemoryStatsObjectShape,
   errorObjectShape,
   fetchAbortControllerObjectShape,
   fetchResponseObjectShape,
-  fsConstantValues,
   fsDirentObjectShape,
   fsStatsObjectShape,
-  globals,
-  libuvOnlyRuntimeImports,
-  numericCastNames,
+  isFsConstantValue,
+  isNumericCastName,
+  libuvOnlyRuntimeImportFeature,
   pathParseObjectShape,
   urlObjectShape,
   urlSearchParamsObjectShape
@@ -866,24 +866,22 @@ class Checker {
       return null
     }
 
-    let actualName = name
-
     if (isNullableTypeName(name)) {
-      actualName = nullableTypeNameFromKnownTypeName(name)
+      return this.declaredClassName(nullableTypeNameFromKnownTypeName(name))
     }
 
-    if (this.classNames.has(actualName)) {
-      return actualName
+    if (this.classNames.has(name)) {
+      return name
     }
 
-    const symbol = this.scope.resolve(actualName)
+    const symbol = this.scope.resolve(name)
 
     if (symbol == null) {
       return null
     }
 
     if (symbol.kind === 'class') {
-      return actualName
+      return name
     }
 
     return null
@@ -5660,7 +5658,7 @@ class Checker {
   checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression)
 
-    if (path == null || path.length !== 3 || path[1] !== 'constants' || !fsConstantValues.has(path[2])) {
+    if (path == null || path.length !== 3 || path[1] !== 'constants' || !isFsConstantValue(path[2])) {
       return null
     }
 
@@ -6020,7 +6018,7 @@ class Checker {
       return
     }
 
-    const feature = libuvOnlyRuntimeImports.get(statement.source)
+    const feature = libuvOnlyRuntimeImportFeature(statement.source)
 
     if (feature != null) {
       this.requireLibuvBackend(feature, statement.loc)
@@ -7081,17 +7079,17 @@ class Checker {
 
   parseJsonLiteralType(source: string, index: number): JsonParseLiteralResult | null {
     const nextIndex = this.skipJsonWhitespace(source, index)
-    const char = source[nextIndex]
+    const unit = source[nextIndex]
 
-    if (char === '[') {
+    if (unit === '[') {
       return this.parseJsonArrayLiteralType(source, nextIndex + 1)
     }
 
-    if (char === '{') {
+    if (unit === '{') {
       return this.parseJsonObjectLiteralType(source, nextIndex + 1)
     }
 
-    if (char === '"') {
+    if (unit === '"') {
       const stringResult = this.parseJsonStringLiteral(source, nextIndex, false)
 
       if (stringResult == null) {
@@ -7104,7 +7102,7 @@ class Checker {
       }
     }
 
-    if (char === '-' || this.isJsonDigit(char)) {
+    if (unit === '-' || this.isJsonDigit(unit)) {
       const numberEnd = this.parseJsonNumberEnd(source, nextIndex)
 
       if (numberEnd == null) {
@@ -7238,16 +7236,16 @@ class Checker {
     let value = ''
 
     while (nextIndex < source.length) {
-      const char = source[nextIndex]
+      const unit = source[nextIndex]
 
-      if (char === '"') {
+      if (unit === '"') {
         return {
           value,
           index: nextIndex + 1
         }
       }
 
-      if (char === '\\') {
+      if (unit === '\\') {
         const escaped = source[nextIndex + 1]
 
         if (escaped === 'u') {
@@ -7268,19 +7266,20 @@ class Checker {
         }
 
         if (captureValue) {
-          value = `${value}${this.jsonSimpleEscapeValue(escaped)}`
+          const escapedValue: string = this.jsonSimpleEscapeValue(escaped)
+          value = value + escapedValue
         }
 
         nextIndex = nextIndex + 2
         continue
       }
 
-      if (char.charCodeAt(0) < 32) {
+      if (unit.charCodeAt(0) < 32) {
         return null
       }
 
       if (captureValue) {
-        value = `${value}${char}`
+        value = value + unit
       }
 
       nextIndex = nextIndex + 1
@@ -8670,7 +8669,7 @@ class Checker {
 
     const castName = firstPathSegment(expression.callee.path)
 
-    if (!numericCastNames.has(castName)) {
+    if (!isNumericCastName(castName)) {
       return null
     }
 
@@ -9213,7 +9212,7 @@ class Checker {
     let symbol = this.scope.resolve(constructorName)
 
     if (symbol == null) {
-      const globalSymbol = globals.get(constructorName)
+      const globalSymbol = builtinGlobalSymbol(constructorName)
 
       if (globalSymbol != null) {
         symbol = globalSymbol
@@ -10387,7 +10386,7 @@ class Checker {
     let symbol = this.scope.resolve(calleeName)
 
     if (symbol == null) {
-      const globalSymbol = globals.get(calleeName)
+      const globalSymbol = builtinGlobalSymbol(calleeName)
 
       if (globalSymbol != null) {
         symbol = globalSymbol
@@ -11017,7 +11016,7 @@ class Checker {
     let symbol = this.scope.resolve(root)
 
     if (symbol == null) {
-      const globalSymbol = globals.get(root)
+      const globalSymbol = builtinGlobalSymbol(root)
 
       if (globalSymbol != null) {
         symbol = globalSymbol
@@ -11108,10 +11107,11 @@ class Checker {
 
           const firstCycleEdge = cycle[0]
           cycleLoc = firstCycleEdge.loc
+          const cycleText: string = this.formatOwnershipCycle(cycle)
 
           this.report(
             'CCJS_OWNERSHIP_CYCLE',
-            `strong ownership cycle detected: ${this.formatOwnershipCycle(cycle)}. Mark one back-reference as weak.`,
+            'strong ownership cycle detected: ' + cycleText + '. Mark one back-reference as weak.',
             cycleLoc
           )
         }

@@ -1,5 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
-import { collectIrTopLevelNodesFromPrograms } from '../ir.ts'
+import { collectIrTopLevelNodesFromPrograms, irClassMethodEffectName } from '../ir.ts'
 import type { AnyNode as CNode, IrProgram, SourceLocation } from '../types.ts'
 import { functionTakesEventLoopParam } from './async/promises.ts'
 import {
@@ -308,6 +308,10 @@ function registerFunctionParamsInContext(
 
       if (param.valueType === 'object') {
         registerObjectShape(context, param.name, param.shape)
+
+        if (param.declaredType != null) {
+          context.objectDeclaredTypes.set(param.name, param.declaredType)
+        }
       }
     } else if (param.valueType === 'string') {
       context.variables.set(param.name, 'string')
@@ -318,6 +322,10 @@ function registerFunctionParamsInContext(
     } else if (param.valueType === 'object') {
       context.variables.set(param.name, 'object')
       registerObjectShape(context, param.name, param.shape)
+
+      if (param.declaredType != null) {
+        context.objectDeclaredTypes.set(param.name, param.declaredType)
+      }
     } else if (param.valueType === 'array') {
       context.variables.set(param.name, 'array')
       context.runtimeArrayElementTypes.set(param.name, declarationTypeOrUnknown(param.arrayElementType))
@@ -421,7 +429,11 @@ function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string 
   }
 
   for (const seenType of seenTypes) {
-    if (seenType === declaredType || isContextDeclaredTypePair(seenType, declaredType)) {
+    if (
+      seenType === declaredType ||
+      isContextDeclaredTypePair(seenType, declaredType) ||
+      isDependencyCarrierContextPair(seenType, declaredType)
+    ) {
       return true
     }
   }
@@ -467,14 +479,50 @@ function isContextDeclaredTypePair(left: string, right: string): boolean {
   return isContextDeclaredType(left) && isContextDeclaredType(right)
 }
 
+function isDependencyCarrierContextPair(left: string, right: string): boolean {
+  return isDependencyCarrierDeclaredType(left) && isContextDeclaredType(right)
+}
+
 function isContextDeclaredType(value: string): boolean {
   return (
+    value === 'ArrayFunctionContext' ||
     value === 'CEmitContext' ||
     value === 'CFunctionContext' ||
     value === 'CDeclarationFunctionContext' ||
+    value === 'CallbackEmitContext' ||
+    value === 'CallbackFunctionContext' ||
+    value === 'ClassFunctionContext' ||
+    value === 'CollectionFunctionContext' ||
+    value === 'DgramFunctionContext' ||
+    value === 'FetchFunctionContext' ||
+    value === 'FsFunctionContext' ||
+    value === 'HttpFunctionContext' ||
+    value === 'NullableFunctionContext' ||
+    value === 'PromiseEmitContext' ||
+    value === 'PromiseFunctionContext' ||
+    value === 'StringCContext' ||
+    value === 'TimerFunctionContext' ||
     value === 'AsyncTaskEmitContext' ||
     value === 'AsyncTaskFunctionContext' ||
     value === 'AsyncTaskPlannerContext'
+  )
+}
+
+function isDependencyCarrierDeclaredType(value: string): boolean {
+  return (
+    value === 'CModuleEmissionDependencies' ||
+    value === 'ArrayLoweringDependencies' ||
+    value === 'AsyncTaskLoweringDependencies' ||
+    value === 'CallbackLoweringDependencies' ||
+    value === 'ClassLoweringDependencies' ||
+    value === 'CollectionLoweringDependencies' ||
+    value === 'DgramLoweringDependencies' ||
+    value === 'HttpLoweringDependencies' ||
+    value === 'NetLoweringDependencies' ||
+    value === 'NullableLoweringDependencies' ||
+    value === 'PromiseChainLoweringDependencies' ||
+    value === 'StatementLoweringDependencies' ||
+    value === 'StringLoweringDependencies'
   )
 }
 
@@ -585,9 +633,11 @@ export function emitClassMethodDeclaration(
 ): string[] {
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, method.returnType, method.returnNullable)
   const params = method.params
+  const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
   context.returnShape = null
   context.throwingFunction = isThrowingClassMethod(info, method, baseContext)
+  context.externalEventLoop = functionTakesEventLoopParam(methodEffectName, baseContext)
   context.functionReturnOut = 'ccjs_out'
   context.functionErrorOut = 'ccjs_error_out'
   context.variables.set('this', 'object')
@@ -610,10 +660,12 @@ export function emitClassMethodDeclaration(
   pushIndentedDeclarationLines(lines, emitStatusResultDeclarations(context))
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitEventLoopDeclarations(context))
   pushIndentedDeclarationLines(lines, emitOwnedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitOwnedPromiseDeclarations(context))
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
   pushDeclarationLines(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
@@ -621,6 +673,7 @@ export function emitClassMethodDeclaration(
     pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
+    pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
   } else if (context.returnType !== 'void') {
@@ -639,8 +692,15 @@ export function emitClassMethodDeclaration(
 }
 
 export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
-  const params = ['ccjs_value this']
+  const params: string[] = []
   const name = emitCClassMethodName(info.name, method.name)
+  const methodEffectName = irClassMethodEffectName(info.name, method.name)
+
+  if (functionTakesEventLoopParam(methodEffectName, context)) {
+    params.push('ccjs_loop* ccjs_loop')
+  }
+
+  params.push('ccjs_value this')
 
   for (let index = 0; index < method.params.length; index = index + 1) {
     params.push(emitClassMethodParam(method.params[index], index, method, context))

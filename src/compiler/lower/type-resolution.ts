@@ -392,10 +392,12 @@ function hydrateObjectShape(shape: LowerTypeNode, context: LowerContext): LowerT
 }
 
 function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): LowerTypeNode {
-  let functionType = nullableNode(field.functionType)
+  let functionType: LowerTypeNode | null = null
+  let functionTypeChanged = false
 
-  if (functionType != null) {
-    functionType = hydrateFunctionType(functionType, context)
+  if (field.functionType != null) {
+    functionType = hydrateFunctionType(field.functionType, context)
+    functionTypeChanged = true
   }
 
   if (field.valueType === 'object' && field.shape == null && field.declaredType != null) {
@@ -428,7 +430,7 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
     }
   }
 
-  if (functionType !== field.functionType) {
+  if (functionTypeChanged) {
     return {
       name: field.name,
       optional: field.optional,

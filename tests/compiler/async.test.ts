@@ -398,7 +398,7 @@ export function main(): void {
   assert.match(c.code, /void run\(ccjs_value callback\);/)
   assert.match(
     c.code,
-    /static ccjs_status ccjs_callback_hello_0\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\);/
+    /static ccjs_status ccjs_callback_hello_0\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\);/
   )
   assert.match(
     c.code,
@@ -434,7 +434,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_hello_0\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\);/
+    /static ccjs_status ccjs_callback_hello_0\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\);/
   )
   const mainIndex = result.ir.body.findIndex((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   const withoutMainBodyCallbacks = emitCFromIr({
@@ -520,9 +520,9 @@ export function main(): void {
   assert.match(c.code, /static void ccjs_callback_context_\d+_finalize\(void \*context\);/)
   assert.match(
     c.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
   )
-  assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)context;/)
+  assert.match(c.code, /ccjs_callback_context_\d+\* captured = \(ccjs_callback_context_\d+\*\)(?:ccjs_)?context;/)
   assert.match(c.code, /const char \*prefix = captured->prefix;/)
   assert.match(
     c.code,
@@ -639,7 +639,7 @@ export function main(): void {
   )
   assert.match(
     c.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
   )
   assert.match(
     c.code,
@@ -985,7 +985,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_addOne_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static ccjs_status ccjs_callback_addOne_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
   )
   assert.match(result.code, /\*out = ccjs_number_value\(addOne\(args\[0\]\.as\.number\)\);/)
   assert.match(result.code, /\*out = ccjs_bool_value\(\(isReady\(\)\) != 0\);/)
@@ -1016,7 +1016,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
   )
   assert.match(result.code, /\*out = ccjs_number_value\(\(value \+ bonus\)\);/)
   assert.match(result.code, /\*out = ccjs_bool_value\(\(\(bonus == 3\)\) != 0\);/)
@@ -1059,7 +1059,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
   )
   assert.match(result.code, /\(\*out\) = ccjs_number_value\(\(doubled \+ bonus\)\);/)
   assert.match(result.code, /\(\*out\) = ccjs_bool_value\(\(1\) != 0\);/)
@@ -1104,7 +1104,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_arrow_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\) \{\n {2}\(void\)context;\n {2}if \(out == 0 \|\| arg_count != 1 \|\| args == 0\) return CCJS_ERR_TYPE;\n {2}\*out = ccjs_undefined_value\(\);\n {2}if \(args\[0\]\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n {2}double value = args\[0\]\.as\.number;\n {2}int ccjs_return_active = 0;/
+    /static ccjs_status ccjs_callback_arrow_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\) \{\n {2}\(void\)(?:ccjs_)?context;\n {2}if \(out == 0 \|\| arg_count != 1 \|\| args == 0\) return CCJS_ERR_TYPE;\n {2}\*out = ccjs_undefined_value\(\);\n {2}if \(args\[0\]\.tag != CCJS_TAG_NUMBER\) return CCJS_ERR_TYPE;\n {2}double value = args\[0\]\.as\.number;\n {2}int ccjs_return_active = 0;/
   )
   assert.match(
     result.code,
@@ -1153,7 +1153,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_getName_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static ccjs_status ccjs_callback_getName_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
   )
   assert.match(result.code, /\*out = getName\(\);/)
   assert.match(result.code, /\(\*out\) = ccjs_value_\d+;/)
@@ -1200,7 +1200,7 @@ export function main(): void {
   assert.match(result.code, /ccjs_value getUser\(void\) \{/)
   assert.match(
     result.code,
-    /static ccjs_status ccjs_callback_getUser_\d+\(void \*context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
+    /static ccjs_status ccjs_callback_getUser_\d+\(void \*(?:ccjs_)?context, const ccjs_value \*args, size_t arg_count, ccjs_value \*out\)/
   )
   assert.match(result.code, /\*out = getUser\(\);/)
   assert.match(result.code, /\(\*out\) = ccjs_object_\d+;/)
@@ -1340,6 +1340,31 @@ export async function main(): Promise<void> {
     throwing.code,
     /ccjs_release\(ccjs_async_result_\d+\);\n {4}ccjs_async_result_\d+ = ccjs_undefined_value\(\);/
   )
+})
+
+
+test('passes event loop into Promise-returning class methods', () => {
+  const result = compileSource(
+    `class SourceHost {
+  readFile(path: string): Promise<string> {
+    return Promise.resolve(path)
+  }
+}
+
+const host = new SourceHost()
+const promise = host.readFile('ok')
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(
+    result.code,
+    /static ccjs_promise\* ccjs_method_SourceHost_readFile\(ccjs_loop\* ccjs_loop, ccjs_value this, ccjs_value ccjs_param_path\)/
+  )
+  assert.match(result.code, /ccjs_promise_resolved\(ccjs_loop, ccjs_value_\d+, &ccjs_return\)/)
+  assert.match(result.code, /ccjs_method_SourceHost_readFile\(&ccjs_loop, host, ccjs_value_\d+\)/)
 })
 
 

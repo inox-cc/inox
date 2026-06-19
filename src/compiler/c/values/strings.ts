@@ -47,7 +47,7 @@ type StringCContext = {
   returnType?: string
   runtimeStrings?: Set<string>
   statusReturn: boolean
-  stringLoweringDependencies?: any
+  stringLoweringDependencies?: StringLoweringDependencies
   throwingFunction: boolean
   usedCleanupGoto: boolean
   variables?: Map<string, string>
@@ -145,8 +145,16 @@ export type StringLoweringDependencies = {
   resolveNetAddressStringMember(expression: AnyNode, context: StringCContext): string | null
 }
 
+const unconfiguredStringLoweringDependencies = {} as StringLoweringDependencies
+
 function stringDeps(context: StringCContext): StringLoweringDependencies {
-  return context.stringLoweringDependencies
+  const deps = context.stringLoweringDependencies
+
+  if (deps != null) {
+    return deps
+  }
+
+  return unconfiguredStringLoweringDependencies
 }
 
 function pushStringDiagnostic(context: StringCContext | StringDiagnosticContext, item: Diagnostic): void {
@@ -1858,11 +1866,11 @@ function parseTemplateLiteralParts(
   }
 
   while (index < end) {
-    const char = raw[index]
+    const part = raw[index]
 
-    if (char === '\\') {
+    if (part === '\\') {
       text = text + raw.slice(index, Math.min(index + 2, end))
-      advanceTemplateLocation(locationState, char)
+      advanceTemplateLocation(locationState, part)
 
       if (index + 1 < end) {
         advanceTemplateLocation(locationState, raw[index + 1])
@@ -1872,7 +1880,7 @@ function parseTemplateLiteralParts(
       continue
     }
 
-    if (char === '$' && raw[index + 1] === '{') {
+    if (part === '$' && raw[index + 1] === '{') {
       if (text !== '') {
         parts.push({
           kind: 'text',
@@ -1955,8 +1963,8 @@ function parseTemplateLiteralParts(
       continue
     }
 
-    text = text + char
-    advanceTemplateLocation(locationState, char)
+    text = text + part
+    advanceTemplateLocation(locationState, part)
     index = index + 1
   }
 
@@ -1977,8 +1985,8 @@ function currentTemplateLocation(
   return sourceLocationWithFile(loc, state.line, state.column)
 }
 
-function advanceTemplateLocation(state: TemplateLocationState, char: string): void {
-  if (char === '\n') {
+function advanceTemplateLocation(state: TemplateLocationState, unit: string): void {
+  if (unit === '\n') {
     state.line = state.line + 1
     state.column = 1
     return

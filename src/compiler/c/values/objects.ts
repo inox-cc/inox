@@ -32,6 +32,7 @@ import type {
 } from '../types.ts'
 
 type ObjectShapeContext = {
+  objectDeclaredTypes?: Map<string, string | null>
   objectShapes: Map<string, CObjectShapeField[]>
 }
 
@@ -301,13 +302,18 @@ function registerObjectShapeFields(
 
   for (const field of normalized) {
     const shape = field.shape
+    const fieldPath = `${name}_${field.name}`
 
     if (field.valueType !== 'object' || shape == null || shape.fields == null || seen.has(shape)) {
       continue
     }
 
+    if (field.declaredType != null && context.objectDeclaredTypes != null) {
+      context.objectDeclaredTypes.set(fieldPath, field.declaredType)
+    }
+
     seen.add(shape)
-    registerObjectShapeFields(context, `${name}_${field.name}`, shape.fields, seen)
+    registerObjectShapeFields(context, fieldPath, shape.fields, seen)
     seen.delete(shape)
   }
 }
@@ -357,6 +363,7 @@ function knownObjectMemberField(
     index,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
+    declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
     setElementType: field.setElementType,
@@ -434,6 +441,7 @@ function knownObjectIndexField(
     index,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
+    declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
     setElementType: field.setElementType,

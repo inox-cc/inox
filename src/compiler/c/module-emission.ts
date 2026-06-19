@@ -13,7 +13,14 @@ import {
 } from '../ir.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import type { CFunctionParam, CObjectShapeField, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
+import type {
+  CCallbackWrapper,
+  CFunctionParam,
+  CFunctionType,
+  CObjectShapeField,
+  CPromiseChainWrapper,
+  CRuntimeArrowCallbackWrapper
+} from './types.ts'
 import {
   collectCallbackWrappers,
   collectFunctionPointerParamNames,
@@ -93,6 +100,12 @@ import {
   emitNetHandlerHead
 } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
+import type { CollectionLoweringDependencies } from './values/collections.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -121,6 +134,19 @@ type CModuleNode = AnyNode
 type CModuleFunctionEntry = {
   declaration: IrFunctionDeclaration
   node: CModuleNode
+}
+
+type CModuleRuntimeCallbackWrapperContext = {
+  callbackWrappers: Map<string, CCallbackWrapper>
+}
+
+type CModuleRuntimeTypeContext = {
+  functionParams: Map<string, CFunctionParam[]>
+  functionReturnTypes: Map<string, string>
+}
+
+type CModuleValueFunctionFieldContext = {
+  moduleObjectShapes: Map<string, CObjectShapeField[]>
 }
 
 function pushCModuleLines(target: string[], source: string[]): void {
@@ -266,7 +292,7 @@ function stringSetFromArray(values: string[]): Set<string> {
   return result
 }
 
-function cModuleHasRuntimeCallbackWrapper(context: CEmitContext): boolean {
+function cModuleHasRuntimeCallbackWrapper(context: CModuleRuntimeCallbackWrapperContext): boolean {
   for (const wrapper of context.callbackWrappers.values()) {
     if (isRuntimeCallbackWrapper(wrapper)) {
       return true
@@ -277,9 +303,12 @@ function cModuleHasRuntimeCallbackWrapper(context: CEmitContext): boolean {
 }
 
 export type CModuleEmissionDependencies = {
+  arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
+  classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string>
+  collectionLoweringDependencies: CollectionLoweringDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
@@ -296,7 +325,10 @@ export type CModuleEmissionDependencies = {
   emitStatementList(body: AnyNode[], context: CFunctionContext): string[]
   httpLoweringDependencies: HttpLoweringDependencies
   netLoweringDependencies: NetLoweringDependencies
+  nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
+  statementLoweringDependencies: StatementLoweringDependencies
+  stringLoweringDependencies: StringLoweringDependencies
 }
 
 export function emitCModuleSource(
@@ -648,23 +680,38 @@ function emitCModuleFunctionPointerAdapterDefinitions(lines: string[], context: 
     return
   }
 
+  const moduleObjectFunctionFields = collectCModuleObjectFunctionFieldNames(context)
+
   for (const adapter of context.functionPointerAdapters) {
-    pushCModuleLines(lines, emitCModuleFunctionPointerAdapterDefinition(adapter))
+    pushCModuleLines(lines, emitCModuleFunctionPointerAdapterDefinition(adapter, context, moduleObjectFunctionFields))
     lines.push('')
   }
 }
 
-function emitCModuleFunctionPointerAdapterDefinition(adapter: CFunctionPointerAdapter): string[] {
+function emitCModuleFunctionPointerAdapterDefinition(
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext,
+  moduleObjectFunctionFields: Set<string>
+): string[] {
   const lines = [`${emitCModuleFunctionPointerAdapterHead(adapter)} {`]
   const expectedNames = collectFunctionPointerParamNames(adapter.functionType, adapter.seenTypes)
-  const targetNames = collectFunctionPointerParamNames(adapter.targetFunctionType, adapter.targetSeenTypes)
+  const targetFunctionType = functionPointerAdapterTargetFunctionType(adapter, context)
+  const targetSeenTypes = functionPointerAdapterTargetSeenTypes(adapter, context)
+  const targetNames = collectFunctionPointerParamNames(targetFunctionType, targetSeenTypes)
   const targetNameSet = stringSetFromArray(targetNames)
-  const targetArgs = emitFunctionPointerAdapterTargetArgs(adapter, expectedNames, targetNames)
+  const targetArgs = emitFunctionPointerAdapterTargetArgs(adapter, expectedNames, targetNames, moduleObjectFunctionFields)
 
   for (const name of expectedNames) {
     if (!targetNameSet.has(name)) {
       lines.push(`  (void)${name};`)
     }
+  }
+
+  if (isThrowingFunctionPointerAdapterTarget(adapter, context)) {
+    pushCModuleLines(lines, emitThrowingFunctionPointerAdapterTargetCall(adapter, targetArgs))
+    lines.push('}')
+
+    return lines
   }
 
   const call = `${adapter.target}(${joinStrings(targetArgs, ', ')})`
@@ -680,10 +727,121 @@ function emitCModuleFunctionPointerAdapterDefinition(adapter: CFunctionPointerAd
   return lines
 }
 
+function functionPointerAdapterTargetSeenTypes(adapter: CFunctionPointerAdapter, context: CEmitContext): string[] {
+  if (isPlainArrowFunctionPointerAdapterTarget(adapter, context)) {
+    return []
+  }
+
+  return adapter.targetSeenTypes
+}
+
+function functionPointerAdapterTargetFunctionType(
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext
+): CFunctionType | null | undefined {
+  for (const wrapper of context.callbackWrappers.values()) {
+    if (wrapper.kind === 'plain-arrow' && wrapper.name === adapter.target) {
+      return wrapper.functionType
+    }
+  }
+
+  return adapter.targetFunctionType
+}
+
+function isPlainArrowFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapter, context: CEmitContext): boolean {
+  for (const wrapper of context.callbackWrappers.values()) {
+    if (wrapper.kind === 'plain-arrow' && wrapper.name === adapter.target) {
+      return true
+    }
+  }
+
+  if (adapter.target.startsWith('ccjs_callback_arrow_')) {
+    return true
+  }
+
+  return false
+}
+
+function isThrowingFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapter, context: CEmitContext): boolean {
+  const sourceName = cFunctionPointerAdapterTargetSourceName(adapter, context)
+
+  return sourceName != null && context.throwingFunctions.has(sourceName)
+}
+
+function cFunctionPointerAdapterTargetSourceName(adapter: CFunctionPointerAdapter, context: CEmitContext): string | null {
+  for (const name of context.functionNames.keys()) {
+    const target = context.functionNames.get(name)
+
+    if (target === adapter.target) {
+      return name
+    }
+  }
+
+  return null
+}
+
+function emitThrowingFunctionPointerAdapterTargetCall(adapter: CFunctionPointerAdapter, targetArgs: string[]): string[] {
+  const lines: string[] = []
+  const callArgs: string[] = []
+  const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
+  const returnType = emitFunctionPointerReturnType(adapter.targetFunctionType)
+
+  for (const arg of targetArgs) {
+    callArgs.push(arg)
+  }
+
+  if (returnType !== 'void') {
+    lines.push(`${returnType} ccjs_adapter_result = ${cFunctionPointerAdapterDefaultReturnValue(returnType)};`)
+    callArgs.push('&ccjs_adapter_result')
+  }
+
+  lines.push('ccjs_value ccjs_adapter_error = ccjs_undefined_value();')
+  callArgs.push('&ccjs_adapter_error')
+  lines.push(`ccjs_status ccjs_adapter_status = ${adapter.target}(${joinStrings(callArgs, ', ')});`)
+  lines.push('if (ccjs_adapter_status != CCJS_OK) {')
+  lines.push('  ccjs_release(ccjs_adapter_error);')
+
+  if (adapterReturnType === 'void') {
+    lines.push('  return;')
+  } else {
+    lines.push(`  return ${throwingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`)
+  }
+
+  lines.push('}')
+  lines.push('ccjs_release(ccjs_adapter_error);')
+
+  if (adapterReturnType !== 'void') {
+    lines.push(`return ${throwingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`)
+  }
+
+  return lines
+}
+
+function throwingFunctionPointerAdapterReturnExpression(adapterReturnType: string, targetReturnType: string): string {
+  if (targetReturnType !== 'void') {
+    return 'ccjs_adapter_result'
+  }
+
+  return cFunctionPointerAdapterDefaultReturnValue(adapterReturnType)
+}
+
+function cFunctionPointerAdapterDefaultReturnValue(returnType: string): string {
+  if (returnType === 'ccjs_value') {
+    return 'ccjs_undefined_value()'
+  }
+
+  if (returnType.includes('*')) {
+    return '0'
+  }
+
+  return '0'
+}
+
 function emitFunctionPointerAdapterTargetArgs(
   adapter: CFunctionPointerAdapter,
   expectedNames: string[],
-  targetNames: string[]
+  targetNames: string[],
+  moduleObjectFunctionFields: Set<string>
 ): string[] {
   const expectedNameSet = stringSetFromArray(expectedNames)
   const args: string[] = []
@@ -691,6 +849,13 @@ function emitFunctionPointerAdapterTargetArgs(
   for (const name of targetNames) {
     if (expectedNameSet.has(name)) {
       args.push(name)
+      continue
+    }
+
+    const moduleObjectFunctionField = emitFunctionPointerAdapterModuleObjectFieldArg(name, moduleObjectFunctionFields)
+
+    if (moduleObjectFunctionField != null) {
+      args.push(moduleObjectFunctionField)
       continue
     }
 
@@ -705,6 +870,66 @@ function emitFunctionPointerAdapterTargetArgs(
   }
 
   return args
+}
+
+function collectCModuleObjectFunctionFieldNames(context: CEmitContext): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const objectName of context.moduleObjectShapes.keys()) {
+    const fields = context.moduleObjectShapes.get(objectName)
+
+    if (fields != null) {
+      collectCModuleObjectFunctionFieldNamesFromShape(names, objectName, fields)
+    }
+  }
+
+  return names
+}
+
+function collectCModuleObjectFunctionFieldNamesFromShape(
+  names: Set<string>,
+  objectName: string,
+  fields: CObjectShapeField[]
+): void {
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      if (isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)) {
+        names.add(emitCObjectFunctionFieldName(objectName, field.name))
+      }
+    }
+  }
+}
+
+function emitFunctionPointerAdapterModuleObjectFieldArg(name: string, moduleObjectFunctionFields: Set<string>): string | null {
+  const prefix = 'ccjs_objfn_ccjs_arg_'
+
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  let index = prefix.length
+
+  while (index < name.length) {
+    const code = name.charCodeAt(index)
+
+    if (code < 48 || code > 57) {
+      break
+    }
+
+    index = index + 1
+  }
+
+  if (index === prefix.length || name[index] !== '_') {
+    return null
+  }
+
+  const candidate = `ccjs_objfn_${name.slice(index + 1)}`
+
+  if (moduleObjectFunctionFields.has(candidate)) {
+    return candidate
+  }
+
+  return null
 }
 
 function emitFunctionPointerAdapterDefaultTargetArg(
@@ -874,26 +1099,80 @@ function createCModuleBaseContext(
   return context
 }
 
-function collectCModuleContextRuntimeTypes(context: CEmitContext): Set<string> {
+function collectCModuleContextRuntimeTypes(context: CModuleRuntimeTypeContext): Set<string> {
   const types: Set<string> = new Set()
 
   for (const valueType of context.functionReturnTypes.values()) {
-    if (isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType) || valueType === 'promise') {
-      types.add(valueType)
-    }
+    addCModuleRuntimeType(types, valueType)
   }
 
   for (const params of context.functionParams.values()) {
     for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
       const param = cModuleFunctionParamAt(params, paramIndex)
 
-      if (isManagedRuntimeReturnType(param.valueType) || isOpaqueRuntimeValueType(param.valueType) || param.valueType === 'promise') {
-        types.add(param.valueType)
-      }
+      collectCModuleFunctionParamRuntimeTypes(types, param, new Set())
     }
   }
 
   return types
+}
+
+function addCModuleRuntimeType(types: Set<string>, valueType: string): void {
+  if (isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType) || valueType === 'promise') {
+    types.add(valueType)
+  }
+}
+
+function collectCModuleFunctionParamRuntimeTypes(
+  types: Set<string>,
+  param: CFunctionParam,
+  seen: Set<CObjectShapeField[]>
+): void {
+  addCModuleRuntimeType(types, param.valueType)
+
+  if (
+    param.valueType === 'function' &&
+    !isPlainFunctionPointerType(param.functionType) &&
+    isRuntimeFunctionType(param.functionType)
+  ) {
+    types.add('function')
+  }
+
+  if (param.valueType === 'object' && param.shape != null && param.shape.fields != null) {
+    collectCModuleObjectShapeRuntimeTypes(types, param.shape.fields, seen)
+  }
+}
+
+function collectCModuleObjectShapeRuntimeTypes(
+  types: Set<string>,
+  fields: CObjectShapeField[],
+  seen: Set<CObjectShapeField[]>
+): void {
+  if (seen.has(fields)) {
+    return
+  }
+
+  seen.add(fields)
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+
+    addCModuleRuntimeType(types, field.valueType)
+
+    if (
+      field.valueType === 'function' &&
+      !isPlainFunctionPointerType(field.functionType) &&
+      isRuntimeFunctionType(field.functionType)
+    ) {
+      types.add('function')
+    }
+
+    if (field.valueType === 'object' && field.shape != null && field.shape.fields != null) {
+      collectCModuleObjectShapeRuntimeTypes(types, field.shape.fields, seen)
+    }
+  }
+
+  seen.delete(fields)
 }
 
 function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
@@ -999,7 +1278,7 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
 function emitCModuleValueFunctionFieldDefinitions(
   lines: string[],
   values: CModuleValueDeclaration[],
-  context: CEmitContext
+  context: CModuleValueFunctionFieldContext
 ): void {
   let emitted = false
 
@@ -1011,7 +1290,7 @@ function emitCModuleValueFunctionFieldDefinitions(
       continue
     }
 
-    if (emitCModuleObjectFunctionFieldDefinitions(lines, item.name, fields, [])) {
+    if (emitCModuleObjectFunctionFieldDefinitions(lines, item.name, fields, cModuleObjectFunctionFieldSeenTypes())) {
       emitted = true
     }
   }
@@ -1019,6 +1298,10 @@ function emitCModuleValueFunctionFieldDefinitions(
   if (emitted) {
     lines.push('')
   }
+}
+
+function cModuleObjectFunctionFieldSeenTypes(): string[] {
+  return ['CFunctionContext']
 }
 
 function emitCModuleObjectFunctionFieldDefinitions(

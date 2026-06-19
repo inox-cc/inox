@@ -1151,7 +1151,10 @@ function pushExpressionListThrowValueTypes(
 function pushThrowValueTypes(target: IrThrowValueType[], values: IrThrowValueType[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     const value = values[index]
-    target.push(value)
+
+    if (!throwValueTypesInclude(target, value)) {
+      target.push(value)
+    }
   }
 }
 
@@ -1227,5 +1230,5 @@ function normalizedEffectThrowValueTypes(effect: IrFunctionEffect): IrThrowValue
     return throwValueTypes
   }
 
-  return effect.throwValueTypes
+  return uniqueThrowValueTypes(effect.throwValueTypes)
 }

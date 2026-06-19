@@ -149,6 +149,7 @@ type CFunctionContext = {
   nullableVariables: CStringSet
   objectAccessorReturnPaths: CObjectAccessorReturnPathMap
   objectAliases: CStringMap
+  objectDeclaredTypes: CStringMap
   objectShapes: Map<string, CObjectShapeField[]>
   ownedCryptoHashes: string[]
   ownedCryptoHmacs: string[]
@@ -321,7 +322,11 @@ export type StatementLoweringDependencies = {
   emitPreparedBytesIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedStatement | null
   emitPreparedCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitPreparedChildProcessCallExpression(expression: StatementNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
-  emitPreparedClassMethodCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedClassMethodCallExpression(
+    expression: StatementNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCryptoCallExpression(expression: StatementNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
   emitPreparedCryptoHashCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
@@ -397,6 +402,20 @@ function pushAllLines(target: string[], source: string[]): void {
   for (const line of source) {
     target.push(line)
   }
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function pushIndentedLines(target: string[], source: string[], indent: string): void {
@@ -1503,6 +1522,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fetchCall != null) {
+    registerPromiseVariableMetadata(statement, fetchCall, context)
     return {
       lines: fetchCall.lines,
       expression: ''
@@ -1512,6 +1532,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fsCall != null) {
+    registerPromiseVariableMetadata(statement, fsCall, context)
     return {
       lines: fsCall.lines,
       expression: ''
@@ -1521,6 +1542,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseConstructor != null) {
+    registerPromiseVariableMetadata(statement, promiseConstructor, context)
     return {
       lines: promiseConstructor.lines,
       expression: ''
@@ -1530,6 +1552,7 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promise != null) {
+    registerPromiseVariableMetadata(statement, promise, context)
     return {
       lines: promise.lines,
       expression: ''
@@ -1539,9 +1562,26 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseCall != null) {
+    registerPromiseVariableMetadata(statement, promiseCall, context)
     return {
       lines: promiseCall.lines,
       expression: ''
+    }
+  }
+
+  if (statement.init.valueType === 'promise') {
+    const classMethodCall = deps.emitPreparedClassMethodCallExpression(
+      statement.init,
+      context,
+      preparedCallOut(statement.name)
+    )
+
+    if (classMethodCall != null) {
+      registerPromiseVariableMetadata(statement, classMethodCall, context)
+      return {
+        lines: classMethodCall.lines,
+        expression: ''
+      }
     }
   }
 
@@ -1589,8 +1629,11 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   }
 
   if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+    const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
+    registerRuntimeValueMetadata(statement.name, statement.valueType, statement, statement.init, context)
+
     return {
-      lines: emitNullableRuntimeValueVariableDeclaration(statement, context),
+      lines,
       expression: ''
     }
   }
@@ -1766,6 +1809,30 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   return {
     lines: value.lines,
     expression: `${constPrefix}double ${statement.name} = ${value.expression}`
+  }
+}
+
+function registerPromiseVariableMetadata(
+  statement: StatementNode,
+  prepared: PreparedExpression,
+  context: CFunctionContext
+): void {
+  if (statement.valueType !== 'promise' && (statement.init == null || statement.init.valueType !== 'promise')) {
+    return
+  }
+
+  context.variables.set(statement.name, 'promise')
+
+  if (prepared.valueType != null && prepared.valueType !== 'unknown') {
+    context.promiseValueTypes.set(statement.name, prepared.valueType)
+  } else if (statement.promiseValueType != null && statement.promiseValueType !== 'unknown') {
+    context.promiseValueTypes.set(statement.name, statement.promiseValueType)
+  } else if (statement.init != null && statement.init.promiseValueType != null && statement.init.promiseValueType !== 'unknown') {
+    context.promiseValueTypes.set(statement.name, statement.init.promiseValueType)
+  }
+
+  if (prepared.rejectionValueType != null && prepared.rejectionValueType !== '' && prepared.rejectionValueType !== 'unknown') {
+    context.promiseRejectionValueTypes.set(statement.name, prepared.rejectionValueType)
   }
 }
 
@@ -2316,9 +2383,11 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       popStringTarget(context.returnTargets)
     }
 
+    const catchFailureStatement: string = statementDeps(context).emitFailureStatement(context)
+
     lines.push(`${catchLabel}:`)
     lines.push(
-      `  if (${emitCatchBindingTypeCheck(catchValueType)}) ${statementDeps(context).emitFailureStatement(context)}`
+      `  if (${emitCatchBindingTypeCheck(catchValueType)}) ${catchFailureStatement}`
     )
     lines.push('  ccjs_error_active = 0;')
     lines.push('  {')
@@ -2391,7 +2460,8 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     if (outerThrowTarget != null) {
       lines.push(`  if (ccjs_error_active) goto ${outerThrowTarget};`)
     } else {
-      lines.push(`  if (ccjs_error_active) ${statementDeps(context).emitFailureStatement(context)}`)
+      const finalizerFailureStatement: string = statementDeps(context).emitFailureStatement(context)
+      lines.push(`  if (ccjs_error_active) ${finalizerFailureStatement}`)
     }
 
     if (context.returnFlowUsed) {
@@ -2493,10 +2563,11 @@ function isThrowableObjectExpression(expression: StatementNode, context: CFuncti
 }
 
 export function emitReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
-  const argument = normalizeCAsyncReturnArgument(statement.argument, context, statement.loc)
-  let returnStatement = statement
+  let argument: StatementNode | null | undefined = statement.argument
+  let returnStatement: StatementNode = statement
 
-  if (argument !== statement.argument) {
+  if (argument != null && shouldNormalizeCAsyncReturnArgument(argument, context)) {
+    argument = cAsyncReturnAwaitExpression(argument, context.returnType, statement.loc)
     returnStatement = returnStatementWithArgument(statement, argument)
   }
 
@@ -2556,7 +2627,8 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
     return ['return;']
   }
 
-  return [`return ${statementDeps(context).emitCExpression(argument, context)};`]
+  const expression: string = statementDeps(context).emitCExpression(argument, context)
+  return [`return ${expression};`]
 }
 
 export function emitVariableDeclarationStatement(statement: StatementNode, context: CFunctionContext): string[] {
@@ -2669,43 +2741,63 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   )
 
   if (asyncPromiseCall != null) {
+    registerPromiseVariableMetadata(statement, asyncPromiseCall, context)
     return asyncPromiseCall.lines
   }
 
   const promiseMethod = deps.emitPreparedPromiseMethodExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseMethod != null) {
+    registerPromiseVariableMetadata(statement, promiseMethod, context)
     return promiseMethod.lines
   }
 
   const fetchCall = deps.emitPreparedFetchCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fetchCall != null) {
+    registerPromiseVariableMetadata(statement, fetchCall, context)
     return fetchCall.lines
   }
 
   const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (fsCall != null) {
+    registerPromiseVariableMetadata(statement, fsCall, context)
     return fsCall.lines
   }
 
   const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseConstructor != null) {
+    registerPromiseVariableMetadata(statement, promiseConstructor, context)
     return promiseConstructor.lines
   }
 
   const promise = deps.emitPreparedPromiseStaticExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promise != null) {
+    registerPromiseVariableMetadata(statement, promise, context)
     return promise.lines
   }
 
   const promiseCall = deps.emitPreparedPromiseReturningCallExpression(statement.init, context, preparedCallOut(statement.name))
 
   if (promiseCall != null) {
+    registerPromiseVariableMetadata(statement, promiseCall, context)
     return promiseCall.lines
+  }
+
+  if (statement.init.valueType === 'promise') {
+    const classMethodCall = deps.emitPreparedClassMethodCallExpression(
+      statement.init,
+      context,
+      preparedCallOut(statement.name)
+    )
+
+    if (classMethodCall != null) {
+      registerPromiseVariableMetadata(statement, classMethodCall, context)
+      return classMethodCall.lines
+    }
   }
 
   if (deps.isCollectionConstructorExpression(statement.init)) {
@@ -2744,7 +2836,11 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
-    return emitNullableRuntimeValueVariableDeclaration(statement, context)
+    const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
+
+    registerRuntimeValueMetadata(statement.name, statement.valueType, statement, statement.init, context)
+
+    return lines
   }
 
   if (deps.isErrorConstructorExpression(statement.init)) {
@@ -2888,16 +2984,6 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
   }
 
   const deps = statementDeps(context)
-  const valueType = deps.inferExpressionType(expression.value, context)
-
-  if (
-    valueType !== 'unknown' &&
-    !isManagedRuntimeReturnType(valueType) &&
-    !isOpaqueRuntimeValueType(valueType)
-  ) {
-    return null
-  }
-
   const value = deps.emitCValueExpression(expression.value, context)
   const expectedTag = cRuntimeValueTag(targetType)
   const lines: string[] = []
@@ -3148,6 +3234,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   if (expression.type === 'AssignmentExpression') {
+    const moduleValueAssignment = emitModuleValueAssignmentExpression(expression, context, deps)
+
+    if (moduleValueAssignment != null) {
+      return moduleValueAssignment
+    }
+
     const processExitCodeAssignment = deps.emitProcessExitCodeAssignment(expression, context)
 
     if (processExitCodeAssignment != null) {
@@ -3249,6 +3341,37 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   return []
 }
 
+function emitModuleValueAssignmentExpression(
+  expression: StatementNode,
+  context: CFunctionContext,
+  deps: StatementLoweringDependencies
+): string[] | null {
+  if (expression.type !== 'AssignmentExpression' || expression.target.type !== 'Reference') {
+    return null
+  }
+
+  if (expression.target.path.length !== 1) {
+    return null
+  }
+
+  const name = joinStrings(expression.target.path, '_')
+
+  if (!context.moduleValueNames.has(name)) {
+    return null
+  }
+
+  return deps.emitModuleValueVariableAssignment(
+    {
+      type: 'VariableDeclaration',
+      kind: 'let',
+      name,
+      init: expression.value,
+      loc: expression.loc
+    },
+    context
+  )
+}
+
 function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFunctionContext): string[] | null {
   if (expression.type !== 'AssignmentExpression' || expression.target.type !== 'IndexExpression') {
     return null
@@ -3299,23 +3422,25 @@ function emitRuntimeArrayIndexExpression(
   }
 }
 
-function normalizeCAsyncReturnArgument(
-  argument: StatementNode | null | undefined,
-  context: CFunctionContext,
-  loc: CSourceLocation
-): StatementNode | null | undefined {
-  if (
-    argument == null ||
-    context.returnType === 'promise' ||
-    (argument.valueType !== 'promise' && statementDeps(context).inferExpressionType(argument, context) !== 'promise')
-  ) {
-    return argument
-  }
+function shouldNormalizeCAsyncReturnArgument(
+  argument: StatementNode,
+  context: CFunctionContext
+): boolean {
+  return (
+    context.returnType !== 'promise' &&
+    (argument.valueType === 'promise' || statementDeps(context).inferExpressionType(argument, context) === 'promise')
+  )
+}
 
+function cAsyncReturnAwaitExpression(
+  argument: StatementNode,
+  returnType: string,
+  loc: CSourceLocation
+): StatementNode {
   return {
     type: 'AwaitExpression',
     argument,
-    valueType: context.returnType,
+    valueType: returnType,
     loc
   }
 }
@@ -3467,11 +3592,9 @@ function emitRuntimeValueReturnStatement(statement: StatementNode, context: CFun
 
 function emitNullableScalarReturnStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const expectedTag = cRuntimeValueTag(context.returnType)
-  let value: PreparedExpression;
+  let value: PreparedExpression = nullRuntimeValueExpression()
 
-  if (statement.argument == null) {
-    value = nullRuntimeValueExpression()
-  } else {
+  if (statement.argument != null) {
     value = statementDeps(context).emitNullableScalarValueExpression(statement.argument, context)
   }
 

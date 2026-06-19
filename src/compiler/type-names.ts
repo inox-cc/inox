@@ -226,13 +226,13 @@ function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {
   let index = 0
 
   while (index < value.length) {
-    const char = value.slice(index, index + 1)
+    const unit = value.slice(index, index + 1)
 
-    if (char === '<') {
+    if (unit === '<') {
       depth = depth + 1
-    } else if (char === '>') {
+    } else if (unit === '>') {
       depth = depth - 1
-    } else if (char === delimiter && depth === 0) {
+    } else if (unit === delimiter && depth === 0) {
       args.push(value.slice(start, index))
       start = index + 1
     }

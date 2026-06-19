@@ -465,6 +465,7 @@ import {
   emitPreparedRuntimeTruthinessExpression as emitPreparedRuntimeTruthinessExpressionWithDependencies,
   emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
   isDynamicRuntimeValueExpression as isDynamicRuntimeValueExpressionWithDependencies,
+  objectExpressionPathName,
   isThrowingFunctionCallee as isThrowingFunctionCalleeFromExpressions,
   isThrowingFunctionName as isThrowingFunctionNameFromExpressions
 } from './values/expressions.ts'
@@ -806,11 +807,32 @@ const classLoweringDependencies: ClassLoweringDependencies = {
 
 objectVariableDeclarationDependencies = {
   emitCFieldFlags,
-  emitFunctionPointerVariable: (name, init, context, isConst, functionType, loc, seenTypes) =>
+  emitFunctionPointerVariable: (
+    name: string,
+    init: AnyNode,
+    context,
+    isConst: boolean,
+    functionType: CFunctionType | null | undefined,
+    loc,
+    seenTypes: string[] = []
+  ) =>
     emitFunctionPointerVariable(name, init, context as CFunctionContext, isConst, functionType, loc, seenTypes),
-  emitFunctionPointerVariableWithCInitializer: (name, init, context, isConst, functionType, loc, seenTypes) =>
+  emitFunctionPointerVariableWithCInitializer: (
+    name: string,
+    init: string,
+    context,
+    isConst: boolean,
+    functionType: CFunctionType | null | undefined,
+    loc,
+    seenTypes: string[] = []
+  ) =>
     emitFunctionPointerVariableWithCInitializer(name, init, context as CFunctionContext, isConst, functionType, loc, seenTypes),
-  emitRuntimeCallbackValueInto: (expression, functionType, out, context) =>
+  emitRuntimeCallbackValueInto: (
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    out: string,
+    context
+  ) =>
     emitRuntimeCallbackValueInto(expression, functionType, out, context as CFunctionContext),
   emitCValueExpression,
   inferExpressionType,
@@ -1151,7 +1173,7 @@ const cCallExpressionDependencies = {
   isExternalEventLoopFunctionCallee,
   isNullableFunctionType,
   isPromiseReturningFunctionCallee,
-  registerErrorChannel: (context: unknown) => registerErrorChannel(context as CFunctionContext),
+  registerErrorChannel,
   resolveFunctionValueType,
   resolveFunctionParams,
   resolveRuntimeCallbackCalleeType,
@@ -1219,7 +1241,7 @@ const cScalarExpressionDependencies = {
 function emitPreparedStatementRuntimeTruthinessExpression(
   expression: CDynamicObjectFieldNode,
   context: CFunctionContext
-) {
+): PreparedExpression | null {
   return emitPreparedRuntimeTruthinessExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
@@ -1324,9 +1346,12 @@ const cValueExpressionDependencies = {
 }
 
 const cUnitDependencies = {
+  arrayLoweringDependencies,
   asyncTaskLoweringDependencies,
   callbackLoweringDependencies,
+  classLoweringDependencies,
   collectExternalEventLoopFunctions,
+  collectionLoweringDependencies,
   createBaseContext,
   dgramLoweringDependencies,
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) =>
@@ -1339,13 +1364,19 @@ const cUnitDependencies = {
     emitMainWrapperWithDependencies(irPrograms, baseContext, declarationEmissionDependencies),
   httpLoweringDependencies,
   netLoweringDependencies,
-  promiseChainLoweringDependencies
+  nullableLoweringDependencies,
+  promiseChainLoweringDependencies,
+  statementLoweringDependencies,
+  stringLoweringDependencies
 }
 
 const cModuleEmissionDependencies = {
+  arrayLoweringDependencies,
   asyncTaskLoweringDependencies,
   callbackLoweringDependencies,
+  classLoweringDependencies,
   collectExternalEventLoopFunctions,
+  collectionLoweringDependencies,
   createBaseContext,
   dgramLoweringDependencies,
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) =>
@@ -1358,7 +1389,10 @@ const cModuleEmissionDependencies = {
   emitStatementList,
   httpLoweringDependencies,
   netLoweringDependencies,
-  promiseChainLoweringDependencies
+  nullableLoweringDependencies,
+  promiseChainLoweringDependencies,
+  statementLoweringDependencies,
+  stringLoweringDependencies
 }
 
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
@@ -1661,6 +1695,17 @@ function collectModuleObjectShapes(
       statement.shape.fields != null
     ) {
       registerModuleObjectShape(result, statement.name, statement.shape.fields)
+    }
+  }
+
+  for (const statement of statements) {
+    if (
+      statement.type === 'VariableDeclaration' &&
+      statement.valueType === 'object' &&
+      statement.shape != null &&
+      statement.shape.fields != null
+    ) {
+      registerModuleObjectShape(result, statement.name, statement.shape.fields)
       continue
     }
 
@@ -1670,6 +1715,10 @@ function collectModuleObjectShapes(
       statement.init != null &&
       statement.init.type === 'ObjectLiteral'
     ) {
+      if (result.has(statement.name)) {
+        continue
+      }
+
       const fields = collectModuleObjectLiteralShapeFields(
         statement.init,
         functionParams,
@@ -1692,6 +1741,10 @@ function collectModuleObjectShapes(
     const assignmentName = moduleObjectAssignmentName(statement)
 
     if (assignmentName == null) {
+      continue
+    }
+
+    if (result.has(assignmentName)) {
       continue
     }
 
@@ -1756,8 +1809,25 @@ function registerModuleObjectShape(
     shapes.set(name, fields)
   } else {
     for (const field of fields) {
-      if (moduleObjectShapeFieldIndex(existing, field.name) === -1) {
+      const index = moduleObjectShapeFieldIndex(existing, field.name)
+
+      if (index === -1) {
         existing.push(field)
+      } else {
+        const existingField = existing[index]
+
+        if (moduleObjectShapeFieldScore(field) > moduleObjectShapeFieldScore(existingField)) {
+          existingField.valueType = field.valueType
+          existingField.declaredType = field.declaredType
+          existingField.functionType = field.functionType
+          existingField.functionTypeOwnership = field.functionTypeOwnership
+          existingField.nullable = field.nullable
+          existingField.optional = field.optional
+          existingField.ownership = field.ownership
+          existingField.readonlyField = field.readonlyField
+          existingField.shape = field.shape
+          existingField.shapeOwnership = field.shapeOwnership
+        }
       }
     }
   }
@@ -1767,6 +1837,48 @@ function registerModuleObjectShape(
       registerModuleObjectShape(shapes, `${name}_${field.name}`, field.shape.fields)
     }
   }
+}
+
+function moduleObjectShapeFieldScore(field: CObjectShapeField): number {
+  let score = 0
+
+  if (field.valueType !== 'unknown') {
+    score = score + 1
+  }
+
+  if (field.declaredType != null && field.declaredType !== 'unknown') {
+    score = score + 1
+  }
+
+  if (field.functionType != null) {
+    score = score + moduleObjectFunctionTypeScore(field.functionType)
+  }
+
+  if (field.shape != null && field.shape.fields != null) {
+    score = score + field.shape.fields.length
+  }
+
+  return score
+}
+
+function moduleObjectFunctionTypeScore(functionType: CFunctionType): number {
+  let score = 1
+
+  if (functionType.returnType !== 'unknown') {
+    score = score + 1
+  }
+
+  for (const param of functionType.params) {
+    if (param.valueType !== 'unknown') {
+      score = score + 1
+    }
+
+    if (param.declaredType != null && param.declaredType !== 'unknown') {
+      score = score + 1
+    }
+  }
+
+  return score
 }
 
 function moduleObjectShapeFieldIndex(fields: CObjectShapeField[], name: string): number {
@@ -2260,9 +2372,12 @@ function emitFunctionPointerVariable(
   loc: CSourceLocation,
   seenTypes: string[] = []
 ): string {
+  const target = emitFunctionValueExpression(init, context)
+  const targetFunctionType = resolveFunctionValueType(init, context)
+
   return emitFunctionPointerVariableWithCInitializer(
     name,
-    emitFunctionValueExpression(init, context),
+    emitAdaptedModuleFunctionPointerExpression(target, targetFunctionType, functionType, context, seenTypes, []),
     context,
     isConst,
     functionType,
@@ -2291,43 +2406,49 @@ function emitFunctionPointerVariableWithCInitializer(
 }
 
 function resolveFunctionValueType(expression: AnyNode, context: CFunctionContext): CFunctionType | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+    const params = context.functionParams.get(name)
+    const returnType = context.functionReturnTypes.get(name)
+
+    if (params != null && returnType != null) {
+      const returnMapType = context.functionReturnMapTypes.get(name)
+      let returnMapKeyType: string | null = null
+      let returnMapValueType: string | null = null
+
+      if (returnMapType != null) {
+        returnMapKeyType = returnMapType.key
+        returnMapValueType = returnMapType.value
+      }
+
+      return {
+        kind: 'function',
+        params,
+        returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
+        returnMapKeyType,
+        returnMapValueType,
+        returnNullable: context.functionReturnNullables.get(name) === true,
+        returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
+        returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
+        returnShape: context.functionReturnShapes.get(name) ?? null,
+        returnType
+      }
+    }
+  }
+
+  if (expression.type === 'ArrowFunctionExpression') {
+    const wrapper = context.callbackArrowWrappers.get(expression)
+
+    if (wrapper != null && wrapper.kind === 'plain-arrow') {
+      return wrapper.functionType
+    }
+  }
+
   if (expression.functionType != null) {
     return expression.functionType
   }
 
-  if (expression.type !== 'Reference' || expression.path.length !== 1) {
-    return null
-  }
-
-  const name = expression.path[0]
-  const params = context.functionParams.get(name)
-  const returnType = context.functionReturnTypes.get(name)
-
-  if (params == null || returnType == null) {
-    return null
-  }
-
-  const returnMapType = context.functionReturnMapTypes.get(name)
-  let returnMapKeyType: string | null = null
-  let returnMapValueType: string | null = null
-
-  if (returnMapType != null) {
-    returnMapKeyType = returnMapType.key
-    returnMapValueType = returnMapType.value
-  }
-
-  return {
-    kind: 'function',
-    params,
-    returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
-    returnMapKeyType,
-    returnMapValueType,
-    returnNullable: context.functionReturnNullables.get(name) === true,
-    returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
-    returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
-    returnShape: context.functionReturnShapes.get(name) ?? null,
-    returnType
-  }
+  return null
 }
 
 function emitStatement(statement: AnyNode, context: CFunctionContext): string[] {
@@ -2971,7 +3092,7 @@ function emitModuleObjectFunctionFieldAssignments(
     return []
   }
 
-  return emitModuleObjectFunctionFieldAssignmentsFromShape(objectName, expression, fields, context, [])
+  return emitModuleObjectFunctionFieldAssignmentsFromShape(objectName, expression, fields, context, ['CFunctionContext'])
 }
 
 function emitModuleObjectFunctionFieldAssignmentsFromShape(
@@ -3073,6 +3194,7 @@ function emitAdaptedModuleFunctionPointerExpression(
   }
 
   if (
+    !isThrowingFunctionPointerTarget(target, context) &&
     emitFunctionPointerReturnType(targetFunctionType) === emitFunctionPointerReturnType(functionType) &&
     emitFunctionPointerParams(targetFunctionType, [], targetSeenTypes) === emitFunctionPointerParams(functionType, [], seenTypes)
   ) {
@@ -3080,6 +3202,24 @@ function emitAdaptedModuleFunctionPointerExpression(
   }
 
   return emitFunctionPointerAdapter(target, targetFunctionType, functionType, context, seenTypes, targetSeenTypes)
+}
+
+function isThrowingFunctionPointerTarget(target: string, context: CFunctionContext): boolean {
+  const sourceName = cFunctionPointerTargetSourceName(target, context)
+
+  return sourceName != null && isThrowingFunctionName(sourceName, context)
+}
+
+function cFunctionPointerTargetSourceName(target: string, context: CFunctionContext): string | null {
+  for (const name of context.functionNames.keys()) {
+    const cName = context.functionNames.get(name)
+
+    if (cName === target) {
+      return name
+    }
+  }
+
+  return null
 }
 
 function emitModuleObjectFunctionFieldDefaultAssignments(
@@ -3579,6 +3719,18 @@ function emitObjectObjectMemberVariableDeclaration(
 
   if (statement.shape != null) {
     registerObjectShape(context, statement.name, statement.shape)
+  }
+
+  if (member.declaredType != null) {
+    context.objectDeclaredTypes.set(statement.name, member.declaredType)
+  }
+
+  const alias = objectExpressionPathName(statement.init, context)
+
+  if (alias != null && alias !== statement.name) {
+    context.objectAliases.set(statement.name, alias)
+  } else {
+    context.objectAliases.delete(statement.name)
   }
 
   return lines
@@ -5192,13 +5344,14 @@ function emitPreparedAsyncTaskPromiseCallExpression(
 
   const prepared = emitPreparedCallArgs(expression, asyncTaskWrapperFunctionParams(wrapper), context)
   const args: string[] = [emitEventLoopReference(context)]
+  const rejectionValueType = resolveCFunctionRejectionValueType(expression.callee, context)
   const lines: string[] = []
 
   pushAll(args, prepared.args)
   args.push(`&${out}`)
 
   if (options.owned !== false) {
-    registerOwnedPromise(context, out, valueType, 'unknown')
+    registerOwnedPromise(context, out, valueType, rejectionValueType)
   }
 
   pushAll(lines, prepared.lines)
@@ -5208,7 +5361,7 @@ function emitPreparedAsyncTaskPromiseCallExpression(
     lines,
     expression: out,
     valueType,
-    rejectionValueType: 'unknown'
+    rejectionValueType
   }
 }
 

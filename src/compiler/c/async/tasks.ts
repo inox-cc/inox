@@ -126,6 +126,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   netReadingSockets: AsyncTaskStringSet
   nullableVariables: AsyncTaskStringSet
   objectAliases: AsyncTaskStringMap
+  objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   ownedCryptoHashes: string[]
   ownedCryptoHmacs: string[]
@@ -156,6 +157,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
 
 type AsyncTaskLocalMetadataContext = {
   mapTypes: AsyncTaskMapTypeMap
+  objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   runtimeArrayElementTypes: AsyncTaskStringMap
   runtimeStrings: AsyncTaskStringSet
@@ -173,6 +175,7 @@ type AsyncTaskVariableScopeSnapshot = {
   narrowedNullableScalars: AsyncTaskStringSet
   nullableVariables: AsyncTaskStringSet
   objectAliases: AsyncTaskStringMap
+  objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   promiseConstructorHandlers: AsyncTaskPromiseConstructorHandlerMap
   promiseRejectionValueTypes: AsyncTaskStringMap
@@ -1811,6 +1814,7 @@ function createAsyncTaskExpressionContext(
   result.netReadingSockets = context.netReadingSockets
   result.nullableVariables = context.nullableVariables
   result.objectAliases = cloneOptionalAsyncTaskStringMap(context.objectAliases)
+  result.objectDeclaredTypes = new Map(context.objectDeclaredTypes)
   result.objectShapes = cloneCObjectShapeFieldMap(context.objectShapes)
   result.ownedCryptoHashes = context.ownedCryptoHashes
   result.ownedCryptoHmacs = context.ownedCryptoHmacs

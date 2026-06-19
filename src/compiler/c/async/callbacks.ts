@@ -3,6 +3,7 @@ import { isCJsGlobalRoot } from '../globals.ts'
 import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
 import {
   cRuntimeValueTag,
+  emitCStringParamName,
   emitCType,
   isManagedRuntimeReturnType,
   isNullableScalarType,
@@ -186,7 +187,11 @@ function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string 
   }
 
   for (const seenType of seenTypes) {
-    if (seenType === declaredType || isContextDeclaredTypePair(seenType, declaredType)) {
+    if (
+      seenType === declaredType ||
+      isContextDeclaredTypePair(seenType, declaredType) ||
+      isDependencyCarrierContextPair(seenType, declaredType)
+    ) {
       return true
     }
   }
@@ -232,14 +237,50 @@ function isContextDeclaredTypePair(left: string, right: string): boolean {
   return isContextDeclaredType(left) && isContextDeclaredType(right)
 }
 
+function isDependencyCarrierContextPair(left: string, right: string): boolean {
+  return isDependencyCarrierDeclaredType(left) && isContextDeclaredType(right)
+}
+
 function isContextDeclaredType(value: string): boolean {
   return (
+    value === 'ArrayFunctionContext' ||
     value === 'CEmitContext' ||
     value === 'CFunctionContext' ||
     value === 'CDeclarationFunctionContext' ||
+    value === 'CallbackEmitContext' ||
+    value === 'CallbackFunctionContext' ||
+    value === 'ClassFunctionContext' ||
+    value === 'CollectionFunctionContext' ||
+    value === 'DgramFunctionContext' ||
+    value === 'FetchFunctionContext' ||
+    value === 'FsFunctionContext' ||
+    value === 'HttpFunctionContext' ||
+    value === 'NullableFunctionContext' ||
+    value === 'PromiseEmitContext' ||
+    value === 'PromiseFunctionContext' ||
+    value === 'StringCContext' ||
+    value === 'TimerFunctionContext' ||
     value === 'AsyncTaskEmitContext' ||
     value === 'AsyncTaskFunctionContext' ||
     value === 'AsyncTaskPlannerContext'
+  )
+}
+
+function isDependencyCarrierDeclaredType(value: string): boolean {
+  return (
+    value === 'CModuleEmissionDependencies' ||
+    value === 'ArrayLoweringDependencies' ||
+    value === 'AsyncTaskLoweringDependencies' ||
+    value === 'CallbackLoweringDependencies' ||
+    value === 'ClassLoweringDependencies' ||
+    value === 'CollectionLoweringDependencies' ||
+    value === 'DgramLoweringDependencies' ||
+    value === 'HttpLoweringDependencies' ||
+    value === 'NetLoweringDependencies' ||
+    value === 'NullableLoweringDependencies' ||
+    value === 'PromiseChainLoweringDependencies' ||
+    value === 'StatementLoweringDependencies' ||
+    value === 'StringLoweringDependencies'
   )
 }
 
@@ -376,13 +417,8 @@ function isSupportedPlainFunctionPointerShape(
   seen.push(shape)
 
   for (const field of shape.fields) {
-    if (
-      field.valueType === 'function' &&
-      !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
-      !isRuntimeFunctionType(field.functionType)
-    ) {
-      seen.pop()
-      return false
+    if (field.valueType === 'function') {
+      continue
     }
 
     if (field.valueType === 'object') {
@@ -1065,7 +1101,16 @@ function registerPlainArrowCallbackWrapper(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  if (context.callbackArrowWrappers.has(expression)) {
+  const existing = context.callbackArrowWrappers.get(expression)
+
+  if (existing != null) {
+    if (existing.kind === 'plain-arrow') {
+      existing.functionType = mergeArrowCallbackFunctionTypes(
+        existing.functionType,
+        refineArrowCallbackFunctionType(expression, functionType)
+      )
+    }
+
     return
   }
 
@@ -1075,6 +1120,7 @@ function registerPlainArrowCallbackWrapper(
     return
   }
 
+  const resolvedFunctionType = refineArrowCallbackFunctionType(expression, functionType)
   const index = wrappers.size
   const key = `plain-arrow:${index}`
   const wrapper: CCallbackWrapper = {
@@ -1082,11 +1128,304 @@ function registerPlainArrowCallbackWrapper(
     key: key,
     name: `ccjs_callback_arrow_${index}`,
     expression: expression,
-    functionType: functionType
+    functionType: resolvedFunctionType
   }
 
   wrappers.set(key, wrapper)
   context.callbackArrowWrappers.set(expression, wrapper)
+}
+
+function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFunctionType): CFunctionType {
+  const params: CFunctionParam[] = []
+
+  for (let index = 0; index < functionType.params.length; index = index + 1) {
+    const param = callbackParamAt(functionType.params, index)
+    const refined: CFunctionParam = {
+      name: param.name,
+      valueType: param.valueType
+    }
+
+    refined.arrayElementType = param.arrayElementType
+    refined.declaredType = param.declaredType
+    refined.functionType = param.functionType
+    refined.mapKeyType = param.mapKeyType
+    refined.mapValueType = param.mapValueType
+    refined.promiseValueType = param.promiseValueType
+    refined.setElementType = param.setElementType
+    refined.shape = param.shape
+
+    if (param.nullable === true) {
+      refined.nullable = true
+    }
+
+    if (expression.params != null && index < expression.params.length) {
+      const arrowParam = callbackNodeAt(expression.params, index)
+
+      if (arrowParam.name != null) {
+        refined.name = arrowParam.name
+      }
+
+      if (arrowParam.valueType != null && arrowParam.valueType !== 'unknown') {
+        refined.valueType = arrowParam.valueType
+      }
+
+      if (arrowParam.arrayElementType != null) {
+        refined.arrayElementType = arrowParam.arrayElementType
+      }
+
+      if (arrowParam.declaredType != null && arrowParam.declaredType !== 'unknown') {
+        refined.declaredType = arrowParam.declaredType
+      }
+
+      if (arrowParam.functionType != null) {
+        refined.functionType = arrowParam.functionType
+      }
+
+      if (arrowParam.mapKeyType != null) {
+        refined.mapKeyType = arrowParam.mapKeyType
+      }
+
+      if (arrowParam.mapValueType != null) {
+        refined.mapValueType = arrowParam.mapValueType
+      }
+
+      if (arrowParam.nullable === true) {
+        refined.nullable = true
+      }
+
+      if (arrowParam.promiseValueType != null) {
+        refined.promiseValueType = arrowParam.promiseValueType
+      }
+
+      if (arrowParam.setElementType != null) {
+        refined.setElementType = arrowParam.setElementType
+      }
+
+      if (arrowParam.shape != null) {
+        refined.shape = arrowParam.shape
+      }
+    }
+
+    params.push(refined)
+  }
+
+  const result: CFunctionType = {
+    kind: 'function',
+    params,
+    returnType: functionType.returnType
+  }
+
+  result.returnArrayElementType = functionType.returnArrayElementType
+  result.returnMapKeyType = functionType.returnMapKeyType
+  result.returnMapValueType = functionType.returnMapValueType
+  result.returnPromiseValueType = functionType.returnPromiseValueType
+  result.returnSetElementType = functionType.returnSetElementType
+  result.returnShape = functionType.returnShape
+
+  if (functionType.returnNullable === true) {
+    result.returnNullable = true
+  }
+
+  if (expression.returnType != null && expression.returnType !== 'unknown') {
+    result.returnType = expression.returnType
+  }
+
+  if (expression.returnArrayElementType != null) {
+    result.returnArrayElementType = expression.returnArrayElementType
+  }
+
+  if (expression.returnMapKeyType != null) {
+    result.returnMapKeyType = expression.returnMapKeyType
+  }
+
+  if (expression.returnMapValueType != null) {
+    result.returnMapValueType = expression.returnMapValueType
+  }
+
+  if (expression.returnNullable === true) {
+    result.returnNullable = true
+  }
+
+  if (expression.returnPromiseValueType != null) {
+    result.returnPromiseValueType = expression.returnPromiseValueType
+  }
+
+  if (expression.returnSetElementType != null) {
+    result.returnSetElementType = expression.returnSetElementType
+  }
+
+  if (expression.returnShape != null) {
+    result.returnShape = expression.returnShape
+  }
+
+  return result
+}
+
+function mergeArrowCallbackFunctionTypes(left: CFunctionType, right: CFunctionType): CFunctionType {
+  const params: CFunctionParam[] = []
+  const paramCount = Math.max(left.params.length, right.params.length)
+
+  for (let index = 0; index < paramCount; index = index + 1) {
+    const leftParam = left.params[index] ?? null
+    const rightParam = right.params[index] ?? null
+
+    if (leftParam == null && rightParam != null) {
+      params.push(cloneCallbackFunctionParam(rightParam))
+    } else if (rightParam == null && leftParam != null) {
+      params.push(cloneCallbackFunctionParam(leftParam))
+    } else if (leftParam != null && rightParam != null) {
+      params.push(mergeCallbackFunctionParam(leftParam, rightParam))
+    }
+  }
+
+  const result: CFunctionType = {
+    kind: 'function',
+    params,
+    returnType: preferredCallbackValueType(left.returnType, right.returnType)
+  }
+
+  result.returnArrayElementType = preferredCallbackMetadata(left.returnArrayElementType, right.returnArrayElementType)
+  result.returnMapKeyType = preferredCallbackMetadata(left.returnMapKeyType, right.returnMapKeyType)
+  result.returnMapValueType = preferredCallbackMetadata(left.returnMapValueType, right.returnMapValueType)
+  result.returnPromiseValueType = preferredCallbackMetadata(left.returnPromiseValueType, right.returnPromiseValueType)
+  result.returnSetElementType = preferredCallbackMetadata(left.returnSetElementType, right.returnSetElementType)
+  result.returnShape = preferredCallbackShape(left.returnShape, right.returnShape)
+
+  if (left.returnNullable === true || right.returnNullable === true) {
+    result.returnNullable = true
+  }
+
+  return result
+}
+
+function mergeCallbackFunctionParam(left: CFunctionParam, right: CFunctionParam): CFunctionParam {
+  const result: CFunctionParam = {
+    name: preferredCallbackParamName(left.name, right.name),
+    valueType: preferredCallbackValueType(left.valueType, right.valueType)
+  }
+
+  result.arrayElementType = preferredCallbackMetadata(left.arrayElementType, right.arrayElementType)
+  result.declaredType = preferredCallbackMetadata(left.declaredType, right.declaredType)
+  result.functionType = preferredCallbackFunctionType(left.functionType, right.functionType)
+  result.mapKeyType = preferredCallbackMetadata(left.mapKeyType, right.mapKeyType)
+  result.mapValueType = preferredCallbackMetadata(left.mapValueType, right.mapValueType)
+  result.promiseValueType = preferredCallbackMetadata(left.promiseValueType, right.promiseValueType)
+  result.setElementType = preferredCallbackMetadata(left.setElementType, right.setElementType)
+  result.shape = preferredCallbackShape(left.shape, right.shape)
+
+  if (left.functionTypeOwnership != null) {
+    result.functionTypeOwnership = left.functionTypeOwnership
+  } else if (right.functionTypeOwnership != null) {
+    result.functionTypeOwnership = right.functionTypeOwnership
+  }
+
+  if (left.defaultValue != null) {
+    result.defaultValue = left.defaultValue
+  } else if (right.defaultValue != null) {
+    result.defaultValue = right.defaultValue
+  }
+
+  if (left.nullable === true || right.nullable === true) {
+    result.nullable = true
+  }
+
+  if (left.optional === true || right.optional === true) {
+    result.optional = true
+  }
+
+  return result
+}
+
+function cloneCallbackFunctionParam(param: CFunctionParam): CFunctionParam {
+  const result: CFunctionParam = {
+    name: param.name,
+    valueType: param.valueType
+  }
+
+  result.arrayElementType = param.arrayElementType
+  result.declaredType = param.declaredType
+  result.defaultValue = param.defaultValue
+  result.functionType = param.functionType
+  result.mapKeyType = param.mapKeyType
+  result.mapValueType = param.mapValueType
+  result.promiseValueType = param.promiseValueType
+  result.setElementType = param.setElementType
+  result.shape = param.shape
+
+  if (param.functionTypeOwnership != null) {
+    result.functionTypeOwnership = param.functionTypeOwnership
+  }
+
+  if (param.nullable === true) {
+    result.nullable = true
+  }
+
+  if (param.optional === true) {
+    result.optional = true
+  }
+
+  return result
+}
+
+function preferredCallbackFunctionType(
+  left: CFunctionType | null | undefined,
+  right: CFunctionType | null | undefined
+): CFunctionType | null | undefined {
+  if (left == null) {
+    return right
+  }
+
+  if (right == null) {
+    return left
+  }
+
+  return mergeArrowCallbackFunctionTypes(left, right)
+}
+
+function preferredCallbackShape(
+  left: CObjectShape | null | undefined,
+  right: CObjectShape | null | undefined
+): CObjectShape | null | undefined {
+  if (left == null || left.fields == null || left.fields.length === 0) {
+    return right
+  }
+
+  if (right == null || right.fields == null || right.fields.length === 0) {
+    return left
+  }
+
+  if (right.fields.length > left.fields.length) {
+    return right
+  }
+
+  return left
+}
+
+function preferredCallbackParamName(left: string, right: string): string {
+  if (left.length === 0 || left.startsWith('ccjs_arg_')) {
+    return right
+  }
+
+  return left
+}
+
+function preferredCallbackValueType(left: string, right: string): string {
+  if (left === 'unknown') {
+    return right
+  }
+
+  return left
+}
+
+function preferredCallbackMetadata(
+  left: string | null | undefined,
+  right: string | null | undefined
+): string | null | undefined {
+  if (left == null || left === 'unknown' || left === 'object') {
+    return right
+  }
+
+  return left
 }
 
 function capturesAreModuleValues(captures: CRuntimeArrowCapture[], context: CallbackEmitContext): boolean {
@@ -1297,6 +1636,8 @@ function visitCallbackStatement(
   if (statement.type === 'VariableDeclaration') {
     if (isNullableFunctionType(statement.valueType, statement.nullable)) {
       registerRuntimeCallbackExpression(statement.init, statement.functionType, scopes, wrappers, context, deps)
+    } else if (isRuntimeFunctionType(statement.functionType)) {
+      registerRuntimeCallbackExpression(statement.init, statement.functionType, scopes, wrappers, context, deps)
     } else if (shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes, context, deps)) {
       registerRuntimeCallbackExpression(statement.init, statement.functionType, scopes, wrappers, context, deps)
     } else {
@@ -1454,6 +1795,47 @@ function visitCallbackExpression(
 
     if (targetInfo != null && isNullableFunctionType(targetInfo.valueType, targetInfo.nullable)) {
       registerRuntimeCallbackExpression(expression.value, targetInfo.functionType, scopes, wrappers, context, deps)
+    } else if (targetInfo != null && isRuntimeFunctionType(targetInfo.functionType)) {
+      registerRuntimeCallbackExpression(expression.value, targetInfo.functionType, scopes, wrappers, context, deps)
+    }
+
+    let objectShape: CObjectShape | null | undefined = null
+
+    if (targetInfo != null) {
+      objectShape = targetInfo.shape
+    }
+
+    if ((objectShape == null || objectShape.fields == null) && context.moduleObjectShapes != null) {
+      const targetName = callbackReferenceNameOrNull(expression.target)
+
+      if (targetName != null) {
+        const moduleFields = context.moduleObjectShapes.get(targetName)
+
+        if (moduleFields != null) {
+          objectShape = { fields: moduleFields }
+        }
+      }
+    }
+
+    if (
+      targetInfo != null &&
+      targetInfo.valueType === 'object' &&
+      expression.value != null &&
+      expression.value.type === 'ObjectLiteral' &&
+      objectShape != null
+    ) {
+      const seenTypes: string[] = []
+      let declaredTypeName: string | null | undefined = null
+
+      if (targetInfo.declaration != null) {
+        declaredTypeName = targetInfo.declaration.declaredType
+      }
+
+      const declaredType = objectShapeDeclaredType(targetInfo.valueType, declaredTypeName, objectShape)
+      const pushedTypes = pushSeenDeclaredType(seenTypes, declaredType)
+
+      visitCallbackObjectShapeFunctionArg(expression.value, objectShape, seenTypes, scopes, wrappers, context, deps)
+      popSeenDeclaredTypes(seenTypes, pushedTypes)
     }
 
     visitCallbackExpression(expression.target, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
@@ -2160,9 +2542,10 @@ function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): stri
   for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
     const param = callbackParamAt(params, paramIndex)
     const name = plainArrowCallbackParamName(wrapper, index)
+    const cName = plainArrowCallbackCParamName(param, name)
     const seenTypes: string[] = []
 
-    emitted.push(`${emitCType(param.valueType)} ${name}`)
+    emitted.push(`${emitFunctionPointerParamCType(param)} ${cName}`)
 
     if (param.declaredType != null) {
       seenTypes.push(param.declaredType)
@@ -2233,12 +2616,18 @@ export function emitPlainArrowCallbackWrapperDeclaration(
 
   const context = deps.createFunctionContext(baseContext, returnType, false)
   context.cleanupEnabled = false
+  const paramPrelude: string[] = []
 
   for (let index = 0; index < params.length; index = index + 1) {
     const param = callbackParamAt(params, index)
     const name = plainArrowCallbackParamName(wrapper, index)
 
     context.variables.set(name, param.valueType)
+
+    if (param.valueType === 'string') {
+      context.runtimeStrings.add(name)
+      paramPrelude.push(`ccjs_string* ${name} = (ccjs_string*)${emitCStringParamName(name)}.as.ref;`)
+    }
 
     if (param.valueType === 'object') {
       deps.registerObjectShape(context, name, param.shape)
@@ -2264,6 +2653,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   pushIndentedLines(lines, deps.emitReturnFlowDeclarations(context))
   pushIndentedLines(lines, deps.emitOwnedValueDeclarations(context))
   pushIndentedLines(lines, deps.emitBoxedValueDeclarations(context))
+  pushIndentedLines(lines, paramPrelude)
   pushIndentedLines(lines, statementLines)
 
   if (deps.shouldEmitCleanupLabel(context)) {
@@ -2286,6 +2676,14 @@ function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index:
   }
 
   return `ccjs_arg_${index}`
+}
+
+function plainArrowCallbackCParamName(param: CFunctionParam, name: string): string {
+  if (param.valueType === 'string') {
+    return emitCStringParamName(name)
+  }
+
+  return name
 }
 
 function pushLines(target: string[], lines: string[]): void {
@@ -2372,7 +2770,9 @@ export function emitRuntimeCallbackWrapperDeclaration(
 
   const call = `${functionName}(${joinStrings(callArgs, ', ')})`
 
-  if (wrapper.functionType.returnType === 'number') {
+  if (wrapper.functionType.returnNullable === true && isNullableScalarType(wrapper.functionType.returnType)) {
+    lines.push(`  *out = ${call};`)
+  } else if (wrapper.functionType.returnType === 'number') {
     lines.push(`  *out = ccjs_number_value(${call});`)
   } else if (wrapper.functionType.returnType === 'boolean') {
     lines.push(`  *out = ccjs_bool_value((${call}) != 0);`)
@@ -2555,13 +2955,14 @@ function emitRuntimeArrowCallbackStatementLines(
 export function emitRuntimeArrowCallbackContextLocals(
   wrapper: CCallbackContextWrapper,
   context: CallbackFunctionContext,
-  deps: CallbackLoweringDependencies
+  deps: CallbackLoweringDependencies,
+  contextParameterName = 'ccjs_context'
 ): string[] {
   if (!hasRuntimeArrowCallbackContext(wrapper)) {
     return []
   }
 
-  const lines = [`${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)ccjs_context;`]
+  const lines = [`${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)${contextParameterName};`]
 
   if (wrapper.needsEventLoop === true) {
     context.eventLoopUsed = true

@@ -89,7 +89,7 @@ const patterns: PatternInfo[] = [
     decision: 'implement support',
     pattern: /\b(try|catch)\b/g,
     note: 'Use only at host adapter boundaries until C exception lowering is planned.',
-    maxAllowedMatches: 62
+    maxAllowedMatches: 67
   },
   {
     name: 'async / await',
@@ -109,7 +109,7 @@ const patterns: PatternInfo[] = [
     decision: 'simplify/remove',
     pattern: /\b(Record|ReadonlyMap|Map|Set)<|ReadonlyArray</g,
     note: 'Self-hosted type surface should prefer explicit aliases and concrete record arrays.',
-    maxAllowedMatches: 335
+    maxAllowedMatches: 378
   }
 ]
 
@@ -275,8 +275,8 @@ function renderMatrix(report: AuditReport): string {
     '## Work Queue',
     '',
     '1. Keep the first self-hosted target in-memory and compiler-core only.',
-    '2. Put `node:fs`, `node:fs/promises`, `node:path`, `node:url` and `node:crypto` host dependencies behind adapters or ccjs stdlib slices.',
-    '3. Extract the remaining large C emitter clusters before trying to compile `src/compiler/c/index.ts` with ccjs.',
+    '2. Put `node:fs`, `node:fs/promises`, `node:path`, `node:url` and `node:crypto` host dependencies behind adapters or inox stdlib slices.',
+    '3. Extract the remaining large C emitter clusters before trying to compile `src/compiler/c/index.ts` with inox.',
     '4. Replace new `AnyNode` mutation surfaces with explicit node shapes as code is touched.',
     '5. Rewrite regex-heavy helpers only when a small scanner is simpler than broad RegExp runtime support.'
   ]

@@ -292,7 +292,8 @@ function shortStableHash(value: string): string {
   const multiplier = 65599
 
   for (let index = 0; index < value.length; index = index + 1) {
-    hash = (hash * multiplier + value.charCodeAt(index)) % modulus
+    const raw = hash * multiplier + value.charCodeAt(index)
+    hash = raw - Math.trunc(raw / modulus) * modulus
   }
 
   return shortHashHex(hash)

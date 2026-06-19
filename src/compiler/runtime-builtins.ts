@@ -33,5 +33,31 @@ function createRuntimeBuiltinImportSources(): Set<string> {
 }
 
 export function isRuntimeBuiltinImportSource(specifier: string): boolean {
-  return runtimeBuiltinImportSources.has(specifier)
+  return (
+    specifier === 'dgram' ||
+    specifier === 'fs' ||
+    specifier === 'http' ||
+    specifier === 'net' ||
+    specifier === 'node:path' ||
+    specifier === 'node:buffer' ||
+    specifier === 'node:crypto' ||
+    specifier === 'node:child_process' ||
+    specifier === 'node:dgram' ||
+    specifier === 'node:events' ||
+    specifier === 'node:fs' ||
+    specifier === 'node:fs/promises' ||
+    specifier === 'node:http' ||
+    specifier === 'node:net' ||
+    specifier === 'node:os' ||
+    specifier === 'node:stream' ||
+    specifier === 'node:timers' ||
+    specifier === 'node:url' ||
+    specifier === 'node:process' ||
+    specifier === 'node:dns' ||
+    specifier === 'node:https' ||
+    specifier === 'node:timers/promises' ||
+    specifier === 'node:tls' ||
+    specifier === 'node:worker_threads' ||
+    specifier === 'node:zlib'
+  )
 }

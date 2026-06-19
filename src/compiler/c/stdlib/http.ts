@@ -492,8 +492,8 @@ function emitHttpRequestStringCompareExpression(
 
   const left = resolveHttpRequestStringMember(expression.left, httpContext)
   const right = resolveHttpRequestStringMember(expression.right, httpContext)
-  let literalExpression = expression.left
-  let member = right
+  let literalExpression: AnyNode = expression.left
+  let member: string | null = right
 
   if (left != null) {
     literalExpression = expression.right

@@ -147,6 +147,7 @@ type CFunctionContext = CEmitContext & {
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet
   objectAliases: CStringMap
+  objectDeclaredTypes: CStringNullableMap
   objectShapes: CObjectShapeFieldMap
   ownedValues: string[]
   returnType?: string
@@ -688,7 +689,7 @@ function emitObjectFunctionFieldArgument(
     if (objectName != null) {
       return {
         lines: [],
-        expression: emitCObjectFunctionFieldName(objectName, field.name)
+        expression: emitObjectFunctionFieldArgumentName(objectName, field.name, context)
       }
     }
 
@@ -734,7 +735,7 @@ function emitObjectFunctionFieldArgument(
   const objectName = source.pathName
 
   if (objectName != null) {
-    const target = emitCObjectFunctionFieldName(objectName, field.name)
+    const target = emitObjectFunctionFieldArgumentName(objectName, field.name, context)
 
     return {
       lines: [],
@@ -809,7 +810,11 @@ function objectFunctionArgumentSourceSeenTypes(
   context: CFunctionContext,
   expectedSeenTypes: string[]
 ): string[] {
-  if (source.pathName != null && context.moduleObjectShapes.get(source.pathName) == null) {
+  if (source.pathName != null) {
+    if (context.moduleObjectShapes.get(source.pathName) != null) {
+      return ['CFunctionContext']
+    }
+
     return copyStringArray(expectedSeenTypes)
   }
 
@@ -845,9 +850,11 @@ function appendObjectFunctionFieldArguments(
     seenTypes.push(seenType)
   }
 
-  if (param.declaredType != null && !seenTypes.includes(param.declaredType)) {
-    seenTypes.push(param.declaredType)
+  if (seenTypesIncludeDeclaredType(seenTypes, param.declaredType)) {
+    return
   }
+
+  pushSeenDeclaredType(seenTypes, param.declaredType)
 
   appendObjectShapeFunctionFieldArguments(
     lines,
@@ -867,9 +874,11 @@ function appendDefaultObjectFunctionFieldArguments(args: string[], param: CFunct
     seenTypes.push(seenType)
   }
 
-  if (param.declaredType != null && !seenTypes.includes(param.declaredType)) {
-    seenTypes.push(param.declaredType)
+  if (seenTypesIncludeDeclaredType(seenTypes, param.declaredType)) {
+    return
   }
+
+  pushSeenDeclaredType(seenTypes, param.declaredType)
 
   appendDefaultObjectShapeFunctionFieldArguments(args, param.shape, seenTypes)
 }
@@ -905,30 +914,18 @@ function appendObjectShapeFunctionFieldArguments(
       appendLines(lines, value.lines)
       args.push(value.expression)
     } else if (field.valueType === 'object') {
-      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+      if (seenTypesIncludeDeclaredType(seenTypes, field.declaredType)) {
         continue
       }
 
       if (isMissingOptionalObjectLiteralField(source, field) || isUnavailableOptionalObjectFieldSource(source, field)) {
-        let pushedType = false
-
-        if (field.declaredType != null) {
-          seenTypes.push(field.declaredType)
-          pushedType = true
-        }
+        const pushedTypes = pushSeenDeclaredType(seenTypes, field.declaredType)
 
         appendDefaultObjectShapeFunctionFieldArguments(args, field.shape, seenTypes)
 
-        if (pushedType) {
-          seenTypes.pop()
-        }
+        popSeenDeclaredTypes(seenTypes, pushedTypes)
       } else {
-        let pushedType = false
-
-        if (field.declaredType != null) {
-          seenTypes.push(field.declaredType)
-          pushedType = true
-        }
+        const pushedTypes = pushSeenDeclaredType(seenTypes, field.declaredType)
 
         appendObjectShapeFunctionFieldArguments(
           lines,
@@ -940,12 +937,72 @@ function appendObjectShapeFunctionFieldArguments(
           seenTypes
         )
 
-        if (pushedType) {
-          seenTypes.pop()
-        }
+        popSeenDeclaredTypes(seenTypes, pushedTypes)
       }
     }
   }
+}
+
+function emitObjectFunctionFieldArgumentName(
+  objectName: string,
+  fieldName: string,
+  context: CFunctionContext
+): string {
+  const fallback = emitDependencyObjectFunctionFieldArgumentName(objectName, fieldName, context)
+
+  if (fallback != null) {
+    return fallback
+  }
+
+  return emitCObjectFunctionFieldName(objectName, fieldName)
+}
+
+function emitDependencyObjectFunctionFieldArgumentName(
+  objectName: string,
+  fieldName: string,
+  context: CFunctionContext
+): string | null {
+  const suffix = dependencyObjectFunctionFieldSuffix(objectName)
+
+  if (suffix == null) {
+    return null
+  }
+
+  const depsName = emitDependencyObjectFunctionFieldArgumentNameForRoot('deps', suffix, fieldName, context)
+
+  if (depsName != null) {
+    return depsName
+  }
+
+  return emitDependencyObjectFunctionFieldArgumentNameForRoot('dependencies', suffix, fieldName, context)
+}
+
+function dependencyObjectFunctionFieldSuffix(objectName: string): string | null {
+  if (objectName.startsWith('context_')) {
+    return objectName.slice('context_'.length)
+  }
+
+  if (objectName.startsWith('baseContext_')) {
+    return objectName.slice('baseContext_'.length)
+  }
+
+  return null
+}
+
+function emitDependencyObjectFunctionFieldArgumentNameForRoot(
+  rootName: string,
+  suffix: string,
+  fieldName: string,
+  context: CFunctionContext
+): string | null {
+  const objectName = `${rootName}_${suffix}`
+  const fields = context.objectShapes.get(objectName)
+
+  if (objectFunctionFieldAt(fields, fieldName) == null) {
+    return null
+  }
+
+  return emitCObjectFunctionFieldName(objectName, fieldName)
 }
 
 function isMissingOptionalObjectLiteralField(source: ObjectFunctionArgumentSource, field: CObjectShapeField): boolean {
@@ -986,22 +1043,15 @@ function appendDefaultObjectShapeFunctionFieldArguments(
         args.push('0')
       }
     } else if (field.valueType === 'object') {
-      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+      if (seenTypesIncludeDeclaredType(seenTypes, field.declaredType)) {
         continue
       }
 
-      let pushedType = false
-
-      if (field.declaredType != null) {
-        seenTypes.push(field.declaredType)
-        pushedType = true
-      }
+      const pushedTypes = pushSeenDeclaredType(seenTypes, field.declaredType)
 
       appendDefaultObjectShapeFunctionFieldArguments(args, field.shape, seenTypes)
 
-      if (pushedType) {
-        seenTypes.pop()
-      }
+      popSeenDeclaredTypes(seenTypes, pushedTypes)
     }
   }
 }
@@ -1176,16 +1226,20 @@ function appendObjectFunctionCalleeSeenTypes(seenTypes: string[], object: CValue
 
     const declaredReturnType = context.functionReturnDeclaredTypes.get(calleeName)
 
-    if (declaredReturnType != null && !seenTypes.includes(declaredReturnType)) {
-      seenTypes.push(declaredReturnType)
-    }
+    pushSeenDeclaredType(seenTypes, declaredReturnType)
 
     return
   }
 
-  if (object.declaredType != null && !seenTypes.includes(object.declaredType)) {
-    seenTypes.push(object.declaredType)
+  const objectName = objectExpressionName(object, context)
+
+  if (objectName != null) {
+    const contextDeclaredType = context.objectDeclaredTypes.get(objectName)
+
+    pushSeenDeclaredType(seenTypes, contextDeclaredType)
   }
+
+  pushSeenDeclaredType(seenTypes, object.declaredType)
 }
 
 function appendObjectFunctionFieldDeclaredType(
@@ -1207,13 +1261,112 @@ function appendObjectFunctionFieldDeclaredType(
 
   const field = objectShapeFieldAt(fields, fieldName)
 
-  if (field != null && field.declaredType != null) {
-    const declaredType = field.declaredType
+  if (field != null) {
+    pushSeenDeclaredType(seenTypes, field.declaredType)
+  }
+}
 
-    if (!seenTypes.includes(declaredType)) {
-      seenTypes.push(declaredType)
+function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
+  if (declaredType == null) {
+    return false
+  }
+
+  for (const seenType of seenTypes) {
+    if (
+      seenType === declaredType ||
+      isContextDeclaredTypePair(seenType, declaredType) ||
+      isDependencyCarrierContextPair(seenType, declaredType)
+    ) {
+      return true
     }
   }
+
+  return false
+}
+
+function pushSeenDeclaredType(seenTypes: string[], declaredType: string | null | undefined): number {
+  if (declaredType == null || seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
+    return 0
+  }
+
+  seenTypes.push(declaredType)
+
+  if (declaredType === 'CEmitContext') {
+    seenTypes.push('CFunctionContext')
+    seenTypes.push('CDeclarationFunctionContext')
+    return 3
+  }
+
+  if (declaredType === 'CFunctionContext') {
+    seenTypes.push('CEmitContext')
+    seenTypes.push('CDeclarationFunctionContext')
+    return 3
+  }
+
+  if (declaredType === 'CDeclarationFunctionContext') {
+    seenTypes.push('CEmitContext')
+    seenTypes.push('CFunctionContext')
+    return 3
+  }
+
+  return 1
+}
+
+function popSeenDeclaredTypes(seenTypes: string[], count: number): void {
+  for (let index = 0; index < count; index = index + 1) {
+    seenTypes.pop()
+  }
+}
+
+function isContextDeclaredTypePair(left: string, right: string): boolean {
+  return isContextDeclaredType(left) && isContextDeclaredType(right)
+}
+
+function isDependencyCarrierContextPair(left: string, right: string): boolean {
+  return isDependencyCarrierDeclaredType(left) && isContextDeclaredType(right)
+}
+
+function isContextDeclaredType(value: string): boolean {
+  return (
+    value === 'ArrayFunctionContext' ||
+    value === 'CEmitContext' ||
+    value === 'CFunctionContext' ||
+    value === 'CDeclarationFunctionContext' ||
+    value === 'CallbackEmitContext' ||
+    value === 'CallbackFunctionContext' ||
+    value === 'ClassFunctionContext' ||
+    value === 'CollectionFunctionContext' ||
+    value === 'DgramFunctionContext' ||
+    value === 'FetchFunctionContext' ||
+    value === 'FsFunctionContext' ||
+    value === 'HttpFunctionContext' ||
+    value === 'NullableFunctionContext' ||
+    value === 'PromiseEmitContext' ||
+    value === 'PromiseFunctionContext' ||
+    value === 'StringCContext' ||
+    value === 'TimerFunctionContext' ||
+    value === 'AsyncTaskEmitContext' ||
+    value === 'AsyncTaskFunctionContext' ||
+    value === 'AsyncTaskPlannerContext'
+  )
+}
+
+function isDependencyCarrierDeclaredType(value: string): boolean {
+  return (
+    value === 'CModuleEmissionDependencies' ||
+    value === 'ArrayLoweringDependencies' ||
+    value === 'AsyncTaskLoweringDependencies' ||
+    value === 'CallbackLoweringDependencies' ||
+    value === 'ClassLoweringDependencies' ||
+    value === 'CollectionLoweringDependencies' ||
+    value === 'DgramLoweringDependencies' ||
+    value === 'HttpLoweringDependencies' ||
+    value === 'NetLoweringDependencies' ||
+    value === 'NullableLoweringDependencies' ||
+    value === 'PromiseChainLoweringDependencies' ||
+    value === 'StatementLoweringDependencies' ||
+    value === 'StringLoweringDependencies'
+  )
 }
 
 function emitRuntimeObjectFunctionFieldCall(
@@ -1740,7 +1893,7 @@ function appendPreparedCallArg(
 
     appendLines(lines, value.lines)
     args.push(value.expression)
-  } else if (deps.isNullableFunctionType(paramValueType, cBooleanValueIsTrue(param.nullable))) {
+  } else if (paramValueType === 'function' && cBooleanValueIsTrue(param.nullable)) {
     const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
 
     appendLines(lines, value.lines)
@@ -4175,7 +4328,12 @@ export function emitCValueExpression(
   if (expression.type === 'CallExpression') {
     const valueType = deps.inferExpressionType(expression, context)
 
-    if (valueType !== 'unknown' && !isManagedRuntimeReturnType(valueType) && !isOpaqueRuntimeValueType(valueType)) {
+    if (
+      valueType !== 'unknown' &&
+      valueType !== 'promise' &&
+      !isManagedRuntimeReturnType(valueType) &&
+      !isOpaqueRuntimeValueType(valueType)
+    ) {
       return emitUnsupportedCValueExpression(expression, context, deps)
     }
 
@@ -4274,11 +4432,11 @@ function isWrappedCExpression(expression: string): boolean {
   let depth = 0
 
   for (let index = 0; index < expression.length; index = index + 1) {
-    const char = expression[index]
+    const part = expression[index]
 
-    if (char === '(') {
+    if (part === '(') {
       depth = depth + 1
-    } else if (char === ')') {
+    } else if (part === ')') {
       depth = depth - 1
 
       if (depth === 0 && index < expression.length - 1) {

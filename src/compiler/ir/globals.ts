@@ -38,6 +38,7 @@ const jsStdGlobalRootNames = [
   'Array',
   'Buffer',
   'ccjs',
+  'inox',
   'Date',
   'Error',
   'Int8Array',
@@ -310,6 +311,7 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Array' ||
     name === 'Buffer' ||
     name === 'ccjs' ||
+    name === 'inox' ||
     name === 'Date' ||
     name === 'Error' ||
     name === 'Int8Array' ||
@@ -387,6 +389,7 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'fetch')
   pushStringIfPresent(values, result, 'fs')
   pushStringIfPresent(values, result, 'http')
+  pushStringIfPresent(values, result, 'inox')
   pushStringIfPresent(values, result, 'performance')
   pushStringIfPresent(values, result, 'setImmediate')
   pushStringIfPresent(values, result, 'setInterval')

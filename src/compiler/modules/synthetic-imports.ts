@@ -12,11 +12,16 @@ export function insertImportSyntheticDeclarations(
   }
 
   const body: AnyNode[] = []
-  const declaredTypes = collectProgramTypeDeclarationNames(program)
+  const sourceDeclaredTypes = collectProgramTypeDeclarationNames(program)
+  const declaredTypes: Map<string, number> = new Map()
   let importIndex = 0
 
   for (const item of program.body) {
     body.push(item)
+
+    if (item.type === 'TypeAliasDeclaration') {
+      declaredTypes.set(item.name, body.length - 1)
+    }
 
     if (item.type === 'ImportDeclaration') {
       const declarations = declarationsByImport.get(importIndex)
@@ -30,11 +35,21 @@ export function insertImportSyntheticDeclarations(
           const declaration = declarations[declarationIndex]
 
           if (declaration.type === 'TypeAliasDeclaration') {
-            if (declaredTypes.has(declaration.name)) {
+            if (sourceDeclaredTypes.has(declaration.name) && declaration.syntheticTypeImportDirect !== true) {
               continue
             }
 
-            declaredTypes.add(declaration.name)
+            const existingIndex = declaredTypes.get(declaration.name)
+
+            if (existingIndex != null) {
+              if (isUnknownSyntheticTypeImport(body[existingIndex]) && !isUnknownSyntheticTypeImport(declaration)) {
+                body[existingIndex] = declaration
+              }
+
+              continue
+            }
+
+            declaredTypes.set(declaration.name, body.length)
           }
 
           body.push(declaration)
@@ -62,6 +77,16 @@ function collectProgramTypeDeclarationNames(program: ProgramNode): Set<string> {
   }
 
   return names
+}
+
+function isUnknownSyntheticTypeImport(declaration: AnyNode): boolean {
+  return (
+    declaration.type === 'TypeAliasDeclaration' &&
+    declaration.syntheticTypeImport === true &&
+    declaration.valueType != null &&
+    declaration.valueType.kind === 'alias' &&
+    declaration.valueType.valueType === 'unknown'
+  )
 }
 
 export function createImportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
@@ -110,7 +135,7 @@ function createAliasDeclaration(
 }
 
 export function createTypeImportDeclaration(specifier: AnyNode, exported: AnyNode): AnyNode {
-  return cloneTypeAliasDeclaration(exported, specifier.local, specifier.loc, specifier.imported)
+  return cloneTypeAliasDeclaration(exported, specifier.local, specifier.loc, specifier.imported, true)
 }
 
 export function createTypeImportDeclarations(specifier: AnyNode, importedProgram: ProgramNode): AnyNode[] {
@@ -203,13 +228,20 @@ function addTypeImportDependency(
   added.add(name)
 }
 
-function cloneTypeAliasDeclaration(exported: AnyNode, name: string, loc: SourceLocation, importedName: string): AnyNode {
+function cloneTypeAliasDeclaration(
+  exported: AnyNode,
+  name: string,
+  loc: SourceLocation,
+  importedName: string,
+  direct: boolean = false
+): AnyNode {
   return {
     type: 'TypeAliasDeclaration',
     exported: false,
     name,
     loc,
     syntheticTypeImport: true,
+    syntheticTypeImportDirect: direct,
     importedName,
     valueType: cloneTypeAliasValue(exported.valueType)
   }
@@ -283,10 +315,10 @@ function collectTypeNameDependencyNames(typeName: string | null | undefined, nam
   let index = 0
 
   while (index < typeName.length) {
-    const char = typeName.slice(index, index + 1)
+    const unit = typeName.slice(index, index + 1)
 
-    if (isTypeNameIdentifierChar(char)) {
-      current = current + char
+    if (isTypeNameIdentifierChar(unit)) {
+      current = current + unit
     } else {
       pushTypeNameDependency(current, names)
       current = ''

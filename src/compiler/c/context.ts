@@ -227,6 +227,7 @@ type CVariableScopeContext = {
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
   objectAliases: CStringMap
+  objectDeclaredTypes: CStringMap
   objectShapes: CObjectShapeFieldMap
   promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
@@ -267,6 +268,7 @@ export type CFunctionContext = CEmitContext & {
   netReadingSockets: CStringSet
   nullableVariables: CStringSet
   objectAliases: CStringMap
+  objectDeclaredTypes: CStringMap
   ownedCryptoHashes: string[]
   ownedCryptoHmacs: string[]
   ownedPromises: string[]
@@ -305,6 +307,7 @@ export type CVariableScopeSnapshot = {
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
   objectAliases: CStringMap
+  objectDeclaredTypes: CStringMap
   objectShapes: CObjectShapeFieldMap
   promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
@@ -406,6 +409,7 @@ export function createFunctionContext(
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
     objectAliases: new Map(),
+    objectDeclaredTypes: new Map(),
     objectShapes: cloneCObjectShapeFieldMap(baseContext.moduleObjectShapes),
     ownedPromises: [],
     ownedCryptoHashes: [],
@@ -954,6 +958,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousNarrowedNullableScalars = context.narrowedNullableScalars
   const previousNullableVariables = context.nullableVariables
   const previousObjectAliases = context.objectAliases
+  const previousObjectDeclaredTypes = context.objectDeclaredTypes
   const previousObjectShapes = context.objectShapes
   const previousPromiseConstructorHandlers = context.promiseConstructorHandlers
   const previousPromiseRejectionValueTypes = context.promiseRejectionValueTypes
@@ -973,6 +978,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.narrowedNullableScalars = cloneCStringSet(previousNarrowedNullableScalars)
   context.nullableVariables = cloneCStringSet(previousNullableVariables)
   context.objectAliases = cloneCStringMap(previousObjectAliases)
+  context.objectDeclaredTypes = new Map(previousObjectDeclaredTypes)
   context.objectShapes = cloneCObjectShapeFieldMap(previousObjectShapes)
   context.promiseConstructorHandlers = cloneCPromiseConstructorHandlerMap(previousPromiseConstructorHandlers)
   context.promiseRejectionValueTypes = cloneCStringMap(previousPromiseRejectionValueTypes)
@@ -992,6 +998,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     narrowedNullableScalars: previousNarrowedNullableScalars,
     nullableVariables: previousNullableVariables,
     objectAliases: previousObjectAliases,
+    objectDeclaredTypes: previousObjectDeclaredTypes,
     objectShapes: previousObjectShapes,
     promiseConstructorHandlers: previousPromiseConstructorHandlers,
     promiseRejectionValueTypes: previousPromiseRejectionValueTypes,
@@ -1015,6 +1022,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.narrowedNullableScalars = snapshot.narrowedNullableScalars
   context.nullableVariables = snapshot.nullableVariables
   context.objectAliases = snapshot.objectAliases
+  context.objectDeclaredTypes = snapshot.objectDeclaredTypes
   context.objectShapes = snapshot.objectShapes
   context.promiseConstructorHandlers = snapshot.promiseConstructorHandlers
   context.promiseRejectionValueTypes = snapshot.promiseRejectionValueTypes

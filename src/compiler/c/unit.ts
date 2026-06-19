@@ -83,12 +83,21 @@ import {
 } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
 import type { CClassInfo, CClassMethod, CEmitOptions } from './types.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
+import type { CollectionLoweringDependencies } from './values/collections.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
 
 export type CUnitDependencies = {
+  arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
+  classLoweringDependencies: ClassLoweringDependencies
   collectExternalEventLoopFunctions: (functions: AnyNode[]) => Set<string>
+  collectionLoweringDependencies: CollectionLoweringDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
     functionDeclarations: IrFunctionDeclaration[],
@@ -104,7 +113,10 @@ export type CUnitDependencies = {
   emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) => string[]
   httpLoweringDependencies: HttpLoweringDependencies
   netLoweringDependencies: NetLoweringDependencies
+  nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
+  statementLoweringDependencies: StatementLoweringDependencies
+  stringLoweringDependencies: StringLoweringDependencies
 }
 
 function pushUnitLines(target: string[], lines: string[]): void {
@@ -315,30 +327,30 @@ export function emitCUnit(
     runtimeRequirements,
     throwingFunctionCount: baseContext.throwingFunctions.size
   })
-  const needsRuntime = preludeRequirements.needsRuntime
-  const needsTimeRuntime = preludeRequirements.needsTimeRuntime
-  const needsMathRuntime = preludeRequirements.needsMathRuntime
-  const needsCryptoRuntime = preludeRequirements.needsCryptoRuntime
-  const needsDebugMemoryRuntime = preludeRequirements.needsDebugMemoryRuntime
-  const needsAsyncRuntime = preludeRequirements.needsAsyncRuntime
-  const needsCallbackRuntime = preludeRequirements.needsCallbackRuntime
-  const needsStringHeader = preludeRequirements.needsStringHeader
-  const needsCollectionRuntime = preludeRequirements.needsCollectionRuntime
-  const needsBinaryRuntime = preludeRequirements.needsBinaryRuntime
-  const needsObjectRuntime = preludeRequirements.needsObjectRuntime
-  const needsChildProcessRuntime = preludeRequirements.needsChildProcessRuntime
-  const needsFsRuntime = preludeRequirements.needsFsRuntime
-  const needsOsRuntime = preludeRequirements.needsOsRuntime
-  const needsPathRuntime = preludeRequirements.needsPathRuntime
-  const needsUrlRuntime = preludeRequirements.needsUrlRuntime
-  const needsProcessRuntime = preludeRequirements.needsProcessRuntime
-  const needsJsonRuntime = preludeRequirements.needsJsonRuntime
-  const needsTimerRuntime = preludeRequirements.needsTimerRuntime
-  const needsConsoleRuntime = preludeRequirements.needsConsoleRuntime
-  const needsDgramRuntime = preludeRequirements.needsDgramRuntime
-  const needsFetchRuntime = preludeRequirements.needsFetchRuntime
-  const needsHttpRuntime = preludeRequirements.needsHttpRuntime
-  const needsNetRuntime = preludeRequirements.needsNetRuntime
+  const needsRuntime: boolean = preludeRequirements.needsRuntime
+  const needsTimeRuntime: boolean = preludeRequirements.needsTimeRuntime
+  const needsMathRuntime: boolean = preludeRequirements.needsMathRuntime
+  const needsCryptoRuntime: boolean = preludeRequirements.needsCryptoRuntime
+  const needsDebugMemoryRuntime: boolean = preludeRequirements.needsDebugMemoryRuntime
+  const needsAsyncRuntime: boolean = preludeRequirements.needsAsyncRuntime
+  const needsCallbackRuntime: boolean = preludeRequirements.needsCallbackRuntime
+  const needsStringHeader: boolean = preludeRequirements.needsStringHeader
+  const needsCollectionRuntime: boolean = preludeRequirements.needsCollectionRuntime
+  const needsBinaryRuntime: boolean = preludeRequirements.needsBinaryRuntime
+  const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
+  const needsChildProcessRuntime: boolean = preludeRequirements.needsChildProcessRuntime
+  const needsFsRuntime: boolean = preludeRequirements.needsFsRuntime
+  const needsOsRuntime: boolean = preludeRequirements.needsOsRuntime
+  const needsPathRuntime: boolean = preludeRequirements.needsPathRuntime
+  const needsUrlRuntime: boolean = preludeRequirements.needsUrlRuntime
+  const needsProcessRuntime: boolean = preludeRequirements.needsProcessRuntime
+  const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
+  const needsTimerRuntime: boolean = preludeRequirements.needsTimerRuntime
+  const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
+  const needsDgramRuntime: boolean = preludeRequirements.needsDgramRuntime
+  const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
+  const needsHttpRuntime: boolean = preludeRequirements.needsHttpRuntime
+  const needsNetRuntime: boolean = preludeRequirements.needsNetRuntime
   baseContext.processRuntime = needsProcessRuntime
   if (needsAsyncRuntime) {
     baseContext.unhandledRejectionFlag = 'ccjs_unhandled_rejection'

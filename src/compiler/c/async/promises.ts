@@ -300,7 +300,8 @@ export type PromiseChainLoweringDependencies = {
   emitRuntimeArrowCallbackContextLocals(
     wrapper: CCallbackContextWrapper,
     context: PromiseFunctionContext,
-    deps: CallbackLoweringDependencies
+    deps: CallbackLoweringDependencies,
+    contextParameterName?: string
   ): string[]
   emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: PromiseFunctionContext): string[]
   emitStatementList(statements: AnyNode[], context: PromiseFunctionContext): string[]
@@ -1883,7 +1884,7 @@ export function emitPromiseChainCallbackWrapperDeclaration(
   context.runtimeCallbackReturnOut = '(*out)'
   context.runtimeCallbackCleanupLabel = 'ccjs_promise_callback_cleanup'
   const bodyLines: string[] = []
-  appendLines(bodyLines, deps.emitRuntimeArrowCallbackContextLocals(wrapper, context, deps.callbackLoweringDependencies))
+  appendLines(bodyLines, deps.emitRuntimeArrowCallbackContextLocals(wrapper, context, deps.callbackLoweringDependencies, 'context'))
   appendLines(bodyLines, emitPromiseChainCallbackParamPrelude(wrapper, context))
   const statementLines = emitPromiseChainCallbackStatementLines(wrapper, context, deps)
 

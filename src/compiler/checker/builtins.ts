@@ -225,6 +225,10 @@ export const fsConstantValues = new Map([
   ['R_OK', 4]
 ])
 
+export function isFsConstantValue(name: string): boolean {
+  return name === 'F_OK' || name === 'X_OK' || name === 'W_OK' || name === 'R_OK'
+}
+
 export const libuvOnlyRuntimeImports = new Map([
   ['dgram', 'node:dgram'],
   ['http', 'node:http'],
@@ -234,6 +238,26 @@ export const libuvOnlyRuntimeImports = new Map([
   ['node:http', 'node:http'],
   ['node:net', 'node:net']
 ])
+
+export function libuvOnlyRuntimeImportFeature(source: string): string | null {
+  if (source === 'dgram' || source === 'node:dgram') {
+    return 'node:dgram'
+  }
+
+  if (source === 'http' || source === 'node:http') {
+    return 'node:http'
+  }
+
+  if (source === 'net' || source === 'node:net') {
+    return 'node:net'
+  }
+
+  if (source === 'node:crypto') {
+    return 'node:crypto'
+  }
+
+  return null
+}
 
 export const globals: Map<string, SymbolInfo> = new Map([
   [
@@ -491,4 +515,70 @@ export const globals: Map<string, SymbolInfo> = new Map([
   ]
 ])
 
+export function builtinGlobalSymbol(name: string): SymbolInfo | null {
+  if (
+    name === 'fetch' ||
+    name === 'setTimeout' ||
+    name === 'clearTimeout' ||
+    name === 'setInterval' ||
+    name === 'clearInterval' ||
+    name === 'setImmediate' ||
+    name === 'clearImmediate'
+  ) {
+    return {
+      kind: 'global',
+      mutable: false,
+      valueType: 'function'
+    }
+  }
+
+  if (
+    name === 'Promise' ||
+    name === 'Date' ||
+    name === 'Error' ||
+    name === 'Set' ||
+    name === 'Map' ||
+    name === 'Array' ||
+    name === 'AbortController' ||
+    name === 'Uint8Array' ||
+    name === 'Int8Array' ||
+    name === 'Uint16Array' ||
+    name === 'Int16Array' ||
+    name === 'Uint32Array' ||
+    name === 'Int32Array'
+  ) {
+    return {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object',
+      constructable: true
+    }
+  }
+
+  if (
+    name === 'inox' ||
+    name === 'ccjs' ||
+    name === 'console' ||
+    name === 'performance' ||
+    name === 'Object' ||
+    name === 'http' ||
+    name === 'JSON' ||
+    name === 'crypto' ||
+    name === 'Math' ||
+    name === 'Buffer'
+  ) {
+    return {
+      kind: 'global',
+      mutable: false,
+      valueType: 'object'
+    }
+  }
+
+  return null
+}
+
 export const numericCastNames = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
+
+export function isNumericCastName(name: string): boolean {
+  return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'
+}

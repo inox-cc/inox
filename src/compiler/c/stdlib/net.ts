@@ -142,12 +142,12 @@ function replaceNetKindSeparator(kind: string): string {
   let value = ''
 
   for (let index = 0; index < kind.length; index = index + 1) {
-    const char = kind[index]
+    const part = kind[index]
 
-    if (char === '-') {
+    if (part === '-') {
       value = value + '_'
     } else {
-      value = value + char
+      value = value + part
     }
   }
 
@@ -1890,7 +1890,9 @@ function findNetHandler(
   }
 
   for (const wrapper of context.netHandlers.values()) {
-    if (wrapper.expression === expression && wrapper.kind === kind) {
+    const wrapperExpression: AnyNode = wrapper.expression
+
+    if (wrapperExpression === expression && wrapper.kind === kind) {
       return wrapper
     }
   }
@@ -1933,7 +1935,9 @@ function registerNetHandler(
   }
 
   for (const wrapper of handlers.values()) {
-    if (wrapper.kind === kind && wrapper.expression === expression) {
+    const wrapperExpression: AnyNode = wrapper.expression
+
+    if (wrapper.kind === kind && wrapperExpression === expression) {
       return
     }
   }

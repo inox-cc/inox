@@ -955,7 +955,7 @@ export function resolveKnownForOfArray(
   }
 
   return {
-    name,
+    name: emitArrayReferenceName(name, context),
     elements
   }
 }
@@ -975,8 +975,10 @@ export function resolveRuntimeForOfArray(
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
     return {
-      name: expression.path[0],
+      name: emitArrayReferenceName(name, context),
       elementType,
       lines: []
     }
@@ -989,6 +991,10 @@ export function resolveRuntimeForOfArray(
     elementType,
     lines: value.lines
   }
+}
+
+function emitArrayReferenceName(name: string, context: ArrayFunctionContext): string {
+  return context.moduleValueNames.get(name) ?? name
 }
 
 export function resolveForOfElementType(elements: CArrayElementInfo[]): string {

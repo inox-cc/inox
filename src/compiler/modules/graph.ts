@@ -1,7 +1,6 @@
 import { checkProgram } from '../checker.ts'
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import type { CompilerHost } from '../host.ts'
-import { requireCompilerHost } from '../host.ts'
 import { lowerHirToIr } from '../ir.ts'
 import { tokenize } from '../lexer.ts'
 import { lowerProgram } from '../lower.ts'
@@ -27,10 +26,14 @@ type ModuleGraphContext = {
 }
 
 export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
-  const host = requireCompilerHost(options.host, 'buildModuleGraph')
+  if (options.host == null) {
+    throw new Error('buildModuleGraph requires a compiler host')
+  }
+
+  const host = options.host
   const entryPath = resolveExistingSource(entry, host)
   const context: ModuleGraphContext = {
-    host,
+    host: options.host,
     options,
     modules: new Map(),
     order: [],
