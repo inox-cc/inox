@@ -3,7 +3,12 @@ import { readdir } from 'node:fs/promises'
 import { dirname, relative } from 'node:path'
 
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
+import type { CModuleCompileResult } from '../compiler/index.ts'
 import { assert, join, mkdir, mkdtemp, readFile, repoRoot, rm, runCommand, tmpdir, writeFile } from './helpers/runtime-c.ts'
+
+const selfHostedCompileSourceDriverPath = '/project/selfhost-compile-driver.ts'
+const selfHostedCompileSourceDriverModuleCount = 216
+const selfHostedCompileSourceDriverSourceCount = 108
 
 const runtimeSources = [
   'runtime/src/arrays/array.c',
@@ -36,35 +41,50 @@ const runtimeSources = [
   'runtime/src/url/url.c'
 ]
 
+let selfHostedCompileSourceDriver: Promise<CModuleCompileResult> | null = null
+
 test('emits C modules for the inox compileSource facade driver', { timeout: 180_000 }, async () => {
-  const files = await readCompilerSources()
-  files.push({
-    path: '/project/selfhost-compile-driver.ts',
-    source: `import { compileSource } from './compiler/index.ts'
+  const modules = await compileSelfHostedCompileSourceDriver()
+  const generatedSources = cModuleSourceFiles(modules.files)
 
-try {
-  const result = compileSource('const value: number = 1\\n', {
-    target: 'c',
-    loopBackend: 'libuv',
-    tlsBackend: 'boringssl'
-  })
-
-  console.log(result.code.length)
-} catch (error) {
-  console.log('compile failed')
-}
-`
-  })
-
-  const modules = await compileMemoryPackageToCModules('/project/selfhost-compile-driver.ts', files, {
-    sourceRoot: '/project',
-    target: 'c',
-    loopBackend: 'libuv',
-    tlsBackend: 'boringssl'
-  })
-
-  assert.ok(modules.files.length > 0)
+  assert.equal(modules.files.length, selfHostedCompileSourceDriverModuleCount)
+  assert.equal(generatedSources.length, selfHostedCompileSourceDriverSourceCount)
   assert.ok(modules.files.some((file) => file.path === 'selfhost-compile-driver.c'))
+})
+
+test('checks the current native compileSource self-hosting blocker', { timeout: 180_000 }, async (t) => {
+  const cc = await runCommand('cc', ['--version'])
+
+  if (cc.code !== 0) {
+    t.skip('cc is not available')
+    return
+  }
+
+  const modules = await compileSelfHostedCompileSourceDriver()
+  const dir = await mkdtemp(join(tmpdir(), 'inox-selfhost-compile-source-'))
+
+  try {
+    const generatedSources = await writeCModuleFiles(dir, modules.files)
+    const exe = join(dir, 'selfhost-compile-source')
+    const compile = await runCommand('cc', [
+      '-std=c11',
+      '-DINOX_LOOP_BACKEND_EMBEDDED=1',
+      '-DINOX_TLS_BACKEND_NONE=1',
+      '-Iruntime/include',
+      `-I${dir}`,
+      ...generatedSources,
+      ...runtimeSources,
+      '-o',
+      exe
+    ])
+
+    assert.equal(generatedSources.length, selfHostedCompileSourceDriverSourceCount)
+    assert.notEqual(compile.code, 0)
+    assert.match(compile.stderr, /error:/)
+    t.diagnostic(formatNativeCompileFailure(compile.stderr))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
 
 test('links and runs the inox self-hosted parser driver', { timeout: 180_000 }, async (t) => {
@@ -103,17 +123,7 @@ try {
       sourceRoot: '/project',
       target: 'c'
     })
-    const generatedSources: string[] = []
-
-    for (const file of modules.files) {
-      const output = join(dir, file.path)
-      await mkdir(dirname(output), { recursive: true })
-      await writeFile(output, file.code)
-
-      if (file.path.endsWith('.c')) {
-        generatedSources.push(output)
-      }
-    }
+    const generatedSources = await writeCModuleFiles(dir, modules.files)
 
     const exe = join(dir, 'selfhost-parser')
     const compile = await runCommand('cc', [
@@ -138,6 +148,83 @@ try {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+function compileSelfHostedCompileSourceDriver(): Promise<CModuleCompileResult> {
+  if (selfHostedCompileSourceDriver === null) {
+    selfHostedCompileSourceDriver = compileSelfHostedCompileSourceDriverOnce()
+  }
+
+  return selfHostedCompileSourceDriver
+}
+
+async function compileSelfHostedCompileSourceDriverOnce(): Promise<CModuleCompileResult> {
+  const files = await readCompilerSources()
+  files.push({
+    path: selfHostedCompileSourceDriverPath,
+    source: `import { compileSource } from './compiler/index.ts'
+
+try {
+  const result = compileSource('const value: number = 1\\n', {
+    target: 'c',
+    loopBackend: 'libuv',
+    tlsBackend: 'boringssl'
+  })
+
+  console.log(result.code.length)
+} catch (error) {
+  console.log('compile failed')
+}
+`
+  })
+
+  return compileMemoryPackageToCModules(selfHostedCompileSourceDriverPath, files, {
+    sourceRoot: '/project',
+    target: 'c',
+    loopBackend: 'libuv',
+    tlsBackend: 'boringssl'
+  })
+}
+
+async function writeCModuleFiles(dir: string, files: Array<{ path: string; code: string }>): Promise<string[]> {
+  const generatedSources: string[] = []
+
+  for (const file of files) {
+    const output = join(dir, file.path)
+    await mkdir(dirname(output), { recursive: true })
+    await writeFile(output, file.code)
+
+    if (file.path.endsWith('.c')) {
+      generatedSources.push(output)
+    }
+  }
+
+  return generatedSources
+}
+
+function cModuleSourceFiles(files: Array<{ path: string }>): Array<{ path: string }> {
+  return files.filter((file) => file.path.endsWith('.c'))
+}
+
+function formatNativeCompileFailure(stderr: string): string {
+  const lines = stderr.split('\n')
+  const firstErrorIndex = lines.findIndex((line) => line.includes('error:'))
+  const firstDiagnosticIndex = firstErrorIndex >= 0 ? firstErrorIndex : 0
+  const diagnosticLines = lines.slice(firstDiagnosticIndex, firstDiagnosticIndex + 30)
+  let errorCount = 0
+
+  for (const line of lines) {
+    if (line.includes('error:')) {
+      errorCount = errorCount + 1
+    }
+  }
+
+  return [
+    'Current expected native compileSource self-hosting blocker:',
+    `cc reported ${errorCount} error lines.`,
+    'First error context:',
+    ...diagnosticLines
+  ].join('\n')
+}
 
 async function readCompilerSources(): Promise<Array<{ path: string; source: string }>> {
   const sourceRoot = join(repoRoot, 'compiler')
