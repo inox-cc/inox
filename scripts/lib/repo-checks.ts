@@ -7,8 +7,7 @@ import ts from 'typescript'
 export const rootDir = fileURLToPath(new URL('../../', import.meta.url))
 
 const requiredFiles: string[] = [
-  'bin/inox.ts',
-  'bin/inox.ts',
+  'bin/cli.ts',
   'LICENSE',
   'PLAN.md',
   'package.json',
@@ -74,7 +73,6 @@ const requiredFiles: string[] = [
   'compiler/lexer.ts',
   'compiler/lower.ts',
   'compiler/parser.ts',
-  'src/inox-globals.d.ts',
   'scripts/lib/run-command.ts',
   'scripts/lib/snapshot-runner.ts',
   'scripts/bootstrap-boringssl.ts',

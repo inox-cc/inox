@@ -7,7 +7,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-const cliPath = join(repoRoot, 'bin/inox.ts')
+const cliPath = join(repoRoot, 'bin/cli.ts')
 
 type CommandResult = {
   code: number

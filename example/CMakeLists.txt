@@ -11,7 +11,7 @@ if(INOX_TLS_BACKEND STREQUAL "boringssl")
   enable_language(CXX)
 endif()
 
-set(INOX_CLI "../bin/inox.ts")
+set(INOX_CLI "../bin/cli.ts")
 set(INOX_ENTRY "src/index.ts")
 set(INOX_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 

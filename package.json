@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@11.5.1",
   "bin": {
-    "inox": "./bin/inox.ts"
+    "inox": "./bin/cli.ts"
   },
   "scripts": {
     "example": "pnpm run example:prepare && cmake --build example/build && ./example/build/inox_cmake_example",

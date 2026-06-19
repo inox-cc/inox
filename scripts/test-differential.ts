@@ -47,7 +47,7 @@ function checkSuccessful(rel: string, result: CommandResult): boolean {
 }
 
 function runFixture(file: string): Promise<CommandResult> {
-  return runCommand(process.execPath, ['bin/inox.ts', 'run', file])
+  return runCommand(process.execPath, ['bin/cli.ts', 'run', file])
 }
 
 async function canRunC(): Promise<boolean> {

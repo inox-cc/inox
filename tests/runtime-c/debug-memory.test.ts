@@ -22,7 +22,7 @@ console.log(after.allocCount - before.allocCount)
 `
     )
 
-    const build = await runCommand(process.execPath, ['bin/inox.ts', 'build', entry, '--target', 'c', '-o', output])
+    const build = await runCommand(process.execPath, ['bin/cli.ts', 'build', entry, '--target', 'c', '-o', output])
 
     assert.equal(build.code, 0, build.stderr)
 
@@ -78,7 +78,7 @@ console.log(
 `
     )
 
-    const build = await runCommand(process.execPath, ['bin/inox.ts', 'build', entry, '--target', 'c', '-o', output])
+    const build = await runCommand(process.execPath, ['bin/cli.ts', 'build', entry, '--target', 'c', '-o', output])
 
     assert.equal(build.code, 0, build.stderr)
 
@@ -144,7 +144,7 @@ console.log(
 `
     )
 
-    const build = await runCommand(process.execPath, ['bin/inox.ts', 'build', entry, '--target', 'c', '-o', output])
+    const build = await runCommand(process.execPath, ['bin/cli.ts', 'build', entry, '--target', 'c', '-o', output])
 
     assert.equal(build.code, 0, build.stderr)
 
