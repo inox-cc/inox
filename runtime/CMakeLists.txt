@@ -8,12 +8,12 @@ set(INOX_TLS_BACKEND "none" CACHE STRING "inox C runtime TLS backend")
 set_property(CACHE INOX_TLS_BACKEND PROPERTY STRINGS none boringssl openssl)
 option(INOX_DEBUG_MEMORY "Enable inox debug memory counters and OOM injection helpers" OFF)
 option(INOX_ENABLE_WEAK "Enable inox weak reference runtime support" OFF)
-set(INOX_BORINGSSL_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../third_party/boringssl" CACHE PATH "BoringSSL source root")
+set(INOX_BORINGSSL_ROOT "${CMAKE_CURRENT_LIST_DIR}/../third_party/boringssl" CACHE PATH "BoringSSL source root")
 set(INOX_TLS_CA_BUNDLE "" CACHE FILEPATH "TLS CA bundle path")
 set(INOX_TLS_CA_PATH "" CACHE PATH "TLS CA directory path")
 
 set(INOX_RUNTIME_DIR "${CMAKE_CURRENT_LIST_DIR}")
-set(INOX_REPO_ROOT "${INOX_RUNTIME_DIR}/../..")
+set(INOX_REPO_ROOT "${INOX_RUNTIME_DIR}/..")
 
 set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/arrays/array.c"

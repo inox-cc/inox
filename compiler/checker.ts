@@ -147,16 +147,6 @@ import type {
   TypeAliasInfo,
   ValueType
 } from './types.ts'
-import { name, length } from 'assert'
-import { info } from 'console'
-import { resolve } from 'dns'
-import { get } from 'http'
-import test from 'node:test'
-import { type } from 'os'
-import path from 'path'
-import { report } from 'process'
-import { from, push } from 'stream/iter'
-import { types } from 'util'
 import { isRuntimeNullableType } from './c/value-types.ts'
 import { resolveDeclaredType } from './lower/type-resolution.ts'
 
