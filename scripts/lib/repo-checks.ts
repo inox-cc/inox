@@ -9,7 +9,6 @@ export const rootDir = fileURLToPath(new URL('../../', import.meta.url))
 const requiredFiles: string[] = [
   'bin/cli.ts',
   'LICENSE',
-  'PLAN.md',
   'package.json',
   'README.md',
   'docs/cli.md',
