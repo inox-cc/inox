@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@11.5.1",
   "bin": {
-    "inox": "./bin/ccjs.ts",
+    "inox": "./bin/inox.ts",
     "ccjs": "./bin/ccjs.ts"
   },
   "scripts": {

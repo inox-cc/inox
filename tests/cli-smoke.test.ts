@@ -7,7 +7,8 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
-const cliPath = join(repoRoot, 'bin/ccjs.ts')
+const cliPath = join(repoRoot, 'bin/inox.ts')
+const compatibilityCliPath = join(repoRoot, 'bin/ccjs.ts')
 
 type CommandResult = {
   code: number
@@ -20,7 +21,7 @@ type RunOptions = {
   env?: NodeJS.ProcessEnv
 }
 
-test('ccjs file compiles and runs on the fly', async () => {
+test('inox file compiles and runs on the fly', async () => {
   const result = await runCli(['tests/fixtures/parser/valid/hello.ts'])
 
   assert.equal(result.code, 0)
@@ -28,7 +29,17 @@ test('ccjs file compiles and runs on the fly', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs accepts valid TypeScript files as canonical source input', async () => {
+test('ccjs compatibility wrapper compiles and runs on the fly', async () => {
+  const result = await runCommand(process.execPath, [compatibilityCliPath, 'tests/fixtures/parser/valid/hello.ts'], {
+    cwd: repoRoot
+  })
+
+  assert.equal(result.code, 0)
+  assert.equal(result.stdout, 'hello\n')
+  assert.equal(result.stderr, '')
+})
+
+test('inox accepts valid TypeScript files as canonical source input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-ts-cli-'))
   const entry = join(dir, 'main.ts')
 
@@ -53,7 +64,7 @@ console.log(\`hello \${name}\`)
   }
 })
 
-test('ccjs file --emit c writes C source', async () => {
+test('inox file --emit c writes C source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-test-'))
   const out = join(dir, 'hello.c')
 
@@ -74,7 +85,7 @@ test('ccjs file --emit c writes C source', async () => {
   }
 })
 
-test('ccjs file --emit c reads Math.random seed config', async () => {
+test('inox file --emit c reads Math.random seed config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-random-config-test-'))
   const out = join(dir, 'random.c')
 
@@ -176,7 +187,7 @@ console.log(value)
   }
 })
 
-test('ccjs file --emit c reads TLS backend config for HTTPS fetch', async () => {
+test('inox file --emit c reads TLS backend config for HTTPS fetch', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-tls-config-test-'))
   const out = join(dir, 'fetch.c')
 
@@ -219,7 +230,7 @@ console.log(response.status)
   }
 })
 
-test('ccjs file --emit c reads Math.random os backend config', async () => {
+test('inox file --emit c reads Math.random os backend config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-random-os-config-test-'))
   const out = join(dir, 'random.c')
 
@@ -263,7 +274,7 @@ console.log(value)
   }
 })
 
-test('ccjs file --emit c checks embedded entropy capability for Math.random os backend', async () => {
+test('inox file --emit c checks embedded entropy capability for Math.random os backend', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-random-entropy-config-test-'))
   const out = join(dir, 'random.c')
 
@@ -331,7 +342,7 @@ console.log(value)
   }
 })
 
-test('ccjs file --emit c reads embedded profile capability config', async () => {
+test('inox file --emit c reads embedded profile capability config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-capability-config-test-'))
   const out = join(dir, 'time.c')
 
@@ -393,7 +404,7 @@ console.log(now)
   }
 })
 
-test('ccjs file --emit c reads C budget config', async () => {
+test('inox file --emit c reads C budget config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-budget-config-test-'))
   const out = join(dir, 'values.c')
 
@@ -452,7 +463,7 @@ console.log(values.length)
   }
 })
 
-test('ccjs module graph --emit c writes bundled C source', async () => {
+test('inox module graph --emit c writes bundled C source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-test-'))
   const out = join(dir, 'modules.c')
 
@@ -474,7 +485,7 @@ test('ccjs module graph --emit c writes bundled C source', async () => {
   }
 })
 
-test('ccjs module graph --emit c --out-dir --entry writes and builds modular C sources', async (t) => {
+test('inox module graph --emit c --out-dir --entry writes and builds modular C sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -577,7 +588,7 @@ console.log('text', text)
   }
 })
 
-test('ccjs build --target c writes a native executable', async (t) => {
+test('inox build --target c writes a native executable', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -608,7 +619,7 @@ test('ccjs build --target c writes a native executable', async (t) => {
   }
 })
 
-test('ccjs build --target c uses CC compiler override', async (t) => {
+test('inox build --target c uses CC compiler override', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -663,7 +674,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c links only needed C runtime source groups', async (t) => {
+test('inox build --target c links only needed C runtime source groups', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -719,7 +730,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c enables weak runtime from IR requirements', async () => {
+test('inox build --target c enables weak runtime from IR requirements', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-weak-runtime-select-test-'))
   const out = join(dir, 'weak')
   const wrapper = join(dir, 'cc-wrapper.sh')
@@ -774,7 +785,7 @@ exit 0
   }
 })
 
-test('ccjs build --target c links TLS runtime source with fetch', async (t) => {
+test('inox build --target c links TLS runtime source with fetch', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -827,7 +838,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c selects configured TLS runtime source with fetch', async () => {
+test('inox build --target c selects configured TLS runtime source with fetch', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-fetch-tls-select-test-'))
   const out = join(dir, 'fetch')
   const wrapper = join(dir, 'cc-wrapper.sh')
@@ -878,7 +889,7 @@ exit 0
   }
 })
 
-test('ccjs build --target c passes OpenSSL crypto flags for node:crypto createHash', async () => {
+test('inox build --target c passes OpenSSL crypto flags for node:crypto createHash', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-crypto-openssl-select-test-'))
   const out = join(dir, 'hash')
   const wrapper = join(dir, 'cc-wrapper.sh')
@@ -929,7 +940,7 @@ exit 0
   }
 })
 
-test('ccjs build --target c reads ccjs.config.json toolchain settings', async (t) => {
+test('inox build --target c reads ccjs.config.json toolchain settings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -999,7 +1010,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c reads ccjs.json toolchain settings', async (t) => {
+test('inox build --target c reads ccjs.json toolchain settings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1069,7 +1080,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c prefers ccjs.config.json over ccjs.json', async (t) => {
+test('inox build --target c prefers ccjs.config.json over ccjs.json', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1154,7 +1165,7 @@ exec cc "$@"
   }
 })
 
-test('ccjs build --target c reports invalid ccjs.config.json', async () => {
+test('inox build --target c reports invalid ccjs.config.json', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
@@ -1191,7 +1202,7 @@ test('ccjs build --target c reports invalid ccjs.config.json', async () => {
   }
 })
 
-test('ccjs build --target c reports invalid random seed config', async () => {
+test('inox build --target c reports invalid random seed config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
@@ -1229,7 +1240,7 @@ console.log(value)
   }
 })
 
-test('ccjs build --target c reports invalid random backend config', async () => {
+test('inox build --target c reports invalid random backend config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
@@ -1267,7 +1278,7 @@ console.log(value)
   }
 })
 
-test('ccjs build --target c reports invalid capability config', async () => {
+test('inox build --target c reports invalid capability config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
@@ -1305,7 +1316,7 @@ test('ccjs build --target c reports invalid capability config', async () => {
   }
 })
 
-test('ccjs build --target c reports invalid budget config', async () => {
+test('inox build --target c reports invalid budget config', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-config-test-'))
 
   try {
@@ -1342,7 +1353,7 @@ test('ccjs build --target c reports invalid budget config', async () => {
   }
 })
 
-test('ccjs run --target c builds and runs a temporary native executable', async (t) => {
+test('inox run --target c builds and runs a temporary native executable', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1357,7 +1368,7 @@ test('ccjs run --target c builds and runs a temporary native executable', async 
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c builds and runs weak fields with automatic runtime selection', async (t) => {
+test('inox run --target c builds and runs weak fields with automatic runtime selection', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1398,7 +1409,7 @@ console.log(child.parent?.name ?? 'missing')
   }
 })
 
-test('ccjs run --target c runs node:fs through non-libuv hosted fallback', async (t) => {
+test('inox run --target c runs node:fs through non-libuv hosted fallback', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1441,7 +1452,7 @@ console.log(names[0], names[1])
   }
 })
 
-test('ccjs run --target c runs sync node:fs hosted fallback operations', async (t) => {
+test('inox run --target c runs sync node:fs hosted fallback operations', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1488,7 +1499,7 @@ console.log(text, stats.isFile(), linkStats.isFile(), linkStats.isDirectory(), t
   }
 })
 
-test('ccjs run --target c runs a module graph with import aliases', async (t) => {
+test('inox run --target c runs a module graph with import aliases', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1503,7 +1514,7 @@ test('ccjs run --target c runs a module graph with import aliases', async (t) =>
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c runs a module graph with type imports', async (t) => {
+test('inox run --target c runs a module graph with type imports', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1518,7 +1529,7 @@ test('ccjs run --target c runs a module graph with type imports', async (t) => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c resolves directory index imports', async (t) => {
+test('inox run --target c resolves directory index imports', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1533,7 +1544,7 @@ test('ccjs run --target c resolves directory index imports', async (t) => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs run --target c --keep keeps temporary C artifacts', async (t) => {
+test('inox run --target c --keep keeps temporary C artifacts', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1565,7 +1576,7 @@ test('ccjs run --target c --keep keeps temporary C artifacts', async (t) => {
   }
 })
 
-test('ccjs run --keep writes temporary C output by default', async (t) => {
+test('inox run --keep writes temporary C output by default', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
   if (probe.code !== 0) {
@@ -1597,14 +1608,14 @@ test('ccjs run --keep writes temporary C output by default', async (t) => {
   }
 })
 
-test('ccjs reports diagnostics for invalid source', async () => {
+test('inox reports diagnostics for invalid source', async () => {
   const result = await runCli(['tests/fixtures/diagnostics/no-var.ts'])
 
   assert.equal(result.code, 1)
   assert.match(result.stderr, /CCJS_NO_VAR/)
 })
 
-test('ccjs reports source file paths for module graph diagnostics', async () => {
+test('inox reports source file paths for module graph diagnostics', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-cli-diagnostics-'))
 
   try {
@@ -1638,7 +1649,7 @@ console.log(userName())
   }
 })
 
-test('ccjs file runs a multi-file module graph', async () => {
+test('inox file runs a multi-file module graph', async () => {
   const result = await runCli(['tests/fixtures/modules/basic/main.js'])
 
   assert.equal(result.code, 0)
@@ -1646,7 +1657,7 @@ test('ccjs file runs a multi-file module graph', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs a module graph with import aliases', async () => {
+test('inox file runs a module graph with import aliases', async () => {
   const result = await runCli(['tests/fixtures/modules/alias/main.ts'])
 
   assert.equal(result.code, 0)
@@ -1654,7 +1665,7 @@ test('ccjs file runs a module graph with import aliases', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs a module graph with type imports', async () => {
+test('inox file runs a module graph with type imports', async () => {
   const result = await runCli(['tests/fixtures/modules/type-import/main.ts'])
 
   assert.equal(result.code, 0)
@@ -1662,7 +1673,7 @@ test('ccjs file runs a module graph with type imports', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file resolves directory index imports', async () => {
+test('inox file resolves directory index imports', async () => {
   const result = await runCli(['tests/fixtures/modules/index-import/main.ts'])
 
   assert.equal(result.code, 0)
@@ -1670,7 +1681,7 @@ test('ccjs file resolves directory index imports', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs if else blocks', async () => {
+test('inox file runs if else blocks', async () => {
   const result = await runCli(['tests/fixtures/runtime/if-else.ts'])
 
   assert.equal(result.code, 0)
@@ -1678,7 +1689,7 @@ test('ccjs file runs if else blocks', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs while loops', async () => {
+test('inox file runs while loops', async () => {
   const result = await runCli(['tests/fixtures/runtime/while.ts'])
 
   assert.equal(result.code, 0)
@@ -1686,7 +1697,7 @@ test('ccjs file runs while loops', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs classic for loops', async () => {
+test('inox file runs classic for loops', async () => {
   const result = await runCli(['tests/fixtures/runtime/for.ts'])
 
   assert.equal(result.code, 0)
@@ -1694,7 +1705,7 @@ test('ccjs file runs classic for loops', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs continue statements', async () => {
+test('inox file runs continue statements', async () => {
   const result = await runCli(['tests/fixtures/runtime/continue.ts'])
 
   assert.equal(result.code, 0)
@@ -1702,7 +1713,7 @@ test('ccjs file runs continue statements', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs switch statements', async () => {
+test('inox file runs switch statements', async () => {
   const result = await runCli(['tests/fixtures/runtime/switch.ts'])
 
   assert.equal(result.code, 0)
@@ -1710,7 +1721,7 @@ test('ccjs file runs switch statements', async () => {
   assert.equal(result.stderr, '')
 })
 
-test('ccjs file runs try catch finally', async () => {
+test('inox file runs try catch finally', async () => {
   const result = await runCli(['tests/fixtures/runtime/try-catch.ts'])
 
   assert.equal(result.code, 0)

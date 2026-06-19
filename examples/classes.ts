@@ -1,6 +1,6 @@
 // @targets c
 // @expect pass
-// @stdout ccjs 7 1
+// @stdout inox 7 1
 
 class Counter {
   readonly name: string
@@ -28,5 +28,5 @@ class Counter {
   }
 }
 
-const counter = new Counter('ccjs', 3)
+const counter = new Counter('inox', 3)
 console.log(counter.label(), counter.total(4), counter.hasStart(3))
