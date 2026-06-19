@@ -2,6 +2,7 @@ import { readdir } from 'node:fs/promises'
 import { dirname, relative } from 'node:path'
 import { test } from 'node:test'
 
+import type { CommandResult } from './helpers/runtime-c.ts'
 import type { CModuleCompileResult } from '../compiler/index.ts'
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
 import {
@@ -54,16 +55,14 @@ const runtimeSources = [
 
 let selfHostedCompileSourceDriver: Promise<CModuleCompileResult> | null = null
 
-test('emits C modules for the inox compileSource facade driver', { timeout: 180_000 }, async () => {
+test('runs the self-hosting driver checks', { timeout: 360_000 }, async (t) => {
   const modules = await compileSelfHostedCompileSourceDriver()
   const generatedSources = cModuleSourceFiles(modules.files)
 
   assert.equal(modules.files.length, selfHostedCompileSourceDriverModuleCount)
   assert.equal(generatedSources.length, selfHostedCompileSourceDriverSourceCount)
   assert.ok(modules.files.some((file) => file.path === 'selfhost-compile-driver.c'))
-})
 
-test('checks the current native compileSource self-hosting blocker', { timeout: 180_000 }, async (t) => {
   const cc = await runCommand('cc', ['--version'])
 
   if (cc.code !== 0) {
@@ -71,7 +70,11 @@ test('checks the current native compileSource self-hosting blocker', { timeout: 
     return
   }
 
-  const modules = await compileSelfHostedCompileSourceDriver()
+  await compileAndRunSelfHostedCompileSourceDriver(modules)
+  await compileAndRunSelfHostedParserDriver()
+})
+
+async function compileAndRunSelfHostedCompileSourceDriver(modules: CModuleCompileResult): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), 'inox-selfhost-compile-source-'))
 
   try {
@@ -90,29 +93,26 @@ test('checks the current native compileSource self-hosting blocker', { timeout: 
     ])
 
     assert.equal(generatedSources.length, selfHostedCompileSourceDriverSourceCount)
-    assert.notEqual(compile.code, 0)
-    assert.match(compile.stderr, /error:/)
-    t.diagnostic(formatNativeCompileFailure(compile.stderr))
+    assert.equal(compile.code, 0, formatNativeCompileFailure(compile))
+
+    const run = await runCommand(exe, [])
+
+    assert.equal(run.code, 0, formatCommandFailure('self-hosted compileSource driver run', run))
+    assert.match(run.stdout.trim(), /^\d+$/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
-})
+}
 
-test('links and runs the inox self-hosted parser driver', { timeout: 180_000 }, async (t) => {
-  const cc = await runCommand('cc', ['--version'])
-
-  if (cc.code !== 0) {
-    t.skip('cc is not available')
-    return
-  }
-
+async function compileAndRunSelfHostedParserDriver(): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), 'inox-selfhost-parser-'))
 
   try {
     const files = await readCompilerSources()
     files.push({
       path: '/project/selfhost-driver.ts',
-      source: `import { tokenize } from './compiler/lexer.ts'
+      source: `import process from 'node:process'
+import { tokenize } from './compiler/lexer.ts'
 import { parse } from './compiler/parser.ts'
 
 try {
@@ -123,9 +123,11 @@ try {
     console.log('SELFHOST PARSER DRIVER PASS')
   } else {
     console.log('SELFHOST PARSER DRIVER FAIL')
+    process.exit(1)
   }
 } catch (error) {
   console.log('SELFHOST PARSER DRIVER ERROR')
+  process.exit(1)
 }
 `
     })
@@ -149,16 +151,16 @@ try {
       exe
     ])
 
-    assert.equal(compile.code, 0, compile.stderr)
+    assert.equal(compile.code, 0, formatCommandFailure('self-hosted parser driver compile', compile))
 
     const run = await runCommand(exe, [])
 
-    assert.equal(run.code, 0, run.stderr)
+    assert.equal(run.code, 0, formatCommandFailure('self-hosted parser driver run', run))
     assert.match(run.stdout, /SELFHOST PARSER DRIVER PASS/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
-})
+}
 
 function compileSelfHostedCompileSourceDriver(): Promise<CModuleCompileResult> {
   if (selfHostedCompileSourceDriver === null) {
@@ -172,7 +174,8 @@ async function compileSelfHostedCompileSourceDriverOnce(): Promise<CModuleCompil
   const files = await readCompilerSources()
   files.push({
     path: selfHostedCompileSourceDriverPath,
-    source: `import { compileSource } from './compiler/index.ts'
+    source: `import process from 'node:process'
+import { compileSource } from './compiler/index.ts'
 
 try {
   const result = compileSource('const value: number = 1\\n', {
@@ -184,6 +187,7 @@ try {
   console.log(result.code.length)
 } catch (error) {
   console.log('compile failed')
+  process.exit(1)
 }
 `
   })
@@ -216,8 +220,8 @@ function cModuleSourceFiles(files: Array<{ path: string }>): Array<{ path: strin
   return files.filter((file) => file.path.endsWith('.c'))
 }
 
-function formatNativeCompileFailure(stderr: string): string {
-  const lines = stderr.split('\n')
+function formatNativeCompileFailure(result: CommandResult): string {
+  const lines = result.stderr.split('\n')
   const firstErrorIndex = lines.findIndex((line) => line.includes('error:'))
   const firstDiagnosticIndex = firstErrorIndex >= 0 ? firstErrorIndex : 0
   const diagnosticLines = lines.slice(firstDiagnosticIndex, firstDiagnosticIndex + 30)
@@ -230,11 +234,25 @@ function formatNativeCompileFailure(stderr: string): string {
   }
 
   return [
-    'Current expected native compileSource self-hosting blocker:',
+    `Native compileSource self-hosting driver failed with exit code ${result.code}.`,
     `cc reported ${errorCount} error lines.`,
     'First error context:',
     ...diagnosticLines
   ].join('\n')
+}
+
+function formatCommandFailure(label: string, result: CommandResult): string {
+  const lines = [`${label} failed with exit code ${result.code}.`]
+
+  if (result.stderr.trim()) {
+    lines.push('stderr:', result.stderr.trim())
+  }
+
+  if (result.stdout.trim()) {
+    lines.push('stdout:', result.stdout.trim())
+  }
+
+  return lines.join('\n')
 }
 
 async function readCompilerSources(): Promise<Array<{ path: string; source: string }>> {
