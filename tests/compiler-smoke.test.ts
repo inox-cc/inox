@@ -3071,6 +3071,44 @@ export function main(): void {
 })
 
 
+test('passes module object companions through named runtime callback wrappers', () => {
+  const result = compileSource(
+    `type Dep = { read: () => string }
+type Context = { dep: Dep }
+type Runner = { lookup: (context: Context) => string | null }
+
+function read(): string {
+  return 'ok'
+}
+
+function lookup(context: Context): string | null {
+  return context.dep.read()
+}
+
+const dep: Dep = { read }
+const runner: Runner = { lookup }
+
+export function main(): void {
+  const context: Context = { dep }
+  const result = runner.lookup(context)
+
+  if (result != null) {
+    console.log(result)
+  }
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /static ccjs_status ccjs_callback_lookup_\d+\(void\* ccjs_context, const ccjs_value\* args, size_t arg_count, ccjs_value\* out\)/)
+  assert.match(result.code, /\*out = lookup\(args\[0\], ccjs_objfn_dep_read\);/)
+  assert.match(result.code, /if \(ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_lookup_\d+, 0, 0, &ccjs_objfn_runner_lookup\) != CCJS_OK\)/)
+  assert.doesNotMatch(result.code, /\*out = lookup\(args\[0\]\);/)
+})
+
+
 test('uses finite plain companions for recursive object function fields', () => {
   const result = compileSource(
     `type Dep = { emit: (context: Context) => string }

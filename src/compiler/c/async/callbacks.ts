@@ -16,6 +16,7 @@ import type {
   CCallbackWrapper,
   CFunctionParam,
   CFunctionType,
+  CNamedCallbackWrapper,
   CObjectShape,
   CObjectShapeField,
   CPlainArrowCallbackWrapper,
@@ -2752,15 +2753,7 @@ export function emitRuntimeCallbackWrapperDeclaration(
     index = index + 1
   }
 
-  const callArgs: string[] = []
-
-  if (targetTakesEventLoop) {
-    callArgs.push('(ccjs_loop*)ccjs_context')
-  }
-
-  for (const arg of args) {
-    callArgs.push(arg)
-  }
+  const callArgs = emitNamedRuntimeCallbackTargetArgs(wrapper, args, targetTakesEventLoop, context)
 
   let functionName = context.functionNames.get(wrapper.target)
 
@@ -2786,6 +2779,159 @@ export function emitRuntimeCallbackWrapperDeclaration(
   lines.push('}')
 
   return lines
+}
+
+function emitNamedRuntimeCallbackTargetArgs(
+  wrapper: CNamedCallbackWrapper,
+  runtimeArgs: string[],
+  targetTakesEventLoop: boolean,
+  context: CallbackEmitContext
+): string[] {
+  const callArgs: string[] = []
+  const targetFunctionType = namedRuntimeCallbackTargetFunctionType(wrapper, context)
+  const targetNames = collectFunctionPointerParamNames(targetFunctionType)
+  const moduleObjectFunctionFields = collectCallbackModuleObjectFunctionFieldNames(context)
+
+  if (targetTakesEventLoop) {
+    callArgs.push('(ccjs_loop*)ccjs_context')
+  }
+
+  for (const name of targetNames) {
+    const runtimeArg = runtimeCallbackArgByName(name, runtimeArgs)
+
+    if (runtimeArg != null) {
+      callArgs.push(runtimeArg)
+      continue
+    }
+
+    const moduleObjectFunctionField = emitRuntimeCallbackModuleObjectFieldArg(name, moduleObjectFunctionFields)
+
+    if (moduleObjectFunctionField != null) {
+      callArgs.push(moduleObjectFunctionField)
+      continue
+    }
+
+    callArgs.push(name)
+  }
+
+  return callArgs
+}
+
+function namedRuntimeCallbackTargetFunctionType(
+  wrapper: CNamedCallbackWrapper,
+  context: CallbackEmitContext
+): CFunctionType {
+  const params = context.functionParams.get(wrapper.target)
+
+  if (params == null) {
+    return wrapper.functionType
+  }
+
+  return {
+    kind: wrapper.functionType.kind,
+    params,
+    returnArrayElementType: wrapper.functionType.returnArrayElementType,
+    returnMapKeyType: wrapper.functionType.returnMapKeyType,
+    returnMapValueType: wrapper.functionType.returnMapValueType,
+    returnNullable: wrapper.functionType.returnNullable,
+    returnPromiseValueType: wrapper.functionType.returnPromiseValueType,
+    returnSetElementType: wrapper.functionType.returnSetElementType,
+    returnShape: wrapper.functionType.returnShape,
+    returnType: wrapper.functionType.returnType
+  }
+}
+
+function runtimeCallbackArgByName(name: string, runtimeArgs: string[]): string | null {
+  const prefix = 'ccjs_arg_'
+
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  let indexEnd = prefix.length
+  let value = 0
+
+  while (indexEnd < name.length) {
+    const code = name.charCodeAt(indexEnd)
+
+    if (code < 48 || code > 57) {
+      break
+    }
+
+    value = value * 10 + (code - 48)
+    indexEnd = indexEnd + 1
+  }
+
+  if (indexEnd === prefix.length || indexEnd !== name.length) {
+    return null
+  }
+
+  if (value >= runtimeArgs.length) {
+    return null
+  }
+
+  return runtimeArgs[value]
+}
+
+function collectCallbackModuleObjectFunctionFieldNames(context: CallbackEmitContext): Set<string> {
+  const names: Set<string> = new Set()
+  const shapes = context.moduleObjectShapes
+
+  if (shapes == null) {
+    return names
+  }
+
+  for (const objectName of shapes.keys()) {
+    const fields = shapes.get(objectName)
+
+    if (fields == null) {
+      continue
+    }
+
+    for (const field of fields) {
+      if (field.valueType !== 'function') {
+        continue
+      }
+
+      if (isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)) {
+        names.add(emitCObjectFunctionFieldName(objectName, field.name))
+      }
+    }
+  }
+
+  return names
+}
+
+function emitRuntimeCallbackModuleObjectFieldArg(name: string, moduleObjectFunctionFields: Set<string>): string | null {
+  const prefix = 'ccjs_objfn_ccjs_arg_'
+
+  if (!name.startsWith(prefix)) {
+    return null
+  }
+
+  let index = prefix.length
+
+  while (index < name.length) {
+    const code = name.charCodeAt(index)
+
+    if (code < 48 || code > 57) {
+      break
+    }
+
+    index = index + 1
+  }
+
+  if (index === prefix.length || name[index] !== '_') {
+    return null
+  }
+
+  const candidate = `ccjs_objfn_${name.slice(index + 1)}`
+
+  if (moduleObjectFunctionFields.has(candidate)) {
+    return candidate
+  }
+
+  return null
 }
 
 export function isRuntimeArrowCallbackWrapperWithContext(
