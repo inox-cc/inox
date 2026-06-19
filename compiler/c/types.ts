@@ -75,6 +75,7 @@ export type CObjectFieldInfo = CShapeValueMetadata & {
   index: number
   key: string | null
   objectName?: string
+  optional?: boolean
   shape?: CObjectShape | null
 }
 
@@ -88,7 +89,7 @@ export type CObjectIndexFieldInfo = CObjectFieldInfo & {
 }
 
 export type CObjectMemberFieldInfo = CObjectFieldInfo & {
-  key: null
+  key: string | null
 }
 
 export type CKnownObjectField = CObjectFieldInfo & {
@@ -100,7 +101,7 @@ export type CKnownObjectIndexField = CKnownObjectField & {
 }
 
 export type CKnownObjectMemberField = CKnownObjectField & {
-  key: null
+  key: string | null
 }
 
 export type CArrayElementInfo = {

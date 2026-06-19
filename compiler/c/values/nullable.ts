@@ -559,10 +559,11 @@ export function emitCOptionalMemberValueExpression(
 
   if (member !== null && typeof member !== 'undefined' && isRuntimeNullableType(member.valueType)) {
     const objectExpression = expression.object
+    const key = member.key ?? expression.property
     const access: OptionalObjectReadAccess = {
       index: member.index,
-      key: '',
-      kind: 'known',
+      key,
+      kind: 'key',
       objectName: nullableString(member.objectName)
     }
 

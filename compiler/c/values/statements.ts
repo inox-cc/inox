@@ -3862,7 +3862,11 @@ function emitRuntimeValueReturnStatement(statement: StatementNode, context: CFun
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(`inox_return = ${value.expression};`)
-  lines.push(emitRuntimeValueCheck('inox_return', expectedTag, context))
+  if (context.returnNullable === true) {
+    pushAllLines(lines, emitRuntimeNullableValueCheck('inox_return', expectedTag, context))
+  } else {
+    lines.push(emitRuntimeValueCheck('inox_return', expectedTag, context))
+  }
   lines.push('inox_retain(inox_return);')
   pushAllLines(lines, emitReturnJump(context))
   return lines

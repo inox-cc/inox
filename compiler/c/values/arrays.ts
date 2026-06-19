@@ -935,7 +935,7 @@ export function emitPreparedArrayLengthExpression(
 
   return {
     lines,
-    expression: temp
+    expression: `((double)${temp})`
   }
 }
 

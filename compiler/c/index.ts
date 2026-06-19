@@ -1035,8 +1035,16 @@ const expressionTypeDependencies = {
   resolveRuntimeArrayIndex
 }
 
+function currentCExpressionErrorTarget(errorTargets: string[]): string {
+  if (errorTargets.length === 0) {
+    return ''
+  }
+
+  return errorTargets[errorTargets.length - 1]
+}
+
 const cCallExpressionDependencies = {
-  currentErrorTarget: (context: unknown) => currentErrorTarget(context as CFunctionContext),
+  currentErrorTarget: currentCExpressionErrorTarget,
   emitCExpression,
   emitCNumberConversionValueExpression,
   emitCValueExpression,
@@ -1197,6 +1205,7 @@ const cValueExpressionDependencies = {
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionConstructorValueExpression,
+  emitPreparedCollectionSizeExpression,
   emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
@@ -1614,6 +1623,29 @@ function collectModuleObjectShapes(
       typeof statement.shape.fields !== 'undefined'
     ) {
       registerModuleObjectShape(result, statement.name, statement.shape.fields)
+
+      if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.type === 'ObjectLiteral'
+      ) {
+        const fields = collectModuleObjectLiteralShapeFields(
+          statement.init,
+          functionParams,
+          functionReturnArrayElementTypes,
+          functionReturnMapTypes,
+          functionReturnNullables,
+          functionReturnPromiseValueTypes,
+          functionReturnSetElementTypes,
+          functionReturnShapes,
+          functionReturnTypes
+        )
+
+        if (fields.length > 0) {
+          registerModuleObjectShape(result, statement.name, fields)
+        }
+      }
+
       continue
     }
 
@@ -1624,10 +1656,6 @@ function collectModuleObjectShapes(
       typeof statement.init !== 'undefined' &&
       statement.init.type === 'ObjectLiteral'
     ) {
-      if (result.has(statement.name)) {
-        continue
-      }
-
       const fields = collectModuleObjectLiteralShapeFields(
         statement.init,
         functionParams,
@@ -1650,10 +1678,6 @@ function collectModuleObjectShapes(
     const assignmentName = moduleObjectAssignmentName(statement)
 
     if (assignmentName === null || typeof assignmentName === 'undefined') {
-      continue
-    }
-
-    if (result.has(assignmentName)) {
       continue
     }
 
@@ -1733,7 +1757,7 @@ function registerModuleObjectShape(
       } else {
         const existingField = existing[index]
 
-        if (moduleObjectShapeFieldScore(field) > moduleObjectShapeFieldScore(existingField)) {
+        if (shouldReplaceModuleObjectShapeField(existingField, field)) {
           existingField.valueType = field.valueType
           existingField.declaredType = field.declaredType
           existingField.functionType = field.functionType
@@ -1760,6 +1784,36 @@ function registerModuleObjectShape(
       registerModuleObjectShape(shapes, `${name}_${field.name}`, field.shape.fields)
     }
   }
+}
+
+function shouldReplaceModuleObjectShapeField(existingField: CObjectShapeField, field: CObjectShapeField): boolean {
+  if (
+    field.functionTypeOwnership === 'weak' &&
+    existingField.functionType !== null &&
+    typeof existingField.functionType !== 'undefined' &&
+    existingField.functionTypeOwnership !== 'weak'
+  ) {
+    if (!isSupportedModuleObjectFunctionField(existingField) && isSupportedModuleObjectFunctionField(field)) {
+      return true
+    }
+
+    return false
+  }
+
+  if (
+    existingField.functionTypeOwnership === 'weak' &&
+    field.functionType !== null &&
+    typeof field.functionType !== 'undefined' &&
+    field.functionTypeOwnership !== 'weak'
+  ) {
+    return true
+  }
+
+  return moduleObjectShapeFieldScore(field) > moduleObjectShapeFieldScore(existingField)
+}
+
+function isSupportedModuleObjectFunctionField(field: CObjectShapeField): boolean {
+  return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
 }
 
 function moduleObjectShapeFieldScore(field: CObjectShapeField): number {
@@ -1857,12 +1911,15 @@ function collectModuleObjectLiteralShapeFields(
     )
 
     if (functionType !== null && typeof functionType !== 'undefined') {
-      fields.push({
+      const field: CObjectShapeField = {
         name: property.key,
         readonlyField: false,
         valueType: 'function',
         functionType
-      })
+      }
+
+      field.functionTypeOwnership = 'weak'
+      fields.push(field)
       continue
     }
 
@@ -1908,6 +1965,16 @@ function resolveModuleObjectFunctionType(
     return expression.functionType
   }
 
+  if (expression.type === 'ArrowFunctionExpression') {
+    const functionType = moduleObjectArrowFunctionType(expression)
+
+    if (functionType !== null && typeof functionType !== 'undefined') {
+      expression.functionType = functionType
+      expression.functionTypeOwnership = 'weak'
+      return functionType
+    }
+  }
+
   if (expression.type !== 'Reference' || expression.path.length !== 1) {
     return null
   }
@@ -1940,6 +2007,42 @@ function resolveModuleObjectFunctionType(
     returnSetElementType: functionReturnSetElementTypes.get(name) ?? null,
     returnShape: functionReturnShapes.get(name) ?? null,
     returnType
+  }
+}
+
+function moduleObjectArrowFunctionType(expression: CAccessorNode): CFunctionType | null {
+  if (expression.params === null || typeof expression.params === 'undefined') {
+    return null
+  }
+
+  const params: CFunctionParam[] = []
+  let returnShape = expression.returnShape ?? null
+
+  if (
+    returnShape === null &&
+    expression.body !== null &&
+    typeof expression.body !== 'undefined' &&
+    expression.body.shape !== null &&
+    typeof expression.body.shape !== 'undefined'
+  ) {
+    returnShape = expression.body.shape
+  }
+
+  for (const param of expression.params as CFunctionParam[]) {
+    params.push(param)
+  }
+
+  return {
+    kind: 'function',
+    params,
+    returnArrayElementType: expression.returnArrayElementType ?? null,
+    returnMapKeyType: expression.returnMapKeyType ?? null,
+    returnMapValueType: expression.returnMapValueType ?? null,
+    returnNullable: expression.returnNullable === true,
+    returnPromiseValueType: expression.returnPromiseValueType ?? null,
+    returnSetElementType: expression.returnSetElementType ?? null,
+    returnShape,
+    returnType: expression.returnType ?? 'unknown'
   }
 }
 
@@ -3588,12 +3691,14 @@ function emitKnownObjectMemberVariableDeclaration(
   member: CKnownObjectField,
   context: CFunctionContext
 ): string[] {
+  const key = knownObjectMemberKey(member)
+
   return emitObjectMemberVariableDeclaration(
     statement,
     member,
     context,
     (temp: string) =>
-      `inox_object_get_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, &${temp})`
+      `inox_object_get(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`
   )
 }
 
@@ -3843,9 +3948,10 @@ function emitKnownObjectMemberAssignment(
   updateKnownObjectMemberValueType(member, valueType, context)
 
   pushAll(lines, value.lines)
+  const key = knownObjectMemberKey(member)
   lines.push(
     emitStatusCheck(
-      `inox_object_set_known(${emitObjectValueReference(member.objectName, context)}, ${member.index}, ${value.expression})`,
+      `inox_object_set(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${value.expression})`,
       context
     )
   )
@@ -3873,6 +3979,14 @@ function emitDynamicObjectMemberAssignment(
   )
 
   return lines
+}
+
+function knownObjectMemberKey(member: CKnownObjectField): string {
+  if (member.key !== null && typeof member.key !== 'undefined') {
+    return member.key
+  }
+
+  return ''
 }
 
 function emitKnownArrayIndexVariableDeclaration(
@@ -5104,8 +5218,9 @@ function emitRuntimeLogGetCall(source: RuntimeLogGetSource, temp: string, contex
   }
 
   const object = emitObjectValueReference(source.member.objectName, context)
+  const key = knownObjectMemberKey(source.member)
 
-  return `inox_object_get_known(${object}, ${source.member.index}, &${temp})`
+  return `inox_object_get(${object}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`
 }
 
 function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {

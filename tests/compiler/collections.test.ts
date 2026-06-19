@@ -87,7 +87,33 @@ export function main(): void {
 
   assert.match(result.code, /size_t inox_array_len_\d+ = 0;/)
   assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_array_len_\d+\)/)
-  assert.match(result.code, /label\(inox_array_len_\d+\)/)
+  assert.match(result.code, /label\(\(\(double\)inox_array_len_\d+\)\)/)
+})
+
+test('lowers reverse loops over runtime array length without unsigned underflow', () => {
+  const result = compileSource(
+    `type Box = {
+  values: number[]
+}
+
+export function main(): void {
+  const box: Box = { values: [] }
+  let total = 0
+
+  for (let index = box.values.length - 1; index >= 0; index--) {
+    total = total + box.values[index]
+  }
+
+  console.log(total)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /double index = \(\(\(double\)inox_array_len_\d+\) - 1\);/)
+  assert.doesNotMatch(result.code, /double index = \(inox_array_len_\d+ - 1\);/)
 })
 
 test('lowers C object identity equality as runtime reference comparison', () => {

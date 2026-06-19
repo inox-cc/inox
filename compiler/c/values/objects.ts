@@ -3,6 +3,7 @@ import type { AnyNode, Diagnostic } from '../../types.ts'
 import { isPlainFunctionPointerType, isRuntimeFunctionType } from '../async/callbacks.ts'
 import {
   emitPrepareOwnedValueWrite,
+  emitFailureStatement,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
@@ -368,8 +369,9 @@ export function resolveKnownObjectMember(
 function knownObjectMemberField(objectName: string, index: number, field: CObjectShapeField): CKnownObjectMemberField {
   return {
     objectName,
-    key: null,
+    key: field.name,
     index,
+    optional: field.optional,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
@@ -468,6 +470,7 @@ function knownObjectIndexField(
     objectName,
     key,
     index,
+    optional: field.optional,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
@@ -570,8 +573,8 @@ export function emitPreparedKnownObjectMemberValueExpression(
   if (member !== null && typeof member !== 'undefined') {
     const access: KnownObjectFieldReadAccess = {
       index: member.index,
-      key: '',
-      kind: 'known',
+      key: member.key ?? expression.property,
+      kind: 'key',
       objectName: member.objectName
     }
 
@@ -818,8 +821,8 @@ function emitPreparedKnownObjectFieldValueExpression(
   registerOwnedValue(context, temp)
 
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(knownObjectFieldReadCall(access, temp, context), context))
-  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+  appendKnownObjectFieldReadLines(lines, access, field, temp, context)
+  appendLines(lines, emitKnownObjectFieldValueCheck(temp, tag, field, expression, context))
 
   return {
     lines,
@@ -1369,6 +1372,77 @@ function knownObjectFieldReadCall(
   }
 
   return `inox_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
+}
+
+function optionalKnownObjectFieldReadCall(
+  access: KnownObjectFieldReadAccess,
+  temp: string,
+  context: ObjectFunctionContext
+): string {
+  const object = emitObjectValueReference(access.objectName, context)
+
+  return `inox_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
+}
+
+function appendKnownObjectFieldReadLines(
+  lines: string[],
+  access: KnownObjectFieldReadAccess,
+  field: CKnownObjectField,
+  temp: string,
+  context: ObjectFunctionContext
+): void {
+  if (field.optional !== true) {
+    lines.push(emitStatusCheck(knownObjectFieldReadCall(access, temp, context), context))
+    return
+  }
+
+  const status = nextCName(context, 'inox_field_status')
+
+  lines.push(`inox_status ${status} = ${optionalKnownObjectFieldReadCall(access, temp, context)};`)
+  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`  ${temp} = inox_undefined_value();`)
+  lines.push('}')
+  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
+}
+
+function emitKnownObjectFieldValueCheck(
+  value: string,
+  expectedTag: string | null,
+  field: CKnownObjectField,
+  expression: AnyNode,
+  context: ObjectFunctionContext
+): string[] {
+  if (field.optional === true) {
+    return emitRuntimeOptionalObjectFieldValueCheck(value, expectedTag, context)
+  }
+
+  return emitRuntimeFieldValueCheck(value, expectedTag, expression, context)
+}
+
+function emitRuntimeOptionalObjectFieldValueCheck(
+  value: string,
+  expectedTag: string | null,
+  context: ObjectFunctionContext
+): string[] {
+  if (expectedTag === null || typeof expectedTag === 'undefined') {
+    return []
+  }
+
+  if (expectedTag === 'INOX_TAG_BOOL' || expectedTag === 'INOX_TAG_NUMBER') {
+    return [
+      emitRuntimeTypeCheck(
+        `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && ${value}.tag != ${expectedTag}`,
+        context
+      )
+    ]
+  }
+
+  return [
+    emitRuntimeTypeCheck(
+      `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && (${value}.tag != ${expectedTag} || ${value}.as.ref == 0)`,
+      context
+    )
+  ]
 }
 
 export function registerObjectShape(

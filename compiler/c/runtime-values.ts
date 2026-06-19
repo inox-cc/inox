@@ -20,12 +20,17 @@ export function emitRuntimeNullableValueCheck(
   }
 
   if (expectedTag === 'INOX_TAG_BOOL' || expectedTag === 'INOX_TAG_NUMBER') {
-    return [emitRuntimeTypeCheck(`${name}.tag != INOX_TAG_NULL && ${name}.tag != ${expectedTag}`, context)]
+    return [
+      emitRuntimeTypeCheck(
+        `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && ${name}.tag != ${expectedTag}`,
+        context
+      )
+    ]
   }
 
   return [
     emitRuntimeTypeCheck(
-      `${name}.tag != INOX_TAG_NULL && (${name}.tag != ${expectedTag} || ${name}.as.ref == 0)`,
+      `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && (${name}.tag != ${expectedTag} || ${name}.as.ref == 0)`,
       context
     )
   ]

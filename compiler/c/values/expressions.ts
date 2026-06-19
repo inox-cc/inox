@@ -126,6 +126,7 @@ type CFunctionContext = CEmitContext & {
   collectionLoweringDependencies: CollectionLoweringDependencies
   externalEventLoop: boolean
   externalEventLoopFunctions: CStringSet
+  errorTargets: string[]
   failureStatement?: string | null
   failureStatementUsed?: boolean
   functionAsyncFlags: CBooleanMap
@@ -1751,7 +1752,7 @@ export type CScalarExpressionDependencies = {
 }
 
 export type CCallExpressionDependencies = {
-  currentErrorTarget(context: CFunctionContext): string | null
+  currentErrorTarget(errorTargets: string[]): string
   emitCExpression(expression: CValueNode, context: CFunctionContext): string
   emitCNumberConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
@@ -2220,7 +2221,9 @@ function emitPreparedThrowingCallExpression(
   appendLines(callArgs, args)
   appendLines(lines, preparedLines)
 
-  if (!deps.currentErrorTarget(context) && !context.throwingFunction) {
+  const target = deps.currentErrorTarget(context.errorTargets)
+
+  if (target === '' && !context.throwingFunction) {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_THROW',
@@ -2255,7 +2258,7 @@ function emitPreparedThrowingCallExpression(
   const status = nextCName(context, 'inox_call_status')
 
   lines.push(`inox_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')});`)
-  appendLines(lines, emitThrowingCallStatusCheck(status, context, deps))
+  appendLines(lines, emitThrowingCallStatusCheck(status, target, context))
 
   return {
     lines,
@@ -2293,13 +2296,12 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
 
 function emitThrowingCallStatusCheck(
   status: string,
-  context: CFunctionContext,
-  deps: CCallExpressionDependencies
+  target: string,
+  context: CFunctionContext
 ): string[] {
-  const target = deps.currentErrorTarget(context)
   const lines = [`if (${status} == INOX_ERR_THROW) {`, '  inox_error_active = 1;']
 
-  if (target !== null && typeof target !== 'undefined') {
+  if (target !== '') {
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
     lines.push('  inox_status_result = INOX_ERR_THROW;')
@@ -2676,6 +2678,12 @@ export function emitPreparedNumberExpression(
       return dynamicObjectStringLiteralCompare
     }
 
+    const nullableStringCompare = emitPreparedNullableStringCompareExpression(expression, context, deps)
+
+    if (nullableStringCompare !== null && typeof nullableStringCompare !== 'undefined') {
+      return nullableStringCompare
+    }
+
     if (
       isEqualityOperator(expression.operator) &&
       deps.canEmitStringBytesOperand(expression.left, context) &&
@@ -2836,7 +2844,8 @@ export function emitPreparedNumberExpression(
     if (member !== null && typeof member !== 'undefined' && isNumberOrBooleanValueType(member.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(member.objectName ?? '', context)
-      const getCall = `inox_object_get_known(${objectReference}, ${member.index}, &${value})`
+      const key = member.key ?? ''
+      const getCall = `inox_object_get(${objectReference}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value})`
 
       return emitPreparedRuntimeNumberValue(member.valueType, value, getCall, context)
     }
@@ -3126,6 +3135,191 @@ function emitPreparedRuntimeStringLiteralCompareExpression(
   }
 
   return null
+}
+
+function emitPreparedNullableStringCompareExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (!isEqualityOperator(expression.operator)) {
+    return null
+  }
+
+  const leftNullable = isNullableStringRuntimeValueExpression(expression.left, context, deps)
+  const rightNullable = isNullableStringRuntimeValueExpression(expression.right, context, deps)
+
+  if (!leftNullable && !rightNullable) {
+    return null
+  }
+
+  const leftLiteral = stringLiteralValue(expression.left)
+
+  if (
+    leftLiteral !== null &&
+    typeof leftLiteral !== 'undefined' &&
+    isNullableStringRuntimeValueExpression(expression.right, context, deps)
+  ) {
+    return emitPreparedRuntimeValueStringLiteralCompare(
+      expression.right,
+      leftLiteral,
+      expression.operator,
+      context,
+      deps
+    )
+  }
+
+  const rightLiteral = stringLiteralValue(expression.right)
+
+  if (
+    rightLiteral !== null &&
+    typeof rightLiteral !== 'undefined' &&
+    isNullableStringRuntimeValueExpression(expression.left, context, deps)
+  ) {
+    return emitPreparedRuntimeValueStringLiteralCompare(
+      expression.left,
+      rightLiteral,
+      expression.operator,
+      context,
+      deps
+    )
+  }
+
+  if (leftNullable && rightNullable) {
+    const left = emitPreparedNullableStringRuntimeValueExpression(expression.left, context, deps)
+    const right = emitPreparedNullableStringRuntimeValueExpression(expression.right, context, deps)
+    const lines: string[] = []
+
+    appendLines(lines, left.lines)
+    appendLines(lines, right.lines)
+
+    return emitPreparedNullableStringCompareResult(
+      lines,
+      runtimeStringValuesEqualExpression(left.expression, right.expression),
+      expression.operator
+    )
+  }
+
+  if (leftNullable) {
+    if (!deps.canEmitStringBytesOperand(expression.right, context)) {
+      return null
+    }
+
+    const left = emitPreparedNullableStringRuntimeValueExpression(expression.left, context, deps)
+    const right = deps.emitPreparedStringBytesOperand(expression.right, context, 'inox_cmp_string')
+    const lines: string[] = []
+
+    appendLines(lines, left.lines)
+    appendLines(lines, right.lines)
+
+    return emitPreparedNullableStringCompareResult(
+      lines,
+      runtimeStringValueEqualsBytesExpression(left.expression, right.bytes, right.length),
+      expression.operator
+    )
+  }
+
+  if (!deps.canEmitStringBytesOperand(expression.left, context)) {
+    return null
+  }
+
+  const left = deps.emitPreparedStringBytesOperand(expression.left, context, 'inox_cmp_string')
+  const right = emitPreparedNullableStringRuntimeValueExpression(expression.right, context, deps)
+  const lines: string[] = []
+
+  appendLines(lines, left.lines)
+  appendLines(lines, right.lines)
+
+  return emitPreparedNullableStringCompareResult(
+    lines,
+    runtimeStringValueEqualsBytesExpression(right.expression, left.bytes, left.length),
+    expression.operator
+  )
+}
+
+function isNullableStringRuntimeValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
+  if (isOptionalKnownStringFieldExpression(expression, context, deps)) {
+    return true
+  }
+
+  if (deps.inferExpressionType(expression, context) !== 'string') {
+    return false
+  }
+
+  return deps.isNullableRuntimeExpression(expression, context)
+}
+
+function emitPreparedNullableStringRuntimeValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression {
+  const dynamicValue = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)
+
+  if (dynamicValue !== null && typeof dynamicValue !== 'undefined') {
+    return dynamicValue
+  }
+
+  return deps.emitCValueExpression(expression, context)
+}
+
+function isOptionalKnownStringFieldExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
+  return (
+    isOptionalKnownStringField(deps.resolveKnownObjectMember(expression, context)) ||
+    isOptionalKnownStringField(deps.resolveKnownObjectIndex(expression, context))
+  )
+}
+
+function isOptionalKnownStringField(field: CKnownObjectField | CKnownObjectIndexField | null | undefined): boolean {
+  return field !== null && typeof field !== 'undefined' && field.optional === true && field.valueType === 'string'
+}
+
+function emitPreparedNullableStringCompareResult(
+  lines: string[],
+  equals: string,
+  operator: string
+): PreparedExpression {
+  if (isPositiveEqualityOperator(operator)) {
+    return {
+      lines,
+      expression: equals
+    }
+  }
+
+  return {
+    lines,
+    expression: `(!${equals})`
+  }
+}
+
+function runtimeStringValuesEqualExpression(left: string, right: string): string {
+  const leftString = `((inox_string*)${left}.as.ref)`
+  const rightString = `((inox_string*)${right}.as.ref)`
+
+  return (
+    `((${left}.tag == INOX_TAG_STRING && ${right}.tag == INOX_TAG_STRING && ` +
+    `${left}.as.ref != 0 && ${right}.as.ref != 0 && ` +
+    `${leftString}->len == ${rightString}->len && ` +
+    `memcmp(${leftString}->bytes, ${rightString}->bytes, ${leftString}->len) == 0) || ` +
+    `(${left}.tag == ${right}.tag && (${left}.tag == INOX_TAG_NULL || ${left}.tag == INOX_TAG_UNDEFINED)))`
+  )
+}
+
+function runtimeStringValueEqualsBytesExpression(value: string, bytes: string, length: string): string {
+  const string = `((inox_string*)${value}.as.ref)`
+
+  return (
+    `(${value}.tag == INOX_TAG_STRING && ${value}.as.ref != 0 && ` +
+    `${string}->len == ${length} && memcmp(${string}->bytes, ${bytes}, ${length}) == 0)`
+  )
 }
 
 function emitPreparedRuntimeValueStringLiteralCompare(
@@ -4161,6 +4355,7 @@ export type CValueExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext
   ): PreparedExpression | null
+  emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCryptoCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDebugMemoryCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -4382,6 +4577,15 @@ export function emitCValueExpression(
 
   if (collectionConstructor !== null && typeof collectionConstructor !== 'undefined') {
     return collectionConstructor
+  }
+
+  const collectionSize = deps.emitPreparedCollectionSizeExpression(expression, context)
+
+  if (collectionSize !== null && typeof collectionSize !== 'undefined') {
+    return {
+      lines: collectionSize.lines,
+      expression: `inox_number_value(${collectionSize.expression})`
+    }
   }
 
   const objectValuesCall = deps.emitPreparedObjectValuesCallExpression(expression, context)
@@ -4727,7 +4931,7 @@ export function emitCValueExpression(
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`${temp} = ${call.expression};`)
 
-    if (callExpressionReturnsNullableScalar(expression, valueType, context)) {
+    if (callExpressionReturnsNullableRuntimeValue(expression, valueType, context)) {
       appendLines(lines, emitRuntimeNullableValueCheck(temp, tag, context))
     } else {
       lines.push(emitRuntimeValueCheck(temp, tag, context))
@@ -4742,12 +4946,12 @@ export function emitCValueExpression(
   return emitUnsupportedCValueExpression(expression, context, deps)
 }
 
-function callExpressionReturnsNullableScalar(
+function callExpressionReturnsNullableRuntimeValue(
   expression: CValueNode,
   valueType: string,
   context: CFunctionContext
 ): boolean {
-  if (!isNullableScalarType(valueType)) {
+  if (!isRuntimeNullableType(valueType)) {
     return false
   }
 

@@ -329,6 +329,18 @@ export function emitPreparedCollectionReceiver(
     }
   }
 
+  const knownField = knownCollectionReceiverField(expression, context)
+
+  if (knownField !== null && typeof knownField !== 'undefined') {
+    const value = emitCollectionValueExpression(expression, context)
+
+    return {
+      type: knownField,
+      lines: value.lines,
+      expression: value.expression
+    }
+  }
+
   if (
     isCollectionMemberAccessExpression(expression, context) ||
     isCollectionIndexAccessExpression(expression, context)
@@ -346,6 +358,33 @@ export function emitPreparedCollectionReceiver(
       lines: value.lines,
       expression: value.expression
     }
+  }
+
+  return null
+}
+
+function knownCollectionReceiverField(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): 'map' | 'set' | null {
+  const member = resolveKnownCollectionObjectMember(expression, context)
+
+  if (member !== null && typeof member !== 'undefined' && member.optional !== true) {
+    return knownCollectionFieldType(member.valueType)
+  }
+
+  const index = resolveKnownCollectionObjectIndex(expression, context)
+
+  if (index !== null && typeof index !== 'undefined' && index.optional !== true) {
+    return knownCollectionFieldType(index.valueType)
+  }
+
+  return null
+}
+
+function knownCollectionFieldType(valueType: string | null | undefined): 'map' | 'set' | null {
+  if (valueType === 'map' || valueType === 'set') {
+    return valueType
   }
 
   return null
@@ -920,7 +959,7 @@ export function emitPreparedCollectionSizeExpression(
 
     return {
       lines,
-      expression: out
+      expression: `((double)${out})`
     }
   }
 

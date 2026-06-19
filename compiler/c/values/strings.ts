@@ -8,6 +8,7 @@ import {
 } from '../../stdlib/descriptors/collections.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
+  emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -417,6 +418,10 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     return true
   }
 
+  if (isKnownOptionalObjectStringField(expression, context)) {
+    return true
+  }
+
   if (isDynamicRuntimeStringFieldExpression(expression, context)) {
     return true
   }
@@ -799,6 +804,16 @@ export function emitPreparedStringBytesOperand(
     return knownObjectString
   }
 
+  const knownOptionalObjectString = emitPreparedKnownOptionalObjectStringBytesOperand(
+    expression,
+    context,
+    tempPrefix
+  )
+
+  if (knownOptionalObjectString !== null && typeof knownOptionalObjectString !== 'undefined') {
+    return knownOptionalObjectString
+  }
+
   const objectExpressionString = emitPreparedObjectExpressionStringBytesOperand(expression, context, tempPrefix)
 
   if (objectExpressionString !== null && typeof objectExpressionString !== 'undefined') {
@@ -811,7 +826,10 @@ export function emitPreparedStringBytesOperand(
     return dynamicRuntimeString
   }
 
-  if (stringDeps(context).inferExpressionType(expression, context) === 'string') {
+  if (
+    !isKnownOptionalObjectStringField(expression, context) &&
+    stringDeps(context).inferExpressionType(expression, context) === 'string'
+  ) {
     const value = stringDeps(context).emitCValueExpression(expression, context)
     const string = nextCName(context, tempPrefix)
     const lines: string[] = []
@@ -906,11 +924,106 @@ function knownObjectStringField(expression: AnyNode, context: StringCContext): C
     field = stringDeps(context).resolveKnownObjectIndex(expression, context)
   }
 
-  if (field === null || typeof field === 'undefined' || field.valueType !== 'string') {
+  if (
+    field === null ||
+    typeof field === 'undefined' ||
+    field.valueType !== 'string' ||
+    field.optional === true
+  ) {
     return null
   }
 
   return field
+}
+
+function isKnownOptionalObjectStringField(expression: AnyNode, context: StringCContext): boolean {
+  return knownOptionalObjectStringField(expression, context) !== null
+}
+
+function knownOptionalObjectStringField(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null {
+  let field: CObjectFieldInfo | null = null
+
+  if (stringDeps(context).isMemberAccessExpression(expression)) {
+    field = stringDeps(context).resolveKnownObjectMember(expression, context)
+  } else if (expression.type === 'IndexExpression') {
+    field = stringDeps(context).resolveKnownObjectIndex(expression, context)
+  }
+
+  if (
+    field === null ||
+    typeof field === 'undefined' ||
+    field.valueType !== 'string' ||
+    field.optional !== true
+  ) {
+    return null
+  }
+
+  return field
+}
+
+function emitPreparedKnownOptionalObjectStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  const field = knownOptionalObjectStringField(expression, context)
+
+  if (field === null || typeof field === 'undefined') {
+    return null
+  }
+
+  const objectName = field.objectName
+
+  if (objectName === null || typeof objectName === 'undefined') {
+    return null
+  }
+
+  const key = knownObjectStringFieldReadKey(field, expression)
+
+  if (key === null || typeof key === 'undefined') {
+    return null
+  }
+
+  const value = nextCName(context, 'inox_expr_value')
+  const string = nextCName(context, tempPrefix)
+  const status = nextCName(context, 'inox_field_status')
+  const object = stringDeps(context).emitObjectValueReference(objectName, context)
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+
+  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(
+    `inox_status ${status} = inox_object_get(${object}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value});`
+  )
+  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`  ${value} = inox_undefined_value();`)
+  lines.push('}')
+  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
+  lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function knownObjectStringFieldReadKey(field: CObjectFieldInfo, expression: AnyNode): string | null {
+  if (field.key !== null && typeof field.key !== 'undefined') {
+    return field.key
+  }
+
+  if (expression.type === 'MemberExpression') {
+    return expression.property
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return expression.index.value
+  }
+
+  return null
 }
 
 function emitPreparedObjectExpressionStringBytesOperand(

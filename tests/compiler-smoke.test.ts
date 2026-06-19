@@ -541,7 +541,10 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /inox_object_get_known\(declaration, 0, &inox_value_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_status inox_field_status_\d+ = inox_object_get\(declaration, "loweredArrayMethodName", 22, &inox_value_\d+\);/
+  )
   assert.match(result.code, /method = inox_value_\d+;/)
   assert.match(result.code, /inox_return = method;/)
   assert.doesNotMatch(result.code, /unknownas/)
@@ -623,6 +626,61 @@ export function main(): void {
   assert.match(result.code, /inox_object_init_known\(inox_object_\d+, 1, inox_number_value\(\(min \+ max\)\)\)/)
 })
 
+test('lowers missing optional known object fields to undefined', () => {
+  const result = compileSource(
+    `type Options = {
+  file?: string
+}
+
+function name(options: Options): string {
+  if (options.file !== null && typeof options.file !== 'undefined') {
+    return options.file
+  }
+
+  return 'none'
+}
+
+export function main(): void {
+  console.log(name({}), name({ file: 'input.ts' }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /inox_status inox_field_status_\d+ = inox_object_get\(options, "file", 4, &inox_value_\d+\);/)
+  assert.match(result.code, /if \(inox_field_status_\d+ == INOX_ERR_FIELD\) \{\n {4}inox_value_\d+ = inox_undefined_value\(\);/)
+  assert.match(
+    result.code,
+    /inox_value_\d+\.tag != INOX_TAG_UNDEFINED && inox_value_\d+\.tag != INOX_TAG_NULL && \(inox_value_\d+\.tag != INOX_TAG_STRING/
+  )
+})
+
+test('compares optional known string fields through runtime values', () => {
+  const result = compileSource(
+    `type Node = {
+  type?: string | null
+}
+
+function keep(node: Node): boolean {
+  return node.type !== 'ExportDeclaration'
+}
+
+export function main(): void {
+  console.log(keep({}))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /inox_status inox_field_status_\d+ = inox_object_get\(node, "type", 4, &inox_value_\d+\);/)
+  assert.match(result.code, /inox_string_cmp_value_\d+\.tag == INOX_TAG_STRING/)
+  assert.doesNotMatch(result.code, /inox_object_get_known\(node, 0, &inox_value_\d+\)/)
+})
+
 test('lowers C collection constructors in object literal value fields', () => {
   const result = compileSource(
     `type Bag = {
@@ -634,7 +692,7 @@ export function main(): void {
   const bag: Bag = { scores: new Map(), names: new Set() }
   bag.scores.set('Ada', 7)
   bag.names.add('Ada')
-  console.log(bag.scores.size, bag.names.has('Ada'))
+  console.log(bag.scores.size, bag.names.size, bag.names.has('Ada'))
 }
 `,
     {
@@ -648,6 +706,37 @@ export function main(): void {
   assert.match(result.code, /inox_object_init_known\(bag, 1, inox_set_\d+\)/)
   assert.match(result.code, /inox_map_set\(inox_value_\d+, inox_value_\d+, inox_number_value\(7\)\)/)
   assert.match(result.code, /inox_set_add\(inox_value_\d+, inox_value_\d+\)/)
+  assert.match(result.code, /inox_map_size\(inox_value_\d+, &inox_map_size_\d+\)/)
+  assert.match(result.code, /inox_set_size\(inox_value_\d+, &inox_set_size_\d+\)/)
+  assert.doesNotMatch(result.code, /inox_object_get\(inox_value_\d+, "size", 4, &inox_value_\d+\)/)
+})
+
+test('boxes C collection size values in object literal fields', () => {
+  const result = compileSource(
+    `type Bag = {
+  scores: Map<string, number>
+}
+
+type Summary = {
+  count: number
+}
+
+function summarize(bag: Bag): Summary {
+  return { count: bag.scores.size }
+}
+
+export function main(): void {
+  console.log(summarize({ scores: new Map() }).count)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /inox_map_size\(inox_value_\d+, &inox_map_size_\d+\)/)
+  assert.match(result.code, /inox_object_init_known\(inox_object_\d+, 0, inox_number_value\(\(\(double\)inox_map_size_\d+\)\)\)/)
+  assert.doesNotMatch(result.code, /inox_object_get\(inox_value_\d+, "size", 4, &inox_value_\d+\)/)
 })
 
 test('lowers synthetic C main wrapper through cleanup when runtime values are owned', () => {
@@ -1591,7 +1680,7 @@ export function main(): void {
 
   assert.match(
     result.code,
-    /inox_return = inox_value_\d+;\n {2}if \(\n {4}inox_return\.tag != INOX_TAG_NULL && \(inox_return\.tag != INOX_TAG_STRING \|\| inox_return\.as\.ref == 0\)\n {2}\) \{\n {4}goto inox_cleanup;\n {2}\}\n {2}inox_retain\(inox_return\);\n {2}goto inox_cleanup;/
+    /inox_return = inox_value_\d+;\n {2}if \(\n {4}inox_return\.tag != INOX_TAG_UNDEFINED && inox_return\.tag != INOX_TAG_NULL && \(inox_return\.tag != INOX_TAG_STRING \|\| inox_return\.as\.ref == 0\)\n {2}\) \{\n {4}goto inox_cleanup;\n {2}\}\n {2}inox_retain\(inox_return\);\n {2}goto inox_cleanup;/
   )
 })
 
@@ -2077,6 +2166,58 @@ export function main(): void {
   assert.match(
     result.code,
     /memcmp\(inox_cmp_string_\d+->bytes, inox_cmp_string_\d+->bytes, inox_cmp_string_\d+->len\) == 0/
+  )
+})
+
+test('allows nullable object return values', () => {
+  const result = compileSource(
+    `function maybeObject(enabled: boolean): object | null {
+  if (enabled) {
+    return {}
+  }
+
+  return null
+}
+
+export function main(): void {
+  console.log(maybeObject(false) === null)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(
+    result.code,
+    /inox_return\.tag != INOX_TAG_UNDEFINED && inox_return\.tag != INOX_TAG_NULL && \(inox_return\.tag != INOX_TAG_OBJECT \|\| inox_return\.as\.ref == 0\)/
+  )
+  assert.doesNotMatch(result.code, /if \(inox_return\.tag != INOX_TAG_OBJECT \|\| inox_return\.as\.ref == 0\)/)
+})
+
+test('allows nullable object call results', () => {
+  const result = compileSource(
+    `function maybeObject(enabled: boolean): object | null {
+  if (enabled) {
+    return {}
+  }
+
+  return null
+}
+
+export function main(): void {
+  const value: object | null = maybeObject(false)
+  console.log(value === null)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(
+    result.code,
+    /inox_value_\d+ = maybeObject\(0\);\n\n  if \(\n    inox_value_\d+\.tag != INOX_TAG_UNDEFINED && inox_value_\d+\.tag != INOX_TAG_NULL && \(inox_value_\d+\.tag != INOX_TAG_OBJECT \|\| inox_value_\d+\.as\.ref == 0\)/
   )
 })
 
