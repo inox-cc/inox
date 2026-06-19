@@ -270,6 +270,41 @@ export function main(): void {
   assert.match(result.code, /!\(statementValueType == 0\)/)
 })
 
+test('lowers AnyNode nullish guards and truthiness through runtime tags', () => {
+  const result = compileSource(
+    `type AnyNode = {
+  type?: string
+  [key: string]: any
+}
+
+function isReference(expression: AnyNode): boolean {
+  return expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference'
+}
+
+function hasValue(expression: AnyNode): boolean {
+  if (expression) {
+    return true
+  }
+
+  return false
+}
+
+export function main(): void {
+  console.log(isReference({ type: 'Reference' }), hasValue({ type: 'Literal' }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /double isReference\(inox_value expression\)/)
+  assert.match(result.code, /expression\.tag == INOX_TAG_NULL \|\| expression\.tag == INOX_TAG_UNDEFINED/)
+  assert.match(result.code, /!\(expression\.tag == INOX_TAG_UNDEFINED\)/)
+  assert.match(result.code, /if \(inox_value_truthy\(expression\) \? 1 : 0\) \{/)
+  assert.doesNotMatch(result.code, /\bexpression\s*(?:!=|==)\s*0\b/)
+})
+
 test('lowers Object.values and Object.entries inside C for-of object arrays', () => {
   const result = compileSource(
     `export function main(): void {

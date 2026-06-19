@@ -2973,10 +2973,28 @@ export function emitPreparedRuntimeTruthinessExpression(
     }
   }
 
+  const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
+
+  if (runtimeReference !== null && typeof runtimeReference !== 'undefined') {
+    return {
+      lines: runtimeReference.lines,
+      expression: `inox_value_truthy(${runtimeReference.expression}) ? 1 : 0`
+    }
+  }
+
   const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression, context, deps)
 
   if (value === null || typeof value === 'undefined') {
-    return null
+    const dynamicValue = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)
+
+    if (dynamicValue === null || typeof dynamicValue === 'undefined') {
+      return null
+    }
+
+    return {
+      lines: dynamicValue.lines,
+      expression: `inox_value_truthy(${dynamicValue.expression}) ? 1 : 0`
+    }
   }
 
   return {
@@ -3827,11 +3845,31 @@ function runtimeValueReferenceName(expression: CValueNode, context: CFunctionCon
     return null
   }
 
-  if (!isOwnedRuntimeValueName(name, context) && valueType !== 'unknown' && !isOpaqueRuntimeValueType(valueType)) {
+  if (!runtimeValueReferenceUsesInoxValueStorage(name, valueType, context)) {
     return null
   }
 
   return name
+}
+
+function runtimeValueReferenceUsesInoxValueStorage(
+  name: string,
+  valueType: string | null | undefined,
+  context: CFunctionContext
+): boolean {
+  if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
+    return true
+  }
+
+  if (!isManagedRuntimeReturnType(valueType)) {
+    return false
+  }
+
+  if (valueType === 'string') {
+    return isOwnedRuntimeValueName(name, context)
+  }
+
+  return true
 }
 
 function isOwnedRuntimeValueName(name: string, context: CFunctionContext): boolean {
