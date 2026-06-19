@@ -183,6 +183,11 @@ type OptionalParamInfo = {
 
 type CheckerNode = AnyNode
 type NullableNode = AnyNode | null
+type TypeAliasDeclarationNode = AnyNode & {
+  name: string
+  loc: SourceLocation
+  valueType: TypeAliasInfo
+}
 type CheckerObjectPropertyNode = CheckerNode & {
   key: string
   loc: SourceLocation
@@ -368,7 +373,7 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('property', 'string', null, false, loc),
       anyNodeField('operator', 'string', null, false, loc),
       anyNodeField('declaredType', 'string', null, true, loc),
-      anyNodeField('valueType', 'unknown', null, false, loc),
+      anyNodeField('valueType', 'string', null, false, loc),
       anyNodeField('arrayElementType', 'string', null, true, loc),
       anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
       anyNodeField('mapKeyType', 'string', null, true, loc),
@@ -772,7 +777,7 @@ class Checker {
       const item = checkerNodeAt(this.program.body, index)
 
       if (item.type === 'TypeAliasDeclaration') {
-        this.declareTypeAlias(item)
+        this.declareTypeAlias(item as TypeAliasDeclarationNode)
       } else if (item.type === 'ClassDeclaration') {
         this.classNames.add(item.name)
       }
@@ -791,19 +796,31 @@ class Checker {
 
         for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
           const specifier = checkerNodeAt(item.specifiers, specifierIndex)
+          const symbol: SymbolInfo = {
+            kind: 'import',
+            mutable: false,
+            valueType: this.runtimeImportValueType(item.source, specifier.imported),
+            importedName: specifier.imported,
+            importSource: item.source,
+            loc: specifier.loc
+          }
 
-          this.declare(
-            specifier.local,
-            {
-              kind: 'import',
-              mutable: false,
-              valueType: this.runtimeImportValueType(item.source, specifier.imported),
-              importedName: specifier.imported,
-              importSource: item.source,
-              loc: specifier.loc
-            },
-            specifier.loc
-          )
+          if (specifier.returnType != null) {
+            symbol.valueType = 'function'
+            symbol.params = specifier.params ?? []
+            symbol.returnType = specifier.returnType
+            symbol.returnNullable = specifier.returnNullable === true
+            symbol.returnArrayElementType = specifier.returnArrayElementType ?? null
+            symbol.returnArrayElementDeclaredType = specifier.returnArrayElementDeclaredType ?? null
+            symbol.returnMapKeyType = specifier.returnMapKeyType ?? null
+            symbol.returnMapValueType = specifier.returnMapValueType ?? null
+            symbol.returnPromiseValueType = specifier.returnPromiseValueType ?? null
+            symbol.returnSetElementType = specifier.returnSetElementType ?? null
+            symbol.returnShape = specifier.returnShape ?? null
+            symbol.async = specifier.async === true
+          }
+
+          this.declare(specifier.local, symbol, specifier.loc)
         }
       }
 
@@ -1311,22 +1328,45 @@ class Checker {
     if (statement.type === 'IfStatement') {
       this.checkBooleanCondition(statement.condition)
       const narrowing = this.resolveNullableConditionNarrowing(statement.condition)
+      let consequentNarrowedNames: Set<string> | null = null
 
-      const trueNarrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+      const trueNarrowingState = this.pushBranchNarrowedNullableNames(narrowing.trueNames)
 
       try {
-        this.checkScopedBody(statement.consequent)
+        this.checkFlowScopedBody(statement.consequent)
+        consequentNarrowedNames = cloneStringSet(this.narrowedNullableNames)
       } finally {
         this.restoreNarrowedNullableNames(trueNarrowingState)
       }
 
       if (statement.alternate != null) {
-        const falseNarrowingState = this.pushNarrowedNullableNames(narrowing.falseNames)
+        let alternateNarrowedNames: Set<string> | null = null
+        const falseNarrowingState = this.pushBranchNarrowedNullableNames(narrowing.falseNames)
 
         try {
-          this.checkScopedBody(statement.alternate)
+          this.checkFlowScopedBody(statement.alternate)
+          alternateNarrowedNames = cloneStringSet(this.narrowedNullableNames)
         } finally {
           this.restoreNarrowedNullableNames(falseNarrowingState)
+        }
+
+        if (consequentNarrowedNames != null && alternateNarrowedNames != null) {
+          const consequentNames: string[] = []
+          const alternateNames: string[] = []
+
+          for (const name of consequentNarrowedNames) {
+            consequentNames.push(name)
+          }
+
+          for (const name of alternateNarrowedNames) {
+            alternateNames.push(name)
+          }
+
+          const commonNames = this.intersectNames(consequentNames, alternateNames)
+
+          for (const name of commonNames) {
+            this.narrowedNullableNames.add(name)
+          }
         }
       }
 
@@ -2169,9 +2209,17 @@ class Checker {
         )
       }
 
-      if (expression.target.path.length === 1) {
+      if (expression.target.path.length === 1 && symbol.mutable === true) {
+        const targetName = firstPathSegment(expression.target.path)
+
+        deleteNullableNarrowingKey(this.narrowedNullableNames, targetName)
+
+        if (this.expressionCanBeNull(expression.value)) {
+          return valueType
+        }
+
         if (symbol.nullable === true) {
-          deleteNullableNarrowingKey(this.narrowedNullableNames, firstPathSegment(expression.target.path))
+          this.narrowedNullableNames.add(targetName)
         }
       }
     }
@@ -2616,13 +2664,13 @@ class Checker {
       expression.target.className = field.className
     }
 
-    this.checkAssignableType(
-      valueType,
-      fieldType.valueType,
-      expression.value.loc,
-      targetNullable,
-      this.expressionCanBeNull(expression.value)
-    )
+    const valueCanBeNull = this.expressionCanBeNull(expression.value)
+
+    this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, targetNullable, valueCanBeNull)
+
+    if (narrowedKey != null && targetNullable && !valueCanBeNull) {
+      this.narrowedNullableNames.add(narrowedKey)
+    }
 
     if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
       this.checkAssignableType(
@@ -8409,16 +8457,18 @@ class Checker {
       return null
     }
 
-    let elementType = this.resolveExpressionArrayElementType(expression.callee.object)
+    let elementType: ValueType = 'unknown'
+    const resolvedElementType = this.resolveExpressionArrayElementType(expression.callee.object)
 
-    if (elementType == null) {
-      elementType = 'unknown'
+    if (resolvedElementType != null) {
+      elementType = resolvedElementType
     }
 
-    let elementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.callee.object)
+    let elementDeclaredType: string = elementType
+    const resolvedElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.callee.object)
 
-    if (elementDeclaredType == null) {
-      elementDeclaredType = elementType
+    if (resolvedElementDeclaredType != null) {
+      elementDeclaredType = resolvedElementDeclaredType
     }
 
     expression.arrayElementType = elementType
@@ -10681,6 +10731,10 @@ class Checker {
       return symbol
     }
 
+    if (symbol != null && symbol.valueType === 'function' && symbol.params != null && symbol.returnType != null) {
+      return symbol
+    }
+
     if (symbol != null && symbol.valueType === 'function' && symbol.functionType != null) {
       return this.callableSymbolFromFunctionType(symbol.functionType, symbol.loc)
     }
@@ -11044,13 +11098,38 @@ class Checker {
   checkBooleanCondition(expression: AnyNode): void {
     const conditionType = this.checkExpression(expression)
 
-    if (conditionType !== 'boolean' && conditionType !== 'unknown') {
-      this.report('CCJS_CONDITION_TYPE', `condition must be boolean, got ${conditionType}`, expression.loc)
+    if (!isConditionValueType(conditionType)) {
+      this.report('CCJS_CONDITION_TYPE', `condition must be boolean or truthy-compatible, got ${conditionType}`, expression.loc)
     }
   }
 
   resolveNullableConditionNarrowing(expression: AnyNode | null | undefined): NullableConditionNarrowing {
-    if (expression == null || expression.type !== 'BinaryExpression') {
+    if (expression == null) {
+      return {
+        trueNames: [],
+        falseNames: []
+      }
+    }
+
+    if (expression.type === 'UnaryExpression' && expression.operator === '!') {
+      const argument = this.resolveNullableConditionNarrowing(expression.argument)
+
+      return {
+        trueNames: argument.falseNames,
+        falseNames: argument.trueNames
+      }
+    }
+
+    if (expression.type !== 'BinaryExpression') {
+      const key = nullableNarrowingKey(expression)
+
+      if (key != null && expression.nullable === true) {
+        return {
+          trueNames: [key],
+          falseNames: []
+        }
+      }
+
       return {
         trueNames: [],
         falseNames: []
@@ -11142,12 +11221,15 @@ class Checker {
     let nullable = expression.left
     let maybeNull = expression.right
 
-    if (expression.left != null && expression.left.type === 'NullLiteral') {
+    if (
+      expression.left != null &&
+      (expression.left.type === 'NullLiteral' || isNonNullNarrowingLiteral(expression.left))
+    ) {
       nullable = expression.right
       maybeNull = expression.left
     }
 
-    if (maybeNull == null || maybeNull.type !== 'NullLiteral' || nullable == null) {
+    if (maybeNull == null || nullable == null) {
       return {
         trueNames: [],
         falseNames: []
@@ -11157,6 +11239,27 @@ class Checker {
     const key = nullableNarrowingKey(nullable)
 
     if (key == null || nullable.nullable !== true) {
+      return {
+        trueNames: [],
+        falseNames: []
+      }
+    }
+
+    if (isNonNullNarrowingLiteral(maybeNull)) {
+      if (expression.operator === '===' || expression.operator === '==') {
+        return {
+          trueNames: [key],
+          falseNames: []
+        }
+      }
+
+      return {
+        trueNames: [],
+        falseNames: [key]
+      }
+    }
+
+    if (maybeNull.type !== 'NullLiteral') {
       return {
         trueNames: [],
         falseNames: []
@@ -11181,9 +11284,12 @@ class Checker {
       return
     }
 
-    let valueType = receiver.valueType
+    let valueType: ValueType | null = null
+    const receiverValueType = receiver.valueType
 
-    if (valueType == null) {
+    if (receiverValueType != null) {
+      valueType = receiverValueType
+    } else {
       valueType = this.inferNullableAccessValueType(receiver)
     }
 
@@ -11243,6 +11349,10 @@ class Checker {
       return null
     }
 
+    return this.pushBranchNarrowedNullableNames(names)
+  }
+
+  pushBranchNarrowedNullableNames(names: string[]): CheckerNarrowingState {
     const previous = {
       narrowedNullableNames: this.narrowedNullableNames
     }
@@ -11304,6 +11414,20 @@ class Checker {
     }
   }
 
+  checkFlowScopedBody(statement: AnyNode): void {
+    const scopeState = this.pushScope()
+
+    try {
+      if (statement.type === 'BlockStatement') {
+        this.checkStatements(statement.body)
+      } else {
+        this.checkStatement(statement)
+      }
+    } finally {
+      this.restoreScopeWithOuterNarrowing(scopeState)
+    }
+  }
+
   resolveReference(reference: AnyNode): SymbolInfo | null {
     const path: string[] = reference.path
     const root = path[0]
@@ -11325,7 +11449,7 @@ class Checker {
     return symbol
   }
 
-  declareTypeAlias(item: AnyNode): void {
+  declareTypeAlias(item: TypeAliasDeclarationNode): void {
     if (this.types.has(item.name)) {
       this.report('CCJS_REDECLARED_NAME', `type ${item.name} is already declared`, item.loc)
       return
@@ -11583,6 +11707,21 @@ class Checker {
 
     if (name === 'AnyNode') {
       return anyNodeResolvedTypeInfo(loc)
+    }
+
+    if (name === 'ValueType') {
+      return {
+        valueType: 'string',
+        nullable: false,
+        functionType: null,
+        shape: null,
+        arrayElementType: null,
+        arrayElementDeclaredType: null,
+        mapKeyType: null,
+        mapValueType: null,
+        promiseValueType: null,
+        setElementType: null
+      }
     }
 
     if (isNullableTypeName(name)) {
@@ -12513,6 +12652,13 @@ class Checker {
       return info
     }
 
+    if (name === 'ValueType') {
+      const info = this.unresolvedTypeInfo()
+      info.valueType = 'string'
+
+      return info
+    }
+
     if (isBuiltinValueType(name)) {
       const info = this.unresolvedTypeInfo()
       info.valueType = name
@@ -12979,6 +13125,41 @@ class Checker {
     this.narrowedNullableNames = previous.narrowedNullableNames
   }
 
+  restoreScopeWithOuterNarrowing(previous: CheckerScopeState): void {
+    const currentScope = this.scope
+    const currentNarrowedNames = this.narrowedNullableNames
+    const restoredNarrowedNames: Set<string> = new Set()
+
+    for (const name of previous.narrowedNullableNames) {
+      const rootName = this.narrowingRootName(name)
+
+      if (currentScope.hasOwn(rootName)) {
+        restoredNarrowedNames.add(name)
+      }
+    }
+
+    for (const name of currentNarrowedNames) {
+      const rootName = this.narrowingRootName(name)
+
+      if (!currentScope.hasOwn(rootName)) {
+        restoredNarrowedNames.add(name)
+      }
+    }
+
+    this.scope = previous.scope
+    this.narrowedNullableNames = restoredNarrowedNames
+  }
+
+  narrowingRootName(name: string): string {
+    const dotIndex = name.indexOf('.')
+
+    if (dotIndex < 0) {
+      return name
+    }
+
+    return name.slice(0, dotIndex)
+  }
+
   pushReturnContext(
     returnType: ValueType,
     returnNullable: boolean,
@@ -13130,6 +13311,30 @@ function asciiLowerCharCode(value: string, index: number): number {
   }
 
   return code
+}
+
+function isConditionValueType(valueType: ValueType): boolean {
+  return (
+    valueType === 'boolean' ||
+    valueType === 'unknown' ||
+    valueType === 'string' ||
+    valueType === 'object' ||
+    valueType === 'array' ||
+    valueType === 'bytes' ||
+    valueType === 'map' ||
+    valueType === 'set' ||
+    valueType === 'promise' ||
+    valueType === 'function' ||
+    valueType === 'timer'
+  )
+}
+
+function isNonNullNarrowingLiteral(expression: AnyNode): boolean {
+  return (
+    expression.type === 'StringLiteral' ||
+    expression.type === 'NumberLiteral' ||
+    expression.type === 'BooleanLiteral'
+  )
 }
 
 function isStringTrimMethod(method: string | null): boolean {

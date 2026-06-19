@@ -1,4 +1,13 @@
 import type { ValueType } from '../types.ts'
+import {
+  isArrayTypeName,
+  isNullableTypeName,
+  isPromiseTypeName,
+  isSetTypeName,
+  mapTypeNamesFromTypeName,
+  nullableTypeNameFromKnownTypeName,
+  unionTypeNamesFromTypeName
+} from '../type-names.ts'
 
 type ValueTypeList = ValueType[]
 
@@ -71,15 +80,78 @@ export function isAssignableType(
     return true
   }
 
+  if (isNullableTypeName(expected)) {
+    return isAssignableType(actual, nullableTypeNameFromKnownTypeName(expected), true, actualCanBeNull)
+  }
+
+  if (isNullableTypeName(actual)) {
+    return isAssignableType(nullableTypeNameFromKnownTypeName(actual), expected, expectedAllowsNull, true)
+  }
+
+  const expectedUnion = unionTypeNamesFromTypeName(expected)
+
+  if (expectedUnion != null) {
+    for (const expectedName of expectedUnion) {
+      if (isAssignableType(actual, expectedName, expectedAllowsNull, actualCanBeNull)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  const actualUnion = unionTypeNamesFromTypeName(actual)
+
+  if (actualUnion != null) {
+    for (const actualName of actualUnion) {
+      if (!isAssignableType(actualName, expected, expectedAllowsNull, actualCanBeNull)) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  const normalizedActual = assignabilityBaseType(actual)
+  const normalizedExpected = assignabilityBaseType(expected)
+
   if (actualCanBeNull && actual !== 'null' && !expectedAllowsNull) {
     return false
   }
 
-  if (actual === 'null') {
+  if (normalizedActual === 'null') {
     return expected === 'null' || expectedAllowsNull
   }
 
-  return actual === expected
+  return normalizedActual === normalizedExpected
+}
+
+function assignabilityBaseType(valueType: ValueType): ValueType {
+  if (valueType === 'AnyNode') {
+    return 'object'
+  }
+
+  if (valueType === 'ValueType') {
+    return 'string'
+  }
+
+  if (isArrayTypeName(valueType)) {
+    return 'array'
+  }
+
+  if (mapTypeNamesFromTypeName(valueType) != null) {
+    return 'map'
+  }
+
+  if (isPromiseTypeName(valueType)) {
+    return 'promise'
+  }
+
+  if (isSetTypeName(valueType)) {
+    return 'set'
+  }
+
+  return valueType
 }
 
 export function isSwitchableType(valueType: ValueType): boolean {

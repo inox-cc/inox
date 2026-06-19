@@ -139,6 +139,10 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return namedResolvedType('bytes')
   }
 
+  if (name === 'ValueType') {
+    return namedResolvedType('string')
+  }
+
   if (isBuiltinValueType(name)) {
     return namedResolvedType(name)
   }
@@ -671,6 +675,10 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
 
   if (isBytesTypeName(name)) {
     return namedResolvedType('bytes')
+  }
+
+  if (name === 'ValueType') {
+    return namedResolvedType('string')
   }
 
   if (isBuiltinValueType(name)) {

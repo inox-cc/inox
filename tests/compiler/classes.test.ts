@@ -255,9 +255,10 @@ export function main(): void {
 
   assert.match(c.code, /ccjs_method_Reader_fallback\(this\)/)
   assert.match(c.code, /ccjs_method_value_\d+ = ccjs_method_Reader_fallback\(this\);/)
-  assert.match(c.code, /ccjs_retain\(ccjs_method_value_\d+\);/)
+  assert.match(c.code, /ccjs_nullable_value_\d+ = ccjs_method_value_\d+;/)
+  assert.match(c.code, /ccjs_retain\(ccjs_nullable_value_\d+\);/)
   assert.match(c.code, /ccjs_release\(value\);/)
-  assert.match(c.code, /value = ccjs_method_value_\d+;/)
+  assert.match(c.code, /value = ccjs_nullable_value_\d+;/)
 })
 
 

@@ -3182,7 +3182,7 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
 }
 
 function emitPreparedAsyncTaskFsSourceExpression(
-  expression,
+  expression: AsyncTaskAstNode,
   wrapper: CAsyncTaskWrapper,
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
@@ -3296,7 +3296,7 @@ function emitPreparedAsyncTaskFsSourceExpression(
 }
 
 function emitPreparedAsyncTaskFetchSourceExpression(
-  expression,
+  expression: AsyncTaskAstNode,
   wrapper: CAsyncTaskWrapper,
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions

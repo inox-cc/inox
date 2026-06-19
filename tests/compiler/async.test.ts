@@ -2103,7 +2103,8 @@ export async function main(): Promise<void> {
     result.code,
     /if \(ccjs_promise_resolved\(&ccjs_loop, ccjs_async_value_\d+, &loaded\) != CCJS_OK\)\s+goto ccjs_cleanup;/
   )
-  assert.match(result.code, /const ccjs_string \*text = \(ccjs_string \*\)ccjs_await_value_\d+\.as\.ref;/)
+  assert.match(result.code, /ccjs_retain\(ccjs_await_value_\d+\);\n {2}text_value_\d+ = ccjs_await_value_\d+;/)
+  assert.match(result.code, /const ccjs_string \*text = \(ccjs_string \*\)text_value_\d+\.as\.ref;/)
 })
 
 
@@ -2952,7 +2953,7 @@ export async function main(): Promise<void> {
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, double ccjs_arg_count, ccjs_promise \*\* out\) \{[\s\S]*const ccjs_string \*prefix = \(ccjs_string \*\)ccjs_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref \*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, double ccjs_arg_count, ccjs_promise \*\* out\) \{[\s\S]*ccjs_retain\(ccjs_value_\d+\);[\s\S]*prefix_value_\d+ = ccjs_value_\d+;[\s\S]*const ccjs_string \*prefix = \(ccjs_string \*\)prefix_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref \*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,
@@ -2998,7 +2999,7 @@ export async function main(): Promise<void> {
   )
   assert.match(
     result.code,
-    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);[\s\S]*ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3, &ccjs_value_\d+\)[\s\S]*const ccjs_string \*prefix = \(ccjs_string \*\)ccjs_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref \*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
+    /static ccjs_status ccjs_async_task_work_start\(ccjs_loop \*ccjs_loop, ccjs_promise \*\* out\) \{[\s\S]*ccjs_value ccjs_value_\d+ = ccjs_undefined_value\(\);[\s\S]*ccjs_string_from_literal\(&ccjs_default_allocator, "Ada", 3, &ccjs_value_\d+\)[\s\S]*ccjs_retain\(ccjs_value_\d+\);[\s\S]*prefix_value_\d+ = ccjs_value_\d+;[\s\S]*const ccjs_string \*prefix = \(ccjs_string \*\)prefix_value_\d+\.as\.ref;[\s\S]*frame->prefix_prefix\.tag = CCJS_TAG_STRING;[\s\S]*frame->prefix_prefix\.as\.ref = \(ccjs_ref \*\)&prefix->header;[\s\S]*ccjs_retain\(frame->prefix_prefix\);/
   )
   assert.match(
     result.code,

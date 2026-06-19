@@ -3,6 +3,27 @@ import type { AnyNode, ProgramNode, SourceLocation } from '../types.ts'
 type SyntheticImportNode = AnyNode
 type ExportedDeclarationMap = Map<string, SyntheticImportNode>
 
+type TypeAliasValueNode = {
+  kind: string
+  valueType: string
+  params: AnyNode[]
+  returnType: string
+  baseTypes: string[]
+  fields: AnyNode[]
+  dynamic?: boolean
+}
+
+type TypeAliasDeclarationNode = {
+  type: string
+  exported?: boolean
+  name: string
+  loc: SourceLocation
+  valueType: TypeAliasValueNode
+  syntheticTypeImport?: boolean
+  syntheticTypeImportDirect?: boolean
+  importedName?: string
+}
+
 export function insertImportSyntheticDeclarations(
   program: ProgramNode,
   declarationsByImport: Map<number, AnyNode[]>
@@ -134,22 +155,22 @@ function createAliasDeclaration(
   }
 }
 
-export function createTypeImportDeclaration(specifier: AnyNode, exported: AnyNode): AnyNode {
+export function createTypeImportDeclaration(specifier: AnyNode, exported: TypeAliasDeclarationNode): AnyNode {
   return cloneTypeAliasDeclaration(exported, specifier.local, specifier.loc, specifier.imported, true)
 }
 
 export function createTypeImportDeclarations(specifier: AnyNode, importedProgram: ProgramNode): AnyNode[] {
-  const exported = findExportedDeclaration(importedProgram, specifier.imported)
+  const exported = findExportedTypeAliasDeclaration(importedProgram, specifier.imported)
 
   if (exported == null) {
     return []
   }
 
-  const aliases: Map<string, AnyNode> = new Map()
+  const aliases: Map<string, TypeAliasDeclarationNode> = new Map()
 
   for (const item of importedProgram.body) {
     if (item.type === 'TypeAliasDeclaration') {
-      aliases.set(item.name, item)
+      aliases.set(item.name, item as TypeAliasDeclarationNode)
     }
   }
 
@@ -176,6 +197,16 @@ function findExportedDeclaration(program: ProgramNode, name: string): SyntheticI
   return null
 }
 
+function findExportedTypeAliasDeclaration(program: ProgramNode, name: string): TypeAliasDeclarationNode | null {
+  const declaration = findExportedDeclaration(program, name)
+
+  if (declaration == null || declaration.type !== 'TypeAliasDeclaration') {
+    return null
+  }
+
+  return declaration as TypeAliasDeclarationNode
+}
+
 function collectExportedDeclarationMap(program: ProgramNode): ExportedDeclarationMap {
   const declarations: ExportedDeclarationMap = new Map()
 
@@ -191,7 +222,7 @@ function collectExportedDeclarationMap(program: ProgramNode): ExportedDeclaratio
 function addTypeImportDependency(
   name: string,
   importedName: string,
-  aliases: Map<string, AnyNode>,
+  aliases: Map<string, TypeAliasDeclarationNode>,
   added: Set<string>,
   visiting: Set<string>,
   declarations: AnyNode[]
@@ -229,7 +260,7 @@ function addTypeImportDependency(
 }
 
 function cloneTypeAliasDeclaration(
-  exported: AnyNode,
+  exported: TypeAliasDeclarationNode,
   name: string,
   loc: SourceLocation,
   importedName: string,
@@ -262,14 +293,14 @@ function createUnknownTypeAliasDeclaration(name: string): AnyNode {
   }
 }
 
-function typeAliasDependencyNames(alias: AnyNode): string[] {
+function typeAliasDependencyNames(alias: TypeAliasDeclarationNode): string[] {
   const names: string[] = []
 
   collectTypeAliasDependencyNames(alias.valueType, names)
   return uniqueTypeNames(names)
 }
 
-function collectTypeAliasDependencyNames(valueType: AnyNode, names: string[]): void {
+function collectTypeAliasDependencyNames(valueType: TypeAliasValueNode, names: string[]): void {
   if (valueType.kind === 'alias') {
     collectTypeNameDependencyNames(valueType.valueType, names)
     return
@@ -388,7 +419,7 @@ function isBuiltinTypeName(name: string): boolean {
   )
 }
 
-function cloneTypeAliasValue(valueType: AnyNode): AnyNode {
+function cloneTypeAliasValue(valueType: TypeAliasValueNode): AnyNode {
   if (valueType.kind === 'object') {
     return {
       kind: 'object',
@@ -441,7 +472,15 @@ function createFunctionAliasDeclaration(
     },
     args,
     loc,
-    valueType: target.returnType
+    valueType: target.returnType,
+    nullable: target.returnNullable === true,
+    arrayElementType: nullableNodeValue(target.returnArrayElementType),
+    arrayElementDeclaredType: nullableNodeValue(target.returnArrayElementDeclaredType),
+    mapKeyType: nullableNodeValue(target.returnMapKeyType),
+    mapValueType: nullableNodeValue(target.returnMapValueType),
+    promiseValueType: nullableNodeValue(target.returnPromiseValueType),
+    setElementType: nullableNodeValue(target.returnSetElementType),
+    shape: nullableNodeValue(target.returnShape)
   }
   return {
     type: 'FunctionDeclaration',
@@ -450,7 +489,16 @@ function createFunctionAliasDeclaration(
     name,
     loc,
     params,
+    declaredReturnType: nullableNodeValue(target.declaredReturnType),
     returnType: target.returnType,
+    returnNullable: target.returnNullable === true,
+    returnArrayElementType: nullableNodeValue(target.returnArrayElementType),
+    returnArrayElementDeclaredType: nullableNodeValue(target.returnArrayElementDeclaredType),
+    returnMapKeyType: nullableNodeValue(target.returnMapKeyType),
+    returnMapValueType: nullableNodeValue(target.returnMapValueType),
+    returnPromiseValueType: nullableNodeValue(target.returnPromiseValueType),
+    returnSetElementType: nullableNodeValue(target.returnSetElementType),
+    returnShape: nullableNodeValue(target.returnShape),
     body: createFunctionAliasBody(target, call, loc)
   }
 }

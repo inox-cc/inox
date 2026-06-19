@@ -533,9 +533,12 @@ test('lowers C Array.join calls for primitive arrays', () => {
   assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, parts, "\/", 1, &ccjs_array_join_\d+\)/)
   assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, ccjs_array_\d+, ",", 1, &ccjs_array_join_\d+\)/)
   assert.match(result.code, /ccjs_array_join\(&ccjs_default_allocator, ccjs_array_\d+, "\|", 1, &ccjs_array_join_\d+\)/)
-  assert.match(result.code, /const ccjs_string\* joined = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
-  assert.match(result.code, /const ccjs_string\* digits = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
-  assert.match(result.code, /const ccjs_string\* flags = \(ccjs_string\*\)ccjs_array_join_\d+\.as\.ref;/)
+  assert.match(result.code, /ccjs_retain\(ccjs_array_join_\d+\);\n {2}joined_value_\d+ = ccjs_array_join_\d+;/)
+  assert.match(result.code, /ccjs_retain\(ccjs_array_join_\d+\);\n {2}digits_value_\d+ = ccjs_array_join_\d+;/)
+  assert.match(result.code, /ccjs_retain\(ccjs_array_join_\d+\);\n {2}flags_value_\d+ = ccjs_array_join_\d+;/)
+  assert.match(result.code, /const ccjs_string\* joined = \(ccjs_string\*\)joined_value_\d+\.as\.ref;/)
+  assert.match(result.code, /const ccjs_string\* digits = \(ccjs_string\*\)digits_value_\d+\.as\.ref;/)
+  assert.match(result.code, /const ccjs_string\* flags = \(ccjs_string\*\)flags_value_\d+\.as\.ref;/)
 })
 
 
@@ -1330,7 +1333,8 @@ export function main(): void {
 
   assert.match(result.code, /ccjs_object_get_known\(wrapper, 0, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_object_get_known\(ccjs_value_\d+, 0, &ccjs_value_\d+\)/)
-  assert.match(result.code, /const ccjs_string\* returnType = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /returnType_value_\d+ = ccjs_value_\d+;/)
+  assert.match(result.code, /const ccjs_string\* returnType = \(ccjs_string\*\)returnType_value_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)returnType->len, returnType->bytes\);/)
 })
 
@@ -3176,7 +3180,7 @@ clearImmediate(immediate)
   assert.match(result.code, /ccjs_loop_clear_timer\(timeout\);/)
   assert.match(result.code, /ccjs_loop_clear_timer\(interval\);/)
   assert.match(result.code, /ccjs_loop_clear_timer\(immediate\);/)
-  assert.match(result.code, /scheduleLater\(\(ccjs_loop \*\)context\);/)
+  assert.match(result.code, /scheduleLater\(\(ccjs_loop \*\)ccjs_context\);/)
   assert.match(
     result.code,
     /ccjs_callback_new\(&ccjs_default_allocator, ccjs_callback_scheduleLater_\d+, &ccjs_loop, 0, &ccjs_callback_\d+\)/

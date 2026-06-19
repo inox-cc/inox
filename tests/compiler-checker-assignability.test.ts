@@ -34,6 +34,9 @@ test('checks assignment compatibility with nullable values', () => {
   assert.equal(isAssignableType('null', 'string', true), true)
   assert.equal(isAssignableType('string', 'string', false, true), false)
   assert.equal(isAssignableType('string', 'string', true, true), true)
+  assert.equal(isAssignableType('array', 'union<AnyNode,array<AnyNode>>'), true)
+  assert.equal(isAssignableType('object', 'union<AnyNode,array<AnyNode>>'), true)
+  assert.equal(isAssignableType('string', 'union<AnyNode,array<AnyNode>>'), false)
 })
 
 test('checks switch and common value helpers', () => {
@@ -122,5 +125,159 @@ export function main(): void {
     (error: any) =>
       Array.isArray(error?.diagnostics) &&
       error.diagnostics.some((item: any) => item.code === 'CCJS_TYPE_MISMATCH')
+  )
+})
+
+test('merges nullable local narrowing from both if branches', () => {
+  assert.doesNotThrow(() => {
+    compileSource(
+      `type Info = {
+  method: string
+}
+
+function maybe(): Info | null {
+  return { method: 'read' }
+}
+
+function read(flag: boolean): string {
+  let info = maybe()
+
+  if (flag) {
+    if (info == null) {
+      return ''
+    }
+  } else {
+    info = maybe()
+    if (info == null) {
+      return ''
+    }
+  }
+
+  return info.method
+}
+`,
+      { target: 'c' }
+    )
+  })
+})
+
+test('does not leak block-local nullable narrowing into shadowed outer locals', () => {
+  assert.throws(
+    () => {
+      compileSource(
+        `type Info = {
+  method: string
+}
+
+function maybe(): Info | null {
+  return { method: 'read' }
+}
+
+function read(flag: boolean): string {
+  let info: Info | null = null
+
+  if (flag) {
+    let info = maybe()
+    if (info == null) {
+      return ''
+    }
+  } else {
+    let info = maybe()
+    if (info == null) {
+      return ''
+    }
+  }
+
+  return info.method
+}
+`,
+        { target: 'c' }
+      )
+    },
+    (error: any) =>
+      Array.isArray(error?.diagnostics) &&
+      error.diagnostics.some((item: any) => item.code === 'CCJS_WEAK_ACCESS')
+  )
+})
+
+test('does not narrow nullable locals after conditional assignment without else', () => {
+  assert.throws(
+    () => {
+      compileSource(
+        `type Info = {
+  method: string
+}
+
+function maybe(): Info | null {
+  return { method: 'read' }
+}
+
+function read(flag: boolean): string {
+  let info: Info | null = null
+
+  if (flag) {
+    info = maybe()
+  }
+
+  return info.method
+}
+`,
+        { target: 'c' }
+      )
+    },
+    (error: any) =>
+      Array.isArray(error?.diagnostics) &&
+      error.diagnostics.some((item: any) => item.code === 'CCJS_WEAK_ACCESS')
+  )
+})
+
+test('narrows nullable member paths after non-null assignments', () => {
+  assert.doesNotThrow(() => {
+    compileSource(
+      `type Info = {
+  method: string
+}
+
+type Holder = {
+  info?: Info
+}
+
+function read(holder: Holder): string {
+  holder.info = { method: 'read' }
+  return holder.info.method
+}
+`,
+      { target: 'c' }
+    )
+  })
+})
+
+test('does not narrow nullable member paths after nullable assignments', () => {
+  assert.throws(
+    () => {
+      compileSource(
+        `type Info = {
+  method: string
+}
+
+type Holder = {
+  info?: Info
+}
+
+function maybe(): Info | null {
+  return null
+}
+
+function read(holder: Holder): string {
+  holder.info = maybe()
+  return holder.info.method
+}
+`,
+        { target: 'c' }
+      )
+    },
+    (error: any) =>
+      Array.isArray(error?.diagnostics) &&
+      error.diagnostics.some((item: any) => item.code === 'CCJS_WEAK_ACCESS')
   )
 })

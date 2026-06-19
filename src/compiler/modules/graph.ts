@@ -203,6 +203,8 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
         continue
       }
 
+      applyImportedFunctionMetadata(specifier, importedModule.hir)
+
       if (specifier.local !== specifier.imported && importedModule.hir != null) {
         const alias = createImportAliasDeclaration(specifier, importedModule.hir)
 
@@ -403,6 +405,41 @@ function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode
     loc: program.loc,
     body
   }
+}
+
+function applyImportedFunctionMetadata(specifier: AnyNode, importedProgram: ProgramNode | null): void {
+  if (importedProgram == null) {
+    return
+  }
+
+  const declaration = findExportedFunctionDeclaration(importedProgram, specifier.imported)
+
+  if (declaration == null) {
+    return
+  }
+
+  specifier.async = declaration.async === true
+  specifier.params = declaration.params
+  specifier.declaredReturnType = declaration.declaredReturnType ?? null
+  specifier.returnType = declaration.returnType
+  specifier.returnNullable = declaration.returnNullable === true
+  specifier.returnArrayElementType = declaration.returnArrayElementType ?? null
+  specifier.returnArrayElementDeclaredType = declaration.returnArrayElementDeclaredType ?? null
+  specifier.returnMapKeyType = declaration.returnMapKeyType ?? null
+  specifier.returnMapValueType = declaration.returnMapValueType ?? null
+  specifier.returnPromiseValueType = declaration.returnPromiseValueType ?? null
+  specifier.returnSetElementType = declaration.returnSetElementType ?? null
+  specifier.returnShape = declaration.returnShape ?? null
+}
+
+function findExportedFunctionDeclaration(program: ProgramNode, name: string): AnyNode | null {
+  for (const item of program.body) {
+    if (item.type === 'FunctionDeclaration' && item.exported === true && item.name === name) {
+      return item
+    }
+  }
+
+  return null
 }
 
 function requireModuleGraphRecord(context: ModuleGraphContext, path: string): ModuleRecord {

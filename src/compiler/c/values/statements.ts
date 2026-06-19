@@ -2908,6 +2908,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
+  if (statement.valueType === 'string' && deps.isDynamicRuntimeValueExpression(statement.init, context)) {
+    return emitRuntimeStringVariableDeclaration(statement, statement.init, context)
+  }
+
   if (deps.isIndexAccessExpression(statement.init)) {
     const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
 
@@ -3632,6 +3636,9 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
   pushAllLines(lines, value.lines)
   lines.push(`ccjs_return = ${value.expression};`)
   pushAllLines(lines, emitRuntimeNullableValueCheck('ccjs_return', expectedTag, context))
+  if (isManagedRuntimeReturnType(context.returnType)) {
+    lines.push('ccjs_retain(ccjs_return);')
+  }
   pushAllLines(lines, emitReturnJump(context))
   return lines
 }

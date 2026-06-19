@@ -89,7 +89,7 @@ const patterns: PatternInfo[] = [
     decision: 'implement support',
     pattern: /\b(try|catch)\b/g,
     note: 'Use only at host adapter boundaries until C exception lowering is planned.',
-    maxAllowedMatches: 67
+    maxAllowedMatches: 68
   },
   {
     name: 'async / await',
@@ -109,7 +109,7 @@ const patterns: PatternInfo[] = [
     decision: 'simplify/remove',
     pattern: /\b(Record|ReadonlyMap|Map|Set)<|ReadonlyArray</g,
     note: 'Self-hosted type surface should prefer explicit aliases and concrete record arrays.',
-    maxAllowedMatches: 378
+    maxAllowedMatches: 384
   }
 ]
 

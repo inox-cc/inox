@@ -1361,6 +1361,10 @@ function cModuleValueType(node: AnyNode): string {
     return 'unknown'
   }
 
+  if (valueType === 'string' && node.init != null && node.init.type === 'AwaitExpression') {
+    return 'unknown'
+  }
+
   return valueType
 }
 

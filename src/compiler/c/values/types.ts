@@ -132,6 +132,21 @@ function isBooleanBinaryOperator(operator: string): boolean {
 function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext): string {
   const variableType = context.variables.get(cDottedPath(expression.path))
   const name = cStringAt(expression.path, 0)
+  let metadataType: string | null = null
+
+  if (expression.valueType != null && expression.valueType !== 'unknown') {
+    metadataType = expression.valueType
+  }
+
+  const moduleValueType = context.moduleValueTypes.get(name)
+
+  if (moduleValueType != null) {
+    return moduleValueType
+  }
+
+  if (metadataType != null && (variableType == null || (variableType === 'number' && metadataType !== 'number'))) {
+    return metadataType
+  }
 
   if (variableType != null) {
     return variableType
@@ -143,6 +158,10 @@ function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext
 
   if (isCJsGlobalRoot(name, context)) {
     return 'js-global'
+  }
+
+  if (metadataType != null) {
+    return metadataType
   }
 
   return 'number'
@@ -435,8 +454,28 @@ export function inferExpressionType(
     return 'js-global'
   }
 
-  if (expression.valueType != null && expression.valueType !== 'unknown') {
-    return expression.valueType
+  if (expression.type === 'AwaitExpression') {
+    let valueType = deps.knownValueType(expression.valueType)
+
+    if (valueType === 'promise') {
+      valueType = null
+    }
+
+    if (valueType == null) {
+      valueType = deps.resolvePromiseExpressionValueType(expression.argument, context)
+    }
+
+    if (valueType != null) {
+      return valueType
+    }
+
+    const argumentType = inferExpressionType(expression.argument, context, deps)
+
+    if (argumentType === 'promise') {
+      return 'unknown'
+    }
+
+    return argumentType
   }
 
   if (expression.type === 'StringLiteral') {
@@ -449,6 +488,10 @@ export function inferExpressionType(
 
   if (expression.type === 'Reference') {
     return cReferenceExpressionType(expression, context)
+  }
+
+  if (expression.valueType != null && expression.valueType !== 'unknown') {
+    return expression.valueType
   }
 
   if (expression.type === 'ArrowFunctionExpression') {
@@ -598,26 +641,6 @@ export function inferExpressionType(
 
   if (expression.type === 'NewExpression') {
     return 'class'
-  }
-
-  if (expression.type === 'AwaitExpression') {
-    let valueType = deps.knownValueType(expression.valueType)
-
-    if (valueType == null) {
-      valueType = deps.resolvePromiseExpressionValueType(expression.argument, context)
-    }
-
-    if (valueType != null) {
-      return valueType
-    }
-
-    const argumentType = inferExpressionType(expression.argument, context, deps)
-
-    if (argumentType === 'promise') {
-      return 'unknown'
-    }
-
-    return argumentType
   }
 
   if (isOptionalChainExpression(expression)) {

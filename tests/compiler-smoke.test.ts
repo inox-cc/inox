@@ -1394,6 +1394,24 @@ export function main(): void {
 })
 
 
+test('lowers explicitly typed C runtime string declarations from dynamic object fields', () => {
+  const result = compileSource(
+    `function readType(symbol: object): string {
+  const valueType: string = symbol.valueType
+  return valueType
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(symbol, "valueType", 9, &ccjs_value_\d+\)/)
+  assert.match(result.code, /const ccjs_string\* valueType = \(ccjs_string\*\)valueType_value_\d+\.as\.ref;/)
+  assert.doesNotMatch(result.code, /double valueType/)
+})
+
+
 test('lowers C runtime string parameters', () => {
   const result = compileSource(
     `function greet(name: string): void {
@@ -1505,6 +1523,26 @@ export function main(): void {
   assert.match(result.code, /return ccjs_return;/)
 })
 
+test('retains C nullable string returns before cleanup', () => {
+  const result = compileSource(
+    `function maybeName(): string | null {
+  return 'Ada'
+}
+
+export function main(): void {
+  console.log(maybeName() ?? '')
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(
+    result.code,
+    /ccjs_return = ccjs_value_\d+;\n {2}if \(\n {4}ccjs_return\.tag != CCJS_TAG_NULL && \(ccjs_return\.tag != CCJS_TAG_STRING \|\| ccjs_return\.as\.ref == 0\)\n {2}\) \{\n {4}goto ccjs_cleanup;\n {2}\}\n {2}ccjs_retain\(ccjs_return\);\n {2}goto ccjs_cleanup;/
+  )
+})
 
 test('lowers C runtime string index returns', () => {
   const result = compileSource(
@@ -3299,6 +3337,67 @@ function firstCalleeSegment(expression: AnyNode): string {
 })
 
 
+test('lowers AnyNode valueType metadata as a runtime string', () => {
+  const result = compileSource(
+    `type AnyNode = {
+  type?: string
+  [key: string]: any
+}
+
+function resolveDeclaredName(node: AnyNode): string {
+  let declaredType: string = node.valueType
+  const nodeDeclaredType = node.declaredType
+
+  if (nodeDeclaredType != null) {
+    declaredType = nodeDeclaredType
+  }
+
+  return declaredType
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get\(node, "valueType", 9, &ccjs_value_\d+\)/)
+  assert.match(result.code, /ccjs_value declaredType_value_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /declaredType_value_\d+\.tag != CCJS_TAG_STRING \|\| declaredType_value_\d+\.as\.ref == 0/)
+  assert.match(result.code, /declaredType = \(ccjs_string\*\)declaredType_value_\d+\.as\.ref;/)
+  assert.doesNotMatch(result.code, /double declaredType/)
+})
+
+
+test('resolves ValueType metadata fields as runtime strings', () => {
+  const result = compileSource(
+    `type Param = {
+  valueType: ValueType
+  declaredType?: string | null
+}
+
+function resolveParam(param: Param): string {
+  let declaredType: string = param.valueType
+  const paramDeclaredType = param.declaredType
+
+  if (paramDeclaredType != null) {
+    declaredType = paramDeclaredType
+  }
+
+  return declaredType
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_object_get_known\(param, 0, &ccjs_field_\d+\)/)
+  assert.match(result.code, /ccjs_value declaredType_value_\d+ = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /declaredType = \(ccjs_string\*\)declaredType_value_\d+\.as\.ref;/)
+  assert.doesNotMatch(result.code, /double declaredType/)
+})
+
+
 test('rejects unsupported C optional chaining forms', () => {
   const source = `function hello(): string {
   return 'called'
@@ -5043,7 +5142,7 @@ test('rejects continue outside loops', () => {
 })
 
 
-test('rejects non-boolean conditions', () => {
+test('rejects numeric conditions', () => {
   assertDiagnostic(
     `export function main(): void {
   if (1) {
@@ -5056,7 +5155,7 @@ test('rejects non-boolean conditions', () => {
 
   assertDiagnostic(
     `export function main(): void {
-  while ('yes') {
+  while (1) {
     console.log('bad')
   }
 }
@@ -5066,13 +5165,77 @@ test('rejects non-boolean conditions', () => {
 
   assertDiagnostic(
     `export function main(): void {
-  for (let index = 0; 'yes'; index = index + 1) {
+  for (let index = 0; 1; index = index + 1) {
     console.log(index)
   }
 }
 `,
     'CCJS_CONDITION_TYPE'
   )
+})
+
+
+test('allows C string truthiness conditions', () => {
+  const result = compileSource(
+    `function present(name: string | null): number {
+  if (name) {
+    return name.length
+  }
+
+  return 0
+}
+
+export function main(): void {
+  console.log(present('Ada'))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value_truthy/)
+})
+
+
+test('narrows nullable locals after non-null assignments', () => {
+  const result = compileSource(
+    `function readLength(enabled: boolean): number {
+  let name: string | null = null
+
+  if (enabled) {
+    name = 'Ada'
+    return name.length
+  }
+
+  return 0
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_string_code_unit_length_parts/)
+})
+
+
+test('narrows nullable strings after literal equality checks', () => {
+  const result = compileSource(
+    `function readLength(kind: string | null): number {
+  if (kind === 'number' || kind === 'boolean') {
+    return kind.length
+  }
+
+  return 0
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_string_code_unit_length_parts/)
 })
 
 

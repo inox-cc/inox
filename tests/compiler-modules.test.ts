@@ -123,6 +123,46 @@ test('creates import aliases only from exported declarations', () => {
   assert.equal(alias?.body[0].type, 'ReturnStatement')
 })
 
+test('preserves re-exported function return shapes for string member length', async () => {
+  const files = [
+    {
+      path: '/project/core.ts',
+      source: `export type SourceCompileResult = {
+  code: string
+}
+
+export function compileSource(): SourceCompileResult {
+  return { code: 'hello' }
+}
+`
+    },
+    {
+      path: '/project/facade.ts',
+      source: `export { compileSource } from './core'
+`
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { compileSource } from './facade'
+
+export function main(): void {
+  const result = compileSource()
+  console.log(result.code.length)
+}
+`
+    }
+  ]
+
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const indexSource = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(indexSource, /ccjs_string_code_unit_length_parts/)
+  assert.doesNotMatch(indexSource, /ccjs_array_len/)
+})
+
 test('resolves module sources and builds module graphs through split entrypoint', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-modules-'))
 

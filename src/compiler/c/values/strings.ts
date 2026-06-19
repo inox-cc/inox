@@ -2195,7 +2195,7 @@ function visitTemplatePlaceholderValue(
     return
   }
 
-  const node = value
+  const node: AnyNode = value
 
   if (node.type === 'Reference') {
     const name = node.path[0]
