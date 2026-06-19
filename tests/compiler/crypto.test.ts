@@ -1,9 +1,9 @@
 import test from 'node:test'
-import { assert, cLibuvOptions, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
 import {
   cryptoRuntimeMethodNameFromKnownPath,
   isCryptoRuntimeMethodPath
 } from '../../compiler/stdlib/descriptors/crypto.ts'
+import { assert, cLibuvOptions, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers default node:crypto random methods to the C crypto runtime', () => {
   const result = compileSource(
@@ -189,9 +189,18 @@ createHmac('sha256', 'secret')
         return false
       }
 
-      assert.equal(error.diagnostics.some((item) => item.message.includes('getHashes requires tlsBackend')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('hash requires tlsBackend')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('createHmac requires tlsBackend')), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('getHashes requires tlsBackend')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('hash requires tlsBackend')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('createHmac requires tlsBackend')),
+        true
+      )
       return true
     }
   )
@@ -253,14 +262,26 @@ createHmac('sha1', 'secret').update('hello', 'latin1').digest('base64')
         return false
       }
 
-      assert.equal(error.diagnostics.some((item) => item.message.includes("hash only supports the 'sha256'")), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes("hash only supports the 'sha256'")),
+        true
+      )
       assert.equal(
         error.diagnostics.some((item) => item.message.includes("hash only supports the 'hex' and 'buffer'")),
         true
       )
-      assert.equal(error.diagnostics.some((item) => item.message.includes("createHmac only supports the 'sha256'")), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes("Hmac.update only supports the 'utf8'")), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes("Hmac.digest only supports the 'hex'")), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes("createHmac only supports the 'sha256'")),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes("Hmac.update only supports the 'utf8'")),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes("Hmac.digest only supports the 'hex'")),
+        true
+      )
       return true
     }
   )

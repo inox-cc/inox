@@ -1,4 +1,12 @@
 import { diagnostic } from '../../diagnostics.ts'
+import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import {
+  emitFunctionPointerParams,
+  emitFunctionPointerReturnType,
+  isPlainFunctionPointerType,
+  isRuntimeFunctionType
+} from '../async/callbacks.ts'
+import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
 import {
   cloneCStringSet,
   emitEventLoopReference,
@@ -15,12 +23,29 @@ import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
+import { cTimeRuntimeCallName } from '../stdlib/time.ts'
 import {
-  emitFunctionPointerParams,
-  emitFunctionPointerReturnType,
-  isPlainFunctionPointerType,
-  isRuntimeFunctionType
-} from '../async/callbacks.ts'
+  cUnsupportedExpressionCode,
+  emitCOperator,
+  isCoalesceExpression,
+  isOptionalChainExpression
+} from '../syntax.ts'
+import type {
+  CFunctionParam,
+  CFunctionReturnMapType,
+  CFunctionType,
+  CKnownArrayElement,
+  CKnownObjectField,
+  CKnownObjectIndexField,
+  CObjectAccessorReturnPath,
+  CObjectShape,
+  CObjectShapeField,
+  CRuntimeArrayElement,
+  CPreparedCallArgs as PreparedCallArgs,
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
@@ -29,13 +54,10 @@ import {
   isOpaqueRuntimeValueType,
   isRuntimeNullableType
 } from '../value-types.ts'
-import { cTimeRuntimeCallName } from '../stdlib/time.ts'
-import {
-  cUnsupportedExpressionCode,
-  emitCOperator,
-  isCoalesceExpression,
-  isOptionalChainExpression
-} from '../syntax.ts'
+import type { ArrayLoweringDependencies } from './arrays.ts'
+import type { ClassLoweringDependencies } from './classes.ts'
+import type { CollectionLoweringDependencies } from './collections.ts'
+import type { NullableLoweringDependencies } from './nullable.ts'
 import {
   canLowerCScalarNullishCoalescingExpression,
   isNarrowedNullableScalarReference,
@@ -43,30 +65,8 @@ import {
   isNullableScalarRuntimeExpression,
   resolveNullableScalarConditionNarrowing
 } from './nullable.ts'
-import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
-import type { ArrayLoweringDependencies } from './arrays.ts'
-import type { ClassLoweringDependencies } from './classes.ts'
-import type { CollectionLoweringDependencies } from './collections.ts'
-import type { NullableLoweringDependencies } from './nullable.ts'
 import type { StatementLoweringDependencies } from './statements.ts'
 import type { StringLoweringDependencies } from './strings.ts'
-import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
-import type {
-  CKnownArrayElement,
-  CKnownObjectField,
-  CKnownObjectIndexField,
-  CFunctionReturnMapType,
-  CFunctionParam,
-  CFunctionType,
-  CObjectAccessorReturnPath,
-  CObjectShape,
-  CObjectShapeField,
-  CPreparedCallArgs as PreparedCallArgs,
-  CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand as PreparedStringBytesOperand,
-  CRuntimeArrayElement
-} from '../types.ts'
 
 type CBooleanMap = Map<string, boolean>
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
@@ -388,11 +388,7 @@ function emitPreparedTypeofArgumentValue(
       }
     }
 
-    if (
-      context.runtimeStrings.has(name) ||
-      context.runtimeStrings.has(reference) ||
-      variableType === 'string'
-    ) {
+    if (context.runtimeStrings.has(name) || context.runtimeStrings.has(reference) || variableType === 'string') {
       return {
         lines: [],
         expression: reference,
@@ -1212,9 +1208,7 @@ function isUnavailableOptionalObjectFieldSource(
     return true
   }
 
-  return (
-    context.moduleValueNames.has(source.pathName) && !objectShapeFieldAt(source.shape?.fields, field.name)
-  )
+  return context.moduleValueNames.has(source.pathName) && !objectShapeFieldAt(source.shape?.fields, field.name)
 }
 
 function appendDefaultObjectShapeFunctionFieldArguments(
@@ -1381,8 +1375,6 @@ function runtimeObjectFunctionFieldCallee(
   ) {
     return null
   }
-
-  const seenTypes = objectFunctionCalleeSeenTypes(object, context)
 
   if (!isRuntimeObjectFunctionField(field)) {
     return null
@@ -2698,6 +2690,10 @@ export function emitPreparedNumberExpression(
       return runtimeStringLiteralCompare
     }
 
+    if (expression.operator === '&&' || expression.operator === '||') {
+      return emitPreparedLogicalExpression(expression, context, deps)
+    }
+
     if (leftType === 'string' || rightType === 'string') {
       context.diagnostics.push(
         diagnostic(
@@ -2711,10 +2707,6 @@ export function emitPreparedNumberExpression(
         lines: [],
         expression: '0'
       }
-    }
-
-    if (expression.operator === '&&' || expression.operator === '||') {
-      return emitPreparedLogicalExpression(expression, context, deps)
     }
 
     const left = emitPreparedNumberExpression(expression.left, context, deps)
@@ -3203,7 +3195,7 @@ function emitPreparedLogicalExpression(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
-  const left = emitPreparedNumberExpression(expression.left, context, deps)
+  const left = emitPreparedBooleanOperandExpression(expression.left, context, deps)
   const leftNarrowing = resolveNullableScalarConditionNarrowing(expression.left, context)
   let rightNarrowed = leftNarrowing.falseNames
 
@@ -3211,7 +3203,7 @@ function emitPreparedLogicalExpression(
     rightNarrowed = leftNarrowing.trueNames
   }
   const snapshot = pushNullableScalarNarrowing(context, rightNarrowed)
-  const right = emitPreparedNumberExpression(expression.right, context, deps)
+  const right = emitPreparedBooleanOperandExpression(expression.right, context, deps)
 
   restoreNullableScalarNarrowing(context, snapshot)
 
@@ -3248,6 +3240,20 @@ function emitPreparedLogicalExpression(
     lines,
     expression: temp
   }
+}
+
+function emitPreparedBooleanOperandExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression {
+  const truthiness = emitPreparedRuntimeTruthinessExpression(expression, context, deps)
+
+  if (truthiness !== null && typeof truthiness !== 'undefined') {
+    return truthiness
+  }
+
+  return emitPreparedNumberExpression(expression, context, deps)
 }
 
 function emitPreparedScalarNullishCoalescingExpression(
@@ -4555,6 +4561,13 @@ export function emitCValueExpression(
         lines: [],
         expression: `inox_bool_value(${name})`
       }
+    }
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return {
+      lines: [],
+      expression: 'this'
     }
   }
 

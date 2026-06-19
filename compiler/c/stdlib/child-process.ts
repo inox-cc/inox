@@ -1,6 +1,6 @@
 import type { AnyNode } from '../../types.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import type { CFunctionContext } from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import type {
   CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,

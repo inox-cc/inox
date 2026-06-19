@@ -1,7 +1,7 @@
+import type { AnyNode } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { isOptionalChainExpression } from '../syntax.ts'
-import type { CFunctionContext } from '../context.ts'
-import type { AnyNode } from '../../types.ts'
 import type {
   CKnownArrayElement,
   CKnownObjectField,

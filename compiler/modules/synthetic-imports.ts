@@ -593,14 +593,6 @@ function cloneStringArray(values: string[]): string[] {
   return cloned
 }
 
-function nodeArray(value: AnyNode[] | null | undefined): AnyNode[] {
-  if (value === null || typeof value === 'undefined') {
-    return []
-  }
-
-  return value
-}
-
 function stringArray(value: string[] | null | undefined): string[] {
   if (value === null || typeof value === 'undefined') {
     return []

@@ -1,15 +1,15 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
+import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
+import type { CEmitContext, CFunctionContext } from '../context.ts'
 import { emitEventLoopReference, emitStatusCheck, nextCName, registerEventLoop } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
-import { isConsoleLog } from './console.ts'
-import type { CEmitContext, CFunctionContext } from '../context.ts'
-import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
 import type {
   CNetHandler,
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { isConsoleLog } from './console.ts'
 
 type NetAstNode = AnyNode
 
@@ -325,7 +325,7 @@ function emitNetHandlerStatement(
       return socketCall
     }
 
-    const serverCall = emitNetHandlerServerCallStatement(statement.expression, context)
+    const serverCall = emitNetHandlerServerCallStatement(statement.expression)
 
     if (serverCall !== null && typeof serverCall !== 'undefined') {
       return serverCall
@@ -507,7 +507,7 @@ function emitNetHandlerConsoleLogStatement(
   return deps.emitConsoleLogStatement(callee.property, expression.args, context)
 }
 
-function emitNetHandlerServerCallStatement(expression: AnyNode, context: CFunctionContext): string[] | null {
+function emitNetHandlerServerCallStatement(expression: AnyNode): string[] | null {
   const callee = expression.callee
 
   if (
@@ -544,11 +544,7 @@ export function emitNetSocketVariableDeclaration(
   return emitNetSocketConnectLines(statement.init, statement.name, context, deps, null)
 }
 
-export function emitNetServerVariableDeclaration(
-  statement: AnyNode,
-  context: CFunctionContext,
-  deps: NetLoweringDependencies
-): string[] | null {
+export function emitNetServerVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   if (!isNetCreateServerCall(statement.init, context)) {
     return null
   }
@@ -1247,11 +1243,7 @@ function emitNetServerListenLines(
     backlogArg = deps.findObjectLiteralPropertyValue(options, 'backlog')
   }
 
-  if (
-    options !== null &&
-    typeof options !== 'undefined' &&
-    deps.findObjectLiteralPropertyValue(options, 'exclusive')
-  ) {
+  if (options !== null && typeof options !== 'undefined' && deps.findObjectLiteralPropertyValue(options, 'exclusive')) {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',

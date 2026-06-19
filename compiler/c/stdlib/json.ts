@@ -1,16 +1,15 @@
 import { jsonRuntimeMethodNameFromPath } from '../../stdlib/descriptors/json.ts'
+import type { AnyNode } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import {
-  emitPrepareOwnedValueWrite,
   emitFailureStatement,
+  emitPrepareOwnedValueWrite,
   emitStatusCheck,
   nextCName,
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../runtime-values.ts'
-import { cRuntimeValueTag } from '../value-types.ts'
-import type { CFunctionContext } from '../context.ts'
-import type { AnyNode } from '../../types.ts'
 import type {
   CObjectShape,
   CObjectShapeField,
@@ -18,6 +17,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { cRuntimeValueTag } from '../value-types.ts'
 
 type JsonMemberExpressionNode = {
   object?: JsonReferenceNode | null

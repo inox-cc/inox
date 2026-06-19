@@ -1,8 +1,8 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
-import { compileSource } from '../compiler/core.ts'
 import { containsAwaitExpression } from '../compiler/c/syntax.ts'
+import { compileSource } from '../compiler/core.ts'
 import type { AnyNode } from '../compiler/types.ts'
 
 test('detects await expressions inside syntax node arrays', () => {

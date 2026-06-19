@@ -20,7 +20,7 @@ import type {
   IrProgram,
   IrRuntimeRequirement
 } from '../types.ts'
-import type { CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
+import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
   collectCallbackWrappers,
   emitPlainArrowCallbackWrapperDeclaration,
@@ -32,20 +32,19 @@ import {
   isRuntimeArrowCallbackWrapperWithContext,
   isRuntimeCallbackWrapper
 } from './async/callbacks.ts'
-import type { CallbackLoweringDependencies } from './async/callbacks.ts'
+import type { PromiseChainLoweringDependencies } from './async/promises.ts'
 import {
   collectPromiseChainWrappers,
   emitPromiseChainCallbackWrapperDeclaration,
   emitPromiseChainCallbackWrapperHead
 } from './async/promises.ts'
-import type { PromiseChainLoweringDependencies } from './async/promises.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   collectAsyncTaskWrappers,
   emitAsyncTaskFrameType,
   emitAsyncTaskWrapperDeclaration,
   emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type {
   CAsyncTaskWrapperMap,
   CCallbackWrapperMap,
@@ -64,20 +63,20 @@ import {
   collectRuntimeNamedImportNames
 } from './runtime-imports.ts'
 import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
   collectDgramMessageHandlers,
   emitDgramMessageHandlerDeclaration,
   emitDgramMessageHandlerHead
 } from './stdlib/dgram.ts'
-import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
-import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
 import type { HttpLoweringDependencies } from './stdlib/http.ts'
-import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
+import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
-import type { CClassInfo, CClassMethod, CEmitOptions } from './types.ts'
+import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
+import type { CClassInfo, CEmitOptions, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
-import { collectClassMethods, createClassInfos } from './values/classes.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
+import { collectClassMethods, createClassInfos } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
@@ -230,7 +229,6 @@ function stringSetFromArray(values: string[]): Set<string> {
 
 export function emitCUnit(
   irPrograms: IrProgram[],
-  entryIrProgram: IrProgram | null,
   options: CEmitOptions,
   entryIrPrograms: IrProgram[],
   deps: CUnitDependencies

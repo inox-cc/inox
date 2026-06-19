@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawn } from 'node:child_process'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 

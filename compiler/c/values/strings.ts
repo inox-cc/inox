@@ -2,6 +2,12 @@ import { diagnostic } from '../../diagnostics.ts'
 import { tokenize } from '../../lexer.ts'
 import { parse } from '../../parser.ts'
 import {
+  isStringIndexMethod,
+  isStringPredicateMethod,
+  isStringRuntimeMethod
+} from '../../stdlib/descriptors/collections.ts'
+import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -20,19 +26,13 @@ import {
   cProcessRuntimeStringPropertyName
 } from '../stdlib/process.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
-import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
-import {
-  isStringIndexMethod,
-  isStringPredicateMethod,
-  isStringRuntimeMethod
-} from '../../stdlib/descriptors/collections.ts'
-import { emitSliceIndexNormalizationLines } from './slices.ts'
-import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type {
   CObjectFieldInfo,
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
+import { emitSliceIndexNormalizationLines } from './slices.ts'
 
 type StringDiagnosticContext = {
   diagnostics: Diagnostic[]
@@ -2314,8 +2314,8 @@ function reportUnknownTemplatePlaceholderReference(
 
 function visitTemplatePlaceholderChildren(
   node: AnyNode,
-  parent: AnyNode | null,
-  key: string,
+  _parent: AnyNode | null,
+  _key: string,
   state: TemplateReferenceValidationState
 ): void {
   if (node.type === 'BinaryExpression') {

@@ -1,24 +1,19 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectionConstructorNameFromPath } from '../../stdlib/descriptors/collections.ts'
+import type { AnyNode, SourceLocation } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
-import { cRuntimeValueTag } from '../value-types.ts'
-import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
-import type { CFunctionContext } from '../context.ts'
 import type {
   CFunctionReturnMapType,
   CObjectFieldInfo,
   CObjectIndexFieldInfo,
-  CObjectShapeField,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
+import { cRuntimeValueTag } from '../value-types.ts'
 
 type PreparedCollectionCall = PreparedExpression
 type CollectionNode = AnyNode
-type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
-type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
-type CStringMap = Map<string, string>
-type CStringNullableMap = Map<string, string | null>
 
 type CollectionFunctionContext = CFunctionContext
 

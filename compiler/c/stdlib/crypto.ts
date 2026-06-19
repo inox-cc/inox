@@ -1,5 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode, SourceLocation } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -8,7 +9,6 @@ import {
   registerOwnedCryptoHmac,
   registerOwnedValue
 } from '../context.ts'
-import type { CFunctionContext } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,

@@ -1,17 +1,11 @@
+import { diagnostic } from '../../diagnostics.ts'
 import {
   isTimerClearMethod,
   isTimerStartMethod,
   timerRuntimeMethodNameFromPath
 } from '../../stdlib/descriptors/timers.ts'
-import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode } from '../../types.ts'
-import {
-  emitEventLoopReference,
-  emitFailureStatement,
-  emitStatusCheck,
-  nextCName,
-  registerEventLoop
-} from '../context.ts'
+import { emitEventLoopReference, emitFailureStatement, nextCName, registerEventLoop } from '../context.ts'
 import type {
   CFunctionType,
   CPreparedCallOptions as PreparedCallOptions,

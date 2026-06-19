@@ -1,20 +1,20 @@
+import { diagnostic } from '../../diagnostics.ts'
 import {
   binaryConstructorNameFromPath,
   binaryInstanceRuntimeMethodName,
   binaryRuntimeReturnType,
   binaryStaticRuntimeMethodNameFromPath
 } from '../../stdlib/descriptors/binary.ts'
-import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode } from '../../types.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import type { CFunctionContext } from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { emitSliceIndexNormalizationLines } from '../values/slices.ts'
 import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStatement as PreparedStatement,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { emitSliceIndexNormalizationLines } from '../values/slices.ts'
 
 export type BinaryLoweringDependencies = {
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression

@@ -3,21 +3,13 @@ import {
   assert,
   compileRuntimeProgram,
   compileSource,
-  generateLocalhostCertificate,
-  isLocalListenUnavailable,
   join,
-  mkdir,
   mkdtemp,
-  readFile,
-  repoRoot,
   rm,
   runCommand,
-  startLocalTlsServer,
   tmpdir,
   writeFile
 } from '../helpers/runtime-c.ts'
-
-
 
 test('C runtime console adapter captures stdout and stderr writes', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -101,7 +93,6 @@ int main(void) {
   }
 })
 
-
 test('generated C direct console log string return compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -145,7 +136,6 @@ console.log(getName())
     })
   }
 })
-
 
 test('generated C direct console log member and index expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])

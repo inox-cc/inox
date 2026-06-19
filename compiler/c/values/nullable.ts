@@ -1,3 +1,5 @@
+import { diagnostic } from '../../diagnostics.ts'
+import type { AnyNode, Diagnostic } from '../../types.ts'
 import {
   cloneCStringSet,
   emitPrepareOwnedValueWrite,
@@ -6,10 +8,19 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { isCoalesceExpression } from '../syntax.ts'
+import type {
+  CFunctionReturnMapType,
+  CFunctionType,
+  CObjectFieldInfo,
+  CObjectIndexFieldInfo,
+  CObjectShape,
+  CObjectShapeField,
+  CRuntimeArrayElement,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 import {
   cRuntimeValueTag,
   isNullableScalarType,
@@ -24,17 +35,6 @@ import {
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember
 } from './objects.ts'
-import type { AnyNode, Diagnostic } from '../../types.ts'
-import type {
-  CFunctionReturnMapType,
-  CFunctionType,
-  CObjectFieldInfo,
-  CObjectIndexFieldInfo,
-  CObjectShapeField,
-  CObjectShape,
-  CPreparedExpression as PreparedExpression,
-  CRuntimeArrayElement
-} from '../types.ts'
 
 type CBooleanMap = Map<string, boolean>
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
@@ -338,14 +338,6 @@ function emptyNullableScalarNarrowing(): NullableScalarNarrowing {
     trueNames: [],
     falseNames: []
   }
-}
-
-function uniqueNames(names: string[]): string[] {
-  const unique: string[] = []
-
-  appendUniqueNames(unique, names)
-
-  return unique
 }
 
 function mergeNames(left: string[], right: string[]): string[] {

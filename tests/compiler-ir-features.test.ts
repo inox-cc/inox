@@ -1,6 +1,12 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
+import {
+  collectIrFeatureRequirements as collectIrFeatureRequirementsFromFacade,
+  collectIrRuntimeRequirements as collectIrRuntimeRequirementsFromFacade,
+  collectIrSyntaxFeatureUsages as collectIrSyntaxFeatureUsagesFromFacade,
+  lowerHirToIr
+} from '../compiler/ir.ts'
 import {
   collectIrFeatureRequirements,
   collectIrFeatures,
@@ -9,12 +15,6 @@ import {
   collectRuntimeRequirements,
   collectSyntaxFeatureUsages
 } from '../compiler/ir/features.ts'
-import {
-  collectIrFeatureRequirements as collectIrFeatureRequirementsFromFacade,
-  collectIrRuntimeRequirements as collectIrRuntimeRequirementsFromFacade,
-  collectIrSyntaxFeatureUsages as collectIrSyntaxFeatureUsagesFromFacade,
-  lowerHirToIr
-} from '../compiler/ir.ts'
 import type { IrFeature, IrRuntimeRequirement, ProgramNode } from '../compiler/types.ts'
 
 test('collects IR features from runtime-shaped nodes', () => {

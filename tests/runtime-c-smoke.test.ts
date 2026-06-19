@@ -3,21 +3,13 @@ import {
   assert,
   compileRuntimeProgram,
   compileSource,
-  generateLocalhostCertificate,
-  isLocalListenUnavailable,
   join,
-  mkdir,
   mkdtemp,
-  readFile,
-  repoRoot,
   rm,
   runCommand,
-  startLocalTlsServer,
   tmpdir,
   writeFile
 } from './helpers/runtime-c.ts'
-
-
 
 test('C runtime value/object/array skeleton compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -325,7 +317,6 @@ console.log('after')
   }
 })
 
-
 test('C runtime JSON parse and stringify compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -426,7 +417,6 @@ int main(void) {
   }
 })
 
-
 test('C runtime binary bytes value compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -516,7 +506,6 @@ int main(void) {
     })
   }
 })
-
 
 test('C runtime Map and Set helpers compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -660,7 +649,6 @@ int main(void) {
   }
 })
 
-
 test('C runtime release frees nested object and array references', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -754,7 +742,6 @@ int main(void) {
     })
   }
 })
-
 
 test('C runtime ownership ABI retains getters and releases container entries', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -911,7 +898,6 @@ int main(void) {
   }
 })
 
-
 test('C runtime debug memory snapshots track refs promises callbacks and OOM', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1045,7 +1031,6 @@ int main(void) {
   }
 })
 
-
 test('C runtime callback object invokes and releases context', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1157,7 +1142,6 @@ int main(void) {
   }
 })
 
-
 test('C runtime Promise microtasks settle asynchronously', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1258,7 +1242,6 @@ int main(void) {
     })
   }
 })
-
 
 test('C runtime Promise chains fulfillment and rejection recovery', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -1420,7 +1403,6 @@ int main(void) {
   }
 })
 
-
 test('generated C reports unhandled Promise rejections', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1461,7 +1443,6 @@ test('generated C reports unhandled Promise rejections', async (t) => {
     })
   }
 })
-
 
 test('C runtime weak references upgrade and clear after target release', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -1702,7 +1683,6 @@ int main(void) {
   }
 })
 
-
 test('generated C weak object fields compile and run with weak runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1821,7 +1801,6 @@ console.log(detached.parent?.name ?? 'gone')
   }
 })
 
-
 test('generated C simple classes compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1892,7 +1871,6 @@ console.log(value, name)
   }
 })
 
-
 test('generated C class method calls through class fields compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -1958,7 +1936,6 @@ console.log(outer.total())
   }
 })
 
-
 test('generated C class method assignment into runtime value local compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2016,7 +1993,6 @@ reader.read({ name: 'Ada' })
     })
   }
 })
-
 
 test('generated C async await over settled promises compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2204,7 +2180,6 @@ try {
   }
 })
 
-
 test('generated C captured Promise callbacks compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2280,7 +2255,6 @@ console.log(await objectLogged)
   }
 })
 
-
 test('generated C Promise callbacks with try catch finally compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2348,7 +2322,6 @@ console.log(await handled, await finalized)
   }
 })
 
-
 test('generated C async task frame over awaited Promise.resolve compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2397,7 +2370,6 @@ console.log(await promise)
   }
 })
 
-
 test('generated C async task frame preserves parameters across resume', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2445,7 +2417,6 @@ console.log(await promise)
     })
   }
 })
-
 
 test('generated C async task frame awaits local Promise variables', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2496,7 +2467,6 @@ console.log(await promise)
   }
 })
 
-
 test('generated C boolean async task frame compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2543,7 +2513,6 @@ console.log(await flip(true))
     })
   }
 })
-
 
 test('generated C async task frame awaits local Promise chains', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2594,7 +2563,6 @@ console.log(await promise)
   }
 })
 
-
 test('generated C async task frame awaits captured local Promise chains', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2644,7 +2612,6 @@ console.log(await promise)
   }
 })
 
-
 test('generated C async task frame direct return values compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2692,7 +2659,6 @@ console.log(await promise)
     })
   }
 })
-
 
 test('generated C async task frame direct managed return values compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2748,7 +2714,6 @@ console.log(result.toString())
   }
 })
 
-
 test('generated C multiple-await async task frame compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2797,7 +2762,6 @@ console.log(await promise)
     })
   }
 })
-
 
 test('generated C async task frame awaits local async tasks and plain Promise helpers', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2864,7 +2828,6 @@ console.log(await promise)
   }
 })
 
-
 test('generated C async task frame awaits managed immediate async helpers', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -2925,7 +2888,6 @@ console.log(await copyText('managed', ${JSON.stringify(input)}))
     })
   }
 })
-
 
 test('generated C async task frame rejected awaits reject returned promises', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -2993,7 +2955,6 @@ try {
     })
   }
 })
-
 
 test('generated C async task frame try catch finally around awaited promises', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3064,7 +3025,6 @@ try {
     })
   }
 })
-
 
 test('generated C async task frame string prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3137,7 +3097,6 @@ console.log(await literal())
   }
 })
 
-
 test('generated C async task frame array prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3193,7 +3152,6 @@ console.log(result[0], result[1])
     })
   }
 })
-
 
 test('generated C async task frame bytes prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3252,7 +3210,6 @@ console.log(result[0], result[1], text)
   }
 })
 
-
 test('generated C async task frame inner body prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3308,7 +3265,6 @@ console.log(result.length, result.toString())
     })
   }
 })
-
 
 test('generated C async task frame post await inner managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3366,7 +3322,6 @@ console.log(result.toString())
   }
 })
 
-
 test('generated C async task frame post await inner scalar locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3421,7 +3376,6 @@ console.log(await work())
     })
   }
 })
-
 
 test('generated C async task frame post await locals before post-nested returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3479,7 +3433,6 @@ console.log(await work())
   }
 })
 
-
 test('generated C async task frame post await managed locals before post-nested returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3535,7 +3488,6 @@ console.log(await work())
     })
   }
 })
-
 
 test('generated C async task frame object prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3598,7 +3550,6 @@ console.log(result.name, result.score)
   }
 })
 
-
 test('generated C async task frame Map prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3654,7 +3605,6 @@ console.log(result.get('Grace') ?? 0, result.size)
     })
   }
 })
-
 
 test('generated C async task frame Set prefix locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3712,7 +3662,6 @@ console.log(result.has('Grace'), result.size)
   }
 })
 
-
 test('generated C async task frame post try managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3768,7 +3717,6 @@ console.log(result.toString())
     })
   }
 })
-
 
 test('generated C async task frame catch managed locals compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -3829,7 +3777,6 @@ console.log(result.toString())
   }
 })
 
-
 test('generated C async task frame catch direct managed returns compile and run', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3887,7 +3834,6 @@ console.log(result.toString())
   }
 })
 
-
 test('generated C nested async finalizer throw fallback compiles and runs', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3943,7 +3889,6 @@ console.log(await promise)
   }
 })
 
-
 test('generated C object literal lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -3984,7 +3929,6 @@ console.log('ok')
     })
   }
 })
-
 
 test('generated C object literal scalar expression boxing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4038,7 +3982,6 @@ console.log(result.optional, result.total)
   }
 })
 
-
 test('generated C object literal collection constructors compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4088,7 +4031,6 @@ console.log(bag.scores.size, bag.names.has('Ada'), bag.scores.get('Grace') ?? 0)
   }
 })
 
-
 test('generated C early return runs through cleanup label with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4133,7 +4075,6 @@ console.log('unreachable')
   }
 })
 
-
 test('generated C top-level wrapper cleanup compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4173,7 +4114,6 @@ console.log('ok')
     })
   }
 })
-
 
 test('generated C number return cleanup compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4220,7 +4160,6 @@ console.log(getScore())
     })
   }
 })
-
 
 test('generated C prepared for clauses compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4280,7 +4219,6 @@ console.log(total)
   }
 })
 
-
 test('generated C continue statements compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4331,7 +4269,6 @@ console.log(total)
   }
 })
 
-
 test('generated C string-returning for initializer compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4379,7 +4316,6 @@ for (const name = getName(); index < 1; index = index + 1) {
     })
   }
 })
-
 
 test('generated C prepared conditions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4451,7 +4387,6 @@ console.log(index)
   }
 })
 
-
 test('generated C prepared scalar assignment compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4497,7 +4432,6 @@ console.log(index)
     })
   }
 })
-
 
 test('generated C named callback values compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4548,7 +4482,6 @@ run(callback)
   }
 })
 
-
 test('generated C non-capturing inline callback values compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4594,7 +4527,6 @@ run(() => {
     })
   }
 })
-
 
 test('generated C capturing plain callback arguments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4652,7 +4584,6 @@ runNumber((value: number) => {
     })
   }
 })
-
 
 test('generated C captured callback variables compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4714,7 +4645,6 @@ runNumber(numberCallback)
   }
 })
 
-
 test('generated C mutable numeric callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4765,7 +4695,6 @@ console.log(count)
   }
 })
 
-
 test('generated C mutable numeric callback parameter captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4814,7 +4743,6 @@ run(1)
     })
   }
 })
-
 
 test('generated C mutable string callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4865,7 +4793,6 @@ console.log(label)
     })
   }
 })
-
 
 test('generated C mutable object callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -4921,7 +4848,6 @@ console.log(person.name)
   }
 })
 
-
 test('generated C typed callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -4973,7 +4899,6 @@ run(callback)
   }
 })
 
-
 test('generated C string callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5024,7 +4949,6 @@ run(callback)
     })
   }
 })
-
 
 test('generated C object callback aliases compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5084,7 +5008,6 @@ run(callback, person)
   }
 })
 
-
 test('generated C capturing runtime callback arrows compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5135,7 +5058,6 @@ run(callback)
   }
 })
 
-
 test('generated C inline runtime callback arguments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5184,7 +5106,6 @@ run((value: string) => {
     })
   }
 })
-
 
 test('generated C retained runtime callback captures compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5241,7 +5162,6 @@ run(callback)
   }
 })
 
-
 test('generated C string equality comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5296,7 +5216,6 @@ console.log(sameLocal, sameRuntime, differentCall)
   }
 })
 
-
 test('generated C string concatenation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5347,7 +5266,6 @@ console.log(message)
     })
   }
 })
-
 
 test('generated C string length compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5405,7 +5323,6 @@ console.log('Ada'.length, length(name), user.name.length, getName().length, mess
   }
 })
 
-
 test('generated C string predicate methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5460,7 +5377,6 @@ console.log('Ada'.includes('d'), 'Ada'.includes('d', 2), hasAda(name), user.name
     })
   }
 })
-
 
 test('generated C string index and trim variants compile and run with UTF-8 strings', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5527,7 +5443,6 @@ console.log(
   }
 })
 
-
 test('generated C string case and padStart methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5574,7 +5489,6 @@ console.log(
     })
   }
 })
-
 
 test('generated C dynamic object string field methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5630,7 +5544,6 @@ console.log(hasInterpolation(first), hasInterpolation(second), body({ raw: ' Ada
   }
 })
 
-
 test('generated C known object string field comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5678,7 +5591,6 @@ console.log(user.name === same, user['name'] !== other, user.name === other)
     })
   }
 })
-
 
 test('generated C string charCodeAt calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5734,7 +5646,6 @@ console.log(isLower('m'), isLower('M'), sumCodes('AZ'))
   }
 })
 
-
 test('generated C string index expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5783,7 +5694,6 @@ console.log(first, second, third)
     })
   }
 })
-
 
 test('generated C string slice compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5841,7 +5751,6 @@ console.log('Ada'.slice(1, 3), middle(name), user.name.slice(0, 1), getName().sl
   }
 })
 
-
 test('generated C string split compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -5888,7 +5797,6 @@ console.log(names[0], names[1], initials[0], initials[1], 'abc'.split('')[1], 'A
     })
   }
 })
-
 
 test('generated C string trim compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -5947,7 +5855,6 @@ console.log(' Ada '.trim(), clean(name), user.name.trim(), getName().trim(), mes
   }
 })
 
-
 test('generated C String conversion compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6003,7 +5910,6 @@ console.log(String('Ada'), String(local), String(name), label(42), flag(true), S
   }
 })
 
-
 test('generated C number toString radix compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6050,7 +5956,6 @@ console.log(hex(value), value.toString(), padded)
   }
 })
 
-
 test('generated C Number conversion compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6094,7 +5999,6 @@ console.log(Number('') ?? 9, Number('42') ?? 0, Number(' +.5e2 ') ?? 0, Number('
     })
   }
 })
-
 
 test('generated C numeric casts compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6142,7 +6046,6 @@ console.log(signedValue, negative, unsignedValue, wide, rounded, preserved)
   }
 })
 
-
 test('generated C Math.random os backend compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6187,7 +6090,6 @@ console.log(value >= 0, value < 1)
   }
 })
 
-
 test('generated C array literal lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6228,7 +6130,6 @@ console.log('ok')
     })
   }
 })
-
 
 test('generated C Array.slice lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6277,7 +6178,6 @@ console.log(copy.length, copy[1], values[1], middle[0], middle[1], tail[0], tail
   }
 })
 
-
 test('generated C Array.push statements compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6325,7 +6225,6 @@ console.log(names.length, names[1])
   }
 })
 
-
 test('generated C Array.unshift expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6371,7 +6270,6 @@ console.log(nameLength, names[0], names[1])
     })
   }
 })
-
 
 test('generated C Array.pop expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6423,7 +6321,6 @@ console.log(names.length, name, none)
   }
 })
 
-
 test('generated C Array.sort without comparator compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6469,7 +6366,6 @@ console.log(names[0], names[1])
     })
   }
 })
-
 
 test('generated C Array.sort comparator callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6531,7 +6427,6 @@ console.log(chained.length, chained[0], chained[1], chained[2])
     })
   }
 })
-
 
 test('generated C Array.filter expression callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6604,7 +6499,6 @@ console.log(picked.length, picked[0], picked[1], inlineCount)
   }
 })
 
-
 test('generated C Array.map expression callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6662,7 +6556,6 @@ console.log(mappedSorted.length, mappedSorted[0], mappedSorted[1], mappedSorted[
     })
   }
 })
-
 
 test('generated C Array block-body callbacks compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6748,7 +6641,6 @@ console.log(initials.length, initials[0], initials[1])
   }
 })
 
-
 test('generated C Array methods over object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6800,7 +6692,6 @@ console.log(initials.length, initials[0], initials[1])
   }
 })
 
-
 test('generated C Array.includes compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6850,7 +6741,6 @@ console.log(box['flags'].includes(true), box['flags'].includes(false))
   }
 })
 
-
 test('generated C array length lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -6891,7 +6781,6 @@ console.log(values.length, [4, 5].length)
     })
   }
 })
-
 
 test('generated C runtime array length compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6937,7 +6826,6 @@ console.log(box.values.length)
     })
   }
 })
-
 
 test('generated C runtime array index reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -6987,7 +6875,6 @@ console.log(box.values[1], box.flags[0], name)
   }
 })
 
-
 test('generated C known object array index declarations compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7033,7 +6920,6 @@ console.log(user.name)
     })
   }
 })
-
 
 test('generated C runtime array locals compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7082,7 +6968,6 @@ console.log(values[1], names[0])
     })
   }
 })
-
 
 test('generated C for of over runtime array locals compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7140,7 +7025,6 @@ console.log(total, letters)
   }
 })
 
-
 test('generated C for of over runtime array expressions compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7195,7 +7079,6 @@ console.log(total, letters)
   }
 })
 
-
 test('generated C for of array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7243,7 +7126,6 @@ console.log(total)
   }
 })
 
-
 test('generated C for of string array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7287,7 +7169,6 @@ for (const name of names) {
     })
   }
 })
-
 
 test('generated C for of Set lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7355,7 +7236,6 @@ console.log(total, letters, sawAda, sawGrace)
   }
 })
 
-
 test('generated C for of Map lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7421,7 +7301,6 @@ console.log(total, letters, ada, grace, alan)
     })
   }
 })
-
 
 test('generated C for of object Set and Map entries compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7497,7 +7376,6 @@ console.log(seenUsers, scoreTotal, seenKeys)
   }
 })
 
-
 test('generated C inline for of array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7544,7 +7422,6 @@ console.log(total)
   }
 })
 
-
 test('generated C inline for of string array lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7586,7 +7463,6 @@ test('generated C inline for of string array lowering compiles and runs with run
     })
   }
 })
-
 
 test('generated C object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7630,7 +7506,6 @@ console.log(score, active)
     })
   }
 })
-
 
 test('generated C object expression field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7683,7 +7558,6 @@ console.log(score, active)
   }
 })
 
-
 test('generated C dynamic object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7733,7 +7607,6 @@ console.log(child.value)
   }
 })
 
-
 test('generated C dynamic object scalar field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7779,7 +7652,6 @@ read({ score: 42, active: true })
     })
   }
 })
-
 
 test('generated C dynamic object field truthiness conditions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -7867,7 +7739,6 @@ console.log(score({ name: 'Ada', empty: '', count: 0, ok: true, nope: false, chi
   }
 })
 
-
 test('generated C dynamic object field assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7923,7 +7794,6 @@ console.log(child.value)
   }
 })
 
-
 test('generated C nested dynamic object scalar field access compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -7970,7 +7840,6 @@ read({ loc: { line: 9 }, meta: { active: false } })
     })
   }
 })
-
 
 test('generated C dynamic runtime string literal comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8177,7 +8046,6 @@ console.log(value.count)
   }
 })
 
-
 test('generated C dynamic object field null comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8225,7 +8093,6 @@ console.log(hasInit({ init: { type: 'StringLiteral' } }), hasInit({ init: null }
     })
   }
 })
-
 
 test('generated C dynamic object field boolean literal comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8282,7 +8149,6 @@ console.log(
   }
 })
 
-
 test('generated C dynamic object array length compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8335,7 +8201,6 @@ console.log(
     })
   }
 })
-
 
 test('generated C for of over dynamic object array fields compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8392,7 +8257,6 @@ console.log(
   }
 })
 
-
 test('generated C dynamic object array index null comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8436,7 +8300,6 @@ console.log(hasFirst({ args: [{ type: 'Literal' }] }), hasFirst({ args: [] }))
     })
   }
 })
-
 
 test('generated C dynamic object array item field comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8489,7 +8352,6 @@ console.log(
     })
   }
 })
-
 
 test('generated C dynamic object array index variable declarations compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8544,7 +8406,6 @@ console.log(
   }
 })
 
-
 test('generated C string object field access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8586,7 +8447,6 @@ console.log(name)
     })
   }
 })
-
 
 test('generated C object field assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8635,7 +8495,6 @@ console.log(score, active, name)
   }
 })
 
-
 test('generated C string index object field reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8679,7 +8538,6 @@ console.log(score, active, name)
     })
   }
 })
-
 
 test('generated C string index object field assignments compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8728,7 +8586,6 @@ console.log(score, active, name)
   }
 })
 
-
 test('generated C array index access lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8771,7 +8628,6 @@ console.log(score, active)
     })
   }
 })
-
 
 test('generated C array index assignment lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8863,7 +8719,6 @@ console.log(values[1], lines[1])
   }
 })
 
-
 test('generated C string array index reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8906,7 +8761,6 @@ console.log(name)
     })
   }
 })
-
 
 test('generated C runtime string local propagation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -8951,7 +8805,6 @@ console.log(again)
   }
 })
 
-
 test('generated C nullable string nullish coalescing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -8995,7 +8848,6 @@ console.log(display, name !== null)
     })
   }
 })
-
 
 test('generated C opaque object index nullish coalescing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9104,7 +8956,6 @@ console.log(readCode('write'))
   }
 })
 
-
 test('generated C nullable runtime optional access compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9162,7 +9013,6 @@ console.log(missingName, memberName, indexName, arrayName, emptyName, maybeScore
     })
   }
 })
-
 
 test('generated C nullable scalar nullish coalescing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9226,7 +9076,6 @@ console.log(maybeValues?.[0] ?? 5, emptyValues?.[0] ?? 5)
   }
 })
 
-
 test('generated C nullable boolean literal comparisons compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9285,7 +9134,6 @@ console.log(
     })
   }
 })
-
 
 test('generated C nullable scalar truthiness compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9373,7 +9221,6 @@ console.log(captureValue({ mutable: null }), captureValue({ mutable: false }), c
   }
 })
 
-
 test('generated C nullable scalar function ABI compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9440,7 +9287,6 @@ printScore(7 + 1, false)
   }
 })
 
-
 test('generated C nullable scalar branch narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9503,7 +9349,6 @@ console.log(value ?? 9)
   }
 })
 
-
 test('generated C nullable scalar logical narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9559,7 +9404,6 @@ printScore(1, 0)
     })
   }
 })
-
 
 test('generated C nullable scalar early return narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9628,7 +9472,6 @@ printHigh(1)
   }
 })
 
-
 test('generated C nullable scalar loop narrowing compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9681,7 +9524,6 @@ printLoop(null, null)
     })
   }
 })
-
 
 test('generated C nullable callback optional calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9754,7 +9596,6 @@ maybeNamed(null)
   }
 })
 
-
 test('generated C nullable callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9813,7 +9654,6 @@ printValues(null, null)
   }
 })
 
-
 test('generated C nullable arrow callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -9866,7 +9706,6 @@ printValues(null, null)
     })
   }
 })
-
 
 test('generated C nullable block arrow callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -9933,7 +9772,6 @@ printValues(null, null)
     })
   }
 })
-
 
 test('generated C runtime callback returns through finally compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10007,7 +9845,6 @@ printName(null)
   }
 })
 
-
 test('generated C nullable string callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10062,7 +9899,6 @@ printName(arrow)
     })
   }
 })
-
 
 test('generated C nullable object callback optional call results compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10127,7 +9963,6 @@ printUser(arrow)
   }
 })
 
-
 test('generated C local string throw try catch finally compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10172,7 +10007,6 @@ test('generated C local string throw try catch finally compiles and runs with ru
     })
   }
 })
-
 
 test('generated C lightweight Error objects compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10223,7 +10057,6 @@ try {
     })
   }
 })
-
 
 test('generated C interfunction throws compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10299,7 +10132,6 @@ try {
   }
 })
 
-
 test('generated C return through finally compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10358,7 +10190,6 @@ stop()
   }
 })
 
-
 test('generated C break and continue through finally compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10414,7 +10245,6 @@ console.log('done', index)
   }
 })
 
-
 test('generated C runtime string assignment references compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10463,7 +10293,6 @@ console.log(objectName, arrayName)
   }
 })
 
-
 test('generated C runtime string local assignments from dynamic object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10509,7 +10338,6 @@ console.log(readType({ valueType: 'number' }))
     })
   }
 })
-
 
 test('generated C nested runtime string field reads compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10561,7 +10389,6 @@ console.log(returnType)
   }
 })
 
-
 test('generated C string-returning assignment calls compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10609,7 +10436,6 @@ console.log(target.name, values[0])
     })
   }
 })
-
 
 test('generated C runtime string params compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10662,7 +10488,6 @@ console.log(echo(user.name))
   }
 })
 
-
 test('generated C prepared string args in number expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10709,7 +10534,6 @@ console.log(length(user.name), total)
   }
 })
 
-
 test('generated C Array.join compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10753,7 +10577,6 @@ console.log(joined, digits, flags)
     })
   }
 })
-
 
 test('generated C plain string local params compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10805,7 +10628,6 @@ console.log(echo(local))
   }
 })
 
-
 test('generated C runtime string return compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10851,7 +10673,6 @@ console.log(name)
     })
   }
 })
-
 
 test('generated C runtime string index returns compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -10903,7 +10724,6 @@ console.log(getObjectName(), getArrayName())
   }
 })
 
-
 test('generated C member and index reads inside scalar expressions compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10948,7 +10768,6 @@ console.log(total, same)
   }
 })
 
-
 test('generated C optional object member and index access compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -10990,7 +10809,6 @@ console.log(name, user?.['score'])
     })
   }
 })
-
 
 test('generated C typed object shape lowering compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -11038,7 +10856,6 @@ console.log(id)
     })
   }
 })
-
 
 test('generated C JSON parse and stringify compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -11089,7 +10906,6 @@ console.log(user.name, user.score, text, parsedScore, active)
   }
 })
 
-
 test('generated C Buffer and Uint8Array APIs compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -11139,7 +10955,6 @@ console.log(bytes.length, out[0], out[1], slice.length, slice[1], tail[0], tail[
   }
 })
 
-
 test('generated C crypto.getRandomValues compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -11181,7 +10996,6 @@ console.log(filled.length, bytes.length, filled[0] >= 0, filled[0] < 256)
     })
   }
 })
-
 
 test('generated C Map and Set methods compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -11243,7 +11057,6 @@ console.log(names.has('Grace'), names.size)
   }
 })
 
-
 test('generated C Map and Set method chains compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -11291,7 +11104,6 @@ console.log(score, hasScore, hasName, removed, names.size)
     })
   }
 })
-
 
 test('generated C collection values cross function boundaries with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -11396,7 +11208,6 @@ console.log(sumFromNums, sumFromCall, totalFromScores, totalFromCall, scores.siz
   }
 })
 
-
 test('generated C Map and Set array literal constructors compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -11441,7 +11252,6 @@ console.log(adaScore, graceScore, names.has('Ada'), names.has('Grace'), scores.s
     })
   }
 })
-
 
 test('generated C Map and Set copy constructors compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -11505,7 +11315,6 @@ console.log(namesFromCall.has('Grace'), namesFromCall.has('Alan'), namesFromCall
     })
   }
 })
-
 
 test('generated C Map and Set copy constructors preserve object identity keys', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -11573,7 +11382,6 @@ console.log(usersCopyAgain.has(ada), usersCopyAgain.has(otherAda), usersCopyAgai
     })
   }
 })
-
 
 test('generated C Map keys iterables compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -11649,7 +11457,6 @@ console.log(totalLetters, sawAda, copy.size, userCount, knownUsers)
   }
 })
 
-
 test('generated C Map and Set object fields compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -11706,7 +11513,6 @@ console.log(adaScore, graceScore, label, hasAda, bag.scores.size, bag.names.size
     })
   }
 })
-
 
 test('generated C Map bracket syntax compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])

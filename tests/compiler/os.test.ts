@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers default node:os methods and constants to the C os runtime', () => {
   const result = compileSource(
@@ -104,7 +104,9 @@ console.log(os.platform())
         true
       )
       assert.equal(
-        error.diagnostics.some((item) => item.message.includes('embedded profile requires os capability for os.platform')),
+        error.diagnostics.some((item) =>
+          item.message.includes('embedded profile requires os capability for os.platform')
+        ),
         true
       )
       return true

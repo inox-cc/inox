@@ -1,4 +1,3 @@
-import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
   commonArrayElementType,
   commonValueType,
@@ -10,8 +9,8 @@ import {
   isSwitchableType
 } from './checker/assignability.ts'
 import {
-  childProcessSpawnSyncResultShape,
   builtinGlobalSymbol,
+  childProcessSpawnSyncResultShape,
   debugMemoryStatsObjectShape,
   errorObjectShape,
   fetchAbortControllerObjectShape,
@@ -34,37 +33,8 @@ import {
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
 import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
+import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { memberExpressionPath } from './member-paths.ts'
-import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
-import {
-  arrayElementTypeNameFromKnownTypeName,
-  isArrayTypeName,
-  isBuiltinValueType,
-  isBytesTypeName,
-  isNullableTypeName,
-  isPromiseTypeName,
-  isSetTypeName,
-  mapTypeNamesFromTypeName,
-  nullableTypeNameFromKnownTypeName,
-  promiseValueTypeNameFromKnownTypeName,
-  recordTypeNamesFromTypeName,
-  setElementTypeNameFromKnownTypeName,
-  unionTypeNamesFromTypeName
-} from './type-names.ts'
-import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
-import {
-  isUnsupportedRuntimeBuiltinImportSource,
-  unsupportedRuntimeBuiltinImportMessageFromKnownSource
-} from './stdlib/descriptors/node-builtins.ts'
-import {
-  fetchHeadersRuntimeMethod,
-  isFetchAbortControllerMethod,
-  isFetchHeadersMethod,
-  isFetchInitOption,
-  isFetchRedirectMode,
-  isFetchResponseBodyMethod,
-  isSupportedFetchResponseBodyMethod
-} from './stdlib/descriptors/fetch.ts'
 import {
   binaryConstructorNameFromPath,
   binaryInstanceRuntimeMethodName,
@@ -74,6 +44,11 @@ import {
   isNodeBufferImportSource,
   isUnsupportedBufferRuntimeExport
 } from './stdlib/descriptors/binary.ts'
+import {
+  isChildProcessRuntimeMethod,
+  isNodeChildProcessImportSource,
+  isUnsupportedChildProcessRuntimeMethod
+} from './stdlib/descriptors/child-process.ts'
 import {
   collectionConstructorNameFromPath,
   isArrayMethod,
@@ -96,24 +71,22 @@ import {
   isUnsupportedEventsRuntimeExport,
   unsupportedEventsRuntimeExportReason
 } from './stdlib/descriptors/events.ts'
+import {
+  fetchHeadersRuntimeMethod,
+  isFetchAbortControllerMethod,
+  isFetchHeadersMethod,
+  isFetchInitOption,
+  isFetchRedirectMode,
+  isFetchResponseBodyMethod,
+  isSupportedFetchResponseBodyMethod
+} from './stdlib/descriptors/fetch.ts'
+import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
+import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import { knownMathRuntimeArgCount } from './stdlib/descriptors/math.ts'
 import {
-  isNodeStreamImportSource,
-  isUnsupportedStreamRuntimeExport,
-  unsupportedStreamRuntimeExportReason
-} from './stdlib/descriptors/stream.ts'
-import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
-import {
-  isChildProcessRuntimeMethod,
-  isNodeChildProcessImportSource,
-  isUnsupportedChildProcessRuntimeMethod
-} from './stdlib/descriptors/child-process.ts'
-import {
-  isNodePathImportSource,
-  isPathRuntimeConstant,
-  isPathRuntimeMethod,
-  isUnsupportedPathRuntimeMethod
-} from './stdlib/descriptors/path.ts'
+  isUnsupportedRuntimeBuiltinImportSource,
+  unsupportedRuntimeBuiltinImportMessageFromKnownSource
+} from './stdlib/descriptors/node-builtins.ts'
 import {
   isNodeOsImportSource,
   isOsRuntimeConstant,
@@ -121,13 +94,25 @@ import {
   isUnsupportedOsRuntimeMethod
 } from './stdlib/descriptors/os.ts'
 import {
+  isNodePathImportSource,
+  isPathRuntimeConstant,
+  isPathRuntimeMethod,
+  isUnsupportedPathRuntimeMethod
+} from './stdlib/descriptors/path.ts'
+import {
   isNodeProcessImportSource,
   isProcessRuntimeMethod,
   isProcessRuntimeProperty,
-  processRuntimePropertyValueType,
+  isUnsupportedProcessRuntimeMethod,
   isUnsupportedProcessRuntimeProperty,
-  isUnsupportedProcessRuntimeMethod
+  processRuntimePropertyValueType
 } from './stdlib/descriptors/process.ts'
+import {
+  isNodeStreamImportSource,
+  isUnsupportedStreamRuntimeExport,
+  unsupportedStreamRuntimeExportReason
+} from './stdlib/descriptors/stream.ts'
+import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
 import {
   isNodeUrlImportSource,
   isUnsupportedUrlRuntimeMethod,
@@ -136,10 +121,25 @@ import {
   isUrlRuntimeMethod,
   isUrlSearchParamsRuntimeMethod
 } from './stdlib/descriptors/url.ts'
+import {
+  arrayElementTypeNameFromKnownTypeName,
+  isArrayTypeName,
+  isBuiltinValueType,
+  isBytesTypeName,
+  isNullableTypeName,
+  isPromiseTypeName,
+  isSetTypeName,
+  mapTypeNamesFromTypeName,
+  nullableTypeNameFromKnownTypeName,
+  promiseValueTypeNameFromKnownTypeName,
+  recordTypeNamesFromTypeName,
+  setElementTypeNameFromKnownTypeName,
+  unionTypeNamesFromTypeName
+} from './type-names.ts'
 import type {
   AnyNode,
-  Diagnostic,
   CompileOptions,
+  Diagnostic,
   ObjectShapeInfo,
   ProgramNode,
   SourceLocation,
@@ -147,8 +147,6 @@ import type {
   TypeAliasInfo,
   ValueType
 } from './types.ts'
-import { isRuntimeNullableType } from './c/value-types.ts'
-import { resolveDeclaredType } from './lower/type-resolution.ts'
 
 type ResolvedTypeInfo = {
   valueType: ValueType
@@ -7472,7 +7470,7 @@ class Checker {
     return false
   }
 
-  checkFsWriteDataArg(expression: AnyNode, index: number, label: string, textMethod: string): string {
+  checkFsWriteDataArg(expression: AnyNode, index: number, _label: string, textMethod: string): string {
     const arg = expression.args[index]
 
     if (arg === null || typeof arg === 'undefined') {
@@ -11629,7 +11627,10 @@ class Checker {
   checkBooleanCondition(expression: AnyNode): void {
     const conditionType = this.checkExpression(expression)
 
-    if (!isConditionValueType(conditionType) && !(expression.nullable === true && this.isRuntimeNullableType(conditionType))) {
+    if (
+      !isConditionValueType(conditionType) &&
+      !(expression.nullable === true && this.isRuntimeNullableType(conditionType))
+    ) {
       this.report(
         'INOX_CONDITION_TYPE',
         `condition must be boolean or truthy-compatible, got ${conditionType}`,
@@ -13906,12 +13907,6 @@ function joinStrings(values: readonly string[], separator: string): string {
   }
 
   return result
-}
-
-function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
-  for (let index = 0; index < source.length; index = index + 1) {
-    target.push(source[index])
-  }
 }
 
 function mergeShapeFields(target: AnyNode[], source: AnyNode[] | null | undefined): void {

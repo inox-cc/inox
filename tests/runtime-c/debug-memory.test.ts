@@ -1,5 +1,14 @@
 import test from 'node:test'
-import { assert, compileRuntimeProgram, join, mkdtemp, rm, runCommand, tmpdir, writeFile } from '../helpers/runtime-c.ts'
+import {
+  assert,
+  compileRuntimeProgram,
+  join,
+  mkdtemp,
+  rm,
+  runCommand,
+  tmpdir,
+  writeFile
+} from '../helpers/runtime-c.ts'
 
 test('CLI links debug memory runtime when inox.__debug.memory is used', async (t) => {
   const probe = await runCommand('cc', ['--version'])

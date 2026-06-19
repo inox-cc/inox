@@ -311,9 +311,7 @@ function collectGateFailures(report: AuditReport): string[] {
         continue
       }
 
-      failures.push(
-        `${module} host import in ${file} is outside the approved compiler host adapter boundary.`
-      )
+      failures.push(`${module} host import in ${file} is outside the approved compiler host adapter boundary.`)
     }
   }
 

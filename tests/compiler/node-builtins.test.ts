@@ -1,10 +1,10 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
 import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessage,
   unsupportedRuntimeBuiltinImportSources
 } from '../../compiler/stdlib/descriptors/node-builtins.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('reports recognized but unsupported node builtin imports at compile time', () => {
   for (const source of unsupportedRuntimeBuiltinImportSources) {

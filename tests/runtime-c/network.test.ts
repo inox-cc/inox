@@ -1,14 +1,11 @@
 import test from 'node:test'
 import {
   assert,
-  compileRuntimeProgram,
   compileSource,
   generateLocalhostCertificate,
   isLocalListenUnavailable,
   join,
-  mkdir,
   mkdtemp,
-  readFile,
   repoRoot,
   rm,
   runCommand,
@@ -16,8 +13,6 @@ import {
   tmpdir,
   writeFile
 } from '../helpers/runtime-c.ts'
-
-
 
 test('C runtime TLS fallback reports unsupported backend', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -71,13 +66,7 @@ int main(void) {
 `
     )
 
-    const compile = await runCommand('cc', [
-      '-Iruntime/include',
-      source,
-      'runtime/src/network/tls.c',
-      '-o',
-      output
-    ])
+    const compile = await runCommand('cc', ['-Iruntime/include', source, 'runtime/src/network/tls.c', '-o', output])
 
     assert.equal(compile.code, 0, compile.stderr)
 
@@ -92,7 +81,6 @@ int main(void) {
     })
   }
 })
-
 
 test('C runtime BoringSSL TLS client connects to local TLS server', async (t) => {
   if (process.env.INOX_TEST_BORINGSSL_TLS !== '1') {
@@ -326,7 +314,6 @@ int main(int argc, char** argv) {
   }
 })
 
-
 test('generated C fetch uses BoringSSL TLS for HTTPS URLs', async (t) => {
   if (process.env.INOX_TEST_BORINGSSL_FETCH !== '1') {
     t.skip('set INOX_TEST_BORINGSSL_FETCH=1 to build BoringSSL HTTPS fetch smoke')
@@ -418,7 +405,6 @@ target_link_libraries(fetch-client PRIVATE inox_runtime)
     })
   }
 })
-
 
 test('C runtime OpenSSL TLS backend builds when available', async (t) => {
   if (process.env.INOX_TEST_OPENSSL_TLS !== '1') {

@@ -1,33 +1,6 @@
 import test from 'node:test'
-import {
-  assert,
-  assertDiagnostic,
-  cLibuvOptions,
-  collectIrFeatureRequirements,
-  collectIrFunctionEffects,
-  collectIrFunctionNodeEntries,
-  collectIrGlobalRoots,
-  collectIrLocalThrowValueTypes,
-  collectIrModuleRecords,
-  collectIrPrograms,
-  collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodesFromPrograms,
-  compileFile,
-  compileSource,
-  CompileError,
-  emitCBundleFromIrModules,
-  emitCFromIr,
-  findIrEntryProgram,
-  join,
-  mkdir,
-  mkdtemp,
-  rm,
-  tmpdir,
-  writeFile
-} from '../helpers/compiler-smoke.ts'
 import type { AnyNode } from '../../compiler/types.ts'
-
-
+import { assert, assertDiagnostic, compileSource, emitCFromIr } from '../helpers/compiler-smoke.ts'
 
 test('compiles classic for loops to C', () => {
   const source = `export function main(): void {
@@ -46,7 +19,6 @@ test('compiles classic for loops to C', () => {
 
   assert.match(c.code, /for \(double index = 0; \(index < 4\); \(index = \(index \+ 1\)\)\) \{/)
 })
-
 
 test('prepares C string-argument calls in classic for clauses', () => {
   const source = `function start(label: string): number {
@@ -88,7 +60,6 @@ export function main(): void {
     /inox_release\(inox_value_\d+\);\n\s+inox_value_\d+ = inox_undefined_value\(\);\n\s+if \(inox_string_from_literal\(&inox_default_allocator, "step", 4, &inox_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;\n\s+\(index = nextIndex\(index, inox_value_\d+\)\);/
   )
 })
-
 
 test('compiles simple classes to C object runtime calls', () => {
   const source = `class User {
@@ -187,7 +158,6 @@ export function main(): void {
   assert.match(c.code, /inox_object_init_known\(host, 1, inox_value_\d+\)/)
 })
 
-
 test('lowers class method calls through class-typed object fields', () => {
   const source = `class Inner {
   value: number
@@ -227,7 +197,6 @@ export function main(): void {
   assert.match(c.code, /inox_return = inox_method_Inner_read\(inox_value_\d+, 2\);/)
 })
 
-
 test('lowers string class method assignments into runtime value locals', () => {
   const source = `class Reader {
   fallback(): string | null {
@@ -262,7 +231,6 @@ export function main(): void {
   assert.match(c.code, /value = inox_nullable_value_\d+;/)
 })
 
-
 test('rejects readonly class field assignment outside constructors', () => {
   assertDiagnostic(
     `class User {
@@ -285,7 +253,6 @@ export function main(): void {
     'INOX_ASSIGN_READONLY_FIELD'
   )
 })
-
 
 test('rejects unsupported class inheritance with a stable diagnostic', () => {
   assertDiagnostic(
@@ -310,7 +277,6 @@ class Admin extends User {
   )
 })
 
-
 test('rejects unsupported static class members with stable diagnostics', () => {
   assertDiagnostic(
     `class User {
@@ -330,7 +296,6 @@ test('rejects unsupported static class members with stable diagnostics', () => {
     'INOX_CLASS_STATIC'
   )
 })
-
 
 test('drives C function return object shapes from target-neutral IR declarations', () => {
   const result = compileSource(
@@ -386,7 +351,6 @@ export function main(): void {
   assert.equal((withoutReturnShape.match(/INOX_FIELD_READONLY/g) ?? []).length, 0)
 })
 
-
 test('checks typed object aliases and readonly fields', () => {
   const result = compileSource(
     `type User = {
@@ -407,7 +371,6 @@ export function main(): void {
 
   assert.doesNotMatch(result.code, /type User/)
 })
-
 
 test('keeps typed object shape metadata for C lowering', () => {
   const source = `type User = {
@@ -609,7 +572,6 @@ export function main(): void {
   assert.doesNotMatch(result.code, /INOX_TAG_NULL/)
 })
 
-
 test('rejects readonly typed object field assignment', () => {
   assertDiagnostic(
     `type User = {
@@ -625,7 +587,6 @@ export function main(): void {
     'INOX_ASSIGN_READONLY_FIELD'
   )
 })
-
 
 test('checks typed object string index fields', () => {
   const result = compileSource(
@@ -661,7 +622,6 @@ export function main(): void {
     'INOX_ASSIGN_READONLY_FIELD'
   )
 })
-
 
 test('rejects typed object shape mismatches', () => {
   assertDiagnostic(
@@ -704,7 +664,6 @@ export function main(): void {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('rejects unknown typed object fields on member access', () => {
   assertDiagnostic(

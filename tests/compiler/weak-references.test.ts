@@ -1,12 +1,7 @@
 import { test } from 'node:test'
 
-import {
-  assert,
-  assertDiagnostic,
-  compileSource,
-  compileSourceToIr
-} from '../helpers/compiler-smoke.ts'
 import type { AnyNode } from '../../compiler/types.ts'
+import { assert, assertDiagnostic, compileSource, compileSourceToIr } from '../helpers/compiler-smoke.ts'
 
 test('parses weak fields as ownership metadata without reserving the weak name', () => {
   const compiled = compileSourceToIr(`type Node = {

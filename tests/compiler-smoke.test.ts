@@ -1,31 +1,23 @@
 import test from 'node:test'
 import { emitPreparedNumberExpression } from '../compiler/c/values/expressions.ts'
+import type { AnyNode } from '../compiler/types.ts'
 import {
   assert,
   assertDiagnostic,
-  cLibuvOptions,
-  collectIrFunctionEffects,
-  collectIrFunctionNodeEntries,
   collectIrGlobalRoots,
   collectIrLocalThrowValueTypes,
-  collectIrModuleRecords,
-  collectIrPrograms,
   collectIrTopLevelNodeEntries,
   collectIrTopLevelNodesFromPrograms,
+  CompileError,
   compileFile,
   compileSource,
-  CompileError,
-  emitCBundleFromIrModules,
   emitCFromIr,
-  findIrEntryProgram,
   join,
-  mkdir,
   mkdtemp,
   rm,
   tmpdir,
   writeFile
 } from './helpers/compiler-smoke.ts'
-import type { AnyNode } from '../compiler/types.ts'
 
 test('compiles exported main to C wrapper', () => {
   const result = compileSource(
@@ -43,7 +35,6 @@ test('compiles exported main to C wrapper', () => {
   assert.match(result.code, /int main\(void\) \{/)
   assert.doesNotMatch(result.code, /int main\(void\) \{[\s\S]*inox_main\(\);/)
 })
-
 
 test('emits C for a minimal console program', () => {
   const result = compileSource(
@@ -63,7 +54,6 @@ test('emits C for a minimal console program', () => {
   assert.match(result.code, /printf\("%s %s\\n", "hello", name\);/)
 })
 
-
 test('emits C console warn and error through stderr runtime stream', () => {
   const result = compileSource(
     `console.warn('heads up')
@@ -78,7 +68,6 @@ console.error('failed')
   assert.match(result.code, /inox_console_printf\(INOX_CONSOLE_STDERR, "%s\\n", "heads up"\)/)
   assert.match(result.code, /inox_console_printf\(INOX_CONSOLE_STDERR, "%s\\n", "failed"\)/)
 })
-
 
 test('parses string literals that look like operators', () => {
   const result = compileSource(
@@ -99,7 +88,6 @@ test('parses string literals that look like operators', () => {
   assert.match(result.code, /const char \*paren = "\(";/)
   assert.match(result.code, /printf\("%s %s %s\\n", bang, plus, paren\);/)
 })
-
 
 test('emits C for numeric operators', () => {
   const result = compileSource(
@@ -208,7 +196,10 @@ test('lowers Object.keys and Object.values calls to C object arrays', () => {
   assert.match(result.code, /inox_array_get\(inox_object_entries_\d+, 0, &inox_value_\d+\)/)
   assert.match(result.code, /inox_console_format_value\(&inox_default_allocator, user, &inox_log_value_\d+\)/)
   assert.match(result.code, /inox_console_format_value\(&inox_default_allocator, keys, &inox_log_value_\d+\)/)
-  assert.match(result.code, /const inox_string\s*\*\s*firstKey = \(inox_string\*\)(?:inox_value_\d+|firstKey_value_\d+)\.as\.ref;/)
+  assert.match(
+    result.code,
+    /const inox_string\s*\*\s*firstKey = \(inox_string\*\)(?:inox_value_\d+|firstKey_value_\d+)\.as\.ref;/
+  )
   assert.match(result.code, /inox_console_format_value\(&inox_default_allocator, values, &inox_log_value_\d+\)/)
   assert.match(result.code, /inox_console_format_value\(&inox_default_allocator, first, &inox_log_value_\d+\)/)
   assert.match(result.code, /inox_console_format_value\(&inox_default_allocator, entries, &inox_log_value_\d+\)/)
@@ -302,7 +293,10 @@ test('lowers Object.values and Object.entries inside C for-of object arrays', ()
     result.ir.globalUsages.map((usage) => usage.path.join('.')),
     ['Object.values', 'Object.entries']
   )
-  assert.match(result.code, /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < 2; inox_for_index_\d+ \+= 1\) \{/)
+  assert.match(
+    result.code,
+    /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < 2; inox_for_index_\d+ \+= 1\) \{/
+  )
   assert.match(result.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
   assert.match(result.code, /inox_value record = inox_for_value_\d+;/)
   assert.match(result.code, /inox_object_values\(&inox_default_allocator, record, &inox_object_values_\d+\)/)
@@ -333,7 +327,10 @@ test('infers JSON.parse literal arrays for C for-of object iteration', () => {
     result.ir.globalUsages.map((usage) => usage.path.join('.')),
     ['JSON.parse', 'Object.values', 'Object.entries']
   )
-  assert.match(result.code, /inox_json_parse\(&inox_default_allocator, "\[\{\\"first\\":10,\\"second\\":20\},\{\\"first\\":30,\\"second\\":40\}\]"/)
+  assert.match(
+    result.code,
+    /inox_json_parse\(&inox_default_allocator, "\[\{\\"first\\":10,\\"second\\":20\},\{\\"first\\":30,\\"second\\":40\}\]"/
+  )
   assert.match(result.code, /rows\.tag != INOX_TAG_ARRAY/)
   assert.match(result.code, /inox_array_len\(rows, &inox_for_length_\d+\)/)
   assert.match(result.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
@@ -363,7 +360,10 @@ test('infers JSON.parse object fields with array values for C iteration', () => 
     result.ir.globalUsages.map((usage) => usage.path.join('.')),
     ['JSON.parse', 'Object.entries', 'Object.values']
   )
-  assert.match(result.code, /inox_json_parse\(&inox_default_allocator, "\{\\"items\\":\[\{\\"score\\":3\},\{\\"score\\":5,\\"bonus\\":8\}\]\}"/)
+  assert.match(
+    result.code,
+    /inox_json_parse\(&inox_default_allocator, "\{\\"items\\":\[\{\\"score\\":3\},\{\\"score\\":5,\\"bonus\\":8\}\]\}"/
+  )
   assert.match(result.code, /inox_json_object_\d+\.tag != INOX_TAG_OBJECT/)
   assert.match(result.code, /inox_object_get_known\(payload, 0, &inox_value_\d+\)/)
   assert.match(result.code, /inox_object_entries\(&inox_default_allocator, inox_value_\d+, &inox_object_entries_\d+\)/)
@@ -420,7 +420,10 @@ test('lowers invalid JSON.parse inside C try catch as a local throw', () => {
   )
   assert.match(result.code, /if \(inox_json_error_\d+\.tag == INOX_TAG_STRING && inox_json_error_\d+\.as\.ref != 0\)/)
   assert.match(result.code, /inox_error = inox_json_error_\d+;/)
-  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "JSON\.parse failed", 17, &inox_error\)/)
+  assert.match(
+    result.code,
+    /inox_string_from_literal\(&inox_default_allocator, "JSON\.parse failed", 17, &inox_error\)/
+  )
   assert.match(result.code, /inox_error_active = 1;\n {4}goto inox_try_\d+_catch;/)
 })
 
@@ -509,7 +512,6 @@ export function main(): void {
   assert.doesNotMatch(result.code, /unknownas/)
 })
 
-
 test('treats double equality as C equality aliases', () => {
   const source = `export function main(): void {
   const same = 1 == 1
@@ -525,7 +527,6 @@ test('treats double equality as C equality aliases', () => {
   assert.match(c.code, /const double same = \(1 == 1\);/)
   assert.match(c.code, /const double different = \(!\(3 == 5 && memcmp\("Ada", "Grace", 3\) == 0\)\);/)
 })
-
 
 test('lowers C object literals to runtime calls', () => {
   const result = compileSource(
@@ -552,7 +553,6 @@ test('lowers C object literals to runtime calls', () => {
   )
 })
 
-
 test('boxes prepared scalar expressions in C object literals', () => {
   const result = compileSource(
     `type Meta = {
@@ -577,10 +577,12 @@ export function main(): void {
   )
 
   assert.match(result.code, /inox_object_get\(node, "optional", 8, &inox_value_\d+\)/)
-  assert.match(result.code, /inox_object_init_known\(inox_object_\d+, 0, inox_bool_value\(\(\(inox_value_\d+\.tag == INOX_TAG_BOOL && inox_value_\d+\.as\.boolean == true\)\) != 0\)\)/)
+  assert.match(
+    result.code,
+    /inox_object_init_known\(inox_object_\d+, 0, inox_bool_value\(\(\(inox_value_\d+\.tag == INOX_TAG_BOOL && inox_value_\d+\.as\.boolean == true\)\) != 0\)\)/
+  )
   assert.match(result.code, /inox_object_init_known\(inox_object_\d+, 1, inox_number_value\(\(min \+ max\)\)\)/)
 })
-
 
 test('lowers C collection constructors in object literal value fields', () => {
   const result = compileSource(
@@ -609,7 +611,6 @@ export function main(): void {
   assert.match(result.code, /inox_set_add\(inox_value_\d+, inox_value_\d+\)/)
 })
 
-
 test('lowers synthetic C main wrapper through cleanup when runtime values are owned', () => {
   const result = compileSource(
     `const user = { name: 'Ada' }
@@ -631,7 +632,6 @@ console.log('ok')
   )
 })
 
-
 test('lowers C void return through cleanup when runtime values are owned', () => {
   const result = compileSource(
     `export function main(): void {
@@ -651,7 +651,6 @@ test('lowers C void return through cleanup when runtime values are owned', () =>
     /inox_cleanup:\n {2}inox_release\(inox_value_\d+\);\n {2}inox_release\(user\);\n {2}return;/
   )
 })
-
 
 test('lowers C number returns through cleanup when runtime values are owned', () => {
   const result = compileSource(
@@ -678,7 +677,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers known C object field access to runtime calls', () => {
   const result = compileSource(
     `export function main(): void {
@@ -698,7 +696,6 @@ test('lowers known C object field access to runtime calls', () => {
   assert.match(result.code, /inox_object_get_known\(user, 1, &inox_field_\d+\)/)
   assert.match(result.code, /const double active = inox_field_\d+\.as\.boolean \? 1 : 0;/)
 })
-
 
 test('lowers C object expression field access through known shape runtime reads', () => {
   const result = compileSource(
@@ -729,7 +726,6 @@ export function main(): void {
   assert.match(result.code, /const double active = \(inox_value_\d+\.as\.boolean \? 1 : 0\);/)
 })
 
-
 test('lowers C dynamic object field access through runtime lookup', () => {
   const result = compileSource(
     `type Child = {
@@ -753,7 +749,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_get\(extra, "child", 5, &inox_value_\d+\)/)
   assert.match(result.code, /inox_object_get_known\(child, 0, &inox_log_value_\d+\)/)
 })
-
 
 test('lowers C dynamic object scalar field access through runtime lookup', () => {
   const result = compileSource(
@@ -780,7 +775,6 @@ export function main(): void {
   assert.match(result.code, /const double active = \(inox_value_\d+\.as\.boolean \? 1 : 0\);/)
 })
 
-
 test('lowers C nested dynamic object scalar field access through runtime lookup', () => {
   const result = compileSource(
     `function read(node: object): void {
@@ -806,7 +800,6 @@ export function main(): void {
   assert.match(result.code, /inox_value_\d+\.tag != INOX_TAG_BOOL/)
   assert.match(result.code, /const double active = \(inox_value_\d+\.as\.boolean \? 1 : 0\);/)
 })
-
 
 test('lowers C dynamic object field truthiness conditions through runtime lookup', () => {
   const result = compileSource(
@@ -859,7 +852,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_get\(extra, "active", 6, &inox_value_\d+\)/)
   assert.match(result.code, /const double inactive = \(!\(inox_value_truthy\(inox_value_\d+\) \? 1 : 0\)\);/)
 })
-
 
 test('lowers C dynamic object field assignments through runtime lookup', () => {
   const result = compileSource(
@@ -972,7 +964,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_set\(value, "count", 5, inox_number_value\(2\)\)/)
 })
 
-
 test('lowers C dynamic runtime value comparisons against string literals', () => {
   const result = compileSource(
     `function isReference(node: object): boolean {
@@ -997,7 +988,6 @@ export function main(): void {
   assert.match(result.code, /memcmp\(\(\(inox_string\*\)inox_string_cmp_value_\d+\.as\.ref\)->bytes, "Reference", 9\)/)
 })
 
-
 test('lowers C dynamic object field null comparisons through runtime lookup', () => {
   const result = compileSource(
     `function hasInit(node: object): boolean {
@@ -1021,7 +1011,6 @@ export function main(): void {
   assert.match(result.code, /!\(inox_value_\d+\.tag == INOX_TAG_NULL \|\| inox_value_\d+\.tag == INOX_TAG_UNDEFINED\)/)
   assert.match(result.code, /inox_value_\d+\.tag == INOX_TAG_NULL \|\| inox_value_\d+\.tag == INOX_TAG_UNDEFINED/)
 })
-
 
 test('lowers C dynamic object field boolean literal comparisons through runtime lookup', () => {
   const result = compileSource(
@@ -1048,7 +1037,6 @@ export function main(): void {
   assert.match(result.code, /!\(inox_value_\d+\.tag == INOX_TAG_BOOL && inox_value_\d+\.as\.boolean == false\)/)
 })
 
-
 test('lowers C dynamic object array length through runtime lookup', () => {
   const result = compileSource(
     `function hasOnePath(node: object): boolean {
@@ -1074,7 +1062,6 @@ export function main(): void {
   assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_array_len_\d+\)/)
 })
 
-
 test('lowers C dynamic object array index null comparisons through runtime lookup', () => {
   const result = compileSource(
     `function hasFirst(node: object): boolean {
@@ -1096,7 +1083,6 @@ export function main(): void {
   assert.match(result.code, /inox_value_\d+ = inox_undefined_value\(\);/)
   assert.match(result.code, /!\(inox_value_\d+\.tag == INOX_TAG_NULL \|\| inox_value_\d+\.tag == INOX_TAG_UNDEFINED\)/)
 })
-
 
 test('lowers C dynamic object array item field comparisons through runtime lookup', () => {
   const result = compileSource(
@@ -1122,7 +1108,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_get\(inox_value_\d+, "type", 4, &inox_value_\d+\)/)
   assert.match(result.code, /memcmp\(\(\(inox_string\*\)inox_string_cmp_value_\d+\.as\.ref\)->bytes, "Literal", 7\)/)
 })
-
 
 test('lowers C dynamic object array index variable declarations through runtime lookup', () => {
   const result = compileSource(
@@ -1206,7 +1191,6 @@ test('lowers C dynamic runtime array index assignments through runtime set', () 
   assert.match(result.code, /inox_array_set\(lines, \(size_t\)\(\(2 - 1\)\), inox_value_\d+\)/)
 })
 
-
 test('lowers known numeric object fields as runtime values in object assignments', () => {
   const result = compileSource(
     `type Point = {
@@ -1234,7 +1218,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_set_known\(target, 2, inox_value_\d+\)/)
 })
 
-
 test('preserves object shapes for typed runtime array index locals', () => {
   const result = compileSource(
     `type DiagnosticLike = {
@@ -1260,9 +1243,11 @@ export function main(): void {
   assert.match(result.code, /item = inox_value_\d+;/)
   assert.match(result.code, /inox_object_get_known\(item, 1, &inox_expr_value_\d+\)/)
   assert.match(result.code, /inox_object_get_known\(item, 2, &inox_expr_value_\d+\)/)
-  assert.match(result.code, /const double total = \(inox_expr_value_\d+\.as\.number \+ inox_expr_value_\d+\.as\.number\);/)
+  assert.match(
+    result.code,
+    /const double total = \(inox_expr_value_\d+\.as\.number \+ inox_expr_value_\d+\.as\.number\);/
+  )
 })
-
 
 test('lowers known C string object field access to runtime strings', () => {
   const result = compileSource(
@@ -1285,7 +1270,6 @@ test('lowers known C string object field access to runtime strings', () => {
   assert.match(result.code, /const inox_string \*name = \(inox_string \*\)inox_field_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
-
 
 test('lowers known C object field assignments to runtime calls', () => {
   const result = compileSource(
@@ -1315,7 +1299,6 @@ test('lowers known C object field assignments to runtime calls', () => {
   )
 })
 
-
 test('lowers C string index object field reads through runtime lookup', () => {
   const result = compileSource(
     `export function main(): void {
@@ -1342,7 +1325,6 @@ test('lowers C string index object field reads through runtime lookup', () => {
     /printf\("%g %g %\.\*s\\n", \(\(double\)score\), \(\(double\)active\), \(int\)name->len, name->bytes\);/
   )
 })
-
 
 test('lowers C string index object field assignments through runtime lookup', () => {
   const result = compileSource(
@@ -1372,7 +1354,6 @@ test('lowers C string index object field assignments through runtime lookup', ()
   )
 })
 
-
 test('propagates C runtime strings through local declarations', () => {
   const result = compileSource(
     `export function main(): void {
@@ -1391,7 +1372,6 @@ test('propagates C runtime strings through local declarations', () => {
   assert.match(result.code, /const inox_string \*again = name;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)again->len, again->bytes\);/)
 })
-
 
 test('lowers C runtime string local assignments from dynamic object fields', () => {
   const result = compileSource(
@@ -1424,7 +1404,6 @@ export function main(): void {
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)inox_log_string_\d+->len, inox_log_string_\d+->bytes\);/)
 })
 
-
 test('lowers explicitly typed C runtime string declarations from dynamic object fields', () => {
   const result = compileSource(
     `function readType(symbol: object): string {
@@ -1441,7 +1420,6 @@ test('lowers explicitly typed C runtime string declarations from dynamic object 
   assert.match(result.code, /const inox_string\* valueType = \(inox_string\*\)valueType_value_\d+\.as\.ref;/)
   assert.doesNotMatch(result.code, /double valueType/)
 })
-
 
 test('lowers C runtime string parameters', () => {
   const result = compileSource(
@@ -1476,7 +1454,6 @@ export function main(): void {
   assert.match(result.code, /echo\(inox_value_\d+\)/)
 })
 
-
 test('prepares C string arguments for number-returning calls inside expressions', () => {
   const result = compileSource(
     `function length(name: string): number {
@@ -1500,7 +1477,6 @@ export function main(): void {
   assert.match(result.code, /const double total = \(length\(inox_value_\d+\) \+ length\(inox_value_\d+\)\);/)
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)length\(inox_value_\d+\)\), \(\(double\)total\)\);/)
 })
-
 
 test('lowers C string-returning functions to owned runtime values', () => {
   const result = compileSource(
@@ -1526,11 +1502,16 @@ export function main(): void {
   )
   assert.match(result.code, /return inox_return;/)
   assert.match(result.code, /inox_value inox_value_\d+ = inox_undefined_value\(\);/)
-  assert.match(result.code, /inox_release\(inox_value_\d+\);\n {2}inox_value_\d+ = inox_undefined_value\(\);\n {2}inox_value_\d+ = getName\(\);/)
-  assert.match(result.code, /const inox_string\s*\*\s*name = \(inox_string\*\)(?:inox_value_\d+|name_value_\d+)\.as\.ref;/)
+  assert.match(
+    result.code,
+    /inox_release\(inox_value_\d+\);\n {2}inox_value_\d+ = inox_undefined_value\(\);\n {2}inox_value_\d+ = getName\(\);/
+  )
+  assert.match(
+    result.code,
+    /const inox_string\s*\*\s*name = \(inox_string\*\)(?:inox_value_\d+|name_value_\d+)\.as\.ref;/
+  )
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
-
 
 test('lowers C runtime string field returns', () => {
   const result = compileSource(
@@ -1603,7 +1584,6 @@ export function main(): void {
   assert.match(result.code, /printf\("%\.\*s %\.\*s\\n"/)
 })
 
-
 test('lowers direct C console.log for string-returning calls', () => {
   const result = compileSource(
     `function getName(): string {
@@ -1624,7 +1604,6 @@ export function main(): void {
   assert.match(result.code, /inox_string \*inox_log_string_\d+ = \(inox_string \*\)inox_value_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)inox_log_string_\d+->len, inox_log_string_\d+->bytes\);/)
 })
-
 
 test('lowers C runtime string concatenation', () => {
   const result = compileSource(
@@ -1660,10 +1639,12 @@ export function main(): void {
     result.code,
     /inox_string_concat_parts\(&inox_default_allocator, inox_cmp_string_\d+->bytes, inox_cmp_string_\d+->len, "!", 1, &inox_value_\d+\)/
   )
-  assert.match(result.code, /const inox_string\s*\*\s*message = \(inox_string\*\)(?:inox_value_\d+|message_value_\d+)\.as\.ref;/)
+  assert.match(
+    result.code,
+    /const inox_string\s*\*\s*message = \(inox_string\*\)(?:inox_value_\d+|message_value_\d+)\.as\.ref;/
+  )
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)message->len, message->bytes\);/)
 })
-
 
 test('rejects unsupported C non-equality string binary expressions with a stable diagnostic', () => {
   assertDiagnostic(
@@ -1682,7 +1663,6 @@ export function main(): void {
     }
   )
 })
-
 
 test('lowers C string equality comparisons by content', () => {
   const result = compileSource(
@@ -1727,7 +1707,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers direct C console.log member and index expressions', () => {
   const result = compileSource(
     `export function main(): void {
@@ -1749,7 +1728,6 @@ test('lowers direct C console.log member and index expressions', () => {
   assert.match(result.code, /\(\(double\)\(inox_log_value_\d+\.as\.boolean \? 1 : 0\)\)/)
   assert.match(result.code, /printf\("%g %g %\.\*s %\.\*s %g %g %\.\*s\\n"/)
 })
-
 
 test('lowers known C member and index reads inside scalar expressions', () => {
   const result = compileSource(
@@ -1778,7 +1756,6 @@ test('lowers known C member and index reads inside scalar expressions', () => {
   )
 })
 
-
 test('compiles if else blocks to C', () => {
   const source = `export function main(): void {
   let text = 'no'
@@ -1801,7 +1778,6 @@ test('compiles if else blocks to C', () => {
   assert.match(c.code, /text = \(inox_string\*\)(?:inox_value_\d+|text_value_\d+)\.as\.ref;/)
 })
 
-
 test('compiles while loops to C', () => {
   const source = `export function main(): void {
   let index = 0
@@ -1822,7 +1798,6 @@ test('compiles while loops to C', () => {
   assert.match(c.code, /while \(index < 4\) \{/)
   assert.match(c.code, /total = \(total \+ index\);/)
 })
-
 
 test('prepares C string-argument calls in if while and switch conditions', () => {
   const result = compileSource(
@@ -1879,7 +1854,6 @@ export function main(): void {
   )
 })
 
-
 test('prepares owned C runtime values before rewriting them inside loops', () => {
   const result = compileSource(
     `export function main(): void {
@@ -1911,7 +1885,6 @@ test('prepares owned C runtime values before rewriting them inside loops', () =>
   )
 })
 
-
 test('compiles continue statements to C', () => {
   const source = `export function main(): void {
   let total = 0
@@ -1934,7 +1907,6 @@ test('compiles continue statements to C', () => {
   assert.match(c.code, /goto inox_continue_\d+;/)
   assert.match(c.code, /inox_continue_\d+:\s*;/)
 })
-
 
 test('lowers C string-returning for initializers into scoped loop blocks', () => {
   const result = compileSource(
@@ -1959,14 +1931,16 @@ export function main(): void {
     result.code,
     /\{\n\s+inox_release\(inox_value_\d+\);\n\s+inox_value_\d+ = inox_undefined_value\(\);\n\s+inox_value_\d+ = getName\(\);/
   )
-  assert.match(result.code, /const inox_string\s*\*\s*name = \(inox_string\*\)(?:inox_value_\d+|name_value_\d+)\.as\.ref;[\s\S]*for \(;;\) \{/)
+  assert.match(
+    result.code,
+    /const inox_string\s*\*\s*name = \(inox_string\*\)(?:inox_value_\d+|name_value_\d+)\.as\.ref;[\s\S]*for \(;;\) \{/
+  )
   assert.match(result.code, /if \(!\(index < 1\)\) break;/)
   assert.doesNotMatch(
     result.code,
     /if \((inox_value_\d+)\.tag != INOX_TAG_STRING \|\| \1\.as\.ref == 0\)\s+goto inox_cleanup;\n\s+if \(\1\.tag != INOX_TAG_STRING \|\| \1\.as\.ref == 0\)\s+goto inox_cleanup;/
   )
 })
-
 
 test('checks explicit typed for of bindings in TypeScript source', () => {
   const source = `type User = {
@@ -2000,7 +1974,6 @@ export function main(): void {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('preserves explicit local metadata for open node string scans', () => {
   const result = compileSource(
@@ -2062,7 +2035,10 @@ export function main(): void {
   assert.match(result.code, /inox_array_get\((?:properties|inox_value_\d+), inox_for_index_\d+, &inox_for_value_\d+\)/)
   assert.match(result.code, /memcmp\(inox_cmp_string_\d+->bytes, key->bytes, inox_cmp_string_\d+->len\) == 0/)
   assert.match(result.code, /inox_object_get\(expression, "path", 4, &inox_value_\d+\)/)
-  assert.match(result.code, /memcmp\(inox_cmp_string_\d+->bytes, inox_cmp_string_\d+->bytes, inox_cmp_string_\d+->len\) == 0/)
+  assert.match(
+    result.code,
+    /memcmp\(inox_cmp_string_\d+->bytes, inox_cmp_string_\d+->bytes, inox_cmp_string_\d+->len\) == 0/
+  )
 })
 
 test('preserves explicit local metadata for open node array entries', () => {
@@ -2281,7 +2257,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_init_known\(options, 1, values\)/)
 })
 
-
 test('rejects unsupported C for of iterables with a stable diagnostic', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -2297,7 +2272,6 @@ test('rejects unsupported C for of iterables with a stable diagnostic', () => {
     }
   )
 })
-
 
 test('compiles switch statements to C', () => {
   const source = `export function main(): void {
@@ -2328,7 +2302,6 @@ test('compiles switch statements to C', () => {
   assert.match(c.code, /inox_break_\d+:\s*;/)
 })
 
-
 test('rejects dynamic C switch case labels with a stable diagnostic', () => {
   const source = `function choose(label: string): number {
   return 1
@@ -2352,7 +2325,6 @@ export function main(): void {
   })
 })
 
-
 test('rejects var with a stable diagnostic code', () => {
   assert.throws(
     () => {
@@ -2371,7 +2343,6 @@ test('rejects var with a stable diagnostic code', () => {
   )
 })
 
-
 test('allows assignment to let bindings', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2388,7 +2359,6 @@ test('allows assignment to let bindings', () => {
   assert.match(result.code, /double count = 1;/)
   assert.match(result.code, /count = 2;/)
 })
-
 
 test('prepares C string-argument calls in scalar assignment statements', () => {
   const result = compileSource(
@@ -2412,7 +2382,6 @@ export function main(): void {
     /inox_release\(inox_value_\d+\);\n {2}inox_value_\d+ = inox_undefined_value\(\);\n {2}if \(inox_string_from_literal\(&inox_default_allocator, "step", 4, &inox_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;\n {2}index = nextIndex\(index, inox_value_\d+\);/
   )
 })
-
 
 test('returns checked HIR and target-neutral IR with simple value types', () => {
   const result = compileSource(
@@ -2473,7 +2442,6 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   assert.deepEqual(result.ir.body, result.hir.body)
 })
 
-
 test('drives C main wrappers from function declarations and top-level statements', () => {
   const functionSource = `export function main(): void {
   console.log('hello')
@@ -2498,7 +2466,6 @@ test('drives C main wrappers from function declarations and top-level statements
   )
 })
 
-
 test('drives C top-level emission from target-neutral IR top-level items', () => {
   const source = `const name = 'Ada'
 console.log(name)
@@ -2516,13 +2483,7 @@ console.log(name)
     ['statement', 'statement']
   )
   assert.match(c.code, /printf\("%s\\n", name\);/)
-  assert.doesNotMatch(
-    emitCFromIr({
-      ...c.ir,
-      topLevelItems: []
-    }),
-    /printf/
-  )
+  assert.doesNotMatch(emitCFromIr(withoutTopLevelItems), /printf/)
   assert.doesNotMatch(
     emitCFromIr({
       ...c.ir,
@@ -2531,7 +2492,6 @@ console.log(name)
     /printf/
   )
 })
-
 
 test('collects IR top-level node entries from stored metadata', () => {
   const result = compileSource(
@@ -2571,7 +2531,6 @@ const count = 1
   )
 })
 
-
 test('tracks type aliases as target-neutral IR top-level type items', () => {
   const source = `type User = {
   readonly id: number,
@@ -2600,7 +2559,6 @@ export function main(): void {
   assert.match(plainJs.code, /void inox_main\(void\) \{/)
   assert.match(emitCFromIr(withoutTypeItems), /void inox_main\(void\) \{/)
 })
-
 
 test('collects IR top-level function nodes across stored programs', () => {
   const left = compileSource(
@@ -2645,7 +2603,6 @@ test('collects IR top-level function nodes across stored programs', () => {
   )
 })
 
-
 test('emits single-file C directly from target-neutral IR programs', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2659,7 +2616,6 @@ test('emits single-file C directly from target-neutral IR programs', () => {
 
   assert.match(emitCFromIr(result.ir), /void inox_main\(void\) \{/)
 })
-
 
 test('collects target-neutral IR feature requirements', () => {
   const result = compileSource(
@@ -2689,7 +2645,6 @@ test('collects target-neutral IR feature requirements', () => {
   )
   assert.match(result.code, /#include "inox\/time\.h"/)
 })
-
 
 test('drives C throwing function ABI from stored target-neutral IR function effects', () => {
   const result = compileSource(
@@ -2736,7 +2691,6 @@ export function main(): void {
   assert.match(code, /inox_status inox_call_status_\d+ = ok\(&inox_error\);/)
 })
 
-
 test('collects local IR throw value types for catch binding analysis', () => {
   const result = compileSource(
     `function failString(): void {
@@ -2775,7 +2729,6 @@ export function main(): void {
   )
 })
 
-
 test('drives C runtime prelude from target-neutral IR requirements', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2806,7 +2759,6 @@ test('drives C runtime prelude from target-neutral IR requirements', () => {
   assert.doesNotMatch(withoutRuntimeRequirements, /#include "inox\/array\.h"/)
   assert.doesNotMatch(withoutRuntimeRequirements, /#include "inox\/time\.h"/)
 })
-
 
 test('drives C object headers from target-neutral IR requirements', () => {
   const objectResult = compileSource(
@@ -2848,7 +2800,6 @@ export function main(): void {
   assert.match(mapEntryResult.code, /inox_object_new\(&inox_default_allocator, &inox_shape_map_entry_\d+, &entry\)/)
 })
 
-
 test('drives C JSON runtime from target-neutral IR requirements', () => {
   const result = compileSource(
     `type User = {
@@ -2877,7 +2828,6 @@ export function main(): void {
   assert.match(result.code, /inox_json_stringify\(&inox_default_allocator, user, &inox_json_value_\d+\)/)
 })
 
-
 test('lowers C JSON scalar parse through runtime tag checks', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2898,7 +2848,6 @@ test('lowers C JSON scalar parse through runtime tag checks', () => {
   assert.match(result.code, /inox_json_value_\d+\.tag != INOX_TAG_BOOL/)
   assert.match(result.code, /const double active = \(inox_json_value_\d+\.as\.boolean \? 1 : 0\);/)
 })
-
 
 test('accepts supported C syntax features from stored target-neutral IR syntax features', () => {
   const result = compileSource(
@@ -2927,7 +2876,6 @@ test('accepts supported C syntax features from stored target-neutral IR syntax f
   )
 })
 
-
 test('keeps function signatures in HIR and compiles typed calls', () => {
   const result = compileSource(
     `function add(left: number, right: number): number {
@@ -2954,7 +2902,6 @@ export function main(): void {
   assert.match(result.code, /double add\(double left, double right\)/)
 })
 
-
 test('uses default parameter initializers for omitted C call arguments', () => {
   const result = compileSource(
     `function label(value: string = 'unknown'): string {
@@ -2978,7 +2925,6 @@ export function main(): void {
   assert.match(result.code, /label\(inox_value_\d+\)/)
   assert.doesNotMatch(result.code, /label\(0\)/)
 })
-
 
 test('uses zero function companions for omitted default object option fields', () => {
   const result = compileSource(
@@ -3005,7 +2951,6 @@ export function main(): void {
   assert.match(result.code, /load\(inox_object_\d+, 0\)/)
   assert.doesNotMatch(result.code, /INOX_C_FUNCTION_VALUE/)
 })
-
 
 test('uses zero function companions for unavailable optional object sources', () => {
   const result = compileSource(
@@ -3039,7 +2984,6 @@ export function main(): void {
   assert.doesNotMatch(result.code, /INOX_C_FUNCTION_VALUE/)
 })
 
-
 test('preserves function companions from intersection base object fields', () => {
   const result = compileSource(
     `type Dep = { run: () => string }
@@ -3063,11 +3007,13 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /inox_value load\(inox_value context, inox_value \(\*inox_objfn_context_dep_run\)\(void\)\)/)
+  assert.match(
+    result.code,
+    /inox_value load\(inox_value context, inox_value \(\*inox_objfn_context_dep_run\)\(void\)\)/
+  )
   assert.match(result.code, /inox_value_\d+ = inox_objfn_context_dep_run\(\);/)
   assert.match(result.code, /load\(inox_object_\d+, read\)/)
 })
-
 
 test('preserves function companion aliases through object accessor locals', () => {
   const result = compileSource(
@@ -3097,12 +3043,14 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /inox_value load\(inox_value context, inox_value \(\*inox_objfn_context_dep_run\)\(void\)\)/)
+  assert.match(
+    result.code,
+    /inox_value load\(inox_value context, inox_value \(\*inox_objfn_context_dep_run\)\(void\)\)/
+  )
   assert.match(result.code, /inox_value_\d+ = asChild\(context, inox_objfn_context_dep_run\);/)
   assert.match(result.code, /inox_value_\d+ = inox_objfn_context_dep_run\(\);/)
   assert.doesNotMatch(result.code, /inox_objfn_alias_dep_run/)
 })
-
 
 test('preserves object function companions on object-field arrow parameters', () => {
   const result = compileSource(
@@ -3139,7 +3087,6 @@ export function main(): void {
   assert.match(result.code, /inox_objfn_runner_run\(inox_object_\d+, read\)/)
 })
 
-
 test('passes module object companions through named runtime callback wrappers', () => {
   const result = compileSource(
     `type Dep = { read: () => string }
@@ -3171,12 +3118,17 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /static inox_status inox_callback_lookup_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/)
+  assert.match(
+    result.code,
+    /static inox_status inox_callback_lookup_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/
+  )
   assert.match(result.code, /\*out = lookup\(args\[0\], inox_objfn_dep_read\);/)
-  assert.match(result.code, /if \(inox_callback_new\(&inox_default_allocator, inox_callback_lookup_\d+, 0, 0, &inox_objfn_runner_lookup\) != INOX_OK\)/)
+  assert.match(
+    result.code,
+    /if \(inox_callback_new\(&inox_default_allocator, inox_callback_lookup_\d+, 0, 0, &inox_objfn_runner_lookup\) != INOX_OK\)/
+  )
   assert.doesNotMatch(result.code, /\*out = lookup\(args\[0\]\);/)
 })
-
 
 test('uses finite plain companions for recursive object function fields', () => {
   const result = compileSource(
@@ -3200,12 +3152,14 @@ export function main(): void {
     }
   )
 
-  assert.match(result.code, /inox_value run\(inox_value context, inox_value \(\*inox_objfn_context_dep_emit\)\(inox_value\)\)/)
+  assert.match(
+    result.code,
+    /inox_value run\(inox_value context, inox_value \(\*inox_objfn_context_dep_emit\)\(inox_value\)\)/
+  )
   assert.match(result.code, /inox_value_\d+ = inox_objfn_context_dep_emit\(context\);/)
   assert.match(result.code, /run\(inox_object_\d+, (?:emit|inox_function_pointer_adapter_\d+)\)/)
   assert.doesNotMatch(result.code, /inox_value inox_objfn_context_dep_emit/)
 })
-
 
 test('keeps explicitly typed object locals on object assignments in C', () => {
   const result = compileSource(
@@ -3233,7 +3187,6 @@ export function main(): void {
   assert.match(result.code, /loc = inox_value_\d+;/)
   assert.doesNotMatch(result.code, /loc = inox_value_\d+\.as\.number;/)
 })
-
 
 test('drives C function signature metadata from target-neutral IR declarations', () => {
   const result = compileSource(
@@ -3288,7 +3241,6 @@ export function main(): void {
   assert.match(withoutParamMetadata, /greet\("Ada"\);/)
 })
 
-
 test('drives C function return ABI from target-neutral IR declarations', () => {
   const result = compileSource(
     `function getScore(): number {
@@ -3323,7 +3275,6 @@ export function main(): void {
   assert.match(withNullableReturnMetadata, /inox_return = inox_number_value\(7\);/)
 })
 
-
 test('compiles simple optional object member and index access to C', () => {
   const source = `export function main(): void {
   const data = { name: 'Ada', score: 7 }
@@ -3337,9 +3288,11 @@ test('compiles simple optional object member and index access to C', () => {
 
   assert.match(c.code, /if \(inox_object_get_known\(data, 0, &inox_field_\d+\) != INOX_OK\)\s+goto inox_cleanup;/)
   assert.match(c.code, /const inox_string \*name = \(inox_string \*\)inox_field_\d+\.as\.ref;/)
-  assert.match(c.code, /if \(inox_object_get\(data, "score", 5, &inox_log_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/)
+  assert.match(
+    c.code,
+    /if \(inox_object_get\(data, "score", 5, &inox_log_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
+  )
 })
-
 
 test('lowers nested AnyNode path element access as a string array index', () => {
   const result = compileSource(
@@ -3366,7 +3319,6 @@ function firstCalleeSegment(expression: AnyNode): string {
   assert.match(result.code, /inox_array_get\(path, 0, &inox_value_\d+\)/)
   assert.match(result.code, /const inox_string\* name = \(inox_string\*\)name_value_\d+\.as\.ref;/)
 })
-
 
 test('lowers AnyNode valueType metadata as a runtime string', () => {
   const result = compileSource(
@@ -3398,7 +3350,6 @@ function resolveDeclaredName(node: AnyNode): string {
   assert.doesNotMatch(result.code, /double declaredType/)
 })
 
-
 test('resolves ValueType metadata fields as runtime strings', () => {
   const result = compileSource(
     `type Param = {
@@ -3428,7 +3379,6 @@ function resolveParam(param: Param): string {
   assert.doesNotMatch(result.code, /double declaredType/)
 })
 
-
 test('rejects unsupported C optional chaining forms', () => {
   const source = `function hello(): string {
   return 'called'
@@ -3444,7 +3394,6 @@ export function main(): void {
     target: 'c'
   })
 })
-
 
 test('lowers C optional access over nullable runtime values', () => {
   const result = compileSource(
@@ -3471,7 +3420,6 @@ export function main(): void {
   assert.match(result.code, /inox_array_get\(maybeNames, 0, &inox_optional_value_\d+\)/)
 })
 
-
 test('lowers C nullable string nullish coalescing', () => {
   const result = compileSource(
     `export function main(): void {
@@ -3491,7 +3439,6 @@ test('lowers C nullable string nullish coalescing', () => {
   assert.match(result.code, /if \(missing\.tag == INOX_TAG_NULL \|\| missing\.tag == INOX_TAG_UNDEFINED\) \{/)
   assert.match(result.code, /present\.tag == INOX_TAG_NULL/)
 })
-
 
 test('lowers C nullable scalar nullish coalescing', () => {
   const result = compileSource(
@@ -3533,7 +3480,6 @@ export function main(): void {
     }
   )
 })
-
 
 test('lowers C nullable scalar truthiness conditions', () => {
   const result = compileSource(
@@ -3584,7 +3530,6 @@ export function main(): void {
   )
 })
 
-
 test('narrows C nullable scalar values through truthiness guards', () => {
   const result = compileSource(
     `function printScore(score: number | null): void {
@@ -3619,7 +3564,6 @@ export function main(): void {
   assert.match(result.code, /if \(!\(inox_value_truthy\(score\) \? 1 : 0\)\) \{/)
   assert.match(result.code, /\(score\.as\.number \+ 2\)/)
 })
-
 
 test('narrows C nullable object values through truthiness guards', () => {
   const result = compileSource(
@@ -3657,7 +3601,6 @@ export function main(): void {
   assert.match(result.code, /if \(!\(inox_value_truthy\(user\) \? 1 : 0\)\) \{/)
   assert.match(result.code, /inox_object_get_known\(user, 0, &inox_\w+_\d+\)/)
 })
-
 
 test('lowers C nullable scalar function params and returns', () => {
   const result = compileSource(
@@ -3709,7 +3652,6 @@ export function main(): void {
     }
   )
 })
-
 
 test('narrows C nullable scalar values inside null-checked branches', () => {
   const result = compileSource(
@@ -3773,7 +3715,6 @@ export function main(): void {
   )
 })
 
-
 test('narrows C nullable scalar values through logical conditions', () => {
   const result = compileSource(
     `function printScore(score: number | null, backup: number | null): void {
@@ -3831,7 +3772,6 @@ export function main(): void {
     }
   )
 })
-
 
 test('narrows C nullable scalar values after null-checked early returns', () => {
   const result = compileSource(
@@ -3926,7 +3866,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_get_known\(user, 0, &inox_\w+_\d+\)/)
 })
 
-
 test('narrows C nullable scalar values inside loop bodies', () => {
   const result = compileSource(
     `function printLoop(score: number | null, active: boolean | null): void {
@@ -3984,7 +3923,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers C unknown nullish coalescing through runtime values', () => {
   const source = `function printValue(value: unknown): void {
   console.log(value ?? 'Ada')
@@ -4003,7 +3941,6 @@ export function main(): void {
   assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "Ada", 3, &inox_value_\d+\)/)
   assert.match(result.code, /inox_value_\d+ = value;/)
 })
-
 
 test('lowers local string throws to C error channel', () => {
   const source = `export function main(): void {
@@ -4044,7 +3981,6 @@ test('lowers local string throws to C error channel', () => {
   )
 })
 
-
 test('lowers C number return through finally before cleanup', () => {
   const result = compileSource(
     `function getScore(): number {
@@ -4073,7 +4009,6 @@ export function main(): void {
   assert.match(result.code, /inox_cleanup:\n {2}inox_release\(inox_error\);\n {2}return inox_return;/)
 })
 
-
 test('lowers C void return through finally before cleanup', () => {
   const result = compileSource(
     `function stop(): void {
@@ -4101,7 +4036,6 @@ export function main(): void {
     /inox_try_\d+_finally:\n {4}printf\("%s\\n", "finally"\);\n {4}if \(inox_error_active\)\s+goto inox_cleanup;\n {4}if \(inox_return_active\)\s+goto inox_cleanup;/
   )
 })
-
 
 test('lowers C break and continue through finally before loop flow', () => {
   const result = compileSource(
@@ -4137,7 +4071,6 @@ test('lowers C break and continue through finally before loop flow', () => {
   assert.match(result.code, /inox_break_\d+:\n\s+if \(inox_break_active\) inox_break_active = 0;/)
   assert.match(result.code, /inox_continue_\d+:\n\s+if \(inox_continue_active\) inox_continue_active = 0;/)
 })
-
 
 test('lowers lightweight Error objects to C', () => {
   const source = `export function main(): void {
@@ -4237,7 +4170,6 @@ test('lowers lightweight Error objects to C', () => {
   )
 })
 
-
 test('lowers C interfunction throws through status error ABI', () => {
   const source = `export function failString(): void {
   throw 'boom'
@@ -4329,7 +4261,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers C class method throws through status error ABI', () => {
   const source = `class TicketError {
   name: string
@@ -4383,6 +4314,37 @@ export function main(): void {
   )
 })
 
+test('lowers C class this field truthiness in logical conditions', () => {
+  const source = `class Gate {
+  ready: boolean
+  label: string
+
+  constructor(ready: boolean, label: string) {
+    this.ready = ready
+    this.label = label
+  }
+
+  read(): string {
+    if (this.ready && this.label) {
+      return this.label
+    }
+
+    return 'closed'
+  }
+}
+
+export function main(): void {
+  const gate = new Gate(true, 'open')
+  console.log(gate.read())
+}
+`
+  const result = compileSource(source, {
+    target: 'c'
+  })
+
+  assert.match(result.code, /inox_object_get\(this, "ready", 5, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_value_truthy\(inox_value_\d+\) \? 1 : 0/)
+})
 
 test('compiles arrow functions and chain calls to C', () => {
   const source = `export function main(): void {
@@ -4399,7 +4361,6 @@ test('compiles arrow functions and chain calls to C', () => {
   assert.match(c.code, /inox_array_push\(inox_filter_array_\d+, inox_filter_value_\d+\)/)
   assert.match(c.code, /inox_array_push\(inox_map_array_\d+, inox_number_value/)
 })
-
 
 test('types and lowers crypto.getRandomValues as a bytes-preserving call', () => {
   const source = `export function main(): void {
@@ -4455,7 +4416,6 @@ test('types and lowers crypto.getRandomValues as a bytes-preserving call', () =>
   )
 })
 
-
 function stripCryptoRuntimeMetadata(node: unknown): void {
   if (!node || typeof node !== 'object') {
     return
@@ -4476,7 +4436,6 @@ function stripCryptoRuntimeMetadata(node: unknown): void {
     stripCryptoRuntimeMetadata(value)
   }
 }
-
 
 test('collects runtime global roots from target-neutral IR global usages', () => {
   const result = compileSource(
@@ -4514,7 +4473,6 @@ test('collects runtime global roots from target-neutral IR global usages', () =>
   )
 })
 
-
 test('lowers Date.now and performance.now to the C time runtime', () => {
   const result = compileSource(
     `export function main(): void {
@@ -4532,7 +4490,6 @@ test('lowers Date.now and performance.now to the C time runtime', () => {
   assert.match(result.code, /double started = inox_date_now\(\);/)
   assert.match(result.code, /double elapsed = inox_performance_now\(\);/)
 })
-
 
 test('lowers supported Math calls to C helpers', () => {
   const result = compileSource(
@@ -4599,7 +4556,6 @@ test('lowers supported Math calls to C helpers', () => {
   )
 })
 
-
 test('configures C Math.random seed through compiler options', () => {
   const result = compileSource(
     `export function main(): void {
@@ -4617,7 +4573,6 @@ test('configures C Math.random seed through compiler options', () => {
 
   assert.match(result.code, /static uint32_t inox_math_random_state = 0x00000001u;/)
 })
-
 
 test('configures C Math.random xorshift32 backend through compiler options', () => {
   const result = compileSource(
@@ -4642,7 +4597,6 @@ test('configures C Math.random xorshift32 backend through compiler options', () 
   assert.match(result.code, /value \^= value << 5;/)
   assert.doesNotMatch(result.code, /1664525u \+ 1013904223u/)
 })
-
 
 test('configures C Math.random os backend through compiler options', () => {
   const result = compileSource(
@@ -4673,12 +4627,11 @@ test('configures C Math.random os backend through compiler options', () => {
   assert.doesNotMatch(result.code, /value \^= value << 13;/)
 })
 
-
 test('reports JS stdlib globals with stable C diagnostics', () => {
   assert.throws(
     () =>
       compileSource(
-    `import fs from 'node:fs'
+        `import fs from 'node:fs'
 
 export function main(): void {
   const text = fs.promises.readFile('/tmp/value.txt', 'utf8')
@@ -4700,7 +4653,10 @@ export function main(): void {
         return false
       }
 
-      assert.equal(error.diagnostics.some((item) => item.code === 'INOX_C_JS_GLOBAL'), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.code === 'INOX_C_JS_GLOBAL'),
+        true
+      )
       return true
     }
   )
@@ -4729,7 +4685,6 @@ export function main(): void {
     })
   }
 })
-
 
 test('reports embedded profile capability diagnostics from IR global usages', () => {
   const source = `import fs from 'node:fs'
@@ -4794,7 +4749,6 @@ export function main(): void {
   assert.match(enabled.code, /inox_loop_set_timeout/)
 })
 
-
 test('reports embedded entropy capability diagnostics for OS Math.random backend', () => {
   const source = `export function main(): void {
   const value = Math.random()
@@ -4843,7 +4797,6 @@ test('reports embedded entropy capability diagnostics for OS Math.random backend
   assert.match(enabled.code, /inox_os_random_bytes/)
 })
 
-
 test('reports embedded entropy capability diagnostics for crypto.getRandomValues', () => {
   const source = `export function main(): void {
   const bytes = Buffer.alloc(4)
@@ -4886,7 +4839,6 @@ test('reports embedded entropy capability diagnostics for crypto.getRandomValues
 
   assert.match(enabled.code, /inox_crypto_get_random_values/)
 })
-
 
 test('reports C compile budget diagnostics from target-neutral IR metadata', () => {
   const source = `export function main(): void {
@@ -4935,7 +4887,6 @@ test('reports C compile budget diagnostics from target-neutral IR metadata', () 
 
   assert.match(result.code, /#include "inox\/array\.h"/)
 })
-
 
 test('drives C JS global diagnostics from target-neutral IR global usages', () => {
   const result = compileSource(
@@ -4988,7 +4939,6 @@ test('drives C JS global diagnostics from target-neutral IR global usages', () =
   )
 })
 
-
 test('accepts valid TypeScript source files as canonical input', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-ts-modules-'))
 
@@ -5027,7 +4977,6 @@ export function main(): void {
   }
 })
 
-
 test('rejects duplicate declarations in the same scope', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5038,7 +4987,6 @@ test('rejects duplicate declarations in the same scope', () => {
     'INOX_REDECLARED_NAME'
   )
 })
-
 
 test('rejects use before declaration in the current compiler slice', () => {
   assertDiagnostic(
@@ -5051,7 +4999,6 @@ test('rejects use before declaration in the current compiler slice', () => {
   )
 })
 
-
 test('rejects assignment to const bindings', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5063,7 +5010,6 @@ test('rejects assignment to const bindings', () => {
   )
 })
 
-
 test('rejects unknown names', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5074,7 +5020,6 @@ test('rejects unknown names', () => {
   )
 })
 
-
 test('rejects variable type mismatches', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5084,7 +5029,6 @@ test('rejects variable type mismatches', () => {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('rejects equality type mismatches', () => {
   assertDiagnostic(
@@ -5106,7 +5050,6 @@ test('rejects equality type mismatches', () => {
   )
 })
 
-
 test('rejects function argument type mismatches', () => {
   assertDiagnostic(
     `function greet(name: string): void {
@@ -5120,7 +5063,6 @@ export function main(): void {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('rejects function argument count mismatches', () => {
   assertDiagnostic(
@@ -5136,7 +5078,6 @@ export function main(): void {
   )
 })
 
-
 test('rejects return type mismatches', () => {
   assertDiagnostic(
     `function getValue(): number {
@@ -5150,7 +5091,6 @@ export function main(): void {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('keeps block declarations scoped to the block', () => {
   assertDiagnostic(
@@ -5166,7 +5106,6 @@ test('keeps block declarations scoped to the block', () => {
   )
 })
 
-
 test('keeps while body declarations scoped to the body', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5180,7 +5119,6 @@ test('keeps while body declarations scoped to the body', () => {
     'INOX_UNKNOWN_NAME'
   )
 })
-
 
 test('keeps for initializer scoped to the loop', () => {
   assertDiagnostic(
@@ -5196,7 +5134,6 @@ test('keeps for initializer scoped to the loop', () => {
   )
 })
 
-
 test('rejects assignment to const for of bindings', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5208,7 +5145,6 @@ test('rejects assignment to const for of bindings', () => {
     'INOX_ASSIGN_CONST'
   )
 })
-
 
 test('rejects for in with a stable diagnostic code', () => {
   assertDiagnostic(
@@ -5224,7 +5160,6 @@ test('rejects for in with a stable diagnostic code', () => {
   )
 })
 
-
 test('rejects break outside loops and switches', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5235,7 +5170,6 @@ test('rejects break outside loops and switches', () => {
   )
 })
 
-
 test('rejects continue outside loops', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5245,7 +5179,6 @@ test('rejects continue outside loops', () => {
     'INOX_CONTINUE_OUTSIDE'
   )
 })
-
 
 test('allows numeric truthiness conditions', () => {
   const result = compileSource(
@@ -5275,7 +5208,6 @@ test('allows numeric truthiness conditions', () => {
   assert.match(result.code, /for \(double index = 1; index; \(index = \(index - 1\)\)\) \{/)
 })
 
-
 test('allows C string truthiness conditions', () => {
   const result = compileSource(
     `function present(name: string | null): number {
@@ -5298,7 +5230,6 @@ export function main(): void {
   assert.match(result.code, /inox_value_truthy/)
 })
 
-
 test('narrows nullable locals after non-null assignments', () => {
   const result = compileSource(
     `function readLength(enabled: boolean): number {
@@ -5320,7 +5251,6 @@ test('narrows nullable locals after non-null assignments', () => {
   assert.match(result.code, /inox_string_code_unit_length_parts/)
 })
 
-
 test('narrows nullable strings after literal equality checks', () => {
   const result = compileSource(
     `function readLength(kind: string | null): number {
@@ -5339,7 +5269,6 @@ test('narrows nullable strings after literal equality checks', () => {
   assert.match(result.code, /inox_string_code_unit_length_parts/)
 })
 
-
 test('rejects duplicate switch default branches', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -5354,7 +5283,6 @@ test('rejects duplicate switch default branches', () => {
     'INOX_DUPLICATE_DEFAULT'
   )
 })
-
 
 test('rejects switch type mismatches', () => {
   assertDiagnostic(

@@ -1,3 +1,6 @@
+import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
+import type { AnyNode } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import {
   cloneCArrayShapeMap,
   cloneCFunctionReturnMapTypeMap,
@@ -12,13 +15,7 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
-import { emitCConditionClause } from './expressions.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
-import { cRuntimeValueTag } from '../value-types.ts'
-import { emitSliceIndexNormalizationLines } from './slices.ts'
-import type { AnyNode, Diagnostic } from '../../types.ts'
-import type { CFunctionContext } from '../context.ts'
 import type {
   CArrayElementInfo,
   CFunctionReturnMapType,
@@ -26,19 +23,21 @@ import type {
   CKnownArrayElement,
   CObjectFieldInfo,
   CObjectShapeField,
+  CPromiseConstructorHandler,
+  CRuntimeArrayElement,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand as PreparedStringBytesOperand,
-  CPromiseConstructorHandler,
-  CRuntimeArrayElement
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { cRuntimeValueTag } from '../value-types.ts'
+import { emitCConditionClause } from './expressions.ts'
+import { emitSliceIndexNormalizationLines } from './slices.ts'
 
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 type CStringMap = Map<string, string>
-type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
 
 type ArrayFunctionContext = CFunctionContext

@@ -1,6 +1,6 @@
 import type { AnyNode } from '../types.ts'
-import { resolveDeclaredType } from './type-resolution.ts'
 import type { LowerContext, LowerResolvedType } from './type-resolution.ts'
+import { resolveDeclaredType } from './type-resolution.ts'
 
 type LowerExpressionNode = AnyNode
 

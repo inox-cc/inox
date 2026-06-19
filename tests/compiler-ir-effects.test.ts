@@ -1,16 +1,16 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
-import {
-  collectIrFunctionEffects,
-  collectIrLocalThrowValueTypes,
-  collectIrStoredFunctionEffects
-} from '../compiler/ir/effects.ts'
 import {
   collectIrFunctionEffects as collectIrFunctionEffectsFromFacade,
   collectIrLocalThrowValueTypes as collectIrLocalThrowValueTypesFromFacade,
   collectIrStoredFunctionEffects as collectIrStoredFunctionEffectsFromFacade
 } from '../compiler/ir.ts'
+import {
+  collectIrFunctionEffects,
+  collectIrLocalThrowValueTypes,
+  collectIrStoredFunctionEffects
+} from '../compiler/ir/effects.ts'
 import { collectTopLevelItems } from '../compiler/ir/top-level.ts'
 import type { AnyNode, IrThrowValueType, ProgramNode } from '../compiler/types.ts'
 
@@ -37,7 +37,10 @@ test('collects IR function effects and propagates call throws', () => {
       body: [
         {
           type: 'TryStatement',
-          block: { type: 'BlockStatement', body: [{ type: 'ThrowStatement', argument: { type: 'StringLiteral', value: 'caught' } }] },
+          block: {
+            type: 'BlockStatement',
+            body: [{ type: 'ThrowStatement', argument: { type: 'StringLiteral', value: 'caught' } }]
+          },
           handler: { body: { type: 'BlockStatement', body: [] } },
           finalizer: null
         }

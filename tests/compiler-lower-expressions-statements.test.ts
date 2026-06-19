@@ -1,5 +1,5 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
 import { lowerExpression } from '../compiler/lower/expressions.ts'
 import { lowerStatement, lowerStatementList } from '../compiler/lower/statements.ts'

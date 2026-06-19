@@ -1,5 +1,5 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
 import { Scope } from '../compiler/checker/scope.ts'
 import type { SymbolInfo } from '../compiler/types.ts'

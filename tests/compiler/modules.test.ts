@@ -6,22 +6,11 @@ import {
 import type { AnyNode } from '../../compiler/types.ts'
 import {
   assert,
-  assertDiagnostic,
-  cLibuvOptions,
-  collectIrFeatureRequirements,
-  collectIrFunctionEffects,
-  collectIrFunctionNodeEntries,
-  collectIrGlobalRoots,
-  collectIrLocalThrowValueTypes,
   collectIrModuleRecords,
   collectIrPrograms,
-  collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodesFromPrograms,
-  compileFile,
-  compileSource,
   CompileError,
+  compileFile,
   emitCBundleFromIrModules,
-  emitCFromIr,
   findIrEntryProgram,
   join,
   mkdir,
@@ -30,8 +19,6 @@ import {
   tmpdir,
   writeFile
 } from '../helpers/compiler-smoke.ts'
-
-
 
 test('module graph stores HIR and IR per module', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-modules-'))
@@ -174,13 +161,15 @@ export function main(): void {
       target: 'c'
     })
 
-    assert.equal(result.graph.modules.some((module) => module.path.endsWith('barrel.js')), true)
+    assert.equal(
+      result.graph.modules.some((module) => module.path.endsWith('barrel.js')),
+      true
+    )
     assert.match(result.code, /from lib/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
-
 
 test('collects target-neutral IR module records from stored IR without HIR', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-ir-module-records-'))
@@ -231,7 +220,6 @@ export function main(): void {
     })
   }
 })
-
 
 test('does not rebuild IR module records from legacy HIR fallback', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-ir-module-no-hir-fallback-'))
@@ -286,7 +274,6 @@ export function main(): void {
     })
   }
 })
-
 
 test('emits C bundles directly from target-neutral IR module records', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-bundle-ir-entrypoints-'))
@@ -344,7 +331,6 @@ export function main(): void {
   }
 })
 
-
 test('drives C bundle functions and main wrapper from stored target-neutral IR programs', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-c-bundle-ir-'))
 
@@ -388,7 +374,6 @@ greet()
   }
 })
 
-
 test('compiles static ESM import aliases to C bundles', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-module-aliases-'))
 
@@ -424,7 +409,6 @@ export function main(): void {
     })
   }
 })
-
 
 test('compiles static ESM type imports before checking modules', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-module-type-imports-'))
@@ -615,7 +599,6 @@ test('does not recurse forever on cyclic transitive type-only imports', () => {
   )
 })
 
-
 test('deduplicates synthetic type declarations inserted by multiple type imports', () => {
   const loc = {
     file: 'main.ts',
@@ -661,7 +644,6 @@ test('deduplicates synthetic type declarations inserted by multiple type imports
   )
 })
 
-
 test('resolves static ESM directory index imports', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-module-index-imports-'))
 
@@ -701,7 +683,6 @@ export function main(): void {
   }
 })
 
-
 test('compiles a static ESM module graph to C bundle', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-modules-'))
 
@@ -739,7 +720,6 @@ export function main(): void {
     })
   }
 })
-
 
 test('rejects unknown imported exports', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'inox-modules-'))

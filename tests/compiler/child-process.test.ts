@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers node:child_process sync helpers to the C runtime', () => {
   const result = compileSource(

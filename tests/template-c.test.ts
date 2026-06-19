@@ -136,10 +136,7 @@ export function main(): void {
   )
 
   assert.match(result.code, /inox_string_from_value\(&inox_default_allocator, inox_value_\d+, &inox_value_\d+\)/)
-  assert.doesNotMatch(
-    result.code,
-    /inox_string_from_number\(&inox_default_allocator, inox_objfn_deps_read\(/
-  )
+  assert.doesNotMatch(result.code, /inox_string_from_number\(&inox_default_allocator, inox_objfn_deps_read\(/)
 })
 
 test('lowers C nullable string parameters through runtime values until narrowed', () => {

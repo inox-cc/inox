@@ -13,12 +13,12 @@ import type {
   RandomOptions,
   RuntimeBudgets,
   RuntimeCapabilities,
-  TlsBackend,
   RuntimeLoopBackend,
-  RuntimeProfile
+  RuntimeProfile,
+  TlsBackend
 } from '../compiler/types.ts'
-import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
 import type { CliPlan } from '../scripts/lib/cli-args.ts'
+import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
 
 type CConfig = {
   budgets?: RuntimeBudgets

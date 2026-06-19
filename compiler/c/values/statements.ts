@@ -1,3 +1,7 @@
+import { diagnostic } from '../../diagnostics.ts'
+import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
+import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
+import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
@@ -12,10 +16,33 @@ import {
   restoreNullableScalarNarrowing,
   restoreVariableScope
 } from '../context.ts'
-import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
-import { diagnostic } from '../../diagnostics.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
+import type {
+  CArrayElementInfo,
+  CAsyncTaskWrapper,
+  CCallbackWrapper,
+  CClassInfo,
+  CDgramMessageHandler,
+  CFunctionParam,
+  CFunctionPointerAdapter,
+  CFunctionReturnMapType,
+  CFunctionType,
+  CHttpHandler,
+  CKnownArrayElement,
+  CKnownObjectField,
+  CKnownObjectIndexField,
+  CNetHandler,
+  CObjectAccessorReturnPath,
+  CObjectShape,
+  CObjectShapeField,
+  CPromiseChainWrapper,
+  CPromiseConstructorHandler,
+  CRuntimeArrayElement,
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStatement as PreparedStatement
+} from '../types.ts'
 import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
@@ -23,44 +50,17 @@ import {
   isOpaqueRuntimeValueType,
   isRuntimeNullableType
 } from '../value-types.ts'
-import { resolveRuntimeArrayElementType } from './arrays.ts'
-import { resolveRuntimeForOfMapKeys, resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
-import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
-import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
-import { registerObjectShape } from './objects.ts'
-import { isRawStringLiteralExpression } from './strings.ts'
-import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
+import { resolveRuntimeArrayElementType } from './arrays.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
+import { resolveRuntimeForOfMapKeys, resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
+import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
+import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
+import { registerObjectShape } from './objects.ts'
 import type { StringLoweringDependencies } from './strings.ts'
-import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
-import type {
-  CArrayElementInfo,
-  CAsyncTaskWrapper,
-  CCallbackWrapper,
-  CClassInfo,
-  CDgramMessageHandler,
-  CKnownArrayElement,
-  CKnownObjectField,
-  CKnownObjectIndexField,
-  CFunctionReturnMapType,
-  CFunctionParam,
-  CFunctionPointerAdapter,
-  CFunctionType,
-  CHttpHandler,
-  CNetHandler,
-  CObjectAccessorReturnPath,
-  CObjectShape,
-  CObjectShapeField,
-  CPromiseChainWrapper,
-  CPromiseConstructorHandler,
-  CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression,
-  CPreparedStatement as PreparedStatement,
-  CRuntimeArrayElement
-} from '../types.ts'
+import { isRawStringLiteralExpression } from './strings.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 

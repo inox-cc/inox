@@ -1,5 +1,5 @@
 import assertModule from 'node:assert/strict'
-import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { emitCBundleFromIrModules, emitCFromIr } from '../../compiler/codegen-c.ts'
@@ -32,7 +32,6 @@ assertModule.match = ((actual: string, expected: RegExp, message?: string | Erro
 export const assert: typeof assertModule = assertModule
 
 export {
-  CompileError,
   collectIrFeatureRequirements,
   collectIrFunctionEffects,
   collectIrFunctionNodeEntries,
@@ -42,6 +41,7 @@ export {
   collectIrPrograms,
   collectIrTopLevelNodeEntries,
   collectIrTopLevelNodesFromPrograms,
+  CompileError,
   compileFile,
   compileSource,
   compileSourceToIr,

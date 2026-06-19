@@ -1,5 +1,5 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
 import {
   errorObjectShape,
@@ -13,7 +13,10 @@ import {
 } from '../compiler/checker/builtins.ts'
 
 test('exports checker builtin object shapes', () => {
-  assert.equal(errorObjectShape.fields.some((field) => field.name === 'message'), true)
+  assert.equal(
+    errorObjectShape.fields.some((field) => field.name === 'message'),
+    true
+  )
   assert.equal(fsStatsObjectShape.builtin, 'fs.Stats')
   assert.equal(fsDirentObjectShape.builtin, 'fs.Dirent')
   assert.equal(fetchAbortControllerObjectShape.fields[0]?.shape?.builtin, 'fetch.AbortSignal')

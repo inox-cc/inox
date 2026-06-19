@@ -3,8 +3,8 @@ import { relative } from 'node:path'
 import { CompileError } from '../compiler/diagnostics.ts'
 import { compileFile } from '../compiler/index.ts'
 import type { CompileTarget } from '../compiler/types.ts'
-import { findFixtureFiles, rootDir } from './lib/repo-checks.ts'
 import { parseMetadataList, validateFixtureMetadata } from './lib/fixture-metadata.ts'
+import { findFixtureFiles, rootDir } from './lib/repo-checks.ts'
 import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 
 const files = await findFixtureFiles()
@@ -24,7 +24,7 @@ for (const file of files) {
   }
 
   if (result.failures.length === 0) {
-    await checkFixtureCompile(file, source, result.metadata)
+    await checkFixtureCompile(file, result.metadata)
   }
 }
 
@@ -40,7 +40,7 @@ if (failures.length > 0) {
   console.log(`Fixture checks passed (${files.length} fixture${files.length === 1 ? '' : 's'}${stdoutSummary})`)
 }
 
-async function checkFixtureCompile(file: string, source: string, metadata: Map<string, string>): Promise<void> {
+async function checkFixtureCompile(file: string, metadata: Map<string, string>): Promise<void> {
   const rel = relative(rootDir, file)
   const expectation = metadata.get('expect')
   const diagnostic = metadata.get('diagnostic')
@@ -106,7 +106,7 @@ async function checkFixtureStdout(file: string, rel: string, target: CompileTarg
   stdoutChecks.passed += 1
 }
 
-async function canRunTarget(target: CompileTarget): Promise<boolean> {
+async function canRunTarget(_target: CompileTarget): Promise<boolean> {
   if (!cRunnerAvailable) {
     try {
       cRunnerAvailable = (await runCommand('cc', ['--version'])).code === 0

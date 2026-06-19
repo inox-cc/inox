@@ -3,21 +3,13 @@ import {
   assert,
   compileRuntimeProgram,
   compileSource,
-  generateLocalhostCertificate,
-  isLocalListenUnavailable,
   join,
-  mkdir,
   mkdtemp,
-  readFile,
-  repoRoot,
   rm,
   runCommand,
-  startLocalTlsServer,
   tmpdir,
   writeFile
 } from '../helpers/runtime-c.ts'
-
-
 
 test('C runtime loop polls immediates and timers by turn', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -150,7 +142,6 @@ int main(void) {
   }
 })
 
-
 test('C runtime time adapter keeps Date.now on monotonic delta', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -223,7 +214,6 @@ int main(void) {
     })
   }
 })
-
 
 test('generated C timer calls drain from main loop', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -346,7 +336,6 @@ timers.setTimeout(() => {
     })
   }
 })
-
 
 test('generated C time globals compile and run with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])

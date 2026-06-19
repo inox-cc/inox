@@ -1,10 +1,10 @@
+import type { CModuleCompileOptions, CModuleCompileResult, GraphIrCompileResult } from './core.ts'
 import {
   compileFile as compileFileCore,
   compileFileToCModules as compileFileToCModulesCore,
   compileGraphToIrModules as compileGraphToIrModulesCore
 } from './core.ts'
 import { createNodeCompilerHost } from './node-host.ts'
-import type { CModuleCompileOptions, CModuleCompileResult, GraphIrCompileResult } from './core.ts'
 import type { CompileOptions, FileCompileResult } from './types.ts'
 
 export {

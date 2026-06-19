@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('reports node:events EventEmitter and async helper diagnostics', () => {
   assert.throws(
@@ -22,10 +22,22 @@ on(emitter, 'close')
         return false
       }
 
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:events EventEmitter')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('event dispatch')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:events once')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:events on')), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:events EventEmitter')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('event dispatch')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:events once')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:events on')),
+        true
+      )
       return true
     }
   )
@@ -54,12 +66,30 @@ stream.promises.pipeline(readable, writable)
         return false
       }
 
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:stream Readable')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:stream Writable')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('stream buffering and backpressure')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:stream pipeline')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:stream finished')), true)
-      assert.equal(error.diagnostics.some((item) => item.message.includes('node:stream promises.pipeline')), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:stream Readable')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:stream Writable')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('stream buffering and backpressure')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:stream pipeline')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:stream finished')),
+        true
+      )
+      assert.equal(
+        error.diagnostics.some((item) => item.message.includes('node:stream promises.pipeline')),
+        true
+      )
       return true
     }
   )

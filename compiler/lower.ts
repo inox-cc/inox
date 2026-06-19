@@ -1,7 +1,7 @@
-import type { AnyNode, ProgramNode } from './types.ts'
 import { lowerParam, lowerStatementList } from './lower/statements.ts'
-import { createLowerContext, resolveDeclaredType } from './lower/type-resolution.ts'
 import type { LowerContext } from './lower/type-resolution.ts'
+import { createLowerContext, resolveDeclaredType } from './lower/type-resolution.ts'
+import type { AnyNode, ProgramNode } from './types.ts'
 
 export function lowerProgram(ast: ProgramNode): ProgramNode {
   const context = createLowerContext(ast)

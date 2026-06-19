@@ -1,5 +1,5 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
 import { createLowerContext, resolveDeclaredType } from '../compiler/lower/type-resolution.ts'
 import type { AnyNode, ProgramNode } from '../compiler/types.ts'

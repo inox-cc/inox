@@ -1,9 +1,14 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { test } from 'node:test'
 
+import {
+  compileFileToCModules,
+  compileMemoryPackageToCModules,
+  compileMemoryPackageToIrModules
+} from '../compiler/index.ts'
 import {
   collectExports as collectExportsFromFacade,
   createMemoryCompilerHost,
@@ -12,11 +17,6 @@ import {
 import { collectExports, moduleId } from '../compiler/modules/exports.ts'
 import { buildModuleGraph } from '../compiler/modules/graph.ts'
 import { resolveExistingSource, resolveImport } from '../compiler/modules/resolve.ts'
-import {
-  compileFileToCModules,
-  compileMemoryPackageToCModules,
-  compileMemoryPackageToIrModules
-} from '../compiler/index.ts'
 import {
   createImportAliasDeclaration,
   insertImportSyntheticDeclarations

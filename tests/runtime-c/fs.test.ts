@@ -3,21 +3,15 @@ import {
   assert,
   compileRuntimeProgram,
   compileSource,
-  generateLocalhostCertificate,
-  isLocalListenUnavailable,
   join,
   mkdir,
   mkdtemp,
   readFile,
-  repoRoot,
   rm,
   runCommand,
-  startLocalTlsServer,
   tmpdir,
   writeFile
 } from '../helpers/runtime-c.ts'
-
-
 
 test('C runtime fs adapter resolves async file promises through the loop', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -244,7 +238,6 @@ int main(void) {
   }
 })
 
-
 test('C runtime fs adapter supports stat lstat access and Stats helpers', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -383,7 +376,6 @@ int main(void) {
   }
 })
 
-
 test('generated C fs.promises calls compile and run without libuv', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -431,7 +423,6 @@ await fs.promises.writeFile(${JSON.stringify(copied)}, read)
     })
   }
 })
-
 
 test('generated C fs.promises.readdir awaits hosted directory entries', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -489,7 +480,6 @@ try {
   }
 })
 
-
 test('generated C fs.promises binary read/write copies hosted bytes', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -537,7 +527,6 @@ await fs.promises.writeFile(${JSON.stringify(copied)}, bytes)
     })
   }
 })
-
 
 test('generated C node:fs promises copy hosted files and read entries', async (t) => {
   const probe = await runCommand('cc', ['--version'])
@@ -638,7 +627,6 @@ console.log(text, names[0], names[1], bytes.length, stats.isFile(), dirents.leng
   }
 })
 
-
 test('generated C fs sync helpers copy hosted files and read entries', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 
@@ -735,7 +723,6 @@ console.log(names[0], names[1], stats.isFile(), dirents.length, firstDirent.isFi
     })
   }
 })
-
 
 test('generated C async task frames await fs promises without libuv', async (t) => {
   const probe = await runCommand('cc', ['--version'])

@@ -1,33 +1,12 @@
 import test from 'node:test'
+import type { AnyNode } from '../../compiler/types.ts'
 import {
   assert,
   assertDiagnostic,
-  cLibuvOptions,
-  collectIrFeatureRequirements,
-  collectIrFunctionEffects,
   collectIrFunctionNodeEntries,
-  collectIrGlobalRoots,
-  collectIrLocalThrowValueTypes,
-  collectIrModuleRecords,
-  collectIrPrograms,
-  collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodesFromPrograms,
-  compileFile,
   compileSource,
-  CompileError,
-  emitCBundleFromIrModules,
-  emitCFromIr,
-  findIrEntryProgram,
-  join,
-  mkdir,
-  mkdtemp,
-  rm,
-  tmpdir,
-  writeFile
+  emitCFromIr
 } from '../helpers/compiler-smoke.ts'
-import type { AnyNode } from '../../compiler/types.ts'
-
-
 
 test('drives C async task wrapper selection from target-neutral IR function declarations', () => {
   const result = compileSource(
@@ -67,7 +46,6 @@ export async function main(): Promise<void> {
   assert.match(code, /inox_async_task_getValue_start/)
 })
 
-
 test('drives C async runtime headers from target-neutral IR requirements', () => {
   const result = compileSource(
     `export function main(): void {
@@ -96,7 +74,6 @@ test('drives C async runtime headers from target-neutral IR requirements', () =>
   assert.doesNotMatch(withoutAsyncRuntime, /#include "inox\/time\.h"/)
 })
 
-
 test('compiles named callback function values to C', () => {
   const source = `function run(callback: Function): void {
   callback()
@@ -120,7 +97,6 @@ export function main(): void {
   assert.match(c.code, /void \(\*const callback\)\(void\) = hello;/)
   assert.match(c.code, /run\(callback\);/)
 })
-
 
 test('compiles typed no-argument callback aliases to C', () => {
   const source = `type Done = () => void;
@@ -146,7 +122,6 @@ export function main(): void {
   assert.match(c.code, /void \(\*const callback\)\(void\) = hello;/)
 })
 
-
 test('compiles typed callback aliases with number parameters to C', () => {
   const source = `type NumberCallback = (value: number) => void;
 
@@ -171,7 +146,6 @@ export function main(): void {
   assert.match(c.code, /void run\(void \(\*callback\)\(double\)\) \{\n {2}callback\(7\);/)
   assert.match(c.code, /void \(\*const callback\)\(double\) = hello;/)
 })
-
 
 test('lowers function-typed object fields to C function pointer parameters', () => {
   const source = `type Deps = {
@@ -331,7 +305,6 @@ export function main(): void {
   assert.doesNotMatch(c.code, /INOX_C_CALL_EXPR/)
 })
 
-
 test('lowers block accessor-returned function-typed object fields to C function pointer parameters', () => {
   const source = `type MathDeps = {
   add(a: number): number
@@ -375,7 +348,6 @@ export function main(): void {
   assert.doesNotMatch(c.code, /INOX_C_CALL_EXPR/)
 })
 
-
 test('compiles typed callback aliases with string parameters through the C callback ABI', () => {
   const source = `type StringCallback = (value: string) => void;
 
@@ -411,7 +383,6 @@ export function main(): void {
     /if \(inox_callback_call\(callback, inox_callback_args_\d+, 1, &inox_callback_out_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
-
 
 test('drives C callback wrapper collection from target-neutral IR top-level items', () => {
   const source = `type StringCallback = (value: string) => void;
@@ -460,7 +431,6 @@ export function main(): void {
   )
 })
 
-
 test('compiles typed callback aliases with object parameters through the C callback ABI', () => {
   const source = `type Person = {
   name: string
@@ -493,7 +463,6 @@ export function main(): void {
   assert.match(c.code, /inox_value inox_callback_args_\d+\[\] = \{ person \};/)
   assert.match(c.code, /if \(inox_object_get_known\(value, 0, &inox_log_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/)
 })
-
 
 test('compiles capturing runtime callback arrows to C callback context', () => {
   const source = `type StringCallback = (value: string) => void;
@@ -536,7 +505,6 @@ export function main(): void {
   )
 })
 
-
 test('compiles runtime callback arrows with retained runtime captures', () => {
   const source = `type User = {
   name: string
@@ -578,7 +546,6 @@ export function main(): void {
   assert.match(c.code, /inox_callback_ctx_\d+->user = user;\n {2}inox_retain\(inox_callback_ctx_\d+->user\);/)
 })
 
-
 test('checks typed callback argument counts', () => {
   assertDiagnostic(
     `type NumberCallback = (value: number) => void;
@@ -593,7 +560,6 @@ function run(callback: NumberCallback): void {
     }
   )
 })
-
 
 test('compiles non-capturing inline C callback values to plain functions', () => {
   const source = `function run(callback: Function): void {
@@ -614,7 +580,6 @@ export function main(): void {
   assert.match(c.code, /static void inox_callback_arrow_\d+\(void\) \{\n {2}printf\("%s\\n", "inline"\);/)
   assert.match(c.code, /run\(inox_callback_arrow_\d+\);/)
 })
-
 
 test('promotes capturing plain C callback values to runtime callbacks', () => {
   const source = `function run(callback: Function): void {
@@ -653,7 +618,6 @@ export function main(): void {
   assert.match(c.code, /run\(inox_callback_\d+\);/)
 })
 
-
 test('promotes capturing number callback values to runtime callbacks', () => {
   const source = `type NumberCallback = (value: number) => void;
 
@@ -682,7 +646,6 @@ export function main(): void {
   assert.match(c.code, /double value = args\[0\]\.as\.number;/)
   assert.match(c.code, /double offset = captured->offset;/)
 })
-
 
 test('promotes captured C callback variables to runtime callbacks', () => {
   const source = `type NumberCallback = (value: number) => void;
@@ -724,7 +687,6 @@ export function main(): void {
   assert.match(c.code, /run\(callback\);/)
   assert.match(c.code, /runNumber\(numberCallback\);/)
 })
-
 
 test('rejects delayed callback storage in C with stable diagnostics', () => {
   assertDiagnostic(
@@ -786,7 +748,6 @@ export function main(): void {
   )
 })
 
-
 test('boxes mutable numeric C callback captures', () => {
   const source = `function run(callback: Function): void {
   callback()
@@ -816,7 +777,6 @@ export function main(): void {
   assert.match(c.code, /if \(count != 0\) inox_default_free\(0, count, sizeof\(double\), _Alignof\(double\)\);/)
 })
 
-
 test('boxes mutable numeric C callback parameter captures', () => {
   const source = `function run(seed: number): void {
   const callback: Function = () => {
@@ -843,7 +803,6 @@ export function main(): void {
   assert.match(c.code, /\(\*seed\) = \(\(\*seed\) \+ 1\);/)
   assert.match(c.code, /if \(seed != 0\) inox_default_free\(0, seed, sizeof\(double\), _Alignof\(double\)\);/)
 })
-
 
 test('boxes mutable string and object C callback captures', () => {
   const source = `type Person = {
@@ -893,7 +852,6 @@ export function main(): void {
     /if \(person != 0\) \{\n {4}inox_release\(\*person\);\n {4}inox_default_free\(0, person, sizeof\(inox_value\), _Alignof\(inox_value\)\);\n {2}\}/
   )
 })
-
 
 test('lowers C optional calls over nullable callbacks', () => {
   const result = compileSource(
@@ -954,7 +912,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers C optional call results over nullable scalar callbacks', () => {
   const result = compileSource(
     `type Score = (value: number) => number;
@@ -995,7 +952,6 @@ export function main(): void {
   assert.match(result.code, /inox_callback_call\(ready, 0, 0, &inox_optional_call_\d+\)/)
 })
 
-
 test('lowers C optional call results over nullable scalar arrow callbacks', () => {
   const result = compileSource(
     `type Score = (value: number) => number;
@@ -1024,7 +980,6 @@ export function main(): void {
   assert.match(result.code, /inox_callback_call\(score, inox_callback_args_\d+, 1, &inox_optional_call_\d+\)/)
   assert.match(result.code, /inox_callback_call\(ready, 0, 0, &inox_optional_call_\d+\)/)
 })
-
 
 test('lowers C optional call results over nullable scalar block arrow callbacks', () => {
   const result = compileSource(
@@ -1069,7 +1024,6 @@ export function main(): void {
   assert.match(result.code, /inox_callback_call\(score, inox_callback_args_\d+, 1, &inox_optional_call_\d+\)/)
   assert.match(result.code, /inox_callback_call\(ready, 0, 0, &inox_optional_call_\d+\)/)
 })
-
 
 test('lowers C runtime callback returns through finally before callback cleanup', () => {
   const result = compileSource(
@@ -1125,7 +1079,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers C optional call results over nullable string callbacks', () => {
   const result = compileSource(
     `type Name = () => string;
@@ -1162,7 +1115,6 @@ export function main(): void {
   assert.match(result.code, /inox_callback_call\(callback, 0, 0, &inox_optional_call_\d+\)/)
   assert.match(result.code, /inox_optional_call_\d+\.tag != INOX_TAG_STRING \|\| inox_optional_call_\d+\.as\.ref == 0/)
 })
-
 
 test('lowers C optional call results over nullable object callbacks', () => {
   const result = compileSource(
@@ -1211,7 +1163,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_get_known\(user, 1, &inox_optional_value_\d+\)/)
 })
 
-
 test('compiles awaited async function calls to C', () => {
   const source = `async function getValue(): Promise<number> {
   return Promise.resolve(2)
@@ -1244,7 +1195,6 @@ export async function main(): Promise<void> {
   assert.match(c.code, /inox_await_value_\d+ = inox_number_value\(getValue\(\)\);/)
   assert.match(c.code, /inox_await_value_\d+ = getText\(\);/)
 })
-
 
 test('lowers async function calls as C Promise values', () => {
   const result = compileSource(
@@ -1343,7 +1293,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('passes event loop into Promise-returning class methods', () => {
   const result = compileSource(
     `class SourceHost {
@@ -1367,7 +1316,6 @@ const promise = host.readFile('ok')
   assert.match(result.code, /inox_promise_resolved\(inox_loop, inox_value_\d+, &inox_return\)/)
   assert.match(result.code, /inox_method_SourceHost_readFile\(&inox_loop, host, inox_value_\d+\)/)
 })
-
 
 test('lowers simple async functions with await to C task frames', () => {
   const result = compileSource(
@@ -1419,7 +1367,6 @@ export async function main(): Promise<void> {
   assert.doesNotMatch(result.code, /inox_await_value_\d+ = inox_number_value\(compute\(\)\);/)
 })
 
-
 test('lowers async task frame parameters to C frame fields', () => {
   const result = compileSource(
     `async function addLater(input: number, delta: number): Promise<number> {
@@ -1461,7 +1408,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers async task frame await over local Promise variables to C', () => {
   const result = compileSource(
     `async function addLater(input: number, delta: number): Promise<number> {
@@ -1491,7 +1437,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /double delta = frame->param_delta;/)
   assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
 })
-
 
 test('lowers boolean async task frames to C', () => {
   const result = compileSource(
@@ -1529,7 +1474,6 @@ export async function main(): Promise<void> {
     /if \(inox_async_task_flip_start\(&inox_loop, 1, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
-
 
 test('lowers async task frame await over local Promise chains to C', () => {
   const result = compileSource(
@@ -1570,7 +1514,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
 })
 
-
 test('lowers async task frame await over captured local Promise chains to C', () => {
   const result = compileSource(
     `async function addChain(input: number, delta: number): Promise<number> {
@@ -1610,7 +1553,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(value \+ delta\)\)\);/)
 })
 
-
 test('lowers async task frame direct return values to C', () => {
   const result = compileSource(
     `async function addLater(input: number, delta: number): Promise<number> {
@@ -1634,7 +1576,6 @@ export async function main(): Promise<void> {
   assert.doesNotMatch(result.code, /return Promise\.resolve/)
   assert.doesNotMatch(result.code, /addLater\(2, 4\)/)
 })
-
 
 test('lowers async task frame direct managed return values to C', () => {
   const result = compileSource(
@@ -1666,7 +1607,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value inox_bytes_\d+ = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_bytes_\d+\);[\s\S]*inox_release\(inox_bytes_\d+\);[\s\S]*return status;/
   )
 })
-
 
 test('lowers multiple awaits in async task frames to C state switches', () => {
   const result = compileSource(
@@ -1702,7 +1642,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /frame->local_second = inox_value_input\.as\.number;/)
   assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(first \+ second\)\)\);/)
 })
-
 
 test('lowers async task frame awaits over local async tasks and plain Promise helpers', () => {
   const result = compileSource(
@@ -1753,7 +1692,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return inox_promise_resolve\(frame->promise, inox_number_value\(\(third \+ 1\)\)\);/)
 })
 
-
 test('lowers async task frame awaits over managed immediate async helpers', () => {
   const result = compileSource(
     `import fs from 'node:fs'
@@ -1797,7 +1735,6 @@ export async function main(): Promise<void> {
     /if \(inox_async_value_\d+\.tag != INOX_TAG_BYTES \|\| inox_async_value_\d+\.as\.ref == 0\) return INOX_ERR_TYPE;/
   )
 })
-
 
 test('lowers async task frame rejected awaits to returned Promise rejections', () => {
   const result = compileSource(
@@ -1848,7 +1785,6 @@ export async function main(): Promise<void> {
     /status = inox_promise_then\(frame->awaited, inox_async_task_failDirect_resume, inox_async_task_failDirect_reject, frame, inox_async_task_failDirect_finalize\);/
   )
 })
-
 
 test('lowers async task frame try catch finally around awaited promises', () => {
   const result = compileSource(
@@ -1909,7 +1845,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame try finally finalizers', () => {
   const result = compileSource(
     `async function compute(): Promise<number> {
@@ -1949,7 +1884,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers awaited plain Promise-returning calls to C', () => {
   const result = compileSource(
     `function getPromise(): Promise<number> {
@@ -1981,7 +1915,6 @@ export async function main(): Promise<void> {
     /if \(inox_promise_get_result\(inox_promise_\d+, &inox_await_value_\d+\) != INOX_OK\)\s+goto inox_cleanup;/
   )
 })
-
 
 test('lowers plain Promise helpers over rejection and fs to C', () => {
   const result = compileSource(
@@ -2026,7 +1959,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /inox_promise_\d+ = loadText\(&inox_loop\);/)
 })
 
-
 test('reports unhandled owned Promise rejections from generated C main', () => {
   const result = compileSource(
     `export async function main(): Promise<void> {
@@ -2045,7 +1977,6 @@ test('reports unhandled owned Promise rejections from generated C main', () => {
   )
   assert.match(result.code, /return inox_unhandled_rejection == 0 \? \(int\)inox_return : 1;/)
 })
-
 
 test('lowers first C async await slice over Promise.resolve and fs promises', () => {
   const result = compileSource(
@@ -2108,7 +2039,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /const inox_string \*text = \(inox_string \*\)text_value_\d+\.as\.ref;/)
 })
 
-
 test('lowers awaited rejected promises into C try catch', () => {
   const result = compileSource(
     `export async function main(): Promise<void> {
@@ -2135,7 +2065,6 @@ test('lowers awaited rejected promises into C try catch', () => {
   assert.match(result.code, /inox_error_active = 1;/)
   assert.match(result.code, /goto inox_try_\d+_catch;/)
 })
-
 
 test('lowers awaited Error rejected promises into C try catch', () => {
   const result = compileSource(
@@ -2171,7 +2100,6 @@ test('lowers awaited Error rejected promises into C try catch', () => {
   assert.match(result.code, /inox_object_get_known\(error, 1, &inox_log_value_\d+\)/)
 })
 
-
 test('lowers awaited throwing async helpers through the C error channel', () => {
   const result = compileSource(
     `async function failText(): Promise<string> {
@@ -2199,7 +2127,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /if \(inox_call_status_\d+ == INOX_ERR_THROW\) \{/)
   assert.match(result.code, /goto inox_try_\d+_catch;/)
 })
-
 
 test('lowers async throws after awaits to rejected local promises', () => {
   const stringResult = compileSource(
@@ -2275,7 +2202,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame try catch with outer finally', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2315,7 +2241,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(7\)\);/
   )
 })
-
 
 test('lowers nested async task frame inner finally before outer catch', () => {
   const result = compileSource(
@@ -2357,7 +2282,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame inner catch under outer catch', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2395,7 +2319,6 @@ export async function main(): Promise<void> {
   )
   assert.doesNotMatch(result.code, /inox_number_value\(9\)/)
 })
-
 
 test('lowers deeper nested async task frame try metadata', () => {
   const result = compileSource(
@@ -2443,7 +2366,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame try prefixes before first await', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2485,7 +2407,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame try prefix declarations into awaited expressions', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2522,7 +2443,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*printf\("%s\\n", "done"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(value\)\);/
   )
 })
-
 
 test('lowers nested async task frame inner body prefix locals into awaited expressions', () => {
   const result = compileSource(
@@ -2569,7 +2489,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame post await managed locals into inner try returns', () => {
   const result = compileSource(
     `async function work(): Promise<Buffer> {
@@ -2607,7 +2526,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame post await scalar locals into inner try returns', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2644,7 +2562,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame post await locals before post-nested returns', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2678,7 +2595,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame post await managed locals before post-nested returns', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2711,7 +2627,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*double value = frame->local_value;[\s\S]*inox_value scratch = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*inox_bytes_len\(scratch, &inox_bytes_len_\d+\)[\s\S]*printf\("%g %g\\n", \(\(double\)value\), \(\(double\)\(\(double\)inox_bytes_len_\d+\)\)\);[\s\S]*printf\("%s\\n", "inner"\);[\s\S]*printf\("%s\\n", "after"\);[\s\S]*inox_release\(scratch\);[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(9\)\);/
   )
 })
-
 
 test('lowers nested async task frame post try statements through finalizers', () => {
   const result = compileSource(
@@ -2748,7 +2663,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = inox_promise_reject\(frame->promise, inox_error\);/
   )
 })
-
 
 test('lowers nested async task frame post try statements with outer catch', () => {
   const result = compileSource(
@@ -2790,7 +2704,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame post try statements with inner catch', () => {
   const result = compileSource(
     `async function work(): Promise<number> {
@@ -2830,7 +2743,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_reject\(void \*context, inox_value inox_error\) \{[\s\S]*inox_string \*error = \(inox_string \*\)inox_error\.as\.ref;[\s\S]*printf\("%\.\*s\\n", \(int\)error->len, error->bytes\);[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*status = inox_promise_resolve\(frame->promise, inox_number_value\(9\)\);/
   )
 })
-
 
 test('lowers nested async task frame prefix locals into post try statements', () => {
   const result = compileSource(
@@ -2873,7 +2785,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*double seed = frame->prefix_seed;[\s\S]*printf\("%s\\n", "inner finally"\);[\s\S]*const double total = \(seed \+ 5\);[\s\S]*printf\("%g\\n", \(\(double\)total\)\);[\s\S]*printf\("%s\\n", "outer finally"\);[\s\S]*return inox_promise_resolve\(frame->promise, inox_number_value\(seed\)\);/
   )
 })
-
 
 test('lowers nested async task frame string prefix locals into post try statements', () => {
   const result = compileSource(
@@ -2920,7 +2831,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame produced string prefix locals into post try statements', () => {
   const result = compileSource(
     `async function work(count: number): Promise<string> {
@@ -2966,7 +2876,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame raw string prefix locals into post try statements', () => {
   const result = compileSource(
     `async function work(): Promise<string> {
@@ -3011,7 +2920,6 @@ export async function main(): Promise<void> {
     /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
-
 
 test('lowers nested async task frame array prefix locals into post try statements', () => {
   const result = compileSource(
@@ -3059,7 +2967,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame bytes prefix locals into post try statements', () => {
   const result = compileSource(
     `async function work(): Promise<Buffer> {
@@ -3105,7 +3012,6 @@ export async function main(): Promise<void> {
     /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
-
 
 test('lowers nested async task frame object prefix locals into post try statements', () => {
   const result = compileSource(
@@ -3157,7 +3063,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame Map prefix locals into post try statements', () => {
   const result = compileSource(
     `async function work(): Promise<Map<string, number>> {
@@ -3202,7 +3107,6 @@ export async function main(): Promise<void> {
     /static void inox_async_task_work_finalize\(void \*context\) \{[\s\S]*inox_release\(frame->prefix_prefix\);/
   )
 })
-
 
 test('lowers nested async task frame Set prefix locals into post try statements', () => {
   const result = compileSource(
@@ -3249,7 +3153,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame post try managed locals into returns', () => {
   const result = compileSource(
     `async function work(): Promise<Buffer> {
@@ -3282,7 +3185,6 @@ export async function main(): Promise<void> {
     /static inox_status inox_async_task_work_resume\(void \*context, inox_value inox_value_input\) \{[\s\S]*inox_value suffix = inox_undefined_value\(\);[\s\S]*inox_bytes_from_data\(&inox_default_allocator, \(const uint8_t \*\)"ok", 2, &inox_bytes_\d+\)[\s\S]*inox_bytes_len\(suffix, &inox_bytes_len_\d+\)[\s\S]*printf\("%s\\n", "outer"\);[\s\S]*status = inox_promise_resolve\(frame->promise, suffix\);[\s\S]*inox_release\(suffix\);[\s\S]*return status;/
   )
 })
-
 
 test('lowers nested async task frame catch managed locals into returns', () => {
   const result = compileSource(
@@ -3320,7 +3222,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers nested async task frame catch direct managed returns', () => {
   const result = compileSource(
     `async function work(): Promise<Buffer> {
@@ -3355,7 +3256,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('reports nested async task frame catch throw paths as unsupported', () => {
   assertDiagnostic(
     `async function work(): Promise<number> {
@@ -3382,7 +3282,6 @@ export async function main(): Promise<void> {
     }
   )
 })
-
 
 test('keeps nested async finalizer throw paths on the non-task-frame fallback', () => {
   const result = compileSource(
@@ -3414,7 +3313,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /inox_try_\d+_finally:/)
   assert.match(result.code, /goto inox_try_\d+_catch;/)
 })
-
 
 test('tracks Promise generic metadata through checker and IR', () => {
   const result = compileSource(
@@ -3460,7 +3358,6 @@ export function main(): void {
   )
 })
 
-
 test('tracks Promise constructor generic metadata through checker and IR', () => {
   const result = compileSource(
     `function makeText(): Promise<string> {
@@ -3502,7 +3399,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('lowers Promise constructor timer resolves and template update placeholders to C', () => {
   const result = compileSource(
     `function makeText(): Promise<string> {
@@ -3531,7 +3427,6 @@ console.log(text, \`interval \${++i}\`)
   assert.match(result.code, /inox_loop_poll\(&inox_loop, inox_performance_now\(\)\)/)
   assert.match(result.code, /inox_string_from_number\(&inox_default_allocator, \(\+\+i\), &inox_value_\d+\)/)
 })
-
 
 test('checks Promise then catch as typed chain calls', () => {
   const result = compileSource(
@@ -3584,7 +3479,9 @@ test('checks Promise then catch as typed chain calls', () => {
     }
   )
   const multiMain = multiStatement.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const multiPromise = multiMain?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise')
+  const multiPromise = multiMain?.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise'
+  )
 
   assert.equal(multiPromise?.promiseValueType, 'number')
 
@@ -3606,7 +3503,9 @@ test('checks Promise then catch as typed chain calls', () => {
   const branchMain = branchStatement.hir.body.find(
     (item) => item.type === 'FunctionDeclaration' && item.name === 'main'
   )
-  const branchPromise = branchMain?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise')
+  const branchPromise = branchMain?.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise'
+  )
 
   assert.equal(branchPromise?.promiseValueType, 'number')
 
@@ -3631,7 +3530,9 @@ test('checks Promise then catch as typed chain calls', () => {
   const switchMain = switchStatement.hir.body.find(
     (item) => item.type === 'FunctionDeclaration' && item.name === 'main'
   )
-  const switchPromise = switchMain?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise')
+  const switchPromise = switchMain?.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise'
+  )
 
   assert.equal(switchPromise?.promiseValueType, 'number')
 
@@ -3669,7 +3570,6 @@ test('checks Promise then catch as typed chain calls', () => {
     }
   )
 })
-
 
 test('lowers Promise then catch chains to C runtime promises', () => {
   const result = compileSource(
@@ -3807,7 +3707,6 @@ test('lowers Promise then catch chains to C runtime promises', () => {
   )
 })
 
-
 test('lowers Promise callback loop bodies to C runtime promises', () => {
   const result = compileSource(
     `export async function main(): Promise<void> {
@@ -3848,7 +3747,6 @@ test('lowers Promise callback loop bodies to C runtime promises', () => {
   assert.match(result.code, /goto inox_continue_\d+;/)
   assert.match(result.code, /\(\*out\) = inox_number_value\(total\);\n {2}goto inox_promise_callback_cleanup;/)
 })
-
 
 test('lowers captured Promise callbacks to C runtime promises', () => {
   const result = compileSource(
@@ -3952,7 +3850,6 @@ export async function main(): Promise<void> {
   )
 })
 
-
 test('rejects mutable Promise callback captures in C with stable diagnostics', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -4007,7 +3904,6 @@ export async function main(): Promise<void> {
     }
   )
 })
-
 
 test('lowers Promise callbacks with try catch finally to C runtime promises', () => {
   const result = compileSource(
@@ -4073,7 +3969,6 @@ test('lowers Promise callbacks with try catch finally to C runtime promises', ()
   )
 })
 
-
 test('passes loop context to C Promise callbacks that schedule timers', () => {
   const result = compileSource(
     `export function main(): void {
@@ -4115,7 +4010,6 @@ test('passes loop context to C Promise callbacks that schedule timers', () => {
   )
 })
 
-
 test('rejects await outside async functions', () => {
   assertDiagnostic(
     `export function main(): void {
@@ -4126,7 +4020,6 @@ test('rejects await outside async functions', () => {
     'INOX_AWAIT_OUTSIDE_ASYNC'
   )
 })
-
 
 test('accepts await in top-level C entry statements', () => {
   const result = compileSource(

@@ -1,5 +1,5 @@
-import { collectIrTopLevelNodes } from './top-level.ts'
 import type { AnyNode, IrFunctionEffect, IrThrowValueType, IrTopLevelItem } from '../types.ts'
+import { collectIrTopLevelNodes } from './top-level.ts'
 
 type ThrowValueTypeMap = Map<string, IrThrowValueType[]>
 type StringMap = Map<string, string>

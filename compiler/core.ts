@@ -1,16 +1,17 @@
 import { checkCCompileBudgets } from './budgets.ts'
+import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile } from './c/types.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
-import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
 import { checkProgram } from './checker.ts'
+import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
+import type { CompilerHost } from './host.ts'
 import { collectIrModuleRecords, collectIrRuntimeRequirements, lowerHirToIr } from './ir.ts'
+import type { IrModuleRecord } from './ir/top-level.ts'
 import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
+import type { MemoryCompilerSourceFile } from './memory-host.ts'
 import { createMemoryCompilerHost } from './memory-host.ts'
 import { buildModuleGraph } from './modules/graph.ts'
 import { parse } from './parser.ts'
-import type { CompilerHost } from './host.ts'
-import { requireCompilerHost } from './host.ts'
-import type { IrModuleRecord } from './ir/top-level.ts'
 import type {
   CompileOptions,
   CompileTarget,
@@ -26,8 +27,6 @@ import type {
   SourceCompileResult,
   TlsBackend
 } from './types.ts'
-import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile } from './c/types.ts'
-import type { MemoryCompilerSourceFile } from './memory-host.ts'
 
 export type CModuleCompileOptions = {
   target?: CompileTarget

@@ -1,4 +1,8 @@
 import { diagnostic } from '../../diagnostics.ts'
+import { irClassMethodEffectName } from '../../ir.ts'
+import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import { functionTakesEventLoopParam } from '../async/promises.ts'
+import type { CFunctionContext } from '../context.ts'
 import {
   emitEventLoopReference,
   emitFailureStatement,
@@ -9,10 +13,17 @@ import {
   registerOwnedPromise,
   registerOwnedValue
 } from '../context.ts'
-import { irClassMethodEffectName } from '../../ir.ts'
-import { functionTakesEventLoopParam } from '../async/promises.ts'
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import type {
+  CClassInfo,
+  CClassMethod,
+  CFunctionParam,
+  CObjectShapeField,
+  CPreparedCallArgs as PreparedCallArgs,
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
+} from '../types.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
   cRuntimeValueTag,
@@ -21,17 +32,6 @@ import {
   isOpaqueRuntimeValueType
 } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
-import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
-import type { CFunctionContext } from '../context.ts'
-import type {
-  CClassInfo,
-  CClassMethod,
-  CFunctionParam,
-  CObjectShapeField,
-  CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression,
-  CPreparedCallArgs as PreparedCallArgs
-} from '../types.ts'
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
@@ -49,8 +49,6 @@ type ClassMethodCallInfo = {
 type CClassInfoMap = Map<string, CClassInfo>
 type CClassMethodMap = Map<string, AnyNode>
 type CConstructorArgMap = Map<string, AnyNode>
-type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
-type CStringMap = Map<string, string>
 type CStringSet = Set<string>
 type ClassExpressionNode = AnyNode
 type ClassMaybeNode = AnyNode | null | undefined
@@ -413,10 +411,6 @@ function findClassParam(params: AnyNode[], name: string): AnyNode | null {
   }
 
   return null
-}
-
-function isThisFieldExpression(expression: ClassMaybeNode): boolean {
-  return !!thisFieldName(expression)
 }
 
 function thisFieldName(expression: ClassMaybeNode): string | null {

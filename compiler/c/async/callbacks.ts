@@ -1,15 +1,7 @@
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
+import type { AnyNode, IrProgram } from '../../types.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
-import {
-  cRuntimeValueTag,
-  emitCStringParamName,
-  emitCType,
-  isManagedRuntimeReturnType,
-  isNullableScalarType,
-  isOpaqueRuntimeValueType
-} from '../value-types.ts'
-import { isPromiseConstructorExpression, functionTakesEventLoopParam } from './promises.ts'
 import { isTimerStartCallExpression, timerCallbackFunctionType } from '../stdlib/timers.ts'
 import type {
   CCallbackContextWrapper,
@@ -23,10 +15,18 @@ import type {
   CPromiseChainWrapper,
   CRuntimeArrowCallbackWrapper,
   CRuntimeArrowCapture,
-  CRuntimeCallbackWrapper
+  CRuntimeCallbackWrapper,
+  CPreparedExpression as PreparedExpression
 } from '../types.ts'
-import type { AnyNode, IrProgram } from '../../types.ts'
-import type { CPreparedExpression as PreparedExpression } from '../types.ts'
+import {
+  cRuntimeValueTag,
+  emitCStringParamName,
+  emitCType,
+  isManagedRuntimeReturnType,
+  isNullableScalarType,
+  isOpaqueRuntimeValueType
+} from '../value-types.ts'
+import { functionTakesEventLoopParam, isPromiseConstructorExpression } from './promises.ts'
 
 type CallbackNode = AnyNode
 type CallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
@@ -362,54 +362,6 @@ function isPlainFunctionPointerParam(param: CFunctionParam, seen: CObjectShape[]
     isManagedRuntimeReturnType(param.valueType) ||
     isOpaqueRuntimeValueType(param.valueType)
   )
-}
-
-function objectShapeHasFunctionField(
-  shape: CObjectShape | null | undefined,
-  seen: CObjectShape[],
-  seenTypes: string[]
-): boolean {
-  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
-    return false
-  }
-
-  for (const item of seen) {
-    if (item === shape) {
-      return false
-    }
-  }
-
-  seen.push(shape)
-
-  for (const field of shape.fields) {
-    if (field.valueType === 'function') {
-      seen.pop()
-      return true
-    }
-
-    if (field.valueType === 'object') {
-      const declaredType = objectShapeDeclaredType(field.valueType, field.declaredType, field.shape)
-
-      if (seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
-        continue
-      }
-
-      const pushedTypes = pushSeenDeclaredType(seenTypes, declaredType)
-
-      if (objectShapeHasFunctionField(field.shape, seen, seenTypes)) {
-        popSeenDeclaredTypes(seenTypes, pushedTypes)
-
-        seen.pop()
-        return true
-      }
-
-      popSeenDeclaredTypes(seenTypes, pushedTypes)
-    }
-  }
-
-  seen.pop()
-
-  return false
 }
 
 function isSupportedPlainFunctionPointerShape(
@@ -892,17 +844,15 @@ export function collectCallbackWrappers(
   for (let pendingIndex = 0; pendingIndex < pendingPlainFunctionArgs.length; pendingIndex = pendingIndex + 1) {
     const pending = pendingPlainFunctionArgs[pendingIndex]
     if (
-      !!(
-        resolveRuntimeFunctionArgumentType(
-          pending.callee,
-          pending.index,
-          {
-            name: '',
-            valueType: 'function',
-            functionType: pending.functionType
-          },
-          context
-        )
+      !!resolveRuntimeFunctionArgumentType(
+        pending.callee,
+        pending.index,
+        {
+          name: '',
+          valueType: 'function',
+          functionType: pending.functionType
+        },
+        context
       )
     ) {
       registerRuntimeCallbackExpression(pending.arg, pending.functionType, pending.scopes, wrappers, context, deps)

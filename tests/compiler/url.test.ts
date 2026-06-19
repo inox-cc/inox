@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers node:url helpers and URL constructor to the C url runtime', () => {
   const result = compileSource(
@@ -27,7 +27,14 @@ export function main(): void {
     }
   )
 
-  assert.deepEqual(result.ir.features, ['collections', 'map-get-null', 'objects', 'runtime-values', 'string-bytes', 'url'])
+  assert.deepEqual(result.ir.features, [
+    'collections',
+    'map-get-null',
+    'objects',
+    'runtime-values',
+    'string-bytes',
+    'url'
+  ])
   assert.deepEqual(result.ir.runtimeRequirements, ['collections', 'managed-values', 'objects', 'string-bytes', 'url'])
   assert.match(result.code, /#include "inox\/url\.h"/)
   assert.match(result.code, /inox_url_path_to_file_url\(&inox_default_allocator,/)

@@ -1,15 +1,15 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
 import { fsRuntimeCallInfo, isFsRuntimeImportSymbol } from '../compiler/checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from '../compiler/checker/std/json.ts'
 import { isMathRuntimeMethod } from '../compiler/checker/std/math.ts'
-import { memberExpressionPath } from '../compiler/member-paths.ts'
 import {
   timerCallbackFunctionType,
   timerClearMethodName,
   timerRuntimeMethodName
 } from '../compiler/checker/std/timers.ts'
+import { memberExpressionPath } from '../compiler/member-paths.ts'
 import type { AnyNode, SymbolInfo } from '../compiler/types.ts'
 
 test('maps member expressions to runtime paths', () => {
@@ -57,10 +57,20 @@ test('classifies fs checker std helpers', () => {
 })
 
 test('classifies json math and timer checker std helpers', () => {
-  assert.equal(jsonRuntimeMethodName({ type: 'MemberExpression', object: { type: 'Reference', path: ['JSON'] }, property: 'parse' }), 'parse')
+  assert.equal(
+    jsonRuntimeMethodName({
+      type: 'MemberExpression',
+      object: { type: 'Reference', path: ['JSON'] },
+      property: 'parse'
+    }),
+    'parse'
+  )
   assert.equal(isJsonParseDeclaredType('object'), true)
   assert.equal(isJsonParseDeclaredType('bytes'), false)
-  assert.equal(isMathRuntimeMethod({ type: 'MemberExpression', object: { type: 'Reference', path: ['Math'] }, property: 'max' }), true)
+  assert.equal(
+    isMathRuntimeMethod({ type: 'MemberExpression', object: { type: 'Reference', path: ['Math'] }, property: 'max' }),
+    true
+  )
   assert.equal(timerRuntimeMethodName({ type: 'Reference', path: ['setTimeout'] }), 'setTimeout')
   assert.equal(timerClearMethodName('clearTimeout'), 'clearTimeout')
   assert.equal(timerClearMethodName('setTimeout'), null)

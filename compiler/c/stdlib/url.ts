@@ -1,5 +1,6 @@
 import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } from '../../stdlib/descriptors/url.ts'
 import type { AnyNode } from '../../types.ts'
+import type { CFunctionContext } from '../context.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
@@ -7,7 +8,6 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import type { CFunctionContext } from '../context.ts'
 import { cStringLiteral } from '../identifiers.ts'
 import type {
   CObjectShape,

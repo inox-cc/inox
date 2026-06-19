@@ -1,26 +1,66 @@
 import { diagnostic } from '../diagnostics.ts'
-import {
-  collectIrFunctionDeclarations,
-  collectIrFunctionNodeEntries,
-  collectIrGlobalRoots,
-  collectIrGlobalUsages,
-  collectIrLocalThrowValueTypes,
-  collectIrPrograms,
-  collectIrRuntimeRequirements,
-  collectIrStoredFunctionEffects,
-  collectIrSyntaxFeatureUsages,
-  collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodes,
-  findIrEntryProgram
-} from '../ir.ts'
+import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
+import type { IrModuleRecord } from '../ir/top-level.ts'
+import type { DebugMemoryStatsField } from '../stdlib/descriptors/debug.ts'
+import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import type {
+  AnyNode,
+  Diagnostic,
+  IrFunctionDeclaration,
+  IrFunctionEffect,
+  IrProgram,
+  IrThrowValueType,
+  ModuleGraph,
+  SourceLocation
+} from '../types.ts'
+import type { CallbackLoweringDependencies } from './async/callbacks.ts'
+import {
+  collectArrowCaptures,
+  emitFunctionPointerParams,
+  emitFunctionPointerReturnType,
+  emitRuntimeArrowCallbackContextFinalizerDeclaration,
+  emitRuntimeArrowCallbackContextLocals,
+  emitRuntimeArrowCaptureField,
+  functionUsesExternalEventLoop,
+  hasRuntimeArrowCallbackContext,
+  isNullableFunctionType,
+  isPlainFunctionPointerType,
+  isPromiseChainCallbackWrapperWithContext,
+  isRetainedRuntimeArrowCapture,
+  isRuntimeFunctionType,
+  isSupportedMutableRuntimeArrowCapture,
+  isSupportedRuntimeCallbackType,
+  normalizeFunctionType,
+  resolveRuntimeFunctionArgumentType,
+  runtimeCallbackWrapperFor
+} from './async/callbacks.ts'
+import type { PromiseChainLoweringDependencies, PromiseLoweringDependencies } from './async/promises.ts'
+import {
+  cPromiseRuntimeCallName,
+  emitPreparedPromiseConstructorExpression,
+  emitPreparedPromiseExpression,
+  emitPreparedPromiseMethodExpression,
+  emitPreparedPromiseReturningCallExpression,
+  emitPreparedPromiseStaticExpression,
+  emitPromiseConstructorSettlementCall,
+  functionTakesEventLoopParam,
+  isAsyncFunctionCallee,
+  isExternalEventLoopFunctionCallee,
+  isPromiseConstructorExpression,
+  isPromiseReturningFunctionCallee,
+  knownValueType,
+  resolveCAsyncFunctionAwaitValueType,
+  resolvePromiseExpressionValueType
+} from './async/promises.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
+import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
   emitBoxedValueDeclarations,
   emitCleanupReturn,
   emitErrorChannelDeclarations,
-  emitEventLoopCurrentTimeExpression,
   emitEventLoopNextTimeExpression,
   emitEventLoopReference,
   emitEventLoopSleepUntilNextTimerLines,
@@ -36,31 +76,29 @@ import {
   isRuntimeBoxedValueType,
   nextCName,
   pushDiagnostic,
+  pushVariableScope,
   registerBoxedValue,
   registerEventLoop,
   registerOwnedPromise,
   registerOwnedValue,
-  pushVariableScope,
   restoreVariableScope,
   shouldEmitCleanupLabel
 } from './context.ts'
-import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
-  reportCJsGlobalDiagnostic,
-  reportUnsupportedCGlobalUsages,
-  reportUnsupportedCSyntaxFeatures
-} from './diagnostics.ts'
+  emitClassMethodDeclaration as emitClassMethodDeclarationWithDependencies,
+  emitClassMethodHead,
+  emitFunctionDeclaration as emitFunctionDeclarationWithDependencies,
+  emitFunctionHead,
+  emitMainReturnExpression,
+  emitMainWrapper as emitMainWrapperWithDependencies,
+  reportUnsupportedCFunctionType,
+  resolveFunctionDeclarationParams
+} from './declarations.ts'
+import { reportCJsGlobalDiagnostic } from './diagnostics.ts'
 import { formatGeneratedC } from './format.ts'
-import {
-  arrayRuntimeMethodName,
-  isStringPredicateMethod,
-  isStringRuntimeMethod
-} from '../stdlib/descriptors/collections.ts'
-import { isCJsGlobalRoot, usesCJsGlobal } from './globals.ts'
 import {
   cStringLiteral,
   emitCFunctionName,
-  emitCIdentifier,
   emitCObjectFunctionFieldName,
   escapeCString,
   utf8ByteLength
@@ -69,84 +107,13 @@ import {
   emitCModuleHeader as emitCModuleHeaderWithDependencies,
   emitCModuleSource as emitCModuleSourceWithDependencies
 } from './module-emission.ts'
-import type { CModuleEmissionDependencies } from './module-emission.ts'
-import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
 import type { CModuleFileEmitters } from './modules.ts'
-import { emitCUnit as emitCUnitWithDependencies } from './unit.ts'
-import type { CUnitDependencies } from './unit.ts'
-import {
-  collectHttpRuntimeCreateServerNames,
-  collectHttpRuntimeImportNames,
-  collectRuntimeImportNames,
-  collectRuntimeNamedImportNames,
-  irProgramsUseRuntimeImport
-} from './runtime-imports.ts'
-import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
+import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
 import { mathRuntimeMethodName } from './runtime-methods.ts'
-import {
-  cPromiseRuntimeCallName,
-  collectPromiseChainWrappers,
-  emitPreparedPromiseConstructorExpression,
-  emitPreparedPromiseExpression,
-  emitPreparedPromiseMethodExpression,
-  emitPreparedPromiseReturningCallExpression,
-  emitPreparedPromiseStaticExpression,
-  emitPromiseConstructorSettlementCall,
-  emitPromiseChainCallbackWrapperDeclaration,
-  emitPromiseChainCallbackWrapperHead,
-  functionTakesEventLoopParam,
-  isAsyncFunctionCallee,
-  isExternalEventLoopFunctionCallee,
-  isPromiseConstructorExpression,
-  isPromiseMethodAst,
-  isPromiseReturningFunctionCallee,
-  knownValueType,
-  resolveCAsyncFunctionAwaitValueType,
-  resolvePromiseChainArrowBody,
-  resolvePromiseExpressionValueType,
-  resolvePromiseReturningFunctionValueType
-} from './async/promises.ts'
-import type { PromiseChainLoweringDependencies, PromiseLoweringDependencies } from './async/promises.ts'
-import {
-  collectAsyncTaskWrappers,
-  emitAsyncTaskFrameType,
-  emitAsyncTaskWrapperDeclaration,
-  emitAsyncTaskWrapperPrototypes
-} from './async/tasks.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
-import {
-  collectArrowCaptures,
-  collectCallbackWrappers,
-  emitFunctionPointerParams,
-  emitFunctionPointerReturnType,
-  emitPlainArrowCallbackWrapperDeclaration,
-  emitPlainArrowCallbackWrapperHead,
-  emitRuntimeArrowCallbackContextFinalizerDeclaration,
-  emitRuntimeArrowCallbackContextLocals,
-  emitRuntimeArrowCallbackContextType,
-  emitRuntimeArrowCaptureField,
-  emitRuntimeCallbackWrapperDeclaration,
-  emitRuntimeCallbackWrapperHead,
-  functionUsesExternalEventLoop,
-  hasRuntimeArrowCallbackContext,
-  isNullableFunctionType,
-  isPlainFunctionPointerType,
-  isPromiseChainCallbackWrapperWithContext,
-  isRetainedRuntimeArrowCapture,
-  isRuntimeArrowCallbackWrapperWithContext,
-  isRuntimeCallbackWrapper,
-  isRuntimeFunctionType,
-  isSupportedMutableRuntimeArrowCapture,
-  isSupportedRuntimeCallbackType,
-  markRuntimeFunctionParam,
-  normalizeFunctionType,
-  resolveRuntimeFunctionArgumentType,
-  runtimeCallbackWrapperFor
-} from './async/callbacks.ts'
-import type { CallbackLoweringDependencies } from './async/callbacks.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
+import type { BinaryLoweringDependencies } from './stdlib/binary.ts'
 import {
   binaryRuntimeExpressionReturnType,
-  binaryRuntimeMethodName,
   emitPreparedBinaryNumberCallExpression,
   emitPreparedBinaryValueExpression,
   emitPreparedBytesIndexAssignment,
@@ -155,63 +122,37 @@ import {
   isBinaryConstructorExpression,
   isBinaryRuntimeCall
 } from './stdlib/binary.ts'
-import type { BinaryLoweringDependencies } from './stdlib/binary.ts'
-import { cChildProcessRuntimeMethodName, emitPreparedChildProcessCallExpression } from './stdlib/child-process.ts'
 import type { ChildProcessLoweringDependencies } from './stdlib/child-process.ts'
+import { cChildProcessRuntimeMethodName, emitPreparedChildProcessCallExpression } from './stdlib/child-process.ts'
 import { isConsoleLog } from './stdlib/console.ts'
+import type { CryptoLoweringDependencies } from './stdlib/crypto.ts'
 import {
   cryptoRuntimeMethodName,
-  emitCryptoHashVariableDeclaration,
   emitCryptoHandleVariableDeclaration,
+  emitCryptoHashVariableDeclaration,
   emitPreparedCryptoCallExpression,
   emitPreparedCryptoHashCallExpression,
   emitPreparedCryptoHmacCallExpression,
   emitPreparedCryptoNumberCallExpression
 } from './stdlib/crypto.ts'
-import type { CryptoLoweringDependencies } from './stdlib/crypto.ts'
+import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
+import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
-  collectDgramMessageHandlers,
   emitDgramAddressVariableDeclaration,
-  emitDgramMessageHandlerDeclaration,
-  emitDgramMessageHandlerHead,
   emitDgramNumberVariableDeclaration,
   emitDgramSocketCallStatement,
   emitDgramSocketVariableDeclaration,
   emitPreparedDgramAddressPortExpression
 } from './stdlib/dgram.ts'
-import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
-import {
-  collectHttpHandlers,
-  emitHttpHandlerDeclaration,
-  emitHttpHandlerHead,
-  emitHttpServerCallStatement,
-  emitHttpServerVariableDeclaration
-} from './stdlib/http.ts'
-import type { HttpLoweringDependencies } from './stdlib/http.ts'
-import {
-  collectNetHandlers,
-  emitNetAddressMemberVariableDeclaration,
-  emitNetAddressVariableDeclaration,
-  emitNetHandlerDeclaration,
-  emitNetHandlerHead,
-  emitNetNumberVariableDeclaration,
-  emitNetServerCallStatement,
-  emitNetServerVariableDeclaration,
-  emitNetSocketCallStatement,
-  emitNetSocketVariableDeclaration,
-  emitPreparedNetAddressPortExpression,
-  resolveNetAddressStringMember
-} from './stdlib/net.ts'
-import type { NetLoweringDependencies } from './stdlib/net.ts'
+import type { FetchLoweringDependencies } from './stdlib/fetch.ts'
 import {
   cFetchRuntimeExpressionMethod,
   emitFetchHeadersBooleanVariableDeclaration,
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
-  emitPreparedFetchInitOperand,
-  isAsyncFetchRuntimeCallExpression
+  emitPreparedFetchInitOperand
 } from './stdlib/fetch.ts'
-import type { FetchLoweringDependencies } from './stdlib/fetch.ts'
+import type { FsLoweringDependencies } from './stdlib/fs.ts'
 import {
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
@@ -220,23 +161,36 @@ import {
   emitPreparedFsCallExpression,
   emitPreparedFsStatsMethodExpression,
   emitPreparedFsSyncStatementExpression,
-  emitPreparedFsSyncValueExpression,
-  isAsyncFsRuntimeCallExpression
+  emitPreparedFsSyncValueExpression
 } from './stdlib/fs.ts'
-import type { FsLoweringDependencies } from './stdlib/fs.ts'
+import type { HttpLoweringDependencies } from './stdlib/http.ts'
+import { emitHttpServerCallStatement, emitHttpServerVariableDeclaration } from './stdlib/http.ts'
+import type { JsonDeclarationDependencies } from './stdlib/json.ts'
 import {
   cJsonRuntimeCallName,
   emitJsonParseVariableDeclaration,
   emitPreparedJsonCallExpression,
   emitPreparedJsonScalarParseExpression
 } from './stdlib/json.ts'
-import type { JsonDeclarationDependencies } from './stdlib/json.ts'
+import type { NetLoweringDependencies } from './stdlib/net.ts'
+import {
+  emitNetAddressMemberVariableDeclaration,
+  emitNetAddressVariableDeclaration,
+  emitNetNumberVariableDeclaration,
+  emitNetServerCallStatement,
+  emitNetServerVariableDeclaration,
+  emitNetSocketCallStatement,
+  emitNetSocketVariableDeclaration,
+  emitPreparedNetAddressPortExpression,
+  resolveNetAddressStringMember
+} from './stdlib/net.ts'
 import {
   cOsRuntimeConstantName,
   cOsRuntimeMethodName,
   emitPreparedOsConstantExpression,
   emitPreparedOsStringCallExpression
 } from './stdlib/os.ts'
+import type { PathLoweringDependencies } from './stdlib/path.ts'
 import {
   cPathRuntimeConstantName,
   cPathRuntimeMethodName,
@@ -245,7 +199,7 @@ import {
   emitPreparedPathObjectCallExpression,
   emitPreparedPathStringCallExpression
 } from './stdlib/path.ts'
-import type { PathLoweringDependencies } from './stdlib/path.ts'
+import type { ProcessLoweringDependencies } from './stdlib/process.ts'
 import {
   cProcessRuntimeEnvName,
   cProcessRuntimeMethodName,
@@ -256,10 +210,10 @@ import {
   emitProcessExitCodeAssignment,
   emitProcessExitStatement
 } from './stdlib/process.ts'
-import type { ProcessLoweringDependencies } from './stdlib/process.ts'
 import { cTimeRuntimeCallName } from './stdlib/time.ts'
-import { emitPreparedTimerCallExpression, emitTimerVariableDeclaration } from './stdlib/timers.ts'
 import type { TimerLoweringDependencies } from './stdlib/timers.ts'
+import { emitPreparedTimerCallExpression, emitTimerVariableDeclaration } from './stdlib/timers.ts'
+import type { UrlLoweringDependencies } from './stdlib/url.ts'
 import {
   cUrlRuntimeMethodName,
   emitPreparedUrlObjectExpression,
@@ -268,43 +222,32 @@ import {
   emitPreparedUrlStringCallExpression,
   emitUrlObjectFieldAssignment
 } from './stdlib/url.ts'
-import type { UrlLoweringDependencies } from './stdlib/url.ts'
-import {
-  cUnsupportedExpressionCode,
-  cUnsupportedVariableDeclarationCode,
-  isCoalesceExpression,
-  isOptionalChainExpression
-} from './syntax.ts'
-import type { IrFunctionNodeEntry, IrModuleRecord } from '../ir/top-level.ts'
-import { isReadonlyCObjectShapeField } from './types.ts'
+import { cUnsupportedExpressionCode, isCoalesceExpression } from './syntax.ts'
 import type {
   CArrayElementInfo,
   CAsyncTaskWrapper,
-  CCallbackWrapper,
   CClassInfo,
-  CDgramMessageHandler,
-  CHttpHandler,
-  CNetHandler,
-  CPromiseChainWrapper,
-  CKnownArrayElement,
-  CKnownObjectField,
-  CKnownObjectIndexField,
   CEmitOptions,
   CFunctionParam,
   CFunctionReturnMapType,
   CFunctionType,
+  CKnownArrayElement,
+  CKnownObjectField,
+  CKnownObjectIndexField,
   CModuleEmitOptions,
   CModuleOutputFile,
   CModulePlan,
   CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
-  CPreparedCallOptions as PreparedCallOptions,
-  CPreparedCallArgs as PreparedCallArgs,
-  CPreparedExpression as PreparedExpression,
   CRuntimeArrowCallbackWrapper,
-  CRuntimeArrowCapture
+  CRuntimeArrowCapture,
+  CPreparedCallArgs as PreparedCallArgs,
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
 } from './types.ts'
+import { isReadonlyCObjectShapeField } from './types.ts'
+import { emitCUnit as emitCUnitWithDependencies } from './unit.ts'
 import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
@@ -312,59 +255,51 @@ import {
   isOpaqueRuntimeValueType,
   isRuntimeNullableType
 } from './value-types.ts'
-import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
-import type { DebugMemoryStatsField } from '../stdlib/descriptors/debug.ts'
-import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import {
-  canLowerCNullishCoalescingExpression,
-  clearNullableScalarNarrowing,
-  emitCOptionalIndexValueExpression,
-  emitCOptionalMemberValueExpression,
-  emitNullableRuntimeValueVariableDeclaration,
-  isNullableRuntimeExpression,
-  isNullableScalarRuntimeExpression,
-  resolveNullableScalarConditionNarrowing
-} from './values/nullable.ts'
-import type { NullableLoweringDependencies } from './values/nullable.ts'
+  emitArrayFilterVariableDeclaration,
+  emitArrayMapVariableDeclaration,
+  emitArraySliceVariableDeclaration,
+  emitArraySortVariableDeclaration,
+  emitPreparedArrayFilterCallExpression,
+  emitPreparedArrayIncludesCallExpression,
+  emitPreparedArrayJoinCallExpression,
+  emitPreparedArrayLengthExpression,
+  emitPreparedArrayMapCallExpression,
+  emitPreparedArrayPopCallExpression,
+  emitPreparedArrayPushCallExpression,
+  emitPreparedArraySliceCallExpression,
+  emitPreparedArraySortCallExpression,
+  emitPreparedArrayUnshiftCallExpression,
+  emitPreparedKnownArrayIndexValueExpression,
+  emitPreparedRuntimeArrayIndexValue,
+  emitPreparedRuntimeArrayIndexValueExpression,
+  isArrayIncludesCall,
+  isArrayJoinCall,
+  isArrayLengthExpression,
+  isArrayMethodCall,
+  isArrayUnshiftCall,
+  resolveForOfElementType,
+  resolveKnownArrayIndex,
+  resolveKnownArrayLength,
+  resolveKnownForOfArray,
+  resolveRuntimeArrayElementType,
+  resolveRuntimeArrayIndex,
+  resolveRuntimeForOfArray,
+  updateKnownArrayElementValueType
+} from './values/arrays.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
-  collectClassMethods,
-  createClassInfos,
-  emitCClassMethodName,
   emitCClassObjectValueExpression,
   emitClassObjectVariableDeclaration,
   emitPreparedClassMethodCallExpression,
-  isClassConstructorExpression,
-  registerClassObjectShape
+  isClassConstructorExpression
 } from './values/classes.ts'
-import type { ClassLoweringDependencies } from './values/classes.ts'
-import {
-  emitDynamicObjectFieldAssignment,
-  emitObjectVariableDeclaration,
-  emitObjectValueReference,
-  emitPreparedDynamicObjectIndexValueExpression,
-  emitPreparedDynamicObjectMemberValueExpression,
-  emitPreparedObjectExpressionIndexValueExpression,
-  emitPreparedObjectExpressionMemberValueExpression,
-  emitPreparedObjectExpressionScalarIndexValueExpression,
-  emitPreparedObjectExpressionScalarMemberValueExpression,
-  emitPreparedKnownObjectIndexValueExpression,
-  emitPreparedKnownObjectMemberValueExpression,
-  isIndexAccessExpression,
-  isMemberAccessExpression,
-  registerObjectShape,
-  resolveCObjectExpressionName,
-  resolveKnownObjectIndex,
-  resolveKnownObjectMember,
-  resolveObjectExpressionIndex,
-  resolveObjectExpressionMember,
-  updateKnownObjectMemberValueType
-} from './values/objects.ts'
-import type { ObjectExpressionFieldDependencies, ObjectVariableDeclarationDependencies } from './values/objects.ts'
+import type { CollectionLoweringDependencies } from './values/collections.ts'
 import {
   collectionConstructorName,
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionConstructorValueExpression,
-  emitPreparedCollectionReceiver,
   emitPreparedCollectionSizeExpression,
   emitPreparedMapIndexAssignment,
   emitPreparedMapIndexGetExpression,
@@ -375,41 +310,79 @@ import {
   resolveRuntimeMapType,
   resolveRuntimeSetElementType
 } from './values/collections.ts'
-import type { CollectionLoweringDependencies } from './values/collections.ts'
 import {
-  emitArrayFilterVariableDeclaration,
-  emitArrayMapVariableDeclaration,
-  emitArraySliceVariableDeclaration,
-  emitArraySortVariableDeclaration,
-  emitPreparedArrayIncludesCallExpression,
-  emitPreparedKnownArrayIndexValueExpression,
-  emitPreparedArrayFilterCallExpression,
-  emitPreparedArrayJoinCallExpression,
-  emitPreparedArrayLengthExpression,
-  emitPreparedArrayMapCallExpression,
-  emitPreparedArrayPopCallExpression,
-  emitPreparedArrayPushCallExpression,
-  emitPreparedRuntimeArrayIndexValueExpression,
-  emitPreparedRuntimeArrayIndexValue,
-  emitPreparedArraySliceCallExpression,
-  emitPreparedArraySortCallExpression,
-  emitPreparedArrayUnshiftCallExpression,
-  isArrayIncludesCall,
-  isArrayJoinCall,
-  isArrayLengthExpression,
-  isArrayMethodCall,
-  isArrayUnshiftCall,
-  resolveForOfElementType,
-  resolveKnownArrayIndex,
-  resolveKnownArrayLength,
-  resolveKnownForOfArray,
-  resolveOptionalRuntimeArrayIndex,
-  resolveRuntimeArrayElementType,
-  resolveRuntimeArrayIndex,
-  resolveRuntimeForOfArray,
-  updateKnownArrayElementValueType
-} from './values/arrays.ts'
-import type { ArrayLoweringDependencies } from './values/arrays.ts'
+  emitCExpression as emitCExpressionWithDependencies,
+  emitCValueExpression as emitCValueExpressionWithDependencies,
+  emitCallExpression as emitCallExpressionWithDependencies,
+  emitCallee as emitCalleeFromExpressions,
+  emitPreparedCallArgs as emitPreparedCallArgsWithDependencies,
+  emitPreparedCallExpression as emitPreparedCallExpressionWithDependencies,
+  emitPreparedNumberExpression as emitPreparedNumberExpressionWithDependencies,
+  emitPreparedRuntimeTruthinessExpression as emitPreparedRuntimeTruthinessExpressionWithDependencies,
+  emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
+  isDynamicRuntimeValueExpression as isDynamicRuntimeValueExpressionWithDependencies,
+  isThrowingFunctionCallee as isThrowingFunctionCalleeFromExpressions,
+  isThrowingFunctionName as isThrowingFunctionNameFromExpressions,
+  objectExpressionPathName
+} from './values/expressions.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
+import {
+  canLowerCNullishCoalescingExpression,
+  clearNullableScalarNarrowing,
+  emitCOptionalIndexValueExpression,
+  emitCOptionalMemberValueExpression,
+  emitNullableRuntimeValueVariableDeclaration,
+  isNullableRuntimeExpression,
+  isNullableScalarRuntimeExpression,
+  resolveNullableScalarConditionNarrowing
+} from './values/nullable.ts'
+import type { ObjectExpressionFieldDependencies, ObjectVariableDeclarationDependencies } from './values/objects.ts'
+import {
+  emitDynamicObjectFieldAssignment,
+  emitObjectValueReference,
+  emitObjectVariableDeclaration,
+  emitPreparedDynamicObjectIndexValueExpression,
+  emitPreparedDynamicObjectMemberValueExpression,
+  emitPreparedKnownObjectIndexValueExpression,
+  emitPreparedKnownObjectMemberValueExpression,
+  emitPreparedObjectExpressionIndexValueExpression,
+  emitPreparedObjectExpressionMemberValueExpression,
+  emitPreparedObjectExpressionScalarIndexValueExpression,
+  emitPreparedObjectExpressionScalarMemberValueExpression,
+  isIndexAccessExpression,
+  isMemberAccessExpression,
+  registerObjectShape,
+  resolveCObjectExpressionName,
+  resolveKnownObjectIndex,
+  resolveKnownObjectMember,
+  updateKnownObjectMemberValueType
+} from './values/objects.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
+import {
+  currentErrorTarget,
+  emitBreakJump,
+  emitContinueJump,
+  emitExpressionStatement,
+  emitForOfStatement,
+  emitForStatement,
+  emitFunctionScalarVariableDeclaration,
+  emitIfStatement,
+  emitNumberBooleanScalarVariableDeclaration,
+  emitReturnStatement,
+  emitRuntimeCallbackRuntimeValueReturnLines,
+  emitStatementBody,
+  emitStatementList,
+  emitStringScalarVariableDeclaration,
+  emitSwitchStatement,
+  emitThrowStatement,
+  emitTryStatement,
+  emitVariableDeclarationStatement,
+  emitWhileStatement,
+  registerErrorChannel,
+  registerRuntimeValueMetadata,
+  reportCCollectionHashability
+} from './values/statements.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
 import {
   canEmitStringBytesOperand,
   collectTemplatePlaceholderExpressions,
@@ -424,14 +397,13 @@ import {
   emitCStringSplitValueExpression,
   emitCStringTrimValueExpression,
   emitCTemplateLiteralValueExpression,
-  emitPreparedStringCharCodeAtExpression,
   emitPreparedStringBytesOperand,
+  emitPreparedStringCharCodeAtExpression,
   emitPreparedStringCompareExpression,
-  emitPreparedStringLengthExpression,
   emitPreparedStringIndexCallExpression,
+  emitPreparedStringLengthExpression,
   emitPreparedStringPredicateCall,
   emitStringExpression,
-  isCStringRuntimeMethodName,
   isNumberConversionCall,
   isNumberToStringCall,
   isRuntimeProducedStringExpression,
@@ -445,88 +417,7 @@ import {
   isStringTrimCall,
   resolveRuntimeStringReference
 } from './values/strings.ts'
-import type { StringLoweringDependencies } from './values/strings.ts'
-import {
-  emitCallExpression as emitCallExpressionWithDependencies,
-  emitCallee as emitCalleeFromExpressions,
-  emitCConditionClause,
-  emitCExpression as emitCExpressionWithDependencies,
-  emitCNegatedConditionClause,
-  emitCValueExpression as emitCValueExpressionWithDependencies,
-  emitPreparedCallArgs as emitPreparedCallArgsWithDependencies,
-  emitPreparedCallExpression as emitPreparedCallExpressionWithDependencies,
-  emitPreparedNumberExpression as emitPreparedNumberExpressionWithDependencies,
-  emitPreparedRuntimeTruthinessExpression as emitPreparedRuntimeTruthinessExpressionWithDependencies,
-  emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
-  isDynamicRuntimeValueExpression as isDynamicRuntimeValueExpressionWithDependencies,
-  objectExpressionPathName,
-  isThrowingFunctionCallee as isThrowingFunctionCalleeFromExpressions,
-  isThrowingFunctionName as isThrowingFunctionNameFromExpressions
-} from './values/expressions.ts'
-import type {
-  CCallExpressionDependencies,
-  CScalarExpressionDependencies,
-  CValueExpressionDependencies
-} from './values/expressions.ts'
 import { inferExpressionType as inferExpressionTypeWithDependencies } from './values/types.ts'
-import type { CExpressionTypeDependencies } from './values/types.ts'
-import {
-  currentBreakTarget,
-  currentContinueTarget,
-  currentErrorTarget,
-  currentReturnTarget,
-  emitBreakJump,
-  emitBreakTargetLabel,
-  emitCatchBindingTypeCheck,
-  emitContinueJump,
-  emitContinueTargetLabel,
-  emitExpressionStatement,
-  emitFunctionScalarVariableDeclaration,
-  emitForOfStatement,
-  emitForStatement,
-  emitIfStatement,
-  emitReturnStatement,
-  emitReturnCleanupStatement,
-  emitReturnJump,
-  emitRuntimeCallbackRuntimeValueReturnLines,
-  emitRuntimeStringVariableDeclaration,
-  emitRuntimeValueVariableDeclaration,
-  emitNumberBooleanScalarVariableDeclaration,
-  emitStringScalarVariableDeclaration,
-  emitStatementBody,
-  emitStatementList,
-  emitSwitchStatement,
-  emitThrowStatement,
-  emitTryStatement,
-  emitVariableDeclarationStatement,
-  emitWhileStatement,
-  isRuntimeValueLocalExpression,
-  registerRuntimeValueMetadata,
-  reportCCollectionHashability,
-  registerErrorChannel
-} from './values/statements.ts'
-import type { StatementLoweringDependencies } from './values/statements.ts'
-import {
-  emitClassMethodDeclaration as emitClassMethodDeclarationWithDependencies,
-  emitClassMethodHead,
-  emitFunctionDeclaration as emitFunctionDeclarationWithDependencies,
-  emitFunctionHead,
-  emitMainReturnExpression,
-  emitMainWrapper as emitMainWrapperWithDependencies,
-  reportUnsupportedCFunctionType,
-  resolveFunctionDeclarationParams
-} from './declarations.ts'
-import type { CDeclarationEmissionDependencies } from './declarations.ts'
-import type {
-  AnyNode,
-  Diagnostic,
-  IrFunctionDeclaration,
-  IrFunctionEffect,
-  IrThrowValueType,
-  IrProgram,
-  ModuleGraph,
-  SourceLocation
-} from '../types.ts'
 export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
@@ -652,7 +543,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitCValueExpression,
   emitDgramAddressVariableDeclaration,
   emitDgramNumberVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitDgramNumberVariableDeclaration(statement, context, dgramLoweringDependencies),
+    emitDgramNumberVariableDeclaration(statement, context),
   emitDgramSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitDgramSocketVariableDeclaration(statement, context, dgramLoweringDependencies),
   emitDgramSocketCallStatement: (expression: AnyNode, context: CFunctionContext) =>
@@ -681,7 +572,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitNetServerCallStatement: (expression: AnyNode, context: CFunctionContext) =>
     emitNetServerCallStatement(expression, context, netLoweringDependencies),
   emitNetServerVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitNetServerVariableDeclaration(statement, context, netLoweringDependencies),
+    emitNetServerVariableDeclaration(statement, context),
   emitNetSocketCallStatement: (expression: AnyNode, context: CFunctionContext) =>
     emitNetSocketCallStatement(expression, context, netLoweringDependencies),
   emitNetSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
@@ -1417,7 +1308,7 @@ const cModuleEmissionDependencies = {
 }
 
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
-  return formatGeneratedC(emitCUnit([ir], ir, options, [ir]), 'inox.generated.c')
+  return formatGeneratedC(emitCUnit([ir], options, [ir]), 'inox.generated.c')
 }
 
 export function emitCBundleFromIrModules(
@@ -1449,9 +1340,8 @@ export function emitCBundleFromIrModules(
   }
 
   const entryIrPrograms = collectIrPrograms(entryModules)
-  const entryIr = findIrEntryProgram(irModules, entry)
 
-  return formatGeneratedC(emitCUnit(irPrograms, entryIr, options, entryIrPrograms), 'inox.bundle.c')
+  return formatGeneratedC(emitCUnit(irPrograms, options, entryIrPrograms), 'inox.bundle.c')
 }
 
 export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions): CModuleOutputFile[] {
@@ -1476,13 +1366,8 @@ function emitCModuleSourceForGraph(
   return emitCModuleSourceWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
 }
 
-function emitCUnit(
-  irPrograms: IrProgram[],
-  entryIrProgram: IrProgram | null,
-  options: CEmitOptions,
-  entryIrPrograms: IrProgram[]
-): string {
-  return emitCUnitWithDependencies(irPrograms, entryIrProgram, options, entryIrPrograms, cUnitDependencies)
+function emitCUnit(irPrograms: IrProgram[], options: CEmitOptions, entryIrPrograms: IrProgram[]): string {
+  return emitCUnitWithDependencies(irPrograms, options, entryIrPrograms, cUnitDependencies)
 }
 
 function createThrowingFunctionInfo(
@@ -2997,7 +2882,7 @@ function inferRejectedValueTypeWithErrors(
   context: CFunctionContext,
   localErrorObjectNames: CNameSet
 ): string {
-  if (isKnownErrorValueExpression(expression, context, localErrorObjectNames)) {
+  if (isKnownErrorValueExpression(expression, localErrorObjectNames)) {
     return 'error'
   }
 
@@ -3136,10 +3021,7 @@ function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, co
   }
 
   if (isIndexAccessExpression(expression) && expression.index.type === 'StringLiteral') {
-    if (
-      !resolveKnownObjectIndex(expression, context) &&
-      inferExpressionType(expression.object, context) === 'object'
-    ) {
+    if (!resolveKnownObjectIndex(expression, context) && inferExpressionType(expression.object, context) === 'object') {
       return true
     }
 
@@ -3752,7 +3634,7 @@ function emitObjectMemberVariableDeclaration(
   }
 
   if (member.valueType === 'string') {
-    return emitObjectStringMemberVariableDeclaration(statement, member, context, emitGetCall)
+    return emitObjectStringMemberVariableDeclaration(statement, context, emitGetCall)
   }
 
   if (!isNullableScalarType(member.valueType)) {
@@ -3925,7 +3807,6 @@ function emitObjectObjectMemberVariableDeclaration(
 
 function emitObjectStringMemberVariableDeclaration(
   statement: AnyNode,
-  member: CKnownObjectField,
   context: CFunctionContext,
   emitGetCall: TempValueEmitter
 ): string[] {
@@ -4878,7 +4759,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
   }
 
   if (valueType === 'number' || valueType === 'boolean') {
-    return emitNumberLogValue(expression, valueType, context)
+    return emitNumberLogValue(expression, context)
   }
 
   if (valueType === 'object' && isErrorValueExpression(expression, context)) {
@@ -5092,7 +4973,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 }
 
-function emitNumberLogValue(expression: AnyNode, valueType: string, context: CFunctionContext): ConsoleLogValue {
+function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   if (isMemberAccessExpression(expression)) {
     const stringLength = emitPreparedStringLengthExpression(expression, context)
 
@@ -5839,7 +5720,7 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
   const value = nextCName(context, 'inox_await_value')
   const valueTag = cRuntimeValueTag(valueType)
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
-  const pollCall = `inox_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression(context)})`
+  const pollCall = `inox_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression()})`
   let rejectionValueType = 'unknown'
   const promiseRejectionValueType = preparedPromise.rejectionValueType ?? ''
   const lines: string[] = []
@@ -6349,7 +6230,7 @@ function emitRuntimeArrowCaptureStoreLines(
 
 function emitRuntimeCallbackCall(
   expression: AnyNode,
-  functionType: CFunctionType,
+  _functionType: CFunctionType,
   context: CFunctionContext
 ): PreparedExpression {
   const lines: string[] = []
@@ -6793,14 +6674,10 @@ function emitPreparedObjectValuesCallExpression(
 }
 
 function isErrorValueExpression(expression: AnyNode, context: CFunctionContext): boolean {
-  return isKnownErrorValueExpression(expression, context, context.errorObjectNames)
+  return isKnownErrorValueExpression(expression, context.errorObjectNames)
 }
 
-function isKnownErrorValueExpression(
-  expression: AnyNode,
-  context: CFunctionContext,
-  errorObjectNames: CNameSet
-): boolean {
+function isKnownErrorValueExpression(expression: AnyNode, errorObjectNames: CNameSet): boolean {
   if (isErrorConstructorExpression(expression)) {
     return true
   }

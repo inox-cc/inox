@@ -1,17 +1,17 @@
+import { memberExpressionPath } from '../member-paths.ts'
 import { binaryConstructorNameFromPath } from '../stdlib/descriptors/binary.ts'
 import {
   arrayRuntimeMethodName,
   collectionConstructorNameFromPath,
+  stringRuntimeMethodName as collectionStringRuntimeMethodName,
   isMapMethod,
-  isSetMethod,
-  stringRuntimeMethodName as collectionStringRuntimeMethodName
+  isSetMethod
 } from '../stdlib/descriptors/collections.ts'
 import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
 import { fsRuntimeMethodForPath } from '../stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
-import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
 type FeatureRawNode = AnyNode

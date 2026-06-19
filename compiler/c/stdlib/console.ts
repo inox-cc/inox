@@ -1,5 +1,5 @@
 import { memberExpressionPath } from '../../member-paths.ts'
-import type { IrProgram, AnyNode } from '../../types.ts'
+import type { AnyNode, IrProgram } from '../../types.ts'
 
 export function isConsoleLog(expression: AnyNode): boolean {
   if (expression.type !== 'CallExpression') {

@@ -1,17 +1,17 @@
+import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import type {
-  CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression,
   CCallbackContextWrapper,
   CCallbackWrapper,
   CFunctionParam,
   CFunctionType,
   CObjectShape,
   CObjectShapeField,
-  CPromiseConstructorHandler,
   CPromiseChainWrapper,
-  CRuntimeArrowCapture
+  CPromiseConstructorHandler,
+  CRuntimeArrowCapture,
+  CPreparedCallOptions as PreparedCallOptions,
+  CPreparedExpression as PreparedExpression
 } from '../types.ts'
-import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import type { CallbackLoweringDependencies, CallbackScope, CallbackScopeBinding } from './callbacks.ts'
 
 type PromiseNode = AnyNode
@@ -275,12 +275,11 @@ export function resolveCAsyncFunctionAwaitValueType(
   return 'unknown'
 }
 
-import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import { diagnostic } from '../../diagnostics.ts'
+import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import {
   emitEventLoopReference,
   emitFailureStatement,
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,

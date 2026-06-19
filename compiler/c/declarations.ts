@@ -1,7 +1,6 @@
 import { diagnostic } from '../diagnostics.ts'
 import { collectIrTopLevelNodesFromPrograms, irClassMethodEffectName } from '../ir.ts'
 import type { AnyNode as CNode, IrProgram, SourceLocation } from '../types.ts'
-import { functionTakesEventLoopParam } from './async/promises.ts'
 import {
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
@@ -10,6 +9,10 @@ import {
   normalizeFunctionType,
   resolveFunctionParameterRuntimeType
 } from './async/callbacks.ts'
+import { functionTakesEventLoopParam } from './async/promises.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
+import { emitAsyncTaskFunctionStubDeclaration } from './async/tasks.ts'
+import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
@@ -34,13 +37,9 @@ import {
   registerBoxedValue,
   shouldEmitCleanupLabel
 } from './context.ts'
-import type { CEmitContext, CFunctionContext } from './context.ts'
-import { registerErrorChannel } from './values/statements.ts'
+import { emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitRuntimeNullableValueCheck } from './runtime-values.ts'
-import { emitAsyncTaskFunctionStubDeclaration } from './async/tasks.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
-import { emitCClassMethodName, registerClassObjectShape } from './values/classes.ts'
-import { registerObjectShape } from './values/objects.ts'
+import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
 import {
   cRuntimeValueTag,
   emitCObjectParamName,
@@ -54,9 +53,10 @@ import {
   isRuntimeNullableType,
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
-import { emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
+import { emitCClassMethodName, registerClassObjectShape } from './values/classes.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
-import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
+import { registerObjectShape } from './values/objects.ts'
+import { registerErrorChannel } from './values/statements.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -979,10 +979,7 @@ function emitRuntimeParamPreludeForParam(
     return lines
   }
 
-  if (
-    param.valueType === 'function' &&
-    resolveFunctionParameterRuntimeType(statement.name, index, param, context)
-  ) {
+  if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context)) {
     if (param.nullable === true) {
       return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context)
     }

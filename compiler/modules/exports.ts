@@ -1,5 +1,5 @@
-import type { AnyNode, ProgramNode } from '../types.ts'
 import type { CompilerHost } from '../host.ts'
+import type { AnyNode, ProgramNode } from '../types.ts'
 
 type ExportNode = AnyNode & {
   exported: boolean

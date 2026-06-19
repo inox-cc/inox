@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers node:process cwd argv env and exitCode to the C process runtime', () => {
   const result = compileSource(
@@ -87,7 +87,10 @@ console.log(execPath, pid, platform, arch, version, versions.node)
 
   assert.match(result.code, /inox_process_argv\(&inox_default_allocator, \(int\)\(1\), &inox_process_string_\d+\)/)
   assert.match(result.code, /inox_process_argv_length\(\)/)
-  assert.match(result.code, /inox_process_env\(&inox_default_allocator, "INOX_PROCESS_TEST", 17, &inox_process_string_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_process_env\(&inox_default_allocator, "INOX_PROCESS_TEST", 17, &inox_process_string_\d+\)/
+  )
   assert.match(result.code, /inox_process_execPath\(&inox_default_allocator, &inox_process_string_\d+\)/)
   assert.match(result.code, /inox_process_pid\(\)/)
   assert.match(result.code, /inox_process_versions_node\(&inox_default_allocator, &inox_process_string_\d+\)/)

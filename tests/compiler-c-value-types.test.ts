@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { emitReturnValueDeclarations } from '../compiler/c/context.ts'
 import {
   cRuntimeValueTag,
   emitCReturnType,
@@ -10,7 +11,6 @@ import {
   isOpaqueRuntimeValueType,
   isThrowingFunctionRuntimeOut
 } from '../compiler/c/value-types.ts'
-import { emitReturnValueDeclarations } from '../compiler/c/context.ts'
 
 test('treats named non-special C value types as opaque runtime values', () => {
   const names = ['CFunctionContext', 'StatementLoweringDependencies', 'ArrayCallbackBody']

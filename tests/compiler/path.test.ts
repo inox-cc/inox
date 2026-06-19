@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers default node:path methods and constants to the C path runtime', () => {
   const result = compileSource(
@@ -25,7 +25,10 @@ export function main(): void {
   assert.match(result.code, /inox_path_join\(&inox_default_allocator, inox_path_args_\d+, 4, &inox_path_value_\d+\)/)
   assert.match(result.code, /inox_path_resolve\(&inox_default_allocator, inox_path_args_\d+, 4, &inox_path_value_\d+\)/)
   assert.match(result.code, /inox_path_basename\(&inox_default_allocator,/)
-  assert.match(result.code, /inox_path_parse\(&inox_default_allocator, inox_value_\d+, &inox_shape_path_parse_\d+, &parsed\)/)
+  assert.match(
+    result.code,
+    /inox_path_parse\(&inox_default_allocator, inox_value_\d+, &inox_shape_path_parse_\d+, &parsed\)/
+  )
   assert.match(result.code, /inox_path_format\(&inox_default_allocator, parsed, &inox_path_value_\d+\)/)
   assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, "\/", 1, &inox_path_constant_\d+\)/)
   assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, ":", 1, &inox_path_constant_\d+\)/)

@@ -34,37 +34,6 @@ type IrProgramWithGlobalUsages = {
 
 type StringSet = Set<string>
 
-const jsStdGlobalRootNames = [
-  'Array',
-  'Buffer',
-  'inox',
-  'Date',
-  'Error',
-  'Int8Array',
-  'Int16Array',
-  'Int32Array',
-  'JSON',
-  'Map',
-  'Math',
-  'Object',
-  'Promise',
-  'Set',
-  'Uint8Array',
-  'Uint16Array',
-  'Uint32Array',
-  'crypto',
-  'fetch',
-  'fs',
-  'http',
-  'performance',
-  'clearTimeout',
-  'clearInterval',
-  'clearImmediate',
-  'setTimeout',
-  'setInterval',
-  'setImmediate'
-]
-
 export function collectGlobalUsages(program: ProgramNode): IrGlobalUsage[] {
   const usages: IrGlobalUsage[] = []
 

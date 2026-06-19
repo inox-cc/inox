@@ -1,34 +1,18 @@
 import { diagnostic } from '../../diagnostics.ts'
-import {
-  cloneCFunctionReturnMapTypeMap,
-  cloneCObjectShapeFieldMap,
-  cloneCStringMap,
-  cloneCStringSet,
-  emitPrepareOwnedValueWrite,
-  emitRuntimeTypeCheck,
-  nextCName
-} from '../context.ts'
+import type { AnyNode, Diagnostic, IrFunctionDeclaration, SourceLocation } from '../../types.ts'
+import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, nextCName } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from '../stdlib/fetch.ts'
 import { cFsRuntimeExpressionMethod, isAsyncFsRuntimeCallExpression } from '../stdlib/fs.ts'
-import { cRuntimeValueTag, emitCType, isManagedRuntimeReturnType } from '../value-types.ts'
-import {
-  cPromiseRuntimeCallName,
-  isAsyncFunctionCallee,
-  isPromiseReturningFunctionCallee,
-  resolveCAsyncFunctionAwaitValueType
-} from './promises.ts'
-import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, SourceLocation } from '../../types.ts'
 import type {
   CArrayElementInfo,
-  CAsyncTaskPhase,
   CAsyncTaskAwaitFrameLocal,
   CAsyncTaskAwaitStep,
   CAsyncTaskFrameLocal,
   CAsyncTaskFrameLocalKind,
   CAsyncTaskParam,
+  CAsyncTaskPhase,
   CAsyncTaskPrefixFrameLocal,
   CAsyncTaskPrefixLocal,
   CAsyncTaskSuccessPhaseKind,
@@ -39,21 +23,27 @@ import type {
   CFunctionParam,
   CFunctionReturnMapType,
   CFunctionType,
-  CObjectShape,
-  CObjectShapeField,
-  CPromiseChainWrapper,
-  CPromiseConstructorHandler,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
-  CRuntimeArrayElement,
-  CRuntimeArrowCapture
-} from '../types.ts'
-import type {
+  CObjectShape,
+  CObjectShapeField,
   CPreparedCallArgs,
-  CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand
+  CPreparedStringBytesOperand,
+  CPromiseChainWrapper,
+  CPromiseConstructorHandler,
+  CRuntimeArrayElement,
+  CRuntimeArrowCapture,
+  CPreparedExpression as PreparedExpression
 } from '../types.ts'
+import { cRuntimeValueTag, emitCType, isManagedRuntimeReturnType } from '../value-types.ts'
+import { isPromiseChainCallbackWrapperWithContext } from './callbacks.ts'
+import {
+  cPromiseRuntimeCallName,
+  isAsyncFunctionCallee,
+  isPromiseReturningFunctionCallee,
+  resolveCAsyncFunctionAwaitValueType
+} from './promises.ts'
 
 type AsyncTaskAstNode = AnyNode
 type AsyncTaskLoopFlowTarget = {
@@ -838,22 +828,6 @@ function asyncTaskSuccessPhaseKindSetFromArray(values: CAsyncTaskSuccessPhaseKin
   return result
 }
 
-function cloneOptionalAsyncTaskStringMap(values: AsyncTaskStringMap | null | undefined): AsyncTaskStringMap {
-  if (values === null || typeof values === 'undefined') {
-    return new Map()
-  }
-
-  return cloneCStringMap(values)
-}
-
-function cloneOptionalAsyncTaskStringSet(values: AsyncTaskStringSet | null | undefined): AsyncTaskStringSet {
-  if (values === null || typeof values === 'undefined') {
-    return new Set()
-  }
-
-  return cloneCStringSet(values)
-}
-
 function appendAsyncTaskLines(target: string[], source: string[]): void {
   for (const line of source) {
     target.push(line)
@@ -1224,7 +1198,7 @@ function resolveAsyncTaskNestedTryBodyPlan(
     return null
   }
 
-  const prefixResult = asyncTaskPrefixLocalsResultOrEmpty(prefixResultOrNull, context)
+  const prefixResult = asyncTaskPrefixLocalsResultOrEmpty(prefixResultOrNull)
   const prefixScope = pushAsyncTaskExpressionContextScope(context, params, prefixResult.locals)
   const awaitResultOrNull = resolveAsyncTaskAwaitStepsAndTrailingStatements(innerPrefixResult.awaitStatements, context)
   asyncTaskDeps(context).restoreVariableScope(context, prefixScope)
@@ -1365,10 +1339,7 @@ function asyncTaskNestedTryChainOrEmpty(result: AsyncTaskNestedTryChain | null):
   }
 }
 
-function asyncTaskPrefixLocalsResultOrEmpty(
-  result: AsyncTaskPrefixLocalsResult | null,
-  context: AsyncTaskPlannerContext
-): AsyncTaskPrefixLocalsResult {
+function asyncTaskPrefixLocalsResultOrEmpty(result: AsyncTaskPrefixLocalsResult | null): AsyncTaskPrefixLocalsResult {
   if (result !== null && typeof result !== 'undefined') {
     return result
   }
@@ -1872,89 +1843,6 @@ function resolveAsyncTaskTryHandler(
     statements: handlerStatements,
     returnExpression: returnExpression
   }
-}
-
-function createAsyncTaskExpressionContext(
-  context: AsyncTaskPlannerContext,
-  params: CAsyncTaskParam[],
-  awaits: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
-): AsyncTaskPlannerContext {
-  const result = asyncTaskDeps(context).createFunctionContext(context, context.returnType, context.returnNullable)
-
-  result.arrayShapes = context.arrayShapes
-  result.breakFlowUsed = context.breakFlowUsed
-  result.breakTargets = context.breakTargets
-  result.boxedValueTypes = context.boxedValueTypes
-  result.boxedValues = context.boxedValues
-  result.boxedVariables = context.boxedVariables
-  result.classInstanceTypes = context.classInstanceTypes
-  result.cleanupEnabled = context.cleanupEnabled
-  result.continueFlowUsed = context.continueFlowUsed
-  result.continueTargets = context.continueTargets
-  result.dgramBoundSockets = context.dgramBoundSockets
-  result.dgramMessageSockets = context.dgramMessageSockets
-  result.dgramReuseAddrSockets = context.dgramReuseAddrSockets
-  result.errorChannelUsed = context.errorChannelUsed
-  result.errorObjectNames = context.errorObjectNames
-  result.errorTargets = context.errorTargets
-  result.eventLoopUsed = context.eventLoopUsed
-  result.externalEventLoop = context.externalEventLoop
-  result.failureStatement = context.failureStatement
-  result.failureStatementUsed = context.failureStatementUsed === true
-  result.functionErrorOut = context.functionErrorOut
-  result.functionReturnOut = context.functionReturnOut
-  result.functionTypes = context.functionTypes
-  result.mapTypes = cloneCFunctionReturnMapTypeMap(context.mapTypes)
-  result.narrowedNullableScalars = context.narrowedNullableScalars
-  result.netReadingSockets = context.netReadingSockets
-  result.nullableVariables = context.nullableVariables
-  result.objectAliases = cloneOptionalAsyncTaskStringMap(context.objectAliases)
-  result.objectDeclaredTypes = new Map(context.objectDeclaredTypes)
-  result.objectShapes = cloneCObjectShapeFieldMap(context.objectShapes)
-  result.ownedCryptoHashes = context.ownedCryptoHashes
-  result.ownedCryptoHmacs = context.ownedCryptoHmacs
-  result.ownedPromises = context.ownedPromises
-  result.ownedValues = context.ownedValues
-  result.promiseConstructorHandlers = context.promiseConstructorHandlers
-  result.promiseRejectionValueTypes = context.promiseRejectionValueTypes
-  result.promiseValueTypes = context.promiseValueTypes
-  result.returnFlowUsed = context.returnFlowUsed
-  result.returnShape = context.returnShape
-  result.returnTargets = context.returnTargets
-  result.runtimeArrayElementTypes = cloneOptionalAsyncTaskStringMap(context.runtimeArrayElementTypes)
-  const runtimeCallbackCleanupLabel = context.runtimeCallbackCleanupLabel
-  if (runtimeCallbackCleanupLabel !== null && typeof runtimeCallbackCleanupLabel !== 'undefined') {
-    result.runtimeCallbackCleanupLabel = runtimeCallbackCleanupLabel
-  }
-  const runtimeCallbackReturnOut = context.runtimeCallbackReturnOut
-  if (runtimeCallbackReturnOut !== null && typeof runtimeCallbackReturnOut !== 'undefined') {
-    result.runtimeCallbackReturnOut = runtimeCallbackReturnOut
-  }
-  result.runtimeCallbackReturnShape = context.runtimeCallbackReturnShape
-  const runtimeCallbackReturnType = context.runtimeCallbackReturnType
-  if (runtimeCallbackReturnType !== null && typeof runtimeCallbackReturnType !== 'undefined') {
-    result.runtimeCallbackReturnType = runtimeCallbackReturnType
-  }
-  result.runtimeCallbacks = context.runtimeCallbacks
-  result.runtimeStrings = cloneOptionalAsyncTaskStringSet(context.runtimeStrings)
-  result.setElementTypes = cloneOptionalAsyncTaskStringMap(context.setElementTypes)
-  result.statusReturn = context.statusReturn
-  result.throwingFunction = context.throwingFunction
-  result.usedCleanupGoto = context.usedCleanupGoto
-  result.usedRuntimeCallbackCleanupGoto = context.usedRuntimeCallbackCleanupGoto === true
-  result.variables = cloneOptionalAsyncTaskStringMap(context.variables)
-
-  for (const param of params) {
-    registerAsyncTaskLocalMetadata(param.name, param.valueType, param, result)
-  }
-
-  for (const item of awaits) {
-    if (item.name !== null && typeof item.name !== 'undefined') {
-      registerAsyncTaskLocalMetadata(item.name, item.type, item, result)
-    }
-  }
-
-  return result
 }
 
 function pushAsyncTaskExpressionContextScope(

@@ -1,9 +1,9 @@
 import test from 'node:test'
-import { assert, assertDiagnostic, compileSource } from '../helpers/compiler-smoke.ts'
 import {
   debugRuntimeMethodNameFromKnownPath,
   isDebugRuntimeMethodPath
 } from '../../compiler/stdlib/descriptors/debug.ts'
+import { assert, assertDiagnostic, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers inox.__debug.memory to C debug memory snapshots', () => {
   const result = compileSource(

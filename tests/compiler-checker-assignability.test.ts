@@ -1,5 +1,5 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
 import {
   commonArrayElementType,
@@ -123,8 +123,7 @@ export function main(): void {
       )
     },
     (error: any) =>
-      Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'INOX_TYPE_MISMATCH')
+      Array.isArray(error?.diagnostics) && error.diagnostics.some((item: any) => item.code === 'INOX_TYPE_MISMATCH')
   )
 })
 
@@ -195,8 +194,7 @@ function read(flag: boolean): string {
       )
     },
     (error: any) =>
-      Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
+      Array.isArray(error?.diagnostics) && error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
   )
 })
 
@@ -226,8 +224,7 @@ function read(flag: boolean): string {
       )
     },
     (error: any) =>
-      Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
+      Array.isArray(error?.diagnostics) && error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
   )
 })
 
@@ -277,7 +274,6 @@ function read(holder: Holder): string {
       )
     },
     (error: any) =>
-      Array.isArray(error?.diagnostics) &&
-      error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
+      Array.isArray(error?.diagnostics) && error.diagnostics.some((item: any) => item.code === 'INOX_WEAK_ACCESS')
   )
 })

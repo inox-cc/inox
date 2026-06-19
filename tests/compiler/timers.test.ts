@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { assert, compileSource, CompileError } from '../helpers/compiler-smoke.ts'
+import { assert, CompileError, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers node:timers named and default imports to timer runtime calls', () => {
   const result = compileSource(
@@ -54,7 +54,10 @@ setTimeout(() => {
         return false
       }
 
-      assert.equal(error.diagnostics.some((item) => item.code === 'INOX_CAPABILITY'), true)
+      assert.equal(
+        error.diagnostics.some((item) => item.code === 'INOX_CAPABILITY'),
+        true
+      )
       assert.equal(
         error.diagnostics.some((item) =>
           item.message.includes('embedded profile requires timers capability for setTimeout')

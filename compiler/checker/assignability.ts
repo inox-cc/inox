@@ -1,4 +1,3 @@
-import type { ValueType } from '../types.ts'
 import {
   isArrayTypeName,
   isNullableTypeName,
@@ -8,6 +7,7 @@ import {
   nullableTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
+import type { ValueType } from '../types.ts'
 
 type ValueTypeList = ValueType[]
 

@@ -1,9 +1,9 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
+import type { CompilerHost } from '../host.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
+import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord } from '../types.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCIdentifier } from './identifiers.ts'
-import type { CompilerHost } from '../host.ts'
-import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord } from '../types.ts'
 import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
 
 const cModuleSourceExtensions = ['', '.ts', '.js']

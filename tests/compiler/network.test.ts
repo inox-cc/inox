@@ -3,30 +3,10 @@ import {
   assert,
   assertDiagnostic,
   cLibuvOptions,
-  collectIrFeatureRequirements,
-  collectIrFunctionEffects,
-  collectIrFunctionNodeEntries,
   collectIrGlobalRoots,
-  collectIrLocalThrowValueTypes,
-  collectIrModuleRecords,
-  collectIrPrograms,
-  collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodesFromPrograms,
-  compileFile,
-  compileSource,
   CompileError,
-  emitCBundleFromIrModules,
-  emitCFromIr,
-  findIrEntryProgram,
-  join,
-  mkdir,
-  mkdtemp,
-  rm,
-  tmpdir,
-  writeFile
+  compileSource
 } from '../helpers/compiler-smoke.ts'
-
-
 
 test('emits C dgram runtime include for node:dgram imports', () => {
   const result = compileSource(
@@ -40,7 +20,6 @@ export function main(): void {
 
   assert.match(result.code, /#include "inox\/dgram\.h"/)
 })
-
 
 test('lowers node:dgram message echo sockets to the C dgram runtime', () => {
   const result = compileSource(
@@ -58,7 +37,10 @@ server.bind(0, '127.0.0.1', () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /static inox_status inox_dgram_message_handler_\d+\(void\* user, inox_dgram_socket\* inox_socket, const char\* inox_bytes, size_t inox_len, const char\* inox_host, int inox_port\);/)
+  assert.match(
+    result.code,
+    /static inox_status inox_dgram_message_handler_\d+\(void\* user, inox_dgram_socket\* inox_socket, const char\* inox_bytes, size_t inox_len, const char\* inox_host, int inox_port\);/
+  )
   assert.match(result.code, /inox_dgram_socket_new\(&inox_loop, 0, 0, &server\)/)
   assert.match(result.code, /inox_dgram_socket_on_message\(server, inox_dgram_message_handler_\d+, 0\)/)
   assert.match(result.code, /inox_dgram_bind_flags\(server, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
@@ -67,7 +49,6 @@ server.bind(0, '127.0.0.1', () => {
   assert.match(result.code, /inox_dgram_socket_address\(server, &address\)/)
   assert.match(result.code, /printf\("%g\\n", \(\(double\)address\.port\)\)/)
 })
-
 
 test('lowers node:dgram createSocket and bind option objects with keyword keys', () => {
   const result = compileSource(
@@ -82,7 +63,6 @@ socket.bind({ port: 0, address: '127.0.0.1' })
   assert.match(result.code, /inox_dgram_socket_new\(&inox_loop, 0, 0, &socket\)/)
   assert.match(result.code, /inox_dgram_bind_flags\(socket, "127\.0\.0\.1", \(int\)\(0\), 0\)/)
 })
-
 
 test('lowers node:dgram connected UDP helpers to the C dgram runtime', () => {
   const result = compileSource(
@@ -104,7 +84,6 @@ socket.disconnect()
   assert.match(result.code, /inox_dgram_send_connected\(socket, "hello", 5\)/)
   assert.match(result.code, /inox_dgram_socket_disconnect\(socket\)/)
 })
-
 
 test('lowers node:dgram socket options to the C dgram runtime', () => {
   const result = compileSource(
@@ -136,7 +115,6 @@ console.log(sendSize, recvSize)
   assert.match(result.code, /inox_dgram_ref\(socket\)/)
 })
 
-
 test('reports unsupported node:dgram compatibility shapes with dgram diagnostics', () => {
   assertDiagnostic(
     `import dgram from 'node:dgram'
@@ -158,7 +136,6 @@ socket.addMembership('224.0.0.1')
   )
 })
 
-
 test('emits C net runtime include for node:net imports', () => {
   const result = compileSource(
     `import net from 'node:net'
@@ -171,7 +148,6 @@ export function main(): void {
 
   assert.match(result.code, /#include "inox\/net\.h"/)
 })
-
 
 test('lowers node:net server lifecycle to the C net runtime', () => {
   const result = compileSource(
@@ -198,9 +174,18 @@ server.listen({ port: 0, host: '127.0.0.1', backlog: 16 }, () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /static inox_status inox_net_connection_handler_\d+\(void\* user, inox_net_server\* inox_server, inox_net_socket\* inox_socket\);/)
-  assert.match(result.code, /static inox_status inox_net_event_handler_\d+\(void\* user, inox_net_server\* inox_server\);/)
-  assert.match(result.code, /static inox_status inox_net_error_handler_\d+\(void\* user, inox_net_server\* inox_server, inox_status inox_error_status\);/)
+  assert.match(
+    result.code,
+    /static inox_status inox_net_connection_handler_\d+\(void\* user, inox_net_server\* inox_server, inox_net_socket\* inox_socket\);/
+  )
+  assert.match(
+    result.code,
+    /static inox_status inox_net_event_handler_\d+\(void\* user, inox_net_server\* inox_server\);/
+  )
+  assert.match(
+    result.code,
+    /static inox_status inox_net_error_handler_\d+\(void\* user, inox_net_server\* inox_server, inox_status inox_error_status\);/
+  )
   assert.match(result.code, /inox_net_server_new\(&inox_loop, inox_net_connection_handler_\d+, 0, &server\)/)
   assert.match(result.code, /inox_net_server_on_listening\(server, inox_net_event_handler_\d+, 0\)/)
   assert.match(result.code, /inox_net_server_on_close\(server, inox_net_event_handler_\d+, 0\)/)
@@ -212,7 +197,6 @@ server.listen({ port: 0, host: '127.0.0.1', backlog: 16 }, () => {
   assert.match(result.code, /printf\("%s %s %g\\n", address\.address, address\.family, \(\(double\)address\.port\)\)/)
 })
 
-
 test('lowers chained node:net createServer listen calls', () => {
   const result = compileSource(
     `import { createServer } from 'node:net'
@@ -223,11 +207,16 @@ createServer((socket) => socket.end('ok')).listen(0, '127.0.0.1')
   )
 
   assert.match(result.code, /inox_net_server\* inox_net_server_\d+ = 0;/)
-  assert.match(result.code, /inox_net_server_new\(&inox_loop, inox_net_connection_handler_\d+, 0, &inox_net_server_\d+\)/)
-  assert.match(result.code, /inox_net_server_listen\(inox_net_server_\d+, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(128\)\)/)
+  assert.match(
+    result.code,
+    /inox_net_server_new\(&inox_loop, inox_net_connection_handler_\d+, 0, &inox_net_server_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /inox_net_server_listen\(inox_net_server_\d+, "127\.0\.0\.1", \(int\)\(0\), \(int\)\(128\)\)/
+  )
   assert.match(result.code, /inox_net_socket_end\(inox_socket, "ok", 2\)/)
 })
-
 
 test('lowers node:net client sockets and events to the C net runtime', () => {
   const result = compileSource(
@@ -264,10 +253,22 @@ client.on('drain', () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /static inox_status inox_net_socket_event_handler_\d+\(void\* user, inox_net_socket\* inox_socket\);/)
-  assert.match(result.code, /static inox_status inox_net_socket_data_handler_\d+\(void\* user, inox_net_socket\* inox_socket, const char\* inox_bytes, size_t inox_len\);/)
-  assert.match(result.code, /static inox_status inox_net_socket_write_handler_\d+\(void\* user, inox_net_socket\* inox_socket, inox_status inox_write_status\);/)
-  assert.match(result.code, /static inox_status inox_net_socket_error_handler_\d+\(void\* user, inox_net_socket\* inox_socket, inox_status inox_error_status\);/)
+  assert.match(
+    result.code,
+    /static inox_status inox_net_socket_event_handler_\d+\(void\* user, inox_net_socket\* inox_socket\);/
+  )
+  assert.match(
+    result.code,
+    /static inox_status inox_net_socket_data_handler_\d+\(void\* user, inox_net_socket\* inox_socket, const char\* inox_bytes, size_t inox_len\);/
+  )
+  assert.match(
+    result.code,
+    /static inox_status inox_net_socket_write_handler_\d+\(void\* user, inox_net_socket\* inox_socket, inox_status inox_write_status\);/
+  )
+  assert.match(
+    result.code,
+    /static inox_status inox_net_socket_error_handler_\d+\(void\* user, inox_net_socket\* inox_socket, inox_status inox_error_status\);/
+  )
   assert.match(result.code, /inox_net_connect\(&inox_loop, "127\.0\.0\.1", \(int\)\(9000\), 0, 0, 0, 0, &client\)/)
   assert.match(result.code, /inox_net_socket_on_connect\(client, inox_net_socket_event_handler_\d+, 0\)/)
   assert.match(result.code, /inox_net_socket_set_encoding\(client, "utf8", 4\)/)
@@ -277,12 +278,17 @@ client.on('drain', () => {
   assert.match(result.code, /inox_net_socket_on_close\(client, inox_net_socket_event_handler_\d+, 0\)/)
   assert.match(result.code, /inox_net_socket_on_error\(client, inox_net_socket_error_handler_\d+, 0\)/)
   assert.match(result.code, /inox_net_socket_on_drain\(client, inox_net_socket_event_handler_\d+, 0\)/)
-  assert.match(result.code, /inox_net_socket_write_with_callback\(inox_socket, "ping", 4, inox_net_socket_write_handler_\d+, 0\)/)
+  assert.match(
+    result.code,
+    /inox_net_socket_write_with_callback\(inox_socket, "ping", 4, inox_net_socket_write_handler_\d+, 0\)/
+  )
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)inox_len, inox_bytes\)/)
-  assert.match(result.code, /inox_net_socket_end_with_callback\(inox_socket, inox_bytes, inox_len, inox_net_socket_write_handler_\d+, 0\)/)
+  assert.match(
+    result.code,
+    /inox_net_socket_end_with_callback\(inox_socket, inox_bytes, inox_len, inox_net_socket_write_handler_\d+, 0\)/
+  )
   assert.match(result.code, /inox_net_socket_destroy\(inox_socket\)/)
 })
-
 
 test('lowers node:net socket address helpers and options to the C net runtime', () => {
   const result = compileSource(
@@ -325,7 +331,6 @@ console.log(local.address, local.port, remoteAddress, remotePort, localAddress, 
   assert.match(result.code, /printf\("%s %g %s %g %s %g %g %g\\n"/)
 })
 
-
 test('reports unsupported node:net socket timeout with net diagnostics', () => {
   assertDiagnostic(
     `import net from 'node:net'
@@ -337,7 +342,6 @@ client.setTimeout(1000)
     cLibuvOptions
   )
 })
-
 
 test('emits C http runtime include for node:http imports', () => {
   const result = compileSource(
@@ -351,7 +355,6 @@ export function main(): void {
 
   assert.match(result.code, /#include "inox\/http\.h"/)
 })
-
 
 test('reports libuv-only C APIs when the loop backend is embedded', () => {
   assertDiagnostic(
@@ -414,7 +417,6 @@ console.log(response.status)
   assert.match(error.diagnostics[0].message, /fetch is not implemented for C without libuv/)
 })
 
-
 test('lowers global fetch GET and response text to the C fetch runtime', () => {
   const result = compileSource(
     `const response = await fetch('http://127.0.0.1:9000/hello')
@@ -434,7 +436,6 @@ console.log(response.status, response.ok, response.url, text)
   assert.match(result.code, /printf\("%g %g %\.\*s %\.\*s\\n"/)
 })
 
-
 test('lowers global fetch init options to the C fetch runtime', () => {
   const result = compileSource(
     `const response = await fetch('http://127.0.0.1:9000/users', {
@@ -450,11 +451,19 @@ console.log(response.status)
     cLibuvOptions
   )
 
-  assert.match(result.code, /inox_fetch_header inox_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-INOX", 6, "fetch", 5 \} \};/)
-  assert.match(result.code, /inox_fetch_init inox_fetch_init_\d+ = \{ "POST", 4, inox_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14, inox_undefined_value\(\), 0, 0 \};/)
-  assert.match(result.code, /inox_fetch_with_init\(&inox_loop, "http:\/\/127\.0\.0\.1:9000\/users", 27, &inox_fetch_init_\d+, &inox_promise_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_fetch_header inox_fetch_headers_\d+\[2\] = \{ \{ "Content-Type", 12, "application\/json", 16 \}, \{ "X-INOX", 6, "fetch", 5 \} \};/
+  )
+  assert.match(
+    result.code,
+    /inox_fetch_init inox_fetch_init_\d+ = \{ "POST", 4, inox_fetch_headers_\d+, 2, "\{\\"name\\":\\"Ada\\"\}", 14, inox_undefined_value\(\), 0, 0 \};/
+  )
+  assert.match(
+    result.code,
+    /inox_fetch_with_init\(&inox_loop, "http:\/\/127\.0\.0\.1:9000\/users", 27, &inox_fetch_init_\d+, &inox_promise_\d+\)/
+  )
 })
-
 
 test('lowers fetch response metadata and headers helpers to the C fetch runtime', () => {
   const result = compileSource(
@@ -467,9 +476,15 @@ console.log(response.statusText, response.redirected, contentType ?? 'missing', 
     cLibuvOptions
   )
 
-  assert.match(result.code, /inox_fetch_init inox_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, inox_undefined_value\(\), "manual", 6 \};/)
+  assert.match(
+    result.code,
+    /inox_fetch_init inox_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, inox_undefined_value\(\), "manual", 6 \};/
+  )
   assert.match(result.code, /inox_object_get_known\(response, 5, &headers\)/)
-  assert.match(result.code, /inox_fetch_headers_get\(&inox_default_allocator, headers, "content-type", 12, &inox_fetch_header_value_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_fetch_headers_get\(&inox_default_allocator, headers, "content-type", 12, &inox_fetch_header_value_\d+\)/
+  )
   assert.match(result.code, /inox_nullable_value_\d+ = inox_fetch_header_value_\d+;/)
   assert.match(result.code, /contentType = inox_nullable_value_\d+;/)
   assert.match(result.code, /inox_retain\(contentType\);/)
@@ -478,7 +493,6 @@ console.log(response.statusText, response.redirected, contentType ?? 'missing', 
   assert.match(result.code, /inox_object_get_known\(response, 3, &inox_log_value_\d+\)/)
   assert.match(result.code, /inox_object_get_known\(response, 4, &inox_log_value_\d+\)/)
 })
-
 
 test('lowers AbortController signal for fetch init to the C fetch runtime', () => {
   const result = compileSource(
@@ -493,10 +507,15 @@ console.log(response.status)
   assert.match(result.code, /inox_fetch_abort_controller_new\(&inox_default_allocator, &controller\)/)
   assert.match(result.code, /inox_fetch_abort_controller_abort\(controller\)/)
   assert.match(result.code, /inox_fetch_abort_controller_signal\(controller, &inox_fetch_signal_\d+\)/)
-  assert.match(result.code, /inox_fetch_init inox_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, inox_fetch_signal_\d+, 0, 0 \};/)
-  assert.match(result.code, /inox_fetch_with_init\(&inox_loop, "http:\/\/127\.0\.0\.1:9000\/slow", 26, &inox_fetch_init_\d+, &inox_promise_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_fetch_init inox_fetch_init_\d+ = \{ 0, 0, 0, 0, 0, 0, inox_fetch_signal_\d+, 0, 0 \};/
+  )
+  assert.match(
+    result.code,
+    /inox_fetch_with_init\(&inox_loop, "http:\/\/127\.0\.0\.1:9000\/slow", 26, &inox_fetch_init_\d+, &inox_promise_\d+\)/
+  )
 })
-
 
 test('lowers fetch rejections to Error-like catch bindings in C', () => {
   const result = compileSource(
@@ -512,13 +531,15 @@ test('lowers fetch rejections to Error-like catch bindings in C', () => {
     cLibuvOptions
   )
 
-  assert.match(result.code, /if \(inox_error\.tag != INOX_TAG_OBJECT \|\| inox_error\.as\.ref == 0\) goto inox_cleanup;/)
+  assert.match(
+    result.code,
+    /if \(inox_error\.tag != INOX_TAG_OBJECT \|\| inox_error\.as\.ref == 0\) goto inox_cleanup;/
+  )
   assert.match(result.code, /inox_value error = inox_error;/)
   assert.match(result.code, /printf\("%\.\*s: %\.\*s\\n"/)
   assert.match(result.code, /printf\("%s %\.\*s: %\.\*s\\n", "#error:"/)
   assert.doesNotMatch(result.code, /inox_string\* error = \(inox_string\*\)inox_error\.as\.ref;/)
 })
-
 
 test('lowers fetch awaits inside async task frames', () => {
   const result = compileSource(
@@ -533,10 +554,12 @@ console.log(text)
     cLibuvOptions
   )
 
-  assert.match(result.code, /status = inox_fetch_with_init\(inox_loop, "http:\/\/127\.0\.0\.1:9000\/status", 28, &inox_fetch_init_\d+, &frame->awaited\);/)
+  assert.match(
+    result.code,
+    /status = inox_fetch_with_init\(inox_loop, "http:\/\/127\.0\.0\.1:9000\/status", 28, &inox_fetch_init_\d+, &frame->awaited\);/
+  )
   assert.match(result.code, /inox_fetch_response_text\(inox_loop, response, &inox_promise_\d+\)/)
 })
-
 
 test('reports unsupported fetch init and response body helpers with fetch diagnostics', () => {
   assertDiagnostic(
@@ -598,7 +621,6 @@ console.log(response.body)
   )
 })
 
-
 test('accepts HTTPS fetch literals when a C TLS backend is enabled', () => {
   const result = compileSource(
     `const response = await fetch('https://example.test/hello')
@@ -612,7 +634,6 @@ console.log(response.status)
 
   assert.match(result.code, /inox_fetch\(&inox_loop, "https:\/\/example\.test\/hello", \d+, &inox_promise_\d+\)/)
 })
-
 
 test('lowers node:http createServer and listen to the C HTTP runtime', () => {
   const result = compileSource(
@@ -628,13 +649,15 @@ server.listen(8080, '127.0.0.1')
     cLibuvOptions
   )
 
-  assert.match(result.code, /static inox_status inox_http_handler_\d+\(void\* user, const inox_http_request\* inox_request, inox_http_response\* inox_response\);/)
+  assert.match(
+    result.code,
+    /static inox_status inox_http_handler_\d+\(void\* user, const inox_http_request\* inox_request, inox_http_response\* inox_response\);/
+  )
   assert.match(result.code, /inox_http_server_new\(&inox_loop, inox_http_handler_\d+, 0, &server\)/)
   assert.match(result.code, /inox_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
   assert.match(result.code, /inox_http_response_write_head\(res, \(int\)\(200\), inox_http_headers_\d+, 1\)/)
   assert.match(result.code, /inox_http_response_end\(res, "\{\\\"data\\\":\\\"Hello World!\\\"\}", 23\)/)
 })
-
 
 test('lowers aliased node:http imports and request field checks for C', () => {
   const result = compileSource(
@@ -665,7 +688,6 @@ server.listen(9000)
   assert.match(result.code, /inox_http_server_listen\(server, 0, \(int\)\(9000\), 128\)/)
 })
 
-
 test('lowers node:http request event and lifecycle callbacks for C', () => {
   const result = compileSource(
     `import http from 'node:http'
@@ -687,7 +709,6 @@ server.listen(8080, '127.0.0.1', () => {
   assert.match(result.code, /inox_http_server_listen\(server, "127\.0\.0\.1", \(int\)\(8080\), 128\)/)
   assert.match(result.code, /inox_http_server_close\(server\);/)
 })
-
 
 test('collects node:http global usages when http is referenced', () => {
   const result = compileSource(

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { emitRuntimeFieldValueCheck, emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../../compiler/c/runtime-values.ts'
+import {
+  emitRuntimeFieldValueCheck,
+  emitRuntimeNullableValueCheck,
+  emitRuntimeValueCheck
+} from '../../compiler/c/runtime-values.ts'
 
 function createContext() {
   return {
@@ -40,6 +44,9 @@ test('marks custom failure statements as used', () => {
     usedCleanupGoto: false
   }
 
-  assert.equal(emitRuntimeValueCheck('value', 'INOX_TAG_BOOL', context), 'if (value.tag != INOX_TAG_BOOL) return INOX_ERR_CUSTOM;')
+  assert.equal(
+    emitRuntimeValueCheck('value', 'INOX_TAG_BOOL', context),
+    'if (value.tag != INOX_TAG_BOOL) return INOX_ERR_CUSTOM;'
+  )
   assert.equal(context.failureStatementUsed, true)
 })

@@ -1,5 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
+import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
+import type { CEmitContext, CFunctionContext } from '../context.ts'
 import {
   createFunctionContext,
   emitEventLoopReference,
@@ -8,8 +10,6 @@ import {
   registerEventLoop
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
-import type { CEmitContext, CFunctionContext } from '../context.ts'
-import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
 import type {
   CDgramMessageHandler,
   CPreparedExpression as PreparedExpression,
@@ -219,11 +219,7 @@ export function emitDgramAddressVariableDeclaration(statement: AnyNode, context:
   ]
 }
 
-export function emitDgramNumberVariableDeclaration(
-  statement: AnyNode,
-  context: CFunctionContext,
-  deps: DgramLoweringDependencies
-): string[] | null {
+export function emitDgramNumberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   const init = statement.init
 
   if (

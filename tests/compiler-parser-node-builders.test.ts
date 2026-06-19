@@ -1,5 +1,5 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
 import {
   createClassDeclaration,
@@ -39,24 +39,44 @@ test('builds parser declaration nodes with normalized source locations', () => {
   const param = createParam(token('identifier', 'value'), 'number', false)
   const body = [{ type: 'ReturnStatement', argument: null }]
 
-  assert.deepEqual(createFunctionDeclaration({ exported: true, isAsync: false, name, params: [param], returnType: 'void', body }), {
-    type: 'FunctionDeclaration',
-    exported: true,
-    async: false,
-    name: 'main',
-    loc: { line: 1, column: 1 },
-    params: [{ name: 'value', optional: false, valueType: 'number', loc: { line: 1, column: 1 } }],
-    returnType: 'void',
-    body
-  })
-  assert.equal(createTypeAliasDeclaration(false, token('identifier', 'User'), { kind: 'object', fields: [] }).name, 'User')
+  assert.deepEqual(
+    createFunctionDeclaration({ exported: true, isAsync: false, name, params: [param], returnType: 'void', body }),
+    {
+      type: 'FunctionDeclaration',
+      exported: true,
+      async: false,
+      name: 'main',
+      loc: { line: 1, column: 1 },
+      params: [{ name: 'value', optional: false, valueType: 'number', loc: { line: 1, column: 1 } }],
+      returnType: 'void',
+      body
+    }
+  )
   assert.equal(
-    createImportDeclaration(false, [createImportSpecifier('readFile', 'readFile', token('identifier', 'readFile'), false)], token('string', 'node:fs')).source,
+    createTypeAliasDeclaration(false, token('identifier', 'User'), { kind: 'object', fields: [] }).name,
+    'User'
+  )
+  assert.equal(
+    createImportDeclaration(
+      false,
+      [createImportSpecifier('readFile', 'readFile', token('identifier', 'readFile'), false)],
+      token('string', 'node:fs')
+    ).source,
     'node:fs'
   )
-  assert.equal(createVariableDeclaration({ kind: 'const', exported: true, name, declaredType: 'number', init: null }).exported, true)
   assert.equal(
-    createClassDeclaration({ exported: false, name: token('identifier', 'Box'), extendsName: null, extendsToken: null, fields: [], methods: [] }).type,
+    createVariableDeclaration({ kind: 'const', exported: true, name, declaredType: 'number', init: null }).exported,
+    true
+  )
+  assert.equal(
+    createClassDeclaration({
+      exported: false,
+      name: token('identifier', 'Box'),
+      extendsName: null,
+      extendsToken: null,
+      fields: [],
+      methods: []
+    }).type,
     'ClassDeclaration'
   )
 })

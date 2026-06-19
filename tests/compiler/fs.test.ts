@@ -1,33 +1,6 @@
 import test from 'node:test'
-import {
-  assert,
-  assertDiagnostic,
-  cLibuvOptions,
-  collectIrFeatureRequirements,
-  collectIrFunctionEffects,
-  collectIrFunctionNodeEntries,
-  collectIrGlobalRoots,
-  collectIrLocalThrowValueTypes,
-  collectIrModuleRecords,
-  collectIrPrograms,
-  collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodesFromPrograms,
-  compileFile,
-  compileSource,
-  CompileError,
-  emitCBundleFromIrModules,
-  emitCFromIr,
-  findIrEntryProgram,
-  join,
-  mkdir,
-  mkdtemp,
-  rm,
-  tmpdir,
-  writeFile
-} from '../helpers/compiler-smoke.ts'
 import type { AnyNode } from '../../compiler/types.ts'
-
-
+import { assert, assertDiagnostic, compileSource } from '../helpers/compiler-smoke.ts'
 
 test('lowers fs awaits through async task frames', () => {
   const result = compileSource(
@@ -99,7 +72,6 @@ export async function main(): Promise<void> {
   assert.match(result.code, /return inox_undefined_value\(\);/)
 })
 
-
 test('collects node:fs global usages for fs references', () => {
   const result = compileSource(
     `import fs from 'node:fs'
@@ -137,7 +109,6 @@ export async function main(): Promise<void> {
   assert.deepEqual(withoutFsUsage.ir.globalUsages, [])
 })
 
-
 test('lowers default node:fs import and fs.promises calls to the fs runtime', () => {
   const c = compileSource(
     `import fs from 'node:fs'
@@ -166,7 +137,6 @@ export function main(): void {
   assert.match(c.code, /inox_fs_read_dir\(&inox_loop, "\/tmp", 4, &entries\)/)
   assert.match(c.code, /inox_fs_write_file\(&inox_loop, "\/tmp\/out\.txt", 12, "saved", 5, &inox_promise_\d+\)/)
 })
-
 
 test('lowers Node fs stat lstat access and constants to the fs runtime', () => {
   const c = compileSource(
@@ -199,7 +169,10 @@ export async function main(): Promise<void> {
   )
   assert.match(c.code, /inox_fs_stat\(&inox_loop, "\/tmp\/value\.txt", 14, &inox_promise_\d+\)/)
   assert.match(c.code, /inox_fs_lstat\(&inox_loop, "\/tmp\/link\.txt", 13, &inox_promise_\d+\)/)
-  assert.match(c.code, /inox_fs_access\(&inox_loop, "\/tmp\/value\.txt", 14, \(\(int\)INOX_FS_R_OK\), &inox_promise_\d+\)/)
+  assert.match(
+    c.code,
+    /inox_fs_access\(&inox_loop, "\/tmp\/value\.txt", 14, \(\(int\)INOX_FS_R_OK\), &inox_promise_\d+\)/
+  )
   assert.match(c.code, /inox_fs_access_sync\("\/tmp\/value\.txt", 14, \(\(int\)INOX_FS_W_OK\)\)/)
   assert.match(
     c.code,
@@ -208,7 +181,6 @@ export async function main(): Promise<void> {
   assert.match(c.code, /inox_fs_stats_is_file\(stats\)/)
   assert.match(c.code, /inox_fs_stats_is_directory\(syncStats\)/)
 })
-
 
 test('lowers Node fs mutation helpers to the fs runtime', () => {
   const c = compileSource(
@@ -230,7 +202,9 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const mkdirPromise = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'mkdirPromise')
+  const mkdirPromise = main?.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'mkdirPromise'
+  )
 
   assert.equal(mkdirPromise?.valueType, 'promise')
   assert.equal(mkdirPromise?.promiseValueType, 'void')
@@ -260,7 +234,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers Node fs append and copy helpers to the fs runtime', () => {
   const c = compileSource(
     `import fs from 'node:fs'
@@ -278,12 +251,17 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const appendPromise = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'appendPromise')
+  const appendPromise = main?.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'appendPromise'
+  )
 
   assert.equal(appendPromise?.valueType, 'promise')
   assert.equal(appendPromise?.promiseValueType, 'void')
   assert.equal(appendPromise?.init?.fsRuntimeMethod, 'appendFileBytes')
-  assert.match(c.code, /inox_fs_read_file_bytes_sync\(&inox_default_allocator, "\/tmp\/value\.bin", 14, &inox_fs_value_\d+\)/)
+  assert.match(
+    c.code,
+    /inox_fs_read_file_bytes_sync\(&inox_default_allocator, "\/tmp\/value\.bin", 14, &inox_fs_value_\d+\)/
+  )
   assert.match(c.code, /inox_fs_append_file_bytes\(&inox_loop, "\/tmp\/out\.bin", 12, bytes, &appendPromise\)/)
   assert.match(
     c.code,
@@ -303,7 +281,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers Node fs readdir withFileTypes to Dirent runtime values', () => {
   const c = compileSource(
     `import fs from 'node:fs'
@@ -321,7 +298,9 @@ export function main(): void {
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   const entries = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'entries')
-  const syncEntries = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'syncEntries')
+  const syncEntries = main?.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'syncEntries'
+  )
   const first = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'first')
 
   assert.equal(entries?.promiseValueType, 'array')
@@ -331,10 +310,7 @@ export function main(): void {
   assert.equal(first?.arrayElementDeclaredType, 'fs.Dirent')
   assert.equal(first?.init?.shape?.builtin, 'fs.Dirent')
   assert.match(c.code, /inox_fs_read_dir_dirents\(&inox_loop, "\/tmp", 4, &entries\)/)
-  assert.match(
-    c.code,
-    /inox_fs_read_dir_dirents_sync\(&inox_default_allocator, "\/tmp", 4, &inox_fs_value_\d+\)/
-  )
+  assert.match(c.code, /inox_fs_read_dir_dirents_sync\(&inox_default_allocator, "\/tmp", 4, &inox_fs_value_\d+\)/)
   assert.match(c.code, /inox_fs_dirent_is_file\(first\)/)
   assert.match(c.code, /inox_fs_dirent_is_directory\(first\)/)
 
@@ -348,7 +324,6 @@ export function main(): void {
     'INOX_UNKNOWN_FIELD'
   )
 })
-
 
 test('lowers Node fs link path helpers to the fs runtime', () => {
   const c = compileSource(
@@ -394,7 +369,6 @@ export function main(): void {
     'INOX_ARG_COUNT'
   )
 })
-
 
 test('lowers node:fs/promises imports to the fs runtime', () => {
   const c = compileSource(
@@ -446,7 +420,6 @@ export async function load(path: string): Promise<string> {
   assert.match(c.code, /inox_fs_read_file\(&inox_loop, path->bytes, path->len, &inox_promise_\d+\)/)
 })
 
-
 test('maps Node fs binary reads to Buffer-compatible C runtime calls', () => {
   const c = compileSource(
     `import fs from 'node:fs'
@@ -487,7 +460,6 @@ export async function main(): Promise<void> {
     'INOX_FS_UNSUPPORTED'
   )
 })
-
 
 test('maps fs sync helpers to C runtime calls', () => {
   const c = compileSource(
@@ -547,7 +519,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers fs.promises readFile, readdir and writeFile to the C fs runtime', () => {
   const result = compileSource(
     `import fs from 'node:fs'
@@ -590,7 +561,10 @@ export function main(): void {
     result.code,
     /if \(inox_fs_read_file\(&inox_loop, "\/tmp\/value\.txt", 14, &read\) != INOX_OK\)\s+goto inox_cleanup;/
   )
-  assert.match(result.code, /if \(inox_fs_read_dir\(&inox_loop, "\/tmp", 4, &entries\) != INOX_OK\)\s+goto inox_cleanup;/)
+  assert.match(
+    result.code,
+    /if \(inox_fs_read_dir\(&inox_loop, "\/tmp", 4, &entries\) != INOX_OK\)\s+goto inox_cleanup;/
+  )
   assert.match(
     result.code,
     /if \(inox_fs_write_file\(&inox_loop, "\/tmp\/out\.txt", 12, "saved", 5, &inox_promise_\d+\) != INOX_OK\)\s+goto inox_cleanup;/

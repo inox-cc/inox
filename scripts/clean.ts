@@ -123,9 +123,7 @@ async function collectSystemTempPaths(root: string): Promise<string[]> {
     return []
   }
 
-  return entries
-    .filter((entry) => entry.name.startsWith('inox-'))
-    .map((entry) => join(root, entry.name))
+  return entries.filter((entry) => entry.name.startsWith('inox-')).map((entry) => join(root, entry.name))
 }
 
 function isRepoTempFile(name: string): boolean {

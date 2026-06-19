@@ -1,11 +1,11 @@
 import { diagnostic, quoteDiagnosticString, throwDiagnostics } from './diagnostics.ts'
 import {
+  createAliasType,
   createClassDeclaration,
+  createExportDeclaration,
   createFieldDefinition,
   createFunctionDeclaration,
   createFunctionType,
-  createAliasType,
-  createExportDeclaration,
   createImportDeclaration,
   createImportSpecifier,
   createMethodDefinition,
@@ -17,8 +17,8 @@ import {
 } from './parser/declarations.ts'
 import {
   createArrayLiteral,
-  createAssignmentExpression,
   createArrowFunction,
+  createAssignmentExpression,
   createAwaitExpression,
   createBinaryExpression,
   createBooleanLiteral,

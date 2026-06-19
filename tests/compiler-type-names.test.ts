@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  arrayElementTypeNameFromTypeName,
   arrayElementTypeNameFromKnownTypeName,
-  isBuiltinValueType,
+  arrayElementTypeNameFromTypeName,
   isArrayTypeName,
+  isBuiltinValueType,
   isBytesTypeName,
   isNullableTypeName,
   isPromiseTypeName,
   isSetTypeName,
   mapTypeNamesFromTypeName,
-  nullableTypeNameFromTypeName,
   nullableTypeNameFromKnownTypeName,
-  promiseValueTypeNameFromTypeName,
+  nullableTypeNameFromTypeName,
   promiseValueTypeNameFromKnownTypeName,
+  promiseValueTypeNameFromTypeName,
   setElementTypeNameFromKnownTypeName,
   setElementTypeNameFromTypeName,
   splitGenericArgs,
@@ -29,11 +29,7 @@ test('splits nested generic type arguments', () => {
 })
 
 test('splits top-level union type arguments', () => {
-  assert.deepEqual(splitUnionArgs('string | null | Array<number | null>'), [
-    'string',
-    'null',
-    'Array<number | null>'
-  ])
+  assert.deepEqual(splitUnionArgs('string | null | Array<number | null>'), ['string', 'null', 'Array<number | null>'])
 })
 
 test('extracts collection and promise type names', () => {

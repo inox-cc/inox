@@ -1,7 +1,7 @@
-import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { urlObjectFields } from '../stdlib/descriptors/url.ts'
+import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
 
 type DebugMemoryStatsField = {
   name: string

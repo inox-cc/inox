@@ -1,5 +1,5 @@
-import type { AnyNode, IrProgram, ModuleRecord, RandomOptions } from '../types.ts'
 import type { CompilerHost } from '../host.ts'
+import type { AnyNode, IrProgram, ModuleRecord, RandomOptions } from '../types.ts'
 
 export type CEmitOptions = {
   random?: RandomOptions

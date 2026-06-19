@@ -1,23 +1,23 @@
-import { fsRuntimeCallInfoFromPath, isAsyncFsRuntimeMethod } from '../../stdlib/descriptors/fs.ts'
 import { memberExpressionPath } from '../../member-paths.ts'
+import { fsRuntimeCallInfoFromPath, isAsyncFsRuntimeMethod } from '../../stdlib/descriptors/fs.ts'
 import type { AnyNode } from '../../types.ts'
 import {
   emitEventLoopReference,
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
+  nextCName,
   registerEventLoop,
   registerOwnedPromise,
-  registerOwnedValue,
-  nextCName
+  registerOwnedValue
 } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cRuntimeValueTag } from '../value-types.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
   CPreparedStatement as PreparedStatement,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { cRuntimeValueTag } from '../value-types.ts'
 
 type FsFunctionContext = {
   cleanupEnabled: boolean

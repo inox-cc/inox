@@ -1,9 +1,9 @@
 import {
   collectIrFunctionDeclarations,
+  collectIrFunctionEffectsWithExternalEffects,
   collectIrFunctionNodeEntries,
   collectIrGlobalRoots,
   collectIrGlobalUsages,
-  collectIrFunctionEffectsWithExternalEffects,
   collectIrRuntimeRequirements,
   collectIrStoredFunctionEffects,
   collectIrSyntaxFeatureUsages,
@@ -20,19 +20,12 @@ import type {
   IrProgram,
   IrRuntimeRequirement
 } from '../types.ts'
-import type {
-  CCallbackWrapper,
-  CFunctionParam,
-  CFunctionType,
-  CObjectShapeField,
-  CPromiseChainWrapper,
-  CRuntimeArrowCallbackWrapper
-} from './types.ts'
+import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
   collectCallbackWrappers,
   collectFunctionPointerParamNames,
-  emitFunctionPointerParams,
   emitFunctionPointerNamedParams,
+  emitFunctionPointerParams,
   emitFunctionPointerReturnType,
   emitPlainArrowCallbackWrapperDeclaration,
   emitPlainArrowCallbackWrapperHead,
@@ -45,20 +38,20 @@ import {
   isRuntimeCallbackWrapper,
   isRuntimeFunctionType
 } from './async/callbacks.ts'
-import type { CallbackLoweringDependencies } from './async/callbacks.ts'
+import type { PromiseChainLoweringDependencies } from './async/promises.ts'
 import {
   collectPromiseChainWrappers,
   emitPromiseChainCallbackWrapperDeclaration,
   emitPromiseChainCallbackWrapperHead
 } from './async/promises.ts'
-import type { PromiseChainLoweringDependencies } from './async/promises.ts'
+import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import {
   collectAsyncTaskWrappers,
   emitAsyncTaskFrameType,
   emitAsyncTaskWrapperDeclaration,
   emitAsyncTaskWrapperPrototypes
 } from './async/tasks.ts'
-import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
+import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
   createFunctionContext,
   emitBoxedValueCleanup,
@@ -77,7 +70,6 @@ import {
   emitReturnValueDeclarations,
   shouldEmitCleanupLabel
 } from './context.ts'
-import type { CEmitContext, CFunctionContext } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
@@ -89,32 +81,38 @@ import {
   collectRuntimeNamedImportNames
 } from './runtime-imports.ts'
 import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
   collectDgramMessageHandlers,
   emitDgramMessageHandlerDeclaration,
   emitDgramMessageHandlerHead
 } from './stdlib/dgram.ts'
-import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
-import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
 import type { HttpLoweringDependencies } from './stdlib/http.ts'
-import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
+import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
+import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
+import type {
+  CCallbackWrapper,
+  CClassInfo,
+  CClassMethod,
+  CFunctionParam,
+  CFunctionPointerAdapter,
+  CFunctionType,
+  CModuleEmitOptions,
+  CModuleImportPlan,
+  CModulePlan,
+  CObjectShapeField,
+  CPromiseChainWrapper,
+  CRuntimeArrowCallbackWrapper
+} from './types.ts'
+import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
+import { collectClassMethods, createClassInfos } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
-import type {
-  CClassInfo,
-  CClassMethod,
-  CFunctionPointerAdapter,
-  CModuleEmitOptions,
-  CModuleImportPlan,
-  CModulePlan
-} from './types.ts'
-import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from './value-types.ts'
-import { collectClassMethods, createClassInfos } from './values/classes.ts'
 
 type CModuleValueDeclaration = {
   exported: boolean
@@ -320,7 +318,7 @@ export type CModuleEmissionDependencies = {
 
 export function emitCModuleSource(
   plan: CModulePlan,
-  plans: CModulePlan[],
+  _plans: CModulePlan[],
   options: CModuleEmitOptions,
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
@@ -328,7 +326,7 @@ export function emitCModuleSource(
   const irPrograms = [plan.ir]
   const functionEntries = collectCModuleFunctionNodeEntries(plan, irPrograms)
   const functions: AnyNode[] = []
-  const context = createCModuleBaseContext(plan, plans, diagnostics, deps)
+  const context = createCModuleBaseContext(plan, diagnostics, deps)
   const runtimeRequirements = runtimeRequirementSetFromArray(collectIrRuntimeRequirements(irPrograms))
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
@@ -491,11 +489,11 @@ export function emitCModuleSource(
 
 export function emitCModuleHeader(
   plan: CModulePlan,
-  plans: CModulePlan[],
+  _plans: CModulePlan[],
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
 ): string {
-  const context = createCModuleBaseContext(plan, plans, diagnostics, deps)
+  const context = createCModuleBaseContext(plan, diagnostics, deps)
   const exportedFunctions = collectCModuleExportedFunctions(plan)
   const exportedValues = collectCModuleExportedValueDeclarations(plan)
   const lines: string[] = []
@@ -1002,7 +1000,6 @@ function emitCModuleFunctionPointerAdapterHead(adapter: CFunctionPointerAdapter)
 
 function createCModuleBaseContext(
   plan: CModulePlan,
-  plans: CModulePlan[],
   diagnostics: Diagnostic[],
   deps: CModuleEmissionDependencies
 ): CEmitContext {

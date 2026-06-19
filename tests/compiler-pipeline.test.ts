@@ -1,8 +1,8 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { test } from 'node:test'
 
 import {
   compileFile,
@@ -109,7 +109,9 @@ function readSignature(name: string): number {
     { target: 'c' }
   )
 
-  const recordFunction = compiled.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'readRecord')
+  const recordFunction = compiled.hir.body.find(
+    (item) => item.type === 'FunctionDeclaration' && item.name === 'readRecord'
+  )
   const signatureFunction = compiled.hir.body.find(
     (item) => item.type === 'FunctionDeclaration' && item.name === 'readSignature'
   )

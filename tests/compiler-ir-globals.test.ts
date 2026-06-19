@@ -1,12 +1,12 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
-import { collectGlobalUsages, collectIrGlobalRoots, collectIrGlobalUsages } from '../compiler/ir/globals.ts'
 import {
   collectIrGlobalRoots as collectIrGlobalRootsFromFacade,
   collectIrGlobalUsages as collectIrGlobalUsagesFromFacade,
   lowerHirToIr
 } from '../compiler/ir.ts'
+import { collectGlobalUsages, collectIrGlobalRoots, collectIrGlobalUsages } from '../compiler/ir/globals.ts'
 import type { ProgramNode } from '../compiler/types.ts'
 
 test('collects IR global usages from references and member paths', () => {
@@ -75,7 +75,12 @@ test('aggregates IR global usages and roots', () => {
   ]
   const programs = [
     { globalUsages },
-    { globalUsages: [{ root: 'fetch', path: ['fetch'] }, { root: 'fs', path: ['fs', 'constants'] }] }
+    {
+      globalUsages: [
+        { root: 'fetch', path: ['fetch'] },
+        { root: 'fs', path: ['fs', 'constants'] }
+      ]
+    }
   ]
 
   assert.deepEqual(collectIrGlobalUsages(programs), [...globalUsages, ...programs[1].globalUsages])

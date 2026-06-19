@@ -1,14 +1,25 @@
-import { test } from 'node:test'
 import { readdir } from 'node:fs/promises'
 import { dirname, relative } from 'node:path'
+import { test } from 'node:test'
 
-import { compileMemoryPackageToCModules } from '../compiler/index.ts'
 import type { CModuleCompileResult } from '../compiler/index.ts'
-import { assert, join, mkdir, mkdtemp, readFile, repoRoot, rm, runCommand, tmpdir, writeFile } from './helpers/runtime-c.ts'
+import { compileMemoryPackageToCModules } from '../compiler/index.ts'
+import {
+  assert,
+  join,
+  mkdir,
+  mkdtemp,
+  readFile,
+  repoRoot,
+  rm,
+  runCommand,
+  tmpdir,
+  writeFile
+} from './helpers/runtime-c.ts'
 
 const selfHostedCompileSourceDriverPath = '/project/selfhost-compile-driver.ts'
-const selfHostedCompileSourceDriverModuleCount = 216
-const selfHostedCompileSourceDriverSourceCount = 108
+const selfHostedCompileSourceDriverModuleCount = 214
+const selfHostedCompileSourceDriverSourceCount = 107
 
 const runtimeSources = [
   'runtime/src/arrays/array.c',

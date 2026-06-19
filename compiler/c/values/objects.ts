@@ -1,3 +1,6 @@
+import { diagnostic } from '../../diagnostics.ts'
+import type { AnyNode, Diagnostic } from '../../types.ts'
+import { isPlainFunctionPointerType, isRuntimeFunctionType } from '../async/callbacks.ts'
 import {
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
@@ -5,11 +8,21 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
-import { isPlainFunctionPointerType, isRuntimeFunctionType } from '../async/callbacks.ts'
+import type {
+  CFunctionType,
+  CKnownObjectField,
+  CKnownObjectIndexField,
+  CKnownObjectMemberField,
+  CObjectFieldInfo,
+  CObjectIndexFieldInfo,
+  CObjectShape,
+  CObjectShapeField,
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
+} from '../types.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
   cRuntimeValueTag,
@@ -17,19 +30,6 @@ import {
   isNullableScalarType,
   isOpaqueRuntimeValueType
 } from '../value-types.ts'
-import type { AnyNode, Diagnostic } from '../../types.ts'
-import type {
-  CKnownObjectField,
-  CKnownObjectIndexField,
-  CKnownObjectMemberField,
-  CObjectFieldInfo,
-  CFunctionType,
-  CObjectShape,
-  CObjectIndexFieldInfo,
-  CObjectShapeField,
-  CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand as PreparedStringBytesOperand
-} from '../types.ts'
 
 type ObjectShapeContext = {
   objectDeclaredTypes?: Map<string, string | null>
@@ -115,14 +115,6 @@ type KnownObjectFieldReadAccess = {
   key: string
   kind: string
   objectName: string
-}
-
-type KnownObjectNameField = {
-  objectName: string
-}
-
-type KnownObjectIndexKeyField = {
-  key: string
 }
 
 type CDynamicObjectFieldAccess = {

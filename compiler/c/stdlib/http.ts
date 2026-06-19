@@ -1,5 +1,7 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
+import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
+import type { CEmitContext, CFunctionContext } from '../context.ts'
 import {
   createFunctionContext,
   emitEventLoopReference,
@@ -8,10 +10,8 @@ import {
   registerEventLoop
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
-import { cJsonRuntimeCallName } from './json.ts'
-import type { CEmitContext, CFunctionContext } from '../context.ts'
-import type { AnyNode, IrProgram, SourceLocation } from '../../types.ts'
 import type { CHttpHandler, CPreparedExpression as PreparedExpression } from '../types.ts'
+import { cJsonRuntimeCallName } from './json.ts'
 
 type HttpAstNode = AnyNode
 

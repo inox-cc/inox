@@ -1,4 +1,3 @@
-import type { AnyNode, ProgramNode } from '../types.ts'
 import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
@@ -13,6 +12,7 @@ import {
   setElementTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
+import type { AnyNode, ProgramNode } from '../types.ts'
 
 type LowerTypeNode = AnyNode
 

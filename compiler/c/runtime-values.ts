@@ -1,5 +1,5 @@
-import { emitRuntimeTypeCheck } from './context.ts'
 import type { AnyNode } from '../types.ts'
+import { emitRuntimeTypeCheck } from './context.ts'
 
 type RuntimeValueCheckContext = {
   cleanupEnabled: boolean

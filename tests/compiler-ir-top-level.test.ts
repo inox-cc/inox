@@ -1,6 +1,7 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 
+import { collectIrTopLevelNodesFromPrograms } from '../compiler/ir.ts'
 import {
   collectFunctionDeclarations,
   collectIrFunctionDeclarations,
@@ -12,7 +13,6 @@ import {
   collectTopLevelItems,
   findIrEntryProgram
 } from '../compiler/ir/top-level.ts'
-import { collectIrTopLevelNodesFromPrograms } from '../compiler/ir.ts'
 import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from '../compiler/types.ts'
 
 function makeIr(body: AnyNode[]): IrProgram {
@@ -117,7 +117,10 @@ test('collects IR module records from module graph', () => {
   }
   const records = collectIrModuleRecords(graph)
 
-  assert.deepEqual(records.map((record) => record.path), ['/entry.ts', '/other.ts'])
+  assert.deepEqual(
+    records.map((record) => record.path),
+    ['/entry.ts', '/other.ts']
+  )
   assert.deepEqual(collectIrPrograms(records), [entryIr, otherIr])
   assert.equal(findIrEntryProgram(records, '/entry.ts'), entryIr)
   assert.equal(findIrEntryProgram(records, '/missing.ts'), null)

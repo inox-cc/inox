@@ -1,12 +1,5 @@
-import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from './value-types.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
-import type { ArrayLoweringDependencies } from './values/arrays.ts'
-import type { ClassLoweringDependencies } from './values/classes.ts'
-import type { CollectionLoweringDependencies } from './values/collections.ts'
-import type { NullableLoweringDependencies } from './values/nullable.ts'
-import type { StatementLoweringDependencies } from './values/statements.ts'
-import type { StringLoweringDependencies } from './values/strings.ts'
 import type {
   CArrayElementInfo,
   CAsyncTaskWrapper,
@@ -17,14 +10,21 @@ import type {
   CFunctionPointerAdapter,
   CFunctionReturnMapType,
   CFunctionType,
-  CObjectAccessorReturnPath,
   CHttpHandler,
   CNetHandler,
+  CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
   CPromiseChainWrapper,
   CPromiseConstructorHandler
 } from './types.ts'
+import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from './value-types.ts'
+import type { ArrayLoweringDependencies } from './values/arrays.ts'
+import type { ClassLoweringDependencies } from './values/classes.ts'
+import type { CollectionLoweringDependencies } from './values/collections.ts'
+import type { NullableLoweringDependencies } from './values/nullable.ts'
+import type { StatementLoweringDependencies } from './values/statements.ts'
+import type { StringLoweringDependencies } from './values/strings.ts'
 
 export type CLoopFlowTarget = {
   label: string
@@ -850,7 +850,7 @@ export function emitEventLoopReference(context: CEventLoopContext): string {
   return '&inox_loop'
 }
 
-export function emitEventLoopNextTimeExpression(context: CFunctionContext): string {
+export function emitEventLoopNextTimeExpression(): string {
   return emitEventLoopCurrentTimeExpression()
 }
 

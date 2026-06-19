@@ -1,33 +1,13 @@
 import test from 'node:test'
+import type { AnyNode } from '../../compiler/types.ts'
 import {
   assert,
   assertDiagnostic,
-  cLibuvOptions,
-  collectIrFeatureRequirements,
   collectIrFunctionEffects,
-  collectIrFunctionNodeEntries,
-  collectIrGlobalRoots,
-  collectIrLocalThrowValueTypes,
-  collectIrModuleRecords,
-  collectIrPrograms,
-  collectIrTopLevelNodeEntries,
-  collectIrTopLevelNodesFromPrograms,
-  compileFile,
-  compileSource,
   CompileError,
-  emitCBundleFromIrModules,
-  emitCFromIr,
-  findIrEntryProgram,
-  join,
-  mkdir,
-  mkdtemp,
-  rm,
-  tmpdir,
-  writeFile
+  compileSource,
+  emitCFromIr
 } from '../helpers/compiler-smoke.ts'
-import type { AnyNode } from '../../compiler/types.ts'
-
-
 
 test('lowers C array literals to runtime calls', () => {
   const result = compileSource(
@@ -48,7 +28,6 @@ test('lowers C array literals to runtime calls', () => {
   assert.match(result.code, /inox_array_set\(values, 2, inox_number_value\(3\)\)/)
 })
 
-
 test('lowers C array length for known arrays', () => {
   const result = compileSource(
     `export function main(): void {
@@ -63,7 +42,6 @@ test('lowers C array length for known arrays', () => {
 
   assert.match(result.code, /printf\("%g %g\\n", \(\(double\)3\), \(\(double\)2\)\);/)
 })
-
 
 test('lowers C runtime array length for object fields', () => {
   const result = compileSource(
@@ -133,7 +111,6 @@ export function main(): void {
   assert.match(result.code, /!\(ada\.tag == inox_object_\d+\.tag && ada\.as\.ref == inox_object_\d+\.as\.ref\)/)
 })
 
-
 test('lowers C runtime array index reads for object fields', () => {
   const result = compileSource(
     `type Box = {
@@ -185,7 +162,6 @@ console.log(user.name)
   assert.match(result.code, /inox_object_get_known\(user, 0, &inox_(?:log_)?value_\d+\)/)
 })
 
-
 test('lowers C runtime array locals from object fields', () => {
   const result = compileSource(
     `type Box = {
@@ -212,7 +188,6 @@ export function main(): void {
   assert.match(result.code, /inox_array_get\(values, 1, &inox_log_value_\d+\)/)
   assert.match(result.code, /inox_array_get\(names, 0, &inox_log_value_\d+\)/)
 })
-
 
 test('lowers C collection methods on object fields', () => {
   const result = compileSource(
@@ -242,7 +217,6 @@ export function main(): void {
   assert.match(result.code, /inox_set_has\(inox_value_\d+, inox_value_\d+, &inox_set_has_\d+\)/)
   assert.match(result.code, /inox_set_size\(inox_value_\d+, &inox_set_size_\d+\)/)
 })
-
 
 test('lowers C for of over runtime array locals', () => {
   const result = compileSource(
@@ -278,7 +252,6 @@ export function main(): void {
   assert.match(result.code, /inox_for_value_\d+\.tag != INOX_TAG_STRING/)
 })
 
-
 test('lowers C for of over runtime array expressions', () => {
   const result = compileSource(
     `type Box = {
@@ -310,7 +283,6 @@ export function main(): void {
   assert.match(result.code, /inox_object_get_known\(box, 1, &inox_value_\d+\)/)
   assert.match(result.code, /inox_for_value_\d+\.tag != INOX_TAG_STRING/)
 })
-
 
 test('lowers C for of over runtime object array expressions', () => {
   const result = compileSource(
@@ -344,7 +316,6 @@ export function main(): void {
   assert.match(result.code, /inox_value item = inox_for_value_\d+;/)
 })
 
-
 test('lowers C array methods over runtime array object fields', () => {
   const result = compileSource(
     `type Box = {
@@ -375,7 +346,6 @@ export function main(): void {
   assert.match(result.code, /inox_string_slice_parts\(/)
   assert.match(result.code, /inox_array_sort\(inox_map_array_\d+\)/)
 })
-
 
 test('lowers C Array.includes calls for primitive runtime arrays', () => {
   const result = compileSource(
@@ -417,7 +387,6 @@ export function main(): void {
   assert.match(result.code, /inox_hash_value_equal\(inox_array_includes_value_\d+, inox_bool_value\(\(1\) != 0\)\)/)
 })
 
-
 test('checks Array.includes calls as boolean array methods', () => {
   const result = compileSource(
     `function hasName(names: string[], name: string): boolean {
@@ -455,7 +424,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers C Array.unshift calls for primitive runtime arrays', () => {
   const result = compileSource(
     `export function main(): void {
@@ -481,7 +449,6 @@ test('lowers C Array.unshift calls for primitive runtime arrays', () => {
   assert.match(result.code, /inox_array_get\(values, 0, &inox_[a-z_]+_\d+\)/)
   assert.match(result.code, /inox_array_get\(names, 0, &inox_[a-z_]+_\d+\)/)
 })
-
 
 test('lowers C Array.slice calls to runtime arrays', () => {
   const result = compileSource(
@@ -514,7 +481,6 @@ test('lowers C Array.slice calls to runtime arrays', () => {
   )
 })
 
-
 test('lowers C Array.join calls for primitive arrays', () => {
   const result = compileSource(
     `export function main(): void {
@@ -541,7 +507,6 @@ test('lowers C Array.join calls for primitive arrays', () => {
   assert.match(result.code, /const inox_string\* digits = \(inox_string\*\)digits_value_\d+\.as\.ref;/)
   assert.match(result.code, /const inox_string\* flags = \(inox_string\*\)flags_value_\d+\.as\.ref;/)
 })
-
 
 test('lowers C string length for literals and runtime strings', () => {
   const result = compileSource(
@@ -581,7 +546,6 @@ export function main(): void {
   assert.match(result.code, /inox_string_code_unit_length_parts\(message->bytes, message->len\)/)
 })
 
-
 test('lowers C string predicate methods for literals and runtime strings', () => {
   const result = compileSource(
     `type User = {
@@ -609,13 +573,15 @@ export function main(): void {
   )
 
   assert.match(result.code, /#include "inox\/string\.h"/)
-  assert.match(result.code, /inox_string_includes_from_parts\(name->bytes, name->len, "d", 1, inox_string_includes_position_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_string_includes_from_parts\(name->bytes, name->len, "d", 1, inox_string_includes_position_\d+\)/
+  )
   assert.match(result.code, /inox_string_starts_with_parts\(name->bytes, name->len, "A", 1\)/)
   assert.match(result.code, /inox_string_ends_with_parts\(name->bytes, name->len, "a", 1\)/)
   assert.match(result.code, /inox_string_includes_parts\("Ada", 3, "d", 1\)/)
   assert.match(result.code, /inox_string_ends_with_parts\(message->bytes, message->len, "!", 1\)/)
 })
-
 
 test('lowers C string index methods and trim variants', () => {
   const result = compileSource(
@@ -656,10 +622,7 @@ export function main(): void {
     }
   )
 
-  assert.match(
-    result.code,
-    /inox_string_index_of_parts\(name->bytes, name->len, "a", 1, inox_string_index_start_\d+\)/
-  )
+  assert.match(result.code, /inox_string_index_of_parts\(name->bytes, name->len, "a", 1, inox_string_index_start_\d+\)/)
   assert.match(
     result.code,
     /inox_string_last_index_of_parts\(name->bytes, name->len, "a", 1, inox_string_index_start_\d+\)/
@@ -677,7 +640,6 @@ export function main(): void {
     /inox_string_trim_end_parts\(&inox_default_allocator, name->bytes, name->len, &inox_value_\d+\)/
   )
 })
-
 
 test('lowers C string case and padStart methods', () => {
   const result = compileSource(
@@ -712,7 +674,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers C string methods over dynamic object string fields', () => {
   const result = compileSource(
     `function hasInterpolation(node: object): boolean {
@@ -738,14 +699,31 @@ export function main(): void {
   )
 
   assert.match(result.code, /inox_object_get\(node, "raw", 3, &inox_value_\d+\)/)
-  assert.match(result.code, /inox_string_includes_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "\$\{", 2\)/)
-  assert.match(result.code, /inox_string_starts_with_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "expr", 4\)/)
-  assert.match(result.code, /inox_string_ends_with_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "}", 1\)/)
-  assert.match(result.code, /inox_string_slice_parts\(&inox_default_allocator, inox_slice_string_\d+->bytes, inox_slice_string_\d+->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/)
-  assert.match(result.code, /inox_string_trim_parts\(&inox_default_allocator, inox_trim_string_\d+->bytes, inox_trim_string_\d+->len, &inox_value_\d+\)/)
-  assert.match(result.code, /inox_string_split_parts\(&inox_default_allocator, inox_split_string_\d+->bytes, inox_split_string_\d+->len, ",", 1, &inox_split_array_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_string_includes_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "\$\{", 2\)/
+  )
+  assert.match(
+    result.code,
+    /inox_string_starts_with_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "expr", 4\)/
+  )
+  assert.match(
+    result.code,
+    /inox_string_ends_with_parts\(inox_string_method_value_\d+->bytes, inox_string_method_value_\d+->len, "}", 1\)/
+  )
+  assert.match(
+    result.code,
+    /inox_string_slice_parts\(&inox_default_allocator, inox_slice_string_\d+->bytes, inox_slice_string_\d+->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /inox_string_trim_parts\(&inox_default_allocator, inox_trim_string_\d+->bytes, inox_trim_string_\d+->len, &inox_value_\d+\)/
+  )
+  assert.match(
+    result.code,
+    /inox_string_split_parts\(&inox_default_allocator, inox_split_string_\d+->bytes, inox_split_string_\d+->len, ",", 1, &inox_split_array_\d+\)/
+  )
 })
-
 
 test('lowers C string comparisons over known object fields', () => {
   const result = compileSource(
@@ -767,9 +745,11 @@ export function main(): void {
   assert.match(result.code, /inox_object_get_known\(user, 0, &inox_expr_value_\d+\)/)
   assert.match(result.code, /inox_object_get\(user, "name", 4, &inox_expr_value_\d+\)/)
   assert.match(result.code, /memcmp\(inox_cmp_string_\d+->bytes, target, inox_cmp_string_\d+->len\) == 0/)
-  assert.match(result.code, /!\(inox_cmp_string_\d+->len == 5 && memcmp\(inox_cmp_string_\d+->bytes, "Grace", inox_cmp_string_\d+->len\) == 0\)/)
+  assert.match(
+    result.code,
+    /!\(inox_cmp_string_\d+->len == 5 && memcmp\(inox_cmp_string_\d+->bytes, "Grace", inox_cmp_string_\d+->len\) == 0\)/
+  )
 })
-
 
 test('lowers C string comparisons over object expression fields', () => {
   const result = compileSource(
@@ -791,10 +771,15 @@ export function main(): void {
   )
 
   assert.match(result.code, /inox_object_get_known\(inox_value_\d+, 0, &inox_value_\d+\)/)
-  assert.match(result.code, /inox_cmp_string_\d+->len == 3 && memcmp\(inox_cmp_string_\d+->bytes, "Ada", inox_cmp_string_\d+->len\) == 0/)
-  assert.match(result.code, /!\(inox_cmp_string_\d+->len == 5 && memcmp\(inox_cmp_string_\d+->bytes, "Grace", inox_cmp_string_\d+->len\) == 0\)/)
+  assert.match(
+    result.code,
+    /inox_cmp_string_\d+->len == 3 && memcmp\(inox_cmp_string_\d+->bytes, "Ada", inox_cmp_string_\d+->len\) == 0/
+  )
+  assert.match(
+    result.code,
+    /!\(inox_cmp_string_\d+->len == 5 && memcmp\(inox_cmp_string_\d+->bytes, "Grace", inox_cmp_string_\d+->len\) == 0\)/
+  )
 })
-
 
 test('lowers C dynamic object string literal comparisons without string guards', () => {
   const result = compileSource(
@@ -811,7 +796,6 @@ test('lowers C dynamic object string literal comparisons without string guards',
   assert.match(result.code, /!\(inox_string_cmp_value_\d+\.tag == INOX_TAG_STRING/)
   assert.doesNotMatch(result.code, /inox_value_\d+\.tag != INOX_TAG_STRING \|\| inox_value_\d+\.as\.ref == 0/)
 })
-
 
 test('lowers C opaque object index nullish coalescing', () => {
   const result = compileSource(
@@ -868,7 +852,6 @@ console.log(readCode('write'))
   assert.match(result.code, /inox_object_get_known\(item, 0, &inox_expr_value_\d+\)/)
 })
 
-
 test('lowers C nullable boolean literal comparisons', () => {
   const result = compileSource(
     `function maybe(value: number): boolean | null {
@@ -892,7 +875,6 @@ console.log(maybe(1) === true, maybe(2) === true, maybe(3) !== false)
   assert.match(result.code, /\(inox_nullable_value_\d+\.as\.boolean \? 1 : 0\) == 1/)
   assert.match(result.code, /!\(inox_nullable_value_\d+\.tag == INOX_TAG_BOOL/)
 })
-
 
 test('lowers C string charCodeAt calls to byte reads', () => {
   const result = compileSource(
@@ -926,7 +908,6 @@ export function main(): void {
   assert.match(result.code, /\(double\)\(\(unsigned char\)value->bytes\[inox_string_char_code_index_\d+\]\)/)
 })
 
-
 test('lowers C string index expressions to runtime one-byte strings', () => {
   const result = compileSource(
     `function pick(source: string, index: number): string {
@@ -956,7 +937,6 @@ console.log(first, second, third)
     /inox_string_from_literal\(\n\s+&inox_default_allocator,\n\s+\(inox_string_index_\d+ < strlen\(name\)\) \? name \+ inox_string_index_\d+ : "",\n\s+\(inox_string_index_\d+ < strlen\(name\)\) \? 1 : 0,\n\s+&inox_value_\d+\n\s+\)/
   )
 })
-
 
 test('lowers C string slice for literals and runtime strings', () => {
   const result = compileSource(
@@ -1012,7 +992,6 @@ export function main(): void {
   )
 })
 
-
 test('lowers C string split for literals and runtime strings', () => {
   const result = compileSource(
     `type User = {
@@ -1041,7 +1020,6 @@ export function main(): void {
     /inox_string_slice_parts\(&inox_default_allocator, name->bytes, name->len, inox_slice_start_\d+, inox_slice_end_\d+, &inox_value_\d+\)/
   )
 })
-
 
 test('lowers C string trim for literals and runtime strings', () => {
   const result = compileSource(
@@ -1083,7 +1061,6 @@ export function main(): void {
     /inox_string_trim_parts\(&inox_default_allocator, message->bytes, message->len, &inox_value_\d+\)/
   )
 })
-
 
 test('lowers C String conversion for string number boolean and null values', () => {
   const result = compileSource(
@@ -1152,11 +1129,13 @@ export function main(): void {
   assert.equal(hex?.returnType, 'string')
   assert.equal(text?.valueType, 'string')
   assert.equal(padded?.valueType, 'string')
-  assert.match(result.code, /inox_string_from_number_radix\(&inox_default_allocator, value, \(int\)\(16\), &inox_value_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_string_from_number_radix\(&inox_default_allocator, value, \(int\)\(16\), &inox_value_\d+\)/
+  )
   assert.match(result.code, /inox_string_from_number\(&inox_default_allocator, value, &inox_value_\d+\)/)
   assert.match(result.code, /inox_string_slice_parts\(/)
 })
-
 
 test('lowers C plain string locals as string parameter values', () => {
   const result = compileSource(
@@ -1172,10 +1151,12 @@ console.log(echo(local))
     }
   )
 
-  assert.match(result.code, /inox_string_from_literal\(&inox_default_allocator, local, strlen\(local\), &inox_value_\d+\)/)
+  assert.match(
+    result.code,
+    /inox_string_from_literal\(&inox_default_allocator, local, strlen\(local\), &inox_value_\d+\)/
+  )
   assert.match(result.code, /inox_value echo\(inox_value inox_param_value\);/)
 })
-
 
 test('lowers C Number conversion to nullable number parsing', () => {
   const result = compileSource(
@@ -1209,7 +1190,6 @@ test('lowers C Number conversion to nullable number parsing', () => {
   )
 })
 
-
 test('lowers known C array index access to runtime calls', () => {
   const result = compileSource(
     `export function main(): void {
@@ -1229,7 +1209,6 @@ test('lowers known C array index access to runtime calls', () => {
   assert.match(result.code, /inox_array_get\(values, 1, &inox_item_\d+\)/)
   assert.match(result.code, /const double active = inox_item_\d+\.as\.boolean \? 1 : 0;/)
 })
-
 
 test('lowers known C array index assignments to runtime calls', () => {
   const result = compileSource(
@@ -1252,7 +1231,6 @@ test('lowers known C array index assignments to runtime calls', () => {
   assert.match(result.code, /const double score = inox_item_\d+\.as\.number;/)
   assert.match(result.code, /const double active = inox_item_\d+\.as\.boolean \? 1 : 0;/)
 })
-
 
 test('lowers known C string array index reads to runtime strings', () => {
   const result = compileSource(
@@ -1277,7 +1255,6 @@ test('lowers known C string array index reads to runtime strings', () => {
   assert.match(result.code, /const inox_string \*name = \(inox_string \*\)inox_item_\d+\.as\.ref;/)
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
-
 
 test('lowers C runtime string references for object and array assignments', () => {
   const result = compileSource(
@@ -1310,7 +1287,6 @@ test('lowers C runtime string references for object and array assignments', () =
   )
 })
 
-
 test('lowers C nested object string field reads to runtime strings', () => {
   const result = compileSource(
     `type FunctionType = {
@@ -1339,7 +1315,6 @@ export function main(): void {
   assert.match(result.code, /printf\("%\.\*s\\n", \(int\)returnType->len, returnType->bytes\);/)
 })
 
-
 test('lowers C string-returning calls for object and array assignments', () => {
   const result = compileSource(
     `function getName(): string {
@@ -1365,7 +1340,6 @@ export function main(): void {
   assert.match(result.code, /printf\("%\.\*s %\.\*s\\n"/)
 })
 
-
 test('compiles for of loops over arrays to C', () => {
   const source = `export function main(): void {
   const values = [1, 2, 3]
@@ -1386,7 +1360,6 @@ test('compiles for of loops over arrays to C', () => {
   assert.match(c.code, /inox_array_get\(values, inox_for_index_\d+, &inox_for_value_\d+\)/)
   assert.match(c.code, /double value = inox_for_value_\d+\.as\.number;/)
 })
-
 
 test('compiles for of loops over string arrays to C', () => {
   const c = compileSource(
@@ -1411,7 +1384,6 @@ test('compiles for of loops over string arrays to C', () => {
   assert.match(c.code, /inox_string \*name = \(inox_string \*\)inox_for_value_\d+\.as\.ref;/)
   assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
-
 
 test('compiles for of loops over Set values to C', () => {
   const source = `type Bag = {
@@ -1464,7 +1436,6 @@ export function main(): void {
   assert.match(c.code, /inox_for_value_\d+\.tag != INOX_TAG_OBJECT/)
   assert.match(c.code, /inox_value user = inox_for_value_\d+;/)
 })
-
 
 test('compiles for of loops over Map values as MapEntry objects', () => {
   const source = `type Bag = {
@@ -1522,11 +1493,13 @@ export function main(): void {
     }
   )
 
-  assert.match(objectKeys.code, /inox_object_init_known\(entry, 0, inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.key\)/)
+  assert.match(
+    objectKeys.code,
+    /inox_object_init_known\(entry, 0, inox_for_map_\d+->entries\[inox_for_map_index_\d+\]\.key\)/
+  )
   assert.match(objectKeys.code, /inox_object_get_known\(entry, 0, &inox_(?:expr_)?value_\d+\)/)
   assert.match(objectKeys.code, /inox_map_has\(scores, inox_(?:expr_)?value_\d+, &inox_map_has_\d+\)/)
 })
-
 
 test('compiles for of loops over Map.values iterables', () => {
   const numbers = compileSource(
@@ -1615,7 +1588,6 @@ export function main(): void {
   assert.match(unionObjects.code, /inox_value item = inox_for_value_\d+;/)
 })
 
-
 test('compiles for of loops over Map.keys iterables', () => {
   const strings = compileSource(
     `export function main(): void {
@@ -1671,7 +1643,6 @@ export function main(): void {
   assert.match(objects.code, /inox_map_has\(scores, user, &inox_map_has_\d+\)/)
 })
 
-
 test('compiles for of loops over inline array literals to C', () => {
   const c = compileSource(
     `export function main(): void {
@@ -1694,7 +1665,6 @@ test('compiles for of loops over inline array literals to C', () => {
   assert.match(c.code, /double value = inox_for_value_\d+\.as\.number;/)
 })
 
-
 test('compiles for of loops over inline string array literals to C', () => {
   const c = compileSource(
     `export function main(): void {
@@ -1712,7 +1682,6 @@ test('compiles for of loops over inline string array literals to C', () => {
   assert.match(c.code, /inox_string \*name = \(inox_string \*\)inox_for_value_\d+\.as\.ref;/)
   assert.match(c.code, /printf\("%\.\*s\\n", \(int\)name->len, name->bytes\);/)
 })
-
 
 test('drives C function collection from target-neutral IR body', () => {
   const result = compileSource(
@@ -1740,7 +1709,6 @@ export function main(): void {
   assert.doesNotMatch(withoutIrBodyFunctions, /void greet\(void\) \{/)
   assert.doesNotMatch(withoutIrBodyFunctions, /void inox_main\(void\) \{/)
 })
-
 
 test('drives IR function effect collection from top-level item metadata', () => {
   const result = compileSource(
@@ -1773,7 +1741,6 @@ console.log(label)
     []
   )
 })
-
 
 test('drives C collection headers from target-neutral IR requirements', () => {
   const stringOnly = compileSource(
@@ -1818,7 +1785,6 @@ test('drives C collection headers from target-neutral IR requirements', () => {
   assert.doesNotMatch(withoutCollections, /#include "inox\/map\.h"/)
   assert.doesNotMatch(withoutCollections, /#include "inox\/set\.h"/)
 })
-
 
 test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
   const result = compileSource(
@@ -1879,7 +1845,6 @@ test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
   )
 })
 
-
 test('reports embedded heap capability diagnostics for array-producing methods', () => {
   const source = `export function main(): void {
   const values = [1, 2, 3]
@@ -1929,7 +1894,6 @@ test('reports embedded heap capability diagnostics for array-producing methods',
   assert.match(enabled.code, /inox_array_push\(result, inox_number_value/)
 })
 
-
 test('checks string length as a readonly number field', () => {
   const result = compileSource(
     `export function main(): void {
@@ -1958,7 +1922,6 @@ test('checks string length as a readonly number field', () => {
   )
 })
 
-
 test('checks array length as a readonly number field', () => {
   const result = compileSource(
     `function length(values: number[]): number {
@@ -1986,7 +1949,6 @@ export function main(): void {
     'INOX_ASSIGN_READONLY_FIELD'
   )
 })
-
 
 test('keeps array element types for T[] and Array<T>', () => {
   const result = compileSource(
@@ -2044,7 +2006,6 @@ export function main(): void {
   )
 })
 
-
 test('checks Array sort filter map as typed chain calls', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2059,7 +2020,9 @@ test('checks Array sort filter map as typed chain calls', () => {
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
-  const resultDeclaration = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'result')
+  const resultDeclaration = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'result'
+  )
   assert.ok(resultDeclaration)
   const sortCall = resultDeclaration.init.callee.object.callee.object
   const filterCall = resultDeclaration.init.callee.object
@@ -2171,7 +2134,6 @@ test('checks Array sort filter map as typed chain calls', () => {
   )
 })
 
-
 test('lowers C Array.find declarations to nullable loop results', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2219,7 +2181,6 @@ test('lowers C Array.find declarations to nullable loop results', () => {
   )
 })
 
-
 test('lowers C Array.find expression contexts to nullable temps', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2242,10 +2203,22 @@ test('lowers C Array.find expression contexts to nullable temps', () => {
   const score = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'score')
 
   assert.equal(findTemps.length, 2)
-  assert.equal(findTemps.every((item: AnyNode) => item.kind === 'let'), true)
-  assert.equal(findTemps.every((item: AnyNode) => item.nullable === true), true)
-  assert.equal(findTemps.every((item: AnyNode) => item.valueType === 'number'), true)
-  assert.equal(findTemps.every((item: AnyNode) => item.init.type === 'NullLiteral'), true)
+  assert.equal(
+    findTemps.every((item: AnyNode) => item.kind === 'let'),
+    true
+  )
+  assert.equal(
+    findTemps.every((item: AnyNode) => item.nullable === true),
+    true
+  )
+  assert.equal(
+    findTemps.every((item: AnyNode) => item.valueType === 'number'),
+    true
+  )
+  assert.equal(
+    findTemps.every((item: AnyNode) => item.init.type === 'NullLiteral'),
+    true
+  )
   assert.ok(score)
   assert.equal(score.init.type, 'BinaryExpression')
   assert.equal(score.init.operator, '??')
@@ -2254,7 +2227,6 @@ test('lowers C Array.find expression contexts to nullable temps', () => {
   assert.match(result.code, /if \(__inox_find_expr_\d+\.tag == INOX_TAG_NULL\) \{/)
   assert.doesNotMatch(result.code, /INOX_C_ARRAY_METHOD/)
 })
-
 
 test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   const result = compileSource(
@@ -2276,9 +2248,15 @@ test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
 
-  const presentNames = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentNames')
-  const presentNumbers = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentNumbers')
-  const presentFlags = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentFlags')
+  const presentNames = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentNames'
+  )
+  const presentNumbers = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentNumbers'
+  )
+  const presentFlags = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentFlags'
+  )
 
   assert.ok(presentNames)
   assert.ok(presentNumbers)
@@ -2291,7 +2269,10 @@ test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   assert.doesNotMatch(result.code, /inox_filter_array_\d+/)
   assert.match(result.code, /for \(;;\) \{/)
   assert.match(result.code, /inox_array_get\(names, \(size_t\)\(__inox_filter_index_\d+\), &inox_value_\d+\)/)
-  assert.match(result.code, /inox_string_code_unit_length_parts\(__inox_filter_item_\d+->bytes, __inox_filter_item_\d+->len\)/)
+  assert.match(
+    result.code,
+    /inox_string_code_unit_length_parts\(__inox_filter_item_\d+->bytes, __inox_filter_item_\d+->len\)/
+  )
   assert.match(
     result.code,
     /if \(__inox_filter_item_\d+ == __inox_filter_item_\d+\) \{\s*inox_logical_\d+ = \(__inox_filter_item_\d+ != 0\);/s
@@ -2299,9 +2280,11 @@ test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   assert.match(result.code, /if \(__inox_filter_item_\d+\) \{/)
   assert.match(result.code, /inox_array_push\(presentNames, inox_value_\d+\)/)
   assert.match(result.code, /inox_array_push\(presentNumbers, inox_number_value\(__inox_filter_item_\d+\)\)/)
-  assert.match(result.code, /inox_array_push\(presentFlags, inox_bool_value\(\(?__inox_filter_item_\d+\)?(?: != 0)?\)\)/)
+  assert.match(
+    result.code,
+    /inox_array_push\(presentFlags, inox_bool_value\(\(?__inox_filter_item_\d+\)?(?: != 0)?\)\)/
+  )
 })
-
 
 test('lowers C Array.filter chains and return expressions to explicit loops', () => {
   const result = compileSource(
@@ -2336,7 +2319,9 @@ export function main(): void {
   assert.match(selected.body[2].argument.path[0], /^__inox_array_expr_\d+$/)
 
   const scaled = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'scaled')
-  const inlineCount = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'inlineCount')
+  const inlineCount = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'inlineCount'
+  )
   const chainTemp = main.body.find(
     (item: AnyNode) => item.type === 'VariableDeclaration' && /^__inox_array_expr_\d+$/.test(item.name)
   )
@@ -2357,7 +2342,6 @@ export function main(): void {
   assert.match(result.code, /inox_array_push\(__inox_array_expr_\d+, inox_number_value/)
   assert.match(result.code, /inox_array_push\(scaled, inox_number_value/)
 })
-
 
 test('checks Map and Set generic methods as typed chain calls', () => {
   const result = compileSource(
@@ -2392,7 +2376,9 @@ test('checks Map and Set generic methods as typed chain calls', () => {
   )
   assert.ok(main)
   const scores = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'scores')
-  const maybeScore = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'maybeScore')
+  const maybeScore = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'maybeScore'
+  )
   const score = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'score')
   const hasAda = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'hasAda')
   const removed = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'removed')
@@ -2528,7 +2514,6 @@ export function main(): void {
   assert.match(objectSetResult.code, /inox_set\* inox_set_source_\d+ = \(inox_set\*\)users\.as\.ref;/)
 })
 
-
 test('checks Map and Set copy constructors as typed collection values', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2551,7 +2536,9 @@ test('checks Map and Set copy constructors as typed collection values', () => {
   const copy = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'copy')
   const assigned = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'assigned')
   const namesCopy = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'namesCopy')
-  const assignedNames = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'assignedNames')
+  const assignedNames = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'assignedNames'
+  )
   assert.ok(copy)
   assert.ok(assigned)
   assert.ok(namesCopy)
@@ -2566,13 +2553,18 @@ test('checks Map and Set copy constructors as typed collection values', () => {
   assert.equal(namesCopy.setElementType, 'string')
   assert.equal(assignedNames.setElementType, 'string')
   assert.match(result.code, /inox_map\* inox_map_source_\d+ = \(inox_map\*\)scores\.as\.ref;/)
-  assert.match(result.code, /inox_map_set\(\s*inox_map_\d+,\s*inox_map_source_\d+->entries\[inox_map_source_index_\d+\]\.key,\s*inox_map_source_\d+->entries\[inox_map_source_index_\d+\]\.value\s*\)/)
+  assert.match(
+    result.code,
+    /inox_map_set\(\s*inox_map_\d+,\s*inox_map_source_\d+->entries\[inox_map_source_index_\d+\]\.key,\s*inox_map_source_\d+->entries\[inox_map_source_index_\d+\]\.value\s*\)/
+  )
   assert.match(result.code, /copy = inox_map_\d+;/)
   assert.match(result.code, /inox_set\* inox_set_source_\d+ = \(inox_set\*\)names\.as\.ref;/)
-  assert.match(result.code, /inox_set_add\(inox_set_\d+, inox_set_source_\d+->entries\[inox_set_source_index_\d+\]\.value\)/)
+  assert.match(
+    result.code,
+    /inox_set_add\(inox_set_\d+, inox_set_source_\d+->entries\[inox_set_source_index_\d+\]\.value\)/
+  )
   assert.match(result.code, /namesCopy = inox_set_\d+;/)
 })
-
 
 test('compiles C collection values across function boundaries', () => {
   const result = compileSource(
@@ -2672,7 +2664,6 @@ export function main(): void {
   assert.match(result.code, /inox_set_has\(seen, inox_value_\d+, &inox_set_has_\d+\)/)
 })
 
-
 test('checks Map bracket syntax as typed get and set sugar', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2701,7 +2692,9 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
-  const contentType = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'contentType')
+  const contentType = main.body.find(
+    (item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'contentType'
+  )
   const fallback = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'fallback')
   assert.ok(contentType)
   assert.ok(fallback)
@@ -2741,7 +2734,6 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('checks string predicate methods as boolean calls', () => {
   const result = compileSource(
@@ -2798,7 +2790,6 @@ export function main(): void {
   )
 })
 
-
 test('checks string index methods as number calls', () => {
   const result = compileSource(
     `function findAda(name: string): number {
@@ -2845,7 +2836,6 @@ export function main(): void {
   )
 })
 
-
 test('checks string slice as a string call', () => {
   const result = compileSource(
     `function middle(name: string): string {
@@ -2883,7 +2873,6 @@ export function main(): void {
   )
 })
 
-
 test('checks string split as a string array call', () => {
   const result = compileSource(
     `export function main(): void {
@@ -2917,7 +2906,6 @@ test('checks string split as a string array call', () => {
   )
 })
 
-
 test('checks string trim as a string call', () => {
   const result = compileSource(
     `function clean(name: string): string {
@@ -2945,7 +2933,6 @@ export function main(): void {
     'INOX_ARG_COUNT'
   )
 })
-
 
 test('checks string case and padStart as string calls', () => {
   const result = compileSource(
@@ -2993,7 +2980,6 @@ export function main(): void {
   )
 })
 
-
 test('checks String conversion as a typed string call', () => {
   const result = compileSource(
     `function label(value: number): string {
@@ -3028,7 +3014,6 @@ export function main(): void {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('checks Number conversion as a nullable typed number call', () => {
   const source = `function parsePort(text: string): number | null {
@@ -3072,7 +3057,6 @@ export function main(): void {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('checks numeric casts as number calls', () => {
   const source = `function convert(value: number): number {
@@ -3119,7 +3103,6 @@ export function main(): void {
     'INOX_TYPE_MISMATCH'
   )
 })
-
 
 test('marks timer calls and lowers setImmediate/setTimeout to C loop work', () => {
   const result = compileSource(

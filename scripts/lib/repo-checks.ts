@@ -1,6 +1,6 @@
-import { access, readdir, readFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { access, readdir, readFile } from 'node:fs/promises'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 

@@ -6,8 +6,8 @@ import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { compileSource } from '../compiler/index.ts'
-import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 import { rootDir } from './lib/repo-checks.ts'
+import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 
 const uvHeaderPath = join(rootDir, 'third_party', 'libuv', 'include', 'uv.h')
 const mode = parseArgs(process.argv.slice(2))
@@ -264,7 +264,9 @@ int main(void) {
   const expected = '1 1 0 3 1 5\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv timer smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv timer smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -323,7 +325,9 @@ target_link_libraries(inox_libuv_compiled_timer_smoke PRIVATE inox_runtime)
   const expected = 'immediate\ntimeout\n'
 
   if (stdout !== expected) {
-    console.error(`Compiled libuv timer smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Compiled libuv timer smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -522,7 +526,13 @@ int main(void) {
 `
   )
 
-  await checkCommand('configure libuv fs smoke', 'cmake', ['-S', sourceDir, '-B', fsBuildDir, '-DINOX_LOOP_BACKEND=libuv'])
+  await checkCommand('configure libuv fs smoke', 'cmake', [
+    '-S',
+    sourceDir,
+    '-B',
+    fsBuildDir,
+    '-DINOX_LOOP_BACKEND=libuv'
+  ])
   await checkCommand('build libuv fs smoke', 'cmake', ['--build', fsBuildDir])
 
   const run = await runCommand(join(fsBuildDir, 'inox_libuv_fs_smoke'), [])
@@ -535,7 +545,9 @@ int main(void) {
   const expected = 'uv text 2 2 6 true true true ERR_FS_OPERATION\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv fs smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv fs smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 
@@ -562,7 +574,9 @@ int main(void) {
   }
 
   if (linkTarget !== textInput || realTarget !== expectedRealTarget) {
-    console.error(`Libuv fs smoke link output mismatch: ${JSON.stringify({ linkTarget, realTarget, textInput, expectedRealTarget })}`)
+    console.error(
+      `Libuv fs smoke link output mismatch: ${JSON.stringify({ linkTarget, realTarget, textInput, expectedRealTarget })}`
+    )
     process.exit(1)
   }
 
@@ -794,7 +808,9 @@ int main(void) {
   const expected = '1 1 1 1 2 ping\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv dgram smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv dgram smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -939,7 +955,9 @@ int main(void) {
   const expected = '1 1 1 connected\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv connected dgram smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv connected dgram smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -1045,7 +1063,9 @@ int main(void) {
   const expected = '1 1\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv dgram options smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv dgram options smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -1330,7 +1350,9 @@ target_link_libraries(inox_libuv_compiled_dgram_options_smoke PRIVATE inox_runti
   const expected = '1 1\n'
 
   if (stdout !== expected) {
-    console.error(`Compiled libuv dgram options stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Compiled libuv dgram options stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -1591,7 +1613,9 @@ int main(void) {
   const expected = '1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 hello\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv net smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv net smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -1779,7 +1803,9 @@ target_link_libraries(inox_libuv_compiled_net_client_smoke PRIVATE inox_runtime)
     const expected = 'connected\npong\n'
 
     if (stdout !== expected) {
-      console.error(`Compiled libuv net client stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+      console.error(
+        `Compiled libuv net client stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+      )
       process.exit(1)
     }
   } finally {
@@ -1935,7 +1961,9 @@ int main(void) {
   const expected = '1 1 created json length\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv http smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv http smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
@@ -2175,7 +2203,9 @@ int main(void) {
   const expected = '1 1 200 1 fetch-ok\n'
 
   if (stdout !== expected) {
-    console.error(`Libuv fetch smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`)
+    console.error(
+      `Libuv fetch smoke stdout mismatch.\nExpected: ${JSON.stringify(expected)}\nActual: ${JSON.stringify(stdout)}`
+    )
     process.exit(1)
   }
 }
