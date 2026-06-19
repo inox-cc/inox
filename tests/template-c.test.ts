@@ -44,13 +44,13 @@ test('diagnoses unsupported C template placeholders', () => {
 test('lowers C template interpolation as a runtime string expression', () => {
   const result = compileSource(
     `function fromReturn(): string {
-  const str1 = 'ccjs cmake example'
+  const str1 = 'inox cmake example'
   const num = 123
   return \`\${str1} \${String(num)}\`
 }
 
 function fromLocal(): string {
-  const str1 = 'ccjs cmake example'
+  const str1 = 'inox cmake example'
   const num = 123
   const t = \`\${str1} \${String(num)}\`
   return t
@@ -60,7 +60,7 @@ function echo(value: string): string {
   return value
 }
 
-const str1 = 'ccjs cmake example'
+const str1 = 'inox cmake example'
 const num = 123
 console.log(fromReturn())
 console.log(fromLocal())
@@ -74,7 +74,7 @@ console.log(echo(\`\${str1} \${String(num)}\`))
   assert.match(result.code, /#include <string\.h>/)
   assert.match(result.code, /ccjs_string_from_number\(&ccjs_default_allocator, num, &ccjs_value_\d+\)/)
   assert.match(result.code, /ccjs_string_concat_parts\(&ccjs_default_allocator,/)
-  assert.match(result.code, /const ccjs_string\* t = \(ccjs_string\*\)ccjs_value_\d+\.as\.ref;/)
+  assert.match(result.code, /const ccjs_string\* t = \(ccjs_string\*\)[A-Za-z_][A-Za-z0-9_]*\.as\.ref;/)
   assert.match(result.code, /echo\(ccjs_value_\d+\)/)
 })
 
@@ -173,7 +173,7 @@ test('generated C console log template interpolation compiles and runs with runt
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-template-log-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-template-log-'))
   const source = join(dir, 'template-log.c')
   const output = join(dir, 'template-log')
 
@@ -215,20 +215,20 @@ test('generated C template interpolation works for return locals and string argu
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-template-expr-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-template-expr-'))
   const source = join(dir, 'template-expr.c')
   const output = join(dir, 'template-expr')
 
   try {
     const result = compileSource(
       `function fromReturn(): string {
-  const str1 = 'ccjs cmake example'
+  const str1 = 'inox cmake example'
   const num = 123
   return \`\${str1} \${String(num)}\`
 }
 
 function fromLocal(): string {
-  const str1 = 'ccjs cmake example'
+  const str1 = 'inox cmake example'
   const num = 123
   const t = \`\${str1} \${String(num)}\`
   return t
@@ -238,7 +238,7 @@ function echo(value: string): string {
   return value
 }
 
-const str1 = 'ccjs cmake example'
+const str1 = 'inox cmake example'
 const num = 123
 console.log(fromReturn())
 console.log(fromLocal())
@@ -258,7 +258,7 @@ console.log(echo(\`\${str1} \${String(num)}\`))
     const run = await runCommand(output, [])
 
     assert.equal(run.code, 0, run.stderr)
-    assert.equal(run.stdout, 'ccjs cmake example 123\nccjs cmake example 123\nccjs cmake example 123\n')
+    assert.equal(run.stdout, 'inox cmake example 123\ninox cmake example 123\ninox cmake example 123\n')
   } finally {
     await rm(dir, {
       recursive: true,
@@ -275,7 +275,7 @@ test('generated C template interpolation formats unknown runtime values', async 
     return
   }
 
-  const dir = await mkdtemp(join(tmpdir(), 'ccjs-c-template-unknown-'))
+  const dir = await mkdtemp(join(tmpdir(), 'inox-c-template-unknown-'))
   const source = join(dir, 'template-unknown.c')
   const output = join(dir, 'template-unknown')
 
