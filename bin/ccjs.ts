@@ -71,7 +71,7 @@ const cRuntimeSourceGroups = {
   time: ['runtime/c/src/time/time.c'],
   weak: ['runtime/c/src/core/weak.c']
 }
-const configFileNames = ['ccjs.config.json', 'ccjs.json']
+const configFileNames = ['inox.config.json', 'inox.json', 'ccjs.config.json', 'ccjs.json']
 
 const result = parseCliArgs(process.argv.slice(2))
 

@@ -125,6 +125,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   narrowedNullableScalars: AsyncTaskStringSet
   netReadingSockets: AsyncTaskStringSet
   nullableVariables: AsyncTaskStringSet
+  objectAliases: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   ownedCryptoHashes: string[]
   ownedCryptoHmacs: string[]
@@ -153,6 +154,15 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   variables: AsyncTaskStringMap
 }
 
+type AsyncTaskLocalMetadataContext = {
+  mapTypes: AsyncTaskMapTypeMap
+  objectShapes: AsyncTaskObjectShapeFieldMap
+  runtimeArrayElementTypes: AsyncTaskStringMap
+  runtimeStrings: AsyncTaskStringSet
+  setElementTypes: AsyncTaskStringMap
+  variables: AsyncTaskStringMap
+}
+
 type AsyncTaskVariableScopeSnapshot = {
   arrayShapes: AsyncTaskArrayShapeMap
   boxedVariables: AsyncTaskStringSet
@@ -162,6 +172,7 @@ type AsyncTaskVariableScopeSnapshot = {
   mapTypes: AsyncTaskMapTypeMap
   narrowedNullableScalars: AsyncTaskStringSet
   nullableVariables: AsyncTaskStringSet
+  objectAliases: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
   promiseConstructorHandlers: AsyncTaskPromiseConstructorHandlerMap
   promiseRejectionValueTypes: AsyncTaskStringMap
@@ -329,7 +340,6 @@ type AsyncTaskNestedTryChain = {
 }
 
 type AsyncTaskPrefixLocalsResult = {
-  context: AsyncTaskPlannerContext
   locals: CAsyncTaskPrefixLocal[]
 }
 
@@ -1009,12 +1019,13 @@ function resolveAsyncTaskBodyPlan(
   }
 
   const resolvedAwaits = asyncTaskAwaitStepsOrEmpty(awaits)
-  const returnContext = createAsyncTaskExpressionContext(context, params, resolvedAwaits)
+  const returnScope = pushAsyncTaskExpressionContextScope(context, params, resolvedAwaits)
   const returnExpression = resolveAsyncTaskReturnValueExpression(
     getAsyncTaskReturnArgument(returnStatement),
     returnType,
-    returnContext
+    context
   )
+  asyncTaskDeps(context).restoreVariableScope(context, returnScope)
 
   if (returnType !== 'void' && returnExpression == null) {
     return null
@@ -1100,12 +1111,13 @@ function resolveAsyncTaskTryBodyPlan(
   }
 
   const resolvedAwaits = asyncTaskAwaitStepsOrEmpty(awaits)
-  const returnContext = createAsyncTaskExpressionContext(context, params, resolvedAwaits)
+  const returnScope = pushAsyncTaskExpressionContextScope(context, params, resolvedAwaits)
   const returnExpression = resolveAsyncTaskReturnValueExpression(
     getAsyncTaskReturnArgument(returnStatement),
     returnType,
-    returnContext
+    context
   )
+  asyncTaskDeps(context).restoreVariableScope(context, returnScope)
 
   if (returnType !== 'void' && returnExpression == null) {
     return null
@@ -1181,8 +1193,9 @@ function resolveAsyncTaskNestedTryBodyPlan(
   }
 
   const prefixResult = asyncTaskPrefixLocalsResultOrEmpty(prefixResultOrNull, context)
-  const prefixContext = prefixResult.context
-  const awaitResultOrNull = resolveAsyncTaskAwaitStepsAndTrailingStatements(innerPrefixResult.awaitStatements, prefixContext)
+  const prefixScope = pushAsyncTaskExpressionContextScope(context, params, prefixResult.locals)
+  const awaitResultOrNull = resolveAsyncTaskAwaitStepsAndTrailingStatements(innerPrefixResult.awaitStatements, context)
+  asyncTaskDeps(context).restoreVariableScope(context, prefixScope)
 
   if (awaitResultOrNull == null) {
     return null
@@ -1204,7 +1217,7 @@ function resolveAsyncTaskNestedTryBodyPlan(
     appendAsyncTaskFrameLocals(returnContextLocals, awaits)
   }
 
-  const returnContext = createAsyncTaskExpressionContext(context, params, returnContextLocals)
+  const returnScope = pushAsyncTaskExpressionContextScope(context, params, returnContextLocals)
   const finalizers = collectAsyncTaskTryFinalizers(tryChain)
   const handlerIndex = findAsyncTaskNearestTryHandlerIndex(tryChain)
   let handlerSource: AsyncTaskAstNode | null = null
@@ -1214,12 +1227,13 @@ function resolveAsyncTaskNestedTryBodyPlan(
   }
 
   const handler = resolveAsyncTaskTryHandler(handlerSource, context, params, returnType)
-  registerAsyncTaskStatementListLocals(returnContext, successStatements)
+  registerAsyncTaskStatementListLocals(context, successStatements)
   const returnExpression = resolveAsyncTaskReturnValueExpression(
     getAsyncTaskReturnArgument(returnStatement),
     returnType,
-    returnContext
+    context
   )
+  asyncTaskDeps(context).restoreVariableScope(context, returnScope)
 
   if (returnType !== 'void' && returnExpression == null) {
     return null
@@ -1318,7 +1332,6 @@ function asyncTaskPrefixLocalsResultOrEmpty(
   }
 
   return {
-    context: context,
     locals: []
   }
 }
@@ -1484,7 +1497,7 @@ function resolveAsyncTaskPrefixLocals(
   params: CAsyncTaskParam[],
   prefixStatements: AsyncTaskAstNode[]
 ): AsyncTaskPrefixLocalsResult | null {
-  const result = createAsyncTaskExpressionContext(context, params, [])
+  const scope = pushAsyncTaskExpressionContextScope(context, params, [])
   const locals: CAsyncTaskPrefixLocal[] = []
 
   for (const statement of prefixStatements) {
@@ -1495,20 +1508,21 @@ function resolveAsyncTaskPrefixLocals(
     let valueType = statement.valueType
 
     if (valueType == null) {
-      valueType = asyncTaskDeps(context).inferExpressionType(statement.init, result)
+      valueType = asyncTaskDeps(context).inferExpressionType(statement.init, context)
     }
 
     if (!isSupportedAsyncTaskPrefixLocalType(valueType)) {
+      asyncTaskDeps(context).restoreVariableScope(context, scope)
       return null
     }
 
-    asyncTaskDeps(context).registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, result)
+    asyncTaskDeps(context).registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
 
-    if (valueType === 'string' && isRuntimeStringPrefixLocalDeclaration(statement, result)) {
-      result.runtimeStrings.add(statement.name)
+    if (valueType === 'string' && isRuntimeStringPrefixLocalDeclaration(statement, context)) {
+      context.runtimeStrings.add(statement.name)
     }
 
-    if (isSupportedAsyncTaskFramePrefixLocal(statement, valueType, result)) {
+    if (isSupportedAsyncTaskFramePrefixLocal(statement, valueType, context)) {
       let shape: CObjectShape | null = null
       let arrayElementType: string | null = null
       let mapKeyType: string | null = null
@@ -1531,7 +1545,7 @@ function resolveAsyncTaskPrefixLocals(
         } else if (statement.init != null && statement.init.arrayElementType != null) {
           arrayElementType = statement.init.arrayElementType
         } else {
-          const resolvedArrayElementType = asyncTaskDeps(context).resolveRuntimeArrayElementType(statement.init, result)
+          const resolvedArrayElementType = asyncTaskDeps(context).resolveRuntimeArrayElementType(statement.init, context)
 
           if (resolvedArrayElementType != null) {
             arrayElementType = resolvedArrayElementType
@@ -1542,7 +1556,7 @@ function resolveAsyncTaskPrefixLocals(
       }
 
       if (valueType === 'map') {
-        const resolvedMapType = asyncTaskDeps(context).resolveRuntimeMapType(statement.init, result)
+        const resolvedMapType = asyncTaskDeps(context).resolveRuntimeMapType(statement.init, context)
 
         if (statement.mapKeyType != null) {
           mapKeyType = statement.mapKeyType
@@ -1569,7 +1583,7 @@ function resolveAsyncTaskPrefixLocals(
         if (statement.setElementType != null) {
           setElementType = statement.setElementType
         } else {
-          const resolvedSetElementType = asyncTaskDeps(context).resolveRuntimeSetElementType(statement.init, result)
+          const resolvedSetElementType = asyncTaskDeps(context).resolveRuntimeSetElementType(statement.init, context)
 
           if (resolvedSetElementType != null) {
             setElementType = resolvedSetElementType
@@ -1595,8 +1609,9 @@ function resolveAsyncTaskPrefixLocals(
     }
   }
 
+  asyncTaskDeps(context).restoreVariableScope(context, scope)
+
   return {
-    context: result,
     locals
   }
 }
@@ -1725,19 +1740,20 @@ function resolveAsyncTaskTryHandler(
     return null
   }
 
-  const catchContext = createAsyncTaskExpressionContext(context, params, [])
+  const catchScope = pushAsyncTaskExpressionContextScope(context, params, [])
 
   if (handler.param != null) {
-    catchContext.variables.set(handler.param, 'string')
-    catchContext.runtimeStrings.add(handler.param)
+    context.variables.set(handler.param, 'string')
+    context.runtimeStrings.add(handler.param)
   }
 
-  registerAsyncTaskStatementListLocals(catchContext, handlerStatements)
+  registerAsyncTaskStatementListLocals(context, handlerStatements)
   const returnExpression = resolveAsyncTaskReturnValueExpression(
     getAsyncTaskReturnArgument(returnStatement),
     returnType,
-    catchContext
+    context
   )
+  asyncTaskDeps(context).restoreVariableScope(context, catchScope)
 
   if (returnExpression == null) {
     return null
@@ -1794,6 +1810,7 @@ function createAsyncTaskExpressionContext(
   result.narrowedNullableScalars = context.narrowedNullableScalars
   result.netReadingSockets = context.netReadingSockets
   result.nullableVariables = context.nullableVariables
+  result.objectAliases = cloneOptionalAsyncTaskStringMap(context.objectAliases)
   result.objectShapes = cloneCObjectShapeFieldMap(context.objectShapes)
   result.ownedCryptoHashes = context.ownedCryptoHashes
   result.ownedCryptoHmacs = context.ownedCryptoHmacs
@@ -1839,6 +1856,33 @@ function createAsyncTaskExpressionContext(
   }
 
   return result
+}
+
+function pushAsyncTaskExpressionContextScope(
+  context: AsyncTaskPlannerContext,
+  params: CAsyncTaskParam[],
+  locals: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
+): AsyncTaskVariableScopeSnapshot {
+  const scope = asyncTaskDeps(context).pushVariableScope(context)
+  registerAsyncTaskExpressionContextMetadata(context, params, locals)
+
+  return scope
+}
+
+function registerAsyncTaskExpressionContextMetadata(
+  context: AsyncTaskPlannerContext,
+  params: CAsyncTaskParam[],
+  locals: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
+): void {
+  for (const param of params) {
+    registerAsyncTaskLocalMetadata(param.name, param.valueType, param, context)
+  }
+
+  for (const item of locals) {
+    if (item.name != null) {
+      registerAsyncTaskLocalMetadata(item.name, item.type, item, context)
+    }
+  }
 }
 
 function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): boolean {
@@ -2007,14 +2051,12 @@ function resolveAsyncTaskDirectAwaitStep(
     return null
   }
 
-  let awaitedType = statement.valueType
+  let awaitedType: string = 'unknown'
 
-  if (awaitedType == null) {
+  if (statement.valueType != null) {
+    awaitedType = statement.valueType
+  } else if (statement.init.valueType != null) {
     awaitedType = statement.init.valueType
-  }
-
-  if (awaitedType == null) {
-    awaitedType = 'unknown'
   }
 
   const awaitedExpression = statement.init.argument
@@ -2175,14 +2217,12 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
     return null
   }
 
-  let awaitedType = awaitStatement.valueType
+  let awaitedType: string = 'unknown'
 
-  if (awaitedType == null) {
+  if (awaitStatement.valueType != null) {
+    awaitedType = awaitStatement.valueType
+  } else if (awaitStatement.init.valueType != null) {
     awaitedType = awaitStatement.init.valueType
-  }
-
-  if (awaitedType == null) {
-    awaitedType = 'unknown'
   }
 
   if (!isSupportedAsyncTaskValueType(awaitedType) || awaitedType === 'void') {
@@ -2595,13 +2635,13 @@ function emitAsyncTaskStartParams(wrapper: CAsyncTaskWrapper): string {
   return joinStrings(params, ', ')
 }
 
-function registerAsyncTaskParams(wrapper: CAsyncTaskWrapper, context: AsyncTaskFunctionContext): void {
+function registerAsyncTaskParams(wrapper: CAsyncTaskWrapper, context: AsyncTaskLocalMetadataContext): void {
   for (const param of wrapper.params) {
     registerAsyncTaskLocalMetadata(param.name, param.valueType, param, context)
   }
 }
 
-function registerAsyncTaskAwaitLocals(wrapper: CAsyncTaskWrapper, context: AsyncTaskFunctionContext, count: number): void {
+function registerAsyncTaskAwaitLocals(wrapper: CAsyncTaskWrapper, context: AsyncTaskLocalMetadataContext, count: number): void {
   const locals: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)
 
   for (let index = 0; index < locals.length; index = index + 1) {
@@ -2614,7 +2654,7 @@ function registerAsyncTaskAwaitLocals(wrapper: CAsyncTaskWrapper, context: Async
   }
 }
 
-function registerAsyncTaskPrefixLocals(wrapper: CAsyncTaskWrapper, context: AsyncTaskFunctionContext): void {
+function registerAsyncTaskPrefixLocals(wrapper: CAsyncTaskWrapper, context: AsyncTaskLocalMetadataContext): void {
   const locals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
   for (let index = 0; index < locals.length; index = index + 1) {
@@ -2731,14 +2771,14 @@ function registerAsyncTaskLocalMetadata(
   name: string,
   valueType: string,
   item: CAsyncTaskFrameLocal | CAsyncTaskAwaitStep | CAsyncTaskParam | CAsyncTaskPrefixLocal,
-  context: AsyncTaskFunctionContext
+  context: AsyncTaskLocalMetadataContext
 ): void {
   context.variables.set(name, valueType)
 
   if (valueType === 'string') {
     context.runtimeStrings.add(name)
   } else if (valueType === 'object') {
-    asyncTaskDeps(context).registerObjectShape(context, name, item.shape)
+    registerAsyncTaskObjectShape(context, name, item.shape)
   } else if (valueType === 'array') {
     let arrayElementType = item.arrayElementType
 
@@ -2763,6 +2803,41 @@ function registerAsyncTaskLocalMetadata(
     }
 
     context.setElementTypes.set(name, setElementType)
+  }
+}
+
+function registerAsyncTaskObjectShape(
+  context: AsyncTaskLocalMetadataContext,
+  name: string,
+  shape: CObjectShape | null | undefined
+): void {
+  if (shape == null || shape.fields == null) {
+    return
+  }
+
+  const seen: Set<CObjectShape> = new Set()
+  seen.add(shape)
+  registerAsyncTaskObjectShapeFields(context, name, shape.fields, seen)
+}
+
+function registerAsyncTaskObjectShapeFields(
+  context: AsyncTaskLocalMetadataContext,
+  name: string,
+  fields: CObjectShapeField[],
+  seen: Set<CObjectShape>
+): void {
+  context.objectShapes.set(name, fields)
+
+  for (const field of fields) {
+    const shape = field.shape
+
+    if (field.valueType !== 'object' || shape == null || shape.fields == null || seen.has(shape)) {
+      continue
+    }
+
+    seen.add(shape)
+    registerAsyncTaskObjectShapeFields(context, `${name}_${field.name}`, shape.fields, seen)
+    seen.delete(shape)
   }
 }
 
@@ -3168,14 +3243,19 @@ function emitPreparedAsyncTaskFsSourceExpression(
       `status = ccjs_fs_symlink(ccjs_loop, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &frame->awaited);`
     )
   } else if (method === 'mkdir') {
+    const recursiveFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')
+
     lines.push(
-      `status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`
+      `status = ccjs_fs_mkdir(ccjs_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, &frame->awaited);`
     )
   } else if (method === 'unlink') {
     lines.push(`status = ccjs_fs_unlink(ccjs_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'rm') {
+    const recursiveFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')
+    const forceFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsForce')
+
     lines.push(
-      `status = ccjs_fs_rm(ccjs_loop, ${path.bytes}, ${path.length}, ${asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')}, ${asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsForce')}, &frame->awaited);`
+      `status = ccjs_fs_rm(ccjs_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, ${forceFlag}, &frame->awaited);`
     )
   } else if (method === 'rename') {
     const newPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'ccjs_fs_new_path')
@@ -3457,7 +3537,8 @@ function emitPreparedPlainPromiseSourceCallExpression(
   }
 
   appendAsyncTaskLines(lines, prepared.lines)
-  lines.push(`frame->awaited = ${asyncTaskDeps(context).emitCallee(expression.callee, context)}(${joinStrings(args, ', ')});`)
+  const calleeName: string = asyncTaskDeps(context).emitCallee(expression.callee, context)
+  lines.push(`frame->awaited = ${calleeName}(${joinStrings(args, ', ')});`)
   lines.push('status = frame->awaited == 0 ? CCJS_ERR_TYPE : CCJS_OK;')
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
 
@@ -3535,14 +3616,12 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
   options: AsyncTaskScheduleOptions
 ): PreparedAsyncTaskPromise {
   const source = nextCName(context, 'ccjs_async_task_source')
-  let sourceType = receiver.promiseValueType
+  let sourceType: string = item.type
 
-  if (sourceType == null && callback != null && callback.params[0] != null) {
+  if (receiver.promiseValueType != null) {
+    sourceType = receiver.promiseValueType
+  } else if (callback != null && callback.params[0] != null && callback.params[0].valueType != null) {
     sourceType = callback.params[0].valueType
-  }
-
-  if (sourceType == null) {
-    sourceType = item.type
   }
 
   const value = emitPreparedAsyncTaskValueExpression(receiver.args[0], sourceType, context)
@@ -4313,5 +4392,6 @@ export function emitAsyncTaskFunctionStubDeclaration(
     returnLine = '  return ccjs_undefined_value();'
   }
 
-  return [`${asyncTaskDeps(context).emitFunctionHead(statement, context)} {`, returnLine, '}']
+  const head: string = asyncTaskDeps(context).emitFunctionHead(statement, context)
+  return [`${head} {`, returnLine, '}']
 }

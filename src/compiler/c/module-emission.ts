@@ -1204,7 +1204,9 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
       names.set(importedBindingName, importedFunctionName)
 
       if (item.declaration.type !== 'ExportDeclaration') {
-        names.set(specifier.imported, importedFunctionName)
+        if (!localNames.has(specifier.imported)) {
+          names.set(specifier.imported, importedFunctionName)
+        }
 
         if (!localNames.has(specifier.local)) {
           names.set(specifier.local, importedFunctionName)

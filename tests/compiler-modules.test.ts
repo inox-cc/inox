@@ -260,6 +260,80 @@ export function main(): void {
   assert.match(indexSource, /ccjs_mod_dep_ts_[a-f0-9]+_answer/)
 })
 
+test('returns module-scope object constants through C module globals', async () => {
+  const files = [
+    {
+      path: '/project/index.ts',
+      source: `type Item = {
+  kind: string
+}
+
+const fallback: Item = { kind: 'fallback' }
+
+export function read(): Item {
+  return fallback
+}
+`
+    }
+  ]
+
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(source, /static ccjs_value ccjs_mod_index_ts_[a-f0-9]+_fallback;/)
+  assert.match(source, /ccjs_return = ccjs_mod_index_ts_[a-f0-9]+_fallback;/)
+  assert.doesNotMatch(source, /ccjs_return = fallback;/)
+})
+
+test('preserves createFunctionContext companion aliases for typed locals', async () => {
+  const files = [
+    {
+      path: '/project/dep.ts',
+      source: `type Dep = { run: () => string }
+type Context = { dep: Dep }
+
+export function createFunctionContext(baseContext: Context): Context {
+  return baseContext
+}
+`
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { createFunctionContext } from './dep'
+
+type Dep = { run: () => string }
+type Context = { dep: Dep }
+
+function read(): string {
+  return 'ok'
+}
+
+function take(context: Context): string {
+  return context.dep.run()
+}
+
+export function main(): void {
+  const baseContext: Context = { dep: { run: read } }
+  const context: Context = createFunctionContext(baseContext)
+  console.log(take(context))
+}
+`
+    }
+  ]
+
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(source, /take\(context, ccjs_objfn_baseContext_dep_run\)/)
+  assert.doesNotMatch(source, /take\(context, ccjs_objfn_context_dep_run\)/)
+})
+
 test('emits C module wrappers for re-exported functions', async () => {
   const files = [
     {
@@ -298,6 +372,38 @@ export function main(): void {
   assert.match(barrelSource, /ccjs_return = ccjs_mod_dep_ts_[a-f0-9]+_value\(\);/)
   assert.match(indexSource, /ccjs_mod_barrel_ts_[a-f0-9]+_value\(\)/)
   assert.doesNotMatch(barrelSource, /ccjs_return = ccjs_mod_barrel_ts_[a-f0-9]+_value\(\);/)
+})
+
+test('keeps local exported function names when an import uses the same imported name', async () => {
+  const files = [
+    {
+      path: '/project/dep.ts',
+      source: `export function build(value: number, extra: number): number {
+  return value + extra
+}
+`
+    },
+    {
+      path: '/project/index.ts',
+      source: `import { build as buildWithExtra } from './dep'
+
+export function build(value: number): number {
+  return buildWithExtra(value, 1)
+}
+`
+    }
+  ]
+
+  const modules = await compileMemoryPackageToCModules('/project/index.ts', files, {
+    sourceRoot: '/project',
+    target: 'c'
+  })
+  const header = modules.files.find((file) => file.path === 'index.h')?.code ?? ''
+  const source = modules.files.find((file) => file.path === 'index.c')?.code ?? ''
+
+  assert.match(header, /double ccjs_mod_index_ts_[a-f0-9]+_build\(double value\);/)
+  assert.doesNotMatch(header, /double ccjs_mod_dep_ts_[a-f0-9]+_build\(double value\);/)
+  assert.match(source, /ccjs_return = ccjs_mod_dep_ts_[a-f0-9]+_build\(value, 1\);/)
 })
 
 test('compiles memory packages through self-hosting entrypoints', async () => {

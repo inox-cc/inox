@@ -431,30 +431,30 @@ function splitGeneratedCParameters(source: string): string[] | null {
   let escaped = false
 
   for (let index = 0; index < source.length; index = index + 1) {
-    const char = source[index]
+    const character = source[index]
 
     if (quote != null) {
       if (escaped) {
         escaped = false
-      } else if (char === '\\') {
+      } else if (character === '\\') {
         escaped = true
-      } else if (char === quote) {
+      } else if (character === quote) {
         quote = null
       }
 
       continue
     }
 
-    if (char === '"' || char === "'") {
-      quote = char
+    if (character === '"' || character === "'") {
+      quote = character
       continue
     }
 
-    if (char === '(' || char === '[' || char === '{') {
+    if (character === '(' || character === '[' || character === '{') {
       depth = depth + 1
-    } else if (char === ')' || char === ']' || char === '}') {
+    } else if (character === ')' || character === ']' || character === '}') {
       depth = depth - 1
-    } else if (char === ',' && depth === 0) {
+    } else if (character === ',' && depth === 0) {
       params.push(source.slice(start, index).trim())
       start = index + 1
     }
@@ -643,28 +643,28 @@ function findGeneratedCMatchingParen(line: string, start: number): number | null
   let escaped = false
 
   for (let index = start; index < line.length; index = index + 1) {
-    const char = line[index]
+    const character = line[index]
 
     if (quote != null) {
       if (escaped) {
         escaped = false
-      } else if (char === '\\') {
+      } else if (character === '\\') {
         escaped = true
-      } else if (char === quote) {
+      } else if (character === quote) {
         quote = null
       }
 
       continue
     }
 
-    if (char === '"' || char === "'") {
-      quote = char
+    if (character === '"' || character === "'") {
+      quote = character
       continue
     }
 
-    if (char === '(') {
+    if (character === '(') {
       depth = depth + 1
-    } else if (char === ')') {
+    } else if (character === ')') {
       depth = depth - 1
 
       if (depth === 0) {
@@ -681,26 +681,26 @@ function splitGeneratedCLineComment(line: string): GeneratedCLineComment {
   let escaped = false
 
   for (let index = 0; index < line.length - 1; index = index + 1) {
-    const char = line[index]
+    const character = line[index]
 
     if (quote != null) {
       if (escaped) {
         escaped = false
-      } else if (char === '\\') {
+      } else if (character === '\\') {
         escaped = true
-      } else if (char === quote) {
+      } else if (character === quote) {
         quote = null
       }
 
       continue
     }
 
-    if (char === '"' || char === "'") {
-      quote = char
+    if (character === '"' || character === "'") {
+      quote = character
       continue
     }
 
-    if (char === '/' && line[index + 1] === '/') {
+    if (character === '/' && line[index + 1] === '/') {
       return {
         statement: trimGeneratedCEnd(line.slice(0, index)),
         comment: line.slice(index)
@@ -868,11 +868,11 @@ function scanGeneratedCBraces(line: string, state: GeneratedCBraceScanState): Ge
   let escaped = false
 
   for (let index = 0; index < line.length; index = index + 1) {
-    const char = line[index]
+    const character = line[index]
     const next = line[index + 1]
 
     if (state.inBlockComment) {
-      if (char === '*' && next === '/') {
+      if (character === '*' && next === '/') {
         state.inBlockComment = false
         index = index + 1
       }
@@ -883,33 +883,33 @@ function scanGeneratedCBraces(line: string, state: GeneratedCBraceScanState): Ge
     if (quote != null) {
       if (escaped) {
         escaped = false
-      } else if (char === '\\') {
+      } else if (character === '\\') {
         escaped = true
-      } else if (char === quote) {
+      } else if (character === quote) {
         quote = null
       }
 
       continue
     }
 
-    if (char === '/' && next === '/') {
+    if (character === '/' && next === '/') {
       break
     }
 
-    if (char === '/' && next === '*') {
+    if (character === '/' && next === '*') {
       state.inBlockComment = true
       index = index + 1
       continue
     }
 
-    if (char === '"' || char === "'") {
-      quote = char
+    if (character === '"' || character === "'") {
+      quote = character
       continue
     }
 
-    if (char === '{') {
+    if (character === '{') {
       open = open + 1
-    } else if (char === '}') {
+    } else if (character === '}') {
       close = close + 1
     }
   }

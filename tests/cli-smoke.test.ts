@@ -119,6 +119,63 @@ console.log(value)
   }
 })
 
+test('inox config takes precedence over the old ccjs config names', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'inox-random-config-test-'))
+  const out = join(dir, 'random.c')
+
+  try {
+    await writeFile(
+      join(dir, 'main.ts'),
+      `const value = Math.random()
+console.log(value)
+
+`
+    )
+    await writeFile(
+      join(dir, 'ccjs.config.json'),
+      `${JSON.stringify(
+        {
+          random: {
+            backend: 'xorshift32',
+            seed: 1
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
+    await writeFile(
+      join(dir, 'inox.config.json'),
+      `${JSON.stringify(
+        {
+          random: {
+            backend: 'xorshift32',
+            seed: 2
+          }
+        },
+        null,
+        2
+      )}\n`
+    )
+
+    const result = await runCli(['main.ts', '--emit', 'c', '-o', out], {
+      cwd: dir
+    })
+
+    assert.equal(result.code, 0)
+    assert.equal(result.stdout, `${out}\n`)
+
+    const c = await readFile(out, 'utf8')
+
+    assert.match(c, /static uint32_t ccjs_math_random_state = 0x00000002u;/)
+  } finally {
+    await rm(dir, {
+      recursive: true,
+      force: true
+    })
+  }
+})
+
 test('ccjs file --emit c reads TLS backend config for HTTPS fetch', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'ccjs-tls-config-test-'))
   const out = join(dir, 'fetch.c')

@@ -86,6 +86,31 @@ export function main(): void {
   assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
 })
 
+test('lowers C runtime array length as a numeric call argument', () => {
+  const result = compileSource(
+    `type Box = {
+  values: number[]
+}
+
+function label(count: number): string {
+  return String(count)
+}
+
+export function main(): void {
+  const box: Box = { values: [1, 2, 3] }
+  console.log(label(box.values.length))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /size_t ccjs_array_len_\d+ = 0;/)
+  assert.match(result.code, /ccjs_array_len\(ccjs_value_\d+, &ccjs_array_len_\d+\)/)
+  assert.match(result.code, /label\(ccjs_array_len_\d+\)/)
+})
+
 test('lowers C object identity equality as runtime reference comparison', () => {
   const result = compileSource(
     `type User = {

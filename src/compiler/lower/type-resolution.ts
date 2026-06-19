@@ -18,9 +18,11 @@ type LowerTypeNode = AnyNode
 
 export type LowerContext = {
   types: Map<string, LowerTypeNode>
+  resolvedTypes: Map<string, LowerResolvedType>
   classNames: Set<string>
   nextId: number
   variables: Map<string, LowerTypeNode>
+  resolvingTypes: Set<string>
 }
 
 export type LowerResolvedType = {
@@ -55,9 +57,11 @@ type LowerTypeNameResolver = (name: string, context: LowerContext) => LowerResol
 export function createLowerContext(ast: ProgramNode): LowerContext {
   return {
     types: collectTypes(ast),
+    resolvedTypes: new Map(),
     classNames: collectClassNames(ast),
     nextId: 0,
-    variables: new Map()
+    variables: new Map(),
+    resolvingTypes: new Set()
   }
 }
 
@@ -140,20 +144,75 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
   }
 
   const typeInfo = context.types.get(name)
+  const cached = context.resolvedTypes.get(name)
 
-  if (typeInfo != null && typeInfo.kind === 'object') {
-    const resolved = namedResolvedType('object')
-    resolved.shape = resolveObjectShape(typeInfo, context)
+  if (cached != null) {
+    const resolved = cloneResolvedType(cached)
+
+    if (!context.resolvingTypes.has(name)) {
+      context.resolvingTypes.add(name)
+
+      try {
+        hydrateResolvedType(resolved, context)
+        context.resolvedTypes.set(name, cloneResolvedType(resolved))
+      } finally {
+        context.resolvingTypes.delete(name)
+      }
+    }
 
     return resolved
   }
 
+  if (context.resolvingTypes.has(name)) {
+    if ((typeInfo != null && typeInfo.kind === 'object') || context.classNames.has(name)) {
+      return namedResolvedType('object')
+    }
+
+    if (typeInfo != null && typeInfo.kind === 'function') {
+      return namedResolvedType('function')
+    }
+
+    return unresolvedType()
+  }
+
+  if (typeInfo != null && typeInfo.kind === 'object') {
+    context.resolvingTypes.add(name)
+
+    try {
+      const resolved = namedResolvedType('object')
+      resolved.shape = resolveObjectShape(typeInfo, context)
+      context.resolvedTypes.set(name, cloneResolvedType(resolved))
+
+      return resolved
+    } finally {
+      context.resolvingTypes.delete(name)
+    }
+  }
+
   if (typeInfo != null && typeInfo.kind === 'alias') {
-    return resolveDeclaredType(typeInfo.valueType, context)
+    context.resolvingTypes.add(name)
+
+    try {
+      const resolved = resolveDeclaredType(typeInfo.valueType, context)
+      context.resolvedTypes.set(name, cloneResolvedType(resolved))
+
+      return resolved
+    } finally {
+      context.resolvingTypes.delete(name)
+    }
   }
 
   if (typeInfo != null && typeInfo.kind === 'function') {
-    return resolveFunctionType(typeInfo, context)
+    context.resolvingTypes.add(name)
+
+    try {
+      const resolved = resolveFunctionType(typeInfo, context)
+      context.resolvedTypes.set(name, cloneResolvedType(resolved))
+
+      return resolved
+    } finally {
+      context.resolvingTypes.delete(name)
+    }
   }
 
   if (context.classNames.has(name)) {
@@ -190,12 +249,13 @@ function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): Lo
 }
 
 function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): LowerTypeNode {
-  const declared = resolveDeclaredType(param.valueType, context)
+  const declaredType = fieldDeclaredType(param)
+  const declared = resolveDeclaredType(declaredType, context)
 
   return {
     name: param.name,
     optional: param.optional === true,
-    declaredType: param.valueType,
+    declaredType,
     valueType: resolvedValueType(declared, param.valueType),
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
@@ -237,6 +297,11 @@ function resolveObjectShapeField(field: LowerTypeNode, fields: LowerTypeNode[], 
   } else {
     declared = resolveFieldDeclaredType(field, context)
   }
+  let functionType = resolvedFunctionType(field.functionType, declared.functionType)
+
+  if (functionType != null && functionType.resolved !== true) {
+    functionType = resolveFunctionType(functionType, context).functionType
+  }
 
   return {
     name: field.name,
@@ -245,7 +310,7 @@ function resolveObjectShapeField(field: LowerTypeNode, fields: LowerTypeNode[], 
     ownership: field.ownership,
     weakLoc: nullableNode(field.weakLoc),
     loc: field.loc,
-    declaredType: field.valueType,
+    declaredType: fieldDeclaredType(field),
     valueType: resolvedValueType(declared, field.valueType),
     nullable: declared.nullable || weakField || field.optional === true,
     arrayElementType: declared.arrayElementType,
@@ -255,7 +320,7 @@ function resolveObjectShapeField(field: LowerTypeNode, fields: LowerTypeNode[], 
     promiseValueType: nullableString(declared.promiseValueType),
     setElementType: declared.setElementType,
     shape: declared.shape,
-    functionType: resolvedFunctionType(field.functionType, declared.functionType)
+    functionType
   }
 }
 
@@ -289,7 +354,7 @@ function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): L
     const resolved = resolveObjectShape(base, context)
 
     for (const field of resolved.fields) {
-      fields.push(field)
+      fields.push(hydrateObjectShapeField(field, context))
     }
 
     dynamic = dynamic || resolved.dynamic === true
@@ -301,12 +366,156 @@ function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): L
   }
 }
 
+function hydrateResolvedType(resolved: LowerResolvedType, context: LowerContext): void {
+  if (resolved.shape != null) {
+    resolved.shape = hydrateObjectShape(resolved.shape, context)
+  }
+
+  if (resolved.functionType != null) {
+    resolved.functionType = hydrateFunctionType(resolved.functionType, context)
+  }
+}
+
+function hydrateObjectShape(shape: LowerTypeNode, context: LowerContext): LowerTypeNode {
+  const fields: LowerTypeNode[] = []
+
+  for (let index = 0; index < shape.fields.length; index = index + 1) {
+    fields.push(hydrateObjectShapeField(shape.fields[index], context))
+  }
+
+  return {
+    kind: 'object',
+    baseTypes: copyStringArray(shape.baseTypes),
+    dynamic: shape.dynamic === true,
+    fields
+  }
+}
+
+function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): LowerTypeNode {
+  let functionType = nullableNode(field.functionType)
+
+  if (functionType != null) {
+    functionType = hydrateFunctionType(functionType, context)
+  }
+
+  if (field.valueType === 'object' && field.shape == null && field.declaredType != null) {
+    if (context.resolvingTypes.has(field.declaredType)) {
+      return field
+    }
+
+    const declared = resolveDeclaredType(field.declaredType, context)
+
+    if (declared.shape != null) {
+      return {
+        name: field.name,
+        optional: field.optional,
+        readonly: field.readonly,
+        ownership: field.ownership,
+        weakLoc: nullableNode(field.weakLoc),
+        loc: field.loc,
+        declaredType: field.declaredType,
+        valueType: field.valueType,
+        nullable: field.nullable,
+        arrayElementType: field.arrayElementType,
+        arrayElementDeclaredType: field.arrayElementDeclaredType,
+        mapKeyType: field.mapKeyType,
+        mapValueType: field.mapValueType,
+        promiseValueType: nullableString(field.promiseValueType),
+        setElementType: field.setElementType,
+        shape: declared.shape,
+        functionType
+      }
+    }
+  }
+
+  if (functionType !== field.functionType) {
+    return {
+      name: field.name,
+      optional: field.optional,
+      readonly: field.readonly,
+      ownership: field.ownership,
+      weakLoc: nullableNode(field.weakLoc),
+      loc: field.loc,
+      declaredType: field.declaredType,
+      valueType: field.valueType,
+      nullable: field.nullable,
+      arrayElementType: field.arrayElementType,
+      arrayElementDeclaredType: field.arrayElementDeclaredType,
+      mapKeyType: field.mapKeyType,
+      mapValueType: field.mapValueType,
+      promiseValueType: nullableString(field.promiseValueType),
+      setElementType: field.setElementType,
+      shape: nullableNode(field.shape),
+      functionType
+    }
+  }
+
+  return field
+}
+
+function hydrateFunctionType(functionType: LowerTypeNode, context: LowerContext): LowerTypeNode {
+  const params: LowerTypeNode[] = []
+
+  for (let index = 0; index < functionType.params.length; index = index + 1) {
+    params.push(hydrateFunctionParam(functionType.params[index], context))
+  }
+
+  return {
+    kind: 'function',
+    resolved: functionType.resolved,
+    params,
+    declaredReturnType: functionType.declaredReturnType,
+    returnType: functionType.returnType,
+    returnNullable: functionType.returnNullable,
+    returnArrayElementType: functionType.returnArrayElementType,
+    returnArrayElementDeclaredType: functionType.returnArrayElementDeclaredType,
+    returnMapKeyType: functionType.returnMapKeyType,
+    returnMapValueType: functionType.returnMapValueType,
+    returnPromiseValueType: nullableString(functionType.returnPromiseValueType),
+    returnSetElementType: functionType.returnSetElementType,
+    returnShape: nullableNode(functionType.returnShape),
+    loc: functionType.loc
+  }
+}
+
+function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): LowerTypeNode {
+  let shape = nullableNode(param.shape)
+
+  if (param.valueType === 'object' && shape == null && param.declaredType != null && !context.resolvingTypes.has(param.declaredType)) {
+    const declared = resolveDeclaredType(param.declaredType, context)
+    shape = declared.shape
+  }
+
+  return {
+    name: param.name,
+    optional: param.optional === true,
+    declaredType: fieldDeclaredType(param),
+    valueType: param.valueType,
+    nullable: param.nullable,
+    arrayElementType: param.arrayElementType,
+    arrayElementDeclaredType: param.arrayElementDeclaredType,
+    mapKeyType: param.mapKeyType,
+    mapValueType: param.mapValueType,
+    promiseValueType: nullableString(param.promiseValueType),
+    setElementType: param.setElementType,
+    shape,
+    functionType: nullableNode(param.functionType),
+    loc: param.loc
+  }
+}
+
 function resolveFieldDeclaredType(field: LowerTypeNode, context: LowerContext): LowerResolvedType {
   if (field.ownership === 'weak') {
     return resolveWeakFieldDeclaredType(field, context)
   }
 
-  return resolveDeclaredType(field.valueType, context)
+  let valueType = field.valueType
+
+  if (field.declaredType != null) {
+    valueType = field.declaredType
+  }
+
+  return resolveDeclaredType(valueType, context)
 }
 
 function resolveWeakFieldDeclaredType(field: LowerTypeNode, context: LowerContext): LowerResolvedType {
@@ -498,6 +707,13 @@ function collectObjectTypeFields(fields: LowerTypeNode[] | null | undefined): Lo
 
   for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
     const field = fields[fieldIndex]
+    const declaredType = fieldDeclaredType(field)
+    let valueType = field.valueType
+
+    if (declaredType != null) {
+      valueType = declaredType
+    }
+
     collected.push({
       name: field.name,
       optional: field.optional === true,
@@ -505,7 +721,8 @@ function collectObjectTypeFields(fields: LowerTypeNode[] | null | undefined): Lo
       ownership: ownershipOrStrong(field.ownership),
       weakLoc: nullableNode(field.weakLoc),
       functionType: nullableNode(field.functionType),
-      valueType: field.valueType,
+      declaredType,
+      valueType,
       loc: field.loc
     })
   }
@@ -530,12 +747,29 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
 
   for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
     const param = params[paramIndex]
-    collected.push({
+    const declaredType = fieldDeclaredType(param)
+    const collectedParam: LowerTypeNode = {
       name: param.name,
       optional: param.optional === true,
+      declaredType,
       valueType: param.valueType,
+      nullable: param.nullable,
+      arrayElementType: param.arrayElementType,
+      arrayElementDeclaredType: param.arrayElementDeclaredType,
+      mapKeyType: param.mapKeyType,
+      mapValueType: param.mapValueType,
+      promiseValueType: nullableString(param.promiseValueType),
+      setElementType: param.setElementType,
+      shape: nullableNode(param.shape),
+      functionType: nullableNode(param.functionType),
       loc: param.loc
-    })
+    }
+
+    if (param.defaultValue != null) {
+      collectedParam.defaultValue = param.defaultValue
+    }
+
+    collected.push(collectedParam)
   }
 
   return collected

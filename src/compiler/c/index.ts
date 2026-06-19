@@ -1735,7 +1735,11 @@ function objectAccessorReturnPathFromExpression(
   locals: Map<string, CObjectAccessorReturnPath>
 ): CObjectAccessorReturnPath | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    return cloneObjectAccessorReturnPath(locals.get(expression.path[0]))
+    const localPath = cloneObjectAccessorReturnPath(locals.get(expression.path[0]))
+
+    if (localPath != null) {
+      return localPath
+    }
   }
 
   return objectAccessorExpressionReturnPath(expression, params)
@@ -1762,6 +1766,14 @@ function objectAccessorExpressionReturnPath(
   expression: CAccessorNode,
   params: CFunctionParam[]
 ): CObjectAccessorReturnPath | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return objectAccessorExpressionReturnPathPrefix(expression, params)
+  }
+
+  if (expression.type === 'CallExpression') {
+    return objectAccessorCreateFunctionContextReturnPath(expression, params)
+  }
+
   if (expression.type !== 'MemberExpression') {
     return null
   }
@@ -1775,6 +1787,41 @@ function objectAccessorExpressionReturnPath(
   path.fields.push(expression.property)
 
   return path
+}
+
+function objectAccessorCreateFunctionContextReturnPath(
+  expression: CAccessorNode,
+  params: CFunctionParam[]
+): CObjectAccessorReturnPath | null {
+  const callee = expression.callee
+
+  if (callee == null) {
+    return null
+  }
+
+  let isCreateFunctionContext = false
+
+  if (callee.type === 'MemberExpression' && callee.property === 'createFunctionContext') {
+    isCreateFunctionContext = true
+  } else {
+    const calleeName = resolveCObjectExpressionName(callee)
+
+    if (calleeName === 'createFunctionContext') {
+      isCreateFunctionContext = true
+    }
+  }
+
+  if (!isCreateFunctionContext) {
+    return null
+  }
+
+  const argument = expression.args[0]
+
+  if (argument == null) {
+    return null
+  }
+
+  return objectAccessorExpressionReturnPathPrefix(argument, params)
 }
 
 function objectAccessorExpressionReturnPathPrefix(
@@ -2772,6 +2819,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       optional: field.optional,
       ownership,
       readonlyField: isReadonlyCObjectShapeField(field),
+      declaredType: field.declaredType,
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
       mapKeyType: field.mapKeyType,
@@ -5572,6 +5620,7 @@ type FunctionParamContext = {
   functionParams: Map<string, CFunctionParam[]>
   functionReturnShapes: Map<string, CObjectShape | null>
   objectAccessorReturnPaths: Map<string, CObjectAccessorReturnPath>
+  objectAliases: Map<string, string>
   objectShapes: Map<string, CObjectShapeField[]>
 }
 
@@ -5599,14 +5648,15 @@ function resolveObjectFunctionParamExpressionName(expression: CAccessorNode, con
   const directName = resolveCObjectExpressionName(expression)
 
   if (directName != null) {
-    return directName
+    return context.objectAliases.get(directName) ?? directName
   }
 
   if (expression.type === 'MemberExpression') {
     const objectName = resolveObjectFunctionParamExpressionName(expression.object, context)
 
     if (objectName != null) {
-      return `${objectName}_${expression.property}`
+      const path = `${objectName}_${expression.property}`
+      return context.objectAliases.get(path) ?? path
     }
   }
 
@@ -5614,7 +5664,8 @@ function resolveObjectFunctionParamExpressionName(expression: CAccessorNode, con
     const objectName = resolveObjectFunctionParamExpressionName(expression.object, context)
 
     if (objectName != null) {
-      return `${objectName}_${expression.index.value}`
+      const path = `${objectName}_${expression.index.value}`
+      return context.objectAliases.get(path) ?? path
     }
   }
 

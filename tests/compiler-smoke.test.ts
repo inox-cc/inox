@@ -2815,6 +2815,219 @@ export function main(): void {
 })
 
 
+test('uses default parameter initializers for omitted C call arguments', () => {
+  const result = compileSource(
+    `function label(value: string = 'unknown'): string {
+  return value
+}
+
+export function main(): void {
+  console.log(label())
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+  const label = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'label')
+
+  assert.ok(label)
+  assert.equal(label.params[0].optional, true)
+  assert.equal(label.params[0].defaultValue.type, 'StringLiteral')
+  assert.match(result.code, /ccjs_string_from_literal\(&ccjs_default_allocator, "unknown", 7, &ccjs_value_\d+\)/)
+  assert.match(result.code, /label\(ccjs_value_\d+\)/)
+  assert.doesNotMatch(result.code, /label\(0\)/)
+})
+
+
+test('uses zero function companions for omitted default object option fields', () => {
+  const result = compileSource(
+    `type Host = { read: () => string }
+type Options = { host?: Host }
+
+function load(options: Options = {}): string {
+  if (options.host != null) {
+    return options.host.read()
+  }
+
+  return 'none'
+}
+
+export function main(): void {
+  console.log(load())
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /load\(ccjs_object_\d+, 0\)/)
+  assert.doesNotMatch(result.code, /CCJS_C_FUNCTION_VALUE/)
+})
+
+
+test('uses zero function companions for unavailable optional object sources', () => {
+  const result = compileSource(
+    `type Host = { read: () => string }
+type Options = { host?: Host }
+
+function normalize(options: Options): Options {
+  return {
+    host: options.host
+  }
+}
+
+function load(options: Options): string {
+  if (options.host != null) {
+    return options.host.read()
+  }
+
+  return 'none'
+}
+
+export function main(): void {
+  console.log(load(normalize({})))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /load\(ccjs_value_\d+, 0\)/)
+  assert.doesNotMatch(result.code, /CCJS_C_FUNCTION_VALUE/)
+})
+
+
+test('preserves function companions from intersection base object fields', () => {
+  const result = compileSource(
+    `type Dep = { run: () => string }
+type Base = { dep: Dep }
+type Child = Base & { value: number }
+
+function read(): string {
+  return 'ok'
+}
+
+function load(context: Child): string {
+  return context.dep.run()
+}
+
+export function main(): void {
+  console.log(load({ dep: { run: read }, value: 1 }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value load\(ccjs_value context, ccjs_value \(\*ccjs_objfn_context_dep_run\)\(void\)\)/)
+  assert.match(result.code, /ccjs_value_\d+ = ccjs_objfn_context_dep_run\(\);/)
+  assert.match(result.code, /load\(ccjs_object_\d+, read\)/)
+})
+
+
+test('preserves function companion aliases through object accessor locals', () => {
+  const result = compileSource(
+    `type Dep = { run: () => string }
+type Base = { dep: Dep }
+type Child = Base & { value: number }
+
+function read(): string {
+  return 'ok'
+}
+
+function asChild(context: Child): Child {
+  return context
+}
+
+function load(context: Child): string {
+  const alias: Child = asChild(context)
+  return alias.dep.run()
+}
+
+export function main(): void {
+  console.log(load({ dep: { run: read }, value: 1 }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value load\(ccjs_value context, ccjs_value \(\*ccjs_objfn_context_dep_run\)\(void\)\)/)
+  assert.match(result.code, /ccjs_value_\d+ = asChild\(context, ccjs_objfn_context_dep_run\);/)
+  assert.match(result.code, /ccjs_value_\d+ = ccjs_objfn_context_dep_run\(\);/)
+  assert.doesNotMatch(result.code, /ccjs_objfn_alias_dep_run/)
+})
+
+
+test('preserves object function companions on object-field arrow parameters', () => {
+  const result = compileSource(
+    `type Dep = { read: () => string }
+type Context = { dep: Dep }
+type Runner = { run: (context: Context) => string }
+
+function read(): string {
+  return 'ok'
+}
+
+function readContext(context: Context): string {
+  return context.dep.read()
+}
+
+const runner: Runner = {
+  run: (context) => readContext(context)
+}
+
+export function main(): void {
+  console.log(runner.run({ dep: { read } }))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(
+    result.code,
+    /static ccjs_value ccjs_callback_arrow_\d+\(ccjs_value context, ccjs_value \(\*ccjs_objfn_context_dep_read\)\(void\)\)/
+  )
+  assert.match(result.code, /readContext\(context, ccjs_objfn_context_dep_read\)/)
+  assert.match(result.code, /ccjs_objfn_runner_run\(ccjs_object_\d+, read\)/)
+})
+
+
+test('keeps explicitly typed object locals on object assignments in C', () => {
+  const result = compileSource(
+    `type Loc = { line: number, column: number }
+type Executor = { loc: Loc, body: Loc }
+
+function pick(executor: Executor): Loc {
+  let loc: Loc = executor.loc
+  loc = executor.body
+  return loc
+}
+
+export function main(): void {
+  const loc: Loc = pick({ loc: { line: 1, column: 2 }, body: { line: 3, column: 4 } })
+  console.log(loc.line)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value loc = ccjs_undefined_value\(\);/)
+  assert.match(result.code, /ccjs_object_get_known\(executor, 0, &loc\)/)
+  assert.match(result.code, /loc = ccjs_value_\d+;/)
+  assert.doesNotMatch(result.code, /loc = ccjs_value_\d+\.as\.number;/)
+})
+
+
 test('drives C function signature metadata from target-neutral IR declarations', () => {
   const result = compileSource(
     `function greet(value: string): void {

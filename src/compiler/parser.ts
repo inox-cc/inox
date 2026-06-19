@@ -280,15 +280,7 @@ class Parser {
     this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after function name')
 
     while (!this.isValue(')') && !this.is('eof')) {
-      const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
-      const optional = this.matchValue('?')
-      let valueType = 'unknown'
-
-      if (this.matchValue(':')) {
-        valueType = this.parseTypeAnnotation([',', ')'], null)
-      }
-
-      params.push(createParam(param, valueType, optional))
+      params.push(this.parseRuntimeParam())
 
       if (!this.matchValue(',')) {
         break
@@ -633,15 +625,7 @@ class Parser {
     this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( after method name')
 
     while (!this.isValue(')') && !this.is('eof')) {
-      const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
-      const optional = this.matchValue('?')
-      let valueType = 'unknown'
-
-      if (this.matchValue(':')) {
-        valueType = this.parseTypeAnnotation([',', ')'], null)
-      }
-
-      params.push(createParam(param, valueType, optional))
+      params.push(this.parseRuntimeParam())
 
       if (!this.matchValue(',')) {
         break
@@ -1164,15 +1148,7 @@ class Parser {
     this.expectValue('(', 'CCJS_EXPECTED_PAREN', 'expected ( before arrow parameters')
 
     while (!this.isValue(')') && !this.is('eof')) {
-      const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
-      const optional = this.matchValue('?')
-      let valueType = 'unknown'
-
-      if (this.matchValue(':')) {
-        valueType = this.parseTypeAnnotation([',', ')'], null)
-      }
-
-      params.push(createParam(param, valueType, optional))
+      params.push(this.parseRuntimeParam())
 
       if (!this.matchValue(',')) {
         break
@@ -1182,6 +1158,24 @@ class Parser {
     this.expectValue(')', 'CCJS_EXPECTED_PAREN', 'expected ) after arrow parameters')
 
     return params
+  }
+
+  parseRuntimeParam(): AnyNode {
+    const param = this.expect('identifier', 'CCJS_EXPECTED_IDENTIFIER', 'expected parameter name')
+    let optional = this.matchValue('?')
+    let valueType = 'unknown'
+    let defaultValue: AnyNode | null = null
+
+    if (this.matchValue(':')) {
+      valueType = this.parseTypeAnnotation([',', ')', '='], null)
+    }
+
+    if (this.matchValue('=')) {
+      optional = true
+      defaultValue = this.parseExpression()
+    }
+
+    return createParam(param, valueType, optional, defaultValue)
   }
 
   parseNullish(): AnyNode {

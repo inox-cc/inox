@@ -41,6 +41,7 @@ type StringCContext = {
   failureStatementUsed?: boolean
   functionNames?: Map<string, string>
   jsGlobalRoots?: Set<string>
+  nullableVariables?: Set<string>
   nextId: number
   ownedValues: string[]
   returnType?: string
@@ -654,6 +655,19 @@ export function emitPreparedStringBytesOperand(
     const name = expression.path[0]
     const variables = context.variables
 
+    if (isNullableRuntimeStringReference(name, context)) {
+      const string = nextCName(context, tempPrefix)
+
+      return {
+        lines: [
+          emitRuntimeTypeCheck(`${name}.tag != CCJS_TAG_STRING || ${name}.as.ref == 0`, context),
+          `ccjs_string* ${string} = (ccjs_string*)${name}.as.ref;`
+        ],
+        bytes: `${string}->bytes`,
+        length: `${string}->len`
+      }
+    }
+
     if (variables != null && variables.get(name) === 'string') {
       if (stringDeps(context).isBoxedRuntimeStringName(name, context)) {
         const string = nextCName(context, tempPrefix)
@@ -755,6 +769,18 @@ export function emitPreparedStringBytesOperand(
     bytes: '""',
     length: '0'
   }
+}
+
+function isNullableRuntimeStringReference(name: string, context: StringCContext): boolean {
+  const variables = context.variables
+  const nullableVariables = context.nullableVariables
+
+  return (
+    variables != null &&
+    variables.get(name) === 'string' &&
+    nullableVariables != null &&
+    nullableVariables.has(name)
+  )
 }
 
 function emitPreparedKnownObjectStringBytesOperand(

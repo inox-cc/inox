@@ -37,6 +37,7 @@ export type CPreparedCallOptions = {
 
 export type CShapeValueMetadata = {
   arrayElementType?: string | null
+  declaredType?: string | null
   mapKeyType?: string | null
   mapValueType?: string | null
   nullable?: boolean
@@ -117,6 +118,8 @@ export type CRuntimeArrayElement = CArrayElementInfo & {
 
 export type CFunctionParam = {
   arrayElementType?: string | null
+  declaredType?: string | null
+  defaultValue?: AnyNode | null
   functionTypeOwnership?: 'weak'
   functionType?: CFunctionType | null
   loc?: AnyNode['loc']

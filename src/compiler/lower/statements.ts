@@ -306,13 +306,18 @@ function lowerNameDiffers(left: string, right: string): boolean {
 }
 
 export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
-  const declared = resolveDeclaredType(param.valueType, context)
-  const promiseValueType = nullableString(declared.promiseValueType)
+  let declaredType = param.valueType
 
-  return {
+  if (param.declaredType != null) {
+    declaredType = param.declaredType
+  }
+
+  const declared = resolveDeclaredType(declaredType, context)
+  const promiseValueType = nullableString(declared.promiseValueType)
+  const loweredParam: LowerNode = {
     name: param.name,
     loc: param.loc,
-    declaredType: param.valueType,
+    declaredType,
     optional: param.optional === true,
     valueType: fallbackString(declared.valueType, param.valueType),
     nullable: declared.nullable,
@@ -325,6 +330,12 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     functionType: declared.functionType,
     shape: declared.shape
   }
+
+  if (param.defaultValue != null) {
+    loweredParam.defaultValue = lowerExpression(param.defaultValue, context)
+  }
+
+  return loweredParam
 }
 
 function lowerForInitializer(init: LowerNode, context: LowerContext): LowerNode {
@@ -2641,9 +2652,11 @@ function lowerStatementExpression(expression: LowerNode, context: LowerContext):
 function expressionContext(context: LowerContext): LowerExpressionContext {
   return {
     types: context.types,
+    resolvedTypes: context.resolvedTypes,
     classNames: context.classNames,
     nextId: context.nextId,
     variables: context.variables,
+    resolvingTypes: context.resolvingTypes,
     lowerStatement
   }
 }

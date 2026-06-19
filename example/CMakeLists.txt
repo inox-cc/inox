@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ccjs_cmake_example C)
+project(inox_cmake_example C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -63,9 +63,9 @@ add_custom_command(
   VERBATIM
 )
 
-add_executable(ccjs_cmake_example ${CCJS_GENERATED_SOURCES})
-target_link_libraries(ccjs_cmake_example PRIVATE ccjs_runtime)
+add_executable(inox_cmake_example ${CCJS_GENERATED_SOURCES})
+target_link_libraries(inox_cmake_example PRIVATE ccjs_runtime)
 
 if(CCJS_TLS_BACKEND STREQUAL "boringssl")
-  set_property(TARGET ccjs_cmake_example PROPERTY LINKER_LANGUAGE CXX)
+  set_property(TARGET inox_cmake_example PROPERTY LINKER_LANGUAGE CXX)
 endif()

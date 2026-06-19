@@ -86,13 +86,24 @@ export function createExportDeclaration(typeOnly: boolean, specifiers: AnyNode[]
   }
 }
 
-export function createParam(token: Token, valueType: string, optional: boolean): AnyNode {
-  return {
+export function createParam(
+  token: Token,
+  valueType: string,
+  optional: boolean,
+  defaultValue: AnyNode | null = null
+): AnyNode {
+  const param: AnyNode = {
     name: token.value,
     optional,
     valueType,
     loc: locFromToken(token)
   }
+
+  if (defaultValue != null) {
+    param.defaultValue = defaultValue
+  }
+
+  return param
 }
 
 export function createFunctionDeclaration(options: FunctionDeclarationOptions): AnyNode {

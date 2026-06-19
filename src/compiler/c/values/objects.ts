@@ -9,6 +9,7 @@ import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
+import { isPlainFunctionPointerType, isRuntimeFunctionType } from '../async/callbacks.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
   cRuntimeValueTag,
@@ -36,6 +37,7 @@ type ObjectShapeContext = {
 
 type ObjectNameContext = {
   boxedVariables: Set<string>
+  moduleValueNames?: Map<string, string>
   variables: Map<string, string>
 }
 
@@ -258,6 +260,7 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     optional: field.optional,
     ownership: objectShapeFieldOwnership(field),
     readonlyField: isReadonlyCObjectShapeField(field),
+    declaredType: field.declaredType,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
@@ -363,6 +366,21 @@ export function resolveObjectExpressionMember(expression: AnyNode): CObjectField
 }
 
 export function emitObjectValueReference(name: string, context: ObjectFunctionContext): string {
+  const moduleValueNames = context.moduleValueNames
+  let moduleValueName: string | null = null
+
+  if (moduleValueNames != null) {
+    const value = moduleValueNames.get(name)
+
+    if (value != null) {
+      moduleValueName = value
+    }
+  }
+
+  if (moduleValueName != null) {
+    return moduleValueName
+  }
+
   if (context.boxedVariables.has(name) && context.variables.get(name) === 'object') {
     return `(*${name})`
   }
@@ -1074,7 +1092,9 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
 
   for (const field of fields) {
     if (field.valueType === 'function') {
-      lines.push(emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies))
+      if (isSupportedObjectFunctionField(field)) {
+        lines.push(emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies))
+      }
     } else if (field.valueType === 'object') {
       appendLines(lines,
         emitObjectShapeFunctionFieldVariableDeclarations(
@@ -1214,7 +1234,10 @@ export function emitObjectVariableDeclaration(
 
     if (property != null) {
       if (field.valueType === 'function') {
-        lines.push(emitObjectFunctionFieldVariableDeclaration(statement.name, field, property, context, dependencies))
+        if (isSupportedObjectFunctionField(field)) {
+          lines.push(emitObjectFunctionFieldVariableDeclaration(statement.name, field, property, context, dependencies))
+        }
+
         continue
       }
 
@@ -1230,6 +1253,10 @@ export function emitObjectVariableDeclaration(
   }
 
   return lines
+}
+
+function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
+  return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
 }
 
 function objectVariableShapeFields(

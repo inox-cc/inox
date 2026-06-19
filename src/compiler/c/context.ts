@@ -221,6 +221,7 @@ type CVariableScopeContext = {
   mapTypes: CFunctionReturnMapTypeMap
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
+  objectAliases: CStringMap
   objectShapes: CObjectShapeFieldMap
   promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
@@ -260,6 +261,7 @@ export type CFunctionContext = CEmitContext & {
   narrowedNullableScalars: CStringSet
   netReadingSockets: CStringSet
   nullableVariables: CStringSet
+  objectAliases: CStringMap
   ownedCryptoHashes: string[]
   ownedCryptoHmacs: string[]
   ownedPromises: string[]
@@ -297,6 +299,7 @@ export type CVariableScopeSnapshot = {
   mapTypes: CFunctionReturnMapTypeMap
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
+  objectAliases: CStringMap
   objectShapes: CObjectShapeFieldMap
   promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
@@ -394,6 +397,7 @@ export function createFunctionContext(
     netReadingSockets: new Set(),
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
+    objectAliases: new Map(),
     objectShapes: cloneCObjectShapeFieldMap(baseContext.moduleObjectShapes),
     ownedPromises: [],
     ownedCryptoHashes: [],
@@ -518,6 +522,57 @@ export function emitPrepareOwnedValueWrite(name: string): string[] {
   return [`ccjs_release(${name});`, `${name} = ccjs_undefined_value();`]
 }
 
+type CReturnValueDeclarationContext = {
+  cleanupEnabled?: boolean | null
+  returnNullable?: boolean | null
+  returnType?: string | null
+}
+
+type CStatusResultDeclarationContext = {
+  cleanupEnabled?: boolean | null
+  throwingFunction?: boolean | null
+}
+
+type CLoopFlowDeclarationContext = {
+  breakFlowUsed?: boolean | null
+  cleanupEnabled?: boolean | null
+  continueFlowUsed?: boolean | null
+}
+
+type CReturnFlowDeclarationContext = {
+  cleanupEnabled?: boolean | null
+  returnFlowUsed?: boolean | null
+}
+
+type COwnedValueDeclarationContext = {
+  cleanupEnabled?: boolean | null
+  ownedCryptoHashes?: string[] | null
+  ownedCryptoHmacs?: string[] | null
+  ownedValues?: string[] | null
+}
+
+type COwnedPromiseDeclarationContext = {
+  cleanupEnabled?: boolean | null
+  ownedPromises?: string[] | null
+}
+
+type CEventLoopDeclarationContext = {
+  cleanupEnabled?: boolean | null
+  eventLoopUsed?: boolean | null
+  externalEventLoop?: boolean | null
+}
+
+type CErrorChannelDeclarationContext = {
+  cleanupEnabled?: boolean | null
+  errorChannelUsed?: boolean | null
+}
+
+type CBoxedValueDeclarationContext = {
+  boxedValues?: string[] | null
+  boxedValueTypes?: CStringMap | null
+  cleanupEnabled?: boolean | null
+}
+
 export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
   return (
     context.throwingFunction ||
@@ -533,31 +588,37 @@ export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
   )
 }
 
-export function emitReturnValueDeclarations(context: CFunctionContext): string[] {
-  if (context.returnType === 'promise') {
+export function emitReturnValueDeclarations(context: CReturnValueDeclarationContext): string[] {
+  let returnType = 'void'
+
+  if (context.returnType != null) {
+    returnType = context.returnType
+  }
+
+  if (returnType === 'promise') {
     return ['ccjs_promise* ccjs_return = 0;']
   }
 
-  if (context.returnNullable === true && isNullableScalarType(context.returnType)) {
+  if (context.returnNullable === true && isNullableScalarType(returnType)) {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 
   if (
-    context.returnType === 'unknown' ||
-    isManagedRuntimeReturnType(context.returnType) ||
-    isOpaqueRuntimeValueType(context.returnType)
+    returnType === 'unknown' ||
+    isManagedRuntimeReturnType(returnType) ||
+    isOpaqueRuntimeValueType(returnType)
   ) {
     return ['ccjs_value ccjs_return = ccjs_undefined_value();']
   }
 
-  if (context.returnType !== 'void') {
+  if (returnType !== 'void') {
     return ['double ccjs_return = 0;']
   }
 
   return []
 }
 
-export function emitStatusResultDeclarations(context: CFunctionContext): string[] {
+export function emitStatusResultDeclarations(context: CStatusResultDeclarationContext): string[] {
   if (context.throwingFunction) {
     return ['ccjs_status ccjs_status_result = CCJS_OK;']
   }
@@ -565,7 +626,7 @@ export function emitStatusResultDeclarations(context: CFunctionContext): string[
   return []
 }
 
-export function emitLoopFlowDeclarations(context: CFunctionContext): string[] {
+export function emitLoopFlowDeclarations(context: CLoopFlowDeclarationContext): string[] {
   const lines: string[] = []
 
   if (context.breakFlowUsed) {
@@ -579,7 +640,7 @@ export function emitLoopFlowDeclarations(context: CFunctionContext): string[] {
   return lines
 }
 
-export function emitReturnFlowDeclarations(context: CFunctionContext): string[] {
+export function emitReturnFlowDeclarations(context: CReturnFlowDeclarationContext): string[] {
   if (context.returnFlowUsed) {
     return ['int ccjs_return_active = 0;']
   }
@@ -587,55 +648,85 @@ export function emitReturnFlowDeclarations(context: CFunctionContext): string[] 
   return []
 }
 
-export function emitOwnedValueDeclarations(context: CFunctionContext): string[] {
+export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContext): string[] {
   const lines: string[] = []
+  let ownedValues: string[] = []
+  let ownedCryptoHashes: string[] = []
+  let ownedCryptoHmacs: string[] = []
 
-  for (const name of context.ownedValues) {
+  if (context.ownedValues != null) {
+    ownedValues = context.ownedValues
+  }
+
+  if (context.ownedCryptoHashes != null) {
+    ownedCryptoHashes = context.ownedCryptoHashes
+  }
+
+  if (context.ownedCryptoHmacs != null) {
+    ownedCryptoHmacs = context.ownedCryptoHmacs
+  }
+
+  for (const name of ownedValues) {
     lines.push(`ccjs_value ${name} = ccjs_undefined_value();`)
   }
 
-  for (const name of context.ownedCryptoHashes) {
+  for (const name of ownedCryptoHashes) {
     lines.push(`ccjs_crypto_hash* ${name} = 0;`)
   }
 
-  for (const name of context.ownedCryptoHmacs) {
+  for (const name of ownedCryptoHmacs) {
     lines.push(`ccjs_crypto_hmac* ${name} = 0;`)
   }
 
   return lines
 }
 
-export function emitOwnedPromiseDeclarations(context: CFunctionContext): string[] {
+export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationContext): string[] {
   const lines: string[] = []
+  let ownedPromises: string[] = []
 
-  for (const name of context.ownedPromises) {
+  if (context.ownedPromises != null) {
+    ownedPromises = context.ownedPromises
+  }
+
+  for (const name of ownedPromises) {
     lines.push(`ccjs_promise* ${name} = 0;`)
   }
 
   return lines
 }
 
-export function emitEventLoopDeclarations(context: CFunctionContext): string[] {
-  if (context.eventLoopUsed && !context.externalEventLoop) {
+export function emitEventLoopDeclarations(context: CEventLoopDeclarationContext): string[] {
+  if (context.eventLoopUsed === true && context.externalEventLoop !== true) {
     return ['ccjs_loop ccjs_loop;', 'int ccjs_loop_active = 0;']
   }
 
   return []
 }
 
-export function emitErrorChannelDeclarations(context: CFunctionContext): string[] {
-  if (context.errorChannelUsed) {
+export function emitErrorChannelDeclarations(context: CErrorChannelDeclarationContext): string[] {
+  if (context.errorChannelUsed === true) {
     return ['int ccjs_error_active = 0;']
   }
 
   return []
 }
 
-export function emitBoxedValueDeclarations(context: CFunctionContext): string[] {
+export function emitBoxedValueDeclarations(context: CBoxedValueDeclarationContext): string[] {
   const lines: string[] = []
+  let boxedValues: string[] = []
+  let boxedValueTypes: CStringMap = new Map()
 
-  for (const name of context.boxedValues) {
-    if (isRuntimeBoxedValueType(context.boxedValueTypes.get(name))) {
+  if (context.boxedValues != null) {
+    boxedValues = context.boxedValues
+  }
+
+  if (context.boxedValueTypes != null) {
+    boxedValueTypes = context.boxedValueTypes
+  }
+
+  for (const name of boxedValues) {
+    if (isRuntimeBoxedValueType(boxedValueTypes.get(name))) {
       lines.push(`ccjs_value* ${name} = 0;`)
     } else {
       lines.push(`double* ${name} = 0;`)
@@ -846,6 +937,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousMapTypes = context.mapTypes
   const previousNarrowedNullableScalars = context.narrowedNullableScalars
   const previousNullableVariables = context.nullableVariables
+  const previousObjectAliases = context.objectAliases
   const previousObjectShapes = context.objectShapes
   const previousPromiseConstructorHandlers = context.promiseConstructorHandlers
   const previousPromiseRejectionValueTypes = context.promiseRejectionValueTypes
@@ -864,6 +956,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.mapTypes = cloneCFunctionReturnMapTypeMap(previousMapTypes)
   context.narrowedNullableScalars = cloneCStringSet(previousNarrowedNullableScalars)
   context.nullableVariables = cloneCStringSet(previousNullableVariables)
+  context.objectAliases = cloneCStringMap(previousObjectAliases)
   context.objectShapes = cloneCObjectShapeFieldMap(previousObjectShapes)
   context.promiseConstructorHandlers = cloneCPromiseConstructorHandlerMap(previousPromiseConstructorHandlers)
   context.promiseRejectionValueTypes = cloneCStringMap(previousPromiseRejectionValueTypes)
@@ -882,6 +975,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     mapTypes: previousMapTypes,
     narrowedNullableScalars: previousNarrowedNullableScalars,
     nullableVariables: previousNullableVariables,
+    objectAliases: previousObjectAliases,
     objectShapes: previousObjectShapes,
     promiseConstructorHandlers: previousPromiseConstructorHandlers,
     promiseRejectionValueTypes: previousPromiseRejectionValueTypes,
@@ -904,6 +998,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.mapTypes = snapshot.mapTypes
   context.narrowedNullableScalars = snapshot.narrowedNullableScalars
   context.nullableVariables = snapshot.nullableVariables
+  context.objectAliases = snapshot.objectAliases
   context.objectShapes = snapshot.objectShapes
   context.promiseConstructorHandlers = snapshot.promiseConstructorHandlers
   context.promiseRejectionValueTypes = snapshot.promiseRejectionValueTypes

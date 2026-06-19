@@ -328,6 +328,14 @@ export function inferExpressionType(
     return 'number'
   }
 
+  if (expression.type === 'CallExpression') {
+    const objectFunctionFieldReturnType = cObjectFunctionFieldCallReturnType(expression, context, deps)
+
+    if (objectFunctionFieldReturnType != null) {
+      return objectFunctionFieldReturnType
+    }
+  }
+
   if (deps.isArrayIsArrayCall(expression)) {
     return 'boolean'
   }
@@ -612,4 +620,30 @@ export function inferExpressionType(
   }
 
   return 'number'
+}
+
+function cObjectFunctionFieldCallReturnType(
+  expression: AnyNode,
+  context: CFunctionContext,
+  deps: CExpressionTypeDependencies
+): string | null {
+  const callee = expression.callee
+
+  if (callee == null) {
+    return null
+  }
+
+  let field: CKnownObjectField | null = null
+
+  if (callee.type === 'MemberExpression') {
+    field = deps.resolveKnownObjectMember(callee, context)
+  } else if (callee.type === 'IndexExpression' && callee.index.type === 'StringLiteral') {
+    field = deps.resolveKnownObjectIndex(callee, context)
+  }
+
+  if (field == null || field.valueType !== 'function' || field.functionType == null) {
+    return null
+  }
+
+  return field.functionType.returnType
 }

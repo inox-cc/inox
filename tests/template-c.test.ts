@@ -115,6 +115,56 @@ test('lowers C template interpolation for array join runtime strings', () => {
   )
 })
 
+test('lowers C template interpolation for object function field runtime values', () => {
+  const result = compileSource(
+    `type Deps = {
+  read: () => string[]
+}
+
+function label(deps: Deps): string {
+  return \`value \${deps.read()}\`
+}
+
+export function main(): void {
+  const deps: Deps = { read: () => ['a', 'b'] }
+  console.log(label(deps))
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_string_from_value\(&ccjs_default_allocator, ccjs_value_\d+, &ccjs_value_\d+\)/)
+  assert.doesNotMatch(
+    result.code,
+    /ccjs_string_from_number\(&ccjs_default_allocator, ccjs_objfn_deps_read\(/
+  )
+})
+
+test('lowers C nullable string parameters through runtime values until narrowed', () => {
+  const result = compileSource(
+    `function ok(value: string | null | undefined): boolean {
+  if (value == null) {
+    return false
+  }
+
+  return value === 'ok'
+}
+
+console.log(ok(null), ok('ok'))
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /ccjs_value value = ccjs_param_value;/)
+  assert.match(result.code, /value\.tag == CCJS_TAG_NULL \|\| value\.tag == CCJS_TAG_UNDEFINED/)
+  assert.match(result.code, /ccjs_string\* ccjs_cmp_string_\d+ = \(ccjs_string\*\)value\.as\.ref;/)
+  assert.doesNotMatch(result.code, /ccjs_string\* value = \(ccjs_string\*\)ccjs_param_value\.as\.ref;/)
+})
+
 test('generated C console log template interpolation compiles and runs with runtime sources', async (t) => {
   const probe = await runCommand('cc', ['--version'])
 

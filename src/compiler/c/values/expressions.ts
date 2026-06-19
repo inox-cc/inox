@@ -15,6 +15,7 @@ import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import { isPlainFunctionPointerType, isRuntimeFunctionType } from '../async/callbacks.ts'
 import {
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
@@ -65,6 +66,10 @@ type CStringMap = Map<string, string>
 type CStringNullableMap = Map<string, string | null>
 type CStringSet = Set<string>
 type CValueNode = AnyNode
+type CObjectPathContext = {
+  objectAccessorReturnPaths: CObjectAccessorReturnPathMap
+  objectAliases: CStringMap
+}
 type CObjectLiteralPropertyNode = {
   key: string
   value?: CValueNode | null
@@ -112,10 +117,12 @@ type CFunctionContext = CEmitContext & {
   functionTypes: CFunctionTypeMap
   jsGlobalRoots: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
+  moduleValueNames: CStringMap
   narrowedNullableScalars: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet
+  objectAliases: CStringMap
   objectShapes: CObjectShapeFieldMap
   ownedValues: string[]
   returnType?: string
@@ -362,9 +369,16 @@ function objectExpressionName(expression: CValueNode, context: CFunctionContext)
   return objectExpressionPathName(expression, context)
 }
 
-function objectExpressionPathName(expression: CValueNode, context: CFunctionContext): string | null {
+export function objectExpressionPathName(expression: CValueNode, context: CObjectPathContext): string | null {
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    return expression.path[0]
+    const name = expression.path[0]
+    const alias = context.objectAliases.get(name)
+
+    if (alias != null) {
+      return alias
+    }
+
+    return name
   }
 
   if (expression.type === 'ThisExpression') {
@@ -387,6 +401,14 @@ function objectExpressionPathName(expression: CValueNode, context: CFunctionCont
     }
   }
 
+  if (expression.type === 'CallExpression') {
+    const createFunctionContextPath = createFunctionContextObjectPathName(expression, context)
+
+    if (createFunctionContextPath != null) {
+      return createFunctionContextPath
+    }
+  }
+
   if (expression.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
     const path: string[] = expression.callee.path
     const accessor = context.objectAccessorReturnPaths.get(path[0])
@@ -405,6 +427,47 @@ function objectExpressionPathName(expression: CValueNode, context: CFunctionCont
   }
 
   return null
+}
+
+function createFunctionContextObjectPathName(expression: CValueNode, context: CObjectPathContext): string | null {
+  const callee = expression.callee
+
+  if (callee == null) {
+    return null
+  }
+
+  let isCreateFunctionContext = false
+
+  if (callee.type === 'Reference' && callee.path.length === 1) {
+    const path: string[] = callee.path
+
+    for (const name of path) {
+      if (name === 'createFunctionContext') {
+        isCreateFunctionContext = true
+      }
+    }
+  } else if (callee.type === 'MemberExpression' && callee.property === 'createFunctionContext') {
+    isCreateFunctionContext = true
+  }
+
+  if (!isCreateFunctionContext) {
+    return null
+  }
+
+  let argument: CValueNode | null = null
+
+  const args: CValueNode[] = expression.args
+
+  for (const item of args) {
+    argument = item
+    break
+  }
+
+  if (argument == null) {
+    return null
+  }
+
+  return objectExpressionPathName(argument, context)
 }
 
 function appendObjectAccessorFields(objectName: string, fields: string[]): string {
@@ -569,17 +632,40 @@ function appendObjectShapeFunctionFieldArguments(
 
   for (const field of fields) {
     if (field.valueType === 'function') {
+      if (!isSupportedObjectFunctionField(field)) {
+        continue
+      }
+
       args.push(emitObjectFunctionFieldArgument(source, field, context, deps))
     } else if (field.valueType === 'object') {
-      appendObjectShapeFunctionFieldArguments(
-        args,
-        nestedObjectFunctionArgumentSource(source, field.name, context),
-        field.shape,
-        context,
-        deps
-      )
+      if (isMissingOptionalObjectLiteralField(source, field) || isUnavailableOptionalObjectFieldSource(source, field)) {
+        appendDefaultObjectShapeFunctionFieldArguments(args, field.shape)
+      } else {
+        appendObjectShapeFunctionFieldArguments(
+          args,
+          nestedObjectFunctionArgumentSource(source, field.name, context),
+          field.shape,
+          context,
+          deps
+        )
+      }
     }
   }
+}
+
+function isMissingOptionalObjectLiteralField(source: ObjectFunctionArgumentSource, field: CObjectShapeField): boolean {
+  const expression = source.expression
+
+  return (
+    field.optional === true &&
+    expression != null &&
+    expression.type === 'ObjectLiteral' &&
+    objectLiteralPropertyValue(expression, field.name) == null
+  )
+}
+
+function isUnavailableOptionalObjectFieldSource(source: ObjectFunctionArgumentSource, field: CObjectShapeField): boolean {
+  return field.optional === true && source.expression != null && source.pathName == null
 }
 
 function appendDefaultObjectShapeFunctionFieldArguments(
@@ -594,11 +680,19 @@ function appendDefaultObjectShapeFunctionFieldArguments(
 
   for (const field of fields) {
     if (field.valueType === 'function') {
+      if (!isSupportedObjectFunctionField(field)) {
+        continue
+      }
+
       args.push('0')
     } else if (field.valueType === 'object') {
       appendDefaultObjectShapeFunctionFieldArguments(args, field.shape)
     }
   }
+}
+
+function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
+  return isPlainFunctionPointerType(field.functionType) || isRuntimeFunctionType(field.functionType)
 }
 
 function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext): string | null {
@@ -624,6 +718,11 @@ function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext
   }
 
   let fields = context.objectShapes.get(objectName)
+
+  if (fields == null && object.type === 'Reference' && object.path.length === 1) {
+    const directObjectName = object.path[0]
+    fields = context.objectShapes.get(directObjectName)
+  }
 
   if (fields == null && object.shape != null) {
     fields = object.shape.fields
@@ -1074,53 +1173,7 @@ export function emitPreparedCallArgs(
     const param = functionParamAt(params, index)
 
     if (param != null) {
-      const paramValueType = param.valueType
-
-      if (isNullableScalarParam(param)) {
-        const value = deps.emitNullableScalarValueExpression(arg, context)
-
-        appendLines(lines, value.lines)
-        args.push(value.expression)
-      } else if (deps.isNullableFunctionType(paramValueType, cBooleanValueIsTrue(param.nullable))) {
-        const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
-
-        appendLines(lines, value.lines)
-        args.push(value.expression)
-      } else if (paramValueType === 'unknown' || isOpaqueRuntimeValueType(paramValueType)) {
-        const value = deps.emitCValueExpression(arg, context)
-
-        appendLines(lines, value.lines)
-        args.push(value.expression)
-      } else if (paramValueType === 'string') {
-        const value = deps.emitCValueExpression(arg, context)
-
-        appendLines(lines, value.lines)
-        args.push(value.expression)
-      } else if (paramValueType === 'object') {
-        const value = deps.emitCValueExpression(arg, context)
-
-        appendLines(lines, value.lines)
-        args.push(value.expression)
-        appendObjectFunctionFieldArguments(args, arg, param, context, deps)
-      } else if (isManagedRuntimeReturnType(paramValueType)) {
-        const value = deps.emitCValueExpression(arg, context)
-
-        appendLines(lines, value.lines)
-        args.push(value.expression)
-      } else if (paramValueType === 'function') {
-        const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, param, context)
-
-        if (runtimeFunctionType != null) {
-          const value = deps.emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
-
-          appendLines(lines, value.lines)
-          args.push(value.expression)
-        } else {
-          args.push(deps.emitFunctionValueExpression(arg, context))
-        }
-      } else {
-        args.push(deps.emitCExpression(arg, context))
-      }
+      appendPreparedCallArg(lines, args, expression, arg, param, index, context, deps)
     } else {
       args.push(deps.emitCExpression(arg, context))
     }
@@ -1130,14 +1183,82 @@ export function emitPreparedCallArgs(
     const param = params[index]
 
     if (param.optional === true) {
-      args.push(emitDefaultOptionalArg(param))
-      appendDefaultObjectFunctionFieldArguments(args, param)
+      if (param.defaultValue != null) {
+        appendPreparedCallArg(lines, args, expression, param.defaultValue, param, index, context, deps)
+      } else {
+        args.push(emitDefaultOptionalArg(param))
+        appendDefaultObjectFunctionFieldArguments(args, param)
+      }
     }
   }
 
   return {
     lines,
     args
+  }
+}
+
+function appendPreparedCallArg(
+  lines: string[],
+  args: string[],
+  expression: CValueNode,
+  arg: CValueNode,
+  param: CFunctionParam,
+  index: number,
+  context: CFunctionContext,
+  deps: CCallExpressionDependencies
+): void {
+  const paramValueType = param.valueType
+
+  if (isNullableScalarParam(param)) {
+    const value = deps.emitNullableScalarValueExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+  } else if (deps.isNullableFunctionType(paramValueType, cBooleanValueIsTrue(param.nullable))) {
+    const value = deps.emitNullableFunctionValueExpression(arg, param.functionType, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+  } else if (paramValueType === 'unknown' || isOpaqueRuntimeValueType(paramValueType)) {
+    const value = deps.emitCValueExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+  } else if (paramValueType === 'string') {
+    const value = deps.emitCValueExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+  } else if (paramValueType === 'object') {
+    const value = deps.emitCValueExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+    appendObjectFunctionFieldArguments(args, arg, param, context, deps)
+  } else if (isManagedRuntimeReturnType(paramValueType)) {
+    const value = deps.emitCValueExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+  } else if (paramValueType === 'function') {
+    const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, param, context)
+
+    if (runtimeFunctionType != null) {
+      const value = deps.emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
+
+      appendLines(lines, value.lines)
+      args.push(value.expression)
+    } else {
+      args.push(deps.emitFunctionValueExpression(arg, context))
+    }
+  } else if (paramValueType === 'number' || paramValueType === 'boolean') {
+    const value = deps.emitPreparedNumberExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
+  } else {
+    args.push(deps.emitCExpression(arg, context))
   }
 }
 
@@ -3346,6 +3467,14 @@ export function emitCValueExpression(
   if (expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
     const valueType = context.variables.get(name) ?? ''
+    const moduleValueName = context.moduleValueNames.get(name)
+
+    if (moduleValueName != null) {
+      return {
+        lines: [],
+        expression: moduleValueName
+      }
+    }
 
     if (context.nullableVariables.has(name)) {
       return {

@@ -577,6 +577,7 @@ class Checker {
   asyncDepth: number
   functionDepth: number
   narrowedNullableNames: Set<string>
+  resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
   resolvingDeclaredTypes: Set<string>
 
   constructor(program: ProgramNode, options: CompileOptions = {}) {
@@ -596,6 +597,7 @@ class Checker {
     this.asyncDepth = 0
     this.functionDepth = 0
     this.narrowedNullableNames = new Set()
+    this.resolvedDeclaredTypes = new Map()
     this.resolvingDeclaredTypes = new Set()
   }
 
@@ -718,17 +720,23 @@ class Checker {
   }
 
   resolveParam(param: AnyNode): AnyNode {
-    const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+    let declaredType = param.valueType
+
+    if (param.declaredType != null) {
+      declaredType = param.declaredType
+    }
+
+    const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
     let promiseValueType: ValueType | null = null
 
     if (paramInfo.promiseValueType != null) {
       promiseValueType = paramInfo.promiseValueType
     }
 
-    return {
+    const resolvedParam: AnyNode = {
       name: param.name,
       loc: param.loc,
-      declaredType: param.declaredType,
+      declaredType,
       optional: param.optional === true,
       valueType: paramInfo.valueType,
       nullable: paramInfo.nullable,
@@ -741,6 +749,12 @@ class Checker {
       functionType: paramInfo.functionType,
       shape: paramInfo.shape
     }
+
+    if (param.defaultValue != null) {
+      resolvedParam.defaultValue = param.defaultValue
+    }
+
+    return resolvedParam
   }
 
   acceptsArgumentCount(params: OptionalParamInfo[], count: number): boolean {
@@ -9709,6 +9723,11 @@ class Checker {
     }
 
     expression.valueType = 'function'
+
+    if (functionType != null && functionType.resolved !== true) {
+      functionType = this.resolveFunctionTypeMetadata(functionType as FunctionTypeMetadata, expression.loc) ?? functionType
+    }
+
     if (functionType != null) {
       expression.functionType = functionType
     }
@@ -10167,7 +10186,7 @@ class Checker {
         propertyType,
         fieldType.valueType,
         property.loc,
-        fieldType.nullable,
+        field.nullable === true,
         this.expressionCanBeNull(property.value)
       )
 
@@ -11509,88 +11528,122 @@ class Checker {
     const shape = this.types.get(name)
 
     if (shape != null) {
-      if (shape.kind === 'alias') {
-        return this.resolveDeclaredType(shape.valueType, loc)
-      }
+      const cached = this.resolvedDeclaredTypes.get(name)
 
-      if (shape.kind === 'function') {
-        const returnInfo = this.resolveDeclaredType(shape.returnType, loc)
-        const params: FunctionTypeParamMetadata[] = []
-        let returnPromiseValueType: ValueType | null = null
-
-        if (returnInfo.promiseValueType != null) {
-          returnPromiseValueType = returnInfo.promiseValueType
-        }
-
-        for (const param of shape.params) {
-          const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
-          let paramPromiseValueType: ValueType | null = null
-
-          if (paramInfo.promiseValueType != null) {
-            paramPromiseValueType = paramInfo.promiseValueType
-          }
-
-          const resolvedParam = {
-            name: param.name,
-            loc: param.loc,
-            optional: param.optional,
-            declaredType: param.valueType,
-            valueType: paramInfo.valueType,
-            nullable: paramInfo.nullable,
-            arrayElementType: paramInfo.arrayElementType,
-            arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
-            mapKeyType: paramInfo.mapKeyType,
-            mapValueType: paramInfo.mapValueType,
-            promiseValueType: paramPromiseValueType,
-            setElementType: paramInfo.setElementType,
-            functionType: paramInfo.functionType,
-            shape: paramInfo.shape
-          }
-
-          params.push(resolvedParam)
-        }
-
-        return {
-          valueType: 'function',
-          nullable: false,
-          functionType: {
-            kind: 'function',
-            resolved: true,
-            params,
-            declaredReturnType: shape.returnType,
-            returnType: returnInfo.valueType,
-            returnNullable: returnInfo.nullable,
-            returnArrayElementType: returnInfo.arrayElementType,
-            returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
-            returnMapKeyType: returnInfo.mapKeyType,
-            returnMapValueType: returnInfo.mapValueType,
-            returnPromiseValueType,
-            returnSetElementType: returnInfo.setElementType,
-            returnShape: returnInfo.shape
-          },
-          shape: null,
-          arrayElementType: null,
-          arrayElementDeclaredType: null,
-          mapKeyType: null,
-          mapValueType: null,
-          promiseValueType: null,
-          setElementType: null
-        }
+      if (cached != null) {
+        return this.cloneResolvedTypeInfo(cached)
       }
 
       if (this.resolvingDeclaredTypes.has(name)) {
         const recursiveInfo = this.unresolvedTypeInfo()
-        recursiveInfo.valueType = 'object'
+
+        if (shape.kind === 'function') {
+          recursiveInfo.valueType = 'function'
+        } else if (shape.kind === 'object') {
+          recursiveInfo.valueType = 'object'
+        }
 
         return recursiveInfo
+      }
+
+      if (shape.kind === 'alias') {
+        this.resolvingDeclaredTypes.add(name)
+
+        try {
+          const resolved = this.resolveDeclaredType(shape.valueType, loc)
+          this.resolvedDeclaredTypes.set(name, this.cloneResolvedTypeInfo(resolved))
+
+          return resolved
+        } finally {
+          this.resolvingDeclaredTypes.delete(name)
+        }
+      }
+
+      if (shape.kind === 'function') {
+        this.resolvingDeclaredTypes.add(name)
+
+        try {
+          const returnInfo = this.resolveDeclaredType(shape.returnType, loc)
+          const params: FunctionTypeParamMetadata[] = []
+          let returnPromiseValueType: ValueType | null = null
+
+          if (returnInfo.promiseValueType != null) {
+            returnPromiseValueType = returnInfo.promiseValueType
+          }
+
+          for (const param of shape.params) {
+            let declaredType = param.valueType
+
+            if (param.declaredType != null) {
+              declaredType = param.declaredType
+            }
+
+            const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
+            let paramPromiseValueType: ValueType | null = null
+
+            if (paramInfo.promiseValueType != null) {
+              paramPromiseValueType = paramInfo.promiseValueType
+            }
+
+            const resolvedParam = {
+              name: param.name,
+              loc: param.loc,
+              optional: param.optional,
+              declaredType,
+              valueType: paramInfo.valueType,
+              nullable: paramInfo.nullable,
+              arrayElementType: paramInfo.arrayElementType,
+              arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
+              mapKeyType: paramInfo.mapKeyType,
+              mapValueType: paramInfo.mapValueType,
+              promiseValueType: paramPromiseValueType,
+              setElementType: paramInfo.setElementType,
+              functionType: paramInfo.functionType,
+              shape: paramInfo.shape
+            }
+
+            params.push(resolvedParam)
+          }
+
+          const resolved: ResolvedTypeInfo = {
+            valueType: 'function',
+            nullable: false,
+            functionType: {
+              kind: 'function',
+              resolved: true,
+              params,
+              declaredReturnType: shape.returnType,
+              returnType: returnInfo.valueType,
+              returnNullable: returnInfo.nullable,
+              returnArrayElementType: returnInfo.arrayElementType,
+              returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
+              returnMapKeyType: returnInfo.mapKeyType,
+              returnMapValueType: returnInfo.mapValueType,
+              returnPromiseValueType,
+              returnSetElementType: returnInfo.setElementType,
+              returnShape: returnInfo.shape
+            },
+            shape: null,
+            arrayElementType: null,
+            arrayElementDeclaredType: null,
+            mapKeyType: null,
+            mapValueType: null,
+            promiseValueType: null,
+            setElementType: null
+          }
+          this.resolvedDeclaredTypes.set(name, this.cloneResolvedTypeInfo(resolved))
+
+          return resolved
+        } finally {
+          this.resolvingDeclaredTypes.delete(name)
+        }
       }
 
       this.resolvingDeclaredTypes.add(name)
 
       try {
         const resolvedShape = this.resolveObjectShape(shape)
-
-        return {
+        const resolved: ResolvedTypeInfo = {
           valueType: 'object',
           nullable: false,
           functionType: null,
@@ -11602,6 +11655,9 @@ class Checker {
           promiseValueType: null,
           setElementType: null
         }
+        this.resolvedDeclaredTypes.set(name, this.cloneResolvedTypeInfo(resolved))
+
+        return resolved
       } finally {
         this.resolvingDeclaredTypes.delete(name)
       }
@@ -11700,6 +11756,12 @@ class Checker {
 
   resolveObjectShapeField(field: AnyNode, fields: AnyNode[]): AnyNode {
     const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
+    let declaredType = field.valueType
+
+    if (field.declaredType != null) {
+      declaredType = field.declaredType
+    }
+
     let fieldInfo = this.resolveFieldDeclaredType(field)
 
     if (weakField) {
@@ -11707,7 +11769,11 @@ class Checker {
     }
 
     let promiseValueType: ValueType | null = null
-    const functionType = resolvedFunctionTypeMetadata(fieldInfo.functionType, field.functionType)
+    let functionType = fieldInfo.functionType
+
+    if (functionType == null) {
+      functionType = this.resolveFunctionTypeMetadata(field.functionType, field.loc)
+    }
 
     if (fieldInfo.promiseValueType != null) {
       promiseValueType = fieldInfo.promiseValueType
@@ -11724,7 +11790,7 @@ class Checker {
       staticLoc: field.staticLoc,
       weakTypeValidated: field.weakTypeValidated,
       loc: field.loc,
-      declaredType: field.valueType,
+      declaredType,
       valueType: fieldInfo.valueType,
       nullable: fieldInfo.nullable || weakField || field.optional === true,
       arrayElementType: fieldInfo.arrayElementType,
@@ -11771,7 +11837,13 @@ class Checker {
     }
 
     for (const param of functionType.params) {
-      const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+      let declaredType = param.valueType
+
+      if (param.declaredType != null) {
+        declaredType = param.declaredType
+      }
+
+      const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
       let paramPromiseValueType: ValueType | null = null
 
       if (paramInfo.promiseValueType != null) {
@@ -11782,7 +11854,7 @@ class Checker {
         name: param.name,
         loc: param.loc,
         optional: param.optional,
-        declaredType: param.valueType,
+        declaredType,
         valueType: paramInfo.valueType,
         nullable: paramInfo.nullable,
         arrayElementType: paramInfo.arrayElementType,
@@ -12152,6 +12224,21 @@ class Checker {
     }
 
     return this.resolveDeclaredType(name, loc)
+  }
+
+  cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo {
+    return {
+      valueType: info.valueType,
+      nullable: info.nullable,
+      functionType: info.functionType,
+      shape: info.shape,
+      arrayElementType: info.arrayElementType,
+      arrayElementDeclaredType: info.arrayElementDeclaredType,
+      mapKeyType: info.mapKeyType,
+      mapValueType: info.mapValueType,
+      promiseValueType: info.promiseValueType,
+      setElementType: info.setElementType
+    }
   }
 
   unresolvedTypeInfo(): ResolvedTypeInfo {

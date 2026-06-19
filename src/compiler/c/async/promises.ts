@@ -11,7 +11,7 @@ import type {
   CPromiseChainWrapper,
   CRuntimeArrowCapture
 } from '../types.ts'
-import type { AnyNode, Diagnostic, IrProgram } from '../../types.ts'
+import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import type { CallbackLoweringDependencies, CallbackScope, CallbackScopeBinding } from './callbacks.ts'
 
 type PromiseNode = AnyNode
@@ -817,7 +817,7 @@ function promiseExecutorParamName(executor: AnyNode, index: number): string | nu
 
 function promiseExecutorStatements(executor: AnyNode): AnyNode[] {
   if (executor.expressionBody) {
-    let loc = executor.loc
+    let loc: SourceLocation | null | undefined = executor.loc
 
     if (executor.body != null && executor.body.loc != null) {
       loc = executor.body.loc

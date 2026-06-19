@@ -25,7 +25,7 @@ import {
 } from '../value-types.ts'
 import { resolveRuntimeArrayElementType } from './arrays.ts'
 import { resolveRuntimeForOfMapKeys, resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
-import { emitCConditionClause, emitCNegatedConditionClause } from './expressions.ts'
+import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
@@ -40,6 +40,7 @@ import type {
   CKnownObjectIndexField,
   CFunctionReturnMapType,
   CFunctionType,
+  CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
   CPromiseConstructorHandler,
@@ -60,6 +61,7 @@ type CLoopFlowTarget = {
 
 type CStringMap = Map<string, string>
 type CStringSet = Set<string>
+type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 
 type CFunctionContext = {
   arrayShapes: Map<string, CArrayElementInfo[]>
@@ -90,6 +92,8 @@ type CFunctionContext = {
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet
+  objectAccessorReturnPaths: CObjectAccessorReturnPathMap
+  objectAliases: CStringMap
   objectShapes: Map<string, CObjectShapeField[]>
   ownedValues: string[]
   promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
@@ -111,6 +115,7 @@ type CFunctionContext = {
   statementLoweringDependencies: StatementLoweringDependencies
   statusReturn: boolean
   throwingFunction: boolean
+  throwingFunctions: CStringSet
   usedCleanupGoto: boolean
   usedRuntimeCallbackCleanupGoto?: boolean
   variables: CStringMap
@@ -851,7 +856,12 @@ export function emitRuntimeValueVariableDeclaration(
   context: CFunctionContext,
   valueTypeOverride?: string | null
 ): string[] {
-  const valueType = valueTypeOverride ?? statementDeps(context).inferExpressionType(expression, context)
+  let valueType = valueTypeOverride ?? statementDeps(context).inferExpressionType(expression, context)
+
+  if (valueType === 'unknown' && isRuntimeValueDeclarationValueType(statement.valueType)) {
+    valueType = statement.valueType
+  }
+
   const expectedTag = cRuntimeValueTag(valueType)
   let objectLiteralExpression = false
 
@@ -896,6 +906,7 @@ export function registerRuntimeValueMetadata(
 
   if (valueType === 'object') {
     registerObjectShape(context, name, resolveRuntimeObjectShape(declaration, expression))
+    registerObjectAlias(context, name, expression)
   } else if (valueType === 'array') {
     context.runtimeArrayElementTypes.set(name, resolveRuntimeArrayMetadataElementType(declaration, expression, context))
   } else if (valueType === 'map') {
@@ -914,6 +925,25 @@ export function registerRuntimeValueMetadata(
     )
   } else if (valueType === 'set') {
     context.setElementTypes.set(name, resolveRuntimeSetMetadataElementType(declaration, expression, context))
+  }
+}
+
+function registerObjectAlias(
+  context: CFunctionContext,
+  name: string,
+  expression: StatementNode | null | undefined
+): void {
+  if (expression == null) {
+    context.objectAliases.delete(name)
+    return
+  }
+
+  const alias = objectExpressionPathName(expression, context)
+
+  if (alias != null && alias !== name) {
+    context.objectAliases.set(name, alias)
+  } else {
+    context.objectAliases.delete(name)
   }
 }
 

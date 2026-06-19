@@ -72,6 +72,10 @@ type CFunctionReturnInfo = {
   returnNullable: boolean
 }
 
+type CBoxedFunctionParamContext = {
+  boxedMutableCaptureDeclarations: Set<CNode>
+}
+
 export type CDeclarationEmissionDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   emitStatementList: (statements: CNode[], context: CFunctionContext) => string[]
@@ -195,7 +199,12 @@ function isBoxedParamValueType(valueType: string): boolean {
   return isBoxedRuntimeValueParamType(valueType)
 }
 
-function isBoxedFunctionParam(param: CFunctionParam, index: number, statement: CNode, context: CEmitContext): boolean {
+function isBoxedFunctionParam(
+  param: CFunctionParam,
+  index: number,
+  statement: CNode,
+  context: CBoxedFunctionParamContext
+): boolean {
   return context.boxedMutableCaptureDeclarations.has(declarationBoxedParamNode(statement, index, param))
 }
 
@@ -302,7 +311,10 @@ function registerFunctionParamsInContext(
       }
     } else if (param.valueType === 'string') {
       context.variables.set(param.name, 'string')
-      context.runtimeStrings.add(param.name)
+
+      if (param.nullable !== true) {
+        context.runtimeStrings.add(param.name)
+      }
     } else if (param.valueType === 'object') {
       context.variables.set(param.name, 'object')
       registerObjectShape(context, param.name, param.shape)
@@ -415,6 +427,10 @@ function pushObjectShapeFunctionFieldParams(
 
   for (const field of fields) {
     if (field.valueType === 'function') {
+      if (!isPlainFunctionPointerType(field.functionType) && !isRuntimeFunctionType(field.functionType)) {
+        continue
+      }
+
       params.push(emitObjectFunctionFieldParam(objectName, field, context, loc))
     } else if (field.valueType === 'object') {
       pushObjectShapeFunctionFieldParams(params, `${objectName}_${field.name}`, field.shape, context, field.loc ?? loc)
@@ -639,7 +655,7 @@ export function emitFunctionParameter(
 ): string {
   reportUnsupportedCFunctionType(functionType, context, loc)
 
-  if (isRuntimeFunctionType(functionType)) {
+  if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
     return `ccjs_value ${name}`
   }
 
@@ -781,6 +797,12 @@ function emitRuntimeParamPreludeForParam(
 
   if (param.valueType === 'string') {
     const paramName = emitCStringParamName(param.name)
+
+    if (param.nullable === true) {
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(paramName, 'CCJS_TAG_STRING', context))
+      lines.push(`ccjs_value ${param.name} = ${paramName};`)
+      return lines
+    }
 
     lines.push(emitRuntimeTypeCheck(`${paramName}.tag != CCJS_TAG_STRING || ${paramName}.as.ref == 0`, context))
     lines.push(`ccjs_string* ${param.name} = (ccjs_string*)${paramName}.as.ref;`)

@@ -1,6 +1,6 @@
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
-import { emitCFunctionName, emitCIdentifier } from '../identifiers.ts'
+import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
 import { emitCType, isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import { isPromiseConstructorExpression, functionTakesEventLoopParam } from './promises.ts'
 import { isTimerStartCallExpression, timerCallbackFunctionType } from '../stdlib/timers.ts'
@@ -177,13 +177,29 @@ function isPlainCallbackParamValueType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean'
 }
 
-function isPlainFunctionPointerParam(param: CFunctionParam): boolean {
+function isPlainFunctionPointerParam(param: CFunctionParam, seen: CObjectShape[], seenTypes: string[]): boolean {
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
     return false
   }
 
-  if (param.valueType === 'object' && !isSupportedPlainFunctionPointerShape(param.shape, [])) {
-    return false
+  if (param.valueType === 'object') {
+    if (param.declaredType != null) {
+      if (seenTypes.includes(param.declaredType)) {
+        return true
+      }
+
+      seenTypes.push(param.declaredType)
+    }
+
+    const supported = isSupportedPlainFunctionPointerShape(param.shape, seen, seenTypes)
+
+    if (param.declaredType != null) {
+      seenTypes.pop()
+    }
+
+    if (!supported) {
+      return false
+    }
   }
 
   return (
@@ -195,7 +211,109 @@ function isPlainFunctionPointerParam(param: CFunctionParam): boolean {
   )
 }
 
-function isSupportedPlainFunctionPointerShape(shape: CObjectShape | null | undefined, seen: CObjectShape[]): boolean {
+function objectShapeHasFunctionField(
+  shape: CObjectShape | null | undefined,
+  seen: CObjectShape[],
+  seenTypes: string[]
+): boolean {
+  if (shape == null || shape.fields == null) {
+    return false
+  }
+
+  for (const item of seen) {
+    if (item === shape) {
+      return false
+    }
+  }
+
+  seen.push(shape)
+
+  for (const field of shape.fields) {
+    if (field.valueType === 'function') {
+      seen.pop()
+      return true
+    }
+
+    if (field.valueType === 'object') {
+      let pushedType = false
+
+      if (field.declaredType != null) {
+        if (seenTypes.includes(field.declaredType)) {
+          continue
+        }
+
+        seenTypes.push(field.declaredType)
+        pushedType = true
+      }
+
+      if (objectShapeHasFunctionField(field.shape, seen, seenTypes)) {
+        if (pushedType) {
+          seenTypes.pop()
+        }
+
+        seen.pop()
+        return true
+      }
+
+      if (pushedType) {
+        seenTypes.pop()
+      }
+    }
+  }
+
+  seen.pop()
+
+  return false
+}
+
+function objectShapeHasFunctionParamDeclaredType(
+  shape: CObjectShape | null | undefined,
+  declaredType: string,
+  depth: number
+): boolean {
+  if (shape == null || shape.fields == null) {
+    return false
+  }
+
+  if (depth > 64) {
+    return true
+  }
+
+  for (const field of shape.fields) {
+    if (field.valueType === 'function' && functionTypeHasObjectParamDeclaredType(field.functionType, declaredType)) {
+      return true
+    }
+
+    if (field.valueType === 'object' && objectShapeHasFunctionParamDeclaredType(field.shape, declaredType, depth + 1)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function functionTypeHasObjectParamDeclaredType(
+  functionType: CFunctionType | null | undefined,
+  declaredType: string
+): boolean {
+  if (functionType == null) {
+    return false
+  }
+
+  for (const param of functionType.params) {
+    if (param.valueType === 'object' && param.declaredType === declaredType) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function isSupportedPlainFunctionPointerShape(
+  shape: CObjectShape | null | undefined,
+  seen: CObjectShape[],
+  seenTypes: string[]
+): boolean {
   if (shape == null || shape.fields == null) {
     return true
   }
@@ -211,16 +329,32 @@ function isSupportedPlainFunctionPointerShape(shape: CObjectShape | null | undef
   for (const field of shape.fields) {
     if (
       field.valueType === 'function' &&
-      !isPlainFunctionPointerType(field.functionType) &&
+      !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
       !isRuntimeFunctionType(field.functionType)
     ) {
       seen.pop()
       return false
     }
 
-    if (field.valueType === 'object' && !isSupportedPlainFunctionPointerShape(field.shape, seen)) {
-      seen.pop()
-      return false
+    if (field.valueType === 'object') {
+      if (field.declaredType != null) {
+        if (seenTypes.includes(field.declaredType)) {
+          continue
+        }
+
+        seenTypes.push(field.declaredType)
+      }
+
+      const supported = isSupportedPlainFunctionPointerShape(field.shape, seen, seenTypes)
+
+      if (field.declaredType != null) {
+        seenTypes.pop()
+      }
+
+      if (!supported) {
+        seen.pop()
+        return false
+      }
     }
   }
 
@@ -463,7 +597,11 @@ export function normalizeFunctionType(functionType: CFunctionType | null | undef
   return genericFunctionType
 }
 
-export function isPlainFunctionPointerType(functionType: CFunctionType | null | undefined): boolean {
+export function isPlainFunctionPointerType(
+  functionType: CFunctionType | null | undefined,
+  seen: CObjectShape[] = [],
+  seenTypes: string[] = []
+): boolean {
   if (functionType == null) {
     return true
   }
@@ -472,10 +610,22 @@ export function isPlainFunctionPointerType(functionType: CFunctionType | null | 
     return false
   }
 
+  if (isManagedRuntimeReturnType(functionType.returnType)) {
+    for (const param of functionType.params) {
+      if (
+        param.valueType === 'object' &&
+        param.declaredType != null &&
+        objectShapeHasFunctionParamDeclaredType(param.shape, param.declaredType, 0)
+      ) {
+        return false
+      }
+    }
+  }
+
   for (let index = 0; index < functionType.params.length; index = index + 1) {
     const param = callbackParamAt(functionType.params, index)
 
-    if (!isPlainFunctionPointerParam(param)) {
+    if (!isPlainFunctionPointerParam(param, seen, seenTypes)) {
       return false
     }
   }
@@ -541,7 +691,7 @@ export function isSupportedRuntimeCallbackReturnType(returnType: string | null |
     returnType === 'number' ||
     returnType === 'boolean' ||
     returnType === 'string' ||
-    returnType === 'object'
+    isManagedRuntimeReturnType(returnType)
   )
 }
 
@@ -1873,12 +2023,48 @@ function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): stri
 
   for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
     const param = callbackParamAt(params, paramIndex)
+    const name = plainArrowCallbackParamName(wrapper, index)
 
-    emitted.push(`${emitCType(param.valueType)} ${plainArrowCallbackParamName(wrapper, index)}`)
+    emitted.push(`${emitCType(param.valueType)} ${name}`)
+    pushPlainArrowObjectFunctionFieldParams(emitted, name, param.shape)
     index = index + 1
   }
 
   return joinStrings(emitted, ', ')
+}
+
+function pushPlainArrowObjectFunctionFieldParams(
+  params: string[],
+  objectName: string,
+  shape: CObjectShape | null | undefined
+): void {
+  const fields = shape?.fields
+
+  if (fields == null) {
+    return
+  }
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      if (!isPlainFunctionPointerType(field.functionType) && !isRuntimeFunctionType(field.functionType)) {
+        continue
+      }
+
+      params.push(emitPlainArrowObjectFunctionFieldParam(objectName, field))
+    } else if (field.valueType === 'object') {
+      pushPlainArrowObjectFunctionFieldParams(params, `${objectName}_${field.name}`, field.shape)
+    }
+  }
+}
+
+function emitPlainArrowObjectFunctionFieldParam(objectName: string, field: CObjectShapeField): string {
+  const name = emitCObjectFunctionFieldName(objectName, field.name)
+
+  if (!isPlainFunctionPointerType(field.functionType) && isRuntimeFunctionType(field.functionType)) {
+    return `ccjs_value ${name}`
+  }
+
+  return `${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(field.functionType)})`
 }
 
 export function emitPlainArrowCallbackWrapperDeclaration(
@@ -1894,8 +2080,13 @@ export function emitPlainArrowCallbackWrapperDeclaration(
 
   for (let index = 0; index < params.length; index = index + 1) {
     const param = callbackParamAt(params, index)
+    const name = plainArrowCallbackParamName(wrapper, index)
 
-    context.variables.set(plainArrowCallbackParamName(wrapper, index), param.valueType)
+    context.variables.set(name, param.valueType)
+
+    if (param.valueType === 'object') {
+      deps.registerObjectShape(context, name, param.shape)
+    }
   }
 
   let statements: AnyNode[] = wrapper.expression.body
@@ -2437,7 +2628,11 @@ export function emitFunctionPointerReturnType(functionType: CFunctionType | null
   return emitCType('void')
 }
 
-export function emitFunctionPointerParams(functionType: CFunctionType | null | undefined): string {
+export function emitFunctionPointerParams(
+  functionType: CFunctionType | null | undefined,
+  seen: CObjectShape[] = [],
+  seenTypes: string[] = []
+): string {
   if (functionType == null || functionType.params.length === 0) {
     return 'void'
   }
@@ -2445,8 +2640,18 @@ export function emitFunctionPointerParams(functionType: CFunctionType | null | u
   const params: string[] = []
 
   for (const param of functionType.params) {
+    const paramSeenTypes: string[] = []
+
+    for (const seenType of seenTypes) {
+      paramSeenTypes.push(seenType)
+    }
+
+    if (param.declaredType != null) {
+      paramSeenTypes.push(param.declaredType)
+    }
+
     params.push(emitCType(param.valueType))
-    appendObjectShapeFunctionPointerParamTypes(params, param.shape, [])
+    appendObjectShapeFunctionPointerParamTypes(params, param.shape, seen, paramSeenTypes)
   }
 
   return joinStrings(params, ', ')
@@ -2455,7 +2660,8 @@ export function emitFunctionPointerParams(functionType: CFunctionType | null | u
 function appendObjectShapeFunctionPointerParamTypes(
   params: string[],
   shape: CObjectShape | null | undefined,
-  seen: CObjectShape[]
+  seen: CObjectShape[],
+  seenTypes: string[]
 ): void {
   if (shape == null || shape.fields == null) {
     return
@@ -2471,19 +2677,39 @@ function appendObjectShapeFunctionPointerParamTypes(
 
   for (const field of shape.fields) {
     if (field.valueType === 'function') {
-      params.push(emitFunctionPointerParamType(field.functionType))
+      if (!isPlainFunctionPointerType(field.functionType, seen, seenTypes) && !isRuntimeFunctionType(field.functionType)) {
+        continue
+      }
+
+      params.push(emitFunctionPointerParamType(field.functionType, seen, seenTypes))
     } else if (field.valueType === 'object') {
-      appendObjectShapeFunctionPointerParamTypes(params, field.shape, seen)
+      if (field.declaredType != null) {
+        if (seenTypes.includes(field.declaredType)) {
+          continue
+        }
+
+        seenTypes.push(field.declaredType)
+      }
+
+      appendObjectShapeFunctionPointerParamTypes(params, field.shape, seen, seenTypes)
+
+      if (field.declaredType != null) {
+        seenTypes.pop()
+      }
     }
   }
 
   seen.pop()
 }
 
-function emitFunctionPointerParamType(functionType: CFunctionType | null | undefined): string {
-  if (isRuntimeFunctionType(functionType)) {
+function emitFunctionPointerParamType(
+  functionType: CFunctionType | null | undefined,
+  seen: CObjectShape[] = [],
+  seenTypes: string[] = []
+): string {
+  if (!isPlainFunctionPointerType(functionType, seen, seenTypes) && isRuntimeFunctionType(functionType)) {
     return 'ccjs_value'
   }
 
-  return `${emitFunctionPointerReturnType(functionType)} (*)(${emitFunctionPointerParams(functionType)})`
+  return `${emitFunctionPointerReturnType(functionType)} (*)(${emitFunctionPointerParams(functionType, seen, seenTypes)})`
 }

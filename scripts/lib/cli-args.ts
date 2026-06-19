@@ -53,20 +53,22 @@ type ParseResult<T> =
     }
 
 export const usage = `Usage:
-  ccjs <entry>
-  ccjs <entry> --emit c [-o output.c] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
-  ccjs <entry> --emit c --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
-  ccjs run <entry> [--target c] [--keep] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
-  ccjs build <entry> --target c [-o executable] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
-  ccjs test
+  inox <entry>
+  inox <entry> --emit c [-o output.c] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
+  inox <entry> --emit c --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
+  inox run <entry> [--target c] [--keep] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
+  inox build <entry> --target c [-o executable] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]
+  inox test
 
 Examples:
-  ccjs index.ts
-  ccjs index.ts --emit c
-  ccjs index.ts --emit c -o build/index.c
-  ccjs src/index.ts --emit c --out-dir generated --entry
-  ccjs run src/main.ts
-  ccjs build src/main.ts --target c -o build/main`
+  inox index.ts
+  inox index.ts --emit c
+  inox index.ts --emit c -o build/index.c
+  inox src/index.ts --emit c --out-dir generated --entry
+  inox run src/main.ts
+  inox build src/main.ts --target c -o build/main
+
+The old ccjs command remains available as a compatibility alias.`
 
 export function parseCliArgs(args: string[]): ParseResult<CliPlan> {
   if (args.length === 0) {
