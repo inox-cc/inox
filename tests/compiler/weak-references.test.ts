@@ -6,6 +6,7 @@ import {
   compileSource,
   compileSourceToIr
 } from '../helpers/compiler-smoke.ts'
+import type { AnyNode } from '../../compiler/types.ts'
 
 test('parses weak fields as ownership metadata without reserving the weak name', () => {
   const compiled = compileSourceToIr(`type Node = {
@@ -20,8 +21,8 @@ function read(node: Node): void {
 `)
   const alias = compiled.hir.body.find((item) => item.type === 'TypeAliasDeclaration' && item.name === 'Node')
   const fn = compiled.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'read')
-  const parentRead = fn?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'parent')
-  const valueRead = fn?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'value')
+  const parentRead = fn?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'parent')
+  const valueRead = fn?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'value')
 
   assert.equal(alias?.valueType.fields[0].name, 'parent')
   assert.equal(alias?.valueType.fields[0].ownership, 'weak')
@@ -173,7 +174,7 @@ export function main(): void {
 }
 `)
   const main = compiled.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const maybe = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'maybe')
+  const maybe = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'maybe')
 
   assert.equal(maybe?.init.nullable, true)
 })

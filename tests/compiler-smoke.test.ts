@@ -25,6 +25,7 @@ import {
   tmpdir,
   writeFile
 } from './helpers/compiler-smoke.ts'
+import type { AnyNode } from '../compiler/types.ts'
 
 test('compiles exported main to C wrapper', () => {
   const result = compileSource(
@@ -2397,7 +2398,7 @@ test('returns checked HIR and target-neutral IR with simple value types', () => 
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration')
   assert.ok(main)
-  const [name, count] = main.body.filter((item) => item.type === 'VariableDeclaration')
+  const [name, count] = main.body.filter((item: AnyNode) => item.type === 'VariableDeclaration')
 
   assert.equal(result.hir.type, 'HirProgram')
   assert.equal(name.valueType, 'string')
@@ -2732,7 +2733,7 @@ export function main(): void {
     }
   )
   const main = result.ir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const tryStatement = main?.body.find((item) => item.type === 'TryStatement')
+  const tryStatement = main?.body.find((item: AnyNode) => item.type === 'TryStatement')
   const functionThrowValueTypes = new Map(result.ir.functionEffects.map((item) => [item.name, item.throwValueTypes]))
 
   assert.deepEqual(
@@ -2917,7 +2918,7 @@ export function main(): void {
 
   assert.equal(add.returnType, 'number')
   assert.deepEqual(
-    add.params.map((param) => param.valueType),
+    add.params.map((param: AnyNode) => param.valueType),
     ['number', 'number']
   )
   assert.match(result.code, /double add\(double left, double right\)/)

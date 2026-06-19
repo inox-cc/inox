@@ -10,6 +10,7 @@ const selected = values
   .map((value) => value * 2)
 let total = 0
 
+// @ts-expect-error Map bracket syntax is inox collection sugar.
 scores['Ada'] = 10
 scores.set('Linus', 8)
 names.add('Grace').add('Linus')
@@ -23,6 +24,7 @@ for (const value of selected) {
   total = total + value
 }
 
+// @ts-expect-error Map bracket syntax is inox collection sugar.
 const adaScore = scores['Ada'] ?? 0
 
 if (

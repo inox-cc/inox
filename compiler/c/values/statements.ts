@@ -557,7 +557,7 @@ function isUnsignedIntegerLiteral(value: string): boolean {
   return true
 }
 
-function nodeLocOrFallback(node, fallback: CSourceLocation): CSourceLocation {
+function nodeLocOrFallback(node: StatementNode | null | undefined, fallback: CSourceLocation): CSourceLocation {
   if (node !== null && typeof node !== 'undefined' && node.loc !== null && typeof node.loc !== 'undefined') {
     return node.loc
   }

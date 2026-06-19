@@ -25,6 +25,7 @@ import {
   tmpdir,
   writeFile
 } from '../helpers/compiler-smoke.ts'
+import type { AnyNode } from '../../compiler/types.ts'
 
 
 
@@ -403,7 +404,7 @@ export function main(): void {
 
   const hasValue = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'hasValue')
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const hasTwo = main?.body.find((item) => item.name === 'hasTwo')
+  const hasTwo = main?.body.find((item: AnyNode) => item.name === 'hasTwo')
   assert.equal(hasValue?.returnType, 'boolean')
   assert.equal(hasTwo?.valueType, 'boolean')
   assert.match(result.code, /#include "inox\/hash\.h"/)
@@ -471,7 +472,7 @@ test('lowers C Array.unshift calls for primitive runtime arrays', () => {
   )
 
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const length = main?.body.find((item) => item.name === 'length')
+  const length = main?.body.find((item: AnyNode) => item.name === 'length')
 
   assert.equal(length?.valueType, 'number')
   assert.match(result.code, /inox_array_unshift\(values, inox_number_value\(1\), &inox_array_unshift_len_\d+\)/)
@@ -498,8 +499,8 @@ test('lowers C Array.slice calls to runtime arrays', () => {
     }
   )
 
-  assert.equal(result.hir.body[0].body.find((item) => item.name === 'copy')?.arrayElementType, 'number')
-  assert.equal(result.hir.body[0].body.find((item) => item.name === 'middle')?.arrayElementType, 'number')
+  assert.equal(result.hir.body[0].body.find((item: AnyNode) => item.name === 'copy')?.arrayElementType, 'number')
+  assert.equal(result.hir.body[0].body.find((item: AnyNode) => item.name === 'middle')?.arrayElementType, 'number')
   assert.match(
     result.code,
     /inox_array_slice\(&inox_default_allocator, values, inox_array_slice_start_\d+, inox_array_slice_end_\d+, &inox_array_slice_\d+\)/
@@ -529,7 +530,7 @@ test('lowers C Array.join calls for primitive arrays', () => {
     }
   )
 
-  assert.equal(result.hir.body[0].body.find((item) => item.name === 'joined')?.valueType, 'string')
+  assert.equal(result.hir.body[0].body.find((item: AnyNode) => item.name === 'joined')?.valueType, 'string')
   assert.match(result.code, /inox_array_join\(&inox_default_allocator, parts, "\/", 1, &inox_array_join_\d+\)/)
   assert.match(result.code, /inox_array_join\(&inox_default_allocator, inox_array_\d+, ",", 1, &inox_array_join_\d+\)/)
   assert.match(result.code, /inox_array_join\(&inox_default_allocator, inox_array_\d+, "\|", 1, &inox_array_join_\d+\)/)
@@ -1145,8 +1146,8 @@ export function main(): void {
 
   const hex = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'hex')
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const text = main?.body.find((item) => item.name === 'text')
-  const padded = main?.body.find((item) => item.name === 'padded')
+  const text = main?.body.find((item: AnyNode) => item.name === 'text')
+  const padded = main?.body.find((item: AnyNode) => item.name === 'padded')
 
   assert.equal(hex?.returnType, 'string')
   assert.equal(text?.valueType, 'string')
@@ -1836,8 +1837,8 @@ test('lowers Buffer and Uint8Array APIs to C binary runtime calls', () => {
     }
   )
 
-  assert.equal(result.hir.body[0].body.find((item) => item.name === 'bytes')?.valueType, 'bytes')
-  assert.equal(result.hir.body[0].body.find((item) => item.name === 'out')?.valueType, 'bytes')
+  assert.equal(result.hir.body[0].body.find((item: AnyNode) => item.name === 'bytes')?.valueType, 'bytes')
+  assert.equal(result.hir.body[0].body.find((item: AnyNode) => item.name === 'out')?.valueType, 'bytes')
   assert.deepEqual(result.ir.runtimeRequirements, ['binary', 'managed-values', 'string-bytes'])
   assert.match(result.code, /#include "inox\/binary\.h"/)
   assert.match(
@@ -1942,7 +1943,7 @@ test('checks string length as a readonly number field', () => {
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const size = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'size')
+  const size = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'size')
 
   assert.equal(size?.valueType, 'number')
   assert.match(result.code, /inox_string_code_unit_length_parts\(name, strlen\(name\)\)/)
@@ -2013,7 +2014,7 @@ export function main(): void {
   assert.ok(firstNumber)
   assert.ok(firstName)
   assert.ok(main)
-  const [values, names] = main.body.filter((item) => item.type === 'VariableDeclaration')
+  const [values, names] = main.body.filter((item: AnyNode) => item.type === 'VariableDeclaration')
 
   assert.equal(firstNumber.params[0].valueType, 'array')
   assert.equal(firstNumber.params[0].arrayElementType, 'number')
@@ -2058,7 +2059,7 @@ test('checks Array sort filter map as typed chain calls', () => {
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
-  const resultDeclaration = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'result')
+  const resultDeclaration = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'result')
   assert.ok(resultDeclaration)
   const sortCall = resultDeclaration.init.callee.object.callee.object
   const filterCall = resultDeclaration.init.callee.object
@@ -2087,7 +2088,7 @@ test('checks Array sort filter map as typed chain calls', () => {
   )
   const mappedMain = mapped.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(mappedMain)
-  const names = mappedMain.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'names')
+  const names = mappedMain.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'names')
   assert.ok(names)
 
   assert.equal(names.valueType, 'array')
@@ -2190,9 +2191,9 @@ test('lowers C Array.find declarations to nullable loop results', () => {
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
 
-  const found = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'found')
+  const found = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'found')
   const loop = main.body.find(
-    (item) => item.type === 'ForStatement' && /^__inox_find_index_\d+$/.test(item.init.name)
+    (item: AnyNode) => item.type === 'ForStatement' && /^__inox_find_index_\d+$/.test(item.init.name)
   )
 
   assert.ok(found)
@@ -2236,15 +2237,15 @@ test('lowers C Array.find expression contexts to nullable temps', () => {
   assert.ok(main)
 
   const findTemps = main.body.filter(
-    (item) => item.type === 'VariableDeclaration' && /^__inox_find_expr_\d+$/.test(item.name)
+    (item: AnyNode) => item.type === 'VariableDeclaration' && /^__inox_find_expr_\d+$/.test(item.name)
   )
-  const score = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'score')
+  const score = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'score')
 
   assert.equal(findTemps.length, 2)
-  assert.equal(findTemps.every((item) => item.kind === 'let'), true)
-  assert.equal(findTemps.every((item) => item.nullable === true), true)
-  assert.equal(findTemps.every((item) => item.valueType === 'number'), true)
-  assert.equal(findTemps.every((item) => item.init.type === 'NullLiteral'), true)
+  assert.equal(findTemps.every((item: AnyNode) => item.kind === 'let'), true)
+  assert.equal(findTemps.every((item: AnyNode) => item.nullable === true), true)
+  assert.equal(findTemps.every((item: AnyNode) => item.valueType === 'number'), true)
+  assert.equal(findTemps.every((item: AnyNode) => item.init.type === 'NullLiteral'), true)
   assert.ok(score)
   assert.equal(score.init.type, 'BinaryExpression')
   assert.equal(score.init.operator, '??')
@@ -2275,9 +2276,9 @@ test('lowers C Array.filter Boolean callback to for loop plus push', () => {
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
 
-  const presentNames = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'presentNames')
-  const presentNumbers = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'presentNumbers')
-  const presentFlags = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'presentFlags')
+  const presentNames = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentNames')
+  const presentNumbers = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentNumbers')
+  const presentFlags = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'presentFlags')
 
   assert.ok(presentNames)
   assert.ok(presentNumbers)
@@ -2334,13 +2335,13 @@ export function main(): void {
   assert.equal(selected.body[2].type, 'ReturnStatement')
   assert.match(selected.body[2].argument.path[0], /^__inox_array_expr_\d+$/)
 
-  const scaled = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'scaled')
-  const inlineCount = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'inlineCount')
+  const scaled = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'scaled')
+  const inlineCount = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'inlineCount')
   const chainTemp = main.body.find(
-    (item) => item.type === 'VariableDeclaration' && /^__inox_array_expr_\d+$/.test(item.name)
+    (item: AnyNode) => item.type === 'VariableDeclaration' && /^__inox_array_expr_\d+$/.test(item.name)
   )
   const inlineSource = main.body.find(
-    (item) => item.type === 'VariableDeclaration' && /^__inox_array_source_\d+$/.test(item.name)
+    (item: AnyNode) => item.type === 'VariableDeclaration' && /^__inox_array_source_\d+$/.test(item.name)
   )
 
   assert.ok(scaled)
@@ -2390,13 +2391,13 @@ test('checks Map and Set generic methods as typed chain calls', () => {
     }
   )
   assert.ok(main)
-  const scores = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'scores')
-  const maybeScore = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'maybeScore')
-  const score = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'score')
-  const hasAda = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'hasAda')
-  const removed = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'removed')
-  const names = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'names')
-  const hasName = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'hasName')
+  const scores = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'scores')
+  const maybeScore = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'maybeScore')
+  const score = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'score')
+  const hasAda = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'hasAda')
+  const removed = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'removed')
+  const names = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'names')
+  const hasName = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'hasName')
   assert.ok(scores)
   assert.ok(maybeScore)
   assert.ok(score)
@@ -2547,10 +2548,10 @@ test('checks Map and Set copy constructors as typed collection values', () => {
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
 
-  const copy = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'copy')
-  const assigned = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'assigned')
-  const namesCopy = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'namesCopy')
-  const assignedNames = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'assignedNames')
+  const copy = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'copy')
+  const assigned = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'assigned')
+  const namesCopy = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'namesCopy')
+  const assignedNames = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'assignedNames')
   assert.ok(copy)
   assert.ok(assigned)
   assert.ok(namesCopy)
@@ -2700,8 +2701,8 @@ test('checks Map bracket syntax as typed get and set sugar', () => {
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
-  const contentType = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'contentType')
-  const fallback = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'fallback')
+  const contentType = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'contentType')
+  const fallback = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'fallback')
   assert.ok(contentType)
   assert.ok(fallback)
 

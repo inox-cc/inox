@@ -6,7 +6,6 @@
     "lib": ["ES2024"],
     "module": "NodeNext",
     "noEmit": true,
-    "noImplicitAny": false,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,

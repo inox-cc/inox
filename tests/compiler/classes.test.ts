@@ -25,6 +25,7 @@ import {
   tmpdir,
   writeFile
 } from '../helpers/compiler-smoke.ts'
+import type { AnyNode } from '../../compiler/types.ts'
 
 
 
@@ -353,7 +354,7 @@ export function main(): void {
   const getUser = result.ir.functionDeclarations.find((item) => item.name === 'getUser')
 
   assert.deepEqual(
-    getUser?.returnShape?.fields.map((field) => ({
+    getUser?.returnShape?.fields.map((field: AnyNode) => ({
       name: field.name,
       readonly: field.readonly
     })),
@@ -425,11 +426,11 @@ export function main(): void {
   })
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
-  const user = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'user')
+  const user = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'user')
   assert.ok(user)
 
   assert.deepEqual(
-    user.shape.fields.map((field) => ({
+    user.shape.fields.map((field: AnyNode) => ({
       name: field.name,
       readonly: field.readonly,
       valueType: field.valueType
@@ -469,11 +470,11 @@ export function main(): void {
   })
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
-  const options = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'options')
+  const options = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'options')
   assert.ok(options)
 
   assert.deepEqual(
-    options.shape.fields.map((field) => ({
+    options.shape.fields.map((field: AnyNode) => ({
       name: field.name,
       optional: field.optional === true,
       valueType: field.valueType
@@ -554,20 +555,20 @@ export function main(): void {
 
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
   assert.ok(main)
-  const token = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'token')
+  const token = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'token')
   assert.ok(token)
   assert.equal(token.shape.dynamic, true)
   assert.deepEqual(
-    token.shape.fields.map((field) => field.name),
+    token.shape.fields.map((field: AnyNode) => field.name),
     ['line', 'column', 'type']
   )
-  const tagged = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'tagged')
+  const tagged = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'tagged')
   assert.ok(tagged)
-  const kind = main.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'kind')
+  const kind = main.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'kind')
   assert.ok(kind)
   assert.equal(kind.valueType, 'string')
   assert.deepEqual(
-    tagged.shape.fields.map((field) => ({ name: field.name, valueType: field.valueType })),
+    tagged.shape.fields.map((field: AnyNode) => ({ name: field.name, valueType: field.valueType })),
     [
       { name: 'type', valueType: 'string' },
       { name: 'version', valueType: 'number' }

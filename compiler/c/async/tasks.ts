@@ -3545,7 +3545,7 @@ function emitPreparedAsyncTaskFetchSourceExpression(
 }
 
 function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
-  expression,
+  expression: AsyncTaskAstNode,
   wrapper: CAsyncTaskWrapper,
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
@@ -3616,7 +3616,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
 }
 
 function emitPreparedAsyncTaskSourceCallExpression(
-  expression,
+  expression: AsyncTaskAstNode,
   wrapper: CAsyncTaskWrapper,
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
@@ -3652,7 +3652,7 @@ function emitPreparedAsyncTaskSourceCallExpression(
 }
 
 function emitPreparedAsyncFunctionSourceCallExpression(
-  expression,
+  expression: AsyncTaskAstNode,
   wrapper: CAsyncTaskWrapper,
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
@@ -3724,7 +3724,7 @@ function emitPreparedAsyncFunctionSourceCallExpression(
 }
 
 function emitPreparedPlainPromiseSourceCallExpression(
-  expression,
+  expression: AsyncTaskAstNode,
   wrapper: CAsyncTaskWrapper,
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
@@ -4000,13 +4000,24 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
 }
 
 function emitPreparedAsyncTaskValueExpression(
-  expression,
+  expression: AsyncTaskAstNode | null | undefined,
   valueType: string,
   context: AsyncTaskFunctionContext
 ): PreparedExpression {
   if (valueType === 'void') {
     return {
       lines: [],
+      expression: 'inox_undefined_value()'
+    }
+  }
+
+  if (expression === null || typeof expression === 'undefined') {
+    context.diagnostics.push(
+      diagnostic('INOX_C_ASYNC', 'async task value expression is required for non-void return values')
+    )
+
+    return {
+      lines: ['status = INOX_ERR_TYPE;'],
       expression: 'inox_undefined_value()'
     }
   }

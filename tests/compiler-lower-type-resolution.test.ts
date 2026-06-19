@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { createLowerContext, resolveDeclaredType } from '../compiler/lower/type-resolution.ts'
-import type { ProgramNode } from '../compiler/types.ts'
+import type { AnyNode, ProgramNode } from '../compiler/types.ts'
 
 const typeProgram: ProgramNode = {
   type: 'Program',
@@ -78,7 +78,7 @@ test('resolves object aliases into lowered shapes', () => {
 
   assert.equal(user.valueType, 'object')
   assert.deepEqual(
-    user.shape?.fields.map((field) => ({
+    user.shape?.fields.map((field: AnyNode) => ({
       name: field.name,
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
@@ -117,7 +117,7 @@ test('resolves intersection object fields by overriding base fields', () => {
   const known = resolveDeclaredType('Known', context)
 
   assert.deepEqual(
-    known.shape?.fields.map((field) => ({
+    known.shape?.fields.map((field: AnyNode) => ({
       name: field.name,
       optional: field.optional,
       nullable: field.nullable,

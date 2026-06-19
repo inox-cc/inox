@@ -25,6 +25,7 @@ import {
   tmpdir,
   writeFile
 } from '../helpers/compiler-smoke.ts'
+import type { AnyNode } from '../../compiler/types.ts'
 
 
 
@@ -153,9 +154,9 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const bytes = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'bytes')
-  const text = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'text')
-  const entries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'entries')
+  const bytes = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'bytes')
+  const text = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'text')
+  const entries = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'entries')
 
   assert.equal(bytes?.promiseValueType, 'bytes')
   assert.equal(text?.promiseValueType, 'string')
@@ -186,14 +187,14 @@ export async function main(): Promise<void> {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const stats = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'stats')
-  const syncStats = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'syncStats')
+  const stats = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'stats')
+  const syncStats = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'syncStats')
 
   assert.equal(stats?.valueType, 'object')
   assert.equal(stats?.init?.shape?.builtin, 'fs.Stats')
   assert.equal(syncStats?.init?.shape?.builtin, 'fs.Stats')
   assert.deepEqual(
-    stats?.init?.shape?.fields.map((field) => field.name),
+    stats?.init?.shape?.fields.map((field: AnyNode) => field.name),
     ['size', 'mode', 'mtimeMs']
   )
   assert.match(c.code, /inox_fs_stat\(&inox_loop, "\/tmp\/value\.txt", 14, &inox_promise_\d+\)/)
@@ -229,7 +230,7 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const mkdirPromise = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'mkdirPromise')
+  const mkdirPromise = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'mkdirPromise')
 
   assert.equal(mkdirPromise?.valueType, 'promise')
   assert.equal(mkdirPromise?.promiseValueType, 'void')
@@ -277,7 +278,7 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const appendPromise = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'appendPromise')
+  const appendPromise = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'appendPromise')
 
   assert.equal(appendPromise?.valueType, 'promise')
   assert.equal(appendPromise?.promiseValueType, 'void')
@@ -319,9 +320,9 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const entries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'entries')
-  const syncEntries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'syncEntries')
-  const first = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'first')
+  const entries = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'entries')
+  const syncEntries = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'syncEntries')
+  const first = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'first')
 
   assert.equal(entries?.promiseValueType, 'array')
   assert.equal(entries?.arrayElementType, 'object')
@@ -368,8 +369,8 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const real = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'real')
-  const link = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'link')
+  const real = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'real')
+  const link = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'link')
 
   assert.equal(real?.promiseValueType, 'string')
   assert.equal(link?.promiseValueType, 'string')
@@ -434,8 +435,8 @@ export async function load(path: string): Promise<string> {
     }
   )
   const load = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'load')
-  const text = load?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'text')
-  const asyncText = load?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'asyncText')
+  const text = load?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'text')
+  const asyncText = load?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'asyncText')
 
   assert.equal(text?.valueType, 'string')
   assert.equal(text?.init?.fsRuntimeMethod, 'readFileSync')
@@ -460,7 +461,7 @@ export async function main(): Promise<void> {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const bytes = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'bytes')
+  const bytes = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'bytes')
 
   assert.ok(bytes)
   assert.equal(bytes.valueType, 'bytes')
@@ -506,9 +507,9 @@ export function main(): void {
     }
   )
   const main = c.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const text = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'text')
-  const bytes = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'bytes')
-  const entries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'entries')
+  const text = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'text')
+  const bytes = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'bytes')
+  const entries = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'entries')
 
   assert.equal(text?.valueType, 'string')
   assert.equal(bytes?.valueType, 'bytes')
@@ -562,12 +563,12 @@ export function main(): void {
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const read = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'read')
+  const read = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'read')
 
   assert.ok(read)
   assert.equal(read.valueType, 'promise')
   assert.equal(read.promiseValueType, 'string')
-  const entries = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'entries')
+  const entries = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'entries')
 
   assert.ok(entries)
   assert.equal(entries.valueType, 'promise')

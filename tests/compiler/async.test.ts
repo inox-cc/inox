@@ -25,6 +25,7 @@ import {
   tmpdir,
   writeFile
 } from '../helpers/compiler-smoke.ts'
+import type { AnyNode } from '../../compiler/types.ts'
 
 
 
@@ -3432,8 +3433,8 @@ export function main(): void {
   )
   const makeValue = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'makeValue')
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const value = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'value')
-  const inferred = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'inferred')
+  const value = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'value')
+  const inferred = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'inferred')
   const makeValueDeclaration = result.ir.functionDeclarations.find((item) => item.name === 'makeValue')
 
   assert.ok(makeValue)
@@ -3479,7 +3480,7 @@ export async function main(): Promise<void> {
     }
   )
   const makeText = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'makeText')
-  const returnStatement = makeText?.body.find((item) => item.type === 'ReturnStatement')
+  const returnStatement = makeText?.body.find((item: AnyNode) => item.type === 'ReturnStatement')
   const makeTextDeclaration = result.ir.functionDeclarations.find((item) => item.name === 'makeText')
 
   assert.ok(returnStatement)
@@ -3551,9 +3552,9 @@ test('checks Promise then catch as typed chain calls', () => {
     }
   )
   const main = result.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const doubled = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'doubled')
-  const recovered = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'recovered')
-  const chained = main?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'chained')
+  const doubled = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'doubled')
+  const recovered = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'recovered')
+  const chained = main?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'chained')
   const thenCallback = doubled?.init.args[0]
   const catchCallback = recovered?.init.args[0]
 
@@ -3583,7 +3584,7 @@ test('checks Promise then catch as typed chain calls', () => {
     }
   )
   const multiMain = multiStatement.hir.body.find((item) => item.type === 'FunctionDeclaration' && item.name === 'main')
-  const multiPromise = multiMain?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'promise')
+  const multiPromise = multiMain?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(multiPromise?.promiseValueType, 'number')
 
@@ -3605,7 +3606,7 @@ test('checks Promise then catch as typed chain calls', () => {
   const branchMain = branchStatement.hir.body.find(
     (item) => item.type === 'FunctionDeclaration' && item.name === 'main'
   )
-  const branchPromise = branchMain?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'promise')
+  const branchPromise = branchMain?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(branchPromise?.promiseValueType, 'number')
 
@@ -3630,7 +3631,7 @@ test('checks Promise then catch as typed chain calls', () => {
   const switchMain = switchStatement.hir.body.find(
     (item) => item.type === 'FunctionDeclaration' && item.name === 'main'
   )
-  const switchPromise = switchMain?.body.find((item) => item.type === 'VariableDeclaration' && item.name === 'promise')
+  const switchPromise = switchMain?.body.find((item: AnyNode) => item.type === 'VariableDeclaration' && item.name === 'promise')
 
   assert.equal(switchPromise?.promiseValueType, 'number')
 
