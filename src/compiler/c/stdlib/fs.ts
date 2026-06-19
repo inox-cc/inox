@@ -212,7 +212,7 @@ function fsSyncValueCallNameForMethod(method: string | null): string | null {
 }
 
 function fsSyncStatementDescriptorForMethod(method: string | null): FsSyncStatementDescriptor | null {
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
@@ -220,11 +220,11 @@ function fsSyncStatementDescriptorForMethod(method: string | null): FsSyncStatem
 }
 
 export function cFsRuntimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  if (expression.fsRuntimeMethod != null) {
+  if (expression.fsRuntimeMethod !== null && typeof expression.fsRuntimeMethod !== 'undefined') {
     return expression.fsRuntimeMethod
   }
 
@@ -234,11 +234,18 @@ export function cFsRuntimeExpressionMethod(expression: AnyNode | null | undefine
 export function isAsyncFsRuntimeCallExpression(expression: AnyNode | null | undefined): boolean {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  return expression != null && method != null && expression.valueType === 'promise' && isAsyncFsRuntimeMethod(method)
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    method !== null &&
+    typeof method !== 'undefined' &&
+    expression.valueType === 'promise' &&
+    isAsyncFsRuntimeMethod(method)
+  )
 }
 
 export function cFsRuntimeConstantExpression(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -266,13 +273,13 @@ export function cFsRuntimeConstantExpression(expression: AnyNode | null | undefi
 function cFsRuntimeCallName(callee: AnyNode): string | null {
   const path = memberExpressionPath(callee)
 
-  if (path == null || path[0] !== 'fs') {
+  if (path === null || typeof path === 'undefined' || path[0] !== 'fs') {
     return null
   }
 
   const info = fsRuntimeCallInfoFromPath(path)
 
-  if (info == null) {
+  if (info === null || typeof info === 'undefined') {
     return null
   }
 
@@ -291,7 +298,7 @@ export function emitPreparedFsCallExpression(
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
@@ -310,7 +317,7 @@ export function emitPreparedFsCallExpression(
   appendLines(lines, path.lines)
   const descriptor = fsAsyncCallDescriptorForMethod(method)
 
-  if (descriptor != null) {
+  if (descriptor !== null && typeof descriptor !== 'undefined') {
     return emitPreparedFsAsyncDescriptorExpression(expression, context, dependencies, path, lines, out, descriptor)
   }
 
@@ -433,7 +440,7 @@ export function emitPreparedFsSyncValueExpression(
   const method = cFsRuntimeExpressionMethod(expression)
   const callName = fsSyncValueCallNameForMethod(method)
 
-  if (callName == null) {
+  if (callName === null || typeof callName === 'undefined') {
     return null
   }
 
@@ -469,7 +476,11 @@ export function emitPreparedFsSyncStatementExpression(
   const descriptor = fsSyncStatementDescriptorForMethod(method)
   const specialMethod = method === 'accessSync' || method === 'mkdirSync' || method === 'rmSync'
 
-  if (method == null || (descriptor == null && !specialMethod)) {
+  if (
+    method === null ||
+    typeof method === 'undefined' ||
+    ((descriptor === null || typeof descriptor === 'undefined') && !specialMethod)
+  ) {
     return null
   }
 
@@ -477,7 +488,7 @@ export function emitPreparedFsSyncStatementExpression(
   const lines: string[] = []
   appendLines(lines, path.lines)
 
-  if (descriptor != null) {
+  if (descriptor !== null && typeof descriptor !== 'undefined') {
     return emitPreparedFsSyncStatementDescriptor(expression, context, dependencies, path, lines, descriptor)
   }
 
@@ -556,10 +567,7 @@ function emitPreparedFsSyncStatementDescriptor(
 
     appendLines(lines, bytes.lines)
     lines.push(
-      emitStatusCheck(
-        `${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`,
-        context
-      )
+      emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`, context)
     )
   }
 
@@ -573,7 +581,7 @@ export function emitPreparedFsAccessModeExpression(
   context: FsFunctionContext,
   dependencies: FsLoweringDependencies
 ): PreparedExpression {
-  if (expression.args[1] == null) {
+  if (expression.args[1] === null || typeof expression.args[1] === 'undefined') {
     return {
       lines: [],
       expression: 'INOX_FS_F_OK'
@@ -615,7 +623,7 @@ export function emitPreparedFsStatsMethodExpression(
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
@@ -641,7 +649,7 @@ function appendLines(target: string[], values: string[]): void {
 function preparedFsCallOut(options: PreparedCallOptions, context: FsFunctionContext, prefix: string): string {
   const out = options.out
 
-  if (out != null) {
+  if (out !== null && typeof out !== 'undefined') {
     return out
   }
 
@@ -649,17 +657,17 @@ function preparedFsCallOut(options: PreparedCallOptions, context: FsFunctionCont
 }
 
 function fsPromiseValueType(expression: AnyNode, method: string | null): string {
-  if (expression.promiseValueType != null) {
+  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
     return expression.promiseValueType
   }
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return 'string'
   }
 
   const valueType = fsPromiseResultTypeForMethod(method)
 
-  if (valueType != null) {
+  if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
   }
 
@@ -667,7 +675,7 @@ function fsPromiseValueType(expression: AnyNode, method: string | null): string 
 }
 
 function fsDescriptorTempPrefix(descriptor: FsAsyncCallDescriptor | FsSyncStatementDescriptor): string {
-  if (descriptor.tempPrefix != null) {
+  if (descriptor.tempPrefix !== null && typeof descriptor.tempPrefix !== 'undefined') {
     return descriptor.tempPrefix
   }
 

@@ -81,17 +81,18 @@ export function collectIrFunctionEffectsWithExternalEffects(
   externalEffects: IrFunctionEffect[],
   includeClassMethods: boolean
 ): IrFunctionEffect[] {
-  return collectFunctionEffects(collectFunctionEffectNodes(programs, includeClassMethods), externalEffects, includeClassMethods)
+  return collectFunctionEffects(
+    collectFunctionEffectNodes(programs, includeClassMethods),
+    externalEffects,
+    includeClassMethods
+  )
 }
 
 export function irClassMethodEffectName(className: string, methodName: string): string {
   return `${className}.${methodName}`
 }
 
-function collectFunctionEffectNodes(
-  programs: FunctionEffectProgram[],
-  includeClassMethods: boolean
-): NodeList {
+function collectFunctionEffectNodes(programs: FunctionEffectProgram[], includeClassMethods: boolean): NodeList {
   const functions: NodeList = []
 
   for (let index = 0; index < programs.length; index = index + 1) {
@@ -225,7 +226,7 @@ function collectFunctionEffects(
 
       const classInstanceTypes = createStringMap()
 
-      if (item.className != null) {
+      if (item.className !== null && typeof item.className !== 'undefined') {
         classInstanceTypes.set('this', item.className)
       }
 
@@ -307,7 +308,7 @@ function collectEscapingThrowValueTypesFromStatement(
 ): IrThrowValueType[] {
   const types: IrThrowValueType[] = []
 
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return types
   }
 
@@ -341,7 +342,12 @@ function collectEscapingThrowValueTypesFromStatement(
       }
     }
 
-    if (statement.init != null && statement.init.className != null) {
+    if (
+      statement.init !== null &&
+      typeof statement.init !== 'undefined' &&
+      statement.init.className !== null &&
+      typeof statement.init.className !== 'undefined'
+    ) {
       const name = nodeName(statement)
 
       if (name !== '') {
@@ -461,7 +467,7 @@ function collectEscapingThrowValueTypesFromStatement(
   if (statement.type === 'ForStatement') {
     const init = statement.init
 
-    if (init != null && init.type === 'VariableDeclaration') {
+    if (init !== null && typeof init !== 'undefined' && init.type === 'VariableDeclaration') {
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromStatement(
@@ -608,7 +614,7 @@ function collectEscapingThrowValueTypesFromStatement(
   if (statement.type === 'TryStatement') {
     let blockHasTarget = hasErrorTarget
 
-    if (statement.handler != null) {
+    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
       blockHasTarget = true
     }
 
@@ -627,7 +633,7 @@ function collectEscapingThrowValueTypesFromStatement(
 
     const handler = statement.handler
 
-    if (handler != null) {
+    if (handler !== null && typeof handler !== 'undefined') {
       pushThrowValueTypes(
         types,
         collectEscapingThrowValueTypesFromStatement(
@@ -672,7 +678,7 @@ function collectEscapingThrowValueTypesFromExpression(
 ): IrThrowValueType[] {
   const types: IrThrowValueType[] = []
 
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return types
   }
 
@@ -680,7 +686,12 @@ function collectEscapingThrowValueTypesFromExpression(
     const callee = expression.callee
     const functionName = callEffectName(callee, classInstanceTypes, includeClassMethods)
 
-    if (!hasErrorTarget && functionName != null && functionNames.has(functionName)) {
+    if (
+      !hasErrorTarget &&
+      functionName !== null &&
+      typeof functionName !== 'undefined' &&
+      functionNames.has(functionName)
+    ) {
       pushThrowValueTypes(types, functionThrowValueTypes.get(functionName) ?? [])
     }
 
@@ -890,16 +901,17 @@ function collectEscapingThrowValueTypesFromExpression(
   return types
 }
 
-function inferThrowValueTypeForAnalysis(
-  expression: MaybeNode,
-  errorObjectNames: StringSet
-): IrThrowValueType {
+function inferThrowValueTypeForAnalysis(expression: MaybeNode, errorObjectNames: StringSet): IrThrowValueType {
   if (isErrorValueExpressionForAnalysis(expression, errorObjectNames)) {
     return 'error'
   }
 
-  if (expression != null) {
-    if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral' || expression.valueType === 'string') {
+  if (expression !== null && typeof expression !== 'undefined') {
+    if (
+      expression.type === 'StringLiteral' ||
+      expression.type === 'TemplateLiteral' ||
+      expression.valueType === 'string'
+    ) {
       return 'string'
     }
   }
@@ -907,18 +919,15 @@ function inferThrowValueTypeForAnalysis(
   return 'other'
 }
 
-function isErrorValueExpressionForAnalysis(
-  expression: MaybeNode,
-  errorObjectNames: StringSet
-): boolean {
+function isErrorValueExpressionForAnalysis(expression: MaybeNode, errorObjectNames: StringSet): boolean {
   if (isErrorConstructorExpression(expression)) {
     return true
   }
 
-  if (expression != null) {
+  if (expression !== null && typeof expression !== 'undefined') {
     const name = singleReferenceName(expression)
 
-    if (name != null) {
+    if (name !== null && typeof name !== 'undefined') {
       return errorObjectNames.has(name)
     }
   }
@@ -927,7 +936,7 @@ function isErrorValueExpressionForAnalysis(
 }
 
 function isErrorConstructorExpression(expression: MaybeNode): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
@@ -935,11 +944,11 @@ function isErrorConstructorExpression(expression: MaybeNode): boolean {
     return false
   }
 
-  if (expression.className != null) {
+  if (expression.className !== null && typeof expression.className !== 'undefined') {
     return true
   }
 
-  if (expression.callee == null) {
+  if (expression.callee === null || typeof expression.callee === 'undefined') {
     return false
   }
 
@@ -950,7 +959,7 @@ function isErrorConstructorExpression(expression: MaybeNode): boolean {
 function nodeName(node: EffectNode): string {
   const name = node.name
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return ''
   }
 
@@ -958,7 +967,7 @@ function nodeName(node: EffectNode): string {
 }
 
 function nodeList(values: EffectChildList | null | undefined): NodeList {
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return []
   }
 
@@ -966,7 +975,7 @@ function nodeList(values: EffectChildList | null | undefined): NodeList {
 }
 
 function caseList(values: EffectCaseNode[] | null | undefined): EffectCaseNode[] {
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return []
   }
 
@@ -974,7 +983,7 @@ function caseList(values: EffectCaseNode[] | null | undefined): EffectCaseNode[]
 }
 
 function propertyList(values: EffectPropertyNode[] | null | undefined): EffectPropertyNode[] {
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return []
   }
 
@@ -988,23 +997,23 @@ function callEffectName(
 ): string | null {
   const directName = singleReferenceName(callee)
 
-  if (directName != null) {
+  if (directName !== null && typeof directName !== 'undefined') {
     return directName
   }
 
-  if (!includeClassMethods || callee == null) {
+  if (!includeClassMethods || callee === null || typeof callee === 'undefined') {
     return null
   }
 
   const member = callee as EffectNode
 
-  if (member.type !== 'MemberExpression' || member.property == null) {
+  if (member.type !== 'MemberExpression' || member.property === null || typeof member.property === 'undefined') {
     return null
   }
 
   const className = classNameForEffectReceiver(member.object, classInstanceTypes)
 
-  if (className == null) {
+  if (className === null || typeof className === 'undefined') {
     return null
   }
 
@@ -1015,19 +1024,19 @@ function classNameForEffectReceiver(
   expression: EffectChildNode | null | undefined,
   classInstanceTypes: StringMap
 ): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const node = expression as EffectNode
 
-  if (node.className != null) {
+  if (node.className !== null && typeof node.className !== 'undefined') {
     return node.className
   }
 
   const name = singleReferenceName(expression)
 
-  if (name != null) {
+  if (name !== null && typeof name !== 'undefined') {
     return classInstanceTypes.get(name) ?? null
   }
 
@@ -1035,7 +1044,7 @@ function classNameForEffectReceiver(
 }
 
 function singleReferenceName(expression: EffectChildNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -1049,7 +1058,7 @@ function singleReferenceName(expression: EffectChildNode | null | undefined): st
 }
 
 function singleStringPathName(path: string[] | null | undefined): string | null {
-  if (path == null || path.length !== 1) {
+  if (path === null || typeof path === 'undefined' || path.length !== 1) {
     return null
   }
 
@@ -1081,7 +1090,7 @@ function createThrowValueTypeSet(): ThrowValueTypeSet {
 }
 
 function cloneFunctionThrowValueTypeMap(input: ThrowValueTypeMap | null | undefined): ThrowValueTypeMap {
-  if (input == null) {
+  if (input === null || typeof input === 'undefined') {
     return createFunctionThrowValueTypeMap()
   }
 
@@ -1099,7 +1108,7 @@ function functionNameSetFromMap(map: ThrowValueTypeMap): StringSet {
 }
 
 function cloneOptionalStringSet(input: StringSet | null | undefined): StringSet {
-  if (input == null) {
+  if (input === null || typeof input === 'undefined') {
     return createStringSet()
   }
 

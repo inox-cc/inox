@@ -13,6 +13,7 @@ import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
+import { isNullish, isPresent } from '../nullish.ts'
 
 type FeatureRawNode = AnyNode
 
@@ -103,17 +104,11 @@ function irFeatureAt(features: IrFeature[], index: number): IrFeature {
   return features[index]
 }
 
-function runtimeRequirementProgramAt(
-  programs: RuntimeRequirementProgram[],
-  index: number
-): RuntimeRequirementProgram {
+function runtimeRequirementProgramAt(programs: RuntimeRequirementProgram[], index: number): RuntimeRequirementProgram {
   return programs[index]
 }
 
-function runtimeRequirementAt(
-  requirements: IrRuntimeRequirement[],
-  index: number
-): IrRuntimeRequirement {
+function runtimeRequirementAt(requirements: IrRuntimeRequirement[], index: number): IrRuntimeRequirement {
   return requirements[index]
 }
 
@@ -140,7 +135,7 @@ function featureChildNodeAt(nodes: FeatureChildNode[], index: number): FeatureCh
 function featureNodeArgsOrEmpty(node: FeatureNode): FeatureChildNode[] {
   const args = node.args
 
-  if (args != null) {
+  if (args !== null && typeof args !== 'undefined') {
     return args
   }
 
@@ -150,7 +145,7 @@ function featureNodeArgsOrEmpty(node: FeatureNode): FeatureChildNode[] {
 function featureNodeElementsOrEmpty(node: FeatureChildNode): FeatureRawNode[] {
   const elements = node.elements
 
-  if (elements != null) {
+  if (elements !== null && typeof elements !== 'undefined') {
     return elements
   }
 
@@ -253,9 +248,7 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
   return sortedRuntimeRequirements(requirements)
 }
 
-export function collectIrRuntimeRequirements(
-  programs: RuntimeRequirementProgram[]
-): IrRuntimeRequirement[] {
+export function collectIrRuntimeRequirements(programs: RuntimeRequirementProgram[]): IrRuntimeRequirement[] {
   const requirements = createRuntimeRequirementSet()
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
@@ -283,9 +276,7 @@ export function collectSyntaxFeatureUsages(program: ProgramNode): IrSyntaxFeatur
   return usages
 }
 
-export function collectIrSyntaxFeatureUsages(
-  programs: SyntaxFeatureProgram[]
-): IrSyntaxFeatureUsage[] {
+export function collectIrSyntaxFeatureUsages(programs: SyntaxFeatureProgram[]): IrSyntaxFeatureUsage[] {
   const usages: IrSyntaxFeatureUsage[] = []
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
@@ -383,7 +374,7 @@ function createRuntimeRequirementSet(): IrRuntimeRequirementSet {
 }
 
 function visitSyntaxFeatureUsage(node: FeatureRawNode | FeatureRawNode[] | null, usages: IrSyntaxFeatureUsage[]): void {
-  if (node != null) {
+  if (node !== null && typeof node !== 'undefined') {
     if (Array.isArray(node)) {
       for (let index = 0; index < node.length; index = index + 1) {
         const item = featureArrayNodeAt(node, index)
@@ -412,7 +403,7 @@ function visitSyntaxFeatureUsage(node: FeatureRawNode | FeatureRawNode[] | null,
 }
 
 function visitNode(node: FeatureRawNode | FeatureRawNode[] | null, features: IrFeatureSet): void {
-  if (node != null) {
+  if (node !== null && typeof node !== 'undefined') {
     if (Array.isArray(node)) {
       for (let index = 0; index < node.length; index = index + 1) {
         const item = featureArrayNodeAt(node, index)
@@ -453,7 +444,7 @@ function visitNode(node: FeatureRawNode | FeatureRawNode[] | null, features: IrF
 }
 
 function visitSyntaxFeatureChild(value: any, usages: IrSyntaxFeatureUsage[]): void {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return
   }
 
@@ -495,7 +486,7 @@ function visitSyntaxFeatureChildren(item: ChildNode, usages: IrSyntaxFeatureUsag
 }
 
 function visitFeatureChild(value: any, features: IrFeatureSet): void {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return
   }
 
@@ -560,12 +551,15 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     recordCallableSignatureFeatures(node, features)
   }
 
-  if (node.osRuntimeMethod != null || node.osRuntimeConstant != null) {
+  if (
+    (node.osRuntimeMethod !== null && typeof node.osRuntimeMethod !== 'undefined') ||
+    (node.osRuntimeConstant !== null && typeof node.osRuntimeConstant !== 'undefined')
+  ) {
     features.add('os')
     features.add('runtime-values')
   }
 
-  if (node.objectRuntimeMethod != null) {
+  if (node.objectRuntimeMethod !== null && typeof node.objectRuntimeMethod !== 'undefined') {
     features.add('collections')
     features.add('objects')
     features.add('runtime-values')
@@ -599,7 +593,7 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   if (node.type === 'ForOfStatement') {
     const shape = node.shape
 
-    if (shape != null && shape.kind === 'object') {
+    if (shape !== null && typeof shape !== 'undefined' && shape.kind === 'object') {
       features.add('objects')
       features.add('runtime-values')
     }
@@ -609,14 +603,14 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     features.add('collections')
   }
 
-  if (node.type === 'NewExpression' && runtimeConstructorName(node) != null) {
+  if (node.type === 'NewExpression' && isPresent(runtimeConstructorName(node))) {
     features.add('runtime-values')
 
-    if (collectionConstructorName(node) != null) {
+    if (isPresent(collectionConstructorName(node))) {
       features.add('collections')
-    } else if (binaryConstructorName(node) != null) {
+    } else if (isPresent(binaryConstructorName(node))) {
       features.add('binary')
-    } else if (objectConstructorName(node) != null) {
+    } else if (isPresent(objectConstructorName(node))) {
       features.add('objects')
     }
   }
@@ -628,7 +622,7 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   if (node.type === 'TemplateLiteral') {
     const raw = node.raw
 
-    if (raw != null && raw.includes('${')) {
+    if (raw !== null && typeof raw !== 'undefined' && raw.includes('${')) {
       features.add('runtime-values')
       features.add('string-bytes')
     }
@@ -648,7 +642,12 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   if (node.type === 'AssignmentExpression') {
     const target = node.target
 
-    if (target != null && target.type === 'IndexExpression' && target.collectionKind === 'map') {
+    if (
+      target !== null &&
+      typeof target !== 'undefined' &&
+      target.type === 'IndexExpression' &&
+      target.collectionKind === 'map'
+    ) {
       features.add('collections')
       features.add('runtime-values')
       features.add('map-index-set')
@@ -665,17 +664,24 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     features.add('runtime-values')
   }
 
-  if (node.type === 'MemberExpression' && node.fsRuntimeConstant != null) {
+  if (
+    node.type === 'MemberExpression' &&
+    node.fsRuntimeConstant !== null &&
+    typeof node.fsRuntimeConstant !== 'undefined'
+  ) {
     features.add('fs')
   }
 
-  if (node.pathRuntimeConstant != null) {
+  if (node.pathRuntimeConstant !== null && typeof node.pathRuntimeConstant !== 'undefined') {
     features.add('path')
     features.add('runtime-values')
     features.add('string-bytes')
   }
 
-  if (node.processRuntimeProperty != null || node.processRuntimeEnvName != null) {
+  if (
+    (node.processRuntimeProperty !== null && typeof node.processRuntimeProperty !== 'undefined') ||
+    (node.processRuntimeEnvName !== null && typeof node.processRuntimeEnvName !== 'undefined')
+  ) {
     features.add('process')
     features.add('runtime-values')
     features.add('string-bytes')
@@ -694,7 +700,8 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     const operator = node.operator
 
     if (
-      operator != null &&
+      operator !== null &&
+      typeof operator !== 'undefined' &&
       isFeatureEqualityOperator(operator) &&
       (mayBeStringBytesOperand(node.left) || mayBeStringBytesOperand(node.right))
     ) {
@@ -710,13 +717,16 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
 function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureSet): void {
   const returnType = node.returnType
 
-  if ((returnType != null && isRuntimeCallableReturnType(returnType)) || node.returnNullable === true) {
+  if (
+    (returnType !== null && typeof returnType !== 'undefined' && isRuntimeCallableReturnType(returnType)) ||
+    node.returnNullable === true
+  ) {
     features.add('runtime-values')
   }
 
   const params = node.params
 
-  if (params == null) {
+  if (params === null || typeof params === 'undefined') {
     return
   }
 
@@ -736,49 +746,52 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
 function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): void {
   const callee = expression.callee
 
-  if (callee != null && timeRuntimeCallName(callee) != null) {
+  if (callee !== null && typeof callee !== 'undefined' && isPresent(timeRuntimeCallName(callee))) {
     features.add('clocks')
   }
 
-  if (expression.fsRuntimeMethod != null || fsRuntimeMethodForPath(memberExpressionPath(callee)) != null) {
+  if (
+    (expression.fsRuntimeMethod !== null && typeof expression.fsRuntimeMethod !== 'undefined') ||
+    isPresent(fsRuntimeMethodForPath(memberExpressionPath(callee)))
+  ) {
     features.add('fs')
   }
 
-  if (callee != null && jsonRuntimeCallName(callee) != null) {
+  if (callee !== null && typeof callee !== 'undefined' && isPresent(jsonRuntimeCallName(callee))) {
     features.add('json')
     features.add('runtime-values')
   }
 
-  if (cryptoRuntimeMethodName(expression) != null) {
+  if (isPresent(cryptoRuntimeMethodName(expression))) {
     features.add('crypto')
     features.add('runtime-values')
   }
 
-  if (debugRuntimeMethodName(expression) != null) {
+  if (isPresent(debugRuntimeMethodName(expression))) {
     features.add('debug-memory')
     features.add('objects')
     features.add('runtime-values')
   }
 
-  if (pathRuntimeMethodName(expression) != null) {
+  if (isPresent(pathRuntimeMethodName(expression))) {
     features.add('path')
     features.add('runtime-values')
     features.add('string-bytes')
   }
 
-  if (urlRuntimeMethodName(expression) != null) {
+  if (isPresent(urlRuntimeMethodName(expression))) {
     features.add('url')
     features.add('runtime-values')
     features.add('string-bytes')
   }
 
-  if (processRuntimeMethodName(expression) != null) {
+  if (isPresent(processRuntimeMethodName(expression))) {
     features.add('process')
     features.add('runtime-values')
     features.add('string-bytes')
   }
 
-  if (childProcessRuntimeMethodName(expression) != null) {
+  if (isPresent(childProcessRuntimeMethodName(expression))) {
     features.add('child-process')
     features.add('runtime-values')
     features.add('string-bytes')
@@ -789,7 +802,7 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     features.add('string-bytes')
   }
 
-  if (timerRuntimeCallName(expression) != null) {
+  if (isPresent(timerRuntimeCallName(expression))) {
     features.add('timers')
   }
 
@@ -797,7 +810,10 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
 
   const collectionMethod = collectionMethodCallName(expression)
 
-  if (collectionMethod != null || arrayMethod != null) {
+  if (
+    (collectionMethod !== null && typeof collectionMethod !== 'undefined') ||
+    (arrayMethod !== null && typeof arrayMethod !== 'undefined')
+  ) {
     features.add('collections')
     features.add('runtime-values')
   }
@@ -825,14 +841,14 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     features.add('numeric-casts')
   }
 
-  if (binaryRuntimeMethodName(expression) != null) {
+  if (isPresent(binaryRuntimeMethodName(expression))) {
     features.add('binary')
     features.add('runtime-values')
   }
 
   const stringMethod = stringRuntimeMethodName(expression)
 
-  if (stringMethod != null) {
+  if (stringMethod !== null && typeof stringMethod !== 'undefined') {
     features.add('runtime-values')
     features.add('string-bytes')
 
@@ -845,7 +861,7 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
 function plainFunctionCallHasStringArgument(expression: FeatureNode): boolean {
   const calleePath = simpleReferencePath(expression.callee)
 
-  if (calleePath == null || calleePath.length !== 1) {
+  if (calleePath === null || typeof calleePath === 'undefined' || calleePath.length !== 1) {
     return false
   }
 
@@ -853,14 +869,14 @@ function plainFunctionCallHasStringArgument(expression: FeatureNode): boolean {
     isStringConversionCall(expression) ||
     isNumberConversionCall(expression) ||
     isNumericCastCall(expression) ||
-    timerRuntimeCallName(expression) != null
+    isPresent(timerRuntimeCallName(expression))
   ) {
     return false
   }
 
   const args = expression.args
 
-  if (args == null) {
+  if (args === null || typeof args === 'undefined') {
     return false
   }
 
@@ -878,7 +894,7 @@ function plainFunctionCallHasStringArgument(expression: FeatureNode): boolean {
 function runtimeConstructorName(expression: FeatureNode): string | null {
   const calleePath = simpleReferencePath(expression.callee)
 
-  if (calleePath == null) {
+  if (calleePath === null || typeof calleePath === 'undefined') {
     return null
   }
 
@@ -904,7 +920,7 @@ function runtimeConstructorName(expression: FeatureNode): string | null {
 function collectionConstructorName(expression: FeatureNode): string | null {
   const calleePath = simpleReferencePath(expression.callee)
 
-  if (calleePath == null) {
+  if (calleePath === null || typeof calleePath === 'undefined') {
     return null
   }
 
@@ -914,7 +930,7 @@ function collectionConstructorName(expression: FeatureNode): string | null {
 function objectConstructorName(expression: FeatureNode): string | null {
   const calleePath = simpleReferencePath(expression.callee)
 
-  if (calleePath == null) {
+  if (calleePath === null || typeof calleePath === 'undefined') {
     return null
   }
 
@@ -928,7 +944,7 @@ function objectConstructorName(expression: FeatureNode): string | null {
 function binaryConstructorName(expression: FeatureNode): string | null {
   const calleePath = simpleReferencePath(expression.callee)
 
-  if (calleePath == null) {
+  if (calleePath === null || typeof calleePath === 'undefined') {
     return null
   }
 
@@ -938,7 +954,7 @@ function binaryConstructorName(expression: FeatureNode): string | null {
 function isBinaryArrayLiteralConstructor(expression: FeatureNode): boolean {
   const args = expression.args
 
-  if (binaryConstructorName(expression) == null || args == null) {
+  if (isNullish(binaryConstructorName(expression)) || args === null || typeof args === 'undefined') {
     return false
   }
 
@@ -954,11 +970,16 @@ function isBinaryArrayLiteralConstructor(expression: FeatureNode): boolean {
 function binaryRuntimeMethodName(expression: FeatureNode): string | null {
   const callee = expression.callee
 
-  if (expression.type !== 'CallExpression' || callee == null || callee.type !== 'MemberExpression') {
+  if (
+    expression.type !== 'CallExpression' ||
+    callee === null ||
+    typeof callee === 'undefined' ||
+    callee.type !== 'MemberExpression'
+  ) {
     return null
   }
 
-  if (expression.binaryRuntimeMethod != null) {
+  if (expression.binaryRuntimeMethod !== null && typeof expression.binaryRuntimeMethod !== 'undefined') {
     return expression.binaryRuntimeMethod
   }
 
@@ -966,7 +987,11 @@ function binaryRuntimeMethodName(expression: FeatureNode): string | null {
 }
 
 function cryptoRuntimeMethodName(expression: FeatureNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.cryptoRuntimeMethod == null) {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.cryptoRuntimeMethod === null ||
+    typeof expression.cryptoRuntimeMethod === 'undefined'
+  ) {
     return null
   }
 
@@ -976,7 +1001,12 @@ function cryptoRuntimeMethodName(expression: FeatureNode): string | null {
 function debugRuntimeMethodName(expression: FeatureNode): string | null {
   const callee = expression.callee
 
-  if (expression.type !== 'CallExpression' || callee == null || callee.type !== 'MemberExpression') {
+  if (
+    expression.type !== 'CallExpression' ||
+    callee === null ||
+    typeof callee === 'undefined' ||
+    callee.type !== 'MemberExpression'
+  ) {
     return null
   }
 
@@ -988,7 +1018,11 @@ function debugRuntimeMethodName(expression: FeatureNode): string | null {
 }
 
 function pathRuntimeMethodName(expression: FeatureNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.pathRuntimeMethod == null) {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.pathRuntimeMethod === null ||
+    typeof expression.pathRuntimeMethod === 'undefined'
+  ) {
     return null
   }
 
@@ -998,7 +1032,8 @@ function pathRuntimeMethodName(expression: FeatureNode): string | null {
 function urlRuntimeMethodName(expression: FeatureNode): string | null {
   if (
     (expression.type !== 'CallExpression' && expression.type !== 'NewExpression') ||
-    expression.urlRuntimeMethod == null
+    expression.urlRuntimeMethod === null ||
+    typeof expression.urlRuntimeMethod === 'undefined'
   ) {
     return null
   }
@@ -1007,7 +1042,11 @@ function urlRuntimeMethodName(expression: FeatureNode): string | null {
 }
 
 function processRuntimeMethodName(expression: FeatureNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.processRuntimeMethod == null) {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.processRuntimeMethod === null ||
+    typeof expression.processRuntimeMethod === 'undefined'
+  ) {
     return null
   }
 
@@ -1015,7 +1054,11 @@ function processRuntimeMethodName(expression: FeatureNode): string | null {
 }
 
 function childProcessRuntimeMethodName(expression: FeatureNode): string | null {
-  if (expression.type !== 'CallExpression' || expression.childProcessRuntimeMethod == null) {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.childProcessRuntimeMethod === null ||
+    typeof expression.childProcessRuntimeMethod === 'undefined'
+  ) {
     return null
   }
 
@@ -1023,20 +1066,20 @@ function childProcessRuntimeMethodName(expression: FeatureNode): string | null {
 }
 
 function isObjectFieldExpression(expression: FeatureNode | null | undefined): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const object = expression.object
 
-    if (object == null) {
+    if (object === null || typeof object === 'undefined') {
       return false
     }
 
     const shape = object.shape
 
-    return shape != null && shape.kind === 'object'
+    return shape !== null && typeof shape !== 'undefined' && shape.kind === 'object'
   }
 
   if (expression.type !== 'IndexExpression' && expression.type !== 'OptionalIndexExpression') {
@@ -1045,36 +1088,45 @@ function isObjectFieldExpression(expression: FeatureNode | null | undefined): bo
 
   const object = expression.object
 
-  if (object == null) {
+  if (object === null || typeof object === 'undefined') {
     return false
   }
 
   const shape = object.shape
 
-  return shape != null && shape.kind === 'object' && expression.collectionKind !== 'map'
+  return (
+    shape !== null && typeof shape !== 'undefined' && shape.kind === 'object' && expression.collectionKind !== 'map'
+  )
 }
 
 function isStringIndexExpression(expression: FeatureNode | null | undefined): boolean {
-  if (expression == null || expression.type !== 'IndexExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'IndexExpression') {
     return false
   }
 
   const object = expression.object
   const index = expression.index
 
-  return object != null && index != null && object.valueType === 'string' && index.valueType === 'number'
+  return (
+    object !== null &&
+    typeof object !== 'undefined' &&
+    index !== null &&
+    typeof index !== 'undefined' &&
+    object.valueType === 'string' &&
+    index.valueType === 'number'
+  )
 }
 
 function collectionMethodCallName(expression: FeatureNode): string | null {
   const callee = expression.callee
 
-  if (callee == null || callee.type !== 'MemberExpression') {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
     return null
   }
 
   const property = callee.property
 
-  if (property != null && (isMapMethod(property) || isSetMethod(property))) {
+  if (property !== null && typeof property !== 'undefined' && (isMapMethod(property) || isSetMethod(property))) {
     return property
   }
 
@@ -1084,25 +1136,25 @@ function collectionMethodCallName(expression: FeatureNode): string | null {
 function arrayMethodCallName(expression: FeatureNode): string | null {
   const callee = expression.callee
 
-  if (callee == null || callee.type !== 'MemberExpression') {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
     return null
   }
 
   const property = callee.property
 
-  if (property == null) {
+  if (property === null || typeof property === 'undefined') {
     return null
   }
 
   const method = arrayRuntimeMethodName(property)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
   const object = callee.object
 
-  if (object == null || object.valueType !== 'array') {
+  if (object === null || typeof object === 'undefined' || object.valueType !== 'array') {
     return null
   }
 
@@ -1112,31 +1164,31 @@ function arrayMethodCallName(expression: FeatureNode): string | null {
 function isStringConversionCall(expression: FeatureNode): boolean {
   const calleePath = simpleReferencePath(expression.callee)
 
-  return calleePath != null && calleePath[0] === 'String'
+  return calleePath !== null && typeof calleePath !== 'undefined' && calleePath[0] === 'String'
 }
 
 function isNumberConversionCall(expression: FeatureNode): boolean {
   const calleePath = simpleReferencePath(expression.callee)
 
-  return calleePath != null && calleePath[0] === 'Number'
+  return calleePath !== null && typeof calleePath !== 'undefined' && calleePath[0] === 'Number'
 }
 
 function isNumericCastCall(expression: FeatureNode): boolean {
   const calleePath = simpleReferencePath(expression.callee)
 
-  return calleePath != null && isNumericCastName(calleePath[0])
+  return calleePath !== null && typeof calleePath !== 'undefined' && isNumericCastName(calleePath[0])
 }
 
 function stringRuntimeMethodName(expression: FeatureNode): string | null {
   const callee = expression.callee
 
-  if (callee == null || callee.type !== 'MemberExpression') {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
     return null
   }
 
   const property = callee.property
 
-  if (property == null) {
+  if (property === null || typeof property === 'undefined') {
     return null
   }
 
@@ -1152,7 +1204,11 @@ function jsonRuntimeCallName(callee: AnyNode): string | null {
 }
 
 function timerRuntimeCallName(expression: FeatureNode): string | null {
-  if (expression.type === 'CallExpression' && expression.timerRuntimeMethod != null) {
+  if (
+    expression.type === 'CallExpression' &&
+    expression.timerRuntimeMethod !== null &&
+    typeof expression.timerRuntimeMethod !== 'undefined'
+  ) {
     return expression.timerRuntimeMethod
   }
 
@@ -1160,7 +1216,7 @@ function timerRuntimeCallName(expression: FeatureNode): string | null {
 
   const calleePath = simpleReferencePath(callee)
 
-  if (calleePath == null) {
+  if (calleePath === null || typeof calleePath === 'undefined') {
     return null
   }
 
@@ -1168,7 +1224,7 @@ function timerRuntimeCallName(expression: FeatureNode): string | null {
 }
 
 function mayBeStringBytesOperand(expression: FeatureNode | null | undefined): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
@@ -1176,13 +1232,11 @@ function mayBeStringBytesOperand(expression: FeatureNode | null | undefined): bo
     return true
   }
 
-  return (
-    isPossibleStringBytesNodeType(expression.type)
-  )
+  return isPossibleStringBytesNodeType(expression.type)
 }
 
 function isRuntimeFunctionType(functionType: FeatureFunctionType | null | undefined): boolean {
-  if (functionType == null || functionType.returnType !== 'void') {
+  if (functionType === null || typeof functionType === 'undefined' || functionType.returnType !== 'void') {
     return false
   }
 
@@ -1190,7 +1244,7 @@ function isRuntimeFunctionType(functionType: FeatureFunctionType | null | undefi
 
   const params = functionType.params
 
-  if (params == null) {
+  if (params === null || typeof params === 'undefined') {
     return false
   }
 
@@ -1226,7 +1280,7 @@ function isNumericCastName(name: string | undefined): boolean {
 }
 
 function isPossibleStringBytesNodeType(nodeType: string | null | undefined): boolean {
-  if (nodeType == null) {
+  if (nodeType === null || typeof nodeType === 'undefined') {
     return false
   }
 
@@ -1246,13 +1300,13 @@ function isSupportedRuntimeFunctionParamValueType(valueType: string | null | und
 }
 
 function simpleReferencePath(expression: FeatureNode | null | undefined): string[] | null {
-  if (expression == null || expression.type !== 'Reference') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'Reference') {
     return null
   }
 
   const path = expression.path
 
-  if (path == null || path.length !== 1) {
+  if (path === null || typeof path === 'undefined' || path.length !== 1) {
     return null
   }
 

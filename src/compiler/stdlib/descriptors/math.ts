@@ -18,9 +18,7 @@ export function mathRuntimeMethodNameFromPath(path: string[]): MathRuntimeMethod
 
 export function isMathRuntimeMethod(method: string): boolean {
   return (
-    hasString(mathNullaryMethods, method) ||
-    hasString(mathUnaryMethods, method) ||
-    hasString(mathBinaryMethods, method)
+    hasString(mathNullaryMethods, method) || hasString(mathUnaryMethods, method) || hasString(mathBinaryMethods, method)
   )
 }
 

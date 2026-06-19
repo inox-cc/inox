@@ -1,3 +1,4 @@
+import { isPresent } from '../nullish.ts'
 export type CValueTypeInput = string | null | undefined
 
 export type CReturnTypeContext = {
@@ -35,7 +36,7 @@ export function isManagedRuntimeReturnType(valueType: CValueTypeInput): boolean 
 }
 
 export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
-  if (valueType == null || valueType === 'unknown') {
+  if (valueType === null || typeof valueType === 'undefined' || valueType === 'unknown') {
     return false
   }
 
@@ -173,11 +174,11 @@ export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {
 }
 
 export function isRuntimeNullableType(valueType: CValueTypeInput): boolean {
-  return cRuntimeValueTag(valueType) != null
+  return isPresent(cRuntimeValueTag(valueType))
 }
 
 export function isNullableScalarParam(param: CNullableScalarParamInput): boolean {
-  if (param == null) {
+  if (param === null || typeof param === 'undefined') {
     return false
   }
 

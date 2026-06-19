@@ -1,4 +1,5 @@
 import { stringListIncludes } from './string-list.ts'
+import { isPresent } from '../../nullish.ts'
 
 export const binaryStaticMethods: string[] = ['alloc', 'from', 'isBuffer']
 export const binaryInstanceMethods: string[] = ['slice', 'toString']
@@ -26,9 +27,7 @@ export function isNodeBufferImportSource(source: string | null | undefined): boo
   return true
 }
 
-export function binaryStaticRuntimeMethodNameFromPath(
-  path: string[]
-): string | null {
+export function binaryStaticRuntimeMethodNameFromPath(path: string[]): string | null {
   if (path.length !== 2 || path[0] !== 'Buffer') {
     return null
   }
@@ -97,5 +96,5 @@ export function binaryRuntimeReturnType(method: string): string | null {
 }
 
 export function isBinaryGlobalUsagePath(path: string[]): boolean {
-  return binaryStaticRuntimeMethodNameFromPath(path) != null || binaryConstructorNameFromPath(path) != null
+  return isPresent(binaryStaticRuntimeMethodNameFromPath(path)) || isPresent(binaryConstructorNameFromPath(path))
 }

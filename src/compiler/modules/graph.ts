@@ -6,7 +6,15 @@ import { tokenize } from '../lexer.ts'
 import { lowerProgram } from '../lower.ts'
 import { parse } from '../parser.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
-import type { AnyNode, CompileOptions, Diagnostic, ModuleGraph, ModuleRecord, ProgramNode, SourceLocation } from '../types.ts'
+import type {
+  AnyNode,
+  CompileOptions,
+  Diagnostic,
+  ModuleGraph,
+  ModuleRecord,
+  ProgramNode,
+  SourceLocation
+} from '../types.ts'
 import { collectExports } from './exports.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
 import {
@@ -26,7 +34,7 @@ type ModuleGraphContext = {
 }
 
 export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
-  if (options.host == null) {
+  if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('buildModuleGraph requires a compiler host')
   }
 
@@ -66,7 +74,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
   const source = context.host.readFileSync(path)
 
-  if (source == null) {
+  if (source === null || typeof source === 'undefined') {
     context.diagnostics.push(diagnostic('INOX_MODULE_NOT_FOUND', `cannot read module ${path}`, { line: 1, column: 1 }))
     context.visiting.delete(path)
     return false
@@ -159,7 +167,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
       const specifier = item.specifiers[specifierIndex]
       const exported = importedModule.exports.get(specifier.imported)
 
-      if (exported == null) {
+      if (exported === null || typeof exported === 'undefined') {
         context.diagnostics.push(
           diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
         )
@@ -181,7 +189,11 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
         const importedProgram = moduleProgramForTypeImports(importedModule)
         const declarations = createTypeImportDeclarations(specifier, importedProgram)
 
-        for (let declarationIndex = 0; declarationIndex < declarations.length; declarationIndex = declarationIndex + 1) {
+        for (
+          let declarationIndex = 0;
+          declarationIndex < declarations.length;
+          declarationIndex = declarationIndex + 1
+        ) {
           const declaration = declarations[declarationIndex]
 
           if (!typeNames.has(declaration.name)) {
@@ -205,10 +217,14 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
       applyImportedFunctionMetadata(specifier, importedModule.hir)
 
-      if (specifier.local !== specifier.imported && importedModule.hir != null) {
+      if (
+        specifier.local !== specifier.imported &&
+        importedModule.hir !== null &&
+        typeof importedModule.hir !== 'undefined'
+      ) {
         const alias = createImportAliasDeclaration(specifier, importedModule.hir)
 
-        if (alias != null) {
+        if (alias !== null && typeof alias !== 'undefined') {
           aliases.push(alias)
         }
       }
@@ -255,7 +271,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
       const specifier = item.specifiers[specifierIndex]
       const exported = importedModule.exports.get(specifier.imported)
 
-      if (exported == null) {
+      if (exported === null || typeof exported === 'undefined') {
         context.diagnostics.push(
           diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
         )
@@ -264,21 +280,17 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
       if (item.typeOnly === true && exported.type !== 'TypeAliasDeclaration') {
         context.diagnostics.push(
-          diagnostic(
-            'INOX_UNKNOWN_EXPORT',
-            `${item.source} does not export type ${specifier.imported}`,
-            specifier.loc
-          )
+          diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export type ${specifier.imported}`, specifier.loc)
         )
         continue
       }
 
       module.exports.set(specifier.local, exported)
 
-      if (!item.typeOnly && importedModule.hir != null) {
+      if (!item.typeOnly && importedModule.hir !== null && typeof importedModule.hir !== 'undefined') {
         const alias = createExportAliasDeclaration(specifier, importedModule.hir)
 
-        if (alias != null) {
+        if (alias !== null && typeof alias !== 'undefined') {
           reexportAliasDeclarations.push(alias)
         }
       }
@@ -336,11 +348,11 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
     const importedOk = visitModuleGraphFile(context, importedPath)
     const importedModule = context.modules.get(importedPath)
 
-    if (!importedOk && importedModule == null) {
+    if (!importedOk && (importedModule === null || typeof importedModule === 'undefined')) {
       continue
     }
 
-    if (importedModule == null) {
+    if (importedModule === null || typeof importedModule === 'undefined') {
       continue
     }
 
@@ -351,7 +363,7 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
     for (const specifier of item.specifiers) {
       const exported = importedExports.get(specifier.imported)
 
-      if (exported == null) {
+      if (exported === null || typeof exported === 'undefined') {
         context.diagnostics.push(
           diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export ${specifier.imported}`, specifier.loc)
         )
@@ -360,11 +372,7 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
 
       if (exported.type !== 'TypeAliasDeclaration') {
         context.diagnostics.push(
-          diagnostic(
-            'INOX_UNKNOWN_EXPORT',
-            `${item.source} does not export type ${specifier.imported}`,
-            specifier.loc
-          )
+          diagnostic('INOX_UNKNOWN_EXPORT', `${item.source} does not export type ${specifier.imported}`, specifier.loc)
         )
         continue
       }
@@ -408,13 +416,13 @@ function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode
 }
 
 function applyImportedFunctionMetadata(specifier: AnyNode, importedProgram: ProgramNode | null): void {
-  if (importedProgram == null) {
+  if (importedProgram === null || typeof importedProgram === 'undefined') {
     return
   }
 
   const declaration = findExportedFunctionDeclaration(importedProgram, specifier.imported)
 
-  if (declaration == null) {
+  if (declaration === null || typeof declaration === 'undefined') {
     return
   }
 
@@ -445,7 +453,7 @@ function findExportedFunctionDeclaration(program: ProgramNode, name: string): An
 function requireModuleGraphRecord(context: ModuleGraphContext, path: string): ModuleRecord {
   const module = context.modules.get(path)
 
-  if (module == null) {
+  if (module === null || typeof module === 'undefined') {
     throw new Error(`missing module record ${path}`)
   }
 
@@ -455,7 +463,7 @@ function requireModuleGraphRecord(context: ModuleGraphContext, path: string): Mo
 function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
   const hir = module.hir
 
-  if (hir != null) {
+  if (hir !== null && typeof hir !== 'undefined') {
     return hir
   }
 
@@ -466,7 +474,12 @@ function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
   return module.ast
 }
 
-function resolveModuleGraphImport(context: ModuleGraphContext, fromPath: string, specifier: string, loc: SourceLocation): string {
+function resolveModuleGraphImport(
+  context: ModuleGraphContext,
+  fromPath: string,
+  specifier: string,
+  loc: SourceLocation
+): string {
   try {
     return resolveImportSpecifier(fromPath, specifier, context.host)
   } catch {

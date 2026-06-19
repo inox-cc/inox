@@ -147,6 +147,7 @@ import type {
   TypeAliasInfo,
   ValueType
 } from './types.ts'
+import { isNullish, isPresent } from './nullish.ts'
 
 type ResolvedTypeInfo = {
   valueType: ValueType
@@ -439,11 +440,11 @@ function resolvedValueTypeMetadata(
   value: ValueType | null | undefined,
   fallback: ValueType | null | undefined
 ): ValueType | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback
   }
 
@@ -456,7 +457,7 @@ function resolvedConcreteValueTypeMetadata(
 ): ValueType {
   const resolved = resolvedValueTypeMetadata(value, fallback)
 
-  if (resolved != null) {
+  if (resolved !== null && typeof resolved !== 'undefined') {
     return resolved
   }
 
@@ -464,11 +465,11 @@ function resolvedConcreteValueTypeMetadata(
 }
 
 function resolvedStringMetadata(value: string | null | undefined, fallback: string | null | undefined): string | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback
   }
 
@@ -493,11 +494,11 @@ function resolvedObjectShapeMetadata(
   value: ObjectShapeInfo | null | undefined,
   fallback: ObjectShapeInfo | null | undefined
 ): ObjectShapeInfo | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback
   }
 
@@ -520,11 +521,11 @@ function resolvedFunctionTypeMetadata(
   value: FunctionTypeMetadata | null | undefined,
   fallback: FunctionTypeMetadata | null | undefined
 ): FunctionTypeMetadata | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback
   }
 
@@ -639,7 +640,7 @@ function commonResolvedOptionalValueType(infos: ResolvedTypeInfo[], kind: Resolv
     const info = resolvedTypeInfoAt(infos, index)
     const value = resolvedTypeInfoValue(info, kind)
 
-    if (value == null) {
+    if (value === null || typeof value === 'undefined') {
       return null
     }
 
@@ -669,16 +670,16 @@ class Scope {
   resolve(name: string): SymbolInfo | null {
     const local = this.bindings.get(name)
 
-    if (local != null) {
+    if (local !== null && typeof local !== 'undefined') {
       return local
     }
 
     let current = this.parent
 
-    while (current != null) {
+    while (current !== null && typeof current !== 'undefined') {
       const found = current.bindings.get(name)
 
-      if (found != null) {
+      if (found !== null && typeof found !== 'undefined') {
         return found
       }
 
@@ -805,7 +806,7 @@ class Checker {
             loc: specifier.loc
           }
 
-          if (specifier.returnType != null) {
+          if (specifier.returnType !== null && typeof specifier.returnType !== 'undefined') {
             symbol.valueType = 'function'
             symbol.params = specifier.params ?? []
             symbol.returnType = specifier.returnType
@@ -854,7 +855,7 @@ class Checker {
         const constructorMethod = this.findClassConstructorMethod(item)
         let constructorParams: AnyNode[] = []
 
-        if (constructorMethod != null) {
+        if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
           constructorParams = this.resolveParams(constructorMethod.params)
         }
 
@@ -894,14 +895,14 @@ class Checker {
     let declaredType: string = param.valueType
     const paramDeclaredType = param.declaredType
 
-    if (paramDeclaredType != null) {
+    if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
       declaredType = paramDeclaredType
     }
 
     const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
     let promiseValueType: ValueType | null = null
 
-    if (paramInfo.promiseValueType != null) {
+    if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
       promiseValueType = paramInfo.promiseValueType
     }
 
@@ -922,7 +923,7 @@ class Checker {
       shape: paramInfo.shape
     }
 
-    if (param.defaultValue != null) {
+    if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
       resolvedParam.defaultValue = param.defaultValue
     }
 
@@ -960,7 +961,7 @@ class Checker {
   }
 
   resolveClassInstanceShape(statement: AnyNode, constructorParams: AnyNode[]): ObjectShapeInfo {
-    if (statement.fields != null && statement.fields.length > 0) {
+    if (statement.fields !== null && typeof statement.fields !== 'undefined' && statement.fields.length > 0) {
       const resolvedFields: AnyNode[] = []
 
       for (let index = 0; index < statement.fields.length; index = index + 1) {
@@ -1034,7 +1035,7 @@ class Checker {
   }
 
   declaredClassName(name: string | null | undefined): string | null {
-    if (name == null) {
+    if (name === null || typeof name === 'undefined') {
       return null
     }
 
@@ -1048,7 +1049,7 @@ class Checker {
 
     const symbol = this.scope.resolve(name)
 
-    if (symbol == null) {
+    if (symbol === null || typeof symbol === 'undefined') {
       return null
     }
 
@@ -1072,7 +1073,7 @@ class Checker {
   }
 
   collectClassConstructorFieldAssignments(constructorMethod: NullableNode): AnyNode[] {
-    if (constructorMethod == null) {
+    if (constructorMethod === null || typeof constructorMethod === 'undefined') {
       return []
     }
 
@@ -1087,13 +1088,18 @@ class Checker {
         assignment = statement.expression
       }
 
-      if (assignment == null) {
+      if (assignment === null || typeof assignment === 'undefined') {
         continue
       }
 
       const target = assignment.target
 
-      if (target == null || target.type !== 'MemberExpression' || !this.isThisExpression(target.object)) {
+      if (
+        target === null ||
+        typeof target === 'undefined' ||
+        target.type !== 'MemberExpression' ||
+        !this.isThisExpression(target.object)
+      ) {
         continue
       }
 
@@ -1112,7 +1118,7 @@ class Checker {
       const path: string[] = expression.path
       const param = this.findParamByName(constructorParams, path[0])
 
-      if (param != null) {
+      if (param !== null && typeof param !== 'undefined') {
         return param.valueType
       }
     }
@@ -1137,7 +1143,7 @@ class Checker {
       return 'object'
     }
 
-    if (expression.valueType != null) {
+    if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
       return expression.valueType
     }
 
@@ -1182,7 +1188,7 @@ class Checker {
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
         let returnPromiseValueType: ValueType | null = null
 
-        if (returnInfo.promiseValueType != null) {
+        if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
           returnPromiseValueType = returnInfo.promiseValueType
         }
 
@@ -1260,7 +1266,7 @@ class Checker {
       return
     }
 
-    if (statement.alternate != null) {
+    if (statement.alternate !== null && typeof statement.alternate !== 'undefined') {
       return
     }
 
@@ -1290,7 +1296,7 @@ class Checker {
     }
 
     if (statement.type === 'IfStatement') {
-      if (statement.alternate == null) {
+      if (statement.alternate === null || typeof statement.alternate === 'undefined') {
         return false
       }
 
@@ -1339,7 +1345,7 @@ class Checker {
         this.restoreNarrowedNullableNames(trueNarrowingState)
       }
 
-      if (statement.alternate != null) {
+      if (statement.alternate !== null && typeof statement.alternate !== 'undefined') {
         let alternateNarrowedNames: Set<string> | null = null
         const falseNarrowingState = this.pushBranchNarrowedNullableNames(narrowing.falseNames)
 
@@ -1350,7 +1356,12 @@ class Checker {
           this.restoreNarrowedNullableNames(falseNarrowingState)
         }
 
-        if (consequentNarrowedNames != null && alternateNarrowedNames != null) {
+        if (
+          consequentNarrowedNames !== null &&
+          typeof consequentNarrowedNames !== 'undefined' &&
+          alternateNarrowedNames !== null &&
+          typeof alternateNarrowedNames !== 'undefined'
+        ) {
           const consequentNames: string[] = []
           const alternateNames: string[] = []
 
@@ -1435,43 +1446,53 @@ class Checker {
     }
 
     if (statement.type === 'VariableDeclaration') {
-      if (statement.kind === 'const' && statement.init == null) {
+      if (statement.kind === 'const' && (statement.init === null || typeof statement.init === 'undefined')) {
         this.report('INOX_CONST_INIT', 'const declarations must have an initializer', statement.loc)
       }
 
       let declared: ResolvedTypeInfo | null = null
 
-      if (statement.declaredType != null) {
+      if (statement.declaredType !== null && typeof statement.declaredType !== 'undefined') {
         declared = this.resolveDeclaredType(statement.declaredType, statement.loc)
       }
 
       let initType: ValueType = 'unknown'
 
-      if (statement.init != null) {
+      if (statement.init !== null && typeof statement.init !== 'undefined') {
         initType = this.checkVariableInitializer(statement.init, declared)
       }
 
       let valueType = initType
 
-      if (declared != null) {
+      if (declared !== null && typeof declared !== 'undefined') {
         valueType = declared.valueType
       }
 
       let arrayElementType = this.resolveExpressionArrayElementType(statement.init)
 
-      if (declared != null && declared.arrayElementType != null) {
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        declared.arrayElementType !== null &&
+        typeof declared.arrayElementType !== 'undefined'
+      ) {
         arrayElementType = declared.arrayElementType
       }
 
       let arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(statement.init)
 
-      if (declared != null && declared.arrayElementDeclaredType != null) {
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        declared.arrayElementDeclaredType !== null &&
+        typeof declared.arrayElementDeclaredType !== 'undefined'
+      ) {
         arrayElementDeclaredType = declared.arrayElementDeclaredType
       }
 
       let mapType: CheckerMapType | null = this.resolveExpressionMapType(statement.init)
 
-      if (declared != null && declared.valueType === 'map') {
+      if (declared !== null && typeof declared !== 'undefined' && declared.valueType === 'map') {
         mapType = {
           key: declared.mapKeyType,
           value: declared.mapValueType
@@ -1480,68 +1501,93 @@ class Checker {
 
       let setElementType = this.resolveExpressionSetElementType(statement.init)
 
-      if (declared != null && declared.valueType === 'set') {
+      if (declared !== null && typeof declared !== 'undefined' && declared.valueType === 'set') {
         setElementType = declared.setElementType
       }
 
       let promiseValueType = this.resolveExpressionPromiseValueType(statement.init)
 
-      if (declared != null && declared.valueType === 'promise') {
+      if (declared !== null && typeof declared !== 'undefined' && declared.valueType === 'promise') {
         promiseValueType = null
 
-        if (declared.promiseValueType != null) {
+        if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
           promiseValueType = declared.promiseValueType
         }
       }
 
       let nullable = false
 
-      if (declared != null && declared.nullable === true) {
+      if (declared !== null && typeof declared !== 'undefined' && declared.nullable === true) {
         nullable = true
       }
 
-      if (statement.init != null && statement.init.nullable === true) {
+      if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.nullable === true) {
         nullable = true
       }
 
       let statementArrayElementDeclaredType = arrayElementDeclaredType
 
-      if (valueType === 'object' && statement.init != null && statement.init.arrayElementDeclaredType === 'fs.Dirent') {
+      if (
+        valueType === 'object' &&
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.arrayElementDeclaredType === 'fs.Dirent'
+      ) {
         statementArrayElementDeclaredType = 'fs.Dirent'
       }
 
       let mapKeyType: ValueType | null = null
       let mapValueType: ValueType | null = null
 
-      if (mapType != null) {
+      if (mapType !== null && typeof mapType !== 'undefined') {
         mapKeyType = mapType.key
         mapValueType = mapType.value
       }
 
       let functionType: AnyNode | null = null
 
-      if (declared != null && declared.functionType != null) {
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        declared.functionType !== null &&
+        typeof declared.functionType !== 'undefined'
+      ) {
         functionType = declared.functionType
       }
 
       let shape: ObjectShapeInfo | null = null
 
-      if (declared != null && declared.shape != null) {
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        declared.shape !== null &&
+        typeof declared.shape !== 'undefined'
+      ) {
         shape = declared.shape
-      } else if (statement.init != null && statement.init.shape != null) {
+      } else if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.shape !== null &&
+        typeof statement.init.shape !== 'undefined'
+      ) {
         shape = statement.init.shape
       } else if (
         valueType === 'object' &&
-        statement.init != null &&
-        (statement.init.arrayElementDeclaredType === 'fs.Dirent' ||
-          statementArrayElementDeclaredType === 'fs.Dirent')
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        (statement.init.arrayElementDeclaredType === 'fs.Dirent' || statementArrayElementDeclaredType === 'fs.Dirent')
       ) {
         shape = fsDirentObjectShape
       }
 
       let className: string | null = null
 
-      if (statement.init != null && statement.init.className != null) {
+      if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.className !== null &&
+        typeof statement.init.className !== 'undefined'
+      ) {
         className = statement.init.className
       }
 
@@ -1557,10 +1603,16 @@ class Checker {
       statement.shape = shape
       statement.className = className
 
-      if (declared != null && statement.init != null && statement.init.type === 'ObjectLiteral') {
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.type === 'ObjectLiteral'
+      ) {
         const declaredShape = declared.shape
 
-        if (declaredShape != null) {
+        if (declaredShape !== null && typeof declaredShape !== 'undefined') {
           this.checkObjectLiteralAgainstShape(statement.init, declaredShape)
         }
       }
@@ -1586,7 +1638,12 @@ class Checker {
         statement.loc
       )
 
-      if (declared != null && statement.init != null) {
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        statement.init !== null &&
+        typeof statement.init !== 'undefined'
+      ) {
         this.checkAssignableType(
           initType,
           declared.valueType,
@@ -1595,7 +1652,11 @@ class Checker {
           this.expressionCanBeNull(statement.init)
         )
 
-        if (declared.valueType === 'array' && declared.arrayElementType != null) {
+        if (
+          declared.valueType === 'array' &&
+          declared.arrayElementType !== null &&
+          typeof declared.arrayElementType !== 'undefined'
+        ) {
           this.checkAssignableType(
             this.resolveExpressionArrayElementType(statement.init),
             declared.arrayElementType,
@@ -1610,21 +1671,25 @@ class Checker {
           let actualKey: ValueType | null = null
           let actualValue: ValueType | null = null
 
-          if (actual != null) {
+          if (actual !== null && typeof actual !== 'undefined') {
             actualKey = actual.key
             actualValue = actual.value
           }
 
-          if (declared.mapKeyType != null) {
+          if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
             this.checkAssignableType(actualKey, declared.mapKeyType, statement.loc, false, false)
           }
 
-          if (declared.mapValueType != null) {
+          if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
             this.checkAssignableType(actualValue, declared.mapValueType, statement.loc, false, false)
           }
         }
 
-        if (declared.valueType === 'set' && declared.setElementType != null) {
+        if (
+          declared.valueType === 'set' &&
+          declared.setElementType !== null &&
+          typeof declared.setElementType !== 'undefined'
+        ) {
           this.checkAssignableType(
             this.resolveExpressionSetElementType(statement.init),
             declared.setElementType,
@@ -1634,7 +1699,11 @@ class Checker {
           )
         }
 
-        if (declared.valueType === 'promise' && declared.promiseValueType != null) {
+        if (
+          declared.valueType === 'promise' &&
+          declared.promiseValueType !== null &&
+          typeof declared.promiseValueType !== 'undefined'
+        ) {
           this.checkAssignableType(
             this.resolveExpressionPromiseValueType(statement.init),
             declared.promiseValueType,
@@ -1656,14 +1725,15 @@ class Checker {
     if (statement.type === 'ReturnStatement') {
       let actual: ValueType = 'void'
 
-      if (statement.argument != null) {
+      if (statement.argument !== null && typeof statement.argument !== 'undefined') {
         actual = this.checkExpression(statement.argument)
       }
 
       if (
         this.currentReturnAsync &&
         this.currentReturnType === 'promise' &&
-        this.currentReturnPromiseValueType != null
+        this.currentReturnPromiseValueType !== null &&
+        typeof this.currentReturnPromiseValueType !== 'undefined'
       ) {
         if (actual === 'promise') {
           this.checkAssignableType(
@@ -1694,7 +1764,11 @@ class Checker {
         this.expressionCanBeNull(statement.argument)
       )
 
-      if (this.currentReturnType === 'promise' && this.currentReturnPromiseValueType != null) {
+      if (
+        this.currentReturnType === 'promise' &&
+        this.currentReturnPromiseValueType !== null &&
+        typeof this.currentReturnPromiseValueType !== 'undefined'
+      ) {
         this.checkAssignableType(
           this.resolveExpressionPromiseValueType(statement.argument),
           this.currentReturnPromiseValueType,
@@ -1709,11 +1783,11 @@ class Checker {
   checkTryStatement(statement: AnyNode): void {
     this.checkStatement(statement.block)
 
-    if (statement.handler != null) {
+    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
       const scopeState = this.pushScope()
 
       try {
-        if (statement.handler.param != null) {
+        if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
           this.declare(
             statement.handler.param,
             {
@@ -1732,7 +1806,7 @@ class Checker {
       }
     }
 
-    if (statement.finalizer != null) {
+    if (statement.finalizer !== null && typeof statement.finalizer !== 'undefined') {
       this.checkStatement(statement.finalizer)
     }
   }
@@ -1760,7 +1834,7 @@ class Checker {
       let declaredType: string = expression.valueType
       const expressionDeclaredType = expression.declaredType
 
-      if (expressionDeclaredType != null) {
+      if (expressionDeclaredType !== null && typeof expressionDeclaredType !== 'undefined') {
         declaredType = expressionDeclaredType
       }
 
@@ -1792,35 +1866,35 @@ class Checker {
       let shape = asserted.shape
       let className = asserted.className
 
-      if (declared.arrayElementType != null) {
+      if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
         arrayElementType = declared.arrayElementType
       }
 
-      if (declared.arrayElementDeclaredType != null) {
+      if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
         arrayElementDeclaredType = declared.arrayElementDeclaredType
       }
 
-      if (declared.mapKeyType != null) {
+      if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
         mapKeyType = declared.mapKeyType
       }
 
-      if (declared.mapValueType != null) {
+      if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
         mapValueType = declared.mapValueType
       }
 
-      if (declared.promiseValueType != null) {
+      if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
         promiseValueType = declared.promiseValueType
       }
 
-      if (declared.setElementType != null) {
+      if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
         setElementType = declared.setElementType
       }
 
-      if (declared.functionType != null) {
+      if (declared.functionType !== null && typeof declared.functionType !== 'undefined') {
         functionType = declared.functionType
       }
 
-      if (declared.shape != null) {
+      if (declared.shape !== null && typeof declared.shape !== 'undefined') {
         shape = declared.shape
       }
 
@@ -1853,16 +1927,16 @@ class Checker {
       expression.shape = null
       expression.className = null
 
-      if (symbol != null) {
+      if (symbol !== null && typeof symbol !== 'undefined') {
         valueType = symbol.valueType
         expression.nullable = symbol.nullable === true
         expression.valueType = valueType
 
-        if (symbol.shape != null) {
+        if (symbol.shape !== null && typeof symbol.shape !== 'undefined') {
           expression.shape = symbol.shape
         }
 
-        if (symbol.className != null) {
+        if (symbol.className !== null && typeof symbol.className !== 'undefined') {
           expression.className = symbol.className
         }
       }
@@ -1886,59 +1960,65 @@ class Checker {
       expression.shape = null
       expression.className = null
 
-      if (symbol != null) {
+      if (symbol !== null && typeof symbol !== 'undefined') {
         const path: string[] = expression.path
         valueType = symbol.valueType
         expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(path[0])
         expression.valueType = valueType
 
-        if (symbol.arrayElementType != null) {
+        if (symbol.arrayElementType !== null && typeof symbol.arrayElementType !== 'undefined') {
           expression.arrayElementType = symbol.arrayElementType
         }
 
-        if (symbol.arrayElementDeclaredType != null) {
+        if (symbol.arrayElementDeclaredType !== null && typeof symbol.arrayElementDeclaredType !== 'undefined') {
           expression.arrayElementDeclaredType = symbol.arrayElementDeclaredType
         }
 
-        if (symbol.mapKeyType != null) {
+        if (symbol.mapKeyType !== null && typeof symbol.mapKeyType !== 'undefined') {
           expression.mapKeyType = symbol.mapKeyType
         }
 
-        if (symbol.mapValueType != null) {
+        if (symbol.mapValueType !== null && typeof symbol.mapValueType !== 'undefined') {
           expression.mapValueType = symbol.mapValueType
         }
 
-        if (symbol.promiseValueType != null) {
+        if (symbol.promiseValueType !== null && typeof symbol.promiseValueType !== 'undefined') {
           expression.promiseValueType = symbol.promiseValueType
         }
 
-        if (symbol.setElementType != null) {
+        if (symbol.setElementType !== null && typeof symbol.setElementType !== 'undefined') {
           expression.setElementType = symbol.setElementType
         }
 
-        if (symbol.functionType != null) {
+        if (symbol.functionType !== null && typeof symbol.functionType !== 'undefined') {
           expression.functionType = symbol.functionType
         }
 
-        if (symbol.shape != null) {
+        if (symbol.shape !== null && typeof symbol.shape !== 'undefined') {
           expression.shape = symbol.shape
         }
 
-        if (symbol.className != null) {
+        if (symbol.className !== null && typeof symbol.className !== 'undefined') {
           expression.className = symbol.className
         }
       }
 
-      if (symbol != null && symbol.kind === 'import') {
+      if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'import') {
         const importSource = symbol.importSource
         const importedName = symbol.importedName
 
-        if (importedName != null && isNodeOsImportSource(importSource) && isOsRuntimeConstant(importedName)) {
+        if (
+          importedName !== null &&
+          typeof importedName !== 'undefined' &&
+          isNodeOsImportSource(importSource) &&
+          isOsRuntimeConstant(importedName)
+        ) {
           expression.osRuntimeConstant = importedName
         }
 
         if (
-          importedName != null &&
+          importedName !== null &&
+          typeof importedName !== 'undefined' &&
           isNodeProcessImportSource(importSource) &&
           isProcessRuntimeProperty(importedName)
         ) {
@@ -1946,7 +2026,12 @@ class Checker {
           expression.valueType = processRuntimePropertyValueType(importedName) ?? 'unknown'
         }
 
-        if (importedName != null && isNodePathImportSource(importSource) && isPathRuntimeConstant(importedName)) {
+        if (
+          importedName !== null &&
+          typeof importedName !== 'undefined' &&
+          isNodePathImportSource(importSource) &&
+          isPathRuntimeConstant(importedName)
+        ) {
           expression.pathRuntimeConstant = importedName
         }
       }
@@ -1982,7 +2067,7 @@ class Checker {
 
       const symbol = this.getCallableSymbol(expression.callee)
 
-      if (symbol == null) {
+      if (symbol === null || typeof symbol === 'undefined') {
         expression.valueType = 'unknown'
         expression.nullable = true
 
@@ -1999,41 +2084,44 @@ class Checker {
       expression.setElementType = null
       expression.shape = null
 
-      if (symbol.returnType != null) {
+      if (symbol.returnType !== null && typeof symbol.returnType !== 'undefined') {
         expression.valueType = symbol.returnType
       }
 
-      if (symbol.returnArrayElementType != null) {
+      if (symbol.returnArrayElementType !== null && typeof symbol.returnArrayElementType !== 'undefined') {
         expression.arrayElementType = symbol.returnArrayElementType
       }
 
-      if (symbol.returnArrayElementDeclaredType != null) {
+      if (
+        symbol.returnArrayElementDeclaredType !== null &&
+        typeof symbol.returnArrayElementDeclaredType !== 'undefined'
+      ) {
         expression.arrayElementDeclaredType = symbol.returnArrayElementDeclaredType
       }
 
-      if (symbol.returnMapKeyType != null) {
+      if (symbol.returnMapKeyType !== null && typeof symbol.returnMapKeyType !== 'undefined') {
         expression.mapKeyType = symbol.returnMapKeyType
       }
 
-      if (symbol.returnMapValueType != null) {
+      if (symbol.returnMapValueType !== null && typeof symbol.returnMapValueType !== 'undefined') {
         expression.mapValueType = symbol.returnMapValueType
       }
 
-      if (symbol.returnPromiseValueType != null) {
+      if (symbol.returnPromiseValueType !== null && typeof symbol.returnPromiseValueType !== 'undefined') {
         expression.promiseValueType = symbol.returnPromiseValueType
       }
 
-      if (symbol.returnSetElementType != null) {
+      if (symbol.returnSetElementType !== null && typeof symbol.returnSetElementType !== 'undefined') {
         expression.setElementType = symbol.returnSetElementType
       }
 
-      if (symbol.returnShape != null) {
+      if (symbol.returnShape !== null && typeof symbol.returnShape !== 'undefined') {
         expression.shape = symbol.returnShape
       }
 
       const params = symbol.params
 
-      if (params != null) {
+      if (params !== null && typeof params !== 'undefined') {
         if (!this.acceptsArgumentCount(params, expression.args.length)) {
           let name = 'callable'
 
@@ -2083,7 +2171,7 @@ class Checker {
 
         const promiseValueType = this.resolveExpressionPromiseValueType(expression.argument)
 
-        if (promiseValueType != null) {
+        if (promiseValueType !== null && typeof promiseValueType !== 'undefined') {
           valueType = promiseValueType
         }
       }
@@ -2179,18 +2267,14 @@ class Checker {
     const symbol = this.resolveReference(expression.target)
     const valueType = this.checkExpression(expression.value)
 
-    if (symbol != null) {
+    if (symbol !== null && typeof symbol !== 'undefined') {
       if (expression.target.path.length === 1 && symbol.mutable !== true) {
         const path: string[] = expression.target.path
-        this.report(
-          'INOX_ASSIGN_CONST',
-          `cannot assign to ${symbol.kind} binding ${path[0]}`,
-          expression.target.loc
-        )
+        this.report('INOX_ASSIGN_CONST', `cannot assign to ${symbol.kind} binding ${path[0]}`, expression.target.loc)
       }
     }
 
-    if (symbol != null) {
+    if (symbol !== null && typeof symbol !== 'undefined') {
       this.checkAssignableType(
         valueType,
         symbol.valueType,
@@ -2199,7 +2283,11 @@ class Checker {
         this.expressionCanBeNull(expression.value)
       )
 
-      if (symbol.valueType === 'promise' && symbol.promiseValueType != null) {
+      if (
+        symbol.valueType === 'promise' &&
+        symbol.promiseValueType !== null &&
+        typeof symbol.promiseValueType !== 'undefined'
+      ) {
         this.checkAssignableType(
           this.resolveExpressionPromiseValueType(expression.value),
           symbol.promiseValueType,
@@ -2235,7 +2323,7 @@ class Checker {
     if (expression.argument.type === 'Reference') {
       const symbol = this.resolveReference(expression.argument)
 
-      if (symbol != null) {
+      if (symbol !== null && typeof symbol !== 'undefined') {
         if (expression.argument.path.length === 1 && symbol.mutable !== true) {
           const path: string[] = expression.argument.path
           this.report(
@@ -2280,9 +2368,7 @@ class Checker {
     } else {
       right = this.checkExpression(expression.right)
     }
-    const nullableEquality =
-      isEqualityOperator(expression.operator) &&
-      (left === 'null' || right === 'null')
+    const nullableEquality = isEqualityOperator(expression.operator) && (left === 'null' || right === 'null')
 
     if (isEqualityOperator(expression.operator) && !nullableEquality && !isEqualityComparableType(left, right)) {
       this.report(
@@ -2306,7 +2392,8 @@ class Checker {
   applyNullishCoalescingMetadata(expression: AnyNode, valueType: ValueType): void {
     if (valueType === 'array') {
       expression.arrayElementType =
-        this.resolveExpressionArrayElementType(expression.left) ?? this.resolveExpressionArrayElementType(expression.right)
+        this.resolveExpressionArrayElementType(expression.left) ??
+        this.resolveExpressionArrayElementType(expression.right)
       expression.arrayElementDeclaredType =
         this.resolveExpressionArrayElementDeclaredType(expression.left) ??
         this.resolveExpressionArrayElementDeclaredType(expression.right)
@@ -2319,10 +2406,10 @@ class Checker {
       let mapKeyType: ValueType | null = null
       let mapValueType: ValueType | null = null
 
-      if (leftMap != null) {
+      if (leftMap !== null && typeof leftMap !== 'undefined') {
         mapKeyType = leftMap.key
         mapValueType = leftMap.value
-      } else if (rightMap != null) {
+      } else if (rightMap !== null && typeof rightMap !== 'undefined') {
         mapKeyType = rightMap.key
         mapValueType = rightMap.value
       }
@@ -2340,7 +2427,8 @@ class Checker {
 
     if (valueType === 'promise') {
       expression.promiseValueType =
-        this.resolveExpressionPromiseValueType(expression.left) ?? this.resolveExpressionPromiseValueType(expression.right)
+        this.resolveExpressionPromiseValueType(expression.left) ??
+        this.resolveExpressionPromiseValueType(expression.right)
       return
     }
 
@@ -2355,7 +2443,7 @@ class Checker {
   }
 
   expressionCanBeNull(expression: AnyNode | null): boolean {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return false
     }
 
@@ -2365,37 +2453,37 @@ class Checker {
   checkMemberExpression(expression: AnyNode): ValueType {
     const osConstantType = this.checkOsConstantMemberExpression(expression)
 
-    if (osConstantType != null) {
+    if (osConstantType !== null && typeof osConstantType !== 'undefined') {
       return osConstantType
     }
 
     const processMemberType = this.checkProcessMemberExpression(expression)
 
-    if (processMemberType != null) {
+    if (processMemberType !== null && typeof processMemberType !== 'undefined') {
       return processMemberType
     }
 
     const pathConstantType = this.checkPathConstantMemberExpression(expression)
 
-    if (pathConstantType != null) {
+    if (pathConstantType !== null && typeof pathConstantType !== 'undefined') {
       return pathConstantType
     }
 
     const bufferConstantType = this.checkBufferConstantMemberExpression(expression)
 
-    if (bufferConstantType != null) {
+    if (bufferConstantType !== null && typeof bufferConstantType !== 'undefined') {
       return bufferConstantType
     }
 
     const fsConstantType = this.checkFsConstantMemberExpression(expression)
 
-    if (fsConstantType != null) {
+    if (fsConstantType !== null && typeof fsConstantType !== 'undefined') {
       return fsConstantType
     }
 
     const unsupportedFetchBodyType = this.checkFetchUnsupportedResponseBodyMember(expression)
 
-    if (unsupportedFetchBodyType != null) {
+    if (unsupportedFetchBodyType !== null && typeof unsupportedFetchBodyType !== 'undefined') {
       return unsupportedFetchBodyType
     }
 
@@ -2425,17 +2513,17 @@ class Checker {
     const shape = this.resolveExpressionShape(expression.object)
     const anyNodeMetadataType = this.checkAnyNodeMetadataMemberExpression(expression, objectType, shape)
 
-    if (anyNodeMetadataType != null) {
+    if (anyNodeMetadataType !== null && typeof anyNodeMetadataType !== 'undefined') {
       return anyNodeMetadataType
     }
 
-    if (shape == null) {
+    if (shape === null || typeof shape === 'undefined') {
       return 'unknown'
     }
 
     const field = this.findShapeField(shape, expression.property)
 
-    if (field == null) {
+    if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
       return 'unknown'
     }
@@ -2447,7 +2535,7 @@ class Checker {
 
     const narrowedKey = nullableNarrowingKey(expression)
 
-    if (narrowedKey != null && this.narrowedNullableNames.has(narrowedKey)) {
+    if (narrowedKey !== null && typeof narrowedKey !== 'undefined' && this.narrowedNullableNames.has(narrowedKey)) {
       expression.nullable = false
     }
 
@@ -2465,7 +2553,7 @@ class Checker {
     expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
-    if (field.className != null) {
+    if (field.className !== null && typeof field.className !== 'undefined') {
       expression.className = field.className
     }
 
@@ -2477,7 +2565,8 @@ class Checker {
     objectType: ValueType,
     shape: ObjectShapeInfo | null
   ): ValueType | null {
-    const directAnyNode = objectType === 'object' && shape != null && shape.builtin === 'compiler.AnyNode'
+    const directAnyNode =
+      objectType === 'object' && shape !== null && typeof shape !== 'undefined' && shape.builtin === 'compiler.AnyNode'
     const childAnyNode = this.isAnyNodeChildExpression(expression.object)
 
     if (!directAnyNode && !childAnyNode) {
@@ -2514,7 +2603,7 @@ class Checker {
 
     const parentShape = this.resolveExpressionShape(expression.object)
 
-    if (parentShape != null && parentShape.builtin === 'compiler.AnyNode') {
+    if (parentShape !== null && typeof parentShape !== 'undefined' && parentShape.builtin === 'compiler.AnyNode') {
       return true
     }
 
@@ -2526,7 +2615,7 @@ class Checker {
 
     const shape = this.resolveExpressionShape(expression.object)
 
-    if (shape == null) {
+    if (shape === null || typeof shape === 'undefined') {
       expression.nullable = true
       expression.valueType = 'unknown'
       return 'unknown'
@@ -2534,7 +2623,7 @@ class Checker {
 
     const field = this.findShapeField(shape, expression.property)
 
-    if (field == null) {
+    if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.property}`, expression.loc)
       expression.nullable = true
       expression.valueType = 'unknown'
@@ -2559,7 +2648,7 @@ class Checker {
     expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
-    if (field.className != null) {
+    if (field.className !== null && typeof field.className !== 'undefined') {
       expression.className = field.className
     }
 
@@ -2569,7 +2658,7 @@ class Checker {
   checkMemberAssignment(expression: AnyNode): ValueType {
     const processAssignmentType = this.checkProcessMemberAssignment(expression)
 
-    if (processAssignmentType != null) {
+    if (processAssignmentType !== null && typeof processAssignmentType !== 'undefined') {
       return processAssignmentType
     }
 
@@ -2599,7 +2688,7 @@ class Checker {
       return valueType
     }
 
-    if (shape == null) {
+    if (shape === null || typeof shape === 'undefined') {
       return valueType
     }
 
@@ -2620,7 +2709,7 @@ class Checker {
 
     const field = this.findShapeField(shape, expression.target.property)
 
-    if (field == null) {
+    if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.target.property}`, expression.target.loc)
       return valueType
     }
@@ -2642,7 +2731,7 @@ class Checker {
     expression.target.nullable = targetNullable
     const narrowedKey = nullableNarrowingKey(expression.target)
 
-    if (narrowedKey != null) {
+    if (narrowedKey !== null && typeof narrowedKey !== 'undefined') {
       deleteNullableNarrowingKey(this.narrowedNullableNames, narrowedKey)
     }
 
@@ -2660,7 +2749,7 @@ class Checker {
     expression.target.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.target.className = null
 
-    if (field.className != null) {
+    if (field.className !== null && typeof field.className !== 'undefined') {
       expression.target.className = field.className
     }
 
@@ -2668,11 +2757,15 @@ class Checker {
 
     this.checkAssignableType(valueType, fieldType.valueType, expression.value.loc, targetNullable, valueCanBeNull)
 
-    if (narrowedKey != null && targetNullable && !valueCanBeNull) {
+    if (narrowedKey !== null && typeof narrowedKey !== 'undefined' && targetNullable && !valueCanBeNull) {
       this.narrowedNullableNames.add(narrowedKey)
     }
 
-    if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
+    if (
+      fieldType.valueType === 'array' &&
+      fieldType.arrayElementType !== null &&
+      typeof fieldType.arrayElementType !== 'undefined'
+    ) {
       this.checkAssignableType(
         this.resolveExpressionArrayElementType(expression.value),
         fieldType.arrayElementType,
@@ -2687,21 +2780,25 @@ class Checker {
       let actualKey: ValueType | null = null
       let actualValue: ValueType | null = null
 
-      if (actual != null) {
+      if (actual !== null && typeof actual !== 'undefined') {
         actualKey = actual.key
         actualValue = actual.value
       }
 
-      if (fieldType.mapKeyType != null) {
+      if (fieldType.mapKeyType !== null && typeof fieldType.mapKeyType !== 'undefined') {
         this.checkAssignableType(actualKey, fieldType.mapKeyType, expression.value.loc, false, false)
       }
 
-      if (fieldType.mapValueType != null) {
+      if (fieldType.mapValueType !== null && typeof fieldType.mapValueType !== 'undefined') {
         this.checkAssignableType(actualValue, fieldType.mapValueType, expression.value.loc, false, false)
       }
     }
 
-    if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
+    if (
+      fieldType.valueType === 'set' &&
+      fieldType.setElementType !== null &&
+      typeof fieldType.setElementType !== 'undefined'
+    ) {
       this.checkAssignableType(
         this.resolveExpressionSetElementType(expression.value),
         fieldType.setElementType,
@@ -2711,7 +2808,11 @@ class Checker {
       )
     }
 
-    if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
+    if (
+      fieldType.valueType === 'promise' &&
+      fieldType.promiseValueType !== null &&
+      typeof fieldType.promiseValueType !== 'undefined'
+    ) {
       this.checkAssignableType(
         this.resolveExpressionPromiseValueType(expression.value),
         fieldType.promiseValueType,
@@ -2727,7 +2828,7 @@ class Checker {
   checkIndexExpression(expression: AnyNode): ValueType {
     const processIndexType = this.checkProcessIndexExpression(expression)
 
-    if (processIndexType != null) {
+    if (processIndexType !== null && typeof processIndexType !== 'undefined') {
       return processIndexType
     }
 
@@ -2789,7 +2890,7 @@ class Checker {
       if (objectType === 'object') {
         const shape = this.resolveExpressionShape(expression.object)
 
-        if (shape != null && shape.dynamic === true) {
+        if (shape !== null && typeof shape !== 'undefined' && shape.dynamic === true) {
           this.checkAssignableType(
             indexType,
             'string',
@@ -2800,7 +2901,7 @@ class Checker {
 
           const field = this.findShapeField(shape, '')
 
-          if (field != null) {
+          if (field !== null && typeof field !== 'undefined') {
             const fieldType = this.resolveFieldDeclaredType(field)
             const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
@@ -2819,7 +2920,7 @@ class Checker {
             expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
             expression.className = null
 
-            if (field.className != null) {
+            if (field.className !== null && typeof field.className !== 'undefined') {
               expression.className = field.className
             }
 
@@ -2833,13 +2934,13 @@ class Checker {
 
     const shape = this.resolveExpressionShape(expression.object)
 
-    if (shape == null) {
+    if (shape === null || typeof shape === 'undefined') {
       return 'unknown'
     }
 
     const field = this.findShapeField(shape, expression.index.value)
 
-    if (field == null) {
+    if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.index.value}`, expression.index.loc)
       return 'unknown'
     }
@@ -2862,7 +2963,7 @@ class Checker {
     expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
-    if (field.className != null) {
+    if (field.className !== null && typeof field.className !== 'undefined') {
       expression.className = field.className
     }
 
@@ -2895,7 +2996,7 @@ class Checker {
 
     const shape = this.resolveExpressionShape(expression.object)
 
-    if (shape == null) {
+    if (shape === null || typeof shape === 'undefined') {
       expression.nullable = true
       expression.valueType = 'unknown'
       return 'unknown'
@@ -2903,7 +3004,7 @@ class Checker {
 
     const field = this.findShapeField(shape, expression.index.value)
 
-    if (field == null) {
+    if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.index.value}`, expression.index.loc)
       expression.nullable = true
       expression.valueType = 'unknown'
@@ -2928,7 +3029,7 @@ class Checker {
     expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.className = null
 
-    if (field.className != null) {
+    if (field.className !== null && typeof field.className !== 'undefined') {
       expression.className = field.className
     }
 
@@ -2985,7 +3086,7 @@ class Checker {
       if (objectType === 'object') {
         const shape = this.resolveExpressionShape(expression.target.object)
 
-        if (shape != null && shape.dynamic === true) {
+        if (shape !== null && typeof shape !== 'undefined' && shape.dynamic === true) {
           this.checkAssignableType(
             indexType,
             'string',
@@ -2996,26 +3097,32 @@ class Checker {
 
           const field = this.findShapeField(shape, '')
 
-          if (field != null) {
+          if (field !== null && typeof field !== 'undefined') {
             const fieldType = this.resolveFieldDeclaredType(field)
             const targetValueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
             expression.target.nullable = resolvedFieldNullableMetadata(field, fieldType)
             expression.target.valueType = targetValueType
-            expression.target.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
+            expression.target.arrayElementType = resolvedValueTypeMetadata(
+              field.arrayElementType,
+              fieldType.arrayElementType
+            )
             expression.target.arrayElementDeclaredType = resolvedStringMetadata(
               field.arrayElementDeclaredType,
               fieldType.arrayElementDeclaredType
             )
             expression.target.mapKeyType = resolvedValueTypeMetadata(field.mapKeyType, fieldType.mapKeyType)
             expression.target.mapValueType = resolvedValueTypeMetadata(field.mapValueType, fieldType.mapValueType)
-            expression.target.promiseValueType = resolvedValueTypeMetadata(field.promiseValueType, fieldType.promiseValueType)
+            expression.target.promiseValueType = resolvedValueTypeMetadata(
+              field.promiseValueType,
+              fieldType.promiseValueType
+            )
             expression.target.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
             expression.target.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
             expression.target.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
             expression.target.className = null
 
-            if (field.className != null) {
+            if (field.className !== null && typeof field.className !== 'undefined') {
               expression.target.className = field.className
             }
 
@@ -3037,13 +3144,13 @@ class Checker {
 
     const shape = this.resolveExpressionShape(expression.target.object)
 
-    if (shape == null) {
+    if (shape === null || typeof shape === 'undefined') {
       return valueType
     }
 
     const field = this.findShapeField(shape, expression.target.index.value)
 
-    if (field == null) {
+    if (field === null || typeof field === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown field ${expression.target.index.value}`, expression.target.index.loc)
       return valueType
     }
@@ -3077,7 +3184,7 @@ class Checker {
     expression.target.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
     expression.target.className = null
 
-    if (field.className != null) {
+    if (field.className !== null && typeof field.className !== 'undefined') {
       expression.target.className = field.className
     }
 
@@ -3089,7 +3196,11 @@ class Checker {
       this.expressionCanBeNull(expression.value)
     )
 
-    if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
+    if (
+      fieldType.valueType === 'array' &&
+      fieldType.arrayElementType !== null &&
+      typeof fieldType.arrayElementType !== 'undefined'
+    ) {
       this.checkAssignableType(
         this.resolveExpressionArrayElementType(expression.value),
         fieldType.arrayElementType,
@@ -3104,21 +3215,25 @@ class Checker {
       let actualKey: ValueType | null = null
       let actualValue: ValueType | null = null
 
-      if (actual != null) {
+      if (actual !== null && typeof actual !== 'undefined') {
         actualKey = actual.key
         actualValue = actual.value
       }
 
-      if (fieldType.mapKeyType != null) {
+      if (fieldType.mapKeyType !== null && typeof fieldType.mapKeyType !== 'undefined') {
         this.checkAssignableType(actualKey, fieldType.mapKeyType, expression.value.loc, false, false)
       }
 
-      if (fieldType.mapValueType != null) {
+      if (fieldType.mapValueType !== null && typeof fieldType.mapValueType !== 'undefined') {
         this.checkAssignableType(actualValue, fieldType.mapValueType, expression.value.loc, false, false)
       }
     }
 
-    if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
+    if (
+      fieldType.valueType === 'set' &&
+      fieldType.setElementType !== null &&
+      typeof fieldType.setElementType !== 'undefined'
+    ) {
       this.checkAssignableType(
         this.resolveExpressionSetElementType(expression.value),
         fieldType.setElementType,
@@ -3128,7 +3243,11 @@ class Checker {
       )
     }
 
-    if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
+    if (
+      fieldType.valueType === 'promise' &&
+      fieldType.promiseValueType !== null &&
+      typeof fieldType.promiseValueType !== 'undefined'
+    ) {
       this.checkAssignableType(
         this.resolveExpressionPromiseValueType(expression.value),
         fieldType.promiseValueType,
@@ -3144,247 +3263,247 @@ class Checker {
   checkCallExpression(expression: AnyNode): ValueType {
     const binaryType = this.checkBinaryCall(expression)
 
-    if (binaryType != null) {
+    if (binaryType !== null && typeof binaryType !== 'undefined') {
       return binaryType
     }
 
     const bufferUnsupportedType = this.checkBufferUnsupportedCall(expression)
 
-    if (bufferUnsupportedType != null) {
+    if (bufferUnsupportedType !== null && typeof bufferUnsupportedType !== 'undefined') {
       return bufferUnsupportedType
     }
 
     const eventStreamUnsupportedType = this.checkEventStreamUnsupportedCall(expression)
 
-    if (eventStreamUnsupportedType != null) {
+    if (eventStreamUnsupportedType !== null && typeof eventStreamUnsupportedType !== 'undefined') {
       return eventStreamUnsupportedType
     }
 
     const stringConversionType = this.checkStringConversionCall(expression)
 
-    if (stringConversionType != null) {
+    if (stringConversionType !== null && typeof stringConversionType !== 'undefined') {
       return stringConversionType
     }
 
     const numberConversionType = this.checkNumberConversionCall(expression)
 
-    if (numberConversionType != null) {
+    if (numberConversionType !== null && typeof numberConversionType !== 'undefined') {
       return numberConversionType
     }
 
     const numericCastType = this.checkNumericCastCall(expression)
 
-    if (numericCastType != null) {
+    if (numericCastType !== null && typeof numericCastType !== 'undefined') {
       return numericCastType
     }
 
     const numberToStringType = this.checkNumberToStringCall(expression)
 
-    if (numberToStringType != null) {
+    if (numberToStringType !== null && typeof numberToStringType !== 'undefined') {
       return numberToStringType
     }
 
     const stringCharCodeAtType = this.checkStringCharCodeAtCall(expression)
 
-    if (stringCharCodeAtType != null) {
+    if (stringCharCodeAtType !== null && typeof stringCharCodeAtType !== 'undefined') {
       return stringCharCodeAtType
     }
 
     const stringIndexType = this.checkStringIndexCall(expression)
 
-    if (stringIndexType != null) {
+    if (stringIndexType !== null && typeof stringIndexType !== 'undefined') {
       return stringIndexType
     }
 
     const stringTrimType = this.checkStringTrimCall(expression)
 
-    if (stringTrimType != null) {
+    if (stringTrimType !== null && typeof stringTrimType !== 'undefined') {
       return stringTrimType
     }
 
     const stringCaseType = this.checkStringCaseCall(expression)
 
-    if (stringCaseType != null) {
+    if (stringCaseType !== null && typeof stringCaseType !== 'undefined') {
       return stringCaseType
     }
 
     const stringPadStartType = this.checkStringPadStartCall(expression)
 
-    if (stringPadStartType != null) {
+    if (stringPadStartType !== null && typeof stringPadStartType !== 'undefined') {
       return stringPadStartType
     }
 
     const stringSliceType = this.checkStringSliceCall(expression)
 
-    if (stringSliceType != null) {
+    if (stringSliceType !== null && typeof stringSliceType !== 'undefined') {
       return stringSliceType
     }
 
     const stringSplitType = this.checkStringSplitCall(expression)
 
-    if (stringSplitType != null) {
+    if (stringSplitType !== null && typeof stringSplitType !== 'undefined') {
       return stringSplitType
     }
 
     const stringMethodType = this.checkStringPredicateCall(expression)
 
-    if (stringMethodType != null) {
+    if (stringMethodType !== null && typeof stringMethodType !== 'undefined') {
       return stringMethodType
     }
 
     const arrayMethodType = this.checkArrayMethodCall(expression)
 
-    if (arrayMethodType != null) {
+    if (arrayMethodType !== null && typeof arrayMethodType !== 'undefined') {
       return arrayMethodType
     }
 
     const collectionMethodType = this.checkCollectionMethodCall(expression)
 
-    if (collectionMethodType != null) {
+    if (collectionMethodType !== null && typeof collectionMethodType !== 'undefined') {
       return collectionMethodType
     }
 
     const promiseMethodType = this.checkPromiseMethodCall(expression)
 
-    if (promiseMethodType != null) {
+    if (promiseMethodType !== null && typeof promiseMethodType !== 'undefined') {
       return promiseMethodType
     }
 
     const timerHandleMethodType = this.checkTimerHandleMethodCall(expression)
 
-    if (timerHandleMethodType != null) {
+    if (timerHandleMethodType !== null && typeof timerHandleMethodType !== 'undefined') {
       return timerHandleMethodType
     }
 
     const fsStatsMethodType = this.checkFsStatsMethodCall(expression)
 
-    if (fsStatsMethodType != null) {
+    if (fsStatsMethodType !== null && typeof fsStatsMethodType !== 'undefined') {
       return fsStatsMethodType
     }
 
     const fetchAbortControllerMethodType = this.checkFetchAbortControllerMethodCall(expression)
 
-    if (fetchAbortControllerMethodType != null) {
+    if (fetchAbortControllerMethodType !== null && typeof fetchAbortControllerMethodType !== 'undefined') {
       return fetchAbortControllerMethodType
     }
 
     const fetchResponseMethodType = this.checkFetchResponseMethodCall(expression)
 
-    if (fetchResponseMethodType != null) {
+    if (fetchResponseMethodType !== null && typeof fetchResponseMethodType !== 'undefined') {
       return fetchResponseMethodType
     }
 
     const fetchHeadersMethodType = this.checkFetchHeadersMethodCall(expression)
 
-    if (fetchHeadersMethodType != null) {
+    if (fetchHeadersMethodType !== null && typeof fetchHeadersMethodType !== 'undefined') {
       return fetchHeadersMethodType
     }
 
     const urlSearchParamsMethodType = this.checkUrlSearchParamsMethodCall(expression)
 
-    if (urlSearchParamsMethodType != null) {
+    if (urlSearchParamsMethodType !== null && typeof urlSearchParamsMethodType !== 'undefined') {
       return urlSearchParamsMethodType
     }
 
     const cryptoHashMethodType = this.checkCryptoHashMethodCall(expression)
 
-    if (cryptoHashMethodType != null) {
+    if (cryptoHashMethodType !== null && typeof cryptoHashMethodType !== 'undefined') {
       return cryptoHashMethodType
     }
 
     const fsType = this.checkFsCall(expression)
 
-    if (fsType != null) {
+    if (fsType !== null && typeof fsType !== 'undefined') {
       return fsType
     }
 
     const fetchType = this.checkFetchCall(expression)
 
-    if (fetchType != null) {
+    if (fetchType !== null && typeof fetchType !== 'undefined') {
       return fetchType
     }
 
     const jsonType = this.checkJsonCall(expression, null)
 
-    if (jsonType != null) {
+    if (jsonType !== null && typeof jsonType !== 'undefined') {
       return jsonType
     }
 
     const cryptoType = this.checkCryptoCall(expression)
 
-    if (cryptoType != null) {
+    if (cryptoType !== null && typeof cryptoType !== 'undefined') {
       return cryptoType
     }
 
     const childProcessType = this.checkChildProcessCall(expression)
 
-    if (childProcessType != null) {
+    if (childProcessType !== null && typeof childProcessType !== 'undefined') {
       return childProcessType
     }
 
     const osType = this.checkOsCall(expression)
 
-    if (osType != null) {
+    if (osType !== null && typeof osType !== 'undefined') {
       return osType
     }
 
     const processType = this.checkProcessCall(expression)
 
-    if (processType != null) {
+    if (processType !== null && typeof processType !== 'undefined') {
       return processType
     }
 
     const urlType = this.checkUrlCall(expression)
 
-    if (urlType != null) {
+    if (urlType !== null && typeof urlType !== 'undefined') {
       return urlType
     }
 
     const pathType = this.checkPathCall(expression)
 
-    if (pathType != null) {
+    if (pathType !== null && typeof pathType !== 'undefined') {
       return pathType
     }
 
     const debugMemoryType = this.checkDebugMemoryCall(expression)
 
-    if (debugMemoryType != null) {
+    if (debugMemoryType !== null && typeof debugMemoryType !== 'undefined') {
       return debugMemoryType
     }
 
     const timerType = this.checkTimerCall(expression)
 
-    if (timerType != null) {
+    if (timerType !== null && typeof timerType !== 'undefined') {
       return timerType
     }
 
     const promiseStaticType = this.checkPromiseStaticCall(expression)
 
-    if (promiseStaticType != null) {
+    if (promiseStaticType !== null && typeof promiseStaticType !== 'undefined') {
       return promiseStaticType
     }
 
     const classMethodType = this.checkClassMethodCall(expression)
 
-    if (classMethodType != null) {
+    if (classMethodType !== null && typeof classMethodType !== 'undefined') {
       return classMethodType
     }
 
     const mathType = this.checkMathCall(expression)
 
-    if (mathType != null) {
+    if (mathType !== null && typeof mathType !== 'undefined') {
       return mathType
     }
 
     const arrayIsArrayType = this.checkArrayIsArrayCall(expression)
 
-    if (arrayIsArrayType != null) {
+    if (arrayIsArrayType !== null && typeof arrayIsArrayType !== 'undefined') {
       return arrayIsArrayType
     }
 
     const objectValuesType = this.checkObjectStaticCall(expression)
 
-    if (objectValuesType != null) {
+    if (objectValuesType !== null && typeof objectValuesType !== 'undefined') {
       return objectValuesType
     }
 
@@ -3399,63 +3518,63 @@ class Checker {
 
     const symbol = this.getCallableSymbol(expression.callee)
 
-    if (symbol == null) {
+    if (symbol === null || typeof symbol === 'undefined') {
       return 'unknown'
     }
 
     let returnType: ValueType = 'unknown'
     const symbolReturnType = symbol.returnType ?? null
 
-    if (symbolReturnType != null) {
+    if (symbolReturnType !== null && typeof symbolReturnType !== 'undefined') {
       returnType = symbolReturnType
     }
 
     let returnArrayElementType: ValueType | null = null
     const symbolReturnArrayElementType = symbol.returnArrayElementType ?? null
 
-    if (symbolReturnArrayElementType != null) {
+    if (symbolReturnArrayElementType !== null && typeof symbolReturnArrayElementType !== 'undefined') {
       returnArrayElementType = symbolReturnArrayElementType
     }
 
     let returnArrayElementDeclaredType: string | null = null
     const symbolReturnArrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
 
-    if (symbolReturnArrayElementDeclaredType != null) {
+    if (symbolReturnArrayElementDeclaredType !== null && typeof symbolReturnArrayElementDeclaredType !== 'undefined') {
       returnArrayElementDeclaredType = symbolReturnArrayElementDeclaredType
     }
 
     let returnMapKeyType: ValueType | null = null
     const symbolReturnMapKeyType = symbol.returnMapKeyType ?? null
 
-    if (symbolReturnMapKeyType != null) {
+    if (symbolReturnMapKeyType !== null && typeof symbolReturnMapKeyType !== 'undefined') {
       returnMapKeyType = symbolReturnMapKeyType
     }
 
     let returnMapValueType: ValueType | null = null
     const symbolReturnMapValueType = symbol.returnMapValueType ?? null
 
-    if (symbolReturnMapValueType != null) {
+    if (symbolReturnMapValueType !== null && typeof symbolReturnMapValueType !== 'undefined') {
       returnMapValueType = symbolReturnMapValueType
     }
 
     let returnPromiseValueType: ValueType | null = null
     const symbolReturnPromiseValueType = symbol.returnPromiseValueType ?? null
 
-    if (symbolReturnPromiseValueType != null) {
+    if (symbolReturnPromiseValueType !== null && typeof symbolReturnPromiseValueType !== 'undefined') {
       returnPromiseValueType = symbolReturnPromiseValueType
     }
 
     let returnSetElementType: ValueType | null = null
     const symbolReturnSetElementType = symbol.returnSetElementType ?? null
 
-    if (symbolReturnSetElementType != null) {
+    if (symbolReturnSetElementType !== null && typeof symbolReturnSetElementType !== 'undefined') {
       returnSetElementType = symbolReturnSetElementType
     }
 
     let returnShape: ObjectShapeInfo | null = null
     const symbolReturnShape = symbol.returnShape
 
-    if (symbolReturnShape != null) {
+    if (symbolReturnShape !== null && typeof symbolReturnShape !== 'undefined') {
       returnShape = symbolReturnShape
     }
 
@@ -3471,7 +3590,7 @@ class Checker {
 
     const params = symbol.params ?? null
 
-    if (params == null) {
+    if (params === null || typeof params === 'undefined') {
       return returnType
     }
 
@@ -3508,7 +3627,7 @@ class Checker {
 
     const staticMethod = this.resolveBinaryStaticRuntimeMethod(expression.callee)
 
-    if (staticMethod != null) {
+    if (staticMethod !== null && typeof staticMethod !== 'undefined') {
       if (staticMethod === 'from') {
         if (expression.args.length < 1 || expression.args.length > 2) {
           this.report(
@@ -3518,7 +3637,7 @@ class Checker {
           )
         }
 
-        if (expression.args[0] != null) {
+        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
           this.checkAssignableType(
             this.checkExpression(expression.args[0]),
             'string',
@@ -3544,7 +3663,7 @@ class Checker {
           )
         }
 
-        if (expression.args[0] != null) {
+        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
           this.checkExpression(expression.args[0])
         }
 
@@ -3563,8 +3682,14 @@ class Checker {
           )
         }
 
-        if (expression.args[0] != null) {
-          this.checkAssignableType(this.checkExpression(expression.args[0]), 'number', expression.args[0].loc, false, false)
+        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+          this.checkAssignableType(
+            this.checkExpression(expression.args[0]),
+            'number',
+            expression.args[0].loc,
+            false,
+            false
+          )
         }
 
         expression.binaryRuntimeMethod = staticMethod
@@ -3625,14 +3750,14 @@ class Checker {
   resolveBinaryStaticRuntimeMethod(callee: AnyNode): string | null {
     const path = memberExpressionPath(callee)
 
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
     if (path.length === 2 && firstPathSegment(path) === 'Buffer') {
       const symbol = this.scope.resolve('Buffer')
 
-      if (symbol == null) {
+      if (symbol === null || typeof symbol === 'undefined') {
         return binaryStaticRuntimeMethodNameFromPath(path)
       }
 
@@ -3656,7 +3781,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeBufferImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'buffer')
@@ -3676,7 +3802,7 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
     const unsupported = this.resolveUnsupportedBufferRuntimeExport(path)
 
-    if (unsupported == null) {
+    if (unsupported === null || typeof unsupported === 'undefined') {
       return null
     }
 
@@ -3697,7 +3823,7 @@ class Checker {
   }
 
   resolveUnsupportedBufferRuntimeExport(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -3706,15 +3832,22 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeBufferImportSource(symbol.importSource) &&
-        importedName != null &&
+        importedName !== null &&
+        typeof importedName !== 'undefined' &&
         isUnsupportedBufferRuntimeExport(importedName)
       ) {
         return importedName
@@ -3726,7 +3859,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeBufferImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'buffer') &&
@@ -3742,7 +3876,7 @@ class Checker {
   checkEventStreamUnsupportedCall(expression: AnyNode): ValueType | null {
     const usage = this.resolveUnsupportedEventStreamRuntimeExport(memberExpressionPath(expression.callee))
 
-    if (usage == null) {
+    if (usage === null || typeof usage === 'undefined') {
       return null
     }
 
@@ -3769,7 +3903,7 @@ class Checker {
 
     const usage = this.resolveUnsupportedEventStreamRuntimeExport(expression.callee.path)
 
-    if (usage == null) {
+    if (usage === null || typeof usage === 'undefined') {
       return null
     }
 
@@ -3786,7 +3920,7 @@ class Checker {
   resolveUnsupportedEventStreamRuntimeExport(
     path: readonly string[] | null | undefined
   ): UnsupportedEventStreamRuntimeExport | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -3795,11 +3929,22 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        importedName !== null &&
+        typeof importedName !== 'undefined'
+      ) {
         if (isNodeEventsImportSource(symbol.importSource) && isUnsupportedEventsRuntimeExport(importedName)) {
           return {
             source: 'node:events',
@@ -3823,7 +3968,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeEventsImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'events') &&
@@ -3837,7 +3983,8 @@ class Checker {
       }
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeStreamImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
@@ -3857,7 +4004,8 @@ class Checker {
       const exportName = `promises.${path[2]}`
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeStreamImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
@@ -3877,7 +4025,7 @@ class Checker {
   checkUtf8EncodingArg(expression: AnyNode, index: number, label: string): void {
     const arg = expression.args[index]
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return
     }
 
@@ -3893,7 +4041,7 @@ class Checker {
   checkCryptoCall(expression: AnyNode): ValueType | null {
     const call = this.resolveCryptoRuntimeCall(expression)
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       return null
     }
 
@@ -4047,7 +4195,7 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         this.checkAssignableType(
           argTypes[0],
           'string',
@@ -4065,7 +4213,12 @@ class Checker {
         }
       }
 
-      if (expression.args[1] != null && argTypes[1] !== 'string' && argTypes[1] !== 'bytes') {
+      if (
+        expression.args[1] !== null &&
+        typeof expression.args[1] !== 'undefined' &&
+        argTypes[1] !== 'string' &&
+        argTypes[1] !== 'bytes'
+      ) {
         this.report(
           'INOX_TYPE_MISMATCH',
           'node:crypto hash data must be a string or Buffer in the current C backend',
@@ -4081,7 +4234,7 @@ class Checker {
         )
       }
 
-      if (expression.args[2] == null) {
+      if (expression.args[2] === null || typeof expression.args[2] === 'undefined') {
         expression.cryptoHashDigestEncoding = 'hex'
         expression.valueType = 'string'
         return 'string'
@@ -4283,7 +4436,7 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         const dataType = this.checkExpression(expression.args[0])
 
         if (dataType !== 'string' && dataType !== 'bytes') {
@@ -4295,7 +4448,7 @@ class Checker {
         }
       }
 
-      if (expression.args[1] != null) {
+      if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
         const encodingType = this.checkExpression(expression.args[1])
         this.checkAssignableType(
           encodingType,
@@ -4326,7 +4479,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] == null) {
+    if (expression.args[0] === null || typeof expression.args[0] === 'undefined') {
       expression.cryptoHashDigestEncoding = 'bytes'
       expression.valueType = 'bytes'
       return 'bytes'
@@ -4358,7 +4511,7 @@ class Checker {
   checkChildProcessCall(expression: AnyNode): ValueType | null {
     const call = this.resolveChildProcessRuntimeCall(expression)
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       return null
     }
 
@@ -4387,8 +4540,14 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, false)
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        this.checkAssignableType(
+          this.checkExpression(expression.args[0]),
+          'string',
+          expression.args[0].loc,
+          false,
+          false
+        )
       }
 
       this.checkChildProcessSyncOptions(expression.args[1], expression.loc, true)
@@ -4407,33 +4566,39 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, false)
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        this.checkAssignableType(
+          this.checkExpression(expression.args[0]),
+          'string',
+          expression.args[0].loc,
+          false,
+          false
+        )
       }
 
       const second = expression.args[1]
       let args: AnyNode | null = null
       let options: AnyNode | null = null
 
-      if (second != null && second.type === 'ObjectLiteral') {
+      if (second !== null && typeof second !== 'undefined' && second.type === 'ObjectLiteral') {
         options = second
       } else {
-        if (second != null) {
+        if (second !== null && typeof second !== 'undefined') {
           args = second
         }
 
-        if (expression.args[2] != null) {
+        if (expression.args[2] !== null && typeof expression.args[2] !== 'undefined') {
           options = expression.args[2]
         }
       }
 
-      if (args != null && args.type !== 'ArrayLiteral') {
+      if (args !== null && typeof args !== 'undefined' && args.type !== 'ArrayLiteral') {
         this.report(
           'INOX_NOT_IMPLEMENTED',
           'node:child_process execFileSync currently expects a string[] literal args argument',
           args.loc
         )
-      } else if (args != null) {
+      } else if (args !== null && typeof args !== 'undefined') {
         for (let index = 0; index < args.elements.length; index = index + 1) {
           const element = checkerNodeAt(args.elements, index)
 
@@ -4456,7 +4621,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, false)
     }
 
@@ -4464,25 +4629,25 @@ class Checker {
     let args: AnyNode | null = null
     let options: AnyNode | null = null
 
-    if (second != null && second.type === 'ObjectLiteral') {
+    if (second !== null && typeof second !== 'undefined' && second.type === 'ObjectLiteral') {
       options = second
     } else {
-      if (second != null) {
+      if (second !== null && typeof second !== 'undefined') {
         args = second
       }
 
-      if (expression.args[2] != null) {
+      if (expression.args[2] !== null && typeof expression.args[2] !== 'undefined') {
         options = expression.args[2]
       }
     }
 
-    if (args != null && args.type !== 'ArrayLiteral') {
+    if (args !== null && typeof args !== 'undefined' && args.type !== 'ArrayLiteral') {
       this.report(
         'INOX_NOT_IMPLEMENTED',
         'node:child_process spawnSync currently expects a string[] literal args argument',
         args.loc
       )
-    } else if (args != null && args.type === 'ArrayLiteral') {
+    } else if (args !== null && typeof args !== 'undefined' && args.type === 'ArrayLiteral') {
       for (let index = 0; index < args.elements.length; index = index + 1) {
         const element = checkerNodeAt(args.elements, index)
 
@@ -4502,13 +4667,13 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveChildProcessRuntimeMethod(path)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     let label = method
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       label = joinStrings(path, '.')
     }
 
@@ -4520,7 +4685,7 @@ class Checker {
   }
 
   resolveChildProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -4529,11 +4694,23 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && isNodeChildProcessImportSource(symbol.importSource) && importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        isNodeChildProcessImportSource(symbol.importSource) &&
+        importedName !== null &&
+        typeof importedName !== 'undefined'
+      ) {
         if (isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)) {
           return importedName
         }
@@ -4547,7 +4724,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeChildProcessImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'childProcess')
@@ -4568,10 +4746,10 @@ class Checker {
     loc: SourceLocation,
     requireEncoding: boolean
   ): void {
-    if (options == null || options.type !== 'ObjectLiteral') {
+    if (options === null || typeof options === 'undefined' || options.type !== 'ObjectLiteral') {
       let reportLoc = loc
 
-      if (options != null) {
+      if (options !== null && typeof options !== 'undefined') {
         reportLoc = options.loc
       }
 
@@ -4592,10 +4770,16 @@ class Checker {
       }
     }
 
-    if (requireEncoding && (encoding == null || encoding.type !== 'StringLiteral' || encoding.value !== 'utf8')) {
+    if (
+      requireEncoding &&
+      (encoding === null ||
+        typeof encoding === 'undefined' ||
+        encoding.type !== 'StringLiteral' ||
+        encoding.value !== 'utf8')
+    ) {
       let reportLoc = options.loc
 
-      if (encoding != null) {
+      if (encoding !== null && typeof encoding !== 'undefined') {
         reportLoc = encoding.loc
       }
 
@@ -4649,7 +4833,13 @@ class Checker {
         const envProperties: CheckerObjectPropertyNode[] = property.value.properties
 
         for (const envProperty of envProperties) {
-          this.checkAssignableType(this.checkExpression(envProperty.value), 'string', envProperty.value.loc, false, false)
+          this.checkAssignableType(
+            this.checkExpression(envProperty.value),
+            'string',
+            envProperty.value.loc,
+            false,
+            false
+          )
         }
         continue
       }
@@ -4666,7 +4856,7 @@ class Checker {
   checkOsCall(expression: AnyNode): ValueType | null {
     const call = this.resolveOsRuntimeCall(expression)
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       return null
     }
 
@@ -4706,13 +4896,13 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveOsRuntimeMethod(path)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     let label = method
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       label = joinStrings(path, '.')
     }
 
@@ -4724,7 +4914,7 @@ class Checker {
   }
 
   resolveOsRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -4733,11 +4923,23 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && isNodeOsImportSource(symbol.importSource) && importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        isNodeOsImportSource(symbol.importSource) &&
+        importedName !== null &&
+        typeof importedName !== 'undefined'
+      ) {
         if (isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName)) {
           return importedName
         }
@@ -4751,7 +4953,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeOsImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'os')
@@ -4770,7 +4973,7 @@ class Checker {
   checkOsConstantMemberExpression(expression: AnyNode): ValueType | null {
     const constant = this.resolveOsRuntimeConstant(memberExpressionPath(expression))
 
-    if (constant == null) {
+    if (constant === null || typeof constant === 'undefined') {
       return null
     }
 
@@ -4781,7 +4984,7 @@ class Checker {
   }
 
   resolveOsRuntimeConstant(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -4790,15 +4993,22 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeOsImportSource(symbol.importSource) &&
-        importedName != null &&
+        importedName !== null &&
+        typeof importedName !== 'undefined' &&
         isOsRuntimeConstant(importedName)
       ) {
         return importedName
@@ -4810,7 +5020,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeOsImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'os') &&
@@ -4826,7 +5037,7 @@ class Checker {
   checkProcessCall(expression: AnyNode): ValueType | null {
     const call = this.resolveProcessRuntimeCall(expression)
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       return null
     }
 
@@ -4871,7 +5082,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
     }
 
@@ -4883,13 +5094,13 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveProcessRuntimeMethod(path)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     let label = method
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       label = joinStrings(path, '.')
     }
 
@@ -4901,7 +5112,7 @@ class Checker {
   }
 
   resolveProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -4910,11 +5121,23 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && isNodeProcessImportSource(symbol.importSource) && importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        isNodeProcessImportSource(symbol.importSource) &&
+        importedName !== null &&
+        typeof importedName !== 'undefined'
+      ) {
         if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
           return importedName
         }
@@ -4928,7 +5151,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeProcessImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'process')
@@ -4947,14 +5171,19 @@ class Checker {
   checkProcessMemberExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression)
 
-    if (path == null || path.length < 1) {
+    if (path === null || typeof path === 'undefined' || path.length < 1) {
       return null
     }
 
     const rootName = firstPathSegment(path)
     const root = this.scope.resolve(rootName)
 
-    if (root == null || root.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
+    if (
+      root === null ||
+      typeof root === 'undefined' ||
+      root.kind !== 'import' ||
+      !isNodeProcessImportSource(root.importSource)
+    ) {
       return null
     }
 
@@ -5004,7 +5233,7 @@ class Checker {
       return 'string'
     }
 
-    if (path.length === 2 && root.importedName != null) {
+    if (path.length === 2 && root.importedName !== null && typeof root.importedName !== 'undefined') {
       const property = `${root.importedName}.${path[1]}`
 
       if (isProcessRuntimeProperty(property)) {
@@ -5022,7 +5251,7 @@ class Checker {
   checkProcessMemberAssignment(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.target)
 
-    if (path == null || path.length !== 2 || path[1] !== 'exitCode') {
+    if (path === null || typeof path === 'undefined' || path.length !== 2 || path[1] !== 'exitCode') {
       return null
     }
 
@@ -5030,7 +5259,8 @@ class Checker {
     const root = this.scope.resolve(rootName)
 
     if (
-      root == null ||
+      root === null ||
+      typeof root === 'undefined' ||
       root.kind !== 'import' ||
       !isNodeProcessImportSource(root.importSource) ||
       (root.importedName !== 'default' && root.importedName !== 'process')
@@ -5049,14 +5279,19 @@ class Checker {
   checkProcessIndexExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.object)
 
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
     const rootName = firstPathSegment(path)
     const root = this.scope.resolve(rootName)
 
-    if (root == null || root.kind !== 'import' || !isNodeProcessImportSource(root.importSource)) {
+    if (
+      root === null ||
+      typeof root === 'undefined' ||
+      root.kind !== 'import' ||
+      !isNodeProcessImportSource(root.importSource)
+    ) {
       return null
     }
 
@@ -5081,7 +5316,7 @@ class Checker {
   checkUrlCall(expression: AnyNode): ValueType | null {
     const call = this.resolveUrlRuntimeCall(expression)
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       return null
     }
 
@@ -5111,7 +5346,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       let argType: ValueType = 'unknown'
 
       argType = argTypes[0]
@@ -5120,7 +5355,7 @@ class Checker {
         const shape = this.resolveExpressionShape(expression.args[0])
         let isUrlObject = false
 
-        if (shape != null && shape.builtin === 'url.URL') {
+        if (shape !== null && typeof shape !== 'undefined' && shape.builtin === 'url.URL') {
           isUrlObject = true
         }
 
@@ -5162,7 +5397,12 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape == null || shape.builtin !== 'url.URLSearchParams') {
+    if (
+      objectType !== 'object' ||
+      shape === null ||
+      typeof shape === 'undefined' ||
+      shape.builtin !== 'url.URLSearchParams'
+    ) {
       return null
     }
 
@@ -5211,13 +5451,13 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveUrlRuntimeMethod(path)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     let label = method
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       label = joinStrings(path, '.')
     }
 
@@ -5229,7 +5469,7 @@ class Checker {
   }
 
   resolveUrlRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -5238,11 +5478,23 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && isNodeUrlImportSource(symbol.importSource) && importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        isNodeUrlImportSource(symbol.importSource) &&
+        importedName !== null &&
+        typeof importedName !== 'undefined'
+      ) {
         if (isUrlRuntimeMethod(importedName) || isUnsupportedUrlRuntimeMethod(importedName)) {
           return importedName
         }
@@ -5256,7 +5508,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeUrlImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'url')
@@ -5276,13 +5529,13 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolveCryptoRuntimeMethod(path)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     let label = method
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       label = joinStrings(path, '.')
     }
 
@@ -5294,7 +5547,7 @@ class Checker {
   }
 
   resolveCryptoRuntimeMethod(path: string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -5307,7 +5560,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodeCryptoImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'crypto')
@@ -5325,11 +5579,23 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && isNodeCryptoImportSource(symbol.importSource) && importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        isNodeCryptoImportSource(symbol.importSource) &&
+        importedName !== null &&
+        typeof importedName !== 'undefined'
+      ) {
         if (isCryptoRuntimeMethod(importedName) || isUnsupportedNodeCryptoMethod(importedName)) {
           return importedName
         }
@@ -5344,7 +5610,7 @@ class Checker {
   checkPathCall(expression: AnyNode): ValueType | null {
     const call = this.resolvePathRuntimeCall(expression)
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       return null
     }
 
@@ -5393,7 +5659,7 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         this.checkAssignableType(
           argTypes[0],
           'string',
@@ -5416,7 +5682,7 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         this.checkAssignableType(
           argTypes[0],
           'object',
@@ -5502,13 +5768,13 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
     const method = this.resolvePathRuntimeMethod(path)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     let label = method
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       label = joinStrings(path, '.')
     }
 
@@ -5520,7 +5786,7 @@ class Checker {
   }
 
   resolvePathRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -5529,11 +5795,23 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && isNodePathImportSource(symbol.importSource) && importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        isNodePathImportSource(symbol.importSource) &&
+        importedName !== null &&
+        typeof importedName !== 'undefined'
+      ) {
         if (isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName)) {
           return importedName
         }
@@ -5547,7 +5825,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix')
@@ -5565,7 +5844,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path')
@@ -5585,7 +5865,7 @@ class Checker {
     const path = memberExpressionPath(expression)
     const constant = this.resolvePathRuntimeConstant(path)
 
-    if (constant == null) {
+    if (constant === null || typeof constant === 'undefined') {
       return null
     }
 
@@ -5596,7 +5876,7 @@ class Checker {
   }
 
   resolvePathRuntimeConstant(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -5605,7 +5885,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix') &&
@@ -5620,7 +5901,8 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'path') &&
@@ -5636,7 +5918,7 @@ class Checker {
   checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
     const constant = this.resolveBufferRuntimeConstant(memberExpressionPath(expression))
 
-    if (constant == null) {
+    if (constant === null || typeof constant === 'undefined') {
       return null
     }
 
@@ -5647,7 +5929,7 @@ class Checker {
   }
 
   resolveBufferRuntimeConstant(path: readonly string[] | null | undefined): string | null {
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -5655,7 +5937,7 @@ class Checker {
       const rootName = firstPathSegment(path)
       const symbol = this.scope.resolve(rootName)
 
-      if (symbol != null && symbol.kind === 'import') {
+      if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'import') {
         const importSource = symbol.importSource
         const importedName = symbol.importedName
 
@@ -5673,7 +5955,7 @@ class Checker {
       const rootName = firstPathSegment(path)
       const symbol = this.scope.resolve(rootName)
 
-      if (symbol != null && symbol.kind === 'import') {
+      if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'import') {
         const importSource = symbol.importSource
         const importedName = symbol.importedName
 
@@ -5722,17 +6004,17 @@ class Checker {
     this.checkExpression(expression.callee.object)
     const className = this.resolveClassMethodReceiverClassName(expression.callee.object)
 
-    if (className == null) {
+    if (className === null || typeof className === 'undefined') {
       return null
     }
 
     const classSymbol = this.scope.resolve(className)
     let method: AnyNode | null = null
 
-    if (classSymbol != null) {
+    if (classSymbol !== null && typeof classSymbol !== 'undefined') {
       const classMethods = classSymbol.classMethods
 
-      if (classMethods != null) {
+      if (classMethods !== null && typeof classMethods !== 'undefined') {
         for (let index = 0; index < classMethods.length; index = index + 1) {
           const item = checkerNodeAt(classMethods, index)
 
@@ -5752,7 +6034,7 @@ class Checker {
       argTypes.push(this.checkExpression(arg))
     }
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       this.report('INOX_UNKNOWN_FIELD', `unknown method ${expression.callee.property}`, expression.callee.loc)
       expression.valueType = 'unknown'
       return 'unknown'
@@ -5798,7 +6080,7 @@ class Checker {
     expression.mapValueType = returnInfo.mapValueType
     expression.promiseValueType = null
 
-    if (returnInfo.promiseValueType != null) {
+    if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
       expression.promiseValueType = returnInfo.promiseValueType
     }
 
@@ -5809,7 +6091,7 @@ class Checker {
   }
 
   checkMathCall(expression: AnyNode): ValueType | null {
-    if (!isMathRuntimeMethod(expression.callee) || this.scope.resolve('Math') != null) {
+    if (!isMathRuntimeMethod(expression.callee) || isPresent(this.scope.resolve('Math'))) {
       return null
     }
 
@@ -5839,11 +6121,17 @@ class Checker {
   checkArrayIsArrayCall(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.callee)
 
-    if (path == null || path.length !== 2 || path[0] !== 'Array' || path[1] !== 'isArray') {
+    if (
+      path === null ||
+      typeof path === 'undefined' ||
+      path.length !== 2 ||
+      path[0] !== 'Array' ||
+      path[1] !== 'isArray'
+    ) {
       return null
     }
 
-    if (this.scope.resolve('Array') != null) {
+    if (isPresent(this.scope.resolve('Array'))) {
       return null
     }
 
@@ -5868,7 +6156,8 @@ class Checker {
     const path = memberExpressionPath(expression.callee)
 
     if (
-      path == null ||
+      path === null ||
+      typeof path === 'undefined' ||
       path.length !== 2 ||
       path[0] !== 'Object' ||
       (path[1] !== 'values' && path[1] !== 'entries' && path[1] !== 'keys')
@@ -5876,7 +6165,7 @@ class Checker {
       return null
     }
 
-    if (this.scope.resolve('Object') != null) {
+    if (isPresent(this.scope.resolve('Object'))) {
       return null
     }
 
@@ -5902,16 +6191,12 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       const arg = checkerNodeAt(expression.args, 0)
       const argType = this.checkExpression(arg)
 
       if (argType !== 'unknown' && argType !== 'object' && argType !== 'array') {
-        this.report(
-          'INOX_TYPE_MISMATCH',
-          `function Object.${method} expects an object or array argument`,
-          arg.loc
-        )
+        this.report('INOX_TYPE_MISMATCH', `function Object.${method} expects an object or array argument`, arg.loc)
       }
       if (method === 'values') {
         if (argType === 'array') {
@@ -5934,7 +6219,7 @@ class Checker {
   resolveObjectValuesElementType(expression: AnyNode): ValueType {
     const shape = this.resolveExpressionShape(expression)
 
-    if (shape == null || shape.fields.length === 0) {
+    if (shape === null || typeof shape === 'undefined' || shape.fields.length === 0) {
       return 'unknown'
     }
 
@@ -5943,7 +6228,7 @@ class Checker {
     for (const field of shape.fields) {
       let valueType: ValueType = 'unknown'
 
-      if (field.valueType != null) {
+      if (field.valueType !== null && typeof field.valueType !== 'undefined') {
         valueType = field.valueType
       }
 
@@ -5956,14 +6241,20 @@ class Checker {
   checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression)
 
-    if (path == null || path.length !== 3 || path[1] !== 'constants' || !isFsConstantValue(path[2])) {
+    if (
+      path === null ||
+      typeof path === 'undefined' ||
+      path.length !== 3 ||
+      path[1] !== 'constants' ||
+      !isFsConstantValue(path[2])
+    ) {
       return null
     }
 
     const rootName = firstPathSegment(path)
     const symbol = this.scope.resolve(rootName)
 
-    if (symbol == null || !isFsRuntimeImportSymbol(symbol)) {
+    if (symbol === null || typeof symbol === 'undefined' || !isFsRuntimeImportSymbol(symbol)) {
       return null
     }
 
@@ -5976,8 +6267,7 @@ class Checker {
   checkFsStatsMethodCall(expression: AnyNode): ValueType | null {
     if (
       expression.callee.type !== 'MemberExpression' ||
-      expression.callee.property !== 'isFile' &&
-      expression.callee.property !== 'isDirectory'
+      (expression.callee.property !== 'isFile' && expression.callee.property !== 'isDirectory')
     ) {
       return null
     }
@@ -5985,7 +6275,12 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape == null || (shape.builtin !== 'fs.Stats' && shape.builtin !== 'fs.Dirent')) {
+    if (
+      objectType !== 'object' ||
+      shape === null ||
+      typeof shape === 'undefined' ||
+      (shape.builtin !== 'fs.Stats' && shape.builtin !== 'fs.Dirent')
+    ) {
       return null
     }
 
@@ -6032,7 +6327,7 @@ class Checker {
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
       calleeName !== 'fetch' ||
-      this.scope.resolve('fetch') != null
+      isPresent(this.scope.resolve('fetch'))
     ) {
       return null
     }
@@ -6054,7 +6349,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(
         this.checkExpression(expression.args[0]),
         'string',
@@ -6072,7 +6367,7 @@ class Checker {
       }
     }
 
-    if (expression.args[1] != null) {
+    if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
       this.checkFetchInitObject(expression.args[1])
     }
 
@@ -6142,7 +6437,12 @@ class Checker {
         const signalType = this.checkExpression(property.value)
         const signalShape = this.resolveExpressionShape(property.value)
 
-        if (signalType !== 'object' || signalShape == null || signalShape.builtin !== 'fetch.AbortSignal') {
+        if (
+          signalType !== 'object' ||
+          signalShape === null ||
+          typeof signalShape === 'undefined' ||
+          signalShape.builtin !== 'fetch.AbortSignal'
+        ) {
           this.report(
             'INOX_FETCH',
             'fetch init signal must be an AbortSignal in the current C/libuv fetch slice',
@@ -6318,7 +6618,7 @@ class Checker {
 
     const feature = libuvOnlyRuntimeImportFeature(statement.source)
 
-    if (feature != null) {
+    if (feature !== null && typeof feature !== 'undefined') {
       this.requireLibuvBackend(feature, statement.loc)
     }
   }
@@ -6353,7 +6653,12 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.AbortController') {
+    if (
+      objectType !== 'object' ||
+      shape === null ||
+      typeof shape === 'undefined' ||
+      shape.builtin !== 'fetch.AbortController'
+    ) {
       return null
     }
 
@@ -6379,7 +6684,12 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.Response') {
+    if (
+      objectType !== 'object' ||
+      shape === null ||
+      typeof shape === 'undefined' ||
+      shape.builtin !== 'fetch.Response'
+    ) {
       return null
     }
 
@@ -6418,7 +6728,12 @@ class Checker {
     const objectType = this.checkExpression(expression.object)
     const shape = this.resolveExpressionShape(expression.object)
 
-    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.Response') {
+    if (
+      objectType !== 'object' ||
+      shape === null ||
+      typeof shape === 'undefined' ||
+      shape.builtin !== 'fetch.Response'
+    ) {
       return null
     }
 
@@ -6440,7 +6755,12 @@ class Checker {
     const objectType = this.checkExpression(expression.callee.object)
     const shape = this.resolveExpressionShape(expression.callee.object)
 
-    if (objectType !== 'object' || shape == null || shape.builtin !== 'fetch.Headers') {
+    if (
+      objectType !== 'object' ||
+      shape === null ||
+      typeof shape === 'undefined' ||
+      shape.builtin !== 'fetch.Headers'
+    ) {
       return null
     }
 
@@ -6452,7 +6772,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(
         this.checkExpression(expression.args[0]),
         'string',
@@ -6478,11 +6798,16 @@ class Checker {
     if (this.isThisExpression(expression)) {
       const symbol = this.scope.resolve('this')
 
-      if (symbol != null && symbol.className != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.className !== null &&
+        typeof symbol.className !== 'undefined'
+      ) {
         return symbol.className
       }
 
-      if (expression.className != null) {
+      if (expression.className !== null && typeof expression.className !== 'undefined') {
         return expression.className
       }
 
@@ -6493,18 +6818,23 @@ class Checker {
       const name = firstPathSegment(expression.path)
       const symbol = this.scope.resolve(name)
 
-      if (symbol != null && symbol.className != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.className !== null &&
+        typeof symbol.className !== 'undefined'
+      ) {
         return symbol.className
       }
 
-      if (expression.className != null) {
+      if (expression.className !== null && typeof expression.className !== 'undefined') {
         return expression.className
       }
 
       return null
     }
 
-    if (expression.className != null) {
+    if (expression.className !== null && typeof expression.className !== 'undefined') {
       return expression.className
     }
 
@@ -6514,7 +6844,7 @@ class Checker {
   checkFsCall(expression: AnyNode): ValueType | null {
     const removedInfo = removedFsRuntimeMethodInfo(expression.callee)
 
-    if (removedInfo != null && this.isFsRuntimeRootName(removedInfo.root)) {
+    if (removedInfo !== null && typeof removedInfo !== 'undefined' && this.isFsRuntimeRootName(removedInfo.root)) {
       this.report('INOX_FS_UNSUPPORTED', removedInfo.message, expression.loc)
       expression.valueType = 'unknown'
 
@@ -6523,7 +6853,7 @@ class Checker {
 
     let info = fsRuntimeCallInfo(expression.callee)
 
-    if (info != null) {
+    if (info !== null && typeof info !== 'undefined') {
       if (!this.isFsRuntimeRoot(info)) {
         return null
       }
@@ -6536,7 +6866,7 @@ class Checker {
 
       info = fsRuntimeCallInfoFromImportSymbol(expression.callee, symbol)
 
-      if (info == null) {
+      if (info === null || typeof info === 'undefined') {
         return null
       }
     }
@@ -6546,7 +6876,7 @@ class Checker {
     const label = joinStrings(info.path, '.')
     const unsupportedMessage = unsupportedFsRuntimeMethodMessage(info, promisesApi)
 
-    if (unsupportedMessage != null) {
+    if (unsupportedMessage !== null && typeof unsupportedMessage !== 'undefined') {
       this.report('INOX_FS_UNSUPPORTED', unsupportedMessage, expression.loc)
       expression.valueType = 'unknown'
 
@@ -6668,7 +6998,7 @@ class Checker {
 
       this.checkFsStringArg(expression, 0)
 
-      if (expression.args[1] == null) {
+      if (expression.args[1] === null || typeof expression.args[1] === 'undefined') {
         expression.fsRuntimeMethod = 'readFileBytesSync'
         expression.valueType = 'bytes'
 
@@ -6813,7 +7143,7 @@ class Checker {
 
       this.checkFsStringArg(expression, 0)
 
-      if (promisesApi && expression.args[1] == null) {
+      if (promisesApi && (expression.args[1] === null || typeof expression.args[1] === 'undefined')) {
         expression.fsRuntimeMethod = 'readFileBytes'
         expression.valueType = 'promise'
         expression.promiseValueType = 'bytes'
@@ -6821,7 +7151,7 @@ class Checker {
         return 'promise'
       }
 
-      if (expression.args[1] != null) {
+      if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
         this.checkUtf8EncodingArg(expression, 1, label)
       }
 
@@ -7116,7 +7446,7 @@ class Checker {
   isFsRuntimeRootName(root: string): boolean {
     const symbol = this.scope.resolve(root)
 
-    if (symbol == null) {
+    if (symbol === null || typeof symbol === 'undefined') {
       return false
     }
 
@@ -7126,7 +7456,7 @@ class Checker {
   isFsPromisesImportRoot(root: string): boolean {
     const symbol = this.scope.resolve(root)
 
-    if (symbol == null || symbol.kind !== 'import') {
+    if (symbol === null || typeof symbol === 'undefined' || symbol.kind !== 'import') {
       return false
     }
 
@@ -7134,10 +7464,7 @@ class Checker {
       return true
     }
 
-    if (
-      (symbol.importSource === 'fs' || symbol.importSource === 'node:fs') &&
-      symbol.importedName === 'promises'
-    ) {
+    if ((symbol.importSource === 'fs' || symbol.importSource === 'node:fs') && symbol.importedName === 'promises') {
       return true
     }
 
@@ -7147,7 +7474,7 @@ class Checker {
   checkFsWriteDataArg(expression: AnyNode, index: number, label: string, textMethod: string): string {
     const arg = expression.args[index]
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return textMethod
     }
 
@@ -7177,7 +7504,7 @@ class Checker {
   checkFsStringArg(expression: AnyNode, index: number): void {
     const arg = expression.args[index]
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return
     }
 
@@ -7187,7 +7514,7 @@ class Checker {
   checkFsNumberArg(expression: AnyNode, index: number): void {
     const arg = expression.args[index]
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return
     }
 
@@ -7197,7 +7524,7 @@ class Checker {
   checkFsReaddirOptionsArg(expression: AnyNode, index: number, label: string): boolean {
     const arg = expression.args[index]
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return false
     }
 
@@ -7212,16 +7539,11 @@ class Checker {
     return options.withFileTypes === true
   }
 
-  checkFsBooleanOptionsArg(
-    expression: AnyNode,
-    index: number,
-    label: string,
-    allowed: string[]
-  ): FsBooleanOptions {
+  checkFsBooleanOptionsArg(expression: AnyNode, index: number, label: string, allowed: string[]): FsBooleanOptions {
     const arg = expression.args[index]
     const result: FsBooleanOptions = {}
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return result
     }
 
@@ -7256,7 +7578,7 @@ class Checker {
 
       let valueType = property.value.valueType
 
-      if (valueType == null) {
+      if (valueType === null || typeof valueType === 'undefined') {
         valueType = this.checkExpression(property.value)
       }
 
@@ -7284,11 +7606,11 @@ class Checker {
   checkJsonCall(expression: AnyNode, declared?: ResolvedTypeInfo | null): ValueType | null {
     const method = jsonRuntimeMethodName(expression.callee)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
-    if (this.scope.resolve('JSON') != null) {
+    if (isPresent(this.scope.resolve('JSON'))) {
       return null
     }
 
@@ -7308,9 +7630,9 @@ class Checker {
       const literalType = this.inferJsonParseLiteralType(expression)
       let valueType: ValueType = 'object'
 
-      if (declared != null && isJsonParseDeclaredType(declared.valueType)) {
+      if (declared !== null && typeof declared !== 'undefined' && isJsonParseDeclaredType(declared.valueType)) {
         valueType = declared.valueType
-      } else if (literalType != null) {
+      } else if (literalType !== null && typeof literalType !== 'undefined') {
         valueType = literalType.valueType
       }
 
@@ -7323,14 +7645,14 @@ class Checker {
       expression.setElementType = null
       expression.shape = null
 
-      if (declared != null) {
+      if (declared !== null && typeof declared !== 'undefined') {
         expression.arrayElementType = declared.arrayElementType
         expression.arrayElementDeclaredType = declared.arrayElementDeclaredType
         expression.mapKeyType = declared.mapKeyType
         expression.mapValueType = declared.mapValueType
         expression.promiseValueType = null
 
-        if (declared.promiseValueType != null) {
+        if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
           expression.promiseValueType = declared.promiseValueType
         }
 
@@ -7339,7 +7661,7 @@ class Checker {
         if (valueType === 'object') {
           expression.shape = declared.shape
         }
-      } else if (literalType != null) {
+      } else if (literalType !== null && typeof literalType !== 'undefined') {
         expression.arrayElementType = literalType.arrayElementType
         expression.arrayElementDeclaredType = literalType.arrayElementDeclaredType
         expression.shape = literalType.shape
@@ -7348,7 +7670,7 @@ class Checker {
       return valueType
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkExpression(expression.args[0])
     }
 
@@ -7360,7 +7682,7 @@ class Checker {
   checkJsonStringArg(expression: AnyNode, index: number): void {
     const arg = expression.args[index]
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return
     }
 
@@ -7370,13 +7692,13 @@ class Checker {
   inferJsonParseLiteralType(expression: AnyNode): JsonParseLiteralTypeInfo | null {
     const arg = expression.args[0]
 
-    if (arg == null || arg.type !== 'StringLiteral') {
+    if (arg === null || typeof arg === 'undefined' || arg.type !== 'StringLiteral') {
       return null
     }
 
     const result = this.parseJsonLiteralType(arg.value, 0)
 
-    if (result == null) {
+    if (result === null || typeof result === 'undefined') {
       return null
     }
 
@@ -7404,7 +7726,7 @@ class Checker {
     if (unit === '"') {
       const stringResult = this.parseJsonStringLiteral(source, nextIndex, false)
 
-      if (stringResult == null) {
+      if (stringResult === null || typeof stringResult === 'undefined') {
         return null
       }
 
@@ -7417,7 +7739,7 @@ class Checker {
     if (unit === '-' || this.isJsonDigit(unit)) {
       const numberEnd = this.parseJsonNumberEnd(source, nextIndex)
 
-      if (numberEnd == null) {
+      if (numberEnd === null || typeof numberEnd === 'undefined') {
         return null
       }
 
@@ -7465,7 +7787,7 @@ class Checker {
     while (nextIndex < source.length) {
       const element = this.parseJsonLiteralType(source, nextIndex)
 
-      if (element == null) {
+      if (element === null || typeof element === 'undefined') {
         return null
       }
 
@@ -7503,7 +7825,7 @@ class Checker {
     while (nextIndex < source.length) {
       const key = this.parseJsonStringLiteral(source, nextIndex, true)
 
-      if (key == null) {
+      if (key === null || typeof key === 'undefined') {
         return null
       }
 
@@ -7515,7 +7837,7 @@ class Checker {
 
       const value = this.parseJsonLiteralType(source, nextIndex + 1)
 
-      if (value == null) {
+      if (value === null || typeof value === 'undefined') {
         return null
       }
 
@@ -7816,11 +8138,11 @@ class Checker {
   checkPromiseStaticCall(expression: AnyNode): ValueType | null {
     const method = promiseStaticMethodName(expression.callee)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
-    if (this.scope.resolve('Promise') != null) {
+    if (isPresent(this.scope.resolve('Promise'))) {
       return null
     }
 
@@ -7846,7 +8168,7 @@ class Checker {
     if (method === 'resolve') {
       expression.promiseValueType = 'void'
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         expression.promiseValueType = argTypes[0]
       }
     }
@@ -7869,7 +8191,7 @@ class Checker {
     let promiseValueType: ValueType = 'unknown'
     const resolvedPromiseValueType = this.resolveExpressionPromiseValueType(expression.callee.object)
 
-    if (resolvedPromiseValueType != null) {
+    if (resolvedPromiseValueType !== null && typeof resolvedPromiseValueType !== 'undefined') {
       promiseValueType = resolvedPromiseValueType
     }
 
@@ -7886,7 +8208,7 @@ class Checker {
     if (property === 'then') {
       let mappedType: ValueType = 'unknown'
 
-      if (callback != null) {
+      if (callback !== null && typeof callback !== 'undefined') {
         mappedType = this.checkPromiseCallback(callback, [promiseValueType], null, 'promise.then callback')
       }
 
@@ -7900,19 +8222,14 @@ class Checker {
       return 'promise'
     }
 
-    if (callback != null) {
+    if (callback !== null && typeof callback !== 'undefined') {
       let catchReturnType: ValueType | null = promiseValueType
 
       if (promiseValueType === 'unknown') {
         catchReturnType = null
       }
 
-      this.checkPromiseCallback(
-        callback,
-        ['unknown'],
-        catchReturnType,
-        'promise.catch callback'
-      )
+      this.checkPromiseCallback(callback, ['unknown'], catchReturnType, 'promise.catch callback')
     }
 
     for (let index = 1; index < expression.args.length; index++) {
@@ -8007,7 +8324,7 @@ class Checker {
         actualReturnType = this.checkExpression(expression.body)
         returnLoc = expression.loc
 
-        if (expression.body.loc != null) {
+        if (expression.body.loc !== null && typeof expression.body.loc !== 'undefined') {
           returnLoc = expression.body.loc
         }
 
@@ -8016,11 +8333,11 @@ class Checker {
       } else {
         const returnExpression = this.resolveSingleReturnExpression(expression.body)
 
-        if (returnExpression == null) {
+        if (returnExpression === null || typeof returnExpression === 'undefined') {
           const terminalReturnExpression = this.resolveTerminalReturnExpression(expression.body)
           let expectedReturnType: ValueType = 'unknown'
 
-          if (returnType != null) {
+          if (returnType !== null && typeof returnType !== 'undefined') {
             expectedReturnType = returnType
           }
 
@@ -8032,11 +8349,11 @@ class Checker {
             this.restoreReturnContext(returnContextState)
           }
 
-          if (terminalReturnExpression != null) {
+          if (terminalReturnExpression !== null && typeof terminalReturnExpression !== 'undefined') {
             actualReturnType = this.checkExpression(terminalReturnExpression)
             returnLoc = expression.loc
 
-            if (terminalReturnExpression.loc != null) {
+            if (terminalReturnExpression.loc !== null && typeof terminalReturnExpression.loc !== 'undefined') {
               returnLoc = terminalReturnExpression.loc
             }
 
@@ -8047,7 +8364,7 @@ class Checker {
           actualReturnType = this.checkExpression(returnExpression)
           returnLoc = expression.loc
 
-          if (returnExpression.loc != null) {
+          if (returnExpression.loc !== null && typeof returnExpression.loc !== 'undefined') {
             returnLoc = returnExpression.loc
           }
 
@@ -8059,7 +8376,7 @@ class Checker {
       this.restoreScope(scopeState)
     }
 
-    if (returnType != null) {
+    if (returnType !== null && typeof returnType !== 'undefined') {
       this.checkAssignableType(actualReturnType, returnType, returnLoc, false, returnNullable)
     }
 
@@ -8108,17 +8425,17 @@ class Checker {
 
     const mapMethod = mapRuntimeMethodName(property)
 
-    if (objectType === 'map' && mapMethod != null) {
+    if (objectType === 'map' && mapMethod !== null && typeof mapMethod !== 'undefined') {
       const mapType = this.resolveExpressionMapType(expression.callee.object)
       let mapKeyType: ValueType = 'unknown'
       let mapRawValueType: ValueType = 'unknown'
 
-      if (mapType != null) {
-        if (mapType.key != null) {
+      if (mapType !== null && typeof mapType !== 'undefined') {
+        if (mapType.key !== null && typeof mapType.key !== 'undefined') {
           mapKeyType = mapType.key
         }
 
-        if (mapType.value != null) {
+        if (mapType.value !== null && typeof mapType.value !== 'undefined') {
           mapRawValueType = mapType.value
         }
       }
@@ -8134,7 +8451,7 @@ class Checker {
       if (mapMethod === 'get' || mapMethod === 'has' || mapMethod === 'delete') {
         this.checkCollectionArgCount(expression, `map.${mapMethod}`, 1)
 
-        if (expression.args[0] != null) {
+        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
           const keyArg = checkerNodeAt(expression.args, 0)
           this.checkAssignableType(
             this.checkExpression(keyArg),
@@ -8163,7 +8480,7 @@ class Checker {
 
       this.checkCollectionArgCount(expression, 'map.set', 2)
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         const keyArg = checkerNodeAt(expression.args, 0)
         this.checkAssignableType(
           this.checkExpression(keyArg),
@@ -8174,7 +8491,7 @@ class Checker {
         )
       }
 
-      if (expression.args[1] != null) {
+      if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
         const valueArg = checkerNodeAt(expression.args, 1)
         this.checkAssignableType(
           this.checkExpression(valueArg),
@@ -8200,7 +8517,7 @@ class Checker {
 
     const setMethod = setRuntimeMethodName(property)
 
-    if (objectType === 'set' && setMethod != null) {
+    if (objectType === 'set' && setMethod !== null && typeof setMethod !== 'undefined') {
       const elementType = this.resolveExpressionSetElementType(expression.callee.object) ?? 'unknown'
 
       if (setMethod === 'clear') {
@@ -8211,7 +8528,7 @@ class Checker {
 
       this.checkCollectionArgCount(expression, `set.${setMethod}`, 1)
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         this.checkAssignableType(
           this.checkExpression(expression.args[0]),
           elementType,
@@ -8243,7 +8560,7 @@ class Checker {
   checkTimerCall(expression: AnyNode): ValueType | null {
     const method = this.resolveTimerRuntimeMethod(expression.callee)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
@@ -8254,10 +8571,12 @@ class Checker {
     }
 
     if (
-      shadow != null &&
+      shadow !== null &&
+      typeof shadow !== 'undefined' &&
       !(
         shadow.kind === 'import' &&
-        shadow.importSource != null &&
+        shadow.importSource !== null &&
+        typeof shadow.importSource !== 'undefined' &&
         isNodeTimerImportSource(shadow.importSource) &&
         shadow.importedName === method
       )
@@ -8267,7 +8586,7 @@ class Checker {
 
     expression.timerRuntimeMethod = method
 
-    if (timerClearMethodName(method) != null) {
+    if (isPresent(timerClearMethodName(method))) {
       if (expression.args.length !== 1) {
         this.report(
           'INOX_ARG_COUNT',
@@ -8276,8 +8595,14 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
-        this.checkAssignableType(this.checkExpression(expression.args[0]), 'timer', expression.args[0].loc, false, false)
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        this.checkAssignableType(
+          this.checkExpression(expression.args[0]),
+          'timer',
+          expression.args[0].loc,
+          false,
+          false
+        )
       }
 
       expression.valueType = 'void'
@@ -8310,7 +8635,7 @@ class Checker {
 
     this.checkTimerCallbackArg(expression, 0)
 
-    if (expression.args[1] != null) {
+    if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
       const delayArg = checkerNodeAt(expression.args, 1)
       const delayType = this.checkExpression(delayArg)
       this.checkAssignableType(delayType, 'number', delayArg.loc, false, false)
@@ -8324,13 +8649,13 @@ class Checker {
   resolveTimerRuntimeMethod(callee: AnyNode): string | null {
     const globalMethod = timerRuntimeMethodName(callee)
 
-    if (globalMethod != null) {
+    if (globalMethod !== null && typeof globalMethod !== 'undefined') {
       return globalMethod
     }
 
     const path = memberExpressionPath(callee)
 
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
@@ -8339,12 +8664,28 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
       let importedName: string | null = null
 
-      if (symbol != null && symbol.importedName != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.importedName !== null &&
+        typeof symbol.importedName !== 'undefined'
+      ) {
         importedName = symbol.importedName
       }
 
-      if (symbol != null && symbol.kind === 'import' && symbol.importSource != null) {
-        if (isNodeTimerImportSource(symbol.importSource) && importedName != null && isTimerRuntimeMethod(importedName)) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'import' &&
+        symbol.importSource !== null &&
+        typeof symbol.importSource !== 'undefined'
+      ) {
+        if (
+          isNodeTimerImportSource(symbol.importSource) &&
+          importedName !== null &&
+          typeof importedName !== 'undefined' &&
+          isTimerRuntimeMethod(importedName)
+        ) {
           return importedName
         }
       }
@@ -8356,9 +8697,11 @@ class Checker {
       const symbol = this.scope.resolve(rootName)
 
       if (
-        symbol != null &&
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        symbol.importSource != null &&
+        symbol.importSource !== null &&
+        typeof symbol.importSource !== 'undefined' &&
         isNodeTimerImportSource(symbol.importSource) &&
         (symbol.importedName === 'default' || symbol.importedName === 'timers') &&
         isTimerRuntimeMethod(methodName)
@@ -8374,7 +8717,7 @@ class Checker {
     const arg = expression.args[index]
     const functionType = timerCallbackFunctionType()
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return
     }
 
@@ -8398,11 +8741,16 @@ class Checker {
 
     let params: AnyNode[] | null = null
 
-    if (symbol != null && symbol.params != null) {
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      symbol.params !== null &&
+      typeof symbol.params !== 'undefined'
+    ) {
       params = symbol.params
     }
 
-    if (params != null && params.length !== functionType.params.length) {
+    if (params !== null && typeof params !== 'undefined' && params.length !== functionType.params.length) {
       this.report(
         'INOX_ARG_COUNT',
         `function callback expects ${functionType.params.length} argument(s), got ${params.length}`,
@@ -8410,7 +8758,11 @@ class Checker {
       )
     }
 
-    if (symbol != null && (symbol.async === true || symbol.returnType === 'promise')) {
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      (symbol.async === true || symbol.returnType === 'promise')
+    ) {
       this.report(
         'INOX_ASYNC_TIMER_CALLBACK',
         'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly',
@@ -8419,7 +8771,12 @@ class Checker {
       return
     }
 
-    if (symbol != null && symbol.returnType != null) {
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      symbol.returnType !== null &&
+      typeof symbol.returnType !== 'undefined'
+    ) {
       this.checkAssignableType(
         symbol.returnType,
         functionType.returnType,
@@ -8454,14 +8811,14 @@ class Checker {
     let elementType: ValueType = 'unknown'
     const resolvedElementType = this.resolveExpressionArrayElementType(expression.callee.object)
 
-    if (resolvedElementType != null) {
+    if (resolvedElementType !== null && typeof resolvedElementType !== 'undefined') {
       elementType = resolvedElementType
     }
 
     let elementDeclaredType: string = elementType
     const resolvedElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression.callee.object)
 
-    if (resolvedElementDeclaredType != null) {
+    if (resolvedElementDeclaredType !== null && typeof resolvedElementDeclaredType !== 'undefined') {
       elementDeclaredType = resolvedElementDeclaredType
     }
 
@@ -8473,10 +8830,14 @@ class Checker {
       expression.valueType = 'number'
 
       if (expression.args.length !== 1) {
-        this.report('INOX_ARG_COUNT', `array.${method} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'INOX_ARG_COUNT',
+          `array.${method} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         const pushedType = this.checkExpression(expression.args[0])
 
         if (elementType !== 'unknown') {
@@ -8525,7 +8886,7 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         const separatorType = this.checkExpression(expression.args[0])
 
         this.checkAssignableType(
@@ -8548,10 +8909,14 @@ class Checker {
       expression.valueType = 'boolean'
 
       if (expression.args.length !== 1) {
-        this.report('INOX_ARG_COUNT', `array.includes expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+        this.report(
+          'INOX_ARG_COUNT',
+          `array.includes expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         const searchType = this.checkExpression(expression.args[0])
 
         if (elementType !== 'unknown') {
@@ -8602,12 +8967,8 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
-        this.checkArrayCallback(
-          expression.args[0],
-          [elementType, elementType],
-          'number'
-        )
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        this.checkArrayCallback(expression.args[0], [elementType, elementType], 'number')
       }
 
       for (let index = 1; index < expression.args.length; index++) {
@@ -8626,13 +8987,9 @@ class Checker {
     }
 
     if (expression.callee.property === 'filter') {
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         if (!this.isBooleanReference(expression.args[0])) {
-          this.checkArrayCallback(
-            expression.args[0],
-            [elementType, 'number'],
-            'boolean'
-          )
+          this.checkArrayCallback(expression.args[0], [elementType, 'number'], 'boolean')
         }
       }
 
@@ -8657,45 +9014,41 @@ class Checker {
       expression.setElementType = null
       expression.functionType = null
 
-      if (foundInfo.shape != null) {
+      if (foundInfo.shape !== null && typeof foundInfo.shape !== 'undefined') {
         expression.shape = foundInfo.shape
       }
 
-      if (foundInfo.arrayElementType != null) {
+      if (foundInfo.arrayElementType !== null && typeof foundInfo.arrayElementType !== 'undefined') {
         expression.arrayElementType = foundInfo.arrayElementType
       }
 
-      if (foundInfo.arrayElementDeclaredType != null) {
+      if (foundInfo.arrayElementDeclaredType !== null && typeof foundInfo.arrayElementDeclaredType !== 'undefined') {
         expression.arrayElementDeclaredType = foundInfo.arrayElementDeclaredType
       }
 
-      if (foundInfo.mapKeyType != null) {
+      if (foundInfo.mapKeyType !== null && typeof foundInfo.mapKeyType !== 'undefined') {
         expression.mapKeyType = foundInfo.mapKeyType
       }
 
-      if (foundInfo.mapValueType != null) {
+      if (foundInfo.mapValueType !== null && typeof foundInfo.mapValueType !== 'undefined') {
         expression.mapValueType = foundInfo.mapValueType
       }
 
-      if (foundInfo.promiseValueType != null) {
+      if (foundInfo.promiseValueType !== null && typeof foundInfo.promiseValueType !== 'undefined') {
         expression.promiseValueType = foundInfo.promiseValueType
       }
 
-      if (foundInfo.setElementType != null) {
+      if (foundInfo.setElementType !== null && typeof foundInfo.setElementType !== 'undefined') {
         expression.setElementType = foundInfo.setElementType
       }
 
-      if (foundInfo.functionType != null) {
+      if (foundInfo.functionType !== null && typeof foundInfo.functionType !== 'undefined') {
         expression.functionType = foundInfo.functionType
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         if (!this.isBooleanReference(expression.args[0])) {
-          this.checkArrayCallback(
-            expression.args[0],
-            [elementType, 'number'],
-            'boolean'
-          )
+          this.checkArrayCallback(expression.args[0], [elementType, 'number'], 'boolean')
         }
       }
 
@@ -8708,12 +9061,8 @@ class Checker {
 
     let mappedType: ValueType = 'unknown'
 
-    if (expression.args[0] != null) {
-      mappedType = this.checkArrayCallback(
-        expression.args[0],
-        [elementType, 'number'],
-        null
-      )
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+      mappedType = this.checkArrayCallback(expression.args[0], [elementType, 'number'], null)
     }
 
     expression.arrayElementType = mappedType
@@ -8728,17 +9077,11 @@ class Checker {
 
   isBooleanReference(expression: AnyNode): boolean {
     return (
-      expression.type === 'Reference' &&
-      expression.path.length === 1 &&
-      firstPathSegment(expression.path) === 'Boolean'
+      expression.type === 'Reference' && expression.path.length === 1 && firstPathSegment(expression.path) === 'Boolean'
     )
   }
 
-  checkArrayCallback(
-    expression: AnyNode,
-    params: ValueType[],
-    returnType: ValueType | null
-  ): ValueType {
+  checkArrayCallback(expression: AnyNode, params: ValueType[], returnType: ValueType | null): ValueType {
     if (expression.type !== 'ArrowFunctionExpression') {
       const callbackType = this.checkExpression(expression)
 
@@ -8814,7 +9157,7 @@ class Checker {
         actualReturnType = this.checkExpression(expression.body)
         returnLoc = expression.loc
 
-        if (expression.body.loc != null) {
+        if (expression.body.loc !== null && typeof expression.body.loc !== 'undefined') {
           returnLoc = expression.body.loc
         }
 
@@ -8822,11 +9165,11 @@ class Checker {
       } else {
         const returnExpression = this.resolveSingleReturnExpression(expression.body)
 
-        if (returnExpression == null) {
+        if (returnExpression === null || typeof returnExpression === 'undefined') {
           const terminalReturnExpression = this.resolveTerminalReturnExpression(expression.body)
           let expectedReturnType: ValueType = 'unknown'
 
-          if (returnType != null) {
+          if (returnType !== null && typeof returnType !== 'undefined') {
             expectedReturnType = returnType
           }
 
@@ -8838,11 +9181,11 @@ class Checker {
             this.restoreReturnContext(returnContextState)
           }
 
-          if (terminalReturnExpression != null) {
+          if (terminalReturnExpression !== null && typeof terminalReturnExpression !== 'undefined') {
             actualReturnType = this.checkExpression(terminalReturnExpression)
             returnLoc = expression.loc
 
-            if (terminalReturnExpression.loc != null) {
+            if (terminalReturnExpression.loc !== null && typeof terminalReturnExpression.loc !== 'undefined') {
               returnLoc = terminalReturnExpression.loc
             }
 
@@ -8852,7 +9195,7 @@ class Checker {
           actualReturnType = this.checkExpression(returnExpression)
           returnLoc = expression.loc
 
-          if (returnExpression.loc != null) {
+          if (returnExpression.loc !== null && typeof returnExpression.loc !== 'undefined') {
             returnLoc = returnExpression.loc
           }
 
@@ -8863,13 +9206,13 @@ class Checker {
       this.restoreScope(scopeState)
     }
 
-    if (returnType != null) {
+    if (returnType !== null && typeof returnType !== 'undefined') {
       this.checkAssignableType(actualReturnType, returnType, returnLoc, false, returnNullable)
     }
 
     expression.returnType = actualReturnType
 
-    if (returnType != null) {
+    if (returnType !== null && typeof returnType !== 'undefined') {
       expression.returnType = returnType
     }
 
@@ -8890,7 +9233,7 @@ class Checker {
       return null
     }
 
-    if (statement.argument != null) {
+    if (statement.argument !== null && typeof statement.argument !== 'undefined') {
       return statement.argument
     }
 
@@ -8908,7 +9251,7 @@ class Checker {
       return null
     }
 
-    if (statement.argument != null) {
+    if (statement.argument !== null && typeof statement.argument !== 'undefined') {
       return statement.argument
     }
 
@@ -9003,11 +9346,7 @@ class Checker {
     expression.numericCast = castName
 
     if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `${castName} expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
+      this.report('INOX_ARG_COUNT', `${castName} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
       return 'number'
     }
 
@@ -9051,7 +9390,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(
         argTypes[0],
         'number',
@@ -9086,7 +9425,11 @@ class Checker {
     expression.stringRuntimeMethod = 'charCodeAt'
 
     if (expression.args.length !== 1) {
-      this.report('INOX_ARG_COUNT', `string.charCodeAt expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'INOX_ARG_COUNT',
+        `string.charCodeAt expects 1 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
       return 'number'
     }
 
@@ -9125,7 +9468,11 @@ class Checker {
     }
 
     if (expression.args.length !== 0) {
-      this.report('INOX_ARG_COUNT', `string.${method} expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'INOX_ARG_COUNT',
+        `string.${method} expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     expression.valueType = 'string'
@@ -9152,7 +9499,11 @@ class Checker {
     }
 
     if (expression.args.length !== 0) {
-      this.report('INOX_ARG_COUNT', `string.toUpperCase expects 0 argument(s), got ${expression.args.length}`, expression.loc)
+      this.report(
+        'INOX_ARG_COUNT',
+        `string.toUpperCase expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
     }
 
     expression.valueType = 'string'
@@ -9187,7 +9538,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
     }
 
@@ -9214,7 +9565,7 @@ class Checker {
       method = stringRuntimeMethodName(expression.callee.property)
     }
 
-    if (method == null || !isStringIndexMethod(method)) {
+    if (method === null || typeof method === 'undefined' || !isStringIndexMethod(method)) {
       return null
     }
 
@@ -9239,7 +9590,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(
         argTypes[0],
         'string',
@@ -9331,7 +9682,7 @@ class Checker {
       this.report('INOX_ARG_COUNT', `string.split expects 1 argument(s), got ${expression.args.length}`, expression.loc)
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(
         argTypes[0],
         'string',
@@ -9375,14 +9726,10 @@ class Checker {
     }
 
     if (expression.args.length < 1 || expression.args.length > maxArgs) {
-      this.report(
-        'INOX_ARG_COUNT',
-        stringPredicateArgCountMessage(method, expression.args.length),
-        expression.loc
-      )
+      this.report('INOX_ARG_COUNT', stringPredicateArgCountMessage(method, expression.args.length), expression.loc)
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(
         argTypes[0],
         'string',
@@ -9405,7 +9752,7 @@ class Checker {
   checkNewExpression(expression: AnyNode): ValueType {
     const promiseType = this.checkPromiseConstructorExpression(expression)
 
-    if (promiseType != null) {
+    if (promiseType !== null && typeof promiseType !== 'undefined') {
       return promiseType
     }
 
@@ -9419,13 +9766,13 @@ class Checker {
 
     const eventStreamConstructorType = this.checkEventStreamUnsupportedConstructor(expression)
 
-    if (eventStreamConstructorType != null) {
+    if (eventStreamConstructorType !== null && typeof eventStreamConstructorType !== 'undefined') {
       return eventStreamConstructorType
     }
 
     const urlType = this.checkUrlConstructorExpression(expression, argTypes)
 
-    if (urlType != null) {
+    if (urlType !== null && typeof urlType !== 'undefined') {
       return urlType
     }
 
@@ -9445,12 +9792,12 @@ class Checker {
       if (argTypes[0] === 'map') {
         const mapType = this.resolveExpressionMapType(expression.args[0])
 
-        if (mapType != null) {
-          if (mapType.key != null) {
+        if (mapType !== null && typeof mapType !== 'undefined') {
+          if (mapType.key !== null && typeof mapType.key !== 'undefined') {
             expression.mapKeyType = mapType.key
           }
 
-          if (mapType.value != null) {
+          if (mapType.value !== null && typeof mapType.value !== 'undefined') {
             expression.mapValueType = mapType.value
           }
         }
@@ -9466,7 +9813,7 @@ class Checker {
       if (argTypes[0] === 'set') {
         const elementType = this.resolveExpressionSetElementType(expression.args[0])
 
-        if (elementType != null) {
+        if (elementType !== null && typeof elementType !== 'undefined') {
           expression.setElementType = elementType
         }
       }
@@ -9474,7 +9821,7 @@ class Checker {
       return 'set'
     }
 
-    if (constructorName === 'AbortController' && this.scope.resolve('AbortController') == null) {
+    if (constructorName === 'AbortController' && isNullish(this.scope.resolve('AbortController'))) {
       this.requireLibuvBackend('AbortController', expression.loc)
 
       if (expression.args.length !== 0) {
@@ -9500,7 +9847,12 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null && argTypes[0] !== 'number' && argTypes[0] !== 'array') {
+      if (
+        expression.args[0] !== null &&
+        typeof expression.args[0] !== 'undefined' &&
+        argTypes[0] !== 'number' &&
+        argTypes[0] !== 'array'
+      ) {
         this.report(
           'INOX_TYPE_MISMATCH',
           `Uint8Array constructor expects number or number[], got ${argTypes[0]}`,
@@ -9511,7 +9863,7 @@ class Checker {
       if (argTypes[0] === 'array') {
         const elementType = this.resolveExpressionArrayElementType(expression.args[0])
 
-        if (elementType != null) {
+        if (elementType !== null && typeof elementType !== 'undefined') {
           this.checkAssignableType(elementType, 'number', expression.args[0].loc, false, false)
         }
       }
@@ -9529,15 +9881,19 @@ class Checker {
 
     let symbol = this.scope.resolve(constructorName)
 
-    if (symbol == null) {
+    if (symbol === null || typeof symbol === 'undefined') {
       const globalSymbol = builtinGlobalSymbol(constructorName)
 
-      if (globalSymbol != null) {
+      if (globalSymbol !== null && typeof globalSymbol !== 'undefined') {
         symbol = globalSymbol
       }
     }
 
-    if (symbol == null || (symbol.kind !== 'class' && symbol.constructable !== true)) {
+    if (
+      symbol === null ||
+      typeof symbol === 'undefined' ||
+      (symbol.kind !== 'class' && symbol.constructable !== true)
+    ) {
       this.report('INOX_UNKNOWN_NAME', `unknown class ${constructorName}`, expression.callee.loc)
       return 'object'
     }
@@ -9549,7 +9905,7 @@ class Checker {
     let constructorParams: AnyNode[] = []
     const symbolConstructorParams = symbol.constructorParams ?? null
 
-    if (symbolConstructorParams != null) {
+    if (symbolConstructorParams !== null && typeof symbolConstructorParams !== 'undefined') {
       constructorParams = symbolConstructorParams
     }
 
@@ -9578,7 +9934,7 @@ class Checker {
     expression.className = constructorName
     expression.shape = null
 
-    if (symbol.shape != null) {
+    if (symbol.shape !== null && typeof symbol.shape !== 'undefined') {
       expression.shape = symbol.shape
     }
 
@@ -9593,16 +9949,24 @@ class Checker {
     const symbol = this.scope.resolve(firstPathSegment(expression.callee.path))
     let importedName: string | null = null
 
-    if (symbol != null && symbol.importedName != null) {
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      symbol.importedName !== null &&
+      typeof symbol.importedName !== 'undefined'
+    ) {
       importedName = symbol.importedName
     }
 
     if (
-      symbol == null ||
+      symbol === null ||
+      typeof symbol === 'undefined' ||
       symbol.kind !== 'import' ||
-      symbol.importSource == null ||
+      symbol.importSource === null ||
+      typeof symbol.importSource === 'undefined' ||
       !isNodeUrlImportSource(symbol.importSource) ||
-      importedName == null
+      importedName === null ||
+      typeof importedName === 'undefined'
     ) {
       return null
     }
@@ -9630,7 +9994,7 @@ class Checker {
         )
       }
 
-      if (expression.args[0] != null) {
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         const argType = argTypes[0]
 
         if (argType !== 'string' && argType !== 'object') {
@@ -9648,7 +10012,7 @@ class Checker {
             let propertyValueType: ValueType = 'unknown'
             const knownPropertyValueType = property.value.valueType
 
-            if (knownPropertyValueType == null) {
+            if (knownPropertyValueType === null || typeof knownPropertyValueType === 'undefined') {
               propertyValueType = this.checkExpression(property.value)
             } else {
               propertyValueType = knownPropertyValueType
@@ -9665,7 +10029,7 @@ class Checker {
         } else {
           const shape = this.resolveExpressionShape(expression.args[0])
 
-          if (shape != null) {
+          if (shape !== null && typeof shape !== 'undefined') {
             for (const field of shape.fields) {
               const fieldType = this.resolveFieldDeclaredType(field)
 
@@ -9696,7 +10060,7 @@ class Checker {
       if (index === 1 && argType === 'object') {
         const shape = this.resolveExpressionShape(expression.args[index])
 
-        if (shape != null && shape.builtin === 'url.URL') {
+        if (shape !== null && typeof shape !== 'undefined' && shape.builtin === 'url.URL') {
           continue
         }
       }
@@ -9722,7 +10086,7 @@ class Checker {
       expression.callee.type !== 'Reference' ||
       expression.callee.path.length !== 1 ||
       firstPathSegment(expression.callee.path) !== 'Promise' ||
-      this.scope.resolve('Promise') != null
+      isPresent(this.scope.resolve('Promise'))
     ) {
       return null
     }
@@ -9738,7 +10102,7 @@ class Checker {
     const executor = expression.args[0]
     let promiseValueType: ValueType = 'unknown'
 
-    if (executor == null) {
+    if (executor === null || typeof executor === 'undefined') {
       expression.valueType = 'promise'
       expression.promiseValueType = promiseValueType
       return 'promise'
@@ -9759,7 +10123,7 @@ class Checker {
       resolveName = checkerNodeAt(executor.params, 0).name
     }
 
-    if (resolveName != null) {
+    if (resolveName !== null && typeof resolveName !== 'undefined') {
       promiseValueType = this.resolvePromiseExecutorValueType(executor, resolveName)
     }
 
@@ -9787,21 +10151,26 @@ class Checker {
     }
   }
 
-  collectPromiseExecutorValueTypesFromNode(node: AnyNode | null | undefined, resolveName: string, types: ValueType[]): void {
-    if (node == null) {
+  collectPromiseExecutorValueTypesFromNode(
+    node: AnyNode | null | undefined,
+    resolveName: string,
+    types: ValueType[]
+  ): void {
+    if (node === null || typeof node === 'undefined') {
       return
     }
 
     if (
       node.type === 'CallExpression' &&
-      node.callee != null &&
+      node.callee !== null &&
+      typeof node.callee !== 'undefined' &&
       node.callee.type === 'Reference' &&
       node.callee.path.length === 1 &&
       firstPathSegment(node.callee.path) === resolveName
     ) {
       let resolvedType: ValueType = 'void'
 
-      if (node.args[0] != null) {
+      if (node.args[0] !== null && typeof node.args[0] !== 'undefined') {
         resolvedType = this.inferCheckedExpressionType(node.args[0])
       }
 
@@ -9930,7 +10299,11 @@ class Checker {
   }
 
   inferCheckedExpressionType(expression: AnyNode): ValueType {
-    if (expression.valueType != null && expression.valueType !== 'unknown') {
+    if (
+      expression.valueType !== null &&
+      typeof expression.valueType !== 'undefined' &&
+      expression.valueType !== 'unknown'
+    ) {
       return expression.valueType
     }
 
@@ -9962,7 +10335,7 @@ class Checker {
       )
     }
 
-    if (expression.args[0] != null) {
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
       this.checkAssignableType(
         argTypes[0],
         'string',
@@ -9974,7 +10347,7 @@ class Checker {
 
     const options = expression.args[1]
 
-    if (options == null) {
+    if (options === null || typeof options === 'undefined') {
       return
     }
 
@@ -10018,10 +10391,15 @@ class Checker {
   }
 
   checkVariableInitializer(expression: AnyNode, declared: ResolvedTypeInfo | null): ValueType {
-    if (expression.type === 'ArrowFunctionExpression' && declared != null && declared.valueType === 'function') {
+    if (
+      expression.type === 'ArrowFunctionExpression' &&
+      declared !== null &&
+      typeof declared !== 'undefined' &&
+      declared.valueType === 'function'
+    ) {
       const functionType = declared.functionType
 
-      if (functionType != null) {
+      if (functionType !== null && typeof functionType !== 'undefined') {
         this.checkArrowFunctionExpression(expression, functionType)
         return 'function'
       }
@@ -10030,7 +10408,7 @@ class Checker {
     if (expression.type === 'CallExpression') {
       const jsonType = this.checkJsonCall(expression, declared)
 
-      if (jsonType != null) {
+      if (jsonType !== null && typeof jsonType !== 'undefined') {
         return jsonType
       }
     }
@@ -10050,24 +10428,34 @@ class Checker {
 
     expression.valueType = 'function'
 
-    if (functionType != null && functionType.resolved !== true) {
-      functionType = this.resolveFunctionTypeMetadata(functionType as FunctionTypeMetadata, expression.loc) ?? functionType
+    if (functionType !== null && typeof functionType !== 'undefined' && functionType.resolved !== true) {
+      functionType =
+        this.resolveFunctionTypeMetadata(functionType as FunctionTypeMetadata, expression.loc) ?? functionType
     }
 
-    if (functionType != null) {
+    if (functionType !== null && typeof functionType !== 'undefined') {
       expression.functionType = functionType
     }
 
     let actualReturnType: ValueType = 'unknown'
 
-    if (functionType != null && functionType.returnType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnType !== null &&
+      typeof functionType.returnType !== 'undefined'
+    ) {
       actualReturnType = functionType.returnType
     }
 
     const scopeState = this.pushScope()
 
     try {
-      if (functionType != null && expression.params.length > functionType.params.length) {
+      if (
+        functionType !== null &&
+        typeof functionType !== 'undefined' &&
+        expression.params.length > functionType.params.length
+      ) {
         this.report(
           'INOX_ARG_COUNT',
           `function callback expects at most ${functionType.params.length} parameter(s), got ${expression.params.length}`,
@@ -10079,13 +10467,13 @@ class Checker {
         const param = expression.params[index]
         let expected: AnyNode | null = null
 
-        if (functionType != null && index < functionType.params.length) {
+        if (functionType !== null && typeof functionType !== 'undefined' && index < functionType.params.length) {
           expected = functionType.params[index]
         }
 
         let paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
 
-        if (param.valueType === 'unknown' && expected != null) {
+        if (param.valueType === 'unknown' && expected !== null && typeof expected !== 'undefined') {
           let arrayElementType: ValueType | null = null
           let arrayElementDeclaredType: string | null = null
           let expectedValueType = expected.valueType
@@ -10100,35 +10488,35 @@ class Checker {
             expectedValueType = 'object'
           }
 
-          if (expected.arrayElementType != null) {
+          if (expected.arrayElementType !== null && typeof expected.arrayElementType !== 'undefined') {
             arrayElementType = expected.arrayElementType
           }
 
-          if (expected.arrayElementDeclaredType != null) {
+          if (expected.arrayElementDeclaredType !== null && typeof expected.arrayElementDeclaredType !== 'undefined') {
             arrayElementDeclaredType = expected.arrayElementDeclaredType
           }
 
-          if (expected.mapKeyType != null) {
+          if (expected.mapKeyType !== null && typeof expected.mapKeyType !== 'undefined') {
             mapKeyType = expected.mapKeyType
           }
 
-          if (expected.mapValueType != null) {
+          if (expected.mapValueType !== null && typeof expected.mapValueType !== 'undefined') {
             mapValueType = expected.mapValueType
           }
 
-          if (expected.promiseValueType != null) {
+          if (expected.promiseValueType !== null && typeof expected.promiseValueType !== 'undefined') {
             promiseValueType = expected.promiseValueType
           }
 
-          if (expected.setElementType != null) {
+          if (expected.setElementType !== null && typeof expected.setElementType !== 'undefined') {
             setElementType = expected.setElementType
           }
 
-          if (expected.functionType != null) {
+          if (expected.functionType !== null && typeof expected.functionType !== 'undefined') {
             expectedFunctionType = expected.functionType
           }
 
-          if (expected.shape != null) {
+          if (expected.shape !== null && typeof expected.shape !== 'undefined') {
             shape = expected.shape
           }
 
@@ -10146,8 +10534,19 @@ class Checker {
           }
         }
 
-        if (expected != null && param.valueType !== 'unknown' && isBuiltinValueType(expected.valueType)) {
-          this.checkAssignableType(expected.valueType, paramInfo.valueType, param.loc, expected.nullable === true, false)
+        if (
+          expected !== null &&
+          typeof expected !== 'undefined' &&
+          param.valueType !== 'unknown' &&
+          isBuiltinValueType(expected.valueType)
+        ) {
+          this.checkAssignableType(
+            expected.valueType,
+            paramInfo.valueType,
+            param.loc,
+            expected.nullable === true,
+            false
+          )
         }
 
         param.declaredType = param.valueType
@@ -10155,7 +10554,12 @@ class Checker {
         if (param.valueType === 'unknown') {
           param.declaredType = paramInfo.valueType
 
-          if (expected != null && expected.declaredType != null) {
+          if (
+            expected !== null &&
+            typeof expected !== 'undefined' &&
+            expected.declaredType !== null &&
+            typeof expected.declaredType !== 'undefined'
+          ) {
             param.declaredType = expected.declaredType
           }
         }
@@ -10168,7 +10572,7 @@ class Checker {
         param.mapValueType = paramInfo.mapValueType
         param.promiseValueType = null
 
-        if (paramInfo.promiseValueType != null) {
+        if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
           param.promiseValueType = paramInfo.promiseValueType
         }
 
@@ -10204,7 +10608,11 @@ class Checker {
         try {
           actualReturnType = this.checkExpression(expression.body)
 
-          if (functionType != null && isBuiltinValueType(functionType.returnType)) {
+          if (
+            functionType !== null &&
+            typeof functionType !== 'undefined' &&
+            isBuiltinValueType(functionType.returnType)
+          ) {
             this.checkAssignableType(
               actualReturnType,
               functionType.returnType,
@@ -10213,7 +10621,11 @@ class Checker {
               this.expressionCanBeNull(expression.body)
             )
 
-            if (functionType.returnType === 'promise' && functionType.returnPromiseValueType != null) {
+            if (
+              functionType.returnType === 'promise' &&
+              functionType.returnPromiseValueType !== null &&
+              typeof functionType.returnPromiseValueType !== 'undefined'
+            ) {
               this.checkAssignableType(
                 this.resolveExpressionPromiseValueType(expression.body),
                 functionType.returnPromiseValueType,
@@ -10227,7 +10639,7 @@ class Checker {
           this.functionDepth = previousFunctionDepth
         }
       } else {
-        if (functionType == null) {
+        if (functionType === null || typeof functionType === 'undefined') {
           const previousFunctionDepth = this.functionDepth
           this.functionDepth = this.functionDepth + 1
 
@@ -10251,7 +10663,10 @@ class Checker {
           this.currentReturnNullable = functionType.returnNullable === true
           this.currentReturnPromiseValueType = null
 
-          if (functionType.returnPromiseValueType != null) {
+          if (
+            functionType.returnPromiseValueType !== null &&
+            typeof functionType.returnPromiseValueType !== 'undefined'
+          ) {
             this.currentReturnPromiseValueType = functionType.returnPromiseValueType
           }
 
@@ -10272,61 +10687,126 @@ class Checker {
 
     expression.returnType = actualReturnType
 
-    if (functionType != null && functionType.returnType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnType !== null &&
+      typeof functionType.returnType !== 'undefined'
+    ) {
       expression.returnType = functionType.returnType
     }
 
     expression.declaredReturnType = expression.returnType
 
-    if (functionType != null && functionType.declaredReturnType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.declaredReturnType !== null &&
+      typeof functionType.declaredReturnType !== 'undefined'
+    ) {
       expression.declaredReturnType = functionType.declaredReturnType
     }
 
     expression.returnNullable = false
 
-    if (functionType != null && functionType.returnNullable === true) {
+    if (functionType !== null && typeof functionType !== 'undefined' && functionType.returnNullable === true) {
       expression.returnNullable = true
-    } else if (expression.expressionBody && expression.body != null && expression.body.nullable === true) {
+    } else if (
+      expression.expressionBody &&
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.nullable === true
+    ) {
       expression.returnNullable = true
     }
 
     expression.returnArrayElementType = null
 
-    if (functionType != null && functionType.returnArrayElementType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnArrayElementType !== null &&
+      typeof functionType.returnArrayElementType !== 'undefined'
+    ) {
       expression.returnArrayElementType = functionType.returnArrayElementType
-    } else if (expression.body != null && expression.body.arrayElementType != null) {
+    } else if (
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.arrayElementType !== null &&
+      typeof expression.body.arrayElementType !== 'undefined'
+    ) {
       expression.returnArrayElementType = expression.body.arrayElementType
     }
 
     expression.returnMapKeyType = null
 
-    if (functionType != null && functionType.returnMapKeyType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnMapKeyType !== null &&
+      typeof functionType.returnMapKeyType !== 'undefined'
+    ) {
       expression.returnMapKeyType = functionType.returnMapKeyType
-    } else if (expression.body != null && expression.body.mapKeyType != null) {
+    } else if (
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.mapKeyType !== null &&
+      typeof expression.body.mapKeyType !== 'undefined'
+    ) {
       expression.returnMapKeyType = expression.body.mapKeyType
     }
 
     expression.returnMapValueType = null
 
-    if (functionType != null && functionType.returnMapValueType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnMapValueType !== null &&
+      typeof functionType.returnMapValueType !== 'undefined'
+    ) {
       expression.returnMapValueType = functionType.returnMapValueType
-    } else if (expression.body != null && expression.body.mapValueType != null) {
+    } else if (
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.mapValueType !== null &&
+      typeof expression.body.mapValueType !== 'undefined'
+    ) {
       expression.returnMapValueType = expression.body.mapValueType
     }
 
     expression.returnPromiseValueType = null
 
-    if (functionType != null && functionType.returnPromiseValueType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnPromiseValueType !== null &&
+      typeof functionType.returnPromiseValueType !== 'undefined'
+    ) {
       expression.returnPromiseValueType = functionType.returnPromiseValueType
-    } else if (expression.body != null && expression.body.promiseValueType != null) {
+    } else if (
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.promiseValueType !== null &&
+      typeof expression.body.promiseValueType !== 'undefined'
+    ) {
       expression.returnPromiseValueType = expression.body.promiseValueType
     }
 
     expression.returnSetElementType = null
 
-    if (functionType != null && functionType.returnSetElementType != null) {
+    if (
+      functionType !== null &&
+      typeof functionType !== 'undefined' &&
+      functionType.returnSetElementType !== null &&
+      typeof functionType.returnSetElementType !== 'undefined'
+    ) {
       expression.returnSetElementType = functionType.returnSetElementType
-    } else if (expression.body != null && expression.body.setElementType != null) {
+    } else if (
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.setElementType !== null &&
+      typeof expression.body.setElementType !== 'undefined'
+    ) {
       expression.returnSetElementType = expression.body.setElementType
     }
   }
@@ -10335,10 +10815,10 @@ class Checker {
     const fieldNames = new Set()
     const methodNames = new Set()
 
-    if (statement.extendsName != null) {
+    if (statement.extendsName !== null && typeof statement.extendsName !== 'undefined') {
       let extendsLoc = statement.loc
 
-      if (statement.extendsLoc != null) {
+      if (statement.extendsLoc !== null && typeof statement.extendsLoc !== 'undefined') {
         extendsLoc = statement.extendsLoc
       }
 
@@ -10347,7 +10827,7 @@ class Checker {
 
     let fields: AnyNode[] = []
 
-    if (statement.fields != null) {
+    if (statement.fields !== null && typeof statement.fields !== 'undefined') {
       fields = statement.fields
     }
 
@@ -10355,7 +10835,7 @@ class Checker {
       if (field.static) {
         let fieldStaticLoc = field.loc
 
-        if (field.staticLoc != null) {
+        if (field.staticLoc !== null && typeof field.staticLoc !== 'undefined') {
           fieldStaticLoc = field.staticLoc
         }
 
@@ -10373,7 +10853,7 @@ class Checker {
       if (method.static) {
         let methodStaticLoc = method.loc
 
-        if (method.staticLoc != null) {
+        if (method.staticLoc !== null && typeof method.staticLoc !== 'undefined') {
           methodStaticLoc = method.staticLoc
         }
 
@@ -10400,7 +10880,7 @@ class Checker {
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
         this.currentReturnPromiseValueType = null
 
-        if (methodReturnInfo.promiseValueType != null) {
+        if (methodReturnInfo.promiseValueType !== null && typeof methodReturnInfo.promiseValueType !== 'undefined') {
           this.currentReturnPromiseValueType = methodReturnInfo.promiseValueType
         }
 
@@ -10412,7 +10892,7 @@ class Checker {
         this.functionDepth = this.functionDepth + 1
         let thisShape: ObjectShapeInfo | null = null
 
-        if (statement.shape != null) {
+        if (statement.shape !== null && typeof statement.shape !== 'undefined') {
           thisShape = statement.shape
         }
 
@@ -10482,7 +10962,7 @@ class Checker {
     for (const field of shape.fields) {
       const property = properties.get(field.name)
 
-      if (property == null) {
+      if (property === null || typeof property === 'undefined') {
         if (field.optional !== true) {
           this.report('INOX_MISSING_FIELD', `missing field ${field.name}`, expression.loc)
         }
@@ -10496,12 +10976,18 @@ class Checker {
 
       if (
         fieldType.valueType === 'function' &&
-        propertyFunctionType != null &&
+        propertyFunctionType !== null &&
+        typeof propertyFunctionType !== 'undefined' &&
         property.value.type === 'ArrowFunctionExpression'
       ) {
         this.checkArrowFunctionExpression(property.value, propertyFunctionType)
         propertyType = 'function'
-      } else if (fieldType.valueType === 'object' && fieldShape != null && property.value.type === 'ObjectLiteral') {
+      } else if (
+        fieldType.valueType === 'object' &&
+        fieldShape !== null &&
+        typeof fieldShape !== 'undefined' &&
+        property.value.type === 'ObjectLiteral'
+      ) {
         this.checkObjectLiteralAgainstShape(property.value, fieldShape)
         propertyType = 'object'
       } else {
@@ -10516,7 +11002,11 @@ class Checker {
         this.expressionCanBeNull(property.value)
       )
 
-      if (fieldType.valueType === 'array' && fieldType.arrayElementType != null) {
+      if (
+        fieldType.valueType === 'array' &&
+        fieldType.arrayElementType !== null &&
+        typeof fieldType.arrayElementType !== 'undefined'
+      ) {
         this.checkAssignableType(
           this.resolveExpressionArrayElementType(property.value),
           fieldType.arrayElementType,
@@ -10531,21 +11021,25 @@ class Checker {
         let actualKey: ValueType | null = null
         let actualValue: ValueType | null = null
 
-        if (actual != null) {
+        if (actual !== null && typeof actual !== 'undefined') {
           actualKey = actual.key
           actualValue = actual.value
         }
 
-        if (fieldType.mapKeyType != null) {
+        if (fieldType.mapKeyType !== null && typeof fieldType.mapKeyType !== 'undefined') {
           this.checkAssignableType(actualKey, fieldType.mapKeyType, property.loc, false, false)
         }
 
-        if (fieldType.mapValueType != null) {
+        if (fieldType.mapValueType !== null && typeof fieldType.mapValueType !== 'undefined') {
           this.checkAssignableType(actualValue, fieldType.mapValueType, property.loc, false, false)
         }
       }
 
-      if (fieldType.valueType === 'set' && fieldType.setElementType != null) {
+      if (
+        fieldType.valueType === 'set' &&
+        fieldType.setElementType !== null &&
+        typeof fieldType.setElementType !== 'undefined'
+      ) {
         this.checkAssignableType(
           this.resolveExpressionSetElementType(property.value),
           fieldType.setElementType,
@@ -10555,7 +11049,11 @@ class Checker {
         )
       }
 
-      if (fieldType.valueType === 'promise' && fieldType.promiseValueType != null) {
+      if (
+        fieldType.valueType === 'promise' &&
+        fieldType.promiseValueType !== null &&
+        typeof fieldType.promiseValueType !== 'undefined'
+      ) {
         this.checkAssignableType(
           this.resolveExpressionPromiseValueType(property.value),
           fieldType.promiseValueType,
@@ -10567,7 +11065,7 @@ class Checker {
     }
 
     for (const property of expression.properties) {
-      if (shape.dynamic !== true && this.findShapeField(shape, property.key) == null) {
+      if (shape.dynamic !== true && isNullish(this.findShapeField(shape, property.key))) {
         this.report('INOX_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
       }
     }
@@ -10577,11 +11075,16 @@ class Checker {
     if (expression.type === 'ThisExpression') {
       const thisSymbol = this.scope.resolve('this')
 
-      if (thisSymbol != null && thisSymbol.shape != null) {
+      if (
+        thisSymbol !== null &&
+        typeof thisSymbol !== 'undefined' &&
+        thisSymbol.shape !== null &&
+        typeof thisSymbol.shape !== 'undefined'
+      ) {
         return thisSymbol.shape
       }
 
-      if (expression.shape != null) {
+      if (expression.shape !== null && typeof expression.shape !== 'undefined') {
         return expression.shape
       }
 
@@ -10589,7 +11092,7 @@ class Checker {
     }
 
     if (expression.type !== 'Reference' || expression.path.length !== 1) {
-      if (expression.shape != null) {
+      if (expression.shape !== null && typeof expression.shape !== 'undefined') {
         return expression.shape
       }
 
@@ -10599,19 +11102,28 @@ class Checker {
     const name = firstPathSegment(expression.path)
     const symbol = this.scope.resolve(name)
 
-    if (symbol != null && symbol.shape != null) {
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      symbol.shape !== null &&
+      typeof symbol.shape !== 'undefined'
+    ) {
       return symbol.shape
     }
 
-    if (symbol != null && symbol.valueType === 'object') {
-      const elementShape = this.resolveArrayElementObjectShape(symbol.valueType, symbol.arrayElementDeclaredType, expression.loc)
+    if (symbol !== null && typeof symbol !== 'undefined' && symbol.valueType === 'object') {
+      const elementShape = this.resolveArrayElementObjectShape(
+        symbol.valueType,
+        symbol.arrayElementDeclaredType,
+        expression.loc
+      )
 
-      if (elementShape != null) {
+      if (elementShape !== null && typeof elementShape !== 'undefined') {
         return elementShape
       }
     }
 
-    if (expression.shape != null) {
+    if (expression.shape !== null && typeof expression.shape !== 'undefined') {
       return expression.shape
     }
 
@@ -10623,7 +11135,7 @@ class Checker {
     declaredType: string | null | undefined,
     loc: SourceLocation
   ): ObjectShapeInfo | null {
-    if (valueType !== 'object' || declaredType == null) {
+    if (valueType !== 'object' || declaredType === null || typeof declaredType === 'undefined') {
       return null
     }
 
@@ -10637,9 +11149,7 @@ class Checker {
   isThisExpression(expression: AnyNode): boolean {
     return (
       expression.type === 'ThisExpression' ||
-      (expression.type === 'Reference' &&
-        expression.path.length === 1 &&
-        firstPathSegment(expression.path) === 'this')
+      (expression.type === 'Reference' && expression.path.length === 1 && firstPathSegment(expression.path) === 'this')
     )
   }
 
@@ -10662,7 +11172,7 @@ class Checker {
   }
 
   dynamicShapeField(shape: ObjectShapeInfo, name: string) {
-    if (shape.dynamicField != null) {
+    if (shape.dynamicField !== null && typeof shape.dynamicField !== 'undefined') {
       const field = shape.dynamicField
 
       return {
@@ -10702,7 +11212,7 @@ class Checker {
   getCallableSymbol(callee: AnyNode): SymbolInfo | null {
     const calleeFunctionType = callee.functionType
 
-    if (calleeFunctionType != null) {
+    if (calleeFunctionType !== null && typeof calleeFunctionType !== 'undefined') {
       return this.callableSymbolFromFunctionType(calleeFunctionType, callee.loc)
     }
 
@@ -10713,30 +11223,47 @@ class Checker {
     const calleeName = firstPathSegment(callee.path)
     let symbol = this.scope.resolve(calleeName)
 
-    if (symbol == null) {
+    if (symbol === null || typeof symbol === 'undefined') {
       const globalSymbol = builtinGlobalSymbol(calleeName)
 
-      if (globalSymbol != null) {
+      if (globalSymbol !== null && typeof globalSymbol !== 'undefined') {
         symbol = globalSymbol
       }
     }
 
-    if (symbol != null && symbol.kind === 'function') {
+    if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'function') {
       return symbol
     }
 
-    if (symbol != null && symbol.valueType === 'function' && symbol.params != null && symbol.returnType != null) {
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      symbol.valueType === 'function' &&
+      symbol.params !== null &&
+      typeof symbol.params !== 'undefined' &&
+      symbol.returnType !== null &&
+      typeof symbol.returnType !== 'undefined'
+    ) {
       return symbol
     }
 
-    if (symbol != null && symbol.valueType === 'function' && symbol.functionType != null) {
+    if (
+      symbol !== null &&
+      typeof symbol !== 'undefined' &&
+      symbol.valueType === 'function' &&
+      symbol.functionType !== null &&
+      typeof symbol.functionType !== 'undefined'
+    ) {
       return this.callableSymbolFromFunctionType(symbol.functionType, symbol.loc)
     }
 
     return null
   }
 
-  callableSymbolFromFunctionType(functionType: FunctionTypeMetadata, loc: SourceLocation | null | undefined): SymbolInfo {
+  callableSymbolFromFunctionType(
+    functionType: FunctionTypeMetadata,
+    loc: SourceLocation | null | undefined
+  ): SymbolInfo {
     const resolvedFunctionType = this.resolvedCallableFunctionType(functionType, loc)
 
     const symbol: SymbolInfo = {
@@ -10754,7 +11281,7 @@ class Checker {
       returnShape: resolvedFunctionType.returnShape
     }
 
-    if (loc != null) {
+    if (loc !== null && typeof loc !== 'undefined') {
       symbol.loc = loc
     }
 
@@ -10789,17 +11316,21 @@ class Checker {
     const scopeState = this.pushScope()
 
     try {
-      if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+      if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.type === 'VariableDeclaration'
+      ) {
         this.checkStatement(statement.init)
-      } else if (statement.init != null) {
+      } else if (statement.init !== null && typeof statement.init !== 'undefined') {
         this.checkExpression(statement.init)
       }
 
-      if (statement.test != null) {
+      if (statement.test !== null && typeof statement.test !== 'undefined') {
         this.checkBooleanCondition(statement.test)
       }
 
-      if (statement.update != null) {
+      if (statement.update !== null && typeof statement.update !== 'undefined') {
         this.checkExpression(statement.update)
       }
 
@@ -10835,13 +11366,13 @@ class Checker {
     if (iterableType === 'array') {
       const arrayElementType = this.resolveExpressionArrayElementType(statement.iterable)
 
-      if (arrayElementType != null) {
+      if (arrayElementType !== null && typeof arrayElementType !== 'undefined') {
         elementType = arrayElementType
       }
     } else if (iterableType === 'set') {
       const setElementType = this.resolveExpressionSetElementType(statement.iterable)
 
-      if (setElementType != null) {
+      if (setElementType !== null && typeof setElementType !== 'undefined') {
         elementType = setElementType
       }
     } else if (iterableType === 'map') {
@@ -10854,7 +11385,7 @@ class Checker {
       const arrayElementDeclaredType = this.resolveExpressionArrayElementDeclaredType(statement.iterable)
       elementDeclaredType = elementType
 
-      if (arrayElementDeclaredType != null) {
+      if (arrayElementDeclaredType !== null && typeof arrayElementDeclaredType !== 'undefined') {
         elementDeclaredType = arrayElementDeclaredType
       }
     } else if (iterableType === 'set') {
@@ -10865,32 +11396,37 @@ class Checker {
 
     let declared: ResolvedTypeInfo | null = null
 
-    if (statement.declaredType != null) {
+    if (statement.declaredType !== null && typeof statement.declaredType !== 'undefined') {
       declared = this.resolveDeclaredType(statement.declaredType, statement.nameLoc)
     }
 
     let valueType = elementType
 
-    if (declared != null) {
+    if (declared !== null && typeof declared !== 'undefined') {
       valueType = declared.valueType
     }
 
     let inferredDeclaredType: string | null = elementDeclaredType
 
-    if (declared != null) {
+    if (declared !== null && typeof declared !== 'undefined') {
       inferredDeclaredType = statement.declaredType
     }
 
     let shape = mapEntryShape
 
-    if (declared != null && declared.shape != null) {
+    if (
+      declared !== null &&
+      typeof declared !== 'undefined' &&
+      declared.shape !== null &&
+      typeof declared.shape !== 'undefined'
+    ) {
       shape = declared.shape
     }
 
     statement.valueType = valueType
     statement.nullable = false
 
-    if (declared != null && declared.nullable === true) {
+    if (declared !== null && typeof declared !== 'undefined' && declared.nullable === true) {
       statement.nullable = true
     }
 
@@ -10902,35 +11438,35 @@ class Checker {
     statement.setElementType = null
     statement.functionType = null
 
-    if (declared != null) {
-      if (declared.arrayElementType != null) {
+    if (declared !== null && typeof declared !== 'undefined') {
+      if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
         statement.arrayElementType = declared.arrayElementType
       }
 
-      if (declared.arrayElementDeclaredType != null) {
+      if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
         statement.arrayElementDeclaredType = declared.arrayElementDeclaredType
       }
 
-      if (declared.mapKeyType != null) {
+      if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
         statement.mapKeyType = declared.mapKeyType
       }
 
-      if (declared.mapValueType != null) {
+      if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
         statement.mapValueType = declared.mapValueType
       }
 
-      if (declared.setElementType != null) {
+      if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
         statement.setElementType = declared.setElementType
       }
 
-      if (declared.functionType != null) {
+      if (declared.functionType !== null && typeof declared.functionType !== 'undefined') {
         statement.functionType = declared.functionType
       }
     }
 
     statement.shape = shape
 
-    if (declared != null) {
+    if (declared !== null && typeof declared !== 'undefined') {
       this.checkAssignableType(elementType, declared.valueType, statement.nameLoc, declared.nullable, false)
     }
 
@@ -10945,30 +11481,30 @@ class Checker {
       let declaredSetElementType: ValueType | null = null
       let declaredFunctionType: AnyNode | null = null
 
-      if (declared != null) {
+      if (declared !== null && typeof declared !== 'undefined') {
         declaredNullable = declared.nullable === true
 
-        if (declared.arrayElementType != null) {
+        if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
           declaredArrayElementType = declared.arrayElementType
         }
 
-        if (declared.arrayElementDeclaredType != null) {
+        if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
           declaredArrayElementDeclaredType = declared.arrayElementDeclaredType
         }
 
-        if (declared.mapKeyType != null) {
+        if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
           declaredMapKeyType = declared.mapKeyType
         }
 
-        if (declared.mapValueType != null) {
+        if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
           declaredMapValueType = declared.mapValueType
         }
 
-        if (declared.setElementType != null) {
+        if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
           declaredSetElementType = declared.setElementType
         }
 
-        if (declared.functionType != null) {
+        if (declared.functionType !== null && typeof declared.functionType !== 'undefined') {
           declaredFunctionType = declared.functionType
         }
       }
@@ -11008,15 +11544,15 @@ class Checker {
     let keyType: ValueType = 'unknown'
     let valueType: ValueType = 'unknown'
 
-    if (mapType != null) {
+    if (mapType !== null && typeof mapType !== 'undefined') {
       const key = mapType.key
       const value = mapType.value
 
-      if (key != null) {
+      if (key !== null && typeof key !== 'undefined') {
         keyType = key
       }
 
-      if (value != null) {
+      if (value !== null && typeof value !== 'undefined') {
         valueType = value
       }
     }
@@ -11058,7 +11594,7 @@ class Checker {
 
     try {
       for (const item of statement.cases) {
-        if (item.test == null) {
+        if (item.test === null || typeof item.test === 'undefined') {
           if (hasDefault) {
             this.report('INOX_DUPLICATE_DEFAULT', 'switch can only have one default branch', item.loc)
           }
@@ -11093,12 +11629,16 @@ class Checker {
     const conditionType = this.checkExpression(expression)
 
     if (!isConditionValueType(conditionType)) {
-      this.report('INOX_CONDITION_TYPE', `condition must be boolean or truthy-compatible, got ${conditionType}`, expression.loc)
+      this.report(
+        'INOX_CONDITION_TYPE',
+        `condition must be boolean or truthy-compatible, got ${conditionType}`,
+        expression.loc
+      )
     }
   }
 
   resolveNullableConditionNarrowing(expression: AnyNode | null | undefined): NullableConditionNarrowing {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return {
         trueNames: [],
         falseNames: []
@@ -11117,7 +11657,7 @@ class Checker {
     if (expression.type !== 'BinaryExpression') {
       const key = nullableNarrowingKey(expression)
 
-      if (key != null && expression.nullable === true) {
+      if (key !== null && typeof key !== 'undefined' && expression.nullable === true) {
         return {
           trueNames: [key],
           falseNames: []
@@ -11216,14 +11756,20 @@ class Checker {
     let maybeNull = expression.right
 
     if (
-      expression.left != null &&
+      expression.left !== null &&
+      typeof expression.left !== 'undefined' &&
       (expression.left.type === 'NullLiteral' || isNonNullNarrowingLiteral(expression.left))
     ) {
       nullable = expression.right
       maybeNull = expression.left
     }
 
-    if (maybeNull == null || nullable == null) {
+    if (
+      maybeNull === null ||
+      typeof maybeNull === 'undefined' ||
+      nullable === null ||
+      typeof nullable === 'undefined'
+    ) {
       return {
         trueNames: [],
         falseNames: []
@@ -11232,7 +11778,7 @@ class Checker {
 
     const key = nullableNarrowingKey(nullable)
 
-    if (key == null || nullable.nullable !== true) {
+    if (key === null || typeof key === 'undefined' || nullable.nullable !== true) {
       return {
         trueNames: [],
         falseNames: []
@@ -11281,13 +11827,13 @@ class Checker {
     let valueType: ValueType | null = null
     const receiverValueType = receiver.valueType
 
-    if (receiverValueType != null) {
+    if (receiverValueType !== null && typeof receiverValueType !== 'undefined') {
       valueType = receiverValueType
     } else {
       valueType = this.inferNullableAccessValueType(receiver)
     }
 
-    if (valueType == null) {
+    if (valueType === null || typeof valueType === 'undefined') {
       return
     }
 
@@ -11306,18 +11852,18 @@ class Checker {
       const symbol = this.scope.resolve(name)
       let valueType: ValueType | null = null
 
-      if (symbol != null) {
+      if (symbol !== null && typeof symbol !== 'undefined') {
         valueType = symbol.valueType
       }
 
-      if (valueType != null) {
+      if (valueType !== null && typeof valueType !== 'undefined') {
         return valueType
       }
 
       return null
     }
 
-    if (expression.valueType != null) {
+    if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
       return expression.valueType
     }
 
@@ -11361,7 +11907,7 @@ class Checker {
   }
 
   restoreNarrowedNullableNames(previous: CheckerNarrowingState | null): void {
-    if (previous != null) {
+    if (previous !== null && typeof previous !== 'undefined') {
       this.narrowedNullableNames = previous.narrowedNullableNames
     }
   }
@@ -11427,15 +11973,15 @@ class Checker {
     const root = path[0]
     let symbol = this.scope.resolve(root)
 
-    if (symbol == null) {
+    if (symbol === null || typeof symbol === 'undefined') {
       const globalSymbol = builtinGlobalSymbol(root)
 
-      if (globalSymbol != null) {
+      if (globalSymbol !== null && typeof globalSymbol !== 'undefined') {
         symbol = globalSymbol
       }
     }
 
-    if (symbol == null) {
+    if (symbol === null || typeof symbol === 'undefined') {
       this.report('INOX_UNKNOWN_NAME', `unknown name ${root}`, reference.loc)
       return null
     }
@@ -11487,7 +12033,7 @@ class Checker {
     let edges: OwnershipGraphEdge[] = []
     const foundEdges = graph.get(node)
 
-    if (foundEdges != null) {
+    if (foundEdges !== null && typeof foundEdges !== 'undefined') {
       edges = foundEdges
     }
 
@@ -11556,7 +12102,7 @@ class Checker {
       } else if (item.type === 'ClassDeclaration') {
         let fields: AnyNode[] = []
 
-        if (item.fields != null) {
+        if (item.fields !== null && typeof item.fields !== 'undefined') {
           fields = item.fields
         }
 
@@ -11603,7 +12149,7 @@ class Checker {
 
         const edges = graph.get(owner)
 
-        if (edges == null) {
+        if (edges === null || typeof edges === 'undefined') {
           continue
         }
 
@@ -11630,7 +12176,7 @@ class Checker {
   }
 
   ownershipTargetsFromTypeName(name: string | null | undefined): string[] {
-    if (name == null || name === 'unknown') {
+    if (name === null || typeof name === 'undefined' || name === 'unknown') {
       return []
     }
 
@@ -11654,7 +12200,7 @@ class Checker {
 
     const mapTypeNames = mapTypeNamesFromTypeName(name)
 
-    if (mapTypeNames != null) {
+    if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
       return this.ownershipTargetsFromTypeName(mapTypeNames.value)
     }
 
@@ -11684,7 +12230,7 @@ class Checker {
   }
 
   resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
-    if (name == null || name === 'unknown') {
+    if (name === null || typeof name === 'undefined' || name === 'unknown') {
       return {
         valueType: 'unknown',
         nullable: false,
@@ -11738,7 +12284,7 @@ class Checker {
 
     const unionTypeNames = unionTypeNamesFromTypeName(name)
 
-    if (unionTypeNames != null) {
+    if (unionTypeNames !== null && typeof unionTypeNames !== 'undefined') {
       return this.resolveUnionDeclaredType(unionTypeNames, loc)
     }
 
@@ -11777,11 +12323,11 @@ class Checker {
 
     const mapTypeNames = mapTypeNamesFromTypeName(name)
 
-    if (name === 'map' || mapTypeNames != null) {
+    if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined')) {
       let mapKeyType: ValueType = 'unknown'
       let mapValueType: ValueType = 'unknown'
 
-      if (mapTypeNames != null) {
+      if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
         const keyInfo = this.resolveDeclaredType(mapTypeNames.key, loc)
         const valueInfo = this.resolveDeclaredType(mapTypeNames.value, loc)
         mapKeyType = keyInfo.valueType
@@ -11804,7 +12350,7 @@ class Checker {
 
     const recordTypeNames = recordTypeNamesFromTypeName(name)
 
-    if (recordTypeNames != null) {
+    if (recordTypeNames !== null && typeof recordTypeNames !== 'undefined') {
       const valueInfo = this.resolveDeclaredType(recordTypeNames.value, loc)
 
       return {
@@ -11941,10 +12487,18 @@ class Checker {
 
     const classSymbol = this.scope.resolve(name)
 
-    if ((classSymbol != null && classSymbol.kind === 'class') || this.classNames.has(name)) {
+    if (
+      (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class') ||
+      this.classNames.has(name)
+    ) {
       let classShape: ObjectShapeInfo | null = null
 
-      if (classSymbol != null && classSymbol.shape != null) {
+      if (
+        classSymbol !== null &&
+        typeof classSymbol !== 'undefined' &&
+        classSymbol.shape !== null &&
+        typeof classSymbol.shape !== 'undefined'
+      ) {
         classShape = classSymbol.shape
       }
 
@@ -11964,10 +12518,10 @@ class Checker {
 
     const shape = this.types.get(name)
 
-    if (shape != null) {
+    if (shape !== null && typeof shape !== 'undefined') {
       const cached = this.resolvedDeclaredTypes.get(name)
 
-      if (cached != null) {
+      if (cached !== null && typeof cached !== 'undefined') {
         return this.cloneResolvedTypeInfo(cached)
       }
 
@@ -12004,7 +12558,7 @@ class Checker {
           const params: FunctionTypeParamMetadata[] = []
           let returnPromiseValueType: ValueType | null = null
 
-          if (returnInfo.promiseValueType != null) {
+          if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
             returnPromiseValueType = returnInfo.promiseValueType
           }
 
@@ -12012,14 +12566,14 @@ class Checker {
             let declaredType: string = param.valueType
             const paramDeclaredType = param.declaredType
 
-            if (paramDeclaredType != null) {
+            if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
               declaredType = paramDeclaredType
             }
 
             const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
             let paramPromiseValueType: ValueType | null = null
 
-            if (paramInfo.promiseValueType != null) {
+            if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
               paramPromiseValueType = paramInfo.promiseValueType
             }
 
@@ -12099,7 +12653,6 @@ class Checker {
       } finally {
         this.resolvingDeclaredTypes.delete(name)
       }
-
     }
 
     this.report('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc)
@@ -12167,7 +12720,7 @@ class Checker {
     const resolvedBaseTypes: string[] = []
     const baseTypes = shape.baseTypes
 
-    if (baseTypes != null) {
+    if (baseTypes !== null && typeof baseTypes !== 'undefined') {
       for (let index = 0; index < baseTypes.length; index = index + 1) {
         resolvedBaseTypes.push(baseTypes[index])
       }
@@ -12181,11 +12734,11 @@ class Checker {
       fields: resolvedFields
     }
 
-    if (shape.dynamicField != null) {
+    if (shape.dynamicField !== null && typeof shape.dynamicField !== 'undefined') {
       resolvedShape.dynamicField = this.resolveObjectShapeField(shape.dynamicField, [shape.dynamicField])
     }
 
-    if (shape.builtin != null) {
+    if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
       resolvedShape.builtin = shape.builtin
     }
 
@@ -12197,7 +12750,7 @@ class Checker {
     let declaredType: string = field.valueType
     const fieldDeclaredType = field.declaredType
 
-    if (fieldDeclaredType != null) {
+    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
       declaredType = fieldDeclaredType
     }
 
@@ -12210,11 +12763,11 @@ class Checker {
     let promiseValueType: ValueType | null = null
     let functionType = fieldInfo.functionType
 
-    if (functionType == null) {
+    if (functionType === null || typeof functionType === 'undefined') {
       functionType = this.resolveFunctionTypeMetadata(field.functionType, field.loc)
     }
 
-    if (fieldInfo.promiseValueType != null) {
+    if (fieldInfo.promiseValueType !== null && typeof fieldInfo.promiseValueType !== 'undefined') {
       promiseValueType = fieldInfo.promiseValueType
     }
 
@@ -12247,21 +12800,21 @@ class Checker {
     functionType: FunctionTypeMetadata | null | undefined,
     loc: SourceLocation | null | undefined
   ): FunctionTypeMetadata | null {
-    if (functionType == null) {
+    if (functionType === null || typeof functionType === 'undefined') {
       return null
     }
 
     let typeLine = 1
     let typeColumn = 1
 
-    if (loc != null) {
+    if (loc !== null && typeof loc !== 'undefined') {
       typeLine = loc.line
       typeColumn = loc.column
     }
 
     const functionTypeLoc = functionType.loc
 
-    if (functionTypeLoc != null) {
+    if (functionTypeLoc !== null && typeof functionTypeLoc !== 'undefined') {
       typeLine = functionTypeLoc.line
       typeColumn = functionTypeLoc.column
     }
@@ -12271,7 +12824,7 @@ class Checker {
     const params: FunctionTypeParamMetadata[] = []
     let returnPromiseValueType: ValueType | null = null
 
-    if (returnInfo.promiseValueType != null) {
+    if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
       returnPromiseValueType = returnInfo.promiseValueType
     }
 
@@ -12279,14 +12832,14 @@ class Checker {
       let declaredType: string = param.valueType
       const paramDeclaredType = param.declaredType
 
-      if (paramDeclaredType != null) {
+      if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
         declaredType = paramDeclaredType
       }
 
       const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
       let paramPromiseValueType: ValueType | null = null
 
-      if (paramInfo.promiseValueType != null) {
+      if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
         paramPromiseValueType = paramInfo.promiseValueType
       }
 
@@ -12335,7 +12888,7 @@ class Checker {
     for (const name of baseTypes) {
       const base = this.types.get(name)
 
-      if (base == null || base.kind !== 'object') {
+      if (base === null || typeof base === 'undefined' || base.kind !== 'object') {
         continue
       }
 
@@ -12347,7 +12900,7 @@ class Checker {
 
       dynamic = dynamic || resolved.dynamic === true
 
-      if (resolved.dynamicField != null) {
+      if (resolved.dynamicField !== null && typeof resolved.dynamicField !== 'undefined') {
         dynamicField = resolved.dynamicField
       }
     }
@@ -12367,7 +12920,7 @@ class Checker {
     let declaredType: string = field.valueType
     const fieldDeclaredType = field.declaredType
 
-    if (fieldDeclaredType != null) {
+    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
       declaredType = fieldDeclaredType
     }
 
@@ -12378,7 +12931,7 @@ class Checker {
     let declaredName: string = field.valueType
     const fieldDeclaredType = field.declaredType
 
-    if (fieldDeclaredType != null) {
+    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
       declaredName = fieldDeclaredType
     }
 
@@ -12393,7 +12946,7 @@ class Checker {
     if (fieldInfo.valueType !== 'unknown' && fieldInfo.valueType !== 'object' && field.weakTypeValidated !== true) {
       let weakLoc = field.loc
 
-      if (field.weakLoc != null) {
+      if (field.weakLoc !== null && typeof field.weakLoc !== 'undefined') {
         weakLoc = field.weakLoc
       }
 
@@ -12412,7 +12965,7 @@ class Checker {
   }
 
   resolveWeakTargetDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
-    if (name == null || name === 'unknown') {
+    if (name === null || typeof name === 'undefined' || name === 'unknown') {
       return {
         valueType: 'unknown',
         nullable: false,
@@ -12444,7 +12997,7 @@ class Checker {
 
     const shape = this.types.get(name)
 
-    if (shape != null && shape.kind === 'object') {
+    if (shape !== null && typeof shape !== 'undefined' && shape.kind === 'object') {
       return {
         valueType: 'object',
         nullable: false,
@@ -12461,10 +13014,18 @@ class Checker {
 
     const classSymbol = this.scope.resolve(name)
 
-    if (this.classNames.has(name) || (classSymbol != null && classSymbol.kind === 'class')) {
+    if (
+      this.classNames.has(name) ||
+      (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class')
+    ) {
       let classShape: ObjectShapeInfo | null = null
 
-      if (classSymbol != null && classSymbol.shape != null) {
+      if (
+        classSymbol !== null &&
+        typeof classSymbol !== 'undefined' &&
+        classSymbol.shape !== null &&
+        typeof classSymbol.shape !== 'undefined'
+      ) {
         classShape = this.resolveWeakTargetObjectShape(classSymbol.shape)
       }
 
@@ -12500,11 +13061,11 @@ class Checker {
       let promiseValueType: ValueType | null = null
       const functionType = resolvedFunctionTypeMetadata(declared.functionType, field.functionType)
 
-      if (fieldDeclaredType != null) {
+      if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
         declaredType = fieldDeclaredType
       }
 
-      if (declared.promiseValueType != null) {
+      if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
         promiseValueType = declared.promiseValueType
       }
 
@@ -12542,7 +13103,7 @@ class Checker {
       fields: resolvedFields
     }
 
-    if (shape.builtin != null) {
+    if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
       resolvedShape.builtin = shape.builtin
     }
 
@@ -12553,7 +13114,7 @@ class Checker {
     let declaredType: string = field.valueType
     const fieldDeclaredType = field.declaredType
 
-    if (fieldDeclaredType != null) {
+    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
       declaredType = fieldDeclaredType
     }
 
@@ -12561,7 +13122,7 @@ class Checker {
   }
 
   resolveWeakTargetShapeTypeName(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
-    if (name == null || name === 'unknown') {
+    if (name === null || typeof name === 'undefined' || name === 'unknown') {
       return this.unresolvedTypeInfo()
     }
 
@@ -12605,13 +13166,13 @@ class Checker {
 
     const mapTypeNames = mapTypeNamesFromTypeName(name)
 
-    if (name === 'map' || mapTypeNames != null) {
+    if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined')) {
       const info = this.unresolvedTypeInfo()
       info.valueType = 'map'
       info.mapKeyType = 'unknown'
       info.mapValueType = 'unknown'
 
-      if (mapTypeNames != null) {
+      if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
         const keyInfo = this.resolveWeakTargetShapeTypeName(mapTypeNames.key, loc)
         const valueInfo = this.resolveWeakTargetShapeTypeName(mapTypeNames.value, loc)
         info.mapKeyType = keyInfo.valueType
@@ -12664,9 +13225,9 @@ class Checker {
     const symbol = this.scope.resolve(name)
 
     if (
-      (shape != null && shape.kind === 'object') ||
+      (shape !== null && typeof shape !== 'undefined' && shape.kind === 'object') ||
       this.classNames.has(name) ||
-      (symbol != null && symbol.kind === 'class')
+      (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'class')
     ) {
       const info = this.unresolvedTypeInfo()
       info.valueType = 'object'
@@ -12708,12 +13269,12 @@ class Checker {
   }
 
   resolveExpressionArrayElementType(expression: AnyNode | null | undefined): ValueType | null {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return null
     }
 
     if (expression.type === 'ArrayLiteral') {
-      if (expression.arrayElementType != null) {
+      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
         return expression.arrayElementType
       }
 
@@ -12721,7 +13282,7 @@ class Checker {
     }
 
     if (expression.type === 'CallExpression') {
-      if (expression.arrayElementType != null) {
+      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
         return expression.arrayElementType
       }
 
@@ -12729,7 +13290,7 @@ class Checker {
     }
 
     if (expression.type === 'AwaitExpression') {
-      if (expression.arrayElementType != null) {
+      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
         return expression.arrayElementType
       }
 
@@ -12740,7 +13301,12 @@ class Checker {
       const name = firstPathSegment(expression.path)
       const symbol = this.scope.resolve(name)
 
-      if (symbol != null && symbol.arrayElementType != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.arrayElementType !== null &&
+        typeof symbol.arrayElementType !== 'undefined'
+      ) {
         return symbol.arrayElementType
       }
 
@@ -12751,11 +13317,16 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.property)
       }
 
-      if (field != null && field.arrayElementType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.arrayElementType !== null &&
+        typeof field.arrayElementType !== 'undefined'
+      ) {
         return field.arrayElementType
       }
 
@@ -12766,11 +13337,16 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.index.value)
       }
 
-      if (field != null && field.arrayElementType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.arrayElementType !== null &&
+        typeof field.arrayElementType !== 'undefined'
+      ) {
         return field.arrayElementType
       }
 
@@ -12781,16 +13357,16 @@ class Checker {
   }
 
   resolveExpressionArrayElementDeclaredType(expression: AnyNode | null | undefined): string | null {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return null
     }
 
     if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
-      if (expression.arrayElementDeclaredType != null) {
+      if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
         return expression.arrayElementDeclaredType
       }
 
-      if (expression.arrayElementType != null) {
+      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
         return expression.arrayElementType
       }
 
@@ -12798,11 +13374,11 @@ class Checker {
     }
 
     if (expression.type === 'AwaitExpression') {
-      if (expression.arrayElementDeclaredType != null) {
+      if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
         return expression.arrayElementDeclaredType
       }
 
-      if (expression.arrayElementType != null) {
+      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
         return expression.arrayElementType
       }
 
@@ -12813,11 +13389,21 @@ class Checker {
       const name = firstPathSegment(expression.path)
       const symbol = this.scope.resolve(name)
 
-      if (symbol != null && symbol.arrayElementDeclaredType != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.arrayElementDeclaredType !== null &&
+        typeof symbol.arrayElementDeclaredType !== 'undefined'
+      ) {
         return symbol.arrayElementDeclaredType
       }
 
-      if (symbol != null && symbol.arrayElementType != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.arrayElementType !== null &&
+        typeof symbol.arrayElementType !== 'undefined'
+      ) {
         return symbol.arrayElementType
       }
 
@@ -12828,15 +13414,25 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.property)
       }
 
-      if (field != null && field.arrayElementDeclaredType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.arrayElementDeclaredType !== null &&
+        typeof field.arrayElementDeclaredType !== 'undefined'
+      ) {
         return field.arrayElementDeclaredType
       }
 
-      if (field != null && field.arrayElementType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.arrayElementType !== null &&
+        typeof field.arrayElementType !== 'undefined'
+      ) {
         return field.arrayElementType
       }
 
@@ -12847,15 +13443,25 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.index.value)
       }
 
-      if (field != null && field.arrayElementDeclaredType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.arrayElementDeclaredType !== null &&
+        typeof field.arrayElementDeclaredType !== 'undefined'
+      ) {
         return field.arrayElementDeclaredType
       }
 
-      if (field != null && field.arrayElementType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.arrayElementType !== null &&
+        typeof field.arrayElementType !== 'undefined'
+      ) {
         return field.arrayElementType
       }
 
@@ -12866,7 +13472,7 @@ class Checker {
   }
 
   resolveExpressionMapType(expression: AnyNode | null | undefined): CheckerMapType | null {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return null
     }
 
@@ -12875,11 +13481,11 @@ class Checker {
         let key: ValueType | null = null
         let value: ValueType | null = null
 
-        if (expression.mapKeyType != null) {
+        if (expression.mapKeyType !== null && typeof expression.mapKeyType !== 'undefined') {
           key = expression.mapKeyType
         }
 
-        if (expression.mapValueType != null) {
+        if (expression.mapValueType !== null && typeof expression.mapValueType !== 'undefined') {
           value = expression.mapValueType
         }
 
@@ -12896,15 +13502,15 @@ class Checker {
       const name = firstPathSegment(expression.path)
       const symbol = this.scope.resolve(name)
 
-      if (symbol != null && symbol.valueType === 'map') {
+      if (symbol !== null && typeof symbol !== 'undefined' && symbol.valueType === 'map') {
         let key: ValueType | null = null
         let value: ValueType | null = null
 
-        if (symbol.mapKeyType != null) {
+        if (symbol.mapKeyType !== null && typeof symbol.mapKeyType !== 'undefined') {
           key = symbol.mapKeyType
         }
 
-        if (symbol.mapValueType != null) {
+        if (symbol.mapValueType !== null && typeof symbol.mapValueType !== 'undefined') {
           value = symbol.mapValueType
         }
 
@@ -12921,19 +13527,19 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.property)
       }
 
-      if (field != null && field.valueType === 'map') {
+      if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
         let key: ValueType | null = null
         let value: ValueType | null = null
 
-        if (field.mapKeyType != null) {
+        if (field.mapKeyType !== null && typeof field.mapKeyType !== 'undefined') {
           key = field.mapKeyType
         }
 
-        if (field.mapValueType != null) {
+        if (field.mapValueType !== null && typeof field.mapValueType !== 'undefined') {
           value = field.mapValueType
         }
 
@@ -12950,19 +13556,19 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.index.value)
       }
 
-      if (field != null && field.valueType === 'map') {
+      if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
         let key: ValueType | null = null
         let value: ValueType | null = null
 
-        if (field.mapKeyType != null) {
+        if (field.mapKeyType !== null && typeof field.mapKeyType !== 'undefined') {
           key = field.mapKeyType
         }
 
-        if (field.mapValueType != null) {
+        if (field.mapValueType !== null && typeof field.mapValueType !== 'undefined') {
           value = field.mapValueType
         }
 
@@ -12979,12 +13585,16 @@ class Checker {
   }
 
   resolveExpressionSetElementType(expression: AnyNode | null | undefined): ValueType | null {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return null
     }
 
     if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      if (expression.valueType === 'set' && expression.setElementType != null) {
+      if (
+        expression.valueType === 'set' &&
+        expression.setElementType !== null &&
+        typeof expression.setElementType !== 'undefined'
+      ) {
         return expression.setElementType
       }
 
@@ -12995,7 +13605,13 @@ class Checker {
       const name = firstPathSegment(expression.path)
       const symbol = this.scope.resolve(name)
 
-      if (symbol != null && symbol.valueType === 'set' && symbol.setElementType != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.valueType === 'set' &&
+        symbol.setElementType !== null &&
+        typeof symbol.setElementType !== 'undefined'
+      ) {
         return symbol.setElementType
       }
 
@@ -13006,11 +13622,17 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.property)
       }
 
-      if (field != null && field.valueType === 'set' && field.setElementType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.valueType === 'set' &&
+        field.setElementType !== null &&
+        typeof field.setElementType !== 'undefined'
+      ) {
         return field.setElementType
       }
 
@@ -13021,11 +13643,17 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.index.value)
       }
 
-      if (field != null && field.valueType === 'set' && field.setElementType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.valueType === 'set' &&
+        field.setElementType !== null &&
+        typeof field.setElementType !== 'undefined'
+      ) {
         return field.setElementType
       }
 
@@ -13036,12 +13664,16 @@ class Checker {
   }
 
   resolveExpressionPromiseValueType(expression: AnyNode | null | undefined): ValueType | null {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return null
     }
 
     if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      if (expression.valueType === 'promise' && expression.promiseValueType != null) {
+      if (
+        expression.valueType === 'promise' &&
+        expression.promiseValueType !== null &&
+        typeof expression.promiseValueType !== 'undefined'
+      ) {
         return expression.promiseValueType
       }
 
@@ -13052,7 +13684,13 @@ class Checker {
       const name = firstPathSegment(expression.path)
       const symbol = this.scope.resolve(name)
 
-      if (symbol != null && symbol.valueType === 'promise' && symbol.promiseValueType != null) {
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.valueType === 'promise' &&
+        symbol.promiseValueType !== null &&
+        typeof symbol.promiseValueType !== 'undefined'
+      ) {
         return symbol.promiseValueType
       }
 
@@ -13063,11 +13701,17 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.property)
       }
 
-      if (field != null && field.valueType === 'promise' && field.promiseValueType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.valueType === 'promise' &&
+        field.promiseValueType !== null &&
+        typeof field.promiseValueType !== 'undefined'
+      ) {
         return field.promiseValueType
       }
 
@@ -13078,11 +13722,17 @@ class Checker {
       const shape = this.resolveExpressionShape(expression.object)
       let field: AnyNode | null = null
 
-      if (shape != null) {
+      if (shape !== null && typeof shape !== 'undefined') {
         field = this.findShapeField(shape, expression.index.value)
       }
 
-      if (field != null && field.valueType === 'promise' && field.promiseValueType != null) {
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.valueType === 'promise' &&
+        field.promiseValueType !== null &&
+        typeof field.promiseValueType !== 'undefined'
+      ) {
         return field.promiseValueType
       }
 
@@ -13222,7 +13872,13 @@ class Checker {
     if (!isAssignableType(actual, expected, expectedAllowsNull, actualCanBeNull)) {
       let actualLabel = actual
 
-      if (actualCanBeNull && actual !== 'null' && actual !== 'unknown' && actual != null) {
+      if (
+        actualCanBeNull &&
+        actual !== 'null' &&
+        actual !== 'unknown' &&
+        actual !== null &&
+        typeof actual !== 'undefined'
+      ) {
         actualLabel = `${actual} | null`
       }
 
@@ -13258,7 +13914,7 @@ function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
 }
 
 function mergeShapeFields(target: AnyNode[], source: AnyNode[] | null | undefined): void {
-  if (source == null) {
+  if (source === null || typeof source === 'undefined') {
     return
   }
 
@@ -13325,9 +13981,7 @@ function isConditionValueType(valueType: ValueType): boolean {
 
 function isNonNullNarrowingLiteral(expression: AnyNode): boolean {
   return (
-    expression.type === 'StringLiteral' ||
-    expression.type === 'NumberLiteral' ||
-    expression.type === 'BooleanLiteral'
+    expression.type === 'StringLiteral' || expression.type === 'NumberLiteral' || expression.type === 'BooleanLiteral'
   )
 }
 

@@ -1,11 +1,4 @@
-export type OsRuntimeMethod =
-  | 'arch'
-  | 'homedir'
-  | 'hostname'
-  | 'platform'
-  | 'release'
-  | 'tmpdir'
-  | 'type'
+export type OsRuntimeMethod = 'arch' | 'homedir' | 'hostname' | 'platform' | 'release' | 'tmpdir' | 'type'
 
 export type OsRuntimeConstant = 'EOL'
 

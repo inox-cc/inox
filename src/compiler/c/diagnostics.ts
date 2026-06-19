@@ -8,6 +8,7 @@ import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
 import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
+import { isPresent } from '../nullish.ts'
 
 type CGlobalNameSet = Set<string>
 
@@ -45,7 +46,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
   const path = joinStrings(usage.path, '.')
 
   return (
-    timeRuntimeMethodNameFromPath(usage.path) != null ||
+    isPresent(timeRuntimeMethodNameFromPath(usage.path)) ||
     path === 'Error' ||
     path === 'Promise' ||
     path === 'Promise.resolve' ||
@@ -88,7 +89,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'fs.constants.R_OK' ||
     path === 'fs.constants.W_OK' ||
     path === 'fs.constants.X_OK' ||
-    jsonRuntimeMethodNameFromPath(usage.path) != null ||
+    isPresent(jsonRuntimeMethodNameFromPath(usage.path)) ||
     isBinaryGlobalUsagePath(usage.path) ||
     path === 'clearImmediate' ||
     path === 'clearInterval' ||
@@ -157,10 +158,7 @@ function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageS
   )
 }
 
-export function isSupportedCCryptoGlobalUsage(
-  usage: IrGlobalUsage,
-  context: CGlobalUsageSupportContext
-): boolean {
+export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
   return (
     isCryptoRuntimeMethodPath(usage.path) ||
     (usage.path.length === 2 &&
@@ -170,7 +168,7 @@ export function isSupportedCCryptoGlobalUsage(
 }
 
 function runtimeNameSetHas(names: CGlobalNameSet | undefined, root: string): boolean {
-  if (names == null) {
+  if (names === null || typeof names === 'undefined') {
     return false
   }
 
@@ -182,7 +180,7 @@ export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {
 }
 
 export function isSupportedCMathGlobalUsage(usage: IrGlobalUsage): boolean {
-  return mathRuntimeMethodNameFromPath(usage.path) != null
+  return isPresent(mathRuntimeMethodNameFromPath(usage.path))
 }
 
 export function reportCJsGlobalDiagnostic(diagnostics: Diagnostic[], loc: SourceLocation | null | undefined): void {
@@ -208,8 +206,8 @@ function hasCJsGlobalDiagnosticAtLocation(diagnostics: Diagnostic[], loc: Source
 }
 
 function sameLocation(left: SourceLocation | undefined, right: SourceLocation | null | undefined): boolean {
-  if (left == null || right == null) {
-    return left == null && right == null
+  if (left === null || typeof left === 'undefined' || right === null || typeof right === 'undefined') {
+    return (left === null || typeof left === 'undefined') && (right === null || typeof right === 'undefined')
   }
 
   return left.line === right.line && left.column === right.column

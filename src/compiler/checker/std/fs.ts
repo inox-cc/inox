@@ -7,12 +7,25 @@ export function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
   return fsRuntimeCallInfoFromPath(memberExpressionPath(callee))
 }
 
-export function fsRuntimeCallInfoFromImportSymbol(callee: AnyNode, symbol: SymbolInfo | null): FsRuntimeCallInfo | null {
-  if (callee.type !== 'Reference' || callee.path.length !== 1 || symbol == null || symbol.kind !== 'import') {
+export function fsRuntimeCallInfoFromImportSymbol(
+  callee: AnyNode,
+  symbol: SymbolInfo | null
+): FsRuntimeCallInfo | null {
+  if (
+    callee.type !== 'Reference' ||
+    callee.path.length !== 1 ||
+    symbol === null ||
+    typeof symbol === 'undefined' ||
+    symbol.kind !== 'import'
+  ) {
     return null
   }
 
-  if (!isFsRuntimeImportSource(symbol.importSource) || symbol.importedName == null) {
+  if (
+    !isFsRuntimeImportSource(symbol.importSource) ||
+    symbol.importedName === null ||
+    typeof symbol.importedName === 'undefined'
+  ) {
     return null
   }
 
@@ -25,7 +38,7 @@ export function fsRuntimeCallInfoFromImportSymbol(callee: AnyNode, symbol: Symbo
 
   const info = fsRuntimeCallInfoFromPath(path)
 
-  if (info == null) {
+  if (info === null || typeof info === 'undefined') {
     return null
   }
 

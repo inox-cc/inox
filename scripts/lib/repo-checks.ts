@@ -2,6 +2,7 @@ import { access, readdir, readFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 export const rootDir = fileURLToPath(new URL('../../', import.meta.url))
 
@@ -133,6 +134,7 @@ export async function collectRepoChecks(): Promise<string[]> {
 
   await checkDocIndex(failures, 'docs/language')
   await checkDocIndex(failures, 'docs/stdlib')
+  await checkCompilerLooseEquality(failures)
 
   return failures
 }
@@ -169,6 +171,35 @@ async function checkDocIndex(failures: string[], dir: string): Promise<void> {
       failures.push(`${indexPath} does not link ${link}`)
     }
   }
+}
+
+async function checkCompilerLooseEquality(failures: string[]): Promise<void> {
+  const files = await findFiles(join(rootDir, 'src/compiler'), (file) => file.endsWith('.ts'))
+
+  for (const file of files.sort()) {
+    const source = await readFile(file, 'utf8')
+    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+
+    visit(sourceFile)
+
+    function visit(node: ts.Node): void {
+      if (ts.isBinaryExpression(node) && isLooseEqualityOperator(node.operatorToken.kind)) {
+        const pos = sourceFile.getLineAndCharacterOfPosition(node.operatorToken.getStart(sourceFile))
+        const rel = relative(rootDir, file)
+        const operator = node.operatorToken.getText(sourceFile)
+
+        failures.push(
+          `${rel}:${pos.line + 1}:${pos.character + 1} uses forbidden loose equality operator \`${operator}\`; use strict equality or nullish helpers`
+        )
+      }
+
+      ts.forEachChild(node, visit)
+    }
+  }
+}
+
+function isLooseEqualityOperator(kind: ts.SyntaxKind): boolean {
+  return kind === ts.SyntaxKind.EqualsEqualsToken || kind === ts.SyntaxKind.ExclamationEqualsToken
 }
 
 async function exists(relPath: string): Promise<boolean> {

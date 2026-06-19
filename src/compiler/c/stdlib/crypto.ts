@@ -20,7 +20,11 @@ export type CryptoLoweringDependencies = {
   cStringLiteralNode: (value: string, loc: SourceLocation | undefined) => AnyNode
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: AnyNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
+  emitPreparedStringBytesOperand: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    tempPrefix: string
+  ) => PreparedStringBytesOperand
   inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
 }
 
@@ -53,7 +57,7 @@ function cryptoArgOrEmptyString(expression: AnyNode, index: number, deps: Crypto
 function cryptoOutName(options: PreparedCallOptions, context: CFunctionContext, prefix: string): string {
   let out = nextCName(context, prefix)
 
-  if (options.out != null) {
+  if (options.out !== null && typeof options.out !== 'undefined') {
     out = options.out
   }
 
@@ -69,7 +73,13 @@ function cryptoResultExpression(options: PreparedCallOptions, value: string): st
 }
 
 export function cryptoRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'CallExpression' || expression.cryptoRuntimeMethod == null) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.cryptoRuntimeMethod === null ||
+    typeof expression.cryptoRuntimeMethod === 'undefined'
+  ) {
     return null
   }
 
@@ -81,7 +91,7 @@ export function emitCryptoHashVariableDeclaration(
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): string[] | null {
-  if (statement.init == null || statement.init.type !== 'CallExpression') {
+  if (statement.init === null || typeof statement.init === 'undefined' || statement.init.type !== 'CallExpression') {
     return null
   }
 
@@ -90,7 +100,7 @@ export function emitCryptoHashVariableDeclaration(
       out: statement.name
     })
 
-    if (prepared != null) {
+    if (prepared !== null && typeof prepared !== 'undefined') {
       return prepared.lines
     }
 
@@ -102,7 +112,7 @@ export function emitCryptoHashVariableDeclaration(
       out: statement.name
     })
 
-    if (prepared != null) {
+    if (prepared !== null && typeof prepared !== 'undefined') {
       return prepared.lines
     }
 
@@ -286,7 +296,7 @@ export function emitPreparedCryptoCallExpression(
 ): PreparedExpression | null {
   const method = cryptoRuntimeMethodName(expression)
 
-  if (method == null || method === 'randomInt' || method === 'timingSafeEqual') {
+  if (method === null || typeof method === 'undefined' || method === 'randomInt' || method === 'timingSafeEqual') {
     return null
   }
 
@@ -427,7 +437,9 @@ export function emitPreparedCryptoCallExpression(
     registerOwnedValue(context, out)
     pushCryptoLines(lines, size.lines)
     pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_crypto_random_bytes(&inox_default_allocator, ${size.expression}, &${out})`, context))
+    lines.push(
+      emitStatusCheck(`inox_crypto_random_bytes(&inox_default_allocator, ${size.expression}, &${out})`, context)
+    )
     lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_BYTES', context))
 
     return {
@@ -466,7 +478,9 @@ export function emitPreparedCryptoNumberCallExpression(
     pushCryptoLines(lines, left.lines)
     pushCryptoLines(lines, right.lines)
     lines.push(`int ${out} = 0;`)
-    lines.push(emitStatusCheck(`inox_crypto_timing_safe_equal(${left.expression}, ${right.expression}, &${out})`, context))
+    lines.push(
+      emitStatusCheck(`inox_crypto_timing_safe_equal(${left.expression}, ${right.expression}, &${out})`, context)
+    )
 
     return {
       lines,
@@ -519,7 +533,7 @@ export function emitPreparedCryptoHashHandleExpression(
   if (expression.type === 'CallExpression') {
     const call = emitPreparedCryptoHashCallExpression(expression, context, deps, {})
 
-    if (call != null) {
+    if (call !== null && typeof call !== 'undefined') {
       return call
     }
   }
@@ -557,7 +571,7 @@ export function emitPreparedCryptoHmacHandleExpression(
   if (expression.type === 'CallExpression') {
     const call = emitPreparedCryptoHmacCallExpression(expression, context, deps, {})
 
-    if (call != null) {
+    if (call !== null && typeof call !== 'undefined') {
       return call
     }
   }

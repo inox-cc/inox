@@ -7,14 +7,14 @@ type MemberPathNode = AnyNode & {
 }
 
 export function memberExpressionPath(expression: MemberPathNode | null | undefined): string[] {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return []
   }
 
   if (expression.type === 'Reference') {
     const path = expression.path
 
-    if (path != null && path.length > 0) {
+    if (path !== null && typeof path !== 'undefined' && path.length > 0) {
       return path
     }
   }
@@ -23,7 +23,7 @@ export function memberExpressionPath(expression: MemberPathNode | null | undefin
     const objectPath = memberExpressionPath(expression.object)
     const property = expression.property
 
-    if (property != null && objectPath.length > 0) {
+    if (property !== null && typeof property !== 'undefined' && objectPath.length > 0) {
       const path: string[] = []
 
       for (const part of objectPath) {

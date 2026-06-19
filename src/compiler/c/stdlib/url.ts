@@ -18,7 +18,11 @@ import type {
 
 export type UrlLoweringDependencies = {
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: AnyNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
+  emitPreparedStringBytesOperand: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    tempPrefix: string
+  ) => PreparedStringBytesOperand
   registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
@@ -38,7 +42,7 @@ function emptyPreparedUrlExpression(expression: string): PreparedExpression {
 function urlOutName(options: PreparedCallOptions, context: CFunctionContext, prefix: string): string {
   let out = nextCName(context, prefix)
 
-  if (options.out != null) {
+  if (options.out !== null && typeof options.out !== 'undefined') {
     out = options.out
   }
 
@@ -48,7 +52,7 @@ function urlOutName(options: PreparedCallOptions, context: CFunctionContext, pre
 function urlStringBytes(prepared: PreparedStringBytesOperand | null): string {
   let bytes = '""'
 
-  if (prepared != null) {
+  if (prepared !== null && typeof prepared !== 'undefined') {
     bytes = prepared.bytes
   }
 
@@ -58,7 +62,7 @@ function urlStringBytes(prepared: PreparedStringBytesOperand | null): string {
 function urlStringLength(prepared: PreparedStringBytesOperand | null): string {
   let length = '0'
 
-  if (prepared != null) {
+  if (prepared !== null && typeof prepared !== 'undefined') {
     length = prepared.length
   }
 
@@ -114,11 +118,15 @@ function stringArrayValueAt(values: string[], index: number): string {
 }
 
 export function cUrlRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null || (expression.type !== 'CallExpression' && expression.type !== 'NewExpression')) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    (expression.type !== 'CallExpression' && expression.type !== 'NewExpression')
+  ) {
     return null
   }
 
-  if (expression.urlRuntimeMethod == null) {
+  if (expression.urlRuntimeMethod === null || typeof expression.urlRuntimeMethod === 'undefined') {
     return null
   }
 
@@ -267,7 +275,7 @@ export function emitPreparedUrlSearchParamsCallExpression(
 ): PreparedExpression | null {
   const method = cUrlRuntimeMethodName(expression)
 
-  if (method == null || !isUrlSearchParamsRuntimeCall(method)) {
+  if (method === null || typeof method === 'undefined' || !isUrlSearchParamsRuntimeCall(method)) {
     return null
   }
 
@@ -280,9 +288,11 @@ export function emitPreparedUrlSearchParamsCallExpression(
   }
 
   pushUrlLines(lines, receiver.lines)
-  lines.push(emitRuntimeTypeCheck(`${receiver.expression}.tag != INOX_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(`${receiver.expression}.tag != INOX_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context)
+  )
 
-  if (name != null) {
+  if (name !== null && typeof name !== 'undefined') {
     pushUrlLines(lines, name.lines)
   }
 
@@ -374,7 +384,7 @@ export function emitUrlObjectFieldAssignment(
 
   const field = expression.urlRuntimeField
 
-  if (field == null) {
+  if (field === null || typeof field === 'undefined') {
     return null
   }
 

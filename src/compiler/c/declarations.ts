@@ -57,6 +57,7 @@ import {
 import { emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
 import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
+import { isPresent } from '../nullish.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -82,7 +83,7 @@ export type CDeclarationEmissionDependencies = {
 }
 
 function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return false
   }
 
@@ -96,7 +97,7 @@ function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
 export function resolveFunctionReturnType(name: string, fallback: string, context: CEmitContext): string {
   const returnType = context.functionReturnTypes.get(name)
 
-  if (returnType != null) {
+  if (returnType !== null && typeof returnType !== 'undefined') {
     return returnType
   }
 
@@ -118,7 +119,7 @@ export function resolveFunctionDeclarationParams(
 ): CFunctionParam[] {
   const params = context.functionParams.get(name)
 
-  if (params != null) {
+  if (params !== null && typeof params !== 'undefined') {
     return params
   }
 
@@ -160,7 +161,7 @@ function declarationParamList(params: string[]): string {
 }
 
 function declarationTypeOrUnknown(value: string | null | undefined): string {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -220,7 +221,7 @@ export function emitFunctionDeclaration(
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, returnType, returnNullable)
   const returnShape = context.functionReturnShapes.get(statement.name)
 
-  if (returnShape != null) {
+  if (returnShape !== null && typeof returnShape !== 'undefined') {
     context.returnShape = returnShape
   } else {
     context.returnShape = null
@@ -298,10 +299,7 @@ function registerFunctionParamsInContext(
 
     if (isNullableScalarParam(param)) {
       context.variables.set(param.name, param.valueType)
-    } else if (
-      isBoxedFunctionParam(param, index, statement, context) &&
-      isBoxedParamValueType(param.valueType)
-    ) {
+    } else if (isBoxedFunctionParam(param, index, statement, context) && isBoxedParamValueType(param.valueType)) {
       context.variables.set(param.name, param.valueType)
       context.boxedVariables.add(param.name)
       registerBoxedValue(context, param.name, param.valueType)
@@ -309,7 +307,7 @@ function registerFunctionParamsInContext(
       if (param.valueType === 'object') {
         registerObjectShape(context, param.name, param.shape)
 
-        if (param.declaredType != null) {
+        if (param.declaredType !== null && typeof param.declaredType !== 'undefined') {
           context.objectDeclaredTypes.set(param.name, param.declaredType)
         }
       }
@@ -323,7 +321,7 @@ function registerFunctionParamsInContext(
       context.variables.set(param.name, 'object')
       registerObjectShape(context, param.name, param.shape)
 
-      if (param.declaredType != null) {
+      if (param.declaredType !== null && typeof param.declaredType !== 'undefined') {
         context.objectDeclaredTypes.set(param.name, param.declaredType)
       }
     } else if (param.valueType === 'array') {
@@ -345,7 +343,7 @@ function registerFunctionParamsInContext(
       const runtimeFunctionType = resolveFunctionParameterRuntimeType(statement.name, index, param, context)
       let functionType = param.functionType
 
-      if (runtimeFunctionType != null) {
+      if (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined') {
         functionType = runtimeFunctionType
       }
 
@@ -356,7 +354,7 @@ function registerFunctionParamsInContext(
         context.nullableVariables.add(param.name)
       }
 
-      if (runtimeFunctionType != null) {
+      if (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined') {
         context.runtimeCallbacks.add(param.name)
       }
     } else if (isOpaqueRuntimeValueType(param.valueType)) {
@@ -370,7 +368,7 @@ function registerFunctionParamsInContext(
 export function emitFunctionHead(statement: CNode, context: CEmitContext): string {
   let name = context.functionNames.get(statement.name)
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     name = emitCFunctionName(statement.name)
   }
 
@@ -424,7 +422,7 @@ function pushObjectFunctionFieldParams(params: string[], param: CFunctionParam, 
 }
 
 function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
-  if (declaredType == null) {
+  if (declaredType === null || typeof declaredType === 'undefined') {
     return false
   }
 
@@ -442,7 +440,11 @@ function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string 
 }
 
 function pushSeenDeclaredType(seenTypes: string[], declaredType: string | null | undefined): number {
-  if (declaredType == null || seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
+  if (
+    declaredType === null ||
+    typeof declaredType === 'undefined' ||
+    seenTypesIncludeDeclaredType(seenTypes, declaredType)
+  ) {
     return 0
   }
 
@@ -536,7 +538,7 @@ function pushObjectShapeFunctionFieldParams(
 ): void {
   const fields = shape?.fields
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return
   }
 
@@ -584,12 +586,7 @@ function emitObjectFunctionFieldParam(
   )
 }
 
-function emitFunctionHeadParam(
-  param: CFunctionParam,
-  index: number,
-  statement: CNode,
-  context: CEmitContext
-): string {
+function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: CNode, context: CEmitContext): string {
   if (isNullableScalarParam(param)) {
     return `inox_value ${emitCScalarParamName(param.name)}`
   }
@@ -611,7 +608,7 @@ function emitFunctionHeadParam(
   }
 
   if (param.valueType === 'function') {
-    if (resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null) {
+    if (isPresent(resolveFunctionParameterRuntimeType(statement.name, index, param, context))) {
       return `inox_value ${param.name}`
     }
 
@@ -631,7 +628,11 @@ export function emitClassMethodDeclaration(
   baseContext: CEmitContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
-  const context: CDeclarationFunctionContext = createFunctionContext(baseContext, method.returnType, method.returnNullable)
+  const context: CDeclarationFunctionContext = createFunctionContext(
+    baseContext,
+    method.returnType,
+    method.returnNullable
+  )
   const params = method.params
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
@@ -747,7 +748,7 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
   }
 
   if (param.valueType === 'function') {
-    if (resolveFunctionParameterRuntimeType(method.name, index, param, context) != null) {
+    if (isPresent(resolveFunctionParameterRuntimeType(method.name, index, param, context))) {
       return `inox_value ${param.name}`
     }
 
@@ -761,21 +762,18 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
   return `${emitCType(param.valueType)} ${param.name}`
 }
 
-function resolveCFunctionReturnInfo(
-  statement: CNode,
-  context: CEmitContext
-): CFunctionReturnInfo {
+function resolveCFunctionReturnInfo(statement: CNode, context: CEmitContext): CFunctionReturnInfo {
   const returnType = resolveFunctionReturnType(statement.name, statement.returnType, context)
   const returnNullable = resolveFunctionReturnNullable(statement.name, statement.returnNullable, context)
 
   if (cBooleanValueIsTrue(context.functionAsyncFlags.get(statement.name)) && returnType === 'promise') {
     let promiseValueType = context.functionReturnPromiseValueTypes.get(statement.name)
 
-    if (promiseValueType == null) {
+    if (promiseValueType === null || typeof promiseValueType === 'undefined') {
       promiseValueType = statement.returnPromiseValueType
     }
 
-    if (promiseValueType == null) {
+    if (promiseValueType === null || typeof promiseValueType === 'undefined') {
       promiseValueType = 'void'
     }
 
@@ -820,7 +818,7 @@ export function reportUnsupportedCFunctionType(
   context: CEmitContext,
   loc: CSourceLocation
 ): void {
-  if (functionType == null) {
+  if (functionType === null || typeof functionType === 'undefined') {
     return
   }
 
@@ -893,14 +891,18 @@ export function emitMainReturnExpression(context: CFunctionContext): string {
     successReturn = '(int)inox_return'
   }
 
-  if (context.unhandledRejectionFlag == null) {
+  if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
     return successReturn
   }
 
   return `${context.unhandledRejectionFlag} == 0 ? ${successReturn} : 1`
 }
 
-function emitRuntimeParamPreludeForParams(statement: CNode, params: CFunctionParam[], context: CFunctionContext): string[] {
+function emitRuntimeParamPreludeForParams(
+  statement: CNode,
+  params: CFunctionParam[],
+  context: CFunctionContext
+): string[] {
   const lines: string[] = []
 
   for (let index = 0; index < params.length; index = index + 1) {
@@ -980,7 +982,7 @@ function emitRuntimeParamPreludeForParam(
 
   if (
     param.valueType === 'function' &&
-    resolveFunctionParameterRuntimeType(statement.name, index, param, context) != null
+    isPresent(resolveFunctionParameterRuntimeType(statement.name, index, param, context))
   ) {
     if (param.nullable === true) {
       return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context)

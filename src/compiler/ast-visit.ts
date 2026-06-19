@@ -47,13 +47,14 @@ const astLikeChildKeys = [
 ]
 
 export function visitAstLike(node: unknown, visitor: AstLikeVisitor, options: VisitAstLikeOptions = {}): void {
-  const skipKeys = options.skipKeys == null ? defaultSkipKeys : new Set(options.skipKeys)
+  const skipKeys =
+    options.skipKeys === null || typeof options.skipKeys === 'undefined' ? defaultSkipKeys : new Set(options.skipKeys)
 
   visitAstLikeNode(node, visitor, skipKeys)
 }
 
 function visitAstLikeNode(node: unknown, visitor: AstLikeVisitor, skipKeys: Set<string>): void {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return
   }
 
@@ -82,7 +83,7 @@ function visitAstLikeNode(node: unknown, visitor: AstLikeVisitor, skipKeys: Set<
 
     const value = item[key]
 
-    if (value != null) {
+    if (value !== null && typeof value !== 'undefined') {
       visitAstLikeNode(value, visitor, skipKeys)
     }
   }

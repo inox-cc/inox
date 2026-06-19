@@ -1,14 +1,7 @@
-import {
-  collectIrFeatures,
-  collectRuntimeRequirements,
-  collectSyntaxFeatureUsages
-} from './ir/features.ts'
+import { collectIrFeatures, collectRuntimeRequirements, collectSyntaxFeatureUsages } from './ir/features.ts'
 import { collectIrFunctionEffects } from './ir/effects.ts'
 import { collectGlobalUsages } from './ir/globals.ts'
-import {
-  collectFunctionDeclarations,
-  collectTopLevelItems
-} from './ir/top-level.ts'
+import { collectFunctionDeclarations, collectTopLevelItems } from './ir/top-level.ts'
 import type { IrProgram, ProgramNode } from './types.ts'
 
 export {

@@ -150,7 +150,7 @@ export async function compileFileToCModules(
   entry: string,
   options: CModuleCompileOptions = {}
 ): Promise<CModuleCompileResult> {
-  if (options.host == null) {
+  if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileFileToCModules requires a compiler host')
   }
 
@@ -205,7 +205,7 @@ export async function compileGraphToIrModules(
 ): Promise<GraphIrCompileResult> {
   const target = resolveCompileTarget(options)
 
-  if (options.host == null) {
+  if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileGraphToIrModules requires a compiler host')
   }
 
@@ -227,7 +227,7 @@ export function runCStaticChecks(irs: IrProgram[], options: CompileOptions = {})
 function resolveCompileTarget(options: CompileOptions): CompileTarget {
   const target = options.target
 
-  if (target == null || target === 'c') {
+  if (target === null || typeof target === 'undefined' || target === 'c') {
     return 'c'
   }
 
@@ -298,10 +298,7 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: any): Compile
   }
 }
 
-function memoryCModuleCompileOptions(
-  options: MemoryCModuleCompileOptions,
-  host: any
-): CModuleCompileOptions {
+function memoryCModuleCompileOptions(options: MemoryCModuleCompileOptions, host: any): CModuleCompileOptions {
   const base = memoryCompileOptions(options, host)
 
   return {

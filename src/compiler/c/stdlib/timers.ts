@@ -17,6 +17,7 @@ import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 type TimerFunctionContext = {
   cleanupEnabled: boolean
@@ -44,7 +45,7 @@ export type TimerLoweringDependencies = {
 }
 
 export function cTimerRuntimeCallName(callee: AnyNode | null | undefined): string | null {
-  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
@@ -52,7 +53,7 @@ export function cTimerRuntimeCallName(callee: AnyNode | null | undefined): strin
 }
 
 export function cTimerStartCallName(callee: AnyNode | null | undefined): string | null {
-  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
@@ -64,7 +65,7 @@ export function cTimerStartCallName(callee: AnyNode | null | undefined): string 
 }
 
 export function cTimerClearCallName(callee: AnyNode | null | undefined): string | null {
-  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
@@ -76,11 +77,11 @@ export function cTimerClearCallName(callee: AnyNode | null | undefined): string 
 }
 
 export function isTimerStartCallExpression(expression: AnyNode | null | undefined): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
-  return cTimerStartCallName(expression.callee) != null || timerRuntimeMethodStartsWithSet(expression)
+  return isPresent(cTimerStartCallName(expression.callee)) || timerRuntimeMethodStartsWithSet(expression)
 }
 
 function timerStartCallNameFor(method: string | null): string | null {
@@ -108,11 +109,11 @@ function timerStartCallRequiresHandle(method: string | null): boolean {
 }
 
 function timerRuntimeMethodForExpression(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  if (expression.timerRuntimeMethod != null) {
+  if (expression.timerRuntimeMethod !== null && typeof expression.timerRuntimeMethod !== 'undefined') {
     return expression.timerRuntimeMethod
   }
 
@@ -120,11 +121,11 @@ function timerRuntimeMethodForExpression(expression: AnyNode | null | undefined)
 }
 
 function timerRuntimeMethodStartsWithSet(expression: AnyNode | null | undefined): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
-  if (expression.timerRuntimeMethod == null) {
+  if (expression.timerRuntimeMethod === null || typeof expression.timerRuntimeMethod === 'undefined') {
     return false
   }
 
@@ -138,7 +139,7 @@ function appendTimerLines(target: string[], lines: string[]): void {
 }
 
 function timerOutName(options: PreparedCallOptions, context: TimerFunctionContext): string | null {
-  if (options.out != null) {
+  if (options.out !== null && typeof options.out !== 'undefined') {
     return options.out
   }
 
@@ -150,7 +151,7 @@ function timerOutName(options: PreparedCallOptions, context: TimerFunctionContex
 }
 
 function timerOutArgument(out: string | null): string {
-  if (out == null) {
+  if (out === null || typeof out === 'undefined') {
     return '0'
   }
 
@@ -160,7 +161,7 @@ function timerOutArgument(out: string | null): string {
 function timerOutExpression(out: string | null): string {
   let expression = ''
 
-  if (out != null) {
+  if (out !== null && typeof out !== 'undefined') {
     expression = out
   }
 
@@ -182,15 +183,20 @@ export function emitTimerVariableDeclaration(
   dependencies: TimerLoweringDependencies,
   inferred: string | null = null
 ): string[] | null {
-  if (inferred == null) {
+  if (inferred === null || typeof inferred === 'undefined') {
     const init = statement.init
 
-    if (init != null && init.type === 'CallExpression' && isTimerStartCallExpression(init)) {
+    if (
+      init !== null &&
+      typeof init !== 'undefined' &&
+      init.type === 'CallExpression' &&
+      isTimerStartCallExpression(init)
+    ) {
       const timerCall = emitPreparedTimerCallExpression(init, context, dependencies, {
         out: statement.name
       })
 
-      if (timerCall != null) {
+      if (timerCall !== null && typeof timerCall !== 'undefined') {
         const lines = [`inox_timer_handle* ${statement.name} = 0;`]
         appendTimerLines(lines, timerCall.lines)
         context.variables.set(statement.name, 'timer')
@@ -199,7 +205,12 @@ export function emitTimerVariableDeclaration(
       }
     }
 
-    if (init != null && init.type === 'CallExpression' && cTimerClearCallName(init.callee) != null) {
+    if (
+      init !== null &&
+      typeof init !== 'undefined' &&
+      init.type === 'CallExpression' &&
+      isPresent(cTimerClearCallName(init.callee))
+    ) {
       context.diagnostics.push(
         diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls return void and cannot initialize a value', statement.loc)
       )
@@ -234,7 +245,7 @@ export function emitPreparedTimerCallExpression(
 ): PreparedExpression | null {
   const method = timerRuntimeMethodForExpression(expression)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
@@ -246,7 +257,7 @@ export function emitPreparedTimerCallExpression(
     clearMethod = cTimerClearCallName(expression.callee)
   }
 
-  if (clearMethod != null) {
+  if (clearMethod !== null && typeof clearMethod !== 'undefined') {
     const handle = emitPreparedTimerHandleExpression(expression.args[0], context, dependencies)
     const lines: string[] = []
 
@@ -261,7 +272,7 @@ export function emitPreparedTimerCallExpression(
 
   const callName = timerStartCallNameFor(method)
 
-  if (callName == null) {
+  if (callName === null || typeof callName === 'undefined') {
     return null
   }
 
@@ -280,7 +291,11 @@ export function emitPreparedTimerCallExpression(
     }
   }
 
-  if (timerStartCallRequiresHandle(method) && options.out == null && options.asValue !== true) {
+  if (
+    timerStartCallRequiresHandle(method) &&
+    (options.out === null || typeof options.out === 'undefined') &&
+    options.asValue !== true
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_TIMER_HANDLE',
@@ -302,7 +317,7 @@ export function emitPreparedTimerCallExpression(
   const callbackContext = nextCName(context, 'inox_timer_ctx')
   const lines: string[] = []
 
-  if (out != null && options.out == null) {
+  if (out !== null && typeof out !== 'undefined' && (options.out === null || typeof options.out === 'undefined')) {
     lines.push(`inox_timer_handle* ${out} = 0;`)
   }
 
@@ -349,7 +364,8 @@ export function emitPreparedTimerHandleExpression(
   dependencies: TimerLoweringDependencies
 ): PreparedExpression {
   if (
-    expression != null &&
+    expression !== null &&
+    typeof expression !== 'undefined' &&
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
     context.variables.get(expression.path[0]) === 'timer'
@@ -361,27 +377,26 @@ export function emitPreparedTimerHandleExpression(
   }
 
   if (
-    expression != null &&
+    expression !== null &&
+    typeof expression !== 'undefined' &&
     expression.type === 'CallExpression' &&
-    (cTimerStartCallName(expression.callee) != null || timerRuntimeMethodStartsWithSet(expression))
+    (isPresent(cTimerStartCallName(expression.callee)) || timerRuntimeMethodStartsWithSet(expression))
   ) {
     const call = emitPreparedTimerCallExpression(expression, context, dependencies, {
       asValue: true
     })
 
-    if (call != null) {
+    if (call !== null && typeof call !== 'undefined') {
       return call
     }
   }
 
-  if (expression != null) {
+  if (expression !== null && typeof expression !== 'undefined') {
     context.diagnostics.push(
       diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls require a timer handle value', expression.loc)
     )
   } else {
-    context.diagnostics.push(
-      diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls require a timer handle value')
-    )
+    context.diagnostics.push(diagnostic('INOX_C_TIMER_HANDLE', 'timer clear calls require a timer handle value'))
   }
 
   return {

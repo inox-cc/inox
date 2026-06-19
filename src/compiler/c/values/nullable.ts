@@ -10,7 +10,12 @@ import { diagnostic } from '../../diagnostics.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { isNullishCoalescingExpression } from '../syntax.ts'
-import { cRuntimeValueTag, isNullableScalarType, isOpaqueRuntimeValueType, isRuntimeNullableType } from '../value-types.ts'
+import {
+  cRuntimeValueTag,
+  isNullableScalarType,
+  isOpaqueRuntimeValueType,
+  isRuntimeNullableType
+} from '../value-types.ts'
 import {
   emitObjectValueReference,
   registerObjectShape,
@@ -66,7 +71,7 @@ type NullableFunctionContext = {
 }
 
 function nullableBooleanValueIsTrue(value: boolean | null | undefined): boolean {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return false
   }
 
@@ -163,7 +168,7 @@ function isEqualityOperator(operator: string): boolean {
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -210,7 +215,8 @@ function restoreNullableScalarNarrowing(
 
 export function isNullableScalarRuntimeExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
   return (
-    isNullableScalarType(nullableDeps(context).inferExpressionType(expression, context)) && isNullableRuntimeExpression(expression, context)
+    isNullableScalarType(nullableDeps(context).inferExpressionType(expression, context)) &&
+    isNullableRuntimeExpression(expression, context)
   )
 }
 
@@ -262,15 +268,17 @@ function resolveNullableScalarNullCheckNarrowing(
   let nullable = expression.left
   let maybeNull = expression.right
 
-  if (expression.left != null && expression.left.type === 'NullLiteral') {
+  if (expression.left !== null && typeof expression.left !== 'undefined' && expression.left.type === 'NullLiteral') {
     nullable = expression.right
     maybeNull = expression.left
   }
 
   if (
-    maybeNull == null ||
+    maybeNull === null ||
+    typeof maybeNull === 'undefined' ||
     maybeNull.type !== 'NullLiteral' ||
-    nullable == null ||
+    nullable === null ||
+    typeof nullable === 'undefined' ||
     nullable.type !== 'Reference' ||
     nullable.path.length !== 1
   ) {
@@ -362,7 +370,10 @@ export function canLowerCNullishCoalescingExpression(expression: AnyNode, contex
   return resultType === 'unknown' || isRuntimeNullableType(resultType) || isOpaqueRuntimeValueType(resultType)
 }
 
-export function canLowerCScalarNullishCoalescingExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
+export function canLowerCScalarNullishCoalescingExpression(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): boolean {
   if (!isNullishCoalescingExpression(expression)) {
     return false
   }
@@ -371,7 +382,8 @@ export function canLowerCScalarNullishCoalescingExpression(expression: AnyNode, 
 
   return (
     isNullableScalarType(resultType) &&
-    (nullableDeps(context).inferExpressionType(expression.left, context) === 'null' || isNullableRuntimeExpression(expression.left, context))
+    (nullableDeps(context).inferExpressionType(expression.left, context) === 'null' ||
+      isNullableRuntimeExpression(expression.left, context))
   )
 }
 
@@ -399,21 +411,29 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
   if (expression.type === 'OptionalCallExpression') {
     const functionType = nullableDeps(context).resolveRuntimeCallbackCalleeType(expression.callee, context)
 
-    return functionType != null && isRuntimeNullableType(functionType.returnType)
+    return (
+      functionType !== null && typeof functionType !== 'undefined' && isRuntimeNullableType(functionType.returnType)
+    )
   }
 
   if (isNullishCoalescingExpression(expression)) {
     return false
   }
 
-  return expression.nullable === true && isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
+  return (
+    expression.nullable === true &&
+    isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
+  )
 }
 
-export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, context: NullableFunctionContext): string[] {
+export function emitNullableRuntimeValueVariableDeclaration(
+  statement: AnyNode,
+  context: NullableFunctionContext
+): string[] {
   let valueType: string = 'unknown'
   const statementValueType = statement.valueType
 
-  if (statementValueType != null) {
+  if (statementValueType !== null && typeof statementValueType !== 'undefined') {
     valueType = statementValueType
   }
 
@@ -428,7 +448,7 @@ export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, 
   } else if (valueType === 'array') {
     let arrayElementType = 'unknown'
 
-    if (statement.arrayElementType != null) {
+    if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
       arrayElementType = statement.arrayElementType
     }
 
@@ -437,11 +457,11 @@ export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, 
     let mapKeyType = 'unknown'
     let mapValueType = 'unknown'
 
-    if (statement.mapKeyType != null) {
+    if (statement.mapKeyType !== null && typeof statement.mapKeyType !== 'undefined') {
       mapKeyType = statement.mapKeyType
     }
 
-    if (statement.mapValueType != null) {
+    if (statement.mapValueType !== null && typeof statement.mapValueType !== 'undefined') {
       mapValueType = statement.mapValueType
     }
 
@@ -452,7 +472,7 @@ export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, 
   } else if (valueType === 'set') {
     let setElementType = 'unknown'
 
-    if (statement.setElementType != null) {
+    if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
       setElementType = statement.setElementType
     }
 
@@ -462,7 +482,7 @@ export function emitNullableRuntimeValueVariableDeclaration(statement: AnyNode, 
     context.runtimeCallbacks.add(statement.name)
   }
 
-  if (statement.init == null || statement.init.type === 'NullLiteral') {
+  if (statement.init === null || typeof statement.init === 'undefined' || statement.init.type === 'NullLiteral') {
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
@@ -506,14 +526,17 @@ function emitNullableRuntimeValueInitializer(
   return deps.emitCValueExpression(statement.init, context)
 }
 
-export function emitCOptionalMemberValueExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression {
+export function emitCOptionalMemberValueExpression(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): PreparedExpression {
   let member: CObjectFieldInfo | null = resolveKnownObjectMember(expression, context)
 
-  if (member == null) {
+  if (member === null || typeof member === 'undefined') {
     member = resolveObjectExpressionMember(expression)
   }
 
-  if (member != null && isRuntimeNullableType(member.valueType)) {
+  if (member !== null && typeof member !== 'undefined' && isRuntimeNullableType(member.valueType)) {
     const objectExpression = expression.object
     const access: OptionalObjectReadAccess = {
       index: member.index,
@@ -539,14 +562,17 @@ export function emitCOptionalMemberValueExpression(expression: AnyNode, context:
   }
 }
 
-export function emitCOptionalIndexValueExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression {
+export function emitCOptionalIndexValueExpression(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): PreparedExpression {
   let field: CObjectIndexFieldInfo | null = resolveKnownObjectIndex(expression, context)
 
-  if (field == null) {
+  if (field === null || typeof field === 'undefined') {
     field = resolveObjectExpressionIndex(expression)
   }
 
-  if (field != null) {
+  if (field !== null && typeof field !== 'undefined') {
     if (!isRuntimeNullableType(field.valueType)) {
       context.diagnostics.push(
         diagnostic(
@@ -575,7 +601,7 @@ export function emitCOptionalIndexValueExpression(expression: AnyNode, context: 
 
   const element = resolveNullableOptionalRuntimeArrayIndex(expression, context)
 
-  if (element != null) {
+  if (element !== null && typeof element !== 'undefined') {
     if (!isRuntimeNullableType(element.valueType)) {
       context.diagnostics.push(
         diagnostic(
@@ -651,7 +677,7 @@ function optionalObjectReadGetCall(
 ): string {
   let object = objectExpression
 
-  if (access.objectName != null) {
+  if (access.objectName !== null && typeof access.objectName !== 'undefined') {
     object = emitObjectValueReference(access.objectName, context)
   }
 
@@ -711,7 +737,7 @@ function resolveNullableOptionalRuntimeArrayIndex(
 
   const valueType = resolveNullableRuntimeArrayElementType(expression.object, context)
 
-  if (valueType == null) {
+  if (valueType === null || typeof valueType === 'undefined') {
     return null
   }
 
@@ -726,7 +752,7 @@ function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: Nu
     const name = nullableStringAt(expression.path, 0)
     const runtimeElementType = context.runtimeArrayElementTypes.get(name)
 
-    if (runtimeElementType == null) {
+    if (runtimeElementType === null || typeof runtimeElementType === 'undefined') {
       return null
     }
 
@@ -738,16 +764,16 @@ function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: Nu
       return null
     }
 
-    if (expression.arrayElementType != null) {
+    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
       return expression.arrayElementType
     }
 
     const functionReturn = resolveNullableFunctionReturnNameFromCall(expression)
 
-    if (functionReturn != null) {
+    if (functionReturn !== null && typeof functionReturn !== 'undefined') {
       const functionElementType = context.functionReturnArrayElementTypes.get(functionReturn)
 
-      if (functionElementType != null) {
+      if (functionElementType !== null && typeof functionElementType !== 'undefined') {
         return functionElementType
       }
     }
@@ -758,11 +784,11 @@ function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: Nu
   if (expression.type === 'MemberExpression') {
     const member = resolveKnownObjectMember(expression, context)
 
-    if (member == null || member.valueType !== 'array') {
+    if (member === null || typeof member === 'undefined' || member.valueType !== 'array') {
       return null
     }
 
-    if (member.arrayElementType != null) {
+    if (member.arrayElementType !== null && typeof member.arrayElementType !== 'undefined') {
       return member.arrayElementType
     }
 
@@ -772,11 +798,11 @@ function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: Nu
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const field = resolveKnownObjectIndex(expression, context)
 
-    if (field == null || field.valueType !== 'array') {
+    if (field === null || typeof field === 'undefined' || field.valueType !== 'array') {
       return null
     }
 
-    if (field.arrayElementType != null) {
+    if (field.arrayElementType !== null && typeof field.arrayElementType !== 'undefined') {
       return field.arrayElementType
     }
 
@@ -807,10 +833,7 @@ function parseNonNegativeIntegerLiteral(value: string): number {
 }
 
 function resolveNullableFunctionReturnNameFromCall(expression: AnyNode): string | null {
-  if (
-    expression.callee.type === 'Reference' &&
-    expression.callee.path.length === 1
-  ) {
+  if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
     return nullableStringAt(expression.callee.path, 0)
   }
 
@@ -818,7 +841,7 @@ function resolveNullableFunctionReturnNameFromCall(expression: AnyNode): string 
 }
 
 function normalizeNullableFunctionType(functionType: CFunctionType | null | undefined): CFunctionType {
-  if (functionType != null) {
+  if (functionType !== null && typeof functionType !== 'undefined') {
     return functionType
   }
 

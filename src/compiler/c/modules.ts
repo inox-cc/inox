@@ -18,12 +18,7 @@ type NullableCModulePlan = CModulePlan | null
 
 export type CModuleFileEmitters = {
   emitHeader(plan: CModulePlan, plans: CModulePlan[], diagnostics: Diagnostic[]): string
-  emitSource(
-    plan: CModulePlan,
-    plans: CModulePlan[],
-    options: CModuleEmitOptions,
-    diagnostics: Diagnostic[]
-  ): string
+  emitSource(plan: CModulePlan, plans: CModulePlan[], options: CModuleEmitOptions, diagnostics: Diagnostic[]): string
 }
 
 export function emitCModuleFilesFromGraph(
@@ -62,7 +57,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     modulePathList.push(item.path)
   }
 
-  if (configuredSourceRoot == null) {
+  if (configuredSourceRoot === null || typeof configuredSourceRoot === 'undefined') {
     sourceRootInput = commonDirectory(modulePathList, host)
   } else {
     sourceRootInput = configuredSourceRoot
@@ -73,7 +68,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
   for (let moduleIndex = 0; moduleIndex < graphModules.length; moduleIndex = moduleIndex + 1) {
     const record = graphModules[moduleIndex]
 
-    if (record.ir == null) {
+    if (record.ir === null || typeof record.ir === 'undefined') {
       continue
     }
 
@@ -119,15 +114,15 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
       const importedPath = resolveKnownCModuleImport(plan.record.path, declaration.source, modulePaths, host)
       let importedModule: NullableCModulePlan = null
 
-      if (importedPath != null) {
+      if (importedPath !== null && typeof importedPath !== 'undefined') {
         const candidate = plansByPath.get(importedPath)
 
-        if (candidate != null) {
+        if (candidate !== null && typeof candidate !== 'undefined') {
           importedModule = candidate
         }
       }
 
-      if (importedModule != null) {
+      if (importedModule !== null && typeof importedModule !== 'undefined') {
         reportUnsupportedCModuleImports(declaration, importedModule, diagnostics)
 
         imports.push({
@@ -206,7 +201,12 @@ function reportUnsupportedCModuleImports(
   for (const specifier of specifiers) {
     const exported = importedModule.record.exports.get(specifier.imported)
 
-    if (exported == null || exported.type === 'FunctionDeclaration' || exported.type === 'VariableDeclaration') {
+    if (
+      exported === null ||
+      typeof exported === 'undefined' ||
+      exported.type === 'FunctionDeclaration' ||
+      exported.type === 'VariableDeclaration'
+    ) {
       continue
     }
 
@@ -227,7 +227,7 @@ export function uniqueCModuleImports(imports: CModuleImportPlan[]): CModuleImpor
   for (const item of imports) {
     const module = item.module
 
-    if (module == null) {
+    if (module === null || typeof module === 'undefined') {
       continue
     }
 
@@ -297,11 +297,7 @@ function replaceCModuleExtension(path: string, extension: CModuleExtension, host
   return `${path.slice(0, -currentExtension.length)}${extension}`
 }
 
-function cModuleSymbolPrefix(
-  relativeSourcePath: string,
-  sourcePath: string,
-  host: CModuleHost
-): string {
+function cModuleSymbolPrefix(relativeSourcePath: string, sourcePath: string, host: CModuleHost): string {
   return `inox_mod_${emitCIdentifier(relativeSourcePath)}_${shortCModuleHash(sourcePath, host)}`
 }
 
@@ -309,11 +305,7 @@ function shortCModuleHash(value: string, host: CModuleHost): string {
   return host.shortHash(value)
 }
 
-export function relativeCIncludePath(
-  fromSourcePath: string,
-  toHeaderPath: string,
-  host: CModuleHost
-): string {
+export function relativeCIncludePath(fromSourcePath: string, toHeaderPath: string, host: CModuleHost): string {
   const includePath = host.posixPath.relative(host.posixPath.dirname(fromSourcePath), toHeaderPath)
 
   if (includePath === '') {
@@ -342,10 +334,7 @@ function commonDirectory(paths: string[], host: CModuleHost): string {
   for (let pathIndex = 1; pathIndex < paths.length; pathIndex = pathIndex + 1) {
     const path = cModuleResolvedPathSegments(paths[pathIndex], host)
 
-    while (
-      length > 0 &&
-      cModulePathPrefix(first, length, host) !== cModulePathPrefix(path, length, host)
-    ) {
+    while (length > 0 && cModulePathPrefix(first, length, host) !== cModulePathPrefix(path, length, host)) {
       length = length - 1
     }
   }

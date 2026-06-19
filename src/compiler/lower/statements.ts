@@ -148,7 +148,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     const expression = lowerStatementExpression(statement.expression, context)
     const hoisted = lowerArrayMethodSubexpressions(expression, context, false)
 
-    if (hoisted != null) {
+    if (hoisted !== null && typeof hoisted !== 'undefined') {
       declareLoweredTopLevelVariables(context, hoisted.statements)
 
       return prependLoweredStatements(hoisted.statements, {
@@ -169,11 +169,11 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
     const argument = lowerOptionalStatementExpression(statement.argument, context)
     let hoisted: ArrayExpressionHoist | null = null
 
-    if (argument != null) {
+    if (argument !== null && typeof argument !== 'undefined') {
       hoisted = lowerArrayMethodSubexpressions(argument, context)
     }
 
-    if (hoisted != null) {
+    if (hoisted !== null && typeof hoisted !== 'undefined') {
       declareLoweredTopLevelVariables(context, hoisted.statements)
 
       return prependLoweredStatements(hoisted.statements, {
@@ -205,11 +205,8 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
   return [statement]
 }
 
-function lowerOptionalStatementBody(
-  statement: LowerNode | null | undefined,
-  context: LowerContext
-): LowerNode | null {
-  if (statement == null) {
+function lowerOptionalStatementBody(statement: LowerNode | null | undefined, context: LowerContext): LowerNode | null {
+  if (statement === null || typeof statement === 'undefined') {
     return null
   }
 
@@ -220,18 +217,15 @@ function lowerOptionalStatementExpression(
   expression: LowerNode | null | undefined,
   context: LowerContext
 ): LowerNode | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   return lowerStatementExpression(expression, context)
 }
 
-function lowerOptionalForInitializer(
-  init: LowerNode | null | undefined,
-  context: LowerContext
-): LowerNode | null {
-  if (init == null) {
+function lowerOptionalForInitializer(init: LowerNode | null | undefined, context: LowerContext): LowerNode | null {
+  if (init === null || typeof init === 'undefined') {
     return null
   }
 
@@ -266,7 +260,7 @@ function prependLoweredStatements(prefix: LowerNode[], statement: LowerNode): Lo
 }
 
 function fallbackString(value: string | null | undefined, fallback: string): string {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -274,7 +268,7 @@ function fallbackString(value: string | null | undefined, fallback: string): str
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -282,7 +276,7 @@ function nullableString(value: string | null | undefined): string | null {
 }
 
 function nullableNode(value: LowerNode | null | undefined): LowerNode | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -290,7 +284,7 @@ function nullableNode(value: LowerNode | null | undefined): LowerNode | null {
 }
 
 function arrayHoistExpression(value: ArrayExpressionHoist | null, fallback: LowerNode): LowerNode {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value.expression
   }
 
@@ -309,7 +303,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
   let declaredType: string = param.valueType
   const paramDeclaredType = param.declaredType
 
-  if (paramDeclaredType != null) {
+  if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
     declaredType = paramDeclaredType
   }
 
@@ -332,7 +326,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     shape: declared.shape
   }
 
-  if (param.defaultValue != null) {
+  if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
     loweredParam.defaultValue = lowerExpression(param.defaultValue, context)
   }
 
@@ -368,20 +362,20 @@ function lowerStatementBody(statement: LowerNode, context: LowerContext): LowerN
 }
 
 function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerContext): LowerNode | null {
-  if (handler == null) {
+  if (handler === null || typeof handler === 'undefined') {
     return null
   }
 
   let previous: LowerNode | null = null
   let hadPrevious = false
 
-  if (handler.param != null) {
+  if (handler.param !== null && typeof handler.param !== 'undefined') {
     hadPrevious = context.variables.has(handler.param)
 
     if (hadPrevious) {
       const found = context.variables.get(handler.param)
 
-      if (found != null) {
+      if (found !== null && typeof found !== 'undefined') {
         previous = found
       }
     }
@@ -395,8 +389,8 @@ function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerC
 
   const body = lowerStatementBody(handler.body, context)
 
-  if (handler.param != null) {
-    if (hadPrevious && previous != null) {
+  if (handler.param !== null && typeof handler.param !== 'undefined') {
+    if (hadPrevious && previous !== null && typeof previous !== 'undefined') {
       context.variables.set(handler.param, previous)
     } else {
       context.variables.delete(handler.param)
@@ -456,17 +450,17 @@ function lowerVariableDeclaration(
     init
   }
 
-  if (!allowArrayMethodExpansion || statement.exported === true || init == null) {
+  if (!allowArrayMethodExpansion || statement.exported === true || init === null || typeof init === 'undefined') {
     declareLowerVariable(context, lowered)
     return [lowered]
   }
 
   const expanded = lowerArrayMethodVariableDeclaration(lowered, init, context)
 
-  if (expanded == null) {
+  if (expanded === null || typeof expanded === 'undefined') {
     const hoisted = lowerArrayMethodSubexpressions(init, context)
 
-    if (hoisted != null) {
+    if (hoisted !== null && typeof hoisted !== 'undefined') {
       const declaration = cloneVariableDeclarationWithInit(lowered, hoisted.expression)
 
       declareLoweredTopLevelVariables(context, hoisted.statements)
@@ -489,7 +483,7 @@ function variableDeclarationNullable(declared: LowerResolvedType, init: LowerNod
     return true
   }
 
-  if (init != null && init.nullable === true) {
+  if (init !== null && typeof init !== 'undefined' && init.nullable === true) {
     return true
   }
 
@@ -501,15 +495,15 @@ function variableDeclarationShape(
   statement: LowerNode,
   init: LowerNode | null
 ): LowerNode | null {
-  if (declared.shape != null) {
+  if (declared.shape !== null && typeof declared.shape !== 'undefined') {
     return declared.shape
   }
 
-  if (init != null && init.shape != null) {
+  if (init !== null && typeof init !== 'undefined' && init.shape !== null && typeof init.shape !== 'undefined') {
     return init.shape
   }
 
-  if (statement.shape != null) {
+  if (statement.shape !== null && typeof statement.shape !== 'undefined') {
     return statement.shape
   }
 
@@ -521,15 +515,20 @@ function variableDeclarationFunctionType(
   statement: LowerNode,
   init: LowerNode | null
 ): LowerNode | null {
-  if (declared.functionType != null) {
+  if (declared.functionType !== null && typeof declared.functionType !== 'undefined') {
     return declared.functionType
   }
 
-  if (statement.functionType != null) {
+  if (statement.functionType !== null && typeof statement.functionType !== 'undefined') {
     return statement.functionType
   }
 
-  if (init != null && init.functionType != null) {
+  if (
+    init !== null &&
+    typeof init !== 'undefined' &&
+    init.functionType !== null &&
+    typeof init.functionType !== 'undefined'
+  ) {
     return init.functionType
   }
 
@@ -541,11 +540,11 @@ function variableDeclarationArrayElementType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.arrayElementType != null) {
+  if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
     return declared.arrayElementType
   }
 
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     return statement.arrayElementType
   }
 
@@ -557,11 +556,11 @@ function variableDeclarationArrayElementDeclaredType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.arrayElementDeclaredType != null) {
+  if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
     return declared.arrayElementDeclaredType
   }
 
-  if (statement.arrayElementDeclaredType != null) {
+  if (statement.arrayElementDeclaredType !== null && typeof statement.arrayElementDeclaredType !== 'undefined') {
     return statement.arrayElementDeclaredType
   }
 
@@ -572,11 +571,16 @@ function variableDeclarationMapKeyType(
   declared: LowerResolvedType,
   inferredMapType: InferredMapType | null
 ): string | null {
-  if (declared.mapKeyType != null) {
+  if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
     return declared.mapKeyType
   }
 
-  if (inferredMapType != null && inferredMapType.key != null) {
+  if (
+    inferredMapType !== null &&
+    typeof inferredMapType !== 'undefined' &&
+    inferredMapType.key !== null &&
+    typeof inferredMapType.key !== 'undefined'
+  ) {
     return inferredMapType.key
   }
 
@@ -587,11 +591,16 @@ function variableDeclarationMapValueType(
   declared: LowerResolvedType,
   inferredMapType: InferredMapType | null
 ): string | null {
-  if (declared.mapValueType != null) {
+  if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
     return declared.mapValueType
   }
 
-  if (inferredMapType != null && inferredMapType.value != null) {
+  if (
+    inferredMapType !== null &&
+    typeof inferredMapType !== 'undefined' &&
+    inferredMapType.value !== null &&
+    typeof inferredMapType.value !== 'undefined'
+  ) {
     return inferredMapType.value
   }
 
@@ -603,11 +612,11 @@ function variableDeclarationPromiseValueType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.promiseValueType != null) {
+  if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
     return declared.promiseValueType
   }
 
-  if (statement.promiseValueType != null) {
+  if (statement.promiseValueType !== null && typeof statement.promiseValueType !== 'undefined') {
     return statement.promiseValueType
   }
 
@@ -619,11 +628,11 @@ function variableDeclarationSetElementType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.setElementType != null) {
+  if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
     return declared.setElementType
   }
 
-  if (statement.setElementType != null) {
+  if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
     return statement.setElementType
   }
 
@@ -637,26 +646,26 @@ function variableDeclarationValueType(
 ): string {
   const declaredValueType = declared.valueType
 
-  if (declaredValueType != null) {
+  if (declaredValueType !== null && typeof declaredValueType !== 'undefined') {
     return declaredValueType
   }
 
   const statementValueType = statement.valueType
 
-  if (statementValueType != null) {
+  if (statementValueType !== null && typeof statementValueType !== 'undefined') {
     return statementValueType
   }
 
   const statementDeclaredType = statement.declaredType
 
-  if (statementDeclaredType != null) {
+  if (statementDeclaredType !== null && typeof statementDeclaredType !== 'undefined') {
     return statementDeclaredType
   }
 
-  if (init != null) {
+  if (init !== null && typeof init !== 'undefined') {
     const initValueType = init.valueType
 
-    if (initValueType != null) {
+    if (initValueType !== null && typeof initValueType !== 'undefined') {
       return initValueType
     }
   }
@@ -726,7 +735,7 @@ function lowerArrayMethodVariableDeclaration(
 
   const receiver = lowerArrayMethodReceiver(init.callee.object, context)
 
-  if (receiver == null) {
+  if (receiver === null || typeof receiver === 'undefined') {
     return null
   }
 
@@ -756,7 +765,7 @@ function lowerArrayMethodVariableDeclaration(
     expanded = lowerArrayMapVariableDeclaration(statement, expandedInit, context)
   }
 
-  if (expanded == null) {
+  if (expanded === null || typeof expanded === 'undefined') {
     return null
   }
 
@@ -806,7 +815,10 @@ function lowerArrayMethodExpressionToTemp(expression: LowerNode, context: LowerC
   return lowerArrayOutputMethodExpressionToTemp(expression, context)
 }
 
-function lowerArrayOutputMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
+function lowerArrayOutputMethodExpressionToTemp(
+  expression: LowerNode,
+  context: LowerContext
+): ArrayExpressionHoist | null {
   if (!isArrayOutputMethodExpansionCall(expression)) {
     return null
   }
@@ -815,13 +827,13 @@ function lowerArrayOutputMethodExpressionToTemp(expression: LowerNode, context: 
   const target = createArrayTempDeclaration(name, expression, expression.loc)
   const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
 
-  if (statements == null) {
+  if (statements === null || typeof statements === 'undefined') {
     return null
   }
 
   const output = findVariableDeclaration(statements, name)
 
-  if (output == null) {
+  if (output === null || typeof output === 'undefined') {
     return null
   }
 
@@ -831,7 +843,10 @@ function lowerArrayOutputMethodExpressionToTemp(expression: LowerNode, context: 
   }
 }
 
-function lowerArrayFindMethodExpressionToTemp(expression: LowerNode, context: LowerContext): ArrayExpressionHoist | null {
+function lowerArrayFindMethodExpressionToTemp(
+  expression: LowerNode,
+  context: LowerContext
+): ArrayExpressionHoist | null {
   if (!isArrayFindMethodExpansionCall(expression)) {
     return null
   }
@@ -840,13 +855,13 @@ function lowerArrayFindMethodExpressionToTemp(expression: LowerNode, context: Lo
   const target = createFindTempDeclaration(name, expression, expression.loc)
   const statements = lowerArrayMethodVariableDeclaration(target, expression, context)
 
-  if (statements == null) {
+  if (statements === null || typeof statements === 'undefined') {
     return null
   }
 
   const output = findVariableDeclaration(statements, name)
 
-  if (output == null) {
+  if (output === null || typeof output === 'undefined') {
     return null
   }
 
@@ -867,7 +882,7 @@ function lowerArrayMethodReceiver(receiver: LowerNode, context: LowerContext): A
   if (isArrayOutputMethodExpansionCall(receiver)) {
     const hoisted = lowerArrayOutputMethodExpressionToTemp(receiver, context)
 
-    if (hoisted == null) {
+    if (hoisted === null || typeof hoisted === 'undefined') {
       return null
     }
 
@@ -901,7 +916,7 @@ function lowerArrayMethodSubexpressions(
     root = lowerArrayMethodExpressionToTemp(expression, context)
   }
 
-  if (root != null) {
+  if (root !== null && typeof root !== 'undefined') {
     return root
   }
 
@@ -912,7 +927,7 @@ function lowerArrayMethodSubexpressions(
   if (expression.type === 'CallExpression' || expression.type === 'OptionalCallExpression') {
     const args = lowerArrayMethodExpressionList(expression.args, context)
 
-    if (args == null) {
+    if (args === null || typeof args === 'undefined') {
       return null
     }
 
@@ -925,7 +940,7 @@ function lowerArrayMethodSubexpressions(
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const object = lowerArrayMethodSubexpressions(expression.object, context)
 
-    if (object == null) {
+    if (object === null || typeof object === 'undefined') {
       return null
     }
 
@@ -941,12 +956,12 @@ function lowerArrayMethodSubexpressions(
     const statements: LowerNode[] = []
     let changed = false
 
-    if (object != null) {
+    if (object !== null && typeof object !== 'undefined') {
       appendLoweredHoistStatements(statements, object.statements)
       changed = true
     }
 
-    if (index != null) {
+    if (index !== null && typeof index !== 'undefined') {
       appendLoweredHoistStatements(statements, index.statements)
       changed = true
     }
@@ -970,12 +985,12 @@ function lowerArrayMethodSubexpressions(
     const statements: LowerNode[] = []
     let changed = false
 
-    if (left != null) {
+    if (left !== null && typeof left !== 'undefined') {
       appendLoweredHoistStatements(statements, left.statements)
       changed = true
     }
 
-    if (right != null) {
+    if (right !== null && typeof right !== 'undefined') {
       appendLoweredHoistStatements(statements, right.statements)
       changed = true
     }
@@ -997,7 +1012,7 @@ function lowerArrayMethodSubexpressions(
     const operandSource = unaryOrTypeAssertionOperand(expression)
     const operand = lowerArrayMethodSubexpressions(operandSource, context)
 
-    if (operand == null) {
+    if (operand === null || typeof operand === 'undefined') {
       return null
     }
 
@@ -1010,7 +1025,7 @@ function lowerArrayMethodSubexpressions(
   if (expression.type === 'ArrayLiteral') {
     const elements = lowerArrayMethodExpressionList(expression.elements, context)
 
-    if (elements == null) {
+    if (elements === null || typeof elements === 'undefined') {
       return null
     }
 
@@ -1029,7 +1044,7 @@ function lowerArrayMethodSubexpressions(
     for (const property of sourceProperties) {
       const hoisted = lowerArrayMethodSubexpressions(property.value, context)
 
-      if (hoisted == null) {
+      if (hoisted === null || typeof hoisted === 'undefined') {
         properties.push(property)
         continue
       }
@@ -1312,7 +1327,7 @@ function lowerArrayMethodExpressionList(
   for (const expression of expressions) {
     const hoisted = lowerArrayMethodSubexpressions(expression, context)
 
-    if (hoisted == null) {
+    if (hoisted === null || typeof hoisted === 'undefined') {
       lowered.push(expression)
       continue
     }
@@ -1391,18 +1406,21 @@ function lowerArrayFilterVariableDeclaration(
   let predicate: LowerNode | null = null
 
   if (isBooleanFilterCallback(callback)) {
-    predicate = createTruthyCondition(createReference(itemName, receiverElement, receiver.loc), receiverElement.valueType)
+    predicate = createTruthyCondition(
+      createReference(itemName, receiverElement, receiver.loc),
+      receiverElement.valueType
+    )
   } else if (isArrowCallbackWithMaxParams(callback, 2)) {
     const returned = resolveSimpleArrowReturnExpression(callback)
 
-    if (returned == null) {
+    if (returned === null || typeof returned === 'undefined') {
       return null
     }
 
     predicate = replaceExpressionReferences(returned, replacements)
   }
 
-  if (predicate == null) {
+  if (predicate === null || typeof predicate === 'undefined') {
     return null
   }
 
@@ -1451,18 +1469,21 @@ function lowerArrayFindVariableDeclaration(
   let predicate: LowerNode | null = null
 
   if (isBooleanFilterCallback(callback)) {
-    predicate = createTruthyCondition(createReference(itemName, receiverElement, receiver.loc), receiverElement.valueType)
+    predicate = createTruthyCondition(
+      createReference(itemName, receiverElement, receiver.loc),
+      receiverElement.valueType
+    )
   } else if (isArrowCallbackWithMaxParams(callback, 2)) {
     const returned = resolveSimpleArrowReturnExpression(callback)
 
-    if (returned == null) {
+    if (returned === null || typeof returned === 'undefined') {
       return null
     }
 
     predicate = replaceExpressionReferences(returned, replacements)
   }
 
-  if (predicate == null) {
+  if (predicate === null || typeof predicate === 'undefined') {
     return null
   }
 
@@ -1476,7 +1497,11 @@ function lowerArrayFindVariableDeclaration(
       consequent: {
         type: 'BlockStatement',
         body: [
-          createAssignmentStatement(createNullableReference(statement.name, receiverElement, init.loc), foundValue, init.loc),
+          createAssignmentStatement(
+            createNullableReference(statement.name, receiverElement, init.loc),
+            foundValue,
+            init.loc
+          ),
           {
             type: 'BreakStatement',
             loc: init.loc
@@ -1503,7 +1528,7 @@ function lowerArrayMapVariableDeclaration(
 
   const mapped = resolveSimpleArrowReturnExpression(callback)
 
-  if (mapped == null) {
+  if (mapped === null || typeof mapped === 'undefined') {
     return null
   }
 
@@ -1539,7 +1564,7 @@ function lowerArrayMapVariableDeclaration(
 }
 
 function arrowCallbackParam(callback: LowerNode | null | undefined, index: number): LowerNode | null {
-  if (callback == null || callback.type !== 'ArrowFunctionExpression') {
+  if (callback === null || typeof callback === 'undefined' || callback.type !== 'ArrowFunctionExpression') {
     return null
   }
 
@@ -1551,7 +1576,7 @@ function arrowCallbackParam(callback: LowerNode | null | undefined, index: numbe
 }
 
 function isArrowCallbackWithMaxParams(callback: LowerNode | null | undefined, maxParams: number): boolean {
-  if (callback == null || callback.type !== 'ArrowFunctionExpression') {
+  if (callback === null || typeof callback === 'undefined' || callback.type !== 'ArrowFunctionExpression') {
     return false
   }
 
@@ -1564,7 +1589,7 @@ function arrayMethodItemName(
   context: LowerContext,
   fallbackPrefix: string
 ): string {
-  if (valueParam != null && lowerNameDiffers(valueParam.name, outputName)) {
+  if (valueParam !== null && typeof valueParam !== 'undefined' && lowerNameDiffers(valueParam.name, outputName)) {
     return valueParam.name
   }
 
@@ -1572,11 +1597,11 @@ function arrayMethodItemName(
 }
 
 function arrayMethodElementType(statement: LowerNode, init: LowerNode, fallback: string): string {
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     return statement.arrayElementType
   }
 
-  if (init.arrayElementType != null) {
+  if (init.arrayElementType !== null && typeof init.arrayElementType !== 'undefined') {
     return init.arrayElementType
   }
 
@@ -1588,17 +1613,17 @@ function arrayMethodElementDeclaredType(
   init: LowerNode,
   receiverElement: ArrayElementInfo
 ): string {
-  if (statement.arrayElementDeclaredType != null) {
+  if (statement.arrayElementDeclaredType !== null && typeof statement.arrayElementDeclaredType !== 'undefined') {
     return statement.arrayElementDeclaredType
   }
 
-  if (init.arrayElementDeclaredType != null) {
+  if (init.arrayElementDeclaredType !== null && typeof init.arrayElementDeclaredType !== 'undefined') {
     return init.arrayElementDeclaredType
   }
 
   const receiverDeclaredType = receiverElement.declaredType
 
-  if (receiverDeclaredType != null) {
+  if (receiverDeclaredType !== null && typeof receiverDeclaredType !== 'undefined') {
     return receiverDeclaredType
   }
 
@@ -1606,15 +1631,15 @@ function arrayMethodElementDeclaredType(
 }
 
 function arrayMapElementType(statement: LowerNode, init: LowerNode, mappedValue: LowerNode): string {
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     return statement.arrayElementType
   }
 
-  if (init.arrayElementType != null) {
+  if (init.arrayElementType !== null && typeof init.arrayElementType !== 'undefined') {
     return init.arrayElementType
   }
 
-  if (mappedValue.valueType != null) {
+  if (mappedValue.valueType !== null && typeof mappedValue.valueType !== 'undefined') {
     return mappedValue.valueType
   }
 
@@ -1622,11 +1647,11 @@ function arrayMapElementType(statement: LowerNode, init: LowerNode, mappedValue:
 }
 
 function arrayMapElementDeclaredType(statement: LowerNode, init: LowerNode, mappedElementType: string): string {
-  if (statement.arrayElementDeclaredType != null) {
+  if (statement.arrayElementDeclaredType !== null && typeof statement.arrayElementDeclaredType !== 'undefined') {
     return statement.arrayElementDeclaredType
   }
 
-  if (init.arrayElementDeclaredType != null) {
+  if (init.arrayElementDeclaredType !== null && typeof init.arrayElementDeclaredType !== 'undefined') {
     return init.arrayElementDeclaredType
   }
 
@@ -1823,7 +1848,11 @@ type Replacement = {
   replacement: LowerNode
 }
 
-function resolveReceiverElementInfo(receiver: LowerNode, callback: LowerNode | null | undefined, context: LowerContext): ArrayElementInfo {
+function resolveReceiverElementInfo(
+  receiver: LowerNode,
+  callback: LowerNode | null | undefined,
+  context: LowerContext
+): ArrayElementInfo {
   const callbackParam = arrowCallbackParam(callback, 0)
   const declaredType = receiverElementDeclaredType(receiver, callbackParam)
   const declared = resolveDeclaredType(declaredType, context)
@@ -1844,16 +1873,16 @@ function resolveReceiverElementInfo(receiver: LowerNode, callback: LowerNode | n
 }
 
 function receiverElementDeclaredType(receiver: LowerNode, callbackParam: LowerNode | null): string | null {
-  if (receiver.arrayElementDeclaredType != null) {
+  if (receiver.arrayElementDeclaredType !== null && typeof receiver.arrayElementDeclaredType !== 'undefined') {
     return receiver.arrayElementDeclaredType
   }
 
-  if (receiver.arrayElementType != null) {
+  if (receiver.arrayElementType !== null && typeof receiver.arrayElementType !== 'undefined') {
     return receiver.arrayElementType
   }
 
-  if (callbackParam != null) {
-    if (callbackParam.declaredType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.declaredType !== null && typeof callbackParam.declaredType !== 'undefined') {
       return callbackParam.declaredType
     }
   }
@@ -1866,19 +1895,19 @@ function receiverElementValueType(
   callbackParam: LowerNode | null,
   declared: LowerResolvedType
 ): string {
-  if (receiver.arrayElementType != null) {
+  if (receiver.arrayElementType !== null && typeof receiver.arrayElementType !== 'undefined') {
     return receiver.arrayElementType
   }
 
-  if (callbackParam != null) {
-    if (callbackParam.valueType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.valueType !== null && typeof callbackParam.valueType !== 'undefined') {
       return callbackParam.valueType
     }
   }
 
   const declaredValueType = declared.valueType
 
-  if (declaredValueType != null) {
+  if (declaredValueType !== null && typeof declaredValueType !== 'undefined') {
     return declaredValueType
   }
 
@@ -1886,8 +1915,8 @@ function receiverElementValueType(
 }
 
 function receiverElementShape(callbackParam: LowerNode | null, declared: LowerResolvedType): LowerNode | null {
-  if (callbackParam != null) {
-    if (callbackParam.shape != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.shape !== null && typeof callbackParam.shape !== 'undefined') {
       return callbackParam.shape
     }
   }
@@ -1896,13 +1925,13 @@ function receiverElementShape(callbackParam: LowerNode | null, declared: LowerRe
 }
 
 function receiverElementArrayElementType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
-  if (callbackParam != null) {
-    if (callbackParam.arrayElementType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.arrayElementType !== null && typeof callbackParam.arrayElementType !== 'undefined') {
       return callbackParam.arrayElementType
     }
   }
 
-  if (declared.arrayElementType != null) {
+  if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
     return declared.arrayElementType
   }
 
@@ -1913,13 +1942,16 @@ function receiverElementArrayElementDeclaredType(
   callbackParam: LowerNode | null,
   declared: LowerResolvedType
 ): string | null {
-  if (callbackParam != null) {
-    if (callbackParam.arrayElementDeclaredType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (
+      callbackParam.arrayElementDeclaredType !== null &&
+      typeof callbackParam.arrayElementDeclaredType !== 'undefined'
+    ) {
       return callbackParam.arrayElementDeclaredType
     }
   }
 
-  if (declared.arrayElementDeclaredType != null) {
+  if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
     return declared.arrayElementDeclaredType
   }
 
@@ -1927,13 +1959,13 @@ function receiverElementArrayElementDeclaredType(
 }
 
 function receiverElementMapKeyType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
-  if (callbackParam != null) {
-    if (callbackParam.mapKeyType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.mapKeyType !== null && typeof callbackParam.mapKeyType !== 'undefined') {
       return callbackParam.mapKeyType
     }
   }
 
-  if (declared.mapKeyType != null) {
+  if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
     return declared.mapKeyType
   }
 
@@ -1941,13 +1973,13 @@ function receiverElementMapKeyType(callbackParam: LowerNode | null, declared: Lo
 }
 
 function receiverElementMapValueType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
-  if (callbackParam != null) {
-    if (callbackParam.mapValueType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.mapValueType !== null && typeof callbackParam.mapValueType !== 'undefined') {
       return callbackParam.mapValueType
     }
   }
 
-  if (declared.mapValueType != null) {
+  if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
     return declared.mapValueType
   }
 
@@ -1955,13 +1987,13 @@ function receiverElementMapValueType(callbackParam: LowerNode | null, declared: 
 }
 
 function receiverElementPromiseValueType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
-  if (callbackParam != null) {
-    if (callbackParam.promiseValueType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.promiseValueType !== null && typeof callbackParam.promiseValueType !== 'undefined') {
       return callbackParam.promiseValueType
     }
   }
 
-  if (declared.promiseValueType != null) {
+  if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
     return declared.promiseValueType
   }
 
@@ -1969,13 +2001,13 @@ function receiverElementPromiseValueType(callbackParam: LowerNode | null, declar
 }
 
 function receiverElementSetElementType(callbackParam: LowerNode | null, declared: LowerResolvedType): string | null {
-  if (callbackParam != null) {
-    if (callbackParam.setElementType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.setElementType !== null && typeof callbackParam.setElementType !== 'undefined') {
       return callbackParam.setElementType
     }
   }
 
-  if (declared.setElementType != null) {
+  if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
     return declared.setElementType
   }
 
@@ -1983,8 +2015,8 @@ function receiverElementSetElementType(callbackParam: LowerNode | null, declared
 }
 
 function receiverElementFunctionType(callbackParam: LowerNode | null, declared: LowerResolvedType): LowerNode | null {
-  if (callbackParam != null) {
-    if (callbackParam.functionType != null) {
+  if (callbackParam !== null && typeof callbackParam !== 'undefined') {
+    if (callbackParam.functionType !== null && typeof callbackParam.functionType !== 'undefined') {
       return callbackParam.functionType
     }
   }
@@ -2028,7 +2060,7 @@ function createArrayOutputDeclaration(statement: LowerNode): LowerNode {
 }
 
 function arrayOutputElementType(statement: LowerNode): string {
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     return statement.arrayElementType
   }
 
@@ -2036,7 +2068,7 @@ function arrayOutputElementType(statement: LowerNode): string {
 }
 
 function arrayOutputElementDeclaredType(statement: LowerNode, elementType: string): string {
-  if (statement.arrayElementDeclaredType != null) {
+  if (statement.arrayElementDeclaredType !== null && typeof statement.arrayElementDeclaredType !== 'undefined') {
     return statement.arrayElementDeclaredType
   }
 
@@ -2099,11 +2131,11 @@ function createArrayTempDeclaration(name: string, init: LowerNode, loc: LowerNod
 function arrayTempElementType(init: LowerNode): string {
   const inferred = inferArrayElementType(init)
 
-  if (init.arrayElementType != null) {
+  if (init.arrayElementType !== null && typeof init.arrayElementType !== 'undefined') {
     return init.arrayElementType
   }
 
-  if (inferred != null) {
+  if (inferred !== null && typeof inferred !== 'undefined') {
     return inferred
   }
 
@@ -2113,11 +2145,11 @@ function arrayTempElementType(init: LowerNode): string {
 function arrayTempElementDeclaredType(init: LowerNode, elementType: string): string {
   const inferred = inferArrayElementDeclaredType(init)
 
-  if (init.arrayElementDeclaredType != null) {
+  if (init.arrayElementDeclaredType !== null && typeof init.arrayElementDeclaredType !== 'undefined') {
     return init.arrayElementDeclaredType
   }
 
-  if (inferred != null) {
+  if (inferred !== null && typeof inferred !== 'undefined') {
     return inferred
   }
 
@@ -2215,7 +2247,12 @@ function createArrayLengthExpression(receiver: LowerNode, loc: LowerNode['loc'])
   }
 }
 
-function createArrayPushStatement(arrayName: string, arrayInfo: LowerNode, value: LowerNode, loc: LowerNode['loc']): LowerNode {
+function createArrayPushStatement(
+  arrayName: string,
+  arrayInfo: LowerNode,
+  value: LowerNode,
+  loc: LowerNode['loc']
+): LowerNode {
   return {
     type: 'ExpressionStatement',
     expression: {
@@ -2297,14 +2334,14 @@ function createCallbackReplacements(
 ): Replacement[] {
   const replacements: Replacement[] = []
 
-  if (valueParam != null) {
+  if (valueParam !== null && typeof valueParam !== 'undefined') {
     replacements.push({
       name: valueParam.name,
       replacement: createReference(valueName, paramElementInfo(valueParam), valueParam.loc)
     })
   }
 
-  if (indexParam != null) {
+  if (indexParam !== null && typeof indexParam !== 'undefined') {
     replacements.push({
       name: indexParam.name,
       replacement: createNumberReference(indexName, indexParam.loc)
@@ -2455,7 +2492,13 @@ function createTruthyCondition(value: LowerNode, valueType: string): LowerNode |
     return value
   }
 
-  if (valueType === 'object' || valueType === 'array' || valueType === 'map' || valueType === 'set' || valueType === 'bytes') {
+  if (
+    valueType === 'object' ||
+    valueType === 'array' ||
+    valueType === 'map' ||
+    valueType === 'set' ||
+    valueType === 'bytes'
+  ) {
     return {
       type: 'BooleanLiteral',
       value: true,
@@ -2476,17 +2519,25 @@ function resolveSimpleArrowReturnExpression(callback: LowerNode): LowerNode | nu
 
   if (Array.isArray(callback.body)) {
     statements = callback.body
-  } else if (callback.body != null && callback.body.type === 'BlockStatement') {
+  } else if (
+    callback.body !== null &&
+    typeof callback.body !== 'undefined' &&
+    callback.body.type === 'BlockStatement'
+  ) {
     statements = callback.body.body
   }
 
-  if (statements == null || statements.length !== 1) {
+  if (statements === null || typeof statements === 'undefined' || statements.length !== 1) {
     return null
   }
 
   const statement = statements[0]
 
-  if (statement.type !== 'ReturnStatement' || statement.argument == null) {
+  if (
+    statement.type !== 'ReturnStatement' ||
+    statement.argument === null ||
+    typeof statement.argument === 'undefined'
+  ) {
     return null
   }
 
@@ -2501,7 +2552,7 @@ function replaceExpressionReferences(expression: LowerNode, replacements: Replac
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const replacement = findReplacement(expression.path[0], replacements)
 
-    if (replacement != null) {
+    if (replacement !== null && typeof replacement !== 'undefined') {
       return replacement
     }
 
@@ -2621,7 +2672,13 @@ function findReplacement(name: string, replacements: Replacement[]): LowerNode |
 }
 
 function isBooleanFilterCallback(callback: LowerNode | null | undefined): boolean {
-  return callback != null && callback.type === 'Reference' && callback.path.length === 1 && callback.path[0] === 'Boolean'
+  return (
+    callback !== null &&
+    typeof callback !== 'undefined' &&
+    callback.type === 'Reference' &&
+    callback.path.length === 1 &&
+    callback.path[0] === 'Boolean'
+  )
 }
 
 function isStableArrayReceiver(expression: LowerNode): boolean {
@@ -2663,7 +2720,7 @@ function expressionContext(context: LowerContext): LowerExpressionContext {
 }
 
 function inferArrayElementType(expression: LowerNode | null): string | null {
-  if (expression == null || expression.valueType !== 'array') {
+  if (expression === null || typeof expression === 'undefined' || expression.valueType !== 'array') {
     return null
   }
 
@@ -2671,11 +2728,11 @@ function inferArrayElementType(expression: LowerNode | null): string | null {
 }
 
 function inferArrayElementDeclaredType(expression: LowerNode | null): string | null {
-  if (expression == null || expression.valueType !== 'array') {
+  if (expression === null || typeof expression === 'undefined' || expression.valueType !== 'array') {
     return null
   }
 
-  if (expression.arrayElementDeclaredType != null) {
+  if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
     return expression.arrayElementDeclaredType
   }
 
@@ -2683,7 +2740,7 @@ function inferArrayElementDeclaredType(expression: LowerNode | null): string | n
 }
 
 function inferMapType(expression: LowerNode | null): InferredMapType | null {
-  if (expression == null || expression.valueType !== 'map') {
+  if (expression === null || typeof expression === 'undefined' || expression.valueType !== 'map') {
     return null
   }
 
@@ -2694,7 +2751,7 @@ function inferMapType(expression: LowerNode | null): InferredMapType | null {
 }
 
 function inferSetElementType(expression: LowerNode | null): string | null {
-  if (expression == null || expression.valueType !== 'set') {
+  if (expression === null || typeof expression === 'undefined' || expression.valueType !== 'set') {
     return null
   }
 
@@ -2702,7 +2759,7 @@ function inferSetElementType(expression: LowerNode | null): string | null {
 }
 
 function inferPromiseValueType(expression: LowerNode | null): string | null {
-  if (expression == null || expression.valueType !== 'promise') {
+  if (expression === null || typeof expression === 'undefined' || expression.valueType !== 'promise') {
     return null
   }
 

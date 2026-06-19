@@ -49,7 +49,7 @@ class NodeCompilerHost {
   readFile(path: string): Promise<string> {
     const source = this.readFileSync(path)
 
-    if (source != null) {
+    if (source !== null && typeof source !== 'undefined') {
       return Promise.resolve(source)
     }
 

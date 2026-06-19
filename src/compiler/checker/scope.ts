@@ -16,16 +16,16 @@ export class Scope {
   resolve(name: string): SymbolInfo | null {
     const local = this.bindings.get(name)
 
-    if (local != null) {
+    if (local !== null && typeof local !== 'undefined') {
       return local
     }
 
     let current = this.parent
 
-    while (current != null) {
+    while (current !== null && typeof current !== 'undefined') {
       const found = current.bindings.get(name)
 
-      if (found != null) {
+      if (found !== null && typeof found !== 'undefined') {
         return found
       }
 

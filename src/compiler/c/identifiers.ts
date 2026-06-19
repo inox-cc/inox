@@ -19,12 +19,7 @@ export function emitCIdentifier(value: string): string {
 }
 
 function isCIdentifierCode(code: number): boolean {
-  return (
-    (code >= 65 && code <= 90) ||
-    (code >= 97 && code <= 122) ||
-    (code >= 48 && code <= 57) ||
-    code === 95
-  )
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 95
 }
 
 export function emitCFunctionName(name: string): string {

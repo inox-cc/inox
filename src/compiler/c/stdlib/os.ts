@@ -1,11 +1,6 @@
 import { osRuntimeConstantValue } from '../../stdlib/descriptors/os.ts'
 import type { AnyNode } from '../../types.ts'
-import {
-  emitPrepareOwnedValueWrite,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
-} from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
 
@@ -22,11 +17,11 @@ type OsCContext = {
 }
 
 export function cOsRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
-  if (expression.osRuntimeMethod != null) {
+  if (expression.osRuntimeMethod !== null && typeof expression.osRuntimeMethod !== 'undefined') {
     return expression.osRuntimeMethod
   }
 
@@ -34,11 +29,11 @@ export function cOsRuntimeMethodName(expression: AnyNode | null | undefined): st
 }
 
 export function cOsRuntimeConstantName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  if (expression.osRuntimeConstant != null) {
+  if (expression.osRuntimeConstant !== null && typeof expression.osRuntimeConstant !== 'undefined') {
     return expression.osRuntimeConstant
   }
 
@@ -53,18 +48,15 @@ export function cOsRuntimeConstantValue(name: string): string | null {
   return osRuntimeConstantValue(name)
 }
 
-export function emitPreparedOsConstantExpression(
-  expression: AnyNode,
-  context: OsCContext
-): PreparedExpression | null {
+export function emitPreparedOsConstantExpression(expression: AnyNode, context: OsCContext): PreparedExpression | null {
   const constant = cOsRuntimeConstantName(expression)
   let value: string | null = null
 
-  if (constant != null) {
+  if (constant !== null && typeof constant !== 'undefined') {
     value = cOsRuntimeConstantValue(constant)
   }
 
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -91,7 +83,7 @@ export function emitPreparedOsStringCallExpression(
 ): PreparedExpression | null {
   const method = cOsRuntimeMethodName(expression)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 

@@ -6,12 +6,7 @@ import {
 } from '../../stdlib/descriptors/binary.ts'
 import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode } from '../../types.ts'
-import {
-  emitPrepareOwnedValueWrite,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
-} from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import type { CFunctionContext } from '../context.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { emitSliceIndexNormalizationLines } from '../values/slices.ts'
@@ -20,11 +15,16 @@ import type {
   CPreparedStatement as PreparedStatement,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 export type BinaryLoweringDependencies = {
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: AnyNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
+  emitPreparedStringBytesOperand: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    tempPrefix: string
+  ) => PreparedStringBytesOperand
   inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
 }
 
@@ -49,13 +49,16 @@ export function binaryRuntimeMethodName(callee: AnyNode): string | null {
 
   let root: string | null = null
 
-  if (callee.object != null && callee.object.type === 'Reference' && callee.object.path.length === 1) {
+  if (
+    callee.object !== null &&
+    typeof callee.object !== 'undefined' &&
+    callee.object.type === 'Reference' &&
+    callee.object.path.length === 1
+  ) {
     root = binaryStringAt(callee.object.path, 0)
   }
 
-  if (
-    root === 'Buffer'
-  ) {
+  if (root === 'Buffer') {
     return binaryStaticRuntimeMethodNameFromPath([root, callee.property])
   }
 
@@ -63,32 +66,48 @@ export function binaryRuntimeMethodName(callee: AnyNode): string | null {
 }
 
 export function isBinaryRuntimeCall(expression: AnyNode | null | undefined): boolean {
-  return expression != null && expression.type === 'CallExpression' && expression.binaryRuntimeMethod != null
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'CallExpression' &&
+    expression.binaryRuntimeMethod !== null &&
+    typeof expression.binaryRuntimeMethod !== 'undefined'
+  )
 }
 
 export function isBufferFromCall(expression: AnyNode | null | undefined): boolean {
-  return expression != null && isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'from'
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    isBinaryRuntimeCall(expression) &&
+    expression.binaryRuntimeMethod === 'from'
+  )
 }
 
 export function isBufferAllocCall(expression: AnyNode | null | undefined): boolean {
-  return expression != null && isBinaryRuntimeCall(expression) && expression.binaryRuntimeMethod === 'alloc'
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    isBinaryRuntimeCall(expression) &&
+    expression.binaryRuntimeMethod === 'alloc'
+  )
 }
 
 export function isBinaryConstructorExpression(expression: AnyNode): boolean {
   return (
     expression.type === 'NewExpression' &&
     expression.callee.type === 'Reference' &&
-    binaryConstructorNameFromPath(expression.callee.path) != null &&
+    isPresent(binaryConstructorNameFromPath(expression.callee.path)) &&
     expression.valueType === 'bytes'
   )
 }
 
 export function binaryRuntimeExpressionReturnType(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  if (expression.binaryRuntimeMethod != null) {
+  if (expression.binaryRuntimeMethod !== null && typeof expression.binaryRuntimeMethod !== 'undefined') {
     return binaryRuntimeReturnType(expression.binaryRuntimeMethod)
   }
 
@@ -158,7 +177,12 @@ function emitCBytesAllocValueExpression(
     firstArg = expression.args[0]
   }
 
-  if (isBinaryConstructorExpression(expression) && firstArg != null && firstArg.type === 'ArrayLiteral') {
+  if (
+    isBinaryConstructorExpression(expression) &&
+    firstArg !== null &&
+    typeof firstArg !== 'undefined' &&
+    firstArg.type === 'ArrayLiteral'
+  ) {
     const elements = firstArg.elements
     const lines: string[] = []
 
@@ -170,12 +194,7 @@ function emitCBytesAllocValueExpression(
       const value = dependencies.emitPreparedNumberExpression(element, context)
 
       pushBinaryLines(lines, value.lines)
-      lines.push(
-        emitStatusCheck(
-          `inox_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`,
-          context
-        )
-      )
+      lines.push(emitStatusCheck(`inox_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`, context))
     }
 
     return {
@@ -186,7 +205,8 @@ function emitCBytesAllocValueExpression(
 
   if (
     isBinaryConstructorExpression(expression) &&
-    firstArg != null &&
+    firstArg !== null &&
+    typeof firstArg !== 'undefined' &&
     dependencies.inferExpressionType(firstArg, context) !== 'number'
   ) {
     context.diagnostics.push(
@@ -209,10 +229,7 @@ function emitCBytesAllocValueExpression(
   pushBinaryLines(lines, size.lines)
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
-    emitStatusCheck(
-      `inox_bytes_new(&inox_default_allocator, (size_t)(${size.expression}), &${temp})`,
-      context
-    )
+    emitStatusCheck(`inox_bytes_new(&inox_default_allocator, (size_t)(${size.expression}), &${temp})`, context)
   )
 
   return {
@@ -254,7 +271,10 @@ function emitCBytesSliceValueExpression(
   lines.push(emitStatusCheck(`inox_bytes_len(${receiver.expression}, &${lengthName})`, context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${endExpression};`)
-  pushBinaryLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_bytes_start'))
+  pushBinaryLines(
+    lines,
+    emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_bytes_start')
+  )
   pushBinaryLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_bytes_end'))
   lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
@@ -279,7 +299,9 @@ function emitCBytesToStringValueExpression(
 
   pushBinaryLines(lines, receiver.lines)
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_bytes_to_string(&inox_default_allocator, ${receiver.expression}, &${temp})`, context))
+  lines.push(
+    emitStatusCheck(`inox_bytes_to_string(&inox_default_allocator, ${receiver.expression}, &${temp})`, context)
+  )
   lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_STRING', context))
 
   return {
@@ -366,7 +388,8 @@ export function emitPreparedBytesIndexAssignment(
   dependencies: BinaryLoweringDependencies
 ): PreparedStatement | null {
   if (
-    expression.target == null ||
+    expression.target === null ||
+    typeof expression.target === 'undefined' ||
     expression.target.type !== 'IndexExpression' ||
     dependencies.inferExpressionType(expression.target.object, context) !== 'bytes'
   ) {

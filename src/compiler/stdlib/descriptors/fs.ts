@@ -14,7 +14,7 @@ export type RemovedFsRuntimeMethodInfo = {
 }
 
 export function fsRuntimeCallInfoFromPath(path: string[] | null | undefined): FsRuntimeCallInfo | null {
-  if (path == null || path.length < 2) {
+  if (path === null || typeof path === 'undefined' || path.length < 2) {
     return null
   }
 
@@ -23,7 +23,7 @@ export function fsRuntimeCallInfoFromPath(path: string[] | null | undefined): Fs
   if (path.length === 3 && path[1] === 'promises') {
     const method = promiseFsRuntimeMethodForNodeName(nodeName)
 
-    if (method == null) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
@@ -43,7 +43,7 @@ export function fsRuntimeCallInfoFromPath(path: string[] | null | undefined): Fs
 
   const syncMethod = syncFsRuntimeMethodForNodeName(nodeName)
 
-  if (syncMethod != null) {
+  if (syncMethod !== null && typeof syncMethod !== 'undefined') {
     return {
       method: syncMethod,
       nodeName,
@@ -56,7 +56,7 @@ export function fsRuntimeCallInfoFromPath(path: string[] | null | undefined): Fs
 
   const callbackMethod = callbackFsRuntimeMethodForNodeName(nodeName)
 
-  if (callbackMethod != null) {
+  if (callbackMethod !== null && typeof callbackMethod !== 'undefined') {
     return {
       method: callbackMethod,
       nodeName,
@@ -73,7 +73,7 @@ export function fsRuntimeCallInfoFromPath(path: string[] | null | undefined): Fs
 export function fsRuntimeMethodForPath(path: string[] | null | undefined): string | null {
   const info = fsRuntimeCallInfoFromPath(path)
 
-  if (info != null) {
+  if (info !== null && typeof info !== 'undefined') {
     return info.method
   }
 
@@ -83,13 +83,13 @@ export function fsRuntimeMethodForPath(path: string[] | null | undefined): strin
 export function fsGlobalUsagePathForRuntimeMethod(method: string): string[] | null {
   const promisePath = promiseFsNodePathForRuntimeMethod(method)
 
-  if (promisePath != null) {
+  if (promisePath !== null && typeof promisePath !== 'undefined') {
     return promisePath
   }
 
   const syncPath = syncFsNodePathForRuntimeMethod(method)
 
-  if (syncPath != null) {
+  if (syncPath !== null && typeof syncPath !== 'undefined') {
     return syncPath
   }
 
@@ -192,14 +192,14 @@ export function isAsyncFsRuntimeMethod(method: string): boolean {
 export function removedFsRuntimeMethodInfoFromPath(
   path: string[] | null | undefined
 ): RemovedFsRuntimeMethodInfo | null {
-  if (path == null || path.length !== 2) {
+  if (path === null || typeof path === 'undefined' || path.length !== 2) {
     return null
   }
 
   const nodeName = path[1]
   const replacement = removedFsRuntimeMethodReplacement(nodeName)
 
-  if (replacement == null) {
+  if (replacement === null || typeof replacement === 'undefined') {
     return null
   }
 

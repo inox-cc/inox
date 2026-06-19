@@ -1,7 +1,4 @@
-import {
-  isTimerClearMethod,
-  timerRuntimeMethodNameFromPath
-} from '../../stdlib/descriptors/timers.ts'
+import { isTimerClearMethod, timerRuntimeMethodNameFromPath } from '../../stdlib/descriptors/timers.ts'
 import type { AnyNode } from '../../types.ts'
 
 export function timerRuntimeMethodName(callee: AnyNode): string | null {

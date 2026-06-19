@@ -7,7 +7,7 @@ export function locFromToken(token: SourceLocation): SourceLocation {
     column: token.column
   }
 
-  if (file != null) {
+  if (file !== null && typeof file !== 'undefined') {
     location.file = file
   }
 

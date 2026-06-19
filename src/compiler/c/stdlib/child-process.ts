@@ -1,10 +1,5 @@
 import type { AnyNode } from '../../types.ts'
-import {
-  emitPrepareOwnedValueWrite,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
-} from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import type { CFunctionContext } from '../context.ts'
 import type {
   CObjectShape,
@@ -38,7 +33,13 @@ function emitChildProcessArgumentArray(args: PreparedExpression[]): string {
 }
 
 export function cChildProcessRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'CallExpression' || expression.childProcessRuntimeMethod == null) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.childProcessRuntimeMethod === null ||
+    typeof expression.childProcessRuntimeMethod === 'undefined'
+  ) {
     return null
   }
 
@@ -53,14 +54,14 @@ export function emitPreparedChildProcessCallExpression(
 ): PreparedExpression | null {
   const method = cChildProcessRuntimeMethodName(expression)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
   const command = dependencies.emitCValueExpression(expression.args[0], context)
   let out = nextCName(context, 'inox_child_process_output')
 
-  if (options.out != null) {
+  if (options.out !== null && typeof options.out !== 'undefined') {
     out = options.out
   }
 
@@ -98,7 +99,7 @@ export function emitPreparedChildProcessCallExpression(
   let argArray: AnyNode | null = second
   let optionsArg: AnyNode | null = null
 
-  if (second != null && second.type === 'ObjectLiteral') {
+  if (second !== null && typeof second !== 'undefined' && second.type === 'ObjectLiteral') {
     argArray = null
     optionsArg = second
   } else if (expression.args.length > 2) {
@@ -110,13 +111,13 @@ export function emitPreparedChildProcessCallExpression(
     expression: 'inox_undefined_value()'
   }
 
-  if (optionsArg != null) {
+  if (optionsArg !== null && typeof optionsArg !== 'undefined') {
     childOptions = dependencies.emitCValueExpression(optionsArg, context)
   }
 
   const args: PreparedExpression[] = []
 
-  if (argArray != null && argArray.type === 'ArrayLiteral') {
+  if (argArray !== null && typeof argArray !== 'undefined' && argArray.type === 'ArrayLiteral') {
     for (let index = 0; index < argArray.elements.length; index = index + 1) {
       const arg = argArray.elements[index]
       args.push(dependencies.emitCValueExpression(arg, context))

@@ -25,7 +25,7 @@ export function diagnostic(code: string, message: string, token?: SourceLocation
     severity: 'error'
   }
 
-  if (token != null) {
+  if (token !== null && typeof token !== 'undefined') {
     const file = token.file ?? ''
 
     if (file !== '') {
@@ -46,7 +46,7 @@ export function formatDiagnostics(diagnostics: Diagnostic[]): string {
     const item = diagnostics[index]
     let location = `${item.line}:${item.column}`
 
-    if (item.file != null) {
+    if (item.file !== null && typeof item.file !== 'undefined') {
       location = `${item.file}:${item.line}:${item.column}`
     }
 

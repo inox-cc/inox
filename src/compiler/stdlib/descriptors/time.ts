@@ -39,9 +39,7 @@ export const timeRuntimeDescriptors: TimeRuntimeDescriptor[] = [
   performanceNowRuntimeDescriptor
 ]
 
-export function timeRuntimeMethodNameFromPath(
-  path: string[] | null | undefined
-): string | null {
+export function timeRuntimeMethodNameFromPath(path: string[] | null | undefined): string | null {
   if (isDateNowRuntimePath(path)) {
     return 'dateNow'
   }
@@ -53,9 +51,7 @@ export function timeRuntimeMethodNameFromPath(
   return null
 }
 
-export function timeRuntimeCFunctionNameFromPath(
-  path: string[] | null | undefined
-): string | null {
+export function timeRuntimeCFunctionNameFromPath(path: string[] | null | undefined): string | null {
   if (isDateNowRuntimePath(path)) {
     return 'inox_date_now'
   }
@@ -67,9 +63,7 @@ export function timeRuntimeCFunctionNameFromPath(
   return null
 }
 
-export function timeRuntimeCapabilityFromPath(
-  path: string[] | null | undefined
-): TimeRuntimeCapability | null {
+export function timeRuntimeCapabilityFromPath(path: string[] | null | undefined): TimeRuntimeCapability | null {
   if (isDateNowRuntimePath(path)) {
     return {
       key: 'wallClock',
@@ -88,9 +82,11 @@ export function timeRuntimeCapabilityFromPath(
 }
 
 function isDateNowRuntimePath(path: string[] | null | undefined): boolean {
-  return path != null && path.length === 2 && path[0] === 'Date' && path[1] === 'now'
+  return path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Date' && path[1] === 'now'
 }
 
 function isPerformanceNowRuntimePath(path: string[] | null | undefined): boolean {
-  return path != null && path.length === 2 && path[0] === 'performance' && path[1] === 'now'
+  return (
+    path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'performance' && path[1] === 'now'
+  )
 }

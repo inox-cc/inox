@@ -18,6 +18,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 type JsonMemberExpressionNode = {
   object?: JsonReferenceNode | null
@@ -31,7 +32,7 @@ type JsonReferenceNode = {
 }
 
 export function cJsonRuntimeCallName(callee: AnyNode | null | undefined): string | null {
-  if (callee == null) {
+  if (callee === null || typeof callee === 'undefined') {
     return null
   }
 
@@ -43,14 +44,14 @@ export function cJsonRuntimeCallName(callee: AnyNode | null | undefined): string
 
   const object = member.object
 
-  if (object == null || object.type !== 'Reference') {
+  if (object === null || typeof object === 'undefined' || object.type !== 'Reference') {
     return null
   }
 
   const root = singleStringPathName(object.path)
   const property = member.property
 
-  if (root == null || property == null) {
+  if (root === null || typeof root === 'undefined' || property === null || typeof property === 'undefined') {
     return null
   }
 
@@ -60,7 +61,11 @@ export function cJsonRuntimeCallName(callee: AnyNode | null | undefined): string
 export type JsonDeclarationDependencies = {
   emitCFieldFlags: (field: CObjectShapeField) => string
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: AnyNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
+  emitPreparedStringBytesOperand: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    tempPrefix: string
+  ) => PreparedStringBytesOperand
   inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
   registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
@@ -72,7 +77,7 @@ function pushJsonLines(target: string[], lines: string[]): void {
 }
 
 function singleStringPathName(path: string[] | null | undefined): string | null {
-  if (path == null || path.length !== 1) {
+  if (path === null || typeof path === 'undefined' || path.length !== 1) {
     return null
   }
 
@@ -94,7 +99,7 @@ function currentJsonErrorTarget(context: CFunctionContext): string | null {
 }
 
 function shouldUseDetailedJsonParseError(context: CFunctionContext): boolean {
-  return currentJsonErrorTarget(context) != null || context.throwingFunction === true
+  return isPresent(currentJsonErrorTarget(context)) || context.throwingFunction === true
 }
 
 function pushJsonParseStatusLines(
@@ -105,7 +110,7 @@ function pushJsonParseStatusLines(
 ): void {
   const errorTarget = currentJsonErrorTarget(context)
 
-  if (errorTarget == null && context.throwingFunction !== true) {
+  if ((errorTarget === null || typeof errorTarget === 'undefined') && context.throwingFunction !== true) {
     target.push(emitStatusCheck(call, context))
     return
   }
@@ -118,7 +123,7 @@ function pushJsonParseStatusLines(
   const fallbackErrorLine = `if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, &inox_error) != INOX_OK) ${failureStatement}`
   let gotoTarget = 'inox_cleanup'
 
-  if (errorTarget != null) {
+  if (errorTarget !== null && typeof errorTarget !== 'undefined') {
     gotoTarget = errorTarget
   }
 
@@ -127,7 +132,7 @@ function pushJsonParseStatusLines(
   target.push('  inox_release(inox_error);')
   target.push('  inox_error = inox_undefined_value();')
 
-  if (detailedError != null) {
+  if (detailedError !== null && typeof detailedError !== 'undefined') {
     target.push(`  if (${detailedError}.tag == INOX_TAG_STRING && ${detailedError}.as.ref != 0) {`)
     target.push(`    inox_error = ${detailedError};`)
     target.push(`    ${detailedError} = inox_undefined_value();`)
@@ -140,7 +145,7 @@ function pushJsonParseStatusLines(
     target.push(`  ${fallbackErrorLine}`)
   }
 
-  if (errorTarget == null) {
+  if (errorTarget === null || typeof errorTarget === 'undefined') {
     target.push('  inox_status_result = INOX_ERR_THROW;')
   }
 
@@ -155,14 +160,21 @@ export function emitJsonParseVariableDeclaration(
   dependencies: JsonDeclarationDependencies
 ): string[] | null {
   if (
-    statement.init == null ||
+    statement.init === null ||
+    typeof statement.init === 'undefined' ||
     statement.init.type !== 'CallExpression' ||
     cJsonRuntimeCallName(statement.init.callee) !== 'parse'
   ) {
     return null
   }
 
-  if (statement.valueType !== 'object' || statement.shape == null || statement.shape.fields == null) {
+  if (
+    statement.valueType !== 'object' ||
+    statement.shape === null ||
+    typeof statement.shape === 'undefined' ||
+    statement.shape.fields === null ||
+    typeof statement.shape.fields === 'undefined'
+  ) {
     return null
   }
 
@@ -189,7 +201,7 @@ export function emitJsonParseVariableDeclaration(
   context.variables.set(statement.name, 'object')
   dependencies.registerObjectShape(context, statement.name, statement.shape)
 
-  if (parseCall != null) {
+  if (parseCall !== null && typeof parseCall !== 'undefined') {
     pushJsonLines(lines, parseCall.lines)
   } else {
     return null
@@ -229,17 +241,22 @@ export function emitPreparedJsonCallExpression(
 ): PreparedExpression | null {
   const method = cJsonRuntimeCallName(expression.callee)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
   let out = nextCName(context, 'inox_json_value')
 
-  if (options != null && options.out != null) {
+  if (
+    options !== null &&
+    typeof options !== 'undefined' &&
+    options.out !== null &&
+    typeof options.out !== 'undefined'
+  ) {
     out = options.out
   }
 
-  if (options == null || options.owned !== false) {
+  if (options === null || typeof options === 'undefined' || options.owned !== false) {
     registerOwnedValue(context, out)
   }
 
@@ -261,7 +278,7 @@ export function emitPreparedJsonCallExpression(
 
     let parseCall = `inox_json_parse(&inox_default_allocator, ${text.bytes}, ${text.length}, &${out})`
 
-    if (detailedError != null) {
+    if (detailedError !== null && typeof detailedError !== 'undefined') {
       parseCall = `inox_json_parse_with_error(&inox_default_allocator, ${text.bytes}, ${text.length}, &${out}, &${detailedError})`
     }
 
@@ -306,7 +323,7 @@ export function emitPreparedJsonScalarParseExpression(
 
   const value = emitPreparedJsonCallExpression(expression, context, dependencies, null)
 
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     let resultExpression = `${value.expression}.as.number`
 
     if (valueType === 'boolean') {

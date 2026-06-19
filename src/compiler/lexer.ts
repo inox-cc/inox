@@ -26,7 +26,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
     column: 1
   }
 
-  if (options.file != null) {
+  if (options.file !== null && typeof options.file !== 'undefined') {
     state.file = options.file
   }
 
@@ -79,7 +79,11 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
     }
 
     state.diagnostics.push(
-      diagnostic('INOX_UNKNOWN_CHAR', `unknown character ${quoteDiagnosticString(unit)}`, lexerLocation(state, state.line, state.column))
+      diagnostic(
+        'INOX_UNKNOWN_CHAR',
+        `unknown character ${quoteDiagnosticString(unit)}`,
+        lexerLocation(state, state.line, state.column)
+      )
     )
     advanceLexer(state, unit)
   }
@@ -168,7 +172,11 @@ function readTemplateToken(state: LexerState): Token {
   }
 
   state.diagnostics.push(
-    diagnostic('INOX_UNTERMINATED_TEMPLATE', 'unterminated template literal', lexerLocation(state, startLine, startColumn))
+    diagnostic(
+      'INOX_UNTERMINATED_TEMPLATE',
+      'unterminated template literal',
+      lexerLocation(state, startLine, startColumn)
+    )
   )
 
   return makeToken('template', raw, startLine, startColumn, startIndex, state.file)
@@ -303,7 +311,7 @@ function advanceLexer(state: LexerState, unit: string): void {
 function lexerLocation(state: LexerState, line: number, column: number): SourceLocation {
   const file = state.file
 
-  if (file != null) {
+  if (file !== null && typeof file !== 'undefined') {
     return lexerLocationWithFile(file, line, column)
   }
 
@@ -321,7 +329,14 @@ function lexerLocationWithFile(file: string, line: number, column: number): Sour
   }
 }
 
-function makeToken(tokenType: string, value: string, line: number, column: number, index: number, file: string | null): Token {
+function makeToken(
+  tokenType: string,
+  value: string,
+  line: number,
+  column: number,
+  index: number,
+  file: string | null
+): Token {
   const token: Token = {
     type: tokenType,
     value,
@@ -330,7 +345,7 @@ function makeToken(tokenType: string, value: string, line: number, column: numbe
     index
   }
 
-  if (file != null) {
+  if (file !== null && typeof file !== 'undefined') {
     token.file = file
   }
 

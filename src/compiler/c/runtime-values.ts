@@ -15,7 +15,7 @@ export function emitRuntimeNullableValueCheck(
   expectedTag: string | null,
   context: RuntimeValueCheckContext
 ): string[] {
-  if (expectedTag == null) {
+  if (expectedTag === null || typeof expectedTag === 'undefined') {
     return []
   }
 
@@ -31,8 +31,12 @@ export function emitRuntimeNullableValueCheck(
   ]
 }
 
-export function emitRuntimeValueCheck(name: string, expectedTag: string | null, context: RuntimeValueCheckContext): string {
-  if (expectedTag == null) {
+export function emitRuntimeValueCheck(
+  name: string,
+  expectedTag: string | null,
+  context: RuntimeValueCheckContext
+): string {
+  if (expectedTag === null || typeof expectedTag === 'undefined') {
     return ''
   }
 

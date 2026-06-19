@@ -71,7 +71,7 @@ function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
 }
 
 function ownershipFromWeakToken(weakToken: Token | null): string {
-  if (weakToken == null) {
+  if (weakToken === null || typeof weakToken === 'undefined') {
     return 'strong'
   }
 
@@ -89,7 +89,7 @@ function stringArrayIncludes(values: string[], value: string): boolean {
 }
 
 function typeAnnotationOptionsOrEmpty(options: TypeAnnotationOptions | null): TypeAnnotationOptions {
-  if (options != null) {
+  if (options !== null && typeof options !== 'undefined') {
     return options
   }
 
@@ -97,7 +97,7 @@ function typeAnnotationOptionsOrEmpty(options: TypeAnnotationOptions | null): Ty
 }
 
 function stringArrayOrEmpty(values: string[] | null): string[] {
-  if (values != null) {
+  if (values !== null && typeof values !== 'undefined') {
     return values
   }
 
@@ -538,7 +538,7 @@ class Parser {
 
     const extendsToken = this.matchContextualKeyword('extends')
 
-    if (extendsToken != null) {
+    if (extendsToken !== null && typeof extendsToken !== 'undefined') {
       const base = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected base class name')
       extendsName = base.value
     }
@@ -572,11 +572,18 @@ class Parser {
     const modifiers = this.parseFieldModifiers()
     const name = this.parseClassMemberName()
 
-    if (!modifiers.readOnly && modifiers.weakToken == null && this.isValue('(')) {
+    if (
+      !modifiers.readOnly &&
+      (modifiers.weakToken === null || typeof modifiers.weakToken === 'undefined') &&
+      this.isValue('(')
+    ) {
       return this.parseClassMethod(name, staticToken)
     }
 
-    if ((modifiers.readOnly || modifiers.weakToken != null) && this.isValue('(')) {
+    if (
+      (modifiers.readOnly || (modifiers.weakToken !== null && typeof modifiers.weakToken !== 'undefined')) &&
+      this.isValue('(')
+    ) {
       this.report('INOX_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields', null)
     }
 
@@ -610,7 +617,7 @@ class Parser {
         continue
       }
 
-      if (weakToken == null && this.isWeakFieldModifier()) {
+      if ((weakToken === null || typeof weakToken === 'undefined') && this.isWeakFieldModifier()) {
         weakToken = this.advance()
         matched = true
       }
@@ -878,7 +885,10 @@ class Parser {
       }
     }
 
-    if (handler == null && finalizer == null) {
+    if (
+      (handler === null || typeof handler === 'undefined') &&
+      (finalizer === null || typeof finalizer === 'undefined')
+    ) {
       this.report('INOX_EXPECTED_TRY_HANDLER', 'try must be followed by catch or finally', start)
     }
 
@@ -1648,7 +1658,7 @@ class Parser {
   report(code: string, message: string, token: Token | null): void {
     let actualToken = this.current()
 
-    if (token != null) {
+    if (token !== null && typeof token !== 'undefined') {
       actualToken = token
     }
 

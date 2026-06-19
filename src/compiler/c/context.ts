@@ -68,7 +68,7 @@ export function cloneCStringMap(values: CStringMap): CStringMap {
 export function cloneCArrayShapeMap(values: CArrayShapeMap | null | undefined): CArrayShapeMap {
   const result: CArrayShapeMap = new Map()
 
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return result
   }
 
@@ -78,7 +78,7 @@ export function cloneCArrayShapeMap(values: CArrayShapeMap | null | undefined): 
 export function cloneCFunctionTypeMap(values: CFunctionTypeMap | null | undefined): CFunctionTypeMap {
   const result: CFunctionTypeMap = new Map()
 
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return result
   }
 
@@ -90,19 +90,17 @@ export function cloneCFunctionReturnMapTypeMap(
 ): CFunctionReturnMapTypeMap {
   const result: CFunctionReturnMapTypeMap = new Map()
 
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return result
   }
 
   return new Map(values)
 }
 
-export function cloneCObjectShapeFieldMap(
-  values: CObjectShapeFieldMap | null | undefined
-): CObjectShapeFieldMap {
+export function cloneCObjectShapeFieldMap(values: CObjectShapeFieldMap | null | undefined): CObjectShapeFieldMap {
   const result: CObjectShapeFieldMap = new Map()
 
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return result
   }
 
@@ -114,7 +112,7 @@ export function cloneCPromiseConstructorHandlerMap(
 ): CPromiseConstructorHandlerMap {
   const result: CPromiseConstructorHandlerMap = new Map()
 
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return result
   }
 
@@ -448,7 +446,7 @@ export function emitRuntimeTypeCheck(condition: string, context: CFailureContext
 export function emitFailureStatement(context: CFailureContext): string {
   const failureStatement = context.failureStatement
 
-  if (failureStatement != null) {
+  if (failureStatement !== null && typeof failureStatement !== 'undefined') {
     context.failureStatementUsed = true
     return failureStatement
   }
@@ -615,7 +613,7 @@ export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
 export function emitReturnValueDeclarations(context: CReturnValueDeclarationContext): string[] {
   let returnType = 'void'
 
-  if (context.returnType != null) {
+  if (context.returnType !== null && typeof context.returnType !== 'undefined') {
     returnType = context.returnType
   }
 
@@ -627,11 +625,7 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
     return ['inox_value inox_return = inox_undefined_value();']
   }
 
-  if (
-    returnType === 'unknown' ||
-    isManagedRuntimeReturnType(returnType) ||
-    isOpaqueRuntimeValueType(returnType)
-  ) {
+  if (returnType === 'unknown' || isManagedRuntimeReturnType(returnType) || isOpaqueRuntimeValueType(returnType)) {
     return ['inox_value inox_return = inox_undefined_value();']
   }
 
@@ -678,15 +672,15 @@ export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContex
   let ownedCryptoHashes: string[] = []
   let ownedCryptoHmacs: string[] = []
 
-  if (context.ownedValues != null) {
+  if (context.ownedValues !== null && typeof context.ownedValues !== 'undefined') {
     ownedValues = context.ownedValues
   }
 
-  if (context.ownedCryptoHashes != null) {
+  if (context.ownedCryptoHashes !== null && typeof context.ownedCryptoHashes !== 'undefined') {
     ownedCryptoHashes = context.ownedCryptoHashes
   }
 
-  if (context.ownedCryptoHmacs != null) {
+  if (context.ownedCryptoHmacs !== null && typeof context.ownedCryptoHmacs !== 'undefined') {
     ownedCryptoHmacs = context.ownedCryptoHmacs
   }
 
@@ -709,7 +703,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
   const lines: string[] = []
   let ownedPromises: string[] = []
 
-  if (context.ownedPromises != null) {
+  if (context.ownedPromises !== null && typeof context.ownedPromises !== 'undefined') {
     ownedPromises = context.ownedPromises
   }
 
@@ -741,11 +735,11 @@ export function emitBoxedValueDeclarations(context: CBoxedValueDeclarationContex
   let boxedValues: string[] = []
   let boxedValueTypes: CStringMap = new Map()
 
-  if (context.boxedValues != null) {
+  if (context.boxedValues !== null && typeof context.boxedValues !== 'undefined') {
     boxedValues = context.boxedValues
   }
 
-  if (context.boxedValueTypes != null) {
+  if (context.boxedValueTypes !== null && typeof context.boxedValueTypes !== 'undefined') {
     boxedValueTypes = context.boxedValueTypes
   }
 
@@ -788,7 +782,7 @@ export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
     const name = context.ownedPromises[index]
     const release = `if (${name} != 0) inox_promise_release(${name});`
 
-    if (context.unhandledRejectionFlag == null) {
+    if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
       lines.push(release)
       continue
     }

@@ -8,6 +8,7 @@ import {
   nullableTypeNameFromKnownTypeName,
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
+import { isPresent } from '../nullish.ts'
 
 type ValueTypeList = ValueType[]
 
@@ -52,8 +53,7 @@ export function isEqualityComparableType(left: ValueType, right: ValueType): boo
   }
 
   return (
-    (
-      left === 'boolean' ||
+    (left === 'boolean' ||
       left === 'number' ||
       left === 'string' ||
       left === 'null' ||
@@ -61,8 +61,7 @@ export function isEqualityComparableType(left: ValueType, right: ValueType): boo
       left === 'array' ||
       left === 'bytes' ||
       left === 'map' ||
-      left === 'set'
-    ) &&
+      left === 'set') &&
     left === right
   )
 }
@@ -76,7 +75,14 @@ export function isAssignableType(
   const expectedAllowsNull = expectedNullable === true
   const actualCanBeNull = actualNullable === true
 
-  if (actual == null || expected == null || actual === 'unknown' || expected === 'unknown') {
+  if (
+    actual === null ||
+    typeof actual === 'undefined' ||
+    expected === null ||
+    typeof expected === 'undefined' ||
+    actual === 'unknown' ||
+    expected === 'unknown'
+  ) {
     return true
   }
 
@@ -90,7 +96,7 @@ export function isAssignableType(
 
   const expectedUnion = unionTypeNamesFromTypeName(expected)
 
-  if (expectedUnion != null) {
+  if (expectedUnion !== null && typeof expectedUnion !== 'undefined') {
     for (const expectedName of expectedUnion) {
       if (isAssignableType(actual, expectedName, expectedAllowsNull, actualCanBeNull)) {
         return true
@@ -102,7 +108,7 @@ export function isAssignableType(
 
   const actualUnion = unionTypeNamesFromTypeName(actual)
 
-  if (actualUnion != null) {
+  if (actualUnion !== null && typeof actualUnion !== 'undefined') {
     for (const actualName of actualUnion) {
       if (!isAssignableType(actualName, expected, expectedAllowsNull, actualCanBeNull)) {
         return false
@@ -139,7 +145,7 @@ function assignabilityBaseType(valueType: ValueType): ValueType {
     return 'array'
   }
 
-  if (mapTypeNamesFromTypeName(valueType) != null) {
+  if (isPresent(mapTypeNamesFromTypeName(valueType))) {
     return 'map'
   }
 

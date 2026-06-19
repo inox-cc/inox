@@ -21,7 +21,7 @@ function wrapGeneratedCFunctionHeads(code: string): string {
 
     const head = parseGeneratedCFunctionHead(line)
 
-    if (head != null) {
+    if (head !== null && typeof head !== 'undefined') {
       if (head.params.length > 1) {
         mapped.push(`${head.indent}${head.prefix}(`)
 
@@ -55,7 +55,7 @@ function braceGeneratedCSingleLineControls(code: string): string {
     const line = source.lines[index]
     const control = parseGeneratedCSingleLineControl(line)
 
-    if (control == null) {
+    if (control === null || typeof control === 'undefined') {
       mapped.push(line)
       continue
     }
@@ -82,7 +82,7 @@ function wrapGeneratedCLongControlConditions(code: string): string {
 
     const control = parseGeneratedCControlBlockStart(line)
 
-    if (control != null) {
+    if (control !== null && typeof control !== 'undefined') {
       mapped.push(`${control.indent}${control.keyword} (`)
       pushGeneratedCLines(mapped, wrapGeneratedCCondition(control.condition, control.indent))
       mapped.push(`${control.indent}) {`)
@@ -114,7 +114,7 @@ function spaceGeneratedCControlFlow(code: string): string {
 
     const end = findGeneratedCControlEnd(lines, index)
 
-    if (end != null) {
+    if (end !== null && typeof end !== 'undefined') {
       markBlankAfter(lines, end, blankAfter)
     }
   }
@@ -223,11 +223,7 @@ function isGeneratedCWhitespace(ch: string): boolean {
 function isGeneratedCIdentifierStart(ch: string): boolean {
   const code = ch.charCodeAt(0)
 
-  return (
-    ch === '_' ||
-    (code >= 65 && code <= 90) ||
-    (code >= 97 && code <= 122)
-  )
+  return ch === '_' || (code >= 65 && code <= 90) || (code >= 97 && code <= 122)
 }
 
 function isGeneratedCIdentifierPart(ch: string): boolean {
@@ -328,7 +324,7 @@ function parseGeneratedCControlPrefix(line: string): GeneratedCControlPrefix | n
     keyword = 'while'
   }
 
-  if (keyword != null) {
+  if (keyword !== null && typeof keyword !== 'undefined') {
     cursor = cursor + keyword.length
 
     if (cursor >= line.length || !isGeneratedCWhitespace(line[cursor])) {
@@ -387,7 +383,7 @@ function parseGeneratedCFunctionHead(line: string): GeneratedCFunctionHead | nul
     suffix = ' {'
   }
 
-  if (suffix == null) {
+  if (suffix === null || typeof suffix === 'undefined') {
     return null
   }
 
@@ -411,7 +407,12 @@ function parseGeneratedCFunctionHead(line: string): GeneratedCFunctionHead | nul
 
   const params = splitGeneratedCParameters(trimmed.slice(openParen + 1, closeParen))
 
-  if (params == null || params.length === 0 || (params.length === 1 && params[0] === 'void')) {
+  if (
+    params === null ||
+    typeof params === 'undefined' ||
+    params.length === 0 ||
+    (params.length === 1 && params[0] === 'void')
+  ) {
     return null
   }
 
@@ -433,7 +434,7 @@ function splitGeneratedCParameters(source: string): string[] | null {
   for (let index = 0; index < source.length; index = index + 1) {
     const character = source[index]
 
-    if (quote != null) {
+    if (quote !== null && typeof quote !== 'undefined') {
       if (escaped) {
         escaped = false
       } else if (character === '\\') {
@@ -460,7 +461,7 @@ function splitGeneratedCParameters(source: string): string[] | null {
     }
   }
 
-  if (quote != null || depth !== 0) {
+  if ((quote !== null && typeof quote !== 'undefined') || depth !== 0) {
     return null
   }
 
@@ -497,7 +498,7 @@ type GeneratedCCallCondition = {
 function parseGeneratedCSingleLineControl(line: string): GeneratedCSingleLineControl | null {
   const control = parseGeneratedCControlPrefix(line)
 
-  if (control != null) {
+  if (control !== null && typeof control !== 'undefined') {
     const indent = control.indent
     const keyword = control.keyword
     const conditionStart = line.indexOf('(', control.conditionSearchStart)
@@ -508,7 +509,7 @@ function parseGeneratedCSingleLineControl(line: string): GeneratedCSingleLineCon
 
     const conditionEnd = findGeneratedCMatchingParen(line, conditionStart)
 
-    if (conditionEnd == null) {
+    if (conditionEnd === null || typeof conditionEnd === 'undefined') {
       return null
     }
 
@@ -534,7 +535,7 @@ function parseGeneratedCSingleLineControl(line: string): GeneratedCSingleLineCon
 
     let nextStatement = statement
 
-    if (comment != null) {
+    if (comment !== null && typeof comment !== 'undefined') {
       nextStatement = `${statement} ${comment}`
     }
 
@@ -552,7 +553,7 @@ function parseGeneratedCSingleLineControl(line: string): GeneratedCSingleLineCon
 function parseGeneratedCControlBlockStart(line: string): GeneratedCControlBlockStart | null {
   const control = parseGeneratedCControlPrefix(line)
 
-  if (control != null) {
+  if (control !== null && typeof control !== 'undefined') {
     const indent = control.indent
     const keyword = control.keyword
     const conditionStart = line.indexOf('(', control.conditionSearchStart)
@@ -563,7 +564,7 @@ function parseGeneratedCControlBlockStart(line: string): GeneratedCControlBlockS
 
     const conditionEnd = findGeneratedCMatchingParen(line, conditionStart)
 
-    if (conditionEnd == null || line.slice(conditionEnd + 1).trim() !== '{') {
+    if (conditionEnd === null || typeof conditionEnd === 'undefined' || line.slice(conditionEnd + 1).trim() !== '{') {
       return null
     }
 
@@ -580,7 +581,7 @@ function parseGeneratedCControlBlockStart(line: string): GeneratedCControlBlockS
 function wrapGeneratedCCondition(condition: string, indent: string): string[] {
   const call = parseGeneratedCCallCondition(condition)
 
-  if (call != null) {
+  if (call !== null && typeof call !== 'undefined') {
     if (call.args.length > 1) {
       const lines: string[] = []
       lines.push(`${indent}  ${call.callee}(`)
@@ -618,13 +619,13 @@ function parseGeneratedCCallCondition(condition: string): GeneratedCCallConditio
 
   const closeParen = findGeneratedCMatchingParen(condition, openParen)
 
-  if (closeParen == null) {
+  if (closeParen === null || typeof closeParen === 'undefined') {
     return null
   }
 
   const args = splitGeneratedCParameters(condition.slice(openParen + 1, closeParen))
 
-  if (args == null) {
+  if (args === null || typeof args === 'undefined') {
     return null
   }
 
@@ -645,7 +646,7 @@ function findGeneratedCMatchingParen(line: string, start: number): number | null
   for (let index = start; index < line.length; index = index + 1) {
     const character = line[index]
 
-    if (quote != null) {
+    if (quote !== null && typeof quote !== 'undefined') {
       if (escaped) {
         escaped = false
       } else if (character === '\\') {
@@ -683,7 +684,7 @@ function splitGeneratedCLineComment(line: string): GeneratedCLineComment {
   for (let index = 0; index < line.length - 1; index = index + 1) {
     const character = line[index]
 
-    if (quote != null) {
+    if (quote !== null && typeof quote !== 'undefined') {
       if (escaped) {
         escaped = false
       } else if (character === '\\') {
@@ -717,7 +718,7 @@ function splitGeneratedCLineComment(line: string): GeneratedCLineComment {
 function markBlankBefore(lines: string[], index: number, blankBefore: Set<number>): void {
   const previous = previousGeneratedCNonBlankLine(lines, index)
 
-  if (previous == null) {
+  if (previous === null || typeof previous === 'undefined') {
     return
   }
 
@@ -738,7 +739,7 @@ function markBlankBefore(lines: string[], index: number, blankBefore: Set<number
 function markBlankAfter(lines: string[], index: number, blankAfter: Set<number>): void {
   const next = nextGeneratedCNonBlankLine(lines, index)
 
-  if (next == null) {
+  if (next === null || typeof next === 'undefined') {
     return
   }
 
@@ -880,7 +881,7 @@ function scanGeneratedCBraces(line: string, state: GeneratedCBraceScanState): Ge
       continue
     }
 
-    if (quote != null) {
+    if (quote !== null && typeof quote !== 'undefined') {
       if (escaped) {
         escaped = false
       } else if (character === '\\') {

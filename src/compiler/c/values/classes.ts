@@ -14,7 +14,12 @@ import { functionTakesEventLoopParam } from '../async/promises.ts'
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
-import { cRuntimeValueTag, isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
+import {
+  cRuntimeValueTag,
+  isManagedRuntimeReturnType,
+  isNullableScalarType,
+  isOpaqueRuntimeValueType
+} from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
@@ -27,6 +32,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedCallArgs as PreparedCallArgs
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
@@ -84,7 +90,7 @@ function emitFallbackPreparedClassCallArgs(
 function emitClassFieldFlags(context: ClassFunctionContext, field: CObjectShapeField): string {
   const deps = context.classLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.emitCFieldFlags(field)
   }
 
@@ -93,13 +99,10 @@ function emitClassFieldFlags(context: ClassFunctionContext, field: CObjectShapeF
   return emitFallbackClassFieldFlags(field)
 }
 
-function emitClassValueExpression(
-  context: ClassFunctionContext,
-  expression: ClassExpressionNode
-): PreparedExpression {
+function emitClassValueExpression(context: ClassFunctionContext, expression: ClassExpressionNode): PreparedExpression {
   const deps = context.classLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.emitCValueExpression(expression, context)
   }
 
@@ -115,7 +118,7 @@ function emitPreparedClassCallArgs(
 ): PreparedCallArgs {
   const deps = context.classLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.emitPreparedCallArgs(expression, params, context)
   }
 
@@ -163,7 +166,7 @@ function joinStrings(values: string[], separator: string): string {
 function classFieldOwnership(field: CObjectShapeField): string {
   const ownership = field.ownership
 
-  if (ownership != null) {
+  if (ownership !== null && typeof ownership !== 'undefined') {
     return ownership
   }
 
@@ -241,7 +244,7 @@ function collectClassConstructorAssignments(
 ): AnyNode[] {
   const assignments: AnyNode[] = []
 
-  if (constructorMethod != null) {
+  if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
     const statements: ClassExpressionNode[] = constructorMethod.body
 
     for (const statement of statements) {
@@ -251,10 +254,10 @@ function collectClassConstructorAssignments(
         assignment = statement.expression
       }
 
-      if (assignment != null) {
+      if (assignment !== null && typeof assignment !== 'undefined') {
         const field = thisFieldName(assignment.target)
 
-        if (field != null) {
+        if (field !== null && typeof field !== 'undefined') {
           assignments.push(createClassConstructorAssignment(field, assignment))
           continue
         }
@@ -288,11 +291,16 @@ function resolveClassFields(
 ): CObjectShapeField[] {
   let shapeFields: CObjectShapeField[] | null = null
 
-  if (classNode.shape != null && classNode.shape.fields != null) {
+  if (
+    classNode.shape !== null &&
+    typeof classNode.shape !== 'undefined' &&
+    classNode.shape.fields !== null &&
+    typeof classNode.shape.fields !== 'undefined'
+  ) {
     shapeFields = classNode.shape.fields
   }
 
-  if (shapeFields != null) {
+  if (shapeFields !== null && typeof shapeFields !== 'undefined') {
     const fields: CObjectShapeField[] = []
 
     for (const field of shapeFields) {
@@ -328,7 +336,7 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
   const valueType = field.valueType
   const fieldOwnership = field.ownership
 
-  if (fieldOwnership != null) {
+  if (fieldOwnership !== null && typeof fieldOwnership !== 'undefined') {
     ownership = fieldOwnership
   }
 
@@ -347,16 +355,21 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
 }
 
 function inferClassConstructorFieldType(expression: ClassMaybeNode, constructorMethod: AnyNode | null): string {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return 'unknown'
   }
 
-  if (expression.type === 'Reference' && expression.path.length === 1 && constructorMethod != null) {
+  if (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    constructorMethod !== null &&
+    typeof constructorMethod !== 'undefined'
+  ) {
     const paramName = expression.path[0]
     const param = findClassParam(constructorMethod.params, paramName)
 
-    if (param != null) {
-      if (param.valueType != null) {
+    if (param !== null && typeof param !== 'undefined') {
+      if (param.valueType !== null && typeof param.valueType !== 'undefined') {
         return param.valueType
       }
 
@@ -364,7 +377,7 @@ function inferClassConstructorFieldType(expression: ClassMaybeNode, constructorM
     }
   }
 
-  if (expression.valueType != null) {
+  if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
     return expression.valueType
   }
 
@@ -404,11 +417,11 @@ function findClassParam(params: AnyNode[], name: string): AnyNode | null {
 }
 
 function isThisFieldExpression(expression: ClassMaybeNode): boolean {
-  return thisFieldName(expression) != null
+  return isPresent(thisFieldName(expression))
 }
 
 function thisFieldName(expression: ClassMaybeNode): string | null {
-  if (expression == null || expression.type !== 'MemberExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'MemberExpression') {
     return null
   }
 
@@ -420,7 +433,7 @@ function thisFieldName(expression: ClassMaybeNode): string | null {
 }
 
 function isThisObjectExpression(expression: ClassMaybeNode): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
@@ -428,19 +441,15 @@ function isThisObjectExpression(expression: ClassMaybeNode): boolean {
     return true
   }
 
-  return (
-    expression.type === 'Reference' &&
-    expression.path.length === 1 &&
-    expression.path[0] === 'this'
-  )
+  return expression.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this'
 }
 
 function nodeLocOrFallback(node: ClassMaybeNode, fallback: ClassMaybeNode): SourceLocation | null {
-  if (node != null && node.loc != null) {
+  if (node !== null && typeof node !== 'undefined' && node.loc !== null && typeof node.loc !== 'undefined') {
     return node.loc
   }
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback.loc
   }
 
@@ -450,7 +459,7 @@ function nodeLocOrFallback(node: ClassMaybeNode, fallback: ClassMaybeNode): Sour
 export function emitClassObjectVariableDeclaration(statement: AnyNode, context: ClassFunctionContext): string[] {
   const info = resolveClassConstructorInfo(statement.init, context)
 
-  if (info != null) {
+  if (info !== null && typeof info !== 'undefined') {
     return emitSupportedClassObjectVariableDeclaration(statement, info, context)
   }
 
@@ -481,17 +490,20 @@ function emitSupportedClassObjectVariableDeclaration(
 function registerClassInstanceType(context: ClassFunctionContext, name: string, className: string): void {
   const classInstanceTypes = context.classInstanceTypes
 
-  if (classInstanceTypes != null) {
+  if (classInstanceTypes !== null && typeof classInstanceTypes !== 'undefined') {
     classInstanceTypes.set(name, className)
   }
 }
 
-export function emitCClassObjectValueExpression(expression: AnyNode, context: ClassFunctionContext): PreparedExpression {
+export function emitCClassObjectValueExpression(
+  expression: AnyNode,
+  context: ClassFunctionContext
+): PreparedExpression {
   const info = resolveClassConstructorInfo(expression, context)
   const temp = nextCName(context, 'inox_class_object')
   registerOwnedValue(context, temp)
 
-  if (info != null) {
+  if (info !== null && typeof info !== 'undefined') {
     return {
       lines: emitCClassObjectInitLines(temp, expression, info, context),
       expression: temp
@@ -545,7 +557,11 @@ function emitCClassObjectInitLines(
 
     if (fieldIndex === -1) {
       context.diagnostics.push(
-        diagnostic('INOX_UNKNOWN_FIELD', `unknown class field ${assignment.field}`, nodeLocOrFallback(assignment, expression))
+        diagnostic(
+          'INOX_UNKNOWN_FIELD',
+          `unknown class field ${assignment.field}`,
+          nodeLocOrFallback(assignment, expression)
+        )
       )
       continue
     }
@@ -596,7 +612,7 @@ function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): CConstr
 
   for (let index = 0; index < params.length; index++) {
     const param = params[index]
-    if (expression.args[index] != null) {
+    if (expression.args[index] !== null && typeof expression.args[index] !== 'undefined') {
       args.set(param.name, expression.args[index])
     }
   }
@@ -607,7 +623,7 @@ function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): CConstr
 function classConstructorParams(info: CClassInfo): AnyNode[] {
   const constructorMethod = info.constructor
 
-  if (constructorMethod != null) {
+  if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
     return constructorMethod.params
   }
 
@@ -615,7 +631,7 @@ function classConstructorParams(info: CClassInfo): AnyNode[] {
 }
 
 function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstructorArgMap, target: string): AnyNode {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return {
       type: 'InvalidExpression'
     }
@@ -636,7 +652,7 @@ function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstruct
     const name = node.path[0]
     const replacement = args.get(name)
 
-    if (replacement != null) {
+    if (replacement !== null && typeof replacement !== 'undefined') {
       return replacement
     }
   }
@@ -761,7 +777,7 @@ function substituteCallLikeExpression(node: AnyNode, args: CConstructorArgMap, t
 }
 
 function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassFunctionContext): CClassInfo | null {
-  if (expression == null || expression.type !== 'NewExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'NewExpression') {
     return null
   }
 
@@ -771,7 +787,7 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
 
   const classInfos = context.classInfos
 
-  if (classInfos == null) {
+  if (classInfos === null || typeof classInfos === 'undefined') {
     return null
   }
 
@@ -779,7 +795,7 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
   const className = path[0]
   const info = classInfos.get(className)
 
-  if (info != null) {
+  if (info !== null && typeof info !== 'undefined') {
     return info
   }
 
@@ -787,7 +803,7 @@ function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassF
 }
 
 export function isClassConstructorExpression(expression: AnyNode, context: ClassFunctionContext): boolean {
-  return resolveClassConstructorInfo(expression, context) != null
+  return isPresent(resolveClassConstructorInfo(expression, context))
 }
 
 export function emitPreparedClassMethodCallExpression(
@@ -797,7 +813,7 @@ export function emitPreparedClassMethodCallExpression(
 ): PreparedExpression | null {
   const call = resolveClassMethodCallInfo(expression, context)
 
-  if (call != null) {
+  if (call !== null && typeof call !== 'undefined') {
     return emitPreparedResolvedClassMethodCallExpression(expression, context, call, options)
   }
 
@@ -812,7 +828,7 @@ function emitPreparedResolvedClassMethodCallExpression(
 ): PreparedExpression {
   const method = resolveClassMethod(call.info, call.methodName)
 
-  if (method != null) {
+  if (method !== null && typeof method !== 'undefined') {
     return emitKnownPreparedClassMethodCallExpression(expression, context, call, method, options)
   }
 
@@ -863,11 +879,11 @@ function emitKnownPreparedClassMethodCallExpression(
     let out = callExpression
     let promiseValueType = method.returnPromiseValueType
 
-    if (promiseValueType == null) {
+    if (promiseValueType === null || typeof promiseValueType === 'undefined') {
       promiseValueType = 'unknown'
     }
 
-    if (options.out != null) {
+    if (options.out !== null && typeof options.out !== 'undefined') {
       out = options.out
     }
 
@@ -963,7 +979,9 @@ function emitPreparedThrowingClassMethodCallExpression(
   callArgs.push('&inox_error')
 
   const status = nextCName(context, 'inox_method_status')
-  lines.push(`inox_status ${status} = ${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')});`)
+  lines.push(
+    `inox_status ${status} = ${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')});`
+  )
   pushAllLines(lines, emitThrowingClassMethodStatusCheck(status, context))
 
   return {
@@ -985,7 +1003,7 @@ function emitThrowingClassMethodStatusCheck(status: string, context: ClassFuncti
   const target = currentClassErrorTarget(context)
   const lines = [`if (${status} == INOX_ERR_THROW) {`, '  inox_error_active = 1;']
 
-  if (target != null) {
+  if (target !== null && typeof target !== 'undefined') {
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
     lines.push('  inox_status_result = INOX_ERR_THROW;')
@@ -1003,7 +1021,7 @@ function emitThrowingClassMethodStatusCheck(status: string, context: ClassFuncti
 function currentClassErrorTarget(context: ClassFunctionContext): string | null {
   const targets = context.errorTargets
 
-  if (targets == null || targets.length === 0) {
+  if (targets === null || typeof targets === 'undefined' || targets.length === 0) {
     return null
   }
 
@@ -1018,7 +1036,7 @@ function registerClassMethodErrorChannel(context: ClassFunctionContext): void {
 function isThrowingClassMethod(info: CClassInfo, method: AnyNode, context: ClassFunctionContext): boolean {
   const throwingFunctions = context.throwingFunctions
 
-  if (throwingFunctions == null) {
+  if (throwingFunctions === null || typeof throwingFunctions === 'undefined') {
     return false
   }
 
@@ -1052,8 +1070,16 @@ function classMethodTakesEventLoopParam(info: CClassInfo, method: AnyNode, conte
   return functionTakesEventLoopParam(irClassMethodEffectName(info.name, method.name), context)
 }
 
-function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFunctionContext): ClassMethodCallInfo | null {
-  if (expression == null || expression.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
+function resolveClassMethodCallInfo(
+  expression: ClassMaybeNode,
+  context: ClassFunctionContext
+): ClassMethodCallInfo | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression'
+  ) {
     return null
   }
 
@@ -1062,10 +1088,10 @@ function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFu
   if (objectName) {
     const className = classNameForObject(context, objectName)
 
-    if (className != null) {
+    if (className !== null && typeof className !== 'undefined') {
       const info = classInfoForName(context, className)
 
-      if (info != null) {
+      if (info !== null && typeof info !== 'undefined') {
         return {
           info,
           methodName: expression.callee.property,
@@ -1078,10 +1104,10 @@ function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFu
 
   const receiverClassName = expression.callee.object.className
 
-  if (receiverClassName != null) {
+  if (receiverClassName !== null && typeof receiverClassName !== 'undefined') {
     const info = classInfoForName(context, receiverClassName)
 
-    if (info != null) {
+    if (info !== null && typeof info !== 'undefined') {
       const object = emitClassValueExpression(context, expression.callee.object)
 
       return {
@@ -1099,13 +1125,13 @@ function resolveClassMethodCallInfo(expression: ClassMaybeNode, context: ClassFu
 function classNameForObject(context: ClassFunctionContext, objectName: string): string | null {
   const classInstanceTypes = context.classInstanceTypes
 
-  if (classInstanceTypes == null) {
+  if (classInstanceTypes === null || typeof classInstanceTypes === 'undefined') {
     return null
   }
 
   const className = classInstanceTypes.get(objectName)
 
-  if (className != null) {
+  if (className !== null && typeof className !== 'undefined') {
     return className
   }
 
@@ -1115,13 +1141,13 @@ function classNameForObject(context: ClassFunctionContext, objectName: string): 
 function classInfoForName(context: ClassFunctionContext, className: string): CClassInfo | null {
   const classInfos = context.classInfos
 
-  if (classInfos == null) {
+  if (classInfos === null || typeof classInfos === 'undefined') {
     return null
   }
 
   const info = classInfos.get(className)
 
-  if (info != null) {
+  if (info !== null && typeof info !== 'undefined') {
     return info
   }
 
@@ -1131,7 +1157,7 @@ function classInfoForName(context: ClassFunctionContext, className: string): CCl
 function resolveClassMethod(info: CClassInfo, name: string): AnyNode | null {
   const method = info.methods.get(name)
 
-  if (method != null) {
+  if (method !== null && typeof method !== 'undefined') {
     return method
   }
 

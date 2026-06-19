@@ -8,7 +8,7 @@ import {
   emitStatusCheck,
   nextCName,
   registerEventLoop,
-  registerOwnedValue,
+  registerOwnedValue
 } from '../context.ts'
 import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
@@ -67,6 +67,7 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand,
   CRuntimeArrayElement
 } from '../types.ts'
+import { isNullish, isPresent } from '../../nullish.ts'
 
 type CBooleanMap = Map<string, boolean>
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
@@ -165,7 +166,7 @@ type CFunctionContext = CEmitContext & {
 }
 
 function cBooleanValueIsTrue(value: boolean | null | undefined): boolean {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return false
   }
 
@@ -331,14 +332,14 @@ function emitPreparedTypeofCompareExpression(
     typeName = expression.left.value
   }
 
-  if (argument == null || typeName == null) {
+  if (argument === null || typeof argument === 'undefined' || typeName === null || typeof typeName === 'undefined') {
     return null
   }
 
   const value = emitPreparedTypeofArgumentValue(argument, context, deps)
   const check = typeofRuntimeTagCheck(value.expression, typeName)
 
-  if (check == null) {
+  if (check === null || typeof check === 'undefined') {
     return null
   }
 
@@ -401,7 +402,7 @@ export function objectExpressionPathName(expression: CValueNode, context: CObjec
     const name = expression.path[0]
     const alias = context.objectAliases.get(name)
 
-    if (alias != null) {
+    if (alias !== null && typeof alias !== 'undefined') {
       return alias
     }
 
@@ -415,7 +416,7 @@ export function objectExpressionPathName(expression: CValueNode, context: CObjec
   if (expression.type === 'MemberExpression') {
     const objectName = objectExpressionPathName(expression.object, context)
 
-    if (objectName != null) {
+    if (objectName !== null && typeof objectName !== 'undefined') {
       return `${objectName}_${expression.property}`
     }
   }
@@ -423,7 +424,7 @@ export function objectExpressionPathName(expression: CValueNode, context: CObjec
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const objectName = objectExpressionPathName(expression.object, context)
 
-    if (objectName != null) {
+    if (objectName !== null && typeof objectName !== 'undefined') {
       return `${objectName}_${expression.index.value}`
     }
   }
@@ -431,22 +432,26 @@ export function objectExpressionPathName(expression: CValueNode, context: CObjec
   if (expression.type === 'CallExpression') {
     const createFunctionContextPath = createFunctionContextObjectPathName(expression, context)
 
-    if (createFunctionContextPath != null) {
+    if (createFunctionContextPath !== null && typeof createFunctionContextPath !== 'undefined') {
       return createFunctionContextPath
     }
   }
 
-  if (expression.type === 'CallExpression' && expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+  if (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'Reference' &&
+    expression.callee.path.length === 1
+  ) {
     const path: string[] = expression.callee.path
     const accessor = context.objectAccessorReturnPaths.get(path[0])
 
-    if (accessor != null) {
+    if (accessor !== null && typeof accessor !== 'undefined') {
       const argument = functionCallArgumentAt(expression.args, accessor.paramIndex)
 
-      if (argument != null) {
+      if (argument !== null && typeof argument !== 'undefined') {
         const objectName = objectExpressionPathName(argument, context)
 
-        if (objectName != null) {
+        if (objectName !== null && typeof objectName !== 'undefined') {
           return appendObjectAccessorFields(objectName, accessor.fields)
         }
       }
@@ -459,7 +464,7 @@ export function objectExpressionPathName(expression: CValueNode, context: CObjec
 function createFunctionContextObjectPathName(expression: CValueNode, context: CObjectPathContext): string | null {
   const callee = expression.callee
 
-  if (callee == null) {
+  if (callee === null || typeof callee === 'undefined') {
     return null
   }
 
@@ -490,7 +495,7 @@ function createFunctionContextObjectPathName(expression: CValueNode, context: CO
     break
   }
 
-  if (argument == null) {
+  if (argument === null || typeof argument === 'undefined') {
     return null
   }
 
@@ -517,8 +522,11 @@ function functionCallArgumentAt(args: CValueNode[], expectedIndex: number): CVal
   return null
 }
 
-function objectFunctionFieldAt(fields: CObjectShapeField[] | null | undefined, fieldName: string): CObjectShapeField | null {
-  if (fields == null) {
+function objectFunctionFieldAt(
+  fields: CObjectShapeField[] | null | undefined,
+  fieldName: string
+): CObjectShapeField | null {
+  if (fields === null || typeof fields === 'undefined') {
     return null
   }
 
@@ -539,7 +547,7 @@ function objectLiteralPropertyValue(expression: CValueNode, key: string): CValue
   const properties: CObjectLiteralPropertyNode[] = expression.properties
 
   for (const property of properties) {
-    if (property.key === key && property.value != null) {
+    if (property.key === key && property.value !== null && typeof property.value !== 'undefined') {
       return property.value
     }
   }
@@ -568,11 +576,11 @@ function nestedObjectFunctionArgumentSource(
   const sourceExpression = source.expression
   const fieldName = field.name
 
-  if (sourceExpression != null) {
+  if (sourceExpression !== null && typeof sourceExpression !== 'undefined') {
     expression = objectLiteralPropertyValue(sourceExpression, fieldName)
   }
 
-  if (expression != null) {
+  if (expression !== null && typeof expression !== 'undefined') {
     const pathName = objectExpressionPathName(expression, context)
 
     return {
@@ -603,7 +611,7 @@ function nestedObjectFunctionArgumentSource(
 }
 
 function nestedObjectPathName(pathName: string | null, fieldName: string): string | null {
-  if (pathName == null) {
+  if (pathName === null || typeof pathName === 'undefined') {
     return null
   }
 
@@ -615,21 +623,21 @@ function objectFunctionArgumentSourceShape(
   pathName: string | null,
   context: CFunctionContext
 ): CObjectShape | null {
-  if (pathName != null) {
+  if (pathName !== null && typeof pathName !== 'undefined') {
     const fields = context.objectShapes.get(pathName)
 
-    if (fields != null) {
+    if (fields !== null && typeof fields !== 'undefined') {
       return { fields }
     }
 
     const moduleFields = context.moduleObjectShapes.get(pathName)
 
-    if (moduleFields != null) {
+    if (moduleFields !== null && typeof moduleFields !== 'undefined') {
       return { fields: moduleFields }
     }
   }
 
-  if (expression.shape != null) {
+  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
     return expression.shape
   }
 
@@ -641,21 +649,24 @@ function objectFunctionArgumentSourceShapeKnown(
   pathName: string | null,
   context: CFunctionContext
 ): boolean {
-  if (pathName != null) {
-    if (context.objectShapes.get(pathName) != null) {
+  if (pathName !== null && typeof pathName !== 'undefined') {
+    if (isPresent(context.objectShapes.get(pathName))) {
       return true
     }
 
-    if (context.moduleObjectShapes.get(pathName) != null) {
+    if (isPresent(context.moduleObjectShapes.get(pathName))) {
       return true
     }
   }
 
-  return expression.shape != null
+  return expression.shape !== null && typeof expression.shape !== 'undefined'
 }
 
-function objectShapeFieldAt(fields: CObjectShapeField[] | null | undefined, fieldName: string): CObjectShapeField | null {
-  if (fields == null) {
+function objectShapeFieldAt(
+  fields: CObjectShapeField[] | null | undefined,
+  fieldName: string
+): CObjectShapeField | null {
+  if (fields === null || typeof fields === 'undefined') {
     return null
   }
 
@@ -687,18 +698,18 @@ function emitObjectFunctionFieldArgument(
   const expression = source.expression
   const sourceField = objectFunctionFieldAt(source.shape?.fields, field.name)
 
-  if (expression != null) {
+  if (expression !== null && typeof expression !== 'undefined') {
     literalValue = objectLiteralPropertyValue(expression, field.name)
   }
 
   if (isRuntimeObjectFunctionField(field)) {
-    if (literalValue != null) {
+    if (literalValue !== null && typeof literalValue !== 'undefined') {
       return deps.emitRuntimeCallbackValue(literalValue, field.functionType, context)
     }
 
     const objectName = source.pathName
 
-    if (objectName != null) {
+    if (objectName !== null && typeof objectName !== 'undefined') {
       return {
         lines: [],
         expression: emitObjectFunctionFieldArgumentName(objectName, field.name, context)
@@ -726,7 +737,7 @@ function emitObjectFunctionFieldArgument(
     }
   }
 
-  if (literalValue != null) {
+  if (literalValue !== null && typeof literalValue !== 'undefined') {
     const targetFunctionType = deps.resolveFunctionValueType(literalValue, context)
     const target = deps.emitFunctionValueExpression(literalValue, context)
 
@@ -746,7 +757,7 @@ function emitObjectFunctionFieldArgument(
 
   const objectName = source.pathName
 
-  if (objectName != null) {
+  if (objectName !== null && typeof objectName !== 'undefined') {
     const target = emitObjectFunctionFieldArgumentName(objectName, field.name, context)
 
     return {
@@ -793,7 +804,12 @@ function emitAdaptedFunctionPointerExpression(
   seenTypes: string[],
   targetSeenTypes: string[]
 ): string {
-  if (targetFunctionType == null || functionType == null) {
+  if (
+    targetFunctionType === null ||
+    typeof targetFunctionType === 'undefined' ||
+    functionType === null ||
+    typeof functionType === 'undefined'
+  ) {
     return target
   }
 
@@ -814,7 +830,10 @@ function functionPointerSignaturesMatch(
     return false
   }
 
-  return emitFunctionPointerParams(targetFunctionType, [], targetSeenTypes) === emitFunctionPointerParams(functionType, [], seenTypes)
+  return (
+    emitFunctionPointerParams(targetFunctionType, [], targetSeenTypes) ===
+    emitFunctionPointerParams(functionType, [], seenTypes)
+  )
 }
 
 function objectFunctionArgumentSourceSeenTypes(
@@ -822,15 +841,15 @@ function objectFunctionArgumentSourceSeenTypes(
   context: CFunctionContext,
   expectedSeenTypes: string[]
 ): string[] {
-  if (source.pathName != null) {
-    if (context.moduleObjectShapes.get(source.pathName) != null) {
+  if (source.pathName !== null && typeof source.pathName !== 'undefined') {
+    if (isPresent(context.moduleObjectShapes.get(source.pathName))) {
       return ['CFunctionContext']
     }
 
     return copyStringArray(expectedSeenTypes)
   }
 
-  if (source.expression == null) {
+  if (source.expression === null || typeof source.expression === 'undefined') {
     return []
   }
 
@@ -879,7 +898,11 @@ function appendObjectFunctionFieldArguments(
   )
 }
 
-function appendDefaultObjectFunctionFieldArguments(args: string[], param: CFunctionParam, calleeSeenTypes: string[]): void {
+function appendDefaultObjectFunctionFieldArguments(
+  args: string[],
+  param: CFunctionParam,
+  calleeSeenTypes: string[]
+): void {
   const seenTypes: string[] = []
 
   for (const seenType of calleeSeenTypes) {
@@ -906,7 +929,7 @@ function appendObjectShapeFunctionFieldArguments(
 ): void {
   const fields = shape?.fields
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return
   }
 
@@ -916,7 +939,7 @@ function appendObjectShapeFunctionFieldArguments(
         continue
       }
 
-      if (source.shapeKnown && objectFunctionFieldAt(source.shape?.fields, field.name) == null) {
+      if (source.shapeKnown && isNullish(objectFunctionFieldAt(source.shape?.fields, field.name))) {
         appendDefaultObjectFunctionFieldArgument(args, field)
         continue
       }
@@ -958,14 +981,10 @@ function appendObjectShapeFunctionFieldArguments(
   }
 }
 
-function emitObjectFunctionFieldArgumentName(
-  objectName: string,
-  fieldName: string,
-  context: CFunctionContext
-): string {
+function emitObjectFunctionFieldArgumentName(objectName: string, fieldName: string, context: CFunctionContext): string {
   const fallback = emitDependencyObjectFunctionFieldArgumentName(objectName, fieldName, context)
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback
   }
 
@@ -979,13 +998,13 @@ function emitDependencyObjectFunctionFieldArgumentName(
 ): string | null {
   const suffix = dependencyObjectFunctionFieldSuffix(objectName)
 
-  if (suffix == null) {
+  if (suffix === null || typeof suffix === 'undefined') {
     return null
   }
 
   const depsName = emitDependencyObjectFunctionFieldArgumentNameForRoot('deps', suffix, fieldName, context)
 
-  if (depsName != null) {
+  if (depsName !== null && typeof depsName !== 'undefined') {
     return depsName
   }
 
@@ -1013,7 +1032,7 @@ function emitDependencyObjectFunctionFieldArgumentNameForRoot(
   const objectName = `${rootName}_${suffix}`
   const fields = context.objectShapes.get(objectName)
 
-  if (objectFunctionFieldAt(fields, fieldName) == null) {
+  if (isNullish(objectFunctionFieldAt(fields, fieldName))) {
     return null
   }
 
@@ -1025,9 +1044,10 @@ function isMissingOptionalObjectLiteralField(source: ObjectFunctionArgumentSourc
 
   return (
     field.optional === true &&
-    expression != null &&
+    expression !== null &&
+    typeof expression !== 'undefined' &&
     expression.type === 'ObjectLiteral' &&
-    objectLiteralPropertyValue(expression, field.name) == null
+    isNullish(objectLiteralPropertyValue(expression, field.name))
   )
 }
 
@@ -1036,15 +1056,17 @@ function isUnavailableOptionalObjectFieldSource(
   field: CObjectShapeField,
   context: CFunctionContext
 ): boolean {
-  if (field.optional !== true || source.expression == null) {
+  if (field.optional !== true || source.expression === null || typeof source.expression === 'undefined') {
     return false
   }
 
-  if (source.pathName == null) {
+  if (source.pathName === null || typeof source.pathName === 'undefined') {
     return true
   }
 
-  return context.moduleValueNames.has(source.pathName) && objectShapeFieldAt(source.shape?.fields, field.name) == null
+  return (
+    context.moduleValueNames.has(source.pathName) && isNullish(objectShapeFieldAt(source.shape?.fields, field.name))
+  )
 }
 
 function appendDefaultObjectShapeFunctionFieldArguments(
@@ -1054,7 +1076,7 @@ function appendDefaultObjectShapeFunctionFieldArguments(
 ): void {
   const fields = shape?.fields
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return
   }
 
@@ -1103,36 +1125,45 @@ function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext
     fieldName = callee.index.value
   }
 
-  if (object == null || fieldName == null) {
+  if (object === null || typeof object === 'undefined' || fieldName === null || typeof fieldName === 'undefined') {
     return null
   }
 
   const objectName = objectExpressionName(object, context)
 
-  if (objectName == null) {
+  if (objectName === null || typeof objectName === 'undefined') {
     return null
   }
 
   let fields = context.objectShapes.get(objectName)
 
-  if (fields == null && object.type === 'Reference' && object.path.length === 1) {
+  if ((fields === null || typeof fields === 'undefined') && object.type === 'Reference' && object.path.length === 1) {
     const directObjectName = object.path[0]
     fields = context.objectShapes.get(directObjectName)
   }
 
-  if (fields == null && object.shape != null) {
+  if (
+    (fields === null || typeof fields === 'undefined') &&
+    object.shape !== null &&
+    typeof object.shape !== 'undefined'
+  ) {
     fields = object.shape.fields
   }
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     const returnShape = objectFunctionReturnShape(object, context)
 
-    if (returnShape != null && returnShape.fields != null) {
+    if (
+      returnShape !== null &&
+      typeof returnShape !== 'undefined' &&
+      returnShape.fields !== null &&
+      typeof returnShape.fields !== 'undefined'
+    ) {
       fields = returnShape.fields
     }
   }
 
-  if (objectFunctionFieldAt(fields, fieldName) == null) {
+  if (isNullish(objectFunctionFieldAt(fields, fieldName))) {
     return null
   }
 
@@ -1154,38 +1185,52 @@ function runtimeObjectFunctionFieldCallee(
     fieldName = callee.index.value
   }
 
-  if (object == null || fieldName == null) {
+  if (object === null || typeof object === 'undefined' || fieldName === null || typeof fieldName === 'undefined') {
     return null
   }
 
   const objectName = objectExpressionName(object, context)
 
-  if (objectName == null) {
+  if (objectName === null || typeof objectName === 'undefined') {
     return null
   }
 
   let fields = context.objectShapes.get(objectName)
 
-  if (fields == null && object.type === 'Reference' && object.path.length === 1) {
+  if ((fields === null || typeof fields === 'undefined') && object.type === 'Reference' && object.path.length === 1) {
     const directObjectName = object.path[0]
     fields = context.objectShapes.get(directObjectName)
   }
 
-  if (fields == null && object.shape != null) {
+  if (
+    (fields === null || typeof fields === 'undefined') &&
+    object.shape !== null &&
+    typeof object.shape !== 'undefined'
+  ) {
     fields = object.shape.fields
   }
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     const returnShape = objectFunctionReturnShape(object, context)
 
-    if (returnShape != null && returnShape.fields != null) {
+    if (
+      returnShape !== null &&
+      typeof returnShape !== 'undefined' &&
+      returnShape.fields !== null &&
+      typeof returnShape.fields !== 'undefined'
+    ) {
       fields = returnShape.fields
     }
   }
 
   const field = objectFunctionFieldAt(fields, fieldName)
 
-  if (field == null || field.functionType == null) {
+  if (
+    field === null ||
+    typeof field === 'undefined' ||
+    field.functionType === null ||
+    typeof field.functionType === 'undefined'
+  ) {
     return null
   }
 
@@ -1237,16 +1282,16 @@ function appendObjectFunctionCalleeSeenTypes(seenTypes: string[], object: CValue
   if (object.type === 'CallExpression' && object.callee.type === 'Reference') {
     const calleeName = objectExpressionPathName(object.callee, context)
 
-    if (calleeName == null) {
+    if (calleeName === null || typeof calleeName === 'undefined') {
       return
     }
 
     const accessor = context.objectAccessorReturnPaths.get(calleeName)
 
-    if (accessor != null) {
+    if (accessor !== null && typeof accessor !== 'undefined') {
       const argument = functionCallArgumentAt(object.args, accessor.paramIndex)
 
-      if (argument != null) {
+      if (argument !== null && typeof argument !== 'undefined') {
         appendObjectFunctionCalleeSeenTypes(seenTypes, argument, context)
       }
     }
@@ -1260,7 +1305,7 @@ function appendObjectFunctionCalleeSeenTypes(seenTypes: string[], object: CValue
 
   const objectName = objectExpressionName(object, context)
 
-  if (objectName != null) {
+  if (objectName !== null && typeof objectName !== 'undefined') {
     const contextDeclaredType = context.objectDeclaredTypes.get(objectName)
 
     pushSeenDeclaredType(seenTypes, contextDeclaredType)
@@ -1278,23 +1323,27 @@ function appendObjectFunctionFieldDeclaredType(
   const objectName = objectExpressionName(object, context)
   let fields: CObjectShapeField[] | null | undefined = null
 
-  if (objectName != null) {
+  if (objectName !== null && typeof objectName !== 'undefined') {
     fields = context.objectShapes.get(objectName)
   }
 
-  if (fields == null && object.shape != null) {
+  if (
+    (fields === null || typeof fields === 'undefined') &&
+    object.shape !== null &&
+    typeof object.shape !== 'undefined'
+  ) {
     fields = object.shape.fields
   }
 
   const field = objectShapeFieldAt(fields, fieldName)
 
-  if (field != null) {
+  if (field !== null && typeof field !== 'undefined') {
     pushSeenDeclaredType(seenTypes, field.declaredType)
   }
 }
 
 function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
-  if (declaredType == null) {
+  if (declaredType === null || typeof declaredType === 'undefined') {
     return false
   }
 
@@ -1312,7 +1361,11 @@ function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string 
 }
 
 function pushSeenDeclaredType(seenTypes: string[], declaredType: string | null | undefined): number {
-  if (declaredType == null || seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
+  if (
+    declaredType === null ||
+    typeof declaredType === 'undefined' ||
+    seenTypesIncludeDeclaredType(seenTypes, declaredType)
+  ) {
     return 0
   }
 
@@ -1439,7 +1492,7 @@ function objectFunctionReturnShape(object: CValueNode, context: CFunctionContext
   const path: string[] = object.callee.path
   const shape = context.functionReturnShapes.get(path[0])
 
-  if (shape != null) {
+  if (shape !== null && typeof shape !== 'undefined') {
     return shape
   }
 
@@ -1458,10 +1511,7 @@ function expressionLocation(expression: CValueNode): SourceLocation | undefined 
   return expression.loc
 }
 
-function pushNullableScalarNarrowing(
-  context: CFunctionContext,
-  names: string[]
-): NullableScalarNarrowingSnapshot {
+function pushNullableScalarNarrowing(context: CFunctionContext, names: string[]): NullableScalarNarrowingSnapshot {
   const previous = context.narrowedNullableScalars
 
   if (names.length === 0) {
@@ -1483,15 +1533,11 @@ function pushNullableScalarNarrowing(
   }
 }
 
-function restoreNullableScalarNarrowing(
-  context: CFunctionContext,
-  snapshot: NullableScalarNarrowingSnapshot
-): void {
+function restoreNullableScalarNarrowing(context: CFunctionContext, snapshot: NullableScalarNarrowingSnapshot): void {
   if (snapshot.active) {
     context.narrowedNullableScalars = snapshot.narrowedNullableScalars
   }
 }
-
 
 export type CScalarExpressionDependencies = {
   canEmitStringBytesOperand(expression: CValueNode, context: CFunctionContext): boolean
@@ -1514,9 +1560,18 @@ export type CScalarExpressionDependencies = {
   emitPreparedDgramAddressPortExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonScalarParseExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNetAddressPortExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedNullableScalarRuntimeValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedObjectExpressionScalarIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedObjectExpressionScalarMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNullableScalarRuntimeValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression
+  emitPreparedObjectExpressionScalarIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitPreparedObjectExpressionScalarMemberValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedPathBooleanCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessNumberExpression(expression: CValueNode): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
@@ -1536,7 +1591,10 @@ export type CScalarExpressionDependencies = {
   emitPreparedStringIndexCallExpression(expression: any, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringPredicateCall(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedUrlSearchParamsCallExpression(expression: CValueNode, context: CFunctionContext): PreparedUrlSearchParamsExpression | null
+  emitPreparedUrlSearchParamsCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedUrlSearchParamsExpression | null
   emitReference(expression: CValueNode, context: CFunctionContext): string
   emitStringExpression(expression: CValueNode, context: CFunctionContext): string
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
@@ -1550,7 +1608,6 @@ export type CScalarExpressionDependencies = {
   resolveKnownObjectMember(expression: CValueNode, context: CFunctionContext): CKnownObjectField | null
   resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
-
 
 export type CCallExpressionDependencies = {
   currentErrorTarget(context: CFunctionContext): string | null
@@ -1596,9 +1653,20 @@ export type CCallExpressionDependencies = {
   emitPreparedPathStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedTimerCallExpression(expression: CValueNode, context: CFunctionContext, options?: PreparedCallOptions): PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitRuntimeCallbackCall(expression: CValueNode, callbackType: CFunctionType, context: CFunctionContext): PreparedExpression
+  emitPreparedTimerCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
+  emitPreparedUrlSearchParamsCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitRuntimeCallbackCall(
+    expression: CValueNode,
+    callbackType: CFunctionType,
+    context: CFunctionContext
+  ): PreparedExpression
   emitRuntimeCallbackValue(
     expression: CValueNode,
     functionType: CFunctionType | null | undefined,
@@ -1619,7 +1687,11 @@ export type CCallExpressionDependencies = {
   ): CFunctionType | null
 }
 
-export function emitCallExpression(expression: CValueNode, context: CFunctionContext, deps: CCallExpressionDependencies): string {
+export function emitCallExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CCallExpressionDependencies
+): string {
   const args: string[] = []
 
   for (const arg of expression.args) {
@@ -1636,121 +1708,121 @@ export function emitPreparedCallExpression(
 ): PreparedExpression {
   const mathCall = emitPreparedMathCallExpression(expression, context, deps)
 
-  if (mathCall != null) {
+  if (mathCall !== null && typeof mathCall !== 'undefined') {
     return mathCall
   }
 
   const pathStringCall = deps.emitPreparedPathStringCallExpression(expression, context)
 
-  if (pathStringCall != null) {
+  if (pathStringCall !== null && typeof pathStringCall !== 'undefined') {
     return pathStringCall
   }
 
   const pathBooleanCall = deps.emitPreparedPathBooleanCallExpression(expression, context)
 
-  if (pathBooleanCall != null) {
+  if (pathBooleanCall !== null && typeof pathBooleanCall !== 'undefined') {
     return pathBooleanCall
   }
 
   const fsStatsMethod = deps.emitPreparedFsStatsMethodExpression(expression, context)
 
-  if (fsStatsMethod != null) {
+  if (fsStatsMethod !== null && typeof fsStatsMethod !== 'undefined') {
     return fsStatsMethod
   }
 
   const numberConversion = deps.emitCNumberConversionValueExpression(expression, context)
 
-  if (numberConversion != null) {
+  if (numberConversion !== null && typeof numberConversion !== 'undefined') {
     return numberConversion
   }
 
   const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
 
-  if (classMethodCall != null) {
+  if (classMethodCall !== null && typeof classMethodCall !== 'undefined') {
     return classMethodCall
   }
 
   const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
 
-  if (arrayPopCall != null) {
+  if (arrayPopCall !== null && typeof arrayPopCall !== 'undefined') {
     return arrayPopCall
   }
 
   const arrayJoinCall = deps.emitPreparedArrayJoinCallExpression(expression, context)
 
-  if (arrayJoinCall != null) {
+  if (arrayJoinCall !== null && typeof arrayJoinCall !== 'undefined') {
     return arrayJoinCall
   }
 
   const arrayMapCall = deps.emitPreparedArrayMapCallExpression(expression, context)
 
-  if (arrayMapCall != null) {
+  if (arrayMapCall !== null && typeof arrayMapCall !== 'undefined') {
     return arrayMapCall
   }
 
   const arrayFilterCall = deps.emitPreparedArrayFilterCallExpression(expression, context)
 
-  if (arrayFilterCall != null) {
+  if (arrayFilterCall !== null && typeof arrayFilterCall !== 'undefined') {
     return arrayFilterCall
   }
 
   const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)
 
-  if (arraySliceCall != null) {
+  if (arraySliceCall !== null && typeof arraySliceCall !== 'undefined') {
     return arraySliceCall
   }
 
   const arraySortCall = deps.emitPreparedArraySortCallExpression(expression, context)
 
-  if (arraySortCall != null) {
+  if (arraySortCall !== null && typeof arraySortCall !== 'undefined') {
     return arraySortCall
   }
 
   const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
-  if (collectionCall != null) {
+  if (collectionCall !== null && typeof collectionCall !== 'undefined') {
     return collectionCall
   }
 
   const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(expression, context)
 
-  if (cryptoHashCall != null) {
+  if (cryptoHashCall !== null && typeof cryptoHashCall !== 'undefined') {
     return cryptoHashCall
   }
 
   const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(expression, context)
 
-  if (cryptoHmacCall != null) {
+  if (cryptoHmacCall !== null && typeof cryptoHmacCall !== 'undefined') {
     return cryptoHmacCall
   }
 
   const cryptoCall = deps.emitPreparedCryptoCallExpression(expression, context)
 
-  if (cryptoCall != null) {
+  if (cryptoCall !== null && typeof cryptoCall !== 'undefined') {
     return cryptoCall
   }
 
   const fsCall = deps.emitPreparedFsCallExpression(expression, context)
 
-  if (fsCall != null) {
+  if (fsCall !== null && typeof fsCall !== 'undefined') {
     return fsCall
   }
 
   const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(expression, context)
 
-  if (fetchHeadersCall != null) {
+  if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined') {
     return fetchHeadersCall
   }
 
   const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
 
-  if (urlSearchParamsCall != null) {
+  if (urlSearchParamsCall !== null && typeof urlSearchParamsCall !== 'undefined') {
     return urlSearchParamsCall
   }
 
   const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
 
-  if (jsonCall != null) {
+  if (jsonCall !== null && typeof jsonCall !== 'undefined') {
     return jsonCall
   }
 
@@ -1758,44 +1830,50 @@ export function emitPreparedCallExpression(
     asValue: true
   })
 
-  if (timerCall != null) {
+  if (timerCall !== null && typeof timerCall !== 'undefined') {
     return timerCall
   }
 
   const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
 
-  if (promise != null) {
+  if (promise !== null && typeof promise !== 'undefined') {
     return promise
   }
 
   const promiseMethod = deps.emitPreparedPromiseMethodExpression(expression, context)
 
-  if (promiseMethod != null) {
+  if (promiseMethod !== null && typeof promiseMethod !== 'undefined') {
     return promiseMethod
   }
 
   const callbackType = deps.resolveRuntimeCallbackCalleeType(expression.callee, context)
 
-  if (callbackType != null) {
+  if (callbackType !== null && typeof callbackType !== 'undefined') {
     return deps.emitRuntimeCallbackCall(expression, callbackType, context)
   }
 
   const objectCallback = runtimeObjectFunctionFieldCallee(expression.callee, context)
 
-  if (objectCallback != null) {
+  if (objectCallback !== null && typeof objectCallback !== 'undefined') {
     return emitRuntimeObjectFunctionFieldCall(expression, objectCallback, context, deps)
   }
 
   const params = deps.resolveFunctionParams(expression.callee, context)
 
-  if (params == null) {
+  if (params === null || typeof params === 'undefined') {
     return {
       lines: [],
       expression: emitCallExpression(expression, context, deps)
     }
   }
 
-  const prepared = emitPreparedCallArgs(expression, params, context, deps, objectFunctionCalleeArgumentSeenTypes(expression.callee, context))
+  const prepared = emitPreparedCallArgs(
+    expression,
+    params,
+    context,
+    deps,
+    objectFunctionCalleeArgumentSeenTypes(expression.callee, context)
+  )
   const lines = prepared.lines
   const args = prepared.args
 
@@ -1876,7 +1954,7 @@ export function emitPreparedCallArgs(
     const arg = expression.args[index]
     const param = functionParamAt(params, index)
 
-    if (param != null) {
+    if (param !== null && typeof param !== 'undefined') {
       appendPreparedCallArg(lines, args, expression, arg, param, index, context, deps, calleeSeenTypes)
     } else {
       args.push(deps.emitCExpression(arg, context))
@@ -1887,7 +1965,7 @@ export function emitPreparedCallArgs(
     const param = params[index]
 
     if (param.optional === true) {
-      if (param.defaultValue != null) {
+      if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
         appendPreparedCallArg(lines, args, expression, param.defaultValue, param, index, context, deps, calleeSeenTypes)
       } else {
         args.push(emitDefaultOptionalArg(param))
@@ -1949,7 +2027,7 @@ function appendPreparedCallArg(
   } else if (paramValueType === 'function') {
     const runtimeFunctionType = deps.resolveRuntimeFunctionArgumentType(expression.callee, index, param, context)
 
-    if (runtimeFunctionType != null) {
+    if (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined') {
       const value = deps.emitRuntimeCallbackValue(arg, runtimeFunctionType, context)
 
       appendLines(lines, value.lines)
@@ -1972,7 +2050,11 @@ function emitDefaultOptionalArg(param: CFunctionParam): string {
     return 'inox_null_value()'
   }
 
-  if (param.valueType === 'unknown' || isManagedRuntimeReturnType(param.valueType) || isOpaqueRuntimeValueType(param.valueType)) {
+  if (
+    param.valueType === 'unknown' ||
+    isManagedRuntimeReturnType(param.valueType) ||
+    isOpaqueRuntimeValueType(param.valueType)
+  ) {
     return 'inox_undefined_value()'
   }
 
@@ -1997,7 +2079,7 @@ function emitPreparedThrowingCallExpression(
   appendLines(callArgs, args)
   appendLines(lines, preparedLines)
 
-  if (deps.currentErrorTarget(context) == null && !context.throwingFunction) {
+  if (isNullish(deps.currentErrorTarget(context)) && !context.throwingFunction) {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_THROW',
@@ -2044,7 +2126,7 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
   const configuredReturnType = context.functionReturnTypes.get(name)
   let returnType = 'void'
 
-  if (configuredReturnType != null) {
+  if (configuredReturnType !== null && typeof configuredReturnType !== 'undefined') {
     returnType = configuredReturnType
   }
 
@@ -2052,7 +2134,7 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
     const promiseValueType = context.functionReturnPromiseValueTypes.get(name)
     let asyncReturnType = 'void'
 
-    if (promiseValueType != null) {
+    if (promiseValueType !== null && typeof promiseValueType !== 'undefined') {
       asyncReturnType = promiseValueType
     }
 
@@ -2068,11 +2150,15 @@ function resolveCFunctionCallReturnInfo(name: string, context: CFunctionContext)
   }
 }
 
-function emitThrowingCallStatusCheck(status: string, context: CFunctionContext, deps: CCallExpressionDependencies): string[] {
+function emitThrowingCallStatusCheck(
+  status: string,
+  context: CFunctionContext,
+  deps: CCallExpressionDependencies
+): string[] {
   const target = deps.currentErrorTarget(context)
   const lines = [`if (${status} == INOX_ERR_THROW) {`, '  inox_error_active = 1;']
 
-  if (target != null) {
+  if (target !== null && typeof target !== 'undefined') {
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
     lines.push('  inox_status_result = INOX_ERR_THROW;')
@@ -2110,7 +2196,7 @@ export function emitCallee(callee: CValueNode, context: CFunctionContext): strin
 
   const objectFunctionCallee = objectFunctionFieldCallee(callee, context)
 
-  if (objectFunctionCallee != null) {
+  if (objectFunctionCallee !== null && typeof objectFunctionCallee !== 'undefined') {
     return objectFunctionCallee
   }
 
@@ -2124,7 +2210,7 @@ export function emitCallee(callee: CValueNode, context: CFunctionContext): strin
 
     const functionName = context.functionNames.get(name)
 
-    if (functionName != null) {
+    if (functionName !== null && typeof functionName !== 'undefined') {
       return functionName
     }
 
@@ -2142,7 +2228,11 @@ export function emitCallee(callee: CValueNode, context: CFunctionContext): strin
   return '_'
 }
 
-export function emitCExpression(expression: CValueNode, context: CFunctionContext, deps: CScalarExpressionDependencies): string {
+export function emitCExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): string {
   if (isNullishCoalescingExpression(expression)) {
     context.diagnostics.push(
       diagnostic('INOX_C_NULLISH', 'nullish coalescing is not supported by the current C backend slice', expression.loc)
@@ -2226,13 +2316,13 @@ export function emitPreparedNumberExpression(
 ): PreparedExpression {
   const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
 
-  if (classMethodCall != null && classMethodCall.expression !== '') {
+  if (classMethodCall !== null && typeof classMethodCall !== 'undefined' && classMethodCall.expression !== '') {
     return classMethodCall
   }
 
   const fsConstant = deps.cFsRuntimeConstantExpression(expression)
 
-  if (fsConstant != null) {
+  if (fsConstant !== null && typeof fsConstant !== 'undefined') {
     return {
       lines: [],
       expression: fsConstant
@@ -2248,25 +2338,29 @@ export function emitPreparedNumberExpression(
 
   const pathBooleanCall = deps.emitPreparedPathBooleanCallExpression(expression, context)
 
-  if (pathBooleanCall != null) {
+  if (pathBooleanCall !== null && typeof pathBooleanCall !== 'undefined') {
     return pathBooleanCall
   }
 
   const arrayIsArrayCall = deps.emitPreparedArrayIsArrayCallExpression(expression, context)
 
-  if (arrayIsArrayCall != null) {
+  if (arrayIsArrayCall !== null && typeof arrayIsArrayCall !== 'undefined') {
     return arrayIsArrayCall
   }
 
   const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
 
-  if (urlSearchParamsCall != null && urlSearchParamsCall.valueType === 'boolean') {
+  if (
+    urlSearchParamsCall !== null &&
+    typeof urlSearchParamsCall !== 'undefined' &&
+    urlSearchParamsCall.valueType === 'boolean'
+  ) {
     return urlSearchParamsCall
   }
 
   const processNumber = deps.emitPreparedProcessNumberExpression(expression)
 
-  if (processNumber != null) {
+  if (processNumber !== null && typeof processNumber !== 'undefined') {
     return processNumber
   }
 
@@ -2282,7 +2376,7 @@ export function emitPreparedNumberExpression(
     const resolvedType = context.variables.get(name)
     let valueType = 'number'
 
-    if (resolvedType != null) {
+    if (resolvedType !== null && typeof resolvedType !== 'undefined') {
       valueType = resolvedType
     }
 
@@ -2338,7 +2432,7 @@ export function emitPreparedNumberExpression(
     if (expression.operator === '!') {
       const truthiness = emitPreparedRuntimeTruthinessExpression(expression, context, deps)
 
-      if (truthiness != null) {
+      if (truthiness !== null && typeof truthiness !== 'undefined') {
         return truthiness
       }
     }
@@ -2358,7 +2452,7 @@ export function emitPreparedNumberExpression(
   if (expression.type === 'BinaryExpression') {
     const scalarNullish = emitPreparedScalarNullishCoalescingExpression(expression, context, deps)
 
-    if (scalarNullish != null) {
+    if (scalarNullish !== null && typeof scalarNullish !== 'undefined') {
       return scalarNullish
     }
 
@@ -2381,29 +2475,25 @@ export function emitPreparedNumberExpression(
     const rightType = deps.inferExpressionType(expression.right, context)
     const nullableNullCompare = emitPreparedNullableNullCompareExpression(expression, context, deps)
 
-    if (nullableNullCompare != null) {
+    if (nullableNullCompare !== null && typeof nullableNullCompare !== 'undefined') {
       return nullableNullCompare
     }
 
-    const nullableBooleanLiteralCompare = emitPreparedNullableBooleanLiteralCompareExpression(
-      expression,
-      context,
-      deps
-    )
+    const nullableBooleanLiteralCompare = emitPreparedNullableBooleanLiteralCompareExpression(expression, context, deps)
 
-    if (nullableBooleanLiteralCompare != null) {
+    if (nullableBooleanLiteralCompare !== null && typeof nullableBooleanLiteralCompare !== 'undefined') {
       return nullableBooleanLiteralCompare
     }
 
     const dynamicObjectNullCompare = emitPreparedDynamicObjectNullCompareExpression(expression, context, deps)
 
-    if (dynamicObjectNullCompare != null) {
+    if (dynamicObjectNullCompare !== null && typeof dynamicObjectNullCompare !== 'undefined') {
       return dynamicObjectNullCompare
     }
 
     const stringNullCompare = emitPreparedStringNullCompareExpression(expression, leftType, rightType)
 
-    if (stringNullCompare != null) {
+    if (stringNullCompare !== null && typeof stringNullCompare !== 'undefined') {
       return stringNullCompare
     }
 
@@ -2415,7 +2505,7 @@ export function emitPreparedNumberExpression(
       deps
     )
 
-    if (runtimeReferenceCompare != null) {
+    if (runtimeReferenceCompare !== null && typeof runtimeReferenceCompare !== 'undefined') {
       return runtimeReferenceCompare
     }
 
@@ -2425,13 +2515,13 @@ export function emitPreparedNumberExpression(
       deps
     )
 
-    if (dynamicObjectBooleanLiteralCompare != null) {
+    if (dynamicObjectBooleanLiteralCompare !== null && typeof dynamicObjectBooleanLiteralCompare !== 'undefined') {
       return dynamicObjectBooleanLiteralCompare
     }
 
     const typeofCompare = emitPreparedTypeofCompareExpression(expression, context, deps)
 
-    if (typeofCompare != null) {
+    if (typeofCompare !== null && typeof typeofCompare !== 'undefined') {
       return typeofCompare
     }
 
@@ -2441,7 +2531,7 @@ export function emitPreparedNumberExpression(
       deps
     )
 
-    if (dynamicObjectStringLiteralCompare != null) {
+    if (dynamicObjectStringLiteralCompare !== null && typeof dynamicObjectStringLiteralCompare !== 'undefined') {
       return dynamicObjectStringLiteralCompare
     }
 
@@ -2455,7 +2545,7 @@ export function emitPreparedNumberExpression(
 
     const runtimeStringLiteralCompare = emitPreparedRuntimeStringLiteralCompareExpression(expression, context, deps)
 
-    if (runtimeStringLiteralCompare != null) {
+    if (runtimeStringLiteralCompare !== null && typeof runtimeStringLiteralCompare !== 'undefined') {
       return runtimeStringLiteralCompare
     }
 
@@ -2504,25 +2594,25 @@ export function emitPreparedNumberExpression(
   if (expression.type === 'CallExpression') {
     const jsonScalarParse = deps.emitPreparedJsonScalarParseExpression(expression, context)
 
-    if (jsonScalarParse != null) {
+    if (jsonScalarParse !== null && typeof jsonScalarParse !== 'undefined') {
       return jsonScalarParse
     }
 
     const binaryCall = deps.emitPreparedBinaryNumberCallExpression(expression, context)
 
-    if (binaryCall != null) {
+    if (binaryCall !== null && typeof binaryCall !== 'undefined') {
       return binaryCall
     }
 
     const cryptoCall = deps.emitPreparedCryptoNumberCallExpression(expression, context)
 
-    if (cryptoCall != null) {
+    if (cryptoCall !== null && typeof cryptoCall !== 'undefined') {
       return cryptoCall
     }
 
     const numericCast = emitPreparedNumericCastExpression(expression, context, deps)
 
-    if (numericCast != null) {
+    if (numericCast !== null && typeof numericCast !== 'undefined') {
       return numericCast
     }
 
@@ -2532,31 +2622,31 @@ export function emitPreparedNumberExpression(
 
     const arrayIncludesCall = deps.emitPreparedArrayIncludesCallExpression(expression, context)
 
-    if (arrayIncludesCall != null) {
+    if (arrayIncludesCall !== null && typeof arrayIncludesCall !== 'undefined') {
       return arrayIncludesCall
     }
 
     const arrayUnshiftCall = deps.emitPreparedArrayUnshiftCallExpression(expression, context)
 
-    if (arrayUnshiftCall != null) {
+    if (arrayUnshiftCall !== null && typeof arrayUnshiftCall !== 'undefined') {
       return arrayUnshiftCall
     }
 
     const stringCharCodeAt = deps.emitPreparedStringCharCodeAtExpression(expression, context)
 
-    if (stringCharCodeAt != null) {
+    if (stringCharCodeAt !== null && typeof stringCharCodeAt !== 'undefined') {
       return stringCharCodeAt
     }
 
     const stringIndexCall = deps.emitPreparedStringIndexCallExpression(expression, context)
 
-    if (stringIndexCall != null) {
+    if (stringIndexCall !== null && typeof stringIndexCall !== 'undefined') {
       return stringIndexCall
     }
 
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
-    if (collectionCall != null) {
+    if (collectionCall !== null && typeof collectionCall !== 'undefined') {
       return collectionCall
     }
 
@@ -2566,43 +2656,43 @@ export function emitPreparedNumberExpression(
   if (deps.isMemberAccessExpression(expression)) {
     const dgramAddressPort = deps.emitPreparedDgramAddressPortExpression(expression, context)
 
-    if (dgramAddressPort != null) {
+    if (dgramAddressPort !== null && typeof dgramAddressPort !== 'undefined') {
       return dgramAddressPort
     }
 
     const netAddressPort = deps.emitPreparedNetAddressPortExpression(expression, context)
 
-    if (netAddressPort != null) {
+    if (netAddressPort !== null && typeof netAddressPort !== 'undefined') {
       return netAddressPort
     }
 
     const stringLength = deps.emitPreparedStringLengthExpression(expression, context)
 
-    if (stringLength != null) {
+    if (stringLength !== null && typeof stringLength !== 'undefined') {
       return stringLength
     }
 
     const length = deps.emitPreparedArrayLengthExpression(expression, context)
 
-    if (length != null) {
+    if (length !== null && typeof length !== 'undefined') {
       return length
     }
 
     const collectionSize = deps.emitPreparedCollectionSizeExpression(expression, context)
 
-    if (collectionSize != null) {
+    if (collectionSize !== null && typeof collectionSize !== 'undefined') {
       return collectionSize
     }
 
     const bytesLength = deps.emitPreparedBytesLengthExpression(expression, context)
 
-    if (bytesLength != null) {
+    if (bytesLength !== null && typeof bytesLength !== 'undefined') {
       return bytesLength
     }
 
     const member = deps.resolveKnownObjectMember(expression, context)
 
-    if (member != null && isNumberOrBooleanValueType(member.valueType)) {
+    if (member !== null && typeof member !== 'undefined' && isNumberOrBooleanValueType(member.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(member.objectName ?? '', context)
       const getCall = `inox_object_get_known(${objectReference}, ${member.index}, &${value})`
@@ -2612,7 +2702,7 @@ export function emitPreparedNumberExpression(
 
     const objectMember = deps.emitPreparedObjectExpressionScalarMemberValueExpression(expression, context)
 
-    if (objectMember != null) {
+    if (objectMember !== null && typeof objectMember !== 'undefined') {
       return {
         lines: objectMember.lines,
         expression: scalarRuntimeValueExpression(objectMember.expression, objectMember.valueType ?? 'number')
@@ -2623,7 +2713,7 @@ export function emitPreparedNumberExpression(
   if (deps.isIndexAccessExpression(expression)) {
     const element = deps.resolveKnownArrayIndex(expression, context)
 
-    if (element != null && isNumberOrBooleanValueType(element.valueType)) {
+    if (element !== null && typeof element !== 'undefined' && isNumberOrBooleanValueType(element.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const getCall = `inox_array_get(${element.arrayName}, ${element.index}, &${value})`
 
@@ -2632,7 +2722,7 @@ export function emitPreparedNumberExpression(
 
     const field = deps.resolveKnownObjectIndex(expression, context)
 
-    if (field != null && isNumberOrBooleanValueType(field.valueType)) {
+    if (field !== null && typeof field !== 'undefined' && isNumberOrBooleanValueType(field.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(field.objectName ?? '', context)
       const getCall = `inox_object_get(${objectReference}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
@@ -2642,7 +2732,7 @@ export function emitPreparedNumberExpression(
 
     const objectField = deps.emitPreparedObjectExpressionScalarIndexValueExpression(expression, context)
 
-    if (objectField != null) {
+    if (objectField !== null && typeof objectField !== 'undefined') {
       return {
         lines: objectField.lines,
         expression: scalarRuntimeValueExpression(objectField.expression, objectField.valueType ?? 'number')
@@ -2651,7 +2741,11 @@ export function emitPreparedNumberExpression(
 
     const runtimeElement = deps.resolveRuntimeArrayIndex(expression, context)
 
-    if (runtimeElement != null && isNumberOrBooleanValueType(runtimeElement.valueType)) {
+    if (
+      runtimeElement !== null &&
+      typeof runtimeElement !== 'undefined' &&
+      isNumberOrBooleanValueType(runtimeElement.valueType)
+    ) {
       const value = deps.emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_expr_value')
 
       return {
@@ -2662,7 +2756,7 @@ export function emitPreparedNumberExpression(
 
     const bytesIndex = deps.emitPreparedBytesIndexExpression(expression, context)
 
-    if (bytesIndex != null) {
+    if (bytesIndex !== null && typeof bytesIndex !== 'undefined') {
       return bytesIndex
     }
   }
@@ -2679,7 +2773,7 @@ export function emitPreparedNumberExpression(
 
   const dynamicRuntimeScalar = emitPreparedDynamicRuntimeScalarValueExpression(expression, context, deps)
 
-  if (dynamicRuntimeScalar != null) {
+  if (dynamicRuntimeScalar !== null && typeof dynamicRuntimeScalar !== 'undefined') {
     return dynamicRuntimeScalar
   }
 
@@ -2719,7 +2813,7 @@ export function emitPreparedRuntimeTruthinessExpression(
   if (expression.type === 'UnaryExpression' && expression.operator === '!') {
     const argument = emitPreparedRuntimeTruthinessExpression(expression.argument, context, deps)
 
-    if (argument == null) {
+    if (argument === null || typeof argument === 'undefined') {
       return null
     }
 
@@ -2740,7 +2834,7 @@ export function emitPreparedRuntimeTruthinessExpression(
 
   const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression, context, deps)
 
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -2760,7 +2854,12 @@ function emitPreparedOptionalDynamicObjectFieldValueExpression(
   }
 
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    return emitPreparedOptionalRuntimeObjectFieldValueExpression(expression.object, expression.index.value, context, deps)
+    return emitPreparedOptionalRuntimeObjectFieldValueExpression(
+      expression.object,
+      expression.index.value,
+      context,
+      deps
+    )
   }
 
   return null
@@ -2809,11 +2908,11 @@ function emitPreparedDynamicObjectStringLiteralCompareExpression(
 
   const leftLiteral = stringLiteralValue(expression.left)
 
-  if (leftLiteral != null) {
+  if (leftLiteral !== null && typeof leftLiteral !== 'undefined') {
     if (isDynamicReferenceObjectFieldExpression(expression.right, context, deps)) {
       const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression.right, context, deps)
 
-      if (value != null) {
+      if (value !== null && typeof value !== 'undefined') {
         return emitPreparedRuntimePreparedValueStringLiteralCompare(value, leftLiteral, expression.operator, context)
       }
     }
@@ -2821,11 +2920,11 @@ function emitPreparedDynamicObjectStringLiteralCompareExpression(
 
   const rightLiteral = stringLiteralValue(expression.right)
 
-  if (rightLiteral != null) {
+  if (rightLiteral !== null && typeof rightLiteral !== 'undefined') {
     if (isDynamicReferenceObjectFieldExpression(expression.left, context, deps)) {
       const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression.left, context, deps)
 
-      if (value != null) {
+      if (value !== null && typeof value !== 'undefined') {
         return emitPreparedRuntimePreparedValueStringLiteralCompare(value, rightLiteral, expression.operator, context)
       }
     }
@@ -2845,7 +2944,7 @@ function emitPreparedRuntimeStringLiteralCompareExpression(
 
   const leftLiteral = stringLiteralValue(expression.left)
 
-  if (leftLiteral != null) {
+  if (leftLiteral !== null && typeof leftLiteral !== 'undefined') {
     return emitPreparedRuntimeValueStringLiteralCompare(
       expression.right,
       leftLiteral,
@@ -2857,7 +2956,7 @@ function emitPreparedRuntimeStringLiteralCompareExpression(
 
   const rightLiteral = stringLiteralValue(expression.right)
 
-  if (rightLiteral != null) {
+  if (rightLiteral !== null && typeof rightLiteral !== 'undefined') {
     return emitPreparedRuntimeValueStringLiteralCompare(
       expression.left,
       rightLiteral,
@@ -2880,14 +2979,14 @@ function emitPreparedRuntimeValueStringLiteralCompare(
   if (isDynamicReferenceObjectFieldExpression(valueExpression, context, deps)) {
     const objectFieldValue = emitPreparedOptionalDynamicObjectFieldValueExpression(valueExpression, context, deps)
 
-    if (objectFieldValue != null) {
+    if (objectFieldValue !== null && typeof objectFieldValue !== 'undefined') {
       return emitPreparedRuntimePreparedValueStringLiteralCompare(objectFieldValue, literal, operator, context)
     }
   }
 
   const dynamicValue = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
 
-  if (dynamicValue != null) {
+  if (dynamicValue !== null && typeof dynamicValue !== 'undefined') {
     return emitPreparedRuntimePreparedValueStringLiteralCompare(dynamicValue, literal, operator, context)
   }
 
@@ -2903,15 +3002,15 @@ function isDynamicReferenceObjectFieldExpression(
 ): boolean {
   const access = dynamicObjectFieldAccess(expression, context, deps)
 
-  if (access == null || access.object.type !== 'Reference') {
+  if (access === null || typeof access === 'undefined' || access.object.type !== 'Reference') {
     return false
   }
 
-  if (deps.resolveKnownObjectMember(expression, context) != null) {
+  if (isPresent(deps.resolveKnownObjectMember(expression, context))) {
     return false
   }
 
-  return deps.resolveKnownObjectIndex(expression, context) == null
+  return isNullish(deps.resolveKnownObjectIndex(expression, context))
 }
 
 function emitPreparedRuntimePreparedValueStringLiteralCompare(
@@ -3103,8 +3202,7 @@ function emitPreparedNullableBooleanLiteralCompareExpression(
     expected = '1'
   }
 
-  const equals =
-    `(${value.expression}.tag == INOX_TAG_BOOL && (${value.expression}.as.boolean ? 1 : 0) == ${expected})`
+  const equals = `(${value.expression}.tag == INOX_TAG_BOOL && (${value.expression}.as.boolean ? 1 : 0) == ${expected})`
   let result = equals
 
   if (!isPositiveEqualityOperator(expression.operator)) {
@@ -3205,7 +3303,7 @@ function emitPreparedDynamicObjectNullCompareExpression(
 
   const value = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
 
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -3234,18 +3332,18 @@ function emitPreparedDynamicObjectBooleanLiteralCompareExpression(
   let valueExpression = expression.left
   let literal = booleanLiteralValue(expression.right)
 
-  if (literal == null) {
+  if (literal === null || typeof literal === 'undefined') {
     valueExpression = expression.right
     literal = booleanLiteralValue(expression.left)
   }
 
-  if (literal == null) {
+  if (literal === null || typeof literal === 'undefined') {
     return null
   }
 
   const value = emitPreparedDynamicRuntimeValueExpression(valueExpression, context, deps)
 
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -3276,7 +3374,7 @@ function emitPreparedDynamicRuntimeScalarValueExpression(
 
   const value = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)
 
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -3346,7 +3444,7 @@ function emitPreparedDynamicRuntimeValueExpression(
 ): PreparedExpression | null {
   const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
 
-  if (runtimeReference != null) {
+  if (runtimeReference !== null && typeof runtimeReference !== 'undefined') {
     return runtimeReference
   }
 
@@ -3356,7 +3454,7 @@ function emitPreparedDynamicRuntimeValueExpression(
 
   const arrayIndexValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
 
-  if (arrayIndexValue != null) {
+  if (arrayIndexValue !== null && typeof arrayIndexValue !== 'undefined') {
     return arrayIndexValue
   }
 
@@ -3370,7 +3468,7 @@ function isDynamicRuntimeObjectFieldValueExpression(
 ): boolean {
   const access = dynamicRuntimeObjectFieldAccess(expression)
 
-  if (access == null) {
+  if (access === null || typeof access === 'undefined') {
     return false
   }
 
@@ -3404,13 +3502,13 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
 ): PreparedExpression | null {
   const access = dynamicRuntimeObjectFieldAccess(expression)
 
-  if (access == null) {
+  if (access === null || typeof access === 'undefined') {
     return null
   }
 
   const object = emitPreparedDynamicRuntimeObjectValueExpression(access.object, context, deps)
 
-  if (object == null) {
+  if (object === null || typeof object === 'undefined') {
     return null
   }
 
@@ -3420,7 +3518,9 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
 
   registerOwnedValue(context, value)
   appendLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)
+  )
   appendLines(lines, emitPrepareOwnedValueWrite(value))
   lines.push(
     `inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
@@ -3447,14 +3547,14 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
 
   const access = dynamicObjectFieldAccess(expression.object, context, deps)
 
-  if (access == null) {
+  if (access === null || typeof access === 'undefined') {
     return null
   }
 
   const object = deps.emitCValueExpression(access.object, context)
   const index = emitPreparedDynamicArrayIndexExpression(expression.index, context, deps)
 
-  if (index == null) {
+  if (index === null || typeof index === 'undefined') {
     return null
   }
 
@@ -3495,7 +3595,7 @@ function emitPreparedDynamicRuntimeObjectValueExpression(
 ): PreparedExpression | null {
   const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
 
-  if (runtimeReference != null) {
+  if (runtimeReference !== null && typeof runtimeReference !== 'undefined') {
     return runtimeReference
   }
 
@@ -3505,7 +3605,7 @@ function emitPreparedDynamicRuntimeObjectValueExpression(
 
   const arrayIndexValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
 
-  if (arrayIndexValue != null) {
+  if (arrayIndexValue !== null && typeof arrayIndexValue !== 'undefined') {
     return arrayIndexValue
   }
 
@@ -3518,7 +3618,7 @@ function emitPreparedRuntimeValueReferenceExpression(
 ): PreparedExpression | null {
   const name = runtimeValueReferenceName(expression, context)
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return null
   }
 
@@ -3537,7 +3637,7 @@ function isDynamicObjectArrayIndexValueExpression(
     return false
   }
 
-  if (dynamicObjectFieldAccess(expression.object, context, deps) == null) {
+  if (isNullish(dynamicObjectFieldAccess(expression.object, context, deps))) {
     return false
   }
 
@@ -3557,7 +3657,7 @@ function isDynamicArrayIndexExpression(
 }
 
 function isRuntimeValueReferenceExpression(expression: CValueNode, context: CFunctionContext): boolean {
-  return runtimeValueReferenceName(expression, context) != null
+  return isPresent(runtimeValueReferenceName(expression, context))
 }
 
 function runtimeValueReferenceName(expression: CValueNode, context: CFunctionContext): string | null {
@@ -3708,7 +3808,7 @@ function emitPreparedNumericCastExpression(
 
   const limits = numericIntegerCastLimits(cast)
 
-  if (limits == null) {
+  if (limits === null || typeof limits === 'undefined') {
     return null
   }
 
@@ -3731,7 +3831,11 @@ function emitPreparedNumericCastExpression(
   }
 }
 
-function isNumericCastCall(expression: CValueNode, context: CFunctionContext, deps: CScalarExpressionDependencies): boolean {
+function isNumericCastCall(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
   if (
     expression.type !== 'CallExpression' ||
     expression.callee.type !== 'Reference' ||
@@ -3860,33 +3964,69 @@ export type CValueExpressionDependencies = {
   emitPreparedChildProcessCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedClassMethodCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCollectionConstructorValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCollectionConstructorValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedCryptoCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDebugMemoryCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFsSyncValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedKnownArrayIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedKnownObjectIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedKnownObjectMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedKnownArrayIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitPreparedKnownObjectIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitPreparedKnownObjectMemberValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedMapIndexGetExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedNullableScalarRuntimeValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedNullableScalarRuntimeValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression
   emitPreparedObjectValuesCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedDynamicObjectIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedDynamicObjectMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedDynamicObjectIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitPreparedDynamicObjectMemberValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedObjectExpressionIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedObjectExpressionMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedObjectExpressionIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitPreparedObjectExpressionMemberValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedOsConstantExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedOsStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathConstantExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathObjectCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessStringExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedRuntimeArrayIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedRuntimeArrayIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedUrlObjectExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedUrlSearchParamsCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitPreparedUrlSearchParamsObjectExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedUrlStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
   isBoxedRuntimeValueName(name: string, context: CFunctionContext): boolean
@@ -3921,139 +4061,139 @@ export function emitCValueExpression(
 
   const childProcessCall = deps.emitPreparedChildProcessCallExpression(expression, context)
 
-  if (childProcessCall != null) {
+  if (childProcessCall !== null && typeof childProcessCall !== 'undefined') {
     return childProcessCall
   }
 
   const osConstant = deps.emitPreparedOsConstantExpression(expression, context)
 
-  if (osConstant != null) {
+  if (osConstant !== null && typeof osConstant !== 'undefined') {
     return osConstant
   }
 
   const osStringCall = deps.emitPreparedOsStringCallExpression(expression, context)
 
-  if (osStringCall != null) {
+  if (osStringCall !== null && typeof osStringCall !== 'undefined') {
     return osStringCall
   }
 
   const processString = deps.emitPreparedProcessStringExpression(expression, context)
 
-  if (processString != null) {
+  if (processString !== null && typeof processString !== 'undefined') {
     return processString
   }
 
   const urlStringCall = deps.emitPreparedUrlStringCallExpression(expression, context)
 
-  if (urlStringCall != null) {
+  if (urlStringCall !== null && typeof urlStringCall !== 'undefined') {
     return urlStringCall
   }
 
   const urlObject = deps.emitPreparedUrlObjectExpression(expression, context)
 
-  if (urlObject != null) {
+  if (urlObject !== null && typeof urlObject !== 'undefined') {
     return urlObject
   }
 
   const urlSearchParamsObject = deps.emitPreparedUrlSearchParamsObjectExpression(expression, context)
 
-  if (urlSearchParamsObject != null) {
+  if (urlSearchParamsObject !== null && typeof urlSearchParamsObject !== 'undefined') {
     return urlSearchParamsObject
   }
 
   const pathConstant = deps.emitPreparedPathConstantExpression(expression, context)
 
-  if (pathConstant != null) {
+  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
     return pathConstant
   }
 
   const pathObject = deps.emitPreparedPathObjectCallExpression(expression, context)
 
-  if (pathObject != null) {
+  if (pathObject !== null && typeof pathObject !== 'undefined') {
     return pathObject
   }
 
   const pathCall = deps.emitPreparedPathStringCallExpression(expression, context)
 
-  if (pathCall != null) {
+  if (pathCall !== null && typeof pathCall !== 'undefined') {
     return pathCall
   }
 
   const fsSyncValue = deps.emitPreparedFsSyncValueExpression(expression, context)
 
-  if (fsSyncValue != null) {
+  if (fsSyncValue !== null && typeof fsSyncValue !== 'undefined') {
     return fsSyncValue
   }
 
   const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(expression, context)
 
-  if (fetchHeadersCall != null) {
+  if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined') {
     return fetchHeadersCall
   }
 
   const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
 
-  if (urlSearchParamsCall != null) {
+  if (urlSearchParamsCall !== null && typeof urlSearchParamsCall !== 'undefined') {
     return urlSearchParamsCall
   }
 
   const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
 
-  if (jsonCall != null) {
+  if (jsonCall !== null && typeof jsonCall !== 'undefined') {
     return jsonCall
   }
 
   const debugMemoryCall = deps.emitPreparedDebugMemoryCallExpression(expression, context)
 
-  if (debugMemoryCall != null) {
+  if (debugMemoryCall !== null && typeof debugMemoryCall !== 'undefined') {
     return debugMemoryCall
   }
 
   const cryptoCall = deps.emitPreparedCryptoCallExpression(expression, context)
 
-  if (cryptoCall != null) {
+  if (cryptoCall !== null && typeof cryptoCall !== 'undefined') {
     return cryptoCall
   }
 
   const binaryValue = deps.emitPreparedBinaryValueExpression(expression, context)
 
-  if (binaryValue != null) {
+  if (binaryValue !== null && typeof binaryValue !== 'undefined') {
     return binaryValue
   }
 
   const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
 
-  if (arrayPopCall != null) {
+  if (arrayPopCall !== null && typeof arrayPopCall !== 'undefined') {
     return arrayPopCall
   }
 
   const arrayJoinCall = deps.emitPreparedArrayJoinCallExpression(expression, context)
 
-  if (arrayJoinCall != null) {
+  if (arrayJoinCall !== null && typeof arrayJoinCall !== 'undefined') {
     return arrayJoinCall
   }
 
   const arraySliceCall = deps.emitPreparedArraySliceCallExpression(expression, context)
 
-  if (arraySliceCall != null) {
+  if (arraySliceCall !== null && typeof arraySliceCall !== 'undefined') {
     return arraySliceCall
   }
 
   const mapIndexGet = deps.emitPreparedMapIndexGetExpression(expression, context)
 
-  if (mapIndexGet != null) {
+  if (mapIndexGet !== null && typeof mapIndexGet !== 'undefined') {
     return mapIndexGet
   }
 
   const collectionConstructor = deps.emitPreparedCollectionConstructorValueExpression(expression, context)
 
-  if (collectionConstructor != null) {
+  if (collectionConstructor !== null && typeof collectionConstructor !== 'undefined') {
     return collectionConstructor
   }
 
   const objectValuesCall = deps.emitPreparedObjectValuesCallExpression(expression, context)
 
-  if (objectValuesCall != null) {
+  if (objectValuesCall !== null && typeof objectValuesCall !== 'undefined') {
     return objectValuesCall
   }
 
@@ -4071,7 +4211,7 @@ export function emitCValueExpression(
 
   const numberConversion = deps.emitCNumberConversionValueExpression(expression, context)
 
-  if (numberConversion != null) {
+  if (numberConversion !== null && typeof numberConversion !== 'undefined') {
     return numberConversion
   }
 
@@ -4113,7 +4253,7 @@ export function emitCValueExpression(
 
   const stringIndex = deps.emitCStringIndexValueExpression(expression, context)
 
-  if (stringIndex != null) {
+  if (stringIndex !== null && typeof stringIndex !== 'undefined') {
     return stringIndex
   }
 
@@ -4174,7 +4314,7 @@ export function emitCValueExpression(
     const valueType = context.variables.get(name) ?? ''
     const moduleValueName = context.moduleValueNames.get(name)
 
-    if (moduleValueName != null) {
+    if (moduleValueName !== null && typeof moduleValueName !== 'undefined') {
       return {
         lines: [],
         expression: moduleValueName
@@ -4220,7 +4360,12 @@ export function emitCValueExpression(
 
       registerOwnedValue(context, temp)
       appendLines(lines, emitPrepareOwnedValueWrite(temp))
-      lines.push(emitStatusCheck(`inox_string_from_literal(&inox_default_allocator, ${name}, strlen(${name}), &${temp})`, context))
+      lines.push(
+        emitStatusCheck(
+          `inox_string_from_literal(&inox_default_allocator, ${name}, strlen(${name}), &${temp})`,
+          context
+        )
+      )
 
       return {
         lines,
@@ -4228,11 +4373,7 @@ export function emitCValueExpression(
       }
     }
 
-    if (
-      valueType === 'bytes' ||
-      valueType === 'object' ||
-      valueType === 'array'
-    ) {
+    if (valueType === 'bytes' || valueType === 'object' || valueType === 'array') {
       return {
         lines: [],
         expression: name
@@ -4279,25 +4420,25 @@ export function emitCValueExpression(
   if (deps.isMemberAccessExpression(expression)) {
     const memberValue = deps.emitPreparedKnownObjectMemberValueExpression(expression, context)
 
-    if (memberValue != null) {
+    if (memberValue !== null && typeof memberValue !== 'undefined') {
       return memberValue
     }
 
     const objectMemberValue = deps.emitPreparedObjectExpressionMemberValueExpression(expression, context)
 
-    if (objectMemberValue != null) {
+    if (objectMemberValue !== null && typeof objectMemberValue !== 'undefined') {
       return objectMemberValue
     }
 
     const dynamicMemberValue = deps.emitPreparedDynamicObjectMemberValueExpression(expression, context)
 
-    if (dynamicMemberValue != null) {
+    if (dynamicMemberValue !== null && typeof dynamicMemberValue !== 'undefined') {
       return dynamicMemberValue
     }
 
     const dynamicRuntimeMemberValue = emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 
-    if (dynamicRuntimeMemberValue != null) {
+    if (dynamicRuntimeMemberValue !== null && typeof dynamicRuntimeMemberValue !== 'undefined') {
       return dynamicRuntimeMemberValue
     }
   }
@@ -4305,50 +4446,50 @@ export function emitCValueExpression(
   if (deps.isIndexAccessExpression(expression)) {
     const arrayValue = deps.emitPreparedKnownArrayIndexValueExpression(expression, context)
 
-    if (arrayValue != null) {
+    if (arrayValue !== null && typeof arrayValue !== 'undefined') {
       return arrayValue
     }
 
     const runtimeArrayValue = deps.emitPreparedRuntimeArrayIndexValueExpression(expression, context)
 
-    if (runtimeArrayValue != null) {
+    if (runtimeArrayValue !== null && typeof runtimeArrayValue !== 'undefined') {
       return runtimeArrayValue
     }
 
     const dynamicArrayValue = emitPreparedDynamicObjectArrayIndexValueExpression(expression, context, deps)
 
-    if (dynamicArrayValue != null) {
+    if (dynamicArrayValue !== null && typeof dynamicArrayValue !== 'undefined') {
       return dynamicArrayValue
     }
 
     const objectValue = deps.emitPreparedKnownObjectIndexValueExpression(expression, context)
 
-    if (objectValue != null) {
+    if (objectValue !== null && typeof objectValue !== 'undefined') {
       return objectValue
     }
 
     const objectExpressionValue = deps.emitPreparedObjectExpressionIndexValueExpression(expression, context)
 
-    if (objectExpressionValue != null) {
+    if (objectExpressionValue !== null && typeof objectExpressionValue !== 'undefined') {
       return objectExpressionValue
     }
 
     const dynamicObjectValue = deps.emitPreparedDynamicObjectIndexValueExpression(expression, context)
 
-    if (dynamicObjectValue != null) {
+    if (dynamicObjectValue !== null && typeof dynamicObjectValue !== 'undefined') {
       return dynamicObjectValue
     }
 
     const dynamicRuntimeIndexValue = emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 
-    if (dynamicRuntimeIndexValue != null) {
+    if (dynamicRuntimeIndexValue !== null && typeof dynamicRuntimeIndexValue !== 'undefined') {
       return dynamicRuntimeIndexValue
     }
   }
 
   const scalarValue = emitPreparedScalarRuntimeValueExpression(expression, context, deps)
 
-  if (scalarValue != null) {
+  if (scalarValue !== null && typeof scalarValue !== 'undefined') {
     return scalarValue
   }
 
@@ -4366,13 +4507,13 @@ export function emitCValueExpression(
 
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
-    if (collectionCall != null) {
+    if (collectionCall !== null && typeof collectionCall !== 'undefined') {
       return collectionCall
     }
 
     const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
 
-    if (classMethodCall != null) {
+    if (classMethodCall !== null && typeof classMethodCall !== 'undefined') {
       return classMethodCall
     }
 
@@ -4429,15 +4570,12 @@ function emitUnsupportedCValueExpression(
   let unsupportedMessage = 'this object field expression is not supported by the current C backend slice'
 
   if (unsupportedType === 'function') {
-    unsupportedMessage = 'stored callback values need delayed closure lifetime support and are not supported by the current C backend slice'
+    unsupportedMessage =
+      'stored callback values need delayed closure lifetime support and are not supported by the current C backend slice'
   }
 
   context.diagnostics.push(
-    diagnostic(
-      cUnsupportedExpressionCode(unsupportedType),
-      unsupportedMessage,
-      expressionLocation(expression)
-    )
+    diagnostic(cUnsupportedExpressionCode(unsupportedType), unsupportedMessage, expressionLocation(expression))
   )
 
   return {

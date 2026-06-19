@@ -42,18 +42,19 @@ type ObjectNameContext = {
   variables: Map<string, string>
 }
 
-type ObjectFunctionContext = ObjectShapeContext & ObjectNameContext & {
-  cleanupEnabled: boolean
-  diagnostics: Diagnostic[]
-  failureStatement?: string | null
-  failureStatementUsed?: boolean
-  nextId: number
-  ownedValues: string[]
-  returnType?: string
-  statusReturn: boolean
-  throwingFunction: boolean
-  usedCleanupGoto: boolean
-}
+type ObjectFunctionContext = ObjectShapeContext &
+  ObjectNameContext & {
+    cleanupEnabled: boolean
+    diagnostics: Diagnostic[]
+    failureStatement?: string | null
+    failureStatementUsed?: boolean
+    nextId: number
+    ownedValues: string[]
+    returnType?: string
+    statusReturn: boolean
+    throwingFunction: boolean
+    usedCleanupGoto: boolean
+  }
 
 type ObjectFieldNode = AnyNode
 type ObjectPropertyNode = {
@@ -181,7 +182,7 @@ function nestedObjectFunctionFieldSource(
 ): ObjectFunctionFieldSource {
   const propertyValue = objectFunctionFieldSourcePropertyValue(source, fieldName)
 
-  if (propertyValue != null) {
+  if (propertyValue !== null && typeof propertyValue !== 'undefined') {
     const pathName = resolveCObjectExpressionPathName(propertyValue)
 
     return {
@@ -204,13 +205,13 @@ function objectFunctionFieldSourcePropertyValue(
 ): ObjectFieldNode | null {
   const expression = source.expression
 
-  if (expression == null || expression.type !== 'ObjectLiteral') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ObjectLiteral') {
     return null
   }
 
   const property = findObjectProperty(objectNodeProperties(expression), fieldName)
 
-  if (property == null) {
+  if (property === null || typeof property === 'undefined') {
     return null
   }
 
@@ -218,7 +219,7 @@ function objectFunctionFieldSourcePropertyValue(
 }
 
 function nestedObjectPathName(pathName: string | null, fieldName: string): string | null {
-  if (pathName == null) {
+  if (pathName === null || typeof pathName === 'undefined') {
     return null
   }
 
@@ -237,7 +238,7 @@ function resolveCObjectExpressionPathName(expression: AnyNode): string | null {
   if (expression.type === 'MemberExpression') {
     const objectName = resolveCObjectExpressionPathName(expression.object)
 
-    if (objectName != null) {
+    if (objectName !== null && typeof objectName !== 'undefined') {
       return `${objectName}_${expression.property}`
     }
   }
@@ -245,7 +246,7 @@ function resolveCObjectExpressionPathName(expression: AnyNode): string | null {
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const objectName = resolveCObjectExpressionPathName(expression.object)
 
-    if (objectName != null) {
+    if (objectName !== null && typeof objectName !== 'undefined') {
       return `${objectName}_${expression.index.value}`
     }
   }
@@ -256,7 +257,7 @@ function resolveCObjectExpressionPathName(expression: AnyNode): string | null {
 function objectShapeFieldOwnership(field: CObjectShapeField): string {
   const ownership = field.ownership
 
-  if (ownership != null) {
+  if (ownership !== null && typeof ownership !== 'undefined') {
     return ownership
   }
 
@@ -306,15 +307,22 @@ function registerObjectShapeFields(
 
     if (
       field.valueType !== 'object' ||
-      shape == null ||
+      shape === null ||
+      typeof shape === 'undefined' ||
       shape.builtin === 'compiler.AnyNode' ||
-      shape.fields == null ||
+      shape.fields === null ||
+      typeof shape.fields === 'undefined' ||
       seen.has(shape)
     ) {
       continue
     }
 
-    if (field.declaredType != null && context.objectDeclaredTypes != null) {
+    if (
+      field.declaredType !== null &&
+      typeof field.declaredType !== 'undefined' &&
+      context.objectDeclaredTypes !== null &&
+      typeof context.objectDeclaredTypes !== 'undefined'
+    ) {
       context.objectDeclaredTypes.set(fieldPath, field.declaredType)
     }
 
@@ -332,7 +340,10 @@ export function isIndexAccessExpression(expression: AnyNode): boolean {
   return expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression'
 }
 
-export function resolveKnownObjectMember(expression: AnyNode, context: ObjectFunctionContext): CKnownObjectMemberField | null {
+export function resolveKnownObjectMember(
+  expression: AnyNode,
+  context: ObjectFunctionContext
+): CKnownObjectMemberField | null {
   if (!isMemberAccessExpression(expression)) {
     return null
   }
@@ -343,16 +354,16 @@ export function resolveKnownObjectMember(expression: AnyNode, context: ObjectFun
 
   const objectName = resolveCObjectExpressionName(expression.object)
 
-  if (objectName != null) {
+  if (objectName !== null && typeof objectName !== 'undefined') {
     const fields = context.objectShapes.get(objectName)
 
-    if (fields != null) {
+    if (fields !== null && typeof fields !== 'undefined') {
       const index = findObjectShapeFieldIndex(fields, expression.property)
 
       if (index !== -1) {
         const field = fields[index]
 
-        if (field != null) {
+        if (field !== null && typeof field !== 'undefined') {
           return knownObjectMemberField(objectName, index, field)
         }
       }
@@ -362,11 +373,7 @@ export function resolveKnownObjectMember(expression: AnyNode, context: ObjectFun
   return null
 }
 
-function knownObjectMemberField(
-  objectName: string,
-  index: number,
-  field: CObjectShapeField
-): CKnownObjectMemberField {
+function knownObjectMemberField(objectName: string, index: number, field: CObjectShapeField): CKnownObjectMemberField {
   return {
     objectName,
     key: null,
@@ -394,15 +401,15 @@ export function emitObjectValueReference(name: string, context: ObjectFunctionCo
   const moduleValueNames = context.moduleValueNames
   let moduleValueName: string | null = null
 
-  if (moduleValueNames != null) {
+  if (moduleValueNames !== null && typeof moduleValueNames !== 'undefined') {
     const value = moduleValueNames.get(name)
 
-    if (value != null) {
+    if (value !== null && typeof value !== 'undefined') {
       moduleValueName = value
     }
   }
 
-  if (moduleValueName != null) {
+  if (moduleValueName !== null && typeof moduleValueName !== 'undefined') {
     return moduleValueName
   }
 
@@ -413,7 +420,10 @@ export function emitObjectValueReference(name: string, context: ObjectFunctionCo
   return name
 }
 
-export function resolveKnownObjectIndex(expression: AnyNode, context: ObjectFunctionContext): CKnownObjectIndexField | null {
+export function resolveKnownObjectIndex(
+  expression: AnyNode,
+  context: ObjectFunctionContext
+): CKnownObjectIndexField | null {
   if (!isIndexAccessExpression(expression) || expression.index.type !== 'StringLiteral') {
     return null
   }
@@ -424,16 +434,16 @@ export function resolveKnownObjectIndex(expression: AnyNode, context: ObjectFunc
 
   const objectName = resolveCObjectExpressionName(expression.object)
 
-  if (objectName != null) {
+  if (objectName !== null && typeof objectName !== 'undefined') {
     const fields = context.objectShapes.get(objectName)
 
-    if (fields != null) {
+    if (fields !== null && typeof fields !== 'undefined') {
       const index = findObjectShapeFieldIndex(fields, expression.index.value)
 
       if (index !== -1) {
         const field = fields[index]
 
-        if (field != null) {
+        if (field !== null && typeof field !== 'undefined') {
           return knownObjectIndexField(objectName, expression.index.value, index, field)
         }
       }
@@ -444,7 +454,12 @@ export function resolveKnownObjectIndex(expression: AnyNode, context: ObjectFunc
 }
 
 function isCompilerAnyNodeExpression(expression: AnyNode | null | undefined): boolean {
-  if (expression == null || expression.shape == null) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.shape === null ||
+    typeof expression.shape === 'undefined'
+  ) {
     return false
   }
 
@@ -485,7 +500,12 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
     return null
   }
 
-  if (objectExpression.shape == null || objectExpression.shape.fields == null) {
+  if (
+    objectExpression.shape === null ||
+    typeof objectExpression.shape === 'undefined' ||
+    objectExpression.shape.fields === null ||
+    typeof objectExpression.shape.fields === 'undefined'
+  ) {
     return null
   }
 
@@ -499,7 +519,7 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
 
   const field = objectShapeFieldAt(fields, index)
 
-  if (field == null) {
+  if (field === null || typeof field === 'undefined') {
     return null
   }
 
@@ -540,10 +560,10 @@ export function updateKnownObjectMemberValueType(
   const objectName = member.objectName
   const fields = context.objectShapes.get(objectName)
 
-  if (fields != null) {
+  if (fields !== null && typeof fields !== 'undefined') {
     const field = objectShapeFieldAt(fields, member.index)
 
-    if (field != null) {
+    if (field !== null && typeof field !== 'undefined') {
       field.valueType = valueType
     }
   }
@@ -555,7 +575,7 @@ export function emitPreparedKnownObjectMemberValueExpression(
 ): PreparedExpression | null {
   const member = resolveKnownObjectMember(expression, context)
 
-  if (member != null) {
+  if (member !== null && typeof member !== 'undefined') {
     const access: KnownObjectFieldReadAccess = {
       index: member.index,
       key: '',
@@ -575,7 +595,7 @@ export function emitPreparedKnownObjectIndexValueExpression(
 ): PreparedExpression | null {
   const field = resolveKnownObjectIndex(expression, context)
 
-  if (field != null) {
+  if (field !== null && typeof field !== 'undefined') {
     const access: KnownObjectFieldReadAccess = {
       index: field.index,
       key: field.key,
@@ -596,8 +616,14 @@ export function emitPreparedObjectExpressionMemberValueExpression(
 ): PreparedExpression | null {
   const member = resolveObjectExpressionMember(expression)
 
-  if (member != null) {
-    return emitPreparedObjectExpressionFieldValueExpression(member, expression, expression.object, context, dependencies)
+  if (member !== null && typeof member !== 'undefined') {
+    return emitPreparedObjectExpressionFieldValueExpression(
+      member,
+      expression,
+      expression.object,
+      context,
+      dependencies
+    )
   }
 
   return null
@@ -610,8 +636,14 @@ export function emitPreparedObjectExpressionScalarMemberValueExpression(
 ): PreparedExpression | null {
   const member = resolveObjectExpressionMember(expression)
 
-  if (member != null && isScalarObjectFieldValueType(member.valueType)) {
-    return emitPreparedObjectExpressionFieldValueExpression(member, expression, expression.object, context, dependencies)
+  if (member !== null && typeof member !== 'undefined' && isScalarObjectFieldValueType(member.valueType)) {
+    return emitPreparedObjectExpressionFieldValueExpression(
+      member,
+      expression,
+      expression.object,
+      context,
+      dependencies
+    )
   }
 
   return null
@@ -624,7 +656,7 @@ export function emitPreparedObjectExpressionIndexValueExpression(
 ): PreparedExpression | null {
   const field = resolveObjectExpressionIndex(expression)
 
-  if (field != null) {
+  if (field !== null && typeof field !== 'undefined') {
     return emitPreparedObjectExpressionFieldValueExpression(field, expression, expression.object, context, dependencies)
   }
 
@@ -725,7 +757,7 @@ export function emitDynamicObjectFieldAssignment(
       dependencies
     )
 
-    if (assignment != null) {
+    if (assignment !== null && typeof assignment !== 'undefined') {
       return assignment
     }
 
@@ -747,7 +779,7 @@ export function emitDynamicObjectFieldAssignment(
       dependencies
     )
 
-    if (assignment != null) {
+    if (assignment !== null && typeof assignment !== 'undefined') {
       return assignment
     }
 
@@ -770,7 +802,7 @@ export function emitPreparedObjectExpressionScalarIndexValueExpression(
 ): PreparedExpression | null {
   const field = resolveObjectExpressionIndex(expression)
 
-  if (field != null && isScalarObjectFieldValueType(field.valueType)) {
+  if (field !== null && typeof field !== 'undefined' && isScalarObjectFieldValueType(field.valueType)) {
     return emitPreparedObjectExpressionFieldValueExpression(field, expression, expression.object, context, dependencies)
   }
 
@@ -853,7 +885,12 @@ function emitPreparedDynamicObjectFieldValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`, context))
+  lines.push(
+    emitStatusCheck(
+      `inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`,
+      context
+    )
+  )
   appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
   return {
@@ -906,7 +943,9 @@ function emitDynamicRuntimeObjectFieldAssignmentLines(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)
+  )
   appendLines(lines, value.lines)
   lines.push(
     emitStatusCheck(
@@ -943,11 +982,7 @@ function isRuntimeValueReferenceExpression(expression: ObjectFieldNode, context:
   const name: string = path[0]
   const valueType = context.variables.get(name) ?? ''
 
-  if (
-    valueType !== 'unknown' &&
-    valueType !== 'object' &&
-    !isOpaqueRuntimeValueType(valueType)
-  ) {
+  if (valueType !== 'unknown' && valueType !== 'object' && !isOpaqueRuntimeValueType(valueType)) {
     return false
   }
 
@@ -987,7 +1022,7 @@ function isDynamicRuntimeObjectFieldValueExpression(
 ): boolean {
   const access = dynamicRuntimeObjectFieldAccess(expression)
 
-  if (access == null) {
+  if (access === null || typeof access === 'undefined') {
     return false
   }
 
@@ -1121,7 +1156,11 @@ function emitNestedObjectFunctionFieldVariableDeclarations(
     return []
   }
 
-  if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+  if (
+    field.declaredType !== null &&
+    typeof field.declaredType !== 'undefined' &&
+    seenTypes.includes(field.declaredType)
+  ) {
     return []
   }
 
@@ -1131,7 +1170,11 @@ function emitNestedObjectFunctionFieldVariableDeclarations(
     nestedSeenTypes.push(seenType)
   }
 
-  if (field.declaredType != null && !nestedSeenTypes.includes(field.declaredType)) {
+  if (
+    field.declaredType !== null &&
+    typeof field.declaredType !== 'undefined' &&
+    !nestedSeenTypes.includes(field.declaredType)
+  ) {
     nestedSeenTypes.push(field.declaredType)
   }
 
@@ -1155,7 +1198,7 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
 ): string[] {
   const lines: string[] = []
 
-  if (shape == null || shape.fields == null) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return lines
   }
 
@@ -1164,21 +1207,29 @@ function emitObjectShapeFunctionFieldVariableDeclarations(
   for (const field of fields) {
     if (field.valueType === 'function') {
       if (isSupportedObjectFunctionField(field)) {
-        appendLines(lines, emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies, seenTypes))
+        appendLines(
+          lines,
+          emitObjectShapeFunctionFieldVariableDeclaration(objectName, field, source, context, dependencies, seenTypes)
+        )
       }
     } else if (field.valueType === 'object') {
-      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+      if (
+        field.declaredType !== null &&
+        typeof field.declaredType !== 'undefined' &&
+        seenTypes.includes(field.declaredType)
+      ) {
         continue
       }
 
       let pushedType = false
 
-      if (field.declaredType != null) {
+      if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
         seenTypes.push(field.declaredType)
         pushedType = true
       }
 
-      appendLines(lines,
+      appendLines(
+        lines,
         emitObjectShapeFunctionFieldVariableDeclarations(
           `${objectName}_${field.name}`,
           field.shape,
@@ -1213,7 +1264,7 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
     return emitRuntimeObjectShapeFunctionFieldVariableDeclaration(name, field, source, value, context, dependencies)
   }
 
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return [
       `${dependencies.emitFunctionPointerVariable(
         name,
@@ -1227,7 +1278,7 @@ function emitObjectShapeFunctionFieldVariableDeclaration(
     ]
   }
 
-  if (source.pathName != null) {
+  if (source.pathName !== null && typeof source.pathName !== 'undefined') {
     return [
       `${dependencies.emitFunctionPointerVariableWithCInitializer(
         name,
@@ -1280,11 +1331,11 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
 ): string[] {
   registerOwnedValue(context, name)
 
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return dependencies.emitRuntimeCallbackValueInto(value, field.functionType, name, context)
   }
 
-  if (source.pathName != null) {
+  if (source.pathName !== null && typeof source.pathName !== 'undefined') {
     const sourceName = emitCObjectFunctionFieldName(source.pathName, field.name)
     const lines: string[] = []
 
@@ -1333,7 +1384,7 @@ export function registerObjectShape(
   name: string,
   shape: CObjectShape | null | undefined
 ): void {
-  if (shape == null) {
+  if (shape === null || typeof shape === 'undefined') {
     return
   }
 
@@ -1343,7 +1394,7 @@ export function registerObjectShape(
 
   const fields = shape.fields
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return
   }
 
@@ -1385,10 +1436,20 @@ export function emitObjectVariableDeclaration(
     const field = fields[index]
     const property = findObjectProperty(properties, field.name)
 
-    if (property != null) {
+    if (property !== null && typeof property !== 'undefined') {
       if (field.valueType === 'function') {
         if (isSupportedObjectFunctionField(field)) {
-          appendLines(lines, emitObjectFunctionFieldVariableDeclaration(statement.name, field, property, context, dependencies, seenTypes))
+          appendLines(
+            lines,
+            emitObjectFunctionFieldVariableDeclaration(
+              statement.name,
+              field,
+              property,
+              context,
+              dependencies,
+              seenTypes
+            )
+          )
         }
 
         continue
@@ -1397,7 +1458,17 @@ export function emitObjectVariableDeclaration(
       const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
       appendLines(lines, value.lines)
       lines.push(emitStatusCheck(`inox_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
-      appendLines(lines, emitNestedObjectFunctionFieldVariableDeclarations(statement.name, field, property, context, dependencies, seenTypes))
+      appendLines(
+        lines,
+        emitNestedObjectFunctionFieldVariableDeclarations(
+          statement.name,
+          field,
+          property,
+          context,
+          dependencies,
+          seenTypes
+        )
+      )
     } else {
       if (field.optional !== true) {
         context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
@@ -1419,7 +1490,7 @@ function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
 function objectVariableDeclaredTypes(statement: AnyNode): string[] {
   const seenTypes: string[] = []
 
-  if (statement.declaredType != null) {
+  if (statement.declaredType !== null && typeof statement.declaredType !== 'undefined') {
     seenTypes.push(statement.declaredType)
   }
 
@@ -1433,7 +1504,12 @@ function objectVariableShapeFields(
 ): CObjectShapeField[] {
   const fields: CObjectShapeField[] = []
 
-  if (statement.shape != null && statement.shape.fields != null) {
+  if (
+    statement.shape !== null &&
+    typeof statement.shape !== 'undefined' &&
+    statement.shape.fields !== null &&
+    typeof statement.shape.fields !== 'undefined'
+  ) {
     const shapeFields: CObjectShapeField[] = statement.shape.fields
 
     for (const field of shapeFields) {
@@ -1456,18 +1532,23 @@ function objectVariableShapeFields(
     let shape = property.value.shape
     let functionType = dependencies.resolveFunctionValueType(property.value, context)
 
-    if (statement.shape != null && statement.shape.dynamicField != null) {
+    if (
+      statement.shape !== null &&
+      typeof statement.shape !== 'undefined' &&
+      statement.shape.dynamicField !== null &&
+      typeof statement.shape.dynamicField !== 'undefined'
+    ) {
       const dynamicField = statement.shape.dynamicField
 
-      if (dynamicField.valueType != null) {
+      if (dynamicField.valueType !== null && typeof dynamicField.valueType !== 'undefined') {
         valueType = dynamicField.valueType
       }
 
-      if (dynamicField.shape != null) {
+      if (dynamicField.shape !== null && typeof dynamicField.shape !== 'undefined') {
         shape = dynamicField.shape
       }
 
-      if (dynamicField.functionType != null) {
+      if (dynamicField.functionType !== null && typeof dynamicField.functionType !== 'undefined') {
         functionType = dynamicField.functionType
       }
     }

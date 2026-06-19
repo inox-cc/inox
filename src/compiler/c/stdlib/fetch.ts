@@ -56,7 +56,7 @@ function appendLines(target: string[], values: string[]): void {
 function preparedCallOut(options: PreparedCallOptions, context: FetchFunctionContext, prefix: string): string {
   const out = options.out
 
-  if (out != null) {
+  if (out !== null && typeof out !== 'undefined') {
     return out
   }
 
@@ -64,7 +64,7 @@ function preparedCallOut(options: PreparedCallOptions, context: FetchFunctionCon
 }
 
 function resolveFetchPromiseValueType(expression: AnyNode, method: string): string {
-  if (expression.promiseValueType != null) {
+  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
     return expression.promiseValueType
   }
 
@@ -80,11 +80,11 @@ function emptyStringBytesOperand(): PreparedStringBytesOperand {
 }
 
 export function cFetchRuntimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  if (expression.fetchRuntimeMethod == null) {
+  if (expression.fetchRuntimeMethod === null || typeof expression.fetchRuntimeMethod === 'undefined') {
     return null
   }
 
@@ -94,7 +94,12 @@ export function cFetchRuntimeExpressionMethod(expression: AnyNode | null | undef
 export function isAsyncFetchRuntimeCallExpression(expression: AnyNode | null | undefined): boolean {
   const method = cFetchRuntimeExpressionMethod(expression)
 
-  return expression != null && expression.valueType === 'promise' && isAsyncFetchRuntimeMethod(method)
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.valueType === 'promise' &&
+    isAsyncFetchRuntimeMethod(method)
+  )
 }
 
 export function emitFetchHeadersBooleanVariableDeclaration(
@@ -106,7 +111,7 @@ export function emitFetchHeadersBooleanVariableDeclaration(
     out: statement.name
   })
 
-  if (fetchHeadersCall != null) {
+  if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined') {
     if (statement.valueType !== 'boolean') {
       return null
     }
@@ -127,8 +132,8 @@ export function emitPreparedFetchCallExpression(
 ): PreparedExpression | null {
   const method = cFetchRuntimeExpressionMethod(expression)
 
-  if (method != null) {
-    if (expression == null) {
+  if (method !== null && typeof method !== 'undefined') {
+    if (expression === null || typeof expression === 'undefined') {
       return null
     }
 
@@ -223,7 +228,10 @@ export function emitPreparedFetchHeadersCallExpression(
       const out = preparedCallOut(options, context, 'inox_fetch_header_has')
       lines.push(`int ${out} = 0;`)
       lines.push(
-        emitStatusCheck(`inox_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`, context)
+        emitStatusCheck(
+          `inox_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
+          context
+        )
       )
 
       return {
@@ -265,7 +273,7 @@ export function emitPreparedFetchInitOperand(
 ): PreparedExpression {
   const init = expression.args[1]
 
-  if (init == null || init.type !== 'ObjectLiteral') {
+  if (init === null || typeof init === 'undefined' || init.type !== 'ObjectLiteral') {
     return {
       lines: [],
       expression: '0'
@@ -285,25 +293,30 @@ export function emitPreparedFetchInitOperand(
   let headersExpression = '0'
   let headerCount = '0'
 
-  if (methodValue != null) {
+  if (methodValue !== null && typeof methodValue !== 'undefined') {
     method = dependencies.emitPreparedStringBytesOperand(methodValue, context, 'inox_fetch_method')
   }
 
-  if (redirectValue != null) {
+  if (redirectValue !== null && typeof redirectValue !== 'undefined') {
     redirect = dependencies.emitPreparedStringBytesOperand(redirectValue, context, 'inox_fetch_redirect')
   }
 
-  if (bodyValue != null) {
+  if (bodyValue !== null && typeof bodyValue !== 'undefined') {
     body = emitPreparedFetchBodyOperand(bodyValue, context, dependencies)
   }
 
-  if (signalValue != null) {
+  if (signalValue !== null && typeof signalValue !== 'undefined') {
     signal = emitPreparedFetchSignalOperand(signalValue, context, dependencies)
   }
 
   appendLines(lines, method.lines)
 
-  if (headersValue != null && headersValue.type === 'ObjectLiteral' && headersValue.properties.length > 0) {
+  if (
+    headersValue !== null &&
+    typeof headersValue !== 'undefined' &&
+    headersValue.type === 'ObjectLiteral' &&
+    headersValue.properties.length > 0
+  ) {
     const headersName = nextCName(context, 'inox_fetch_headers')
     const headerInitializers: string[] = []
 
@@ -366,7 +379,10 @@ export function emitPreparedFetchSignalOperand(
     registerOwnedValue(context, signal)
     appendLines(lines, controller.lines)
     lines.push(
-      emitRuntimeTypeCheck(`${controller.expression}.tag != INOX_TAG_OBJECT || ${controller.expression}.as.ref == 0`, context)
+      emitRuntimeTypeCheck(
+        `${controller.expression}.tag != INOX_TAG_OBJECT || ${controller.expression}.as.ref == 0`,
+        context
+      )
     )
     appendLines(lines, emitPrepareOwnedValueWrite(signal))
     lines.push(emitStatusCheck(`inox_fetch_abort_controller_signal(${controller.expression}, &${signal})`, context))
@@ -381,7 +397,9 @@ export function emitPreparedFetchSignalOperand(
   const lines: string[] = []
 
   appendLines(lines, signal.lines)
-  lines.push(emitRuntimeTypeCheck(`${signal.expression}.tag != INOX_TAG_OBJECT || ${signal.expression}.as.ref == 0`, context))
+  lines.push(
+    emitRuntimeTypeCheck(`${signal.expression}.tag != INOX_TAG_OBJECT || ${signal.expression}.as.ref == 0`, context)
+  )
 
   return {
     lines,

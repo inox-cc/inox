@@ -27,7 +27,7 @@ import type {
 } from '../types.ts'
 import type { AnyNode, IrProgram } from '../../types.ts'
 import type { CPreparedExpression as PreparedExpression } from '../types.ts'
-
+import { isPresent } from '../../nullish.ts'
 
 type CallbackNode = AnyNode
 type CallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
@@ -36,10 +36,13 @@ type CallbackFunctionParamMap = Map<string, CFunctionParam[]>
 type CallbackFunctionTypeMap = Map<string, CFunctionType>
 type CallbackMutableDeclarationSet = Set<AnyNode | null | undefined>
 type CallbackObjectShapeMap = Map<string, CObjectShapeField[]>
-type CallbackPromiseConstructorHandlerMap = Map<string, {
-  kind: 'reject' | 'resolve'
-  promise: string
-}>
+type CallbackPromiseConstructorHandlerMap = Map<
+  string,
+  {
+    kind: 'reject' | 'resolve'
+    promise: string
+  }
+>
 type CallbackStringMap = Map<string, string>
 type CallbackStringSet = Set<string>
 type CallbackWrapperMap = Map<string, CCallbackWrapper>
@@ -82,7 +85,7 @@ type RuntimeFunctionArgumentContext = {
 }
 
 function callbackBooleanValueIsTrue(value: boolean | null | undefined): boolean {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return false
   }
 
@@ -183,7 +186,7 @@ function callbackTopLevelNodeEntryAt(values: CallbackTopLevelNodeEntry[], index:
 }
 
 function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string | null | undefined): boolean {
-  if (declaredType == null) {
+  if (declaredType === null || typeof declaredType === 'undefined') {
     return false
   }
 
@@ -201,7 +204,11 @@ function seenTypesIncludeDeclaredType(seenTypes: string[], declaredType: string 
 }
 
 function pushSeenDeclaredType(seenTypes: string[], declaredType: string | null | undefined): number {
-  if (declaredType == null || seenTypesIncludeDeclaredType(seenTypes, declaredType)) {
+  if (
+    declaredType === null ||
+    typeof declaredType === 'undefined' ||
+    seenTypesIncludeDeclaredType(seenTypes, declaredType)
+  ) {
     return 0
   }
 
@@ -290,11 +297,17 @@ function objectShapeDeclaredType(
   declaredType: string | null | undefined,
   shape: CObjectShape | null | undefined
 ): string | null {
-  if (declaredType != null) {
+  if (declaredType !== null && typeof declaredType !== 'undefined') {
     return declaredType
   }
 
-  if (shape != null && valueType != null && !isBuiltinObjectShapeValueType(valueType)) {
+  if (
+    shape !== null &&
+    typeof shape !== 'undefined' &&
+    valueType !== null &&
+    typeof valueType !== 'undefined' &&
+    !isBuiltinObjectShapeValueType(valueType)
+  ) {
     return valueType
   }
 
@@ -357,7 +370,7 @@ function objectShapeHasFunctionField(
   seen: CObjectShape[],
   seenTypes: string[]
 ): boolean {
-  if (shape == null || shape.fields == null) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return false
   }
 
@@ -405,7 +418,7 @@ function isSupportedPlainFunctionPointerShape(
   seen: CObjectShape[],
   seenTypes: string[]
 ): boolean {
-  if (shape == null || shape.fields == null) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return true
   }
 
@@ -465,12 +478,7 @@ function isManagedRuntimeCallbackParamValueType(valueType: string): boolean {
 }
 
 function isSupportedRuntimeCallbackParamValueType(valueType: string): boolean {
-  return (
-    valueType === 'number' ||
-    valueType === 'boolean' ||
-    valueType === 'string' ||
-    valueType === 'object'
-  )
+  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'object'
 }
 
 function externalEventLoopNodeUses(node: AnyNode, externalNames: Set<string>): boolean {
@@ -484,8 +492,11 @@ function externalEventLoopNodeUses(node: AnyNode, externalNames: Set<string>): b
   return state.found
 }
 
-function visitExternalEventLoopNode(value: AnyNode | AnyNode[] | null | undefined, state: ExternalEventLoopScanState): void {
-  if (state.found || value == null) {
+function visitExternalEventLoopNode(
+  value: AnyNode | AnyNode[] | null | undefined,
+  state: ExternalEventLoopScanState
+): void {
+  if (state.found || value === null || typeof value === 'undefined') {
     return
   }
 
@@ -506,7 +517,7 @@ function visitExternalEventLoopNode(value: AnyNode | AnyNode[] | null | undefine
   if (value.type === 'CallExpression') {
     const calleeName = callbackReferenceNameOrNull(value.callee)
 
-    if (calleeName != null && state.externalNames.has(calleeName)) {
+    if (calleeName !== null && typeof calleeName !== 'undefined' && state.externalNames.has(calleeName)) {
       state.found = true
       return
     }
@@ -516,7 +527,7 @@ function visitExternalEventLoopNode(value: AnyNode | AnyNode[] | null | undefine
 }
 
 function callbackReferenceNameOrNull(value: AnyNode | null | undefined): string | null {
-  if (value == null || value.type !== 'Reference' || value.path.length !== 1) {
+  if (value === null || typeof value === 'undefined' || value.type !== 'Reference' || value.path.length !== 1) {
     return null
   }
 
@@ -544,7 +555,11 @@ function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLo
     return
   }
 
-  if (current.type === 'CallExpression' || current.type === 'NewExpression' || current.type === 'OptionalCallExpression') {
+  if (
+    current.type === 'CallExpression' ||
+    current.type === 'NewExpression' ||
+    current.type === 'OptionalCallExpression'
+  ) {
     visitExternalEventLoopNode(current.callee, state)
     visitExternalEventLoopNode(current.args, state)
     return
@@ -562,11 +577,7 @@ function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLo
     return
   }
 
-  if (
-    current.type === 'UnaryExpression' ||
-    current.type === 'UpdateExpression' ||
-    current.type === 'AwaitExpression'
-  ) {
+  if (current.type === 'UnaryExpression' || current.type === 'UpdateExpression' || current.type === 'AwaitExpression') {
     visitExternalEventLoopNode(current.argument, state)
     return
   }
@@ -653,7 +664,7 @@ function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLo
   if (current.type === 'TryStatement') {
     visitExternalEventLoopNode(current.block, state)
 
-    if (current.handler != null) {
+    if (current.handler !== null && typeof current.handler !== 'undefined') {
       visitExternalEventLoopNode(current.handler.body, state)
     }
 
@@ -672,7 +683,7 @@ const genericFunctionType: CFunctionType = {
 }
 
 export function normalizeFunctionType(functionType: CFunctionType | null | undefined): CFunctionType {
-  if (functionType != null) {
+  if (functionType !== null && typeof functionType !== 'undefined') {
     return functionType
   }
 
@@ -684,7 +695,7 @@ export function isPlainFunctionPointerType(
   seen: CObjectShape[] = [],
   seenTypes: string[] = []
 ): boolean {
-  if (functionType == null) {
+  if (functionType === null || typeof functionType === 'undefined') {
     return true
   }
 
@@ -704,7 +715,7 @@ export function isPlainFunctionPointerType(
 }
 
 export function isRuntimeFunctionType(functionType: CFunctionType | null | undefined): boolean {
-  if (functionType == null) {
+  if (functionType === null || typeof functionType === 'undefined') {
     return false
   }
 
@@ -729,7 +740,10 @@ export function isRuntimeFunctionType(functionType: CFunctionType | null | undef
   return hasManagedParam
 }
 
-export function isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean {
+export function isNullableFunctionType(
+  valueType: string | null | undefined,
+  nullable: boolean | null | undefined
+): boolean {
   return valueType === 'function' && callbackBooleanValueIsTrue(nullable)
 }
 
@@ -752,7 +766,7 @@ export function isSupportedRuntimeCallbackType(functionType: CFunctionType | nul
 }
 
 export function isSupportedRuntimeCallbackReturnType(returnType: string | null | undefined): boolean {
-  if (returnType == null) {
+  if (returnType === null || typeof returnType === 'undefined') {
     return false
   }
 
@@ -775,7 +789,7 @@ export function markRuntimeFunctionParam(
   functionType: CFunctionType | null | undefined,
   context: CallbackEmitContext
 ): void {
-  if (callee == null || callee.type !== 'Reference') {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference') {
     return
   }
 
@@ -800,7 +814,7 @@ export function resolveFunctionParameterRuntimeType(
 ): CFunctionType | null {
   const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(functionName, index))
 
-  if (promoted != null) {
+  if (promoted !== null && typeof promoted !== 'undefined') {
     return promoted
   }
 
@@ -821,14 +835,14 @@ export function resolveRuntimeFunctionArgumentType(
   param: CFunctionParam | null | undefined,
   context: RuntimeFunctionArgumentContext
 ): CFunctionType | null {
-  if (param == null || param.valueType !== 'function') {
+  if (param === null || typeof param === 'undefined' || param.valueType !== 'function') {
     return null
   }
 
-  if (callee != null && callee.type === 'Reference' && callee.path.length === 1) {
+  if (callee !== null && typeof callee !== 'undefined' && callee.type === 'Reference' && callee.path.length === 1) {
     const promoted = context.runtimeFunctionParams.get(runtimeFunctionParamKey(callee.path[0], index))
 
-    if (promoted != null) {
+    if (promoted !== null && typeof promoted !== 'undefined') {
       return promoted
     }
   }
@@ -879,16 +893,18 @@ export function collectCallbackWrappers(
   for (let pendingIndex = 0; pendingIndex < pendingPlainFunctionArgs.length; pendingIndex = pendingIndex + 1) {
     const pending = pendingPlainFunctionArgs[pendingIndex]
     if (
-      resolveRuntimeFunctionArgumentType(
-        pending.callee,
-        pending.index,
-        {
-          name: '',
-          valueType: 'function',
-          functionType: pending.functionType
-        },
-        context
-      ) != null
+      isPresent(
+        resolveRuntimeFunctionArgumentType(
+          pending.callee,
+          pending.index,
+          {
+            name: '',
+            valueType: 'function',
+            functionType: pending.functionType
+          },
+          context
+        )
+      )
     ) {
       registerRuntimeCallbackExpression(pending.arg, pending.functionType, pending.scopes, wrappers, context, deps)
     } else {
@@ -921,13 +937,26 @@ function registerCallbackExpression(
   deps: CallbackLoweringDependencies
 ): void {
   const arrowNeedsEventLoop =
-    expression != null &&
+    expression !== null &&
+    typeof expression !== 'undefined' &&
     expression.type === 'ArrowFunctionExpression' &&
     functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions)
 
   if (isPlainFunctionPointerType(functionType)) {
-    if (expression != null && expression.type === 'ArrowFunctionExpression' && !arrowNeedsEventLoop) {
-      registerPlainArrowCallbackWrapper(expression, normalizeFunctionType(functionType), scopes, wrappers, context, deps)
+    if (
+      expression !== null &&
+      typeof expression !== 'undefined' &&
+      expression.type === 'ArrowFunctionExpression' &&
+      !arrowNeedsEventLoop
+    ) {
+      registerPlainArrowCallbackWrapper(
+        expression,
+        normalizeFunctionType(functionType),
+        scopes,
+        wrappers,
+        context,
+        deps
+      )
     }
 
     return
@@ -942,7 +971,7 @@ function registerCallbackExpression(
     return
   }
 
-  if (expression != null && expression.type === 'ArrowFunctionExpression') {
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'ArrowFunctionExpression') {
     registerArrowCallbackWrapper(expression, normalizeFunctionType(functionType), scopes, wrappers, context, deps)
     return
   }
@@ -964,7 +993,7 @@ function registerRuntimeCallbackExpression(
     return
   }
 
-  if (expression != null && expression.type === 'ArrowFunctionExpression') {
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'ArrowFunctionExpression') {
     registerArrowCallbackWrapper(expression, normalized, scopes, wrappers, context, deps)
     return
   }
@@ -980,7 +1009,7 @@ function registerPlainCallbackExpression(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  if (expression != null && expression.type === 'ArrowFunctionExpression') {
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'ArrowFunctionExpression') {
     registerPlainArrowCallbackWrapper(expression, normalizeFunctionType(functionType), scopes, wrappers, context, deps)
   }
 }
@@ -991,7 +1020,7 @@ function callbackExpressionHasCaptures(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): boolean {
-  if (expression == null || expression.type !== 'ArrowFunctionExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ArrowFunctionExpression') {
     return false
   }
 
@@ -1018,7 +1047,7 @@ function registerNamedCallbackWrapper(
   wrappers: CallbackWrapperMap,
   context: CallbackEmitContext
 ): void {
-  if (expression == null || expression.type !== 'Reference') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'Reference') {
     return
   }
 
@@ -1072,7 +1101,8 @@ function registerArrowCallbackWrapper(
     if (
       callbackBooleanValueIsTrue(capture.mutable) &&
       isSupportedRuntimeCallbackParamValueType(capture.valueType) &&
-      declaration != null
+      declaration !== null &&
+      typeof declaration !== 'undefined'
     ) {
       context.boxedMutableCaptureDeclarations.add(declaration)
     }
@@ -1104,7 +1134,7 @@ function registerPlainArrowCallbackWrapper(
 ): void {
   const existing = context.callbackArrowWrappers.get(expression)
 
-  if (existing != null) {
+  if (existing !== null && typeof existing !== 'undefined') {
     if (existing.kind === 'plain-arrow') {
       existing.functionType = mergeArrowCallbackFunctionTypes(
         existing.functionType,
@@ -1159,34 +1189,42 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
       refined.nullable = true
     }
 
-    if (expression.params != null && index < expression.params.length) {
+    if (expression.params !== null && typeof expression.params !== 'undefined' && index < expression.params.length) {
       const arrowParam = callbackNodeAt(expression.params, index)
 
-      if (arrowParam.name != null) {
+      if (arrowParam.name !== null && typeof arrowParam.name !== 'undefined') {
         refined.name = arrowParam.name
       }
 
-      if (arrowParam.valueType != null && arrowParam.valueType !== 'unknown') {
+      if (
+        arrowParam.valueType !== null &&
+        typeof arrowParam.valueType !== 'undefined' &&
+        arrowParam.valueType !== 'unknown'
+      ) {
         refined.valueType = arrowParam.valueType
       }
 
-      if (arrowParam.arrayElementType != null) {
+      if (arrowParam.arrayElementType !== null && typeof arrowParam.arrayElementType !== 'undefined') {
         refined.arrayElementType = arrowParam.arrayElementType
       }
 
-      if (arrowParam.declaredType != null && arrowParam.declaredType !== 'unknown') {
+      if (
+        arrowParam.declaredType !== null &&
+        typeof arrowParam.declaredType !== 'undefined' &&
+        arrowParam.declaredType !== 'unknown'
+      ) {
         refined.declaredType = arrowParam.declaredType
       }
 
-      if (arrowParam.functionType != null) {
+      if (arrowParam.functionType !== null && typeof arrowParam.functionType !== 'undefined') {
         refined.functionType = arrowParam.functionType
       }
 
-      if (arrowParam.mapKeyType != null) {
+      if (arrowParam.mapKeyType !== null && typeof arrowParam.mapKeyType !== 'undefined') {
         refined.mapKeyType = arrowParam.mapKeyType
       }
 
-      if (arrowParam.mapValueType != null) {
+      if (arrowParam.mapValueType !== null && typeof arrowParam.mapValueType !== 'undefined') {
         refined.mapValueType = arrowParam.mapValueType
       }
 
@@ -1194,15 +1232,15 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
         refined.nullable = true
       }
 
-      if (arrowParam.promiseValueType != null) {
+      if (arrowParam.promiseValueType !== null && typeof arrowParam.promiseValueType !== 'undefined') {
         refined.promiseValueType = arrowParam.promiseValueType
       }
 
-      if (arrowParam.setElementType != null) {
+      if (arrowParam.setElementType !== null && typeof arrowParam.setElementType !== 'undefined') {
         refined.setElementType = arrowParam.setElementType
       }
 
-      if (arrowParam.shape != null) {
+      if (arrowParam.shape !== null && typeof arrowParam.shape !== 'undefined') {
         refined.shape = arrowParam.shape
       }
     }
@@ -1227,19 +1265,23 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
     result.returnNullable = true
   }
 
-  if (expression.returnType != null && expression.returnType !== 'unknown') {
+  if (
+    expression.returnType !== null &&
+    typeof expression.returnType !== 'undefined' &&
+    expression.returnType !== 'unknown'
+  ) {
     result.returnType = expression.returnType
   }
 
-  if (expression.returnArrayElementType != null) {
+  if (expression.returnArrayElementType !== null && typeof expression.returnArrayElementType !== 'undefined') {
     result.returnArrayElementType = expression.returnArrayElementType
   }
 
-  if (expression.returnMapKeyType != null) {
+  if (expression.returnMapKeyType !== null && typeof expression.returnMapKeyType !== 'undefined') {
     result.returnMapKeyType = expression.returnMapKeyType
   }
 
-  if (expression.returnMapValueType != null) {
+  if (expression.returnMapValueType !== null && typeof expression.returnMapValueType !== 'undefined') {
     result.returnMapValueType = expression.returnMapValueType
   }
 
@@ -1247,15 +1289,15 @@ function refineArrowCallbackFunctionType(expression: AnyNode, functionType: CFun
     result.returnNullable = true
   }
 
-  if (expression.returnPromiseValueType != null) {
+  if (expression.returnPromiseValueType !== null && typeof expression.returnPromiseValueType !== 'undefined') {
     result.returnPromiseValueType = expression.returnPromiseValueType
   }
 
-  if (expression.returnSetElementType != null) {
+  if (expression.returnSetElementType !== null && typeof expression.returnSetElementType !== 'undefined') {
     result.returnSetElementType = expression.returnSetElementType
   }
 
-  if (expression.returnShape != null) {
+  if (expression.returnShape !== null && typeof expression.returnShape !== 'undefined') {
     result.returnShape = expression.returnShape
   }
 
@@ -1270,11 +1312,24 @@ function mergeArrowCallbackFunctionTypes(left: CFunctionType, right: CFunctionTy
     const leftParam = left.params[index] ?? null
     const rightParam = right.params[index] ?? null
 
-    if (leftParam == null && rightParam != null) {
+    if (
+      (leftParam === null || typeof leftParam === 'undefined') &&
+      rightParam !== null &&
+      typeof rightParam !== 'undefined'
+    ) {
       params.push(cloneCallbackFunctionParam(rightParam))
-    } else if (rightParam == null && leftParam != null) {
+    } else if (
+      (rightParam === null || typeof rightParam === 'undefined') &&
+      leftParam !== null &&
+      typeof leftParam !== 'undefined'
+    ) {
       params.push(cloneCallbackFunctionParam(leftParam))
-    } else if (leftParam != null && rightParam != null) {
+    } else if (
+      leftParam !== null &&
+      typeof leftParam !== 'undefined' &&
+      rightParam !== null &&
+      typeof rightParam !== 'undefined'
+    ) {
       params.push(mergeCallbackFunctionParam(leftParam, rightParam))
     }
   }
@@ -1314,15 +1369,15 @@ function mergeCallbackFunctionParam(left: CFunctionParam, right: CFunctionParam)
   result.setElementType = preferredCallbackMetadata(left.setElementType, right.setElementType)
   result.shape = preferredCallbackShape(left.shape, right.shape)
 
-  if (left.functionTypeOwnership != null) {
+  if (left.functionTypeOwnership !== null && typeof left.functionTypeOwnership !== 'undefined') {
     result.functionTypeOwnership = left.functionTypeOwnership
-  } else if (right.functionTypeOwnership != null) {
+  } else if (right.functionTypeOwnership !== null && typeof right.functionTypeOwnership !== 'undefined') {
     result.functionTypeOwnership = right.functionTypeOwnership
   }
 
-  if (left.defaultValue != null) {
+  if (left.defaultValue !== null && typeof left.defaultValue !== 'undefined') {
     result.defaultValue = left.defaultValue
-  } else if (right.defaultValue != null) {
+  } else if (right.defaultValue !== null && typeof right.defaultValue !== 'undefined') {
     result.defaultValue = right.defaultValue
   }
 
@@ -1353,7 +1408,7 @@ function cloneCallbackFunctionParam(param: CFunctionParam): CFunctionParam {
   result.setElementType = param.setElementType
   result.shape = param.shape
 
-  if (param.functionTypeOwnership != null) {
+  if (param.functionTypeOwnership !== null && typeof param.functionTypeOwnership !== 'undefined') {
     result.functionTypeOwnership = param.functionTypeOwnership
   }
 
@@ -1372,11 +1427,11 @@ function preferredCallbackFunctionType(
   left: CFunctionType | null | undefined,
   right: CFunctionType | null | undefined
 ): CFunctionType | null | undefined {
-  if (left == null) {
+  if (left === null || typeof left === 'undefined') {
     return right
   }
 
-  if (right == null) {
+  if (right === null || typeof right === 'undefined') {
     return left
   }
 
@@ -1387,11 +1442,23 @@ function preferredCallbackShape(
   left: CObjectShape | null | undefined,
   right: CObjectShape | null | undefined
 ): CObjectShape | null | undefined {
-  if (left == null || left.fields == null || left.fields.length === 0) {
+  if (
+    left === null ||
+    typeof left === 'undefined' ||
+    left.fields === null ||
+    typeof left.fields === 'undefined' ||
+    left.fields.length === 0
+  ) {
     return right
   }
 
-  if (right == null || right.fields == null || right.fields.length === 0) {
+  if (
+    right === null ||
+    typeof right === 'undefined' ||
+    right.fields === null ||
+    typeof right.fields === 'undefined' ||
+    right.fields.length === 0
+  ) {
     return left
   }
 
@@ -1422,7 +1489,7 @@ function preferredCallbackMetadata(
   left: string | null | undefined,
   right: string | null | undefined
 ): string | null | undefined {
-  if (left == null || left === 'unknown' || left === 'object') {
+  if (left === null || typeof left === 'undefined' || left === 'unknown' || left === 'object') {
     return right
   }
 
@@ -1432,7 +1499,7 @@ function preferredCallbackMetadata(
 function capturesAreModuleValues(captures: CRuntimeArrowCapture[], context: CallbackEmitContext): boolean {
   const moduleValueNames = context.moduleValueNames
 
-  if (moduleValueNames == null) {
+  if (moduleValueNames === null || typeof moduleValueNames === 'undefined') {
     return false
   }
 
@@ -1472,7 +1539,7 @@ function lookupCallbackBinding(name: string, scopes: CallbackScope[]): CallbackS
   for (let index = scopes.length - 1; index >= 0; index = index - 1) {
     const entry = scopes[index].get(name)
 
-    if (entry != null) {
+    if (entry !== null && typeof entry !== 'undefined') {
       return entry
     }
   }
@@ -1533,20 +1600,25 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
     return false
   }
 
-  if (statement.init != null && statement.init.type === 'StringLiteral') {
+  if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'StringLiteral') {
     return false
   }
 
-  if (statement.init != null && statement.init.type === 'TemplateLiteral' && !statement.init.raw.includes('${')) {
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.type === 'TemplateLiteral' &&
+    !statement.init.raw.includes('${')
+  ) {
     return false
   }
 
   const initName = callbackReferenceNameOrNull(statement.init)
 
-  if (initName != null) {
+  if (initName !== null && typeof initName !== 'undefined') {
     const binding = lookupCallbackBinding(initName, scopes)
 
-    if (binding != null && binding.runtimeManaged === true) {
+    if (binding !== null && typeof binding !== 'undefined' && binding.runtimeManaged === true) {
       return true
     }
 
@@ -1557,26 +1629,42 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
 }
 
 function inferCapturedExpressionValueType(expression: AnyNode | null | undefined, scopes: CallbackScope[]): string {
-  if (expression != null && expression.valueType != null && expression.valueType !== 'unknown') {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType !== 'unknown'
+  ) {
     return expression.valueType
   }
 
-  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'Reference' &&
+    expression.path.length === 1
+  ) {
     const binding = lookupCallbackBinding(expression.path[0], scopes)
 
-    if (binding != null) {
+    if (binding !== null && typeof binding !== 'undefined') {
       return binding.valueType
     }
 
     return 'unknown'
   }
 
-  if (expression != null && expression.type === 'MemberExpression') {
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'MemberExpression') {
     const object = inferCapturedExpressionInfo(expression.object, scopes)
     return objectShapeFieldValueType(object.shape, expression.property)
   }
 
-  if (expression != null && expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'IndexExpression' &&
+    expression.index.type === 'StringLiteral'
+  ) {
     const object = inferCapturedExpressionInfo(expression.object, scopes)
     return objectShapeFieldValueType(object.shape, expression.index.value)
   }
@@ -1584,11 +1672,19 @@ function inferCapturedExpressionValueType(expression: AnyNode | null | undefined
   return 'unknown'
 }
 
-function inferCapturedExpressionInfo(expression: AnyNode | null | undefined, scopes: CallbackScope[]): CallbackScopeBinding {
-  if (expression != null && expression.type === 'Reference' && expression.path.length === 1) {
+function inferCapturedExpressionInfo(
+  expression: AnyNode | null | undefined,
+  scopes: CallbackScope[]
+): CallbackScopeBinding {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'Reference' &&
+    expression.path.length === 1
+  ) {
     const entry = lookupCallbackBinding(expression.path[0], scopes)
 
-    if (entry != null) {
+    if (entry !== null && typeof entry !== 'undefined') {
       return entry
     }
   }
@@ -1601,13 +1697,13 @@ function inferCapturedExpressionInfo(expression: AnyNode | null | undefined, sco
 }
 
 function objectShapeFieldValueType(shape: CObjectShape | null | undefined, name: string): string {
-  if (shape == null) {
+  if (shape === null || typeof shape === 'undefined') {
     return 'unknown'
   }
 
   const fields = shape.fields
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return 'unknown'
   }
 
@@ -1630,7 +1726,7 @@ function visitCallbackStatement(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return
   }
 
@@ -1647,19 +1743,28 @@ function visitCallbackStatement(
 
     let objectShape = statement.shape
 
-    if ((objectShape == null || objectShape.fields == null) && context.moduleObjectShapes != null) {
+    if (
+      (objectShape === null ||
+        typeof objectShape === 'undefined' ||
+        objectShape.fields === null ||
+        typeof objectShape.fields === 'undefined') &&
+      context.moduleObjectShapes !== null &&
+      typeof context.moduleObjectShapes !== 'undefined'
+    ) {
       const moduleFields = context.moduleObjectShapes.get(statement.name)
 
-      if (moduleFields != null) {
+      if (moduleFields !== null && typeof moduleFields !== 'undefined') {
         objectShape = { fields: moduleFields }
       }
     }
 
     if (
       statement.valueType === 'object' &&
-      statement.init != null &&
+      statement.init !== null &&
+      typeof statement.init !== 'undefined' &&
       statement.init.type === 'ObjectLiteral' &&
-      objectShape != null
+      objectShape !== null &&
+      typeof objectShape !== 'undefined'
     ) {
       const seenTypes: string[] = []
       const declaredType = objectShapeDeclaredType(statement.valueType, statement.declaredType, objectShape)
@@ -1713,7 +1818,11 @@ function visitCallbackStatement(
     const scope: CallbackScope = new Map()
     const loopScopes = appendCallbackScope(scopes, scope)
 
-    if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+    if (
+      statement.init !== null &&
+      typeof statement.init !== 'undefined' &&
+      statement.init.type === 'VariableDeclaration'
+    ) {
       visitCallbackStatement(statement.init, loopScopes, wrappers, pendingPlainFunctionArgs, context, deps)
     } else {
       visitCallbackExpression(statement.init, loopScopes, wrappers, pendingPlainFunctionArgs, context, deps)
@@ -1766,7 +1875,7 @@ function visitCallbackStatement(
   if (statement.type === 'TryStatement') {
     visitCallbackStatement(statement.block, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
 
-    if (statement.handler != null) {
+    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
       visitCallbackStatement(statement.handler.body, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
 
@@ -1782,7 +1891,7 @@ function visitCallbackExpression(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return
   }
 
@@ -1794,41 +1903,59 @@ function visitCallbackExpression(
   if (expression.type === 'AssignmentExpression') {
     const targetInfo = callbackAssignmentTargetInfo(expression.target, scopes)
 
-    if (targetInfo != null && isNullableFunctionType(targetInfo.valueType, targetInfo.nullable)) {
+    if (
+      targetInfo !== null &&
+      typeof targetInfo !== 'undefined' &&
+      isNullableFunctionType(targetInfo.valueType, targetInfo.nullable)
+    ) {
       registerRuntimeCallbackExpression(expression.value, targetInfo.functionType, scopes, wrappers, context, deps)
-    } else if (targetInfo != null && isRuntimeFunctionType(targetInfo.functionType)) {
+    } else if (
+      targetInfo !== null &&
+      typeof targetInfo !== 'undefined' &&
+      isRuntimeFunctionType(targetInfo.functionType)
+    ) {
       registerRuntimeCallbackExpression(expression.value, targetInfo.functionType, scopes, wrappers, context, deps)
     }
 
     let objectShape: CObjectShape | null | undefined = null
 
-    if (targetInfo != null) {
+    if (targetInfo !== null && typeof targetInfo !== 'undefined') {
       objectShape = targetInfo.shape
     }
 
-    if ((objectShape == null || objectShape.fields == null) && context.moduleObjectShapes != null) {
+    if (
+      (objectShape === null ||
+        typeof objectShape === 'undefined' ||
+        objectShape.fields === null ||
+        typeof objectShape.fields === 'undefined') &&
+      context.moduleObjectShapes !== null &&
+      typeof context.moduleObjectShapes !== 'undefined'
+    ) {
       const targetName = callbackReferenceNameOrNull(expression.target)
 
-      if (targetName != null) {
+      if (targetName !== null && typeof targetName !== 'undefined') {
         const moduleFields = context.moduleObjectShapes.get(targetName)
 
-        if (moduleFields != null) {
+        if (moduleFields !== null && typeof moduleFields !== 'undefined') {
           objectShape = { fields: moduleFields }
         }
       }
     }
 
     if (
-      targetInfo != null &&
+      targetInfo !== null &&
+      typeof targetInfo !== 'undefined' &&
       targetInfo.valueType === 'object' &&
-      expression.value != null &&
+      expression.value !== null &&
+      typeof expression.value !== 'undefined' &&
       expression.value.type === 'ObjectLiteral' &&
-      objectShape != null
+      objectShape !== null &&
+      typeof objectShape !== 'undefined'
     ) {
       const seenTypes: string[] = []
       let declaredTypeName: string | null | undefined = null
 
-      if (targetInfo.declaration != null) {
+      if (targetInfo.declaration !== null && typeof targetInfo.declaration !== 'undefined') {
         declaredTypeName = targetInfo.declaration.declaredType
       }
 
@@ -1899,7 +2026,7 @@ function visitCallbackExpression(
     for (let index = 0; index < expression.properties.length; index = index + 1) {
       const property = callbackNodeAt(expression.properties, index)
 
-      if (property.value.functionType != null) {
+      if (property.value.functionType !== null && typeof property.value.functionType !== 'undefined') {
         registerCallbackExpression(property.value, property.value.functionType, scopes, wrappers, context, deps)
       }
 
@@ -1931,15 +2058,15 @@ function visitCallbackCallExpression(
     const arg = expression.args[index]
     let param: CFunctionParam | null = null
 
-    if (params != null && index < params.length) {
+    if (params !== null && typeof params !== 'undefined' && index < params.length) {
       param = params[index]
     }
 
-    if (param != null && param.valueType === 'function') {
+    if (param !== null && typeof param !== 'undefined' && param.valueType === 'function') {
       visitCallbackFunctionArg(expression, arg, index, param, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
 
-    if (param != null && param.valueType === 'object') {
+    if (param !== null && typeof param !== 'undefined' && param.valueType === 'object') {
       visitCallbackObjectFunctionArg(arg, param, scopes, wrappers, context, deps)
     }
 
@@ -1959,7 +2086,7 @@ function visitCallbackObjectFunctionArg(
 ): void {
   const seenTypes: string[] = []
 
-  if (param.declaredType != null) {
+  if (param.declaredType !== null && typeof param.declaredType !== 'undefined') {
     seenTypes.push(param.declaredType)
   }
 
@@ -1977,7 +2104,7 @@ function visitCallbackObjectShapeFunctionArg(
 ): void {
   const fields = shape?.fields
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return
   }
 
@@ -1985,7 +2112,7 @@ function visitCallbackObjectShapeFunctionArg(
     if (field.valueType === 'function') {
       const value = callbackObjectLiteralPropertyValue(arg, field.name)
 
-      if (value != null) {
+      if (value !== null && typeof value !== 'undefined') {
         registerCallbackExpression(value, field.functionType, scopes, wrappers, context, deps)
       }
     } else if (field.valueType === 'object') {
@@ -2013,7 +2140,7 @@ function visitCallbackObjectShapeFunctionArg(
 }
 
 function callbackObjectLiteralPropertyValue(arg: AnyNode | null | undefined, name: string): AnyNode | null {
-  if (arg == null || arg.type !== 'ObjectLiteral') {
+  if (arg === null || typeof arg === 'undefined' || arg.type !== 'ObjectLiteral') {
     return null
   }
 
@@ -2057,7 +2184,10 @@ function visitCallbackFunctionArg(
 
   const argInfo = callbackArgumentInfo(arg, scopes)
 
-  if (callbackExpressionHasCaptures(arg, scopes, context, deps) || (argInfo != null && argInfo.runtimeCallback === true)) {
+  if (
+    callbackExpressionHasCaptures(arg, scopes, context, deps) ||
+    (argInfo !== null && typeof argInfo !== 'undefined' && argInfo.runtimeCallback === true)
+  ) {
     markRuntimeFunctionParam(expression.callee, index, param.functionType, context)
   }
 }
@@ -2070,8 +2200,11 @@ function callbackArgumentInfo(arg: AnyNode, scopes: CallbackScope[]): CallbackSc
   return null
 }
 
-function callbackAssignmentTargetInfo(target: AnyNode | null | undefined, scopes: CallbackScope[]): CallbackScopeBinding | null {
-  if (target != null && target.type === 'Reference' && target.path.length === 1) {
+function callbackAssignmentTargetInfo(
+  target: AnyNode | null | undefined,
+  scopes: CallbackScope[]
+): CallbackScopeBinding | null {
+  if (target !== null && typeof target !== 'undefined' && target.type === 'Reference' && target.path.length === 1) {
     return lookupCallbackBinding(target.path[0], scopes)
   }
 
@@ -2090,7 +2223,7 @@ function visitPromiseConstructorCallbackExpression(
 
   const executor = expression.args[0]
 
-  if (executor == null || executor.type !== 'ArrowFunctionExpression') {
+  if (executor === null || typeof executor === 'undefined' || executor.type !== 'ArrowFunctionExpression') {
     for (let index = 0; index < expression.args.length; index = index + 1) {
       const arg = callbackNodeAt(expression.args, index)
 
@@ -2226,7 +2359,7 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
   const name = reference.path[0]
 
   if (
-    lookupCallbackBinding(name, state.localScopes) != null ||
+    isPresent(lookupCallbackBinding(name, state.localScopes)) ||
     state.context.functionNames.has(name) ||
     isCJsGlobalRoot(name, state.context)
   ) {
@@ -2235,7 +2368,7 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
 
   const outer = lookupCallbackBinding(name, state.outerScopes)
 
-  if (outer != null && !state.captures.has(name)) {
+  if (outer !== null && typeof outer !== 'undefined' && !state.captures.has(name)) {
     state.captures.set(name, runtimeArrowCaptureFromBinding(name, outer))
   }
 }
@@ -2270,7 +2403,7 @@ function visitRuntimeArrowCaptureStatement(
   statement: AnyNode | null | undefined,
   state: RuntimeArrowCaptureScanState
 ): void {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return
   }
 
@@ -2321,7 +2454,11 @@ function visitRuntimeArrowCaptureStatement(
     const scope: CallbackScope = new Map()
     state.localScopes.push(scope)
 
-    if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+    if (
+      statement.init !== null &&
+      typeof statement.init !== 'undefined' &&
+      statement.init.type === 'VariableDeclaration'
+    ) {
       visitRuntimeArrowCaptureStatement(statement.init, state)
     } else {
       visitRuntimeArrowCaptureExpression(statement.init, state)
@@ -2374,10 +2511,10 @@ function visitRuntimeArrowCaptureStatement(
   if (statement.type === 'TryStatement') {
     visitRuntimeArrowCaptureStatement(statement.block, state)
 
-    if (statement.handler != null) {
+    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
       const catchScope: CallbackScope = new Map()
 
-      if (statement.handler.param != null) {
+      if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
         declareCallbackBinding(catchScope, statement.handler.param, {
           name: statement.handler.param,
           valueType: 'string',
@@ -2398,7 +2535,7 @@ function visitRuntimeArrowCaptureExpression(
   node: AnyNode | null | undefined,
   state: RuntimeArrowCaptureScanState
 ): void {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return
   }
 
@@ -2478,14 +2615,17 @@ function visitRuntimeArrowCaptureExpression(
   }
 }
 
-function resolveStaticFunctionParams(callee: AnyNode | null | undefined, context: CallbackEmitContext): CFunctionParam[] | null {
-  if (callee == null || callee.type !== 'Reference' || callee.path.length !== 1) {
+function resolveStaticFunctionParams(
+  callee: AnyNode | null | undefined,
+  context: CallbackEmitContext
+): CFunctionParam[] | null {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'Reference' || callee.path.length !== 1) {
     return null
   }
 
   const params = context.functionParams.get(callee.path[0])
 
-  if (params != null) {
+  if (params !== null && typeof params !== 'undefined') {
     return params
   }
 
@@ -2511,7 +2651,7 @@ export function runtimeCallbackWrapperFor(
 ): CCallbackWrapper | null {
   const wrapper = context.callbackWrappers.get(runtimeCallbackWrapperKey(target, functionType))
 
-  if (wrapper != null) {
+  if (wrapper !== null && typeof wrapper !== 'undefined') {
     return wrapper
   }
 
@@ -2548,7 +2688,7 @@ function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): stri
 
     emitted.push(`${emitFunctionPointerParamCType(param)} ${cName}`)
 
-    if (param.declaredType != null) {
+    if (param.declaredType !== null && typeof param.declaredType !== 'undefined') {
       seenTypes.push(param.declaredType)
     }
 
@@ -2567,7 +2707,7 @@ function pushPlainArrowObjectFunctionFieldParams(
 ): void {
   const fields = shape?.fields
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return
   }
 
@@ -2672,7 +2812,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
 function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index: number): string {
   const param = wrapper.expression.params[index] ?? null
 
-  if (param != null) {
+  if (param !== null && typeof param !== 'undefined') {
     return param.name
   }
 
@@ -2757,7 +2897,7 @@ export function emitRuntimeCallbackWrapperDeclaration(
 
   let functionName = context.functionNames.get(wrapper.target)
 
-  if (functionName == null) {
+  if (functionName === null || typeof functionName === 'undefined') {
     functionName = emitCFunctionName(wrapper.target)
   }
 
@@ -2799,14 +2939,14 @@ function emitNamedRuntimeCallbackTargetArgs(
   for (const name of targetNames) {
     const runtimeArg = runtimeCallbackArgByName(name, runtimeArgs)
 
-    if (runtimeArg != null) {
+    if (runtimeArg !== null && typeof runtimeArg !== 'undefined') {
       callArgs.push(runtimeArg)
       continue
     }
 
     const moduleObjectFunctionField = emitRuntimeCallbackModuleObjectFieldArg(name, moduleObjectFunctionFields)
 
-    if (moduleObjectFunctionField != null) {
+    if (moduleObjectFunctionField !== null && typeof moduleObjectFunctionField !== 'undefined') {
       callArgs.push(moduleObjectFunctionField)
       continue
     }
@@ -2823,7 +2963,7 @@ function namedRuntimeCallbackTargetFunctionType(
 ): CFunctionType {
   const params = context.functionParams.get(wrapper.target)
 
-  if (params == null) {
+  if (params === null || typeof params === 'undefined') {
     return wrapper.functionType
   }
 
@@ -2877,14 +3017,14 @@ function collectCallbackModuleObjectFunctionFieldNames(context: CallbackEmitCont
   const names: Set<string> = new Set()
   const shapes = context.moduleObjectShapes
 
-  if (shapes == null) {
+  if (shapes === null || typeof shapes === 'undefined') {
     return names
   }
 
   for (const objectName of shapes.keys()) {
     const fields = shapes.get(objectName)
 
-    if (fields == null) {
+    if (fields === null || typeof fields === 'undefined') {
       continue
     }
 
@@ -2934,16 +3074,22 @@ function emitRuntimeCallbackModuleObjectFieldArg(name: string, moduleObjectFunct
   return null
 }
 
-export function isRuntimeArrowCallbackWrapperWithContext(
-  wrapper: CCallbackWrapper | null | undefined
-): boolean {
-  return wrapper != null && wrapper.kind === 'arrow' && hasRuntimeArrowCallbackContext(wrapper)
+export function isRuntimeArrowCallbackWrapperWithContext(wrapper: CCallbackWrapper | null | undefined): boolean {
+  return (
+    wrapper !== null &&
+    typeof wrapper !== 'undefined' &&
+    wrapper.kind === 'arrow' &&
+    hasRuntimeArrowCallbackContext(wrapper)
+  )
 }
 
-export function isPromiseChainCallbackWrapperWithContext(
-  wrapper: CPromiseChainWrapper | null | undefined
-): boolean {
-  return wrapper != null && wrapper.kind === 'promise-chain-arrow' && hasRuntimeArrowCallbackContext(wrapper)
+export function isPromiseChainCallbackWrapperWithContext(wrapper: CPromiseChainWrapper | null | undefined): boolean {
+  return (
+    wrapper !== null &&
+    typeof wrapper !== 'undefined' &&
+    wrapper.kind === 'promise-chain-arrow' &&
+    hasRuntimeArrowCallbackContext(wrapper)
+  )
 }
 
 export function hasRuntimeArrowCallbackContext(wrapper: CCallbackContextWrapper): boolean {
@@ -3011,7 +3157,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   context.cleanupEnabled = false
   context.statusReturn = true
   context.runtimeCallbackReturnType = wrapper.functionType.returnType
-  if (wrapper.functionType.returnShape != null) {
+  if (wrapper.functionType.returnShape !== null && typeof wrapper.functionType.returnShape !== 'undefined') {
     context.runtimeCallbackReturnShape = wrapper.functionType.returnShape
   } else {
     context.runtimeCallbackReturnShape = null
@@ -3122,7 +3268,7 @@ export function emitRuntimeArrowCallbackContextLocals(
       const promise = capture.name
       let kind: 'reject' | 'resolve' = 'resolve'
 
-      if (capture.promiseSettlementKind != null) {
+      if (capture.promiseSettlementKind !== null && typeof capture.promiseSettlementKind !== 'undefined') {
         kind = capture.promiseSettlementKind
       }
 
@@ -3226,7 +3372,7 @@ function emitRuntimeArrowCallbackParamPrelude(
 function runtimeArrowCallbackParamName(wrapper: CRuntimeArrowCallbackWrapper, index: number): string {
   const param = wrapper.expression.params[index] ?? null
 
-  if (param != null) {
+  if (param !== null && typeof param !== 'undefined') {
     return param.name
   }
 
@@ -3269,9 +3415,7 @@ export function emitRuntimeArrowCaptureField(capture: CRuntimeArrowCapture): str
 
 export function isRetainedRuntimeArrowCapture(capture: CRuntimeArrowCapture): boolean {
   return (
-    capture.runtimeManaged === true &&
-    isManagedRuntimeCallbackParamValueType(capture.valueType) &&
-    !capture.mutable
+    capture.runtimeManaged === true && isManagedRuntimeCallbackParamValueType(capture.valueType) && !capture.mutable
   )
 }
 
@@ -3293,7 +3437,7 @@ export function isSupportedMutableRuntimeArrowCapture(
 
   const declaration = capture.declaration
 
-  if (declaration == null) {
+  if (declaration === null || typeof declaration === 'undefined') {
     return false
   }
 
@@ -3304,7 +3448,7 @@ function emitRuntimeCallbackWrapperArgChecks(param: CFunctionParam, index: numbe
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
     const tag = cRuntimeValueTag(param.valueType)
 
-    if (tag != null) {
+    if (tag !== null && typeof tag !== 'undefined') {
       return [`if (args[${index}].tag != INOX_TAG_NULL && args[${index}].tag != ${tag}) return INOX_ERR_TYPE;`]
     }
   }
@@ -3345,7 +3489,7 @@ function emitRuntimeCallbackWrapperArg(param: CFunctionParam, index: number): st
 }
 
 export function emitFunctionPointerReturnType(functionType: CFunctionType | null | undefined): string {
-  if (functionType != null) {
+  if (functionType !== null && typeof functionType !== 'undefined') {
     return emitCType(functionType.returnType)
   }
 
@@ -3357,7 +3501,7 @@ export function emitFunctionPointerParams(
   seen: CObjectShape[] = [],
   seenTypes: string[] = []
 ): string {
-  if (functionType == null || functionType.params.length === 0) {
+  if (functionType === null || typeof functionType === 'undefined' || functionType.params.length === 0) {
     return 'void'
   }
 
@@ -3387,7 +3531,7 @@ export function emitFunctionPointerNamedParams(
   functionType: CFunctionType | null | undefined,
   seenTypes: string[] = []
 ): string {
-  if (functionType == null || functionType.params.length === 0) {
+  if (functionType === null || typeof functionType === 'undefined' || functionType.params.length === 0) {
     return 'void'
   }
 
@@ -3404,7 +3548,7 @@ export function collectFunctionPointerParamNames(
 ): string[] {
   const names: string[] = []
 
-  if (functionType == null) {
+  if (functionType === null || typeof functionType === 'undefined') {
     return names
   }
 
@@ -3413,11 +3557,7 @@ export function collectFunctionPointerParamNames(
   return names
 }
 
-function appendFunctionPointerNamedParams(
-  params: string[],
-  functionType: CFunctionType,
-  seenTypes: string[]
-): void {
+function appendFunctionPointerNamedParams(params: string[], functionType: CFunctionType, seenTypes: string[]): void {
   let index = 0
 
   for (const param of functionType.params) {
@@ -3439,11 +3579,7 @@ function appendFunctionPointerNamedParams(
   }
 }
 
-function appendFunctionPointerParamNames(
-  names: string[],
-  functionType: CFunctionType,
-  seenTypes: string[]
-): void {
+function appendFunctionPointerParamNames(names: string[], functionType: CFunctionType, seenTypes: string[]): void {
   let index = 0
 
   for (const param of functionType.params) {
@@ -3480,7 +3616,7 @@ function appendObjectShapeFunctionPointerParamDeclarations(
   seen: CObjectShape[],
   seenTypes: string[]
 ): void {
-  if (shape == null || shape.fields == null) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return
   }
 
@@ -3494,11 +3630,21 @@ function appendObjectShapeFunctionPointerParamDeclarations(
 
   for (const field of shape.fields) {
     if (field.valueType === 'function') {
-      if (!isPlainFunctionPointerType(field.functionType, seen, seenTypes) && !isRuntimeFunctionType(field.functionType)) {
+      if (
+        !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
+        !isRuntimeFunctionType(field.functionType)
+      ) {
         continue
       }
 
-      params.push(emitNamedFunctionPointerParam(emitCObjectFunctionFieldName(objectName, field.name), field.functionType, seen, seenTypes))
+      params.push(
+        emitNamedFunctionPointerParam(
+          emitCObjectFunctionFieldName(objectName, field.name),
+          field.functionType,
+          seen,
+          seenTypes
+        )
+      )
     } else if (field.valueType === 'object') {
       const declaredType = objectShapeDeclaredType(field.valueType, field.declaredType, field.shape)
 
@@ -3507,7 +3653,13 @@ function appendObjectShapeFunctionPointerParamDeclarations(
       }
 
       const pushedTypes = pushSeenDeclaredType(seenTypes, declaredType)
-      appendObjectShapeFunctionPointerParamDeclarations(params, `${objectName}_${field.name}`, field.shape, seen, seenTypes)
+      appendObjectShapeFunctionPointerParamDeclarations(
+        params,
+        `${objectName}_${field.name}`,
+        field.shape,
+        seen,
+        seenTypes
+      )
       popSeenDeclaredTypes(seenTypes, pushedTypes)
     }
   }
@@ -3522,7 +3674,7 @@ function appendObjectShapeFunctionPointerParamNames(
   seen: CObjectShape[],
   seenTypes: string[]
 ): void {
-  if (shape == null || shape.fields == null) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return
   }
 
@@ -3536,7 +3688,10 @@ function appendObjectShapeFunctionPointerParamNames(
 
   for (const field of shape.fields) {
     if (field.valueType === 'function') {
-      if (!isPlainFunctionPointerType(field.functionType, seen, seenTypes) && !isRuntimeFunctionType(field.functionType)) {
+      if (
+        !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
+        !isRuntimeFunctionType(field.functionType)
+      ) {
         continue
       }
 
@@ -3576,7 +3731,7 @@ function appendObjectShapeFunctionPointerParamTypes(
   seen: CObjectShape[],
   seenTypes: string[]
 ): void {
-  if (shape == null || shape.fields == null) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return
   }
 
@@ -3590,7 +3745,10 @@ function appendObjectShapeFunctionPointerParamTypes(
 
   for (const field of shape.fields) {
     if (field.valueType === 'function') {
-      if (!isPlainFunctionPointerType(field.functionType, seen, seenTypes) && !isRuntimeFunctionType(field.functionType)) {
+      if (
+        !isPlainFunctionPointerType(field.functionType, seen, seenTypes) &&
+        !isRuntimeFunctionType(field.functionType)
+      ) {
         continue
       }
 

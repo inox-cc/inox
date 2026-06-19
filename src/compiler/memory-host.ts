@@ -61,7 +61,7 @@ class MemoryCompilerHost {
   readFile(path: string): Promise<string> {
     const source = this.readFileSync(path)
 
-    if (source != null) {
+    if (source !== null && typeof source !== 'undefined') {
       return Promise.resolve(source)
     }
 
@@ -113,7 +113,7 @@ function memoryCompilerHostRoot(options: MemoryCompilerHostOptions): string {
   let root = '/'
   const configuredRoot = options.root
 
-  if (configuredRoot != null) {
+  if (configuredRoot !== null && typeof configuredRoot !== 'undefined') {
     root = configuredRoot
   }
 

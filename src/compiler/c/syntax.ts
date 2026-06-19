@@ -87,7 +87,7 @@ export function cUnsupportedVariableDeclarationCode(statement: AnyNode, valueTyp
   const declaration = statement as VariableDeclarationCodeNode
   const init = declaration.init
 
-  if (init != null && init.type === 'AwaitExpression') {
+  if (init !== null && typeof init !== 'undefined' && init.type === 'AwaitExpression') {
     return 'INOX_C_ASYNC'
   }
 
@@ -95,7 +95,7 @@ export function cUnsupportedVariableDeclarationCode(statement: AnyNode, valueTyp
 }
 
 export function containsAwaitExpression(node: SyntaxNode | SyntaxNode[] | null | undefined): boolean {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return false
   }
 
@@ -123,7 +123,7 @@ function containsAwaitExpressionList(nodes: SyntaxNode[]): boolean {
 }
 
 function containsAwaitChild(value: any): boolean {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return false
   }
 
@@ -167,7 +167,7 @@ function containsAwaitChildExpression(current: SyntaxNode): boolean {
 }
 
 export function isOptionalChainExpression(expression: AnyNode | null | undefined): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
@@ -179,5 +179,10 @@ export function isOptionalChainExpression(expression: AnyNode | null | undefined
 }
 
 export function isNullishCoalescingExpression(expression: AnyNode | null | undefined): boolean {
-  return expression != null && expression.type === 'BinaryExpression' && expression.operator === '??'
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'BinaryExpression' &&
+    expression.operator === '??'
+  )
 }

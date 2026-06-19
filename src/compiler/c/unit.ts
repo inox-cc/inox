@@ -70,17 +70,9 @@ import {
   emitDgramMessageHandlerHead
 } from './stdlib/dgram.ts'
 import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
-import {
-  collectHttpHandlers,
-  emitHttpHandlerDeclaration,
-  emitHttpHandlerHead
-} from './stdlib/http.ts'
+import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
 import type { HttpLoweringDependencies } from './stdlib/http.ts'
-import {
-  collectNetHandlers,
-  emitNetHandlerDeclaration,
-  emitNetHandlerHead
-} from './stdlib/net.ts'
+import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
 import type { CClassInfo, CClassMethod, CEmitOptions } from './types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
@@ -181,10 +173,7 @@ function unitStringAt(values: string[], index: number): string {
   return values[index]
 }
 
-function pushCUnitClassMethodFunctionDeclarations(
-  target: IrFunctionDeclaration[],
-  classes: AnyNode[]
-): void {
+function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[], classes: AnyNode[]): void {
   for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
     const classNode = unitNodeAt(classes, classIndex)
     const methods: AnyNode[] = classNode.methods
@@ -422,7 +411,7 @@ export function emitCUnit(
     lines.push('')
   }
 
-  if (baseContext.unhandledRejectionFlag != null) {
+  if (baseContext.unhandledRejectionFlag !== null && typeof baseContext.unhandledRejectionFlag !== 'undefined') {
     lines.push(`static int ${baseContext.unhandledRejectionFlag} = 0;`)
     lines.push('')
   }
@@ -492,16 +481,25 @@ export function emitCUnit(
 
   for (const wrapper of callbackWrappers.values()) {
     if (wrapper.kind === 'plain-arrow') {
-      pushUnitLines(lines, emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies))
+      pushUnitLines(
+        lines,
+        emitPlainArrowCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies)
+      )
     } else {
-      pushUnitLines(lines, emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies))
+      pushUnitLines(
+        lines,
+        emitRuntimeCallbackWrapperDeclaration(wrapper, baseContext, deps.callbackLoweringDependencies)
+      )
     }
 
     lines.push('')
   }
 
   for (const wrapper of promiseChainWrappers.values()) {
-    pushUnitLines(lines, emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext, deps.promiseChainLoweringDependencies))
+    pushUnitLines(
+      lines,
+      emitPromiseChainCallbackWrapperDeclaration(wrapper, baseContext, deps.promiseChainLoweringDependencies)
+    )
     lines.push('')
   }
 

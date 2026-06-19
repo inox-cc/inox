@@ -56,7 +56,7 @@ export type HttpLoweringDependencies = {
 }
 
 function httpNodeLoc(node: HttpAstNode | null | undefined): SourceLocation | null {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return null
   }
 
@@ -97,11 +97,11 @@ export function emitHttpHandlerDeclaration(
   let requestName: string | null = null
   let responseName: string | null = null
 
-  if (firstParam != null) {
+  if (firstParam !== null && typeof firstParam !== 'undefined') {
     requestName = firstParam.name
   }
 
-  if (secondParam != null) {
+  if (secondParam !== null && typeof secondParam !== 'undefined') {
     responseName = secondParam.name
   }
 
@@ -112,11 +112,11 @@ export function emitHttpHandlerDeclaration(
   }
   context.statusReturn = true
 
-  if (requestName != null) {
+  if (requestName !== null && typeof requestName !== 'undefined') {
     context.variables.set(requestName, 'http-request')
   }
 
-  if (responseName != null) {
+  if (responseName !== null && typeof responseName !== 'undefined') {
     context.variables.set(responseName, 'http-response')
   }
 
@@ -134,13 +134,13 @@ export function emitHttpHandlerDeclaration(
 
   const lines = [`${emitHttpHandlerHead(wrapper)} {`, '  (void)user;']
 
-  if (requestName == null) {
+  if (requestName === null || typeof requestName === 'undefined') {
     lines.push('  (void)inox_request;')
   } else {
     lines.push(`  const inox_http_request* ${requestName} = inox_request;`)
   }
 
-  if (responseName == null) {
+  if (responseName === null || typeof responseName === 'undefined') {
     lines.push('  (void)inox_response;')
   } else {
     lines.push(`  inox_http_response* ${responseName} = inox_response;`)
@@ -162,7 +162,7 @@ function emitHttpHandlerStatement(
   context: CFunctionContext,
   deps: HttpLoweringDependencies
 ): string[] {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return []
   }
 
@@ -185,7 +185,7 @@ function emitHttpHandlerStatement(
 
     pushIndentedHttpLines(lines, consequent)
 
-    if (statement.alternate == null) {
+    if (statement.alternate === null || typeof statement.alternate === 'undefined') {
       lines.push('}')
       return lines
     }
@@ -199,7 +199,7 @@ function emitHttpHandlerStatement(
   if (statement.type === 'VariableDeclaration') {
     const stringValue = emitHttpStaticStringValue(statement.init, httpContext, context)
 
-    if (stringValue != null) {
+    if (stringValue !== null && typeof stringValue !== 'undefined') {
       httpContext.stringLocals.set(statement.name, stringValue)
       return []
     }
@@ -215,18 +215,26 @@ function emitHttpHandlerStatement(
   }
 
   if (statement.type === 'ExpressionStatement') {
-    if (statement.expression != null && statement.expression.type === 'CallExpression') {
+    if (
+      statement.expression !== null &&
+      typeof statement.expression !== 'undefined' &&
+      statement.expression.type === 'CallExpression'
+    ) {
       const responseCall = emitHttpResponseCallStatement(statement.expression, httpContext, context)
 
-      if (responseCall != null) {
+      if (responseCall !== null && typeof responseCall !== 'undefined') {
         return responseCall
       }
     }
 
-    if (statement.expression != null && statement.expression.type === 'AssignmentExpression') {
+    if (
+      statement.expression !== null &&
+      typeof statement.expression !== 'undefined' &&
+      statement.expression.type === 'AssignmentExpression'
+    ) {
       const statusAssignment = emitHttpResponseStatusAssignment(statement.expression, httpContext, context)
 
-      if (statusAssignment != null) {
+      if (statusAssignment !== null && typeof statusAssignment !== 'undefined') {
         return statusAssignment
       }
     }
@@ -242,10 +250,14 @@ function emitHttpHandlerStatement(
   }
 
   if (statement.type === 'ReturnStatement') {
-    if (statement.argument != null && statement.argument.type === 'CallExpression') {
+    if (
+      statement.argument !== null &&
+      typeof statement.argument !== 'undefined' &&
+      statement.argument.type === 'CallExpression'
+    ) {
       const responseCall = emitHttpResponseCallStatement(statement.argument, httpContext, context)
 
-      if (responseCall != null) {
+      if (responseCall !== null && typeof responseCall !== 'undefined') {
         const lines: string[] = []
 
         pushHttpLines(lines, responseCall)
@@ -274,7 +286,8 @@ function emitHttpResponseStatusAssignment(
   context: CFunctionContext
 ): string[] | null {
   if (
-    expression.target == null ||
+    expression.target === null ||
+    typeof expression.target === 'undefined' ||
     expression.target.type !== 'MemberExpression' ||
     expression.target.property !== 'statusCode' ||
     !isHttpResponseReference(expression.target.object, httpContext)
@@ -293,7 +306,8 @@ function emitHttpResponseCallStatement(
   context: CFunctionContext
 ): string[] | null {
   if (
-    expression.callee == null ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
     !isHttpResponseReference(expression.callee.object, httpContext)
   ) {
@@ -347,7 +361,10 @@ function emitHttpResponseCallStatement(
     }
 
     pushHttpLines(lines, body.lines)
-    pushHttpLines(lines, emitHttpStatusCheck(`${runtime}(${httpContext.responseName}, ${body.bytes}, ${body.length})`, context))
+    pushHttpLines(
+      lines,
+      emitHttpStatusCheck(`${runtime}(${httpContext.responseName}, ${body.bytes}, ${body.length})`, context)
+    )
 
     return lines
   }
@@ -356,7 +373,7 @@ function emitHttpResponseCallStatement(
 }
 
 function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CFunctionContext): HttpHeaderArray {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return {
       lines: [],
       name: '0',
@@ -398,7 +415,7 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
   for (const property of properties) {
     const value = emitHttpStaticStringValue(property.value, staticContext, context)
 
-    if (value == null) {
+    if (value === null || typeof value === 'undefined') {
       context.diagnostics.push(
         diagnostic(
           'INOX_HTTP_HANDLER',
@@ -428,7 +445,7 @@ function emitHttpConditionExpression(
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): string {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_HANDLER',
@@ -458,7 +475,7 @@ function emitHttpConditionExpression(
 
     const requestCompare = emitHttpRequestStringCompareExpression(expression, httpContext, context)
 
-    if (requestCompare != null) {
+    if (requestCompare !== null && typeof requestCompare !== 'undefined') {
       return requestCompare
     }
   }
@@ -495,14 +512,14 @@ function emitHttpRequestStringCompareExpression(
   let literalExpression: AnyNode = expression.left
   let member: string | null = right
 
-  if (left != null) {
+  if (left !== null && typeof left !== 'undefined') {
     literalExpression = expression.right
     member = left
   }
 
   const literal = emitHttpStaticStringValue(literalExpression, httpContext, context)
 
-  if (member == null || literal == null) {
+  if (member === null || typeof member === 'undefined' || literal === null || typeof literal === 'undefined') {
     return null
   }
 
@@ -524,7 +541,7 @@ function emitHttpStringBytesOperand(
   httpContext: HttpHandlerContext,
   context: CFunctionContext
 ): HttpStringBytesOperand {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return {
       lines: [],
       bytes: '""',
@@ -534,7 +551,7 @@ function emitHttpStringBytesOperand(
 
   const staticValue = emitHttpStaticStringValue(expression, httpContext, context)
 
-  if (staticValue != null) {
+  if (staticValue !== null && typeof staticValue !== 'undefined') {
     return {
       lines: [],
       bytes: cStringLiteral(staticValue),
@@ -580,7 +597,7 @@ function emitHttpStaticStringValue(
   httpContext: HttpStaticStringContext,
   context: CFunctionContext
 ): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -614,7 +631,7 @@ function emitHttpStaticStringValue(
 function emitHttpStaticStringLocalValue(expression: AnyNode, httpContext: HttpStaticStringContext): string | null {
   const value = httpContext.stringLocals.get(expression.path[0])
 
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -626,7 +643,8 @@ function emitHttpStaticJsonStringifyValue(
   context: CFunctionContext
 ): string | null {
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'CallExpression' ||
     cJsonRuntimeCallName(expression.callee) !== 'stringify' ||
     expression.args.length !== 1
@@ -638,7 +656,7 @@ function emitHttpStaticJsonStringifyValue(
 }
 
 function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context: CFunctionContext): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -673,7 +691,7 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
     for (const item of elements) {
       const value = emitHttpStaticJsonValue(item, context)
 
-      if (value != null) {
+      if (value !== null && typeof value !== 'undefined') {
         items.push(value)
       } else {
         return null
@@ -690,7 +708,7 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
     for (const property of properties) {
       const value = emitHttpStaticJsonValue(property.value, context)
 
-      if (value == null) {
+      if (value === null || typeof value === 'undefined') {
         return null
       }
 
@@ -718,7 +736,7 @@ function joinStrings(values: string[], separator: string): string {
 }
 
 function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
-  if (expression != null && expression.type === 'NumberLiteral') {
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'NumberLiteral') {
     return `(int)(${expression.value})`
   }
 
@@ -741,7 +759,7 @@ function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] 
 function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
   const responseName = httpContext.responseName
 
-  if (responseName == null) {
+  if (responseName === null || typeof responseName === 'undefined') {
     return false
   }
 
@@ -758,9 +776,11 @@ function resolveHttpRequestStringMember(expression: AnyNode, httpContext: HttpHa
   const requestName = httpContext.requestName
 
   if (
-    requestName == null ||
+    requestName === null ||
+    typeof requestName === 'undefined' ||
     expression.type !== 'MemberExpression' ||
-    expression.object == null ||
+    expression.object === null ||
+    typeof expression.object === 'undefined' ||
     expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1
   ) {
@@ -799,7 +819,8 @@ export function emitHttpServerCallStatement(
   const callee = expression.callee
 
   if (
-    callee != null &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
     callee.type === 'MemberExpression' &&
     callee.property === 'listen' &&
     isHttpCreateServerCall(callee.object, context)
@@ -853,15 +874,19 @@ function emitHttpServerCreateLines(
   const listener = expression.args[0]
   let wrapper: CHttpHandler | null = null
 
-  if (listener != null) {
+  if (listener !== null && typeof listener !== 'undefined') {
     const registeredWrapper = findHttpHandler(context, listener)
 
-    if (registeredWrapper != null) {
+    if (registeredWrapper !== null && typeof registeredWrapper !== 'undefined') {
       wrapper = registeredWrapper
     }
   }
 
-  if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
+  if (
+    listener !== null &&
+    typeof listener !== 'undefined' &&
+    (listener.type !== 'ArrowFunctionExpression' || wrapper === null || typeof wrapper === 'undefined')
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
@@ -873,13 +898,13 @@ function emitHttpServerCreateLines(
 
   const lines: string[] = []
 
-  if (options == null || options.declare !== false) {
+  if (options === null || typeof options === 'undefined' || options.declare !== false) {
     lines.push(`inox_http_server* ${serverName} = 0;`)
   }
 
   let wrapperName = '0'
 
-  if (wrapper != null) {
+  if (wrapper !== null && typeof wrapper !== 'undefined') {
     wrapperName = wrapper.name
   }
 
@@ -916,7 +941,7 @@ function emitHttpServerListenLines(
   let hostArg: AnyNode | null | undefined = secondArg
   let callback: AnyNode | null | undefined = args[2]
 
-  if (secondArg != null && secondArg.type === 'ArrowFunctionExpression') {
+  if (secondArg !== null && typeof secondArg !== 'undefined' && secondArg.type === 'ArrowFunctionExpression') {
     hostArg = null
     callback = secondArg
   }
@@ -937,7 +962,9 @@ function emitHttpServerListenLines(
   const lines: string[] = []
 
   pushHttpLines(lines, port.lines)
-  lines.push(emitStatusCheck(`inox_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context))
+  lines.push(
+    emitStatusCheck(`inox_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context)
+  )
   pushHttpLines(lines, emitHttpZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -950,7 +977,12 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     eventArg = args[0]
   }
 
-  if (eventArg == null || eventArg.type !== 'StringLiteral' || eventArg.value !== 'request') {
+  if (
+    eventArg === null ||
+    typeof eventArg === 'undefined' ||
+    eventArg.type !== 'StringLiteral' ||
+    eventArg.value !== 'request'
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
@@ -968,15 +1000,21 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     listener = args[1]
   }
 
-  if (listener != null) {
+  if (listener !== null && typeof listener !== 'undefined') {
     const registeredWrapper = findHttpHandler(context, listener)
 
-    if (registeredWrapper != null) {
+    if (registeredWrapper !== null && typeof registeredWrapper !== 'undefined') {
       wrapper = registeredWrapper
     }
   }
 
-  if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
+  if (
+    listener === null ||
+    typeof listener === 'undefined' ||
+    listener.type !== 'ArrowFunctionExpression' ||
+    wrapper === null ||
+    typeof wrapper === 'undefined'
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
@@ -1018,7 +1056,7 @@ function emitHttpZeroArgCallbackLines(
   context: CFunctionContext,
   deps: HttpLoweringDependencies
 ): string[] {
-  if (callback == null) {
+  if (callback === null || typeof callback === 'undefined') {
     return []
   }
 
@@ -1049,7 +1087,7 @@ function emitHttpZeroArgCallbackLines(
 }
 
 function emitHttpListenHostExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return '0'
   }
 
@@ -1076,7 +1114,11 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
     return false
   }
 
-  if (expression.callee == null || expression.callee.type !== 'MemberExpression') {
+  if (
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.type !== 'MemberExpression'
+  ) {
     return false
   }
 
@@ -1084,7 +1126,11 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
     return false
   }
 
-  if (expression.callee.object == null || expression.callee.object.type !== 'Reference') {
+  if (
+    expression.callee.object === null ||
+    typeof expression.callee.object === 'undefined' ||
+    expression.callee.object.type !== 'Reference'
+  ) {
     return false
   }
 
@@ -1099,11 +1145,15 @@ function isHttpServerMethodCall(expression: AnyNode, method: string, context: CF
 }
 
 function isHttpCreateServerCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
-  if (expression.callee != null && expression.callee.type === 'Reference') {
+  if (
+    expression.callee !== null &&
+    typeof expression.callee !== 'undefined' &&
+    expression.callee.type === 'Reference'
+  ) {
     const path: string[] = expression.callee.path
 
     if (path.length === 1 && context.httpCreateServerNames.has(path[0])) {
@@ -1112,10 +1162,12 @@ function isHttpCreateServerCall(expression: AnyNode | null | undefined, context:
   }
 
   if (
-    expression.callee == null ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'createServer' ||
-    expression.callee.object == null ||
+    expression.callee.object === null ||
+    typeof expression.callee.object === 'undefined' ||
     expression.callee.object.type !== 'Reference'
   ) {
     return false
@@ -1131,7 +1183,11 @@ function isHttpRequestEventCall(expression: AnyNode): boolean {
     return false
   }
 
-  if (expression.callee == null || expression.callee.type !== 'MemberExpression') {
+  if (
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.type !== 'MemberExpression'
+  ) {
     return false
   }
 
@@ -1172,13 +1228,13 @@ export function collectHttpHandlers(irPrograms: IrProgram[], context: CEmitConte
 }
 
 function registerHttpHandler(handlers: Map<string, CHttpHandler>, expression: AnyNode | null | undefined): void {
-  if (expression == null || expression.type !== 'ArrowFunctionExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ArrowFunctionExpression') {
     return
   }
 
   const existingName = httpHandlerName(expression)
 
-  if (existingName != null && handlers.has(existingName)) {
+  if (existingName !== null && typeof existingName !== 'undefined' && handlers.has(existingName)) {
     return
   }
 
@@ -1192,13 +1248,13 @@ function registerHttpHandler(handlers: Map<string, CHttpHandler>, expression: An
 }
 
 function httpHandlerName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const name = expression.httpHandlerName
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return null
   }
 
@@ -1208,13 +1264,13 @@ function httpHandlerName(expression: AnyNode | null | undefined): string | null 
 function findHttpHandler(context: CFunctionContext, expression: AnyNode | null | undefined): CHttpHandler | null {
   const name = httpHandlerName(expression)
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return null
   }
 
   const handler = context.httpHandlers.get(name)
 
-  if (handler == null) {
+  if (handler === null || typeof handler === 'undefined') {
     return null
   }
 
@@ -1226,7 +1282,7 @@ function visitHttpHandlerStatement(
   context: CEmitContext,
   statement: AnyNode | null | undefined
 ): void {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return
   }
 
@@ -1268,7 +1324,11 @@ function visitHttpHandlerStatement(
   }
 
   if (statement.type === 'ForStatement') {
-    if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+    if (
+      statement.init !== null &&
+      typeof statement.init !== 'undefined' &&
+      statement.init.type === 'VariableDeclaration'
+    ) {
       visitHttpHandlerStatement(handlers, context, statement.init)
     } else {
       visitHttpHandlerExpression(handlers, context, statement.init)
@@ -1304,7 +1364,7 @@ function visitHttpHandlerStatement(
   if (statement.type === 'TryStatement') {
     const handler = statement.handler
     visitHttpHandlerStatement(handlers, context, statement.block)
-    if (handler != null) {
+    if (handler !== null && typeof handler !== 'undefined') {
       visitHttpHandlerStatement(handlers, context, handler.body)
     }
     visitHttpHandlerStatement(handlers, context, statement.finalizer)
@@ -1316,7 +1376,7 @@ function visitHttpHandlerExpression(
   context: CEmitContext,
   expression: AnyNode | null | undefined
 ): void {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return
   }
 

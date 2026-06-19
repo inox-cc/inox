@@ -26,7 +26,13 @@ export function isUnsupportedStreamRuntimeExport(name: string): boolean {
 }
 
 export function unsupportedStreamRuntimeExportReason(name: string): string {
-  if (name === 'Readable' || name === 'Writable' || name === 'Duplex' || name === 'Transform' || name === 'PassThrough') {
+  if (
+    name === 'Readable' ||
+    name === 'Writable' ||
+    name === 'Duplex' ||
+    name === 'Transform' ||
+    name === 'PassThrough'
+  ) {
     return 'stream buffering and backpressure support are not implemented by the current C backend'
   }
 

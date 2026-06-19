@@ -54,6 +54,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 type AsyncTaskAstNode = AnyNode
 type AsyncTaskLoopFlowTarget = {
@@ -195,7 +196,6 @@ type AsyncTaskFunctionNodeEntry = {
   node: AsyncTaskAstNode
 }
 
-
 export type AsyncTaskLoweringDependencies = {
   createFunctionContext(
     baseContext: AsyncTaskEmitContext,
@@ -215,7 +215,10 @@ export type AsyncTaskLoweringDependencies = {
   ): CPreparedCallArgs
   emitPreparedCallExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedFetchInitOperand(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
-  emitPreparedFsAccessModeExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
+  emitPreparedFsAccessModeExpression(
+    expression: AsyncTaskAstNode,
+    context: AsyncTaskFunctionContext
+  ): PreparedExpression
   emitPreparedNumberExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AsyncTaskAstNode,
@@ -243,14 +246,24 @@ export type AsyncTaskLoweringDependencies = {
     expression: AsyncTaskAstNode,
     context: AsyncTaskFunctionContext
   ): void
-  resolveFunctionDeclarationParams(name: string, fallback: CFunctionParam[], context: AsyncTaskEmitContext): CFunctionParam[]
+  resolveFunctionDeclarationParams(
+    name: string,
+    fallback: CFunctionParam[],
+    context: AsyncTaskEmitContext
+  ): CFunctionParam[]
   resolveFunctionParams(callee: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CFunctionParam[] | null
   resolveKnownArrayIndex(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CKnownArrayElement | null
-  resolveKnownObjectIndex(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CKnownObjectIndexField | null
+  resolveKnownObjectIndex(
+    expression: AsyncTaskAstNode,
+    context: AsyncTaskFunctionContext
+  ): CKnownObjectIndexField | null
   resolveKnownObjectMember(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CKnownObjectField | null
   resolveRuntimeArrayElementType(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string | null
   resolveRuntimeArrayIndex(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CRuntimeArrayElement | null
-  resolveRuntimeMapType(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CAsyncTaskRuntimeMapType | null
+  resolveRuntimeMapType(
+    expression: AsyncTaskAstNode,
+    context: AsyncTaskFunctionContext
+  ): CAsyncTaskRuntimeMapType | null
   resolveRuntimeSetElementType(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string | null
   resolveRuntimeStringReference(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string | null
   restoreVariableScope(context: AsyncTaskFunctionContext, snapshot: AsyncTaskVariableScopeSnapshot): void
@@ -367,14 +380,14 @@ export function collectAsyncTaskWrappers(
     const item = entry.node
     const params = resolveAsyncTaskWrapperParams(declaration, plannerContext)
 
-    if (params == null) {
+    if (params === null || typeof params === 'undefined') {
       continue
     }
 
     const wrapperParams = asyncTaskParamsOrEmpty(params)
     const wrapper = createAsyncTaskWrapperFromBodyPlan(item, declaration, plannerContext, wrapperParams)
 
-    if (wrapper != null) {
+    if (wrapper !== null && typeof wrapper !== 'undefined') {
       wrappers.set(declaration.name, wrapper)
     }
   }
@@ -390,7 +403,7 @@ function createAsyncTaskWrapperFromBodyPlan(
 ): CAsyncTaskWrapper | null {
   const bodyPlan = resolveAsyncTaskBodyPlan(item, declaration, context, params)
 
-  if (bodyPlan != null) {
+  if (bodyPlan !== null && typeof bodyPlan !== 'undefined') {
     const cName = emitCIdentifier(declaration.name)
 
     return {
@@ -418,7 +431,7 @@ function createAsyncTaskWrapperFromBodyPlan(
 }
 
 function asyncTaskParamsOrEmpty(params: CAsyncTaskParam[] | null): CAsyncTaskParam[] {
-  if (params != null) {
+  if (params !== null && typeof params !== 'undefined') {
     return params
   }
 
@@ -441,17 +454,11 @@ function asyncTaskAwaitStepAt(steps: CAsyncTaskAwaitStep[], index: number): CAsy
   return steps[index]
 }
 
-function asyncTaskPrefixFrameLocalAt(
-  locals: CAsyncTaskPrefixFrameLocal[],
-  index: number
-): CAsyncTaskPrefixFrameLocal {
+function asyncTaskPrefixFrameLocalAt(locals: CAsyncTaskPrefixFrameLocal[], index: number): CAsyncTaskPrefixFrameLocal {
   return locals[index]
 }
 
-function asyncTaskAwaitFrameLocalAt(
-  locals: CAsyncTaskAwaitFrameLocal[],
-  index: number
-): CAsyncTaskAwaitFrameLocal {
+function asyncTaskAwaitFrameLocalAt(locals: CAsyncTaskAwaitFrameLocal[], index: number): CAsyncTaskAwaitFrameLocal {
   return locals[index]
 }
 
@@ -460,7 +467,7 @@ function asyncTaskFrameLocalAt(locals: CAsyncTaskFrameLocal[], index: number): C
 }
 
 function asyncTaskMetadataStringOrUnknown(value: string | null | undefined): string {
-  if (value == null || value === '') {
+  if (value === null || typeof value === 'undefined' || value === '') {
     return 'unknown'
   }
 
@@ -490,7 +497,7 @@ function createAsyncTaskBodyPlan(body: AsyncTaskBodyDraft): AsyncTaskBodyPlan {
   const tryPhases = createAsyncTaskTryPhases(tryRegion, successPhases)
   let tryHandler: CAsyncTaskTryHandlerPlan | null = null
 
-  if (tryRegion != null) {
+  if (tryRegion !== null && typeof tryRegion !== 'undefined') {
     tryHandler = tryRegion.handler
   }
 
@@ -510,7 +517,7 @@ function createAsyncTaskBodyPlan(body: AsyncTaskBodyDraft): AsyncTaskBodyPlan {
     tryPhases: tryPhases,
     returnExpression: body.returnExpression,
     returnType: body.returnType,
-    hasTryRegion: tryRegion != null,
+    hasTryRegion: tryRegion !== null && typeof tryRegion !== 'undefined',
     tryHandler: tryHandler
   }
 }
@@ -542,7 +549,12 @@ function createAsyncTaskFrameLocals(
   }
 
   for (const item of awaits) {
-    if (item.fieldName == null || item.name == null) {
+    if (
+      item.fieldName === null ||
+      typeof item.fieldName === 'undefined' ||
+      item.name === null ||
+      typeof item.name === 'undefined'
+    ) {
       continue
     }
 
@@ -573,11 +585,11 @@ function collectAsyncTaskLiveAcrossSuspensionNames(input: AsyncTaskLiveAcrossSus
     const awaitedExpression = item.awaitedExpression
     const awaitedPromiseExpression = item.awaitedPromiseExpression
 
-    if (awaitedExpression != null) {
+    if (awaitedExpression !== null && typeof awaitedExpression !== 'undefined') {
       nodes.push(awaitedExpression)
     }
 
-    if (awaitedPromiseExpression != null) {
+    if (awaitedPromiseExpression !== null && typeof awaitedPromiseExpression !== 'undefined') {
       nodes.push(awaitedPromiseExpression)
     }
   }
@@ -613,7 +625,7 @@ function appendAsyncTaskTryHandlerReferencedNodes(
   nodes: AsyncTaskAstNode[],
   handler: CAsyncTaskTryHandlerPlan | null
 ): void {
-  if (handler != null) {
+  if (handler !== null && typeof handler !== 'undefined') {
     const statements: AsyncTaskAstNode[] = handler.statements
 
     for (const statement of statements) {
@@ -625,7 +637,7 @@ function appendAsyncTaskTryHandlerReferencedNodes(
 }
 
 function appendAsyncTaskNodeIfPresent(nodes: AsyncTaskAstNode[], node: AsyncTaskAstNode | null): void {
-  if (node != null) {
+  if (node !== null && typeof node !== 'undefined') {
     nodes.push(node)
   }
 }
@@ -643,7 +655,7 @@ function collectAsyncTaskReferencedNames(nodes: AsyncTaskAstNode[]): AsyncTaskSt
 }
 
 function visitAsyncTaskReferencedValue(value: AsyncTaskChildValue, names: AsyncTaskStringSet): void {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return
   }
 
@@ -681,7 +693,7 @@ function visitAsyncTaskReferencedNodeArray(nodes: AsyncTaskAstNode[], names: Asy
 }
 
 function visitAsyncTaskReferencedChildValue(value: AsyncTaskChildValue, names: AsyncTaskStringSet): void {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return
   }
 
@@ -751,7 +763,7 @@ function createAsyncTaskTryPhases(
   tryRegion: AsyncTaskTryRegionDraft | null,
   successPhases: CAsyncTaskPhase[]
 ): CAsyncTaskPhase[] {
-  if (tryRegion != null) {
+  if (tryRegion !== null && typeof tryRegion !== 'undefined') {
     return createAsyncTaskTryPhasesForRegion(tryRegion, successPhases)
   }
 
@@ -813,16 +825,11 @@ function appendAsyncTaskNodes(target: AsyncTaskAstNode[], source: AsyncTaskAstNo
   }
 }
 
-function asyncTaskSuccessPhaseKindAt(
-  values: CAsyncTaskSuccessPhaseKind[],
-  index: number
-): CAsyncTaskSuccessPhaseKind {
+function asyncTaskSuccessPhaseKindAt(values: CAsyncTaskSuccessPhaseKind[], index: number): CAsyncTaskSuccessPhaseKind {
   return values[index]
 }
 
-function asyncTaskSuccessPhaseKindSetFromArray(
-  values: CAsyncTaskSuccessPhaseKind[]
-): Set<CAsyncTaskSuccessPhaseKind> {
+function asyncTaskSuccessPhaseKindSetFromArray(values: CAsyncTaskSuccessPhaseKind[]): Set<CAsyncTaskSuccessPhaseKind> {
   const result: Set<CAsyncTaskSuccessPhaseKind> = new Set()
 
   for (let index = 0; index < values.length; index = index + 1) {
@@ -832,20 +839,16 @@ function asyncTaskSuccessPhaseKindSetFromArray(
   return result
 }
 
-function cloneOptionalAsyncTaskStringMap(
-  values: AsyncTaskStringMap | null | undefined
-): AsyncTaskStringMap {
-  if (values == null) {
+function cloneOptionalAsyncTaskStringMap(values: AsyncTaskStringMap | null | undefined): AsyncTaskStringMap {
+  if (values === null || typeof values === 'undefined') {
     return new Map()
   }
 
   return cloneCStringMap(values)
 }
 
-function cloneOptionalAsyncTaskStringSet(
-  values: AsyncTaskStringSet | null | undefined
-): AsyncTaskStringSet {
-  if (values == null) {
+function cloneOptionalAsyncTaskStringSet(values: AsyncTaskStringSet | null | undefined): AsyncTaskStringSet {
+  if (values === null || typeof values === 'undefined') {
     return new Set()
   }
 
@@ -888,7 +891,7 @@ function appendAsyncTaskFrameLocals(
 }
 
 function getAsyncTaskBlockStatements(block: AsyncTaskAstNode | null | undefined): AsyncTaskAstNode[] {
-  if (block == null || block.body == null) {
+  if (block === null || typeof block === 'undefined' || block.body === null || typeof block.body === 'undefined') {
     return []
   }
 
@@ -906,7 +909,7 @@ function getAsyncTaskLastStatement(statements: AsyncTaskAstNode[]): AsyncTaskAst
 function getAsyncTaskReturnArgument(statement: AsyncTaskAstNode): AsyncTaskAstNode | null {
   const argument = statement.argument
 
-  if (argument == null) {
+  if (argument === null || typeof argument === 'undefined') {
     return null
   }
 
@@ -1004,7 +1007,7 @@ function resolveAsyncTaskBodyPlan(
 
   const tryBody = resolveAsyncTaskTryBodyPlan(statement, context, params, returnType)
 
-  if (tryBody != null) {
+  if (tryBody !== null && typeof tryBody !== 'undefined') {
     return tryBody
   }
 
@@ -1014,13 +1017,17 @@ function resolveAsyncTaskBodyPlan(
 
   const returnStatement = getAsyncTaskLastStatement(statement.body)
 
-  if (returnStatement == null || returnStatement.type !== 'ReturnStatement') {
+  if (
+    returnStatement === null ||
+    typeof returnStatement === 'undefined' ||
+    returnStatement.type !== 'ReturnStatement'
+  ) {
     return null
   }
 
   const awaits = resolveAsyncTaskAwaitSteps(getAsyncTaskStatementsBeforeLast(statement.body), context)
 
-  if (awaits == null) {
+  if (awaits === null || typeof awaits === 'undefined') {
     return null
   }
 
@@ -1033,7 +1040,7 @@ function resolveAsyncTaskBodyPlan(
   )
   asyncTaskDeps(context).restoreVariableScope(context, returnScope)
 
-  if (returnType !== 'void' && returnExpression == null) {
+  if (returnType !== 'void' && (returnExpression === null || typeof returnExpression === 'undefined')) {
     return null
   }
 
@@ -1056,13 +1063,13 @@ function resolveAsyncTaskDeclarationReturnType(
 ): string {
   const declarationType = declaration.returnPromiseValueType
 
-  if (declarationType != null) {
+  if (declarationType !== null && typeof declarationType !== 'undefined') {
     return declarationType
   }
 
   const mappedType = context.functionReturnPromiseValueTypes.get(declaration.name)
 
-  if (mappedType != null) {
+  if (mappedType !== null && typeof mappedType !== 'undefined') {
     return mappedType
   }
 
@@ -1070,7 +1077,7 @@ function resolveAsyncTaskDeclarationReturnType(
 }
 
 function asyncTaskAwaitStepsOrEmpty(steps: CAsyncTaskAwaitStep[] | null): CAsyncTaskAwaitStep[] {
-  if (steps != null) {
+  if (steps !== null && typeof steps !== 'undefined') {
     return steps
   }
 
@@ -1095,24 +1102,31 @@ function resolveAsyncTaskTryBodyPlan(
 
   const nestedTryFinallyBody = resolveAsyncTaskNestedTryBodyPlan(tryStatement, context, params, returnType)
 
-  if (nestedTryFinallyBody != null) {
+  if (nestedTryFinallyBody !== null && typeof nestedTryFinallyBody !== 'undefined') {
     return nestedTryFinallyBody
   }
 
   const tryStatements = getAsyncTaskBlockStatements(tryStatement.block)
   const returnStatement = getAsyncTaskLastStatement(tryStatements)
 
-  if (returnStatement == null || returnStatement.type !== 'ReturnStatement') {
+  if (
+    returnStatement === null ||
+    typeof returnStatement === 'undefined' ||
+    returnStatement.type !== 'ReturnStatement'
+  ) {
     return null
   }
 
-  if (tryStatement.handler == null && tryStatement.finalizer == null) {
+  if (
+    (tryStatement.handler === null || typeof tryStatement.handler === 'undefined') &&
+    (tryStatement.finalizer === null || typeof tryStatement.finalizer === 'undefined')
+  ) {
     return null
   }
 
   const awaits = resolveAsyncTaskAwaitSteps(getAsyncTaskStatementsBeforeLast(tryStatements), context)
 
-  if (awaits == null) {
+  if (awaits === null || typeof awaits === 'undefined') {
     return null
   }
 
@@ -1125,14 +1139,19 @@ function resolveAsyncTaskTryBodyPlan(
   )
   asyncTaskDeps(context).restoreVariableScope(context, returnScope)
 
-  if (returnType !== 'void' && returnExpression == null) {
+  if (returnType !== 'void' && (returnExpression === null || typeof returnExpression === 'undefined')) {
     return null
   }
 
   const handler = resolveAsyncTaskTryHandler(tryStatement.handler, context, params, returnType)
   const finalizerStatements = getAsyncTaskBlockStatements(tryStatement.finalizer)
 
-  if ((tryStatement.handler != null && handler == null) || hasUnsupportedAsyncTaskTryControlFlow(finalizerStatements)) {
+  if (
+    (tryStatement.handler !== null &&
+      typeof tryStatement.handler !== 'undefined' &&
+      (handler === null || typeof handler === 'undefined')) ||
+    hasUnsupportedAsyncTaskTryControlFlow(finalizerStatements)
+  ) {
     return null
   }
 
@@ -1162,7 +1181,11 @@ function resolveAsyncTaskNestedTryBodyPlan(
 ): AsyncTaskBodyPlan | null {
   const tryChainResultOrNull = collectAsyncTaskNestedTryChain(tryStatement)
 
-  if (tryChainResultOrNull == null || tryChainResultOrNull.chain.length < 2) {
+  if (
+    tryChainResultOrNull === null ||
+    typeof tryChainResultOrNull === 'undefined' ||
+    tryChainResultOrNull.chain.length < 2
+  ) {
     return null
   }
 
@@ -1185,7 +1208,11 @@ function resolveAsyncTaskNestedTryBodyPlan(
 
   const innerPrefixResult = splitAsyncTaskLeadingPrefixStatements(innerAwaitStatements)
 
-  if (returnStatement == null || returnStatement.type !== 'ReturnStatement') {
+  if (
+    returnStatement === null ||
+    typeof returnStatement === 'undefined' ||
+    returnStatement.type !== 'ReturnStatement'
+  ) {
     return null
   }
 
@@ -1194,7 +1221,7 @@ function resolveAsyncTaskNestedTryBodyPlan(
   appendAsyncTaskNodes(prefixStatements, innerPrefixResult.prefixStatements)
   const prefixResultOrNull = resolveAsyncTaskPrefixLocals(context, params, prefixStatements)
 
-  if (prefixResultOrNull == null) {
+  if (prefixResultOrNull === null || typeof prefixResultOrNull === 'undefined') {
     return null
   }
 
@@ -1203,7 +1230,7 @@ function resolveAsyncTaskNestedTryBodyPlan(
   const awaitResultOrNull = resolveAsyncTaskAwaitStepsAndTrailingStatements(innerPrefixResult.awaitStatements, context)
   asyncTaskDeps(context).restoreVariableScope(context, prefixScope)
 
-  if (awaitResultOrNull == null) {
+  if (awaitResultOrNull === null || typeof awaitResultOrNull === 'undefined') {
     return null
   }
 
@@ -1241,14 +1268,18 @@ function resolveAsyncTaskNestedTryBodyPlan(
   )
   asyncTaskDeps(context).restoreVariableScope(context, returnScope)
 
-  if (returnType !== 'void' && returnExpression == null) {
+  if (returnType !== 'void' && (returnExpression === null || typeof returnExpression === 'undefined')) {
     return null
   }
 
   let successFinalizerStatements: AsyncTaskAstNode[] = []
 
   if (hasPostNestedStatements) {
-    successFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, tryChainResult.postNestedOwnerIndex, 0)
+    successFinalizerStatements = collectAsyncTaskTryFinalizerStatements(
+      finalizers,
+      tryChainResult.postNestedOwnerIndex,
+      0
+    )
   } else if (handlerIndex < 0) {
     successFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, 0)
   } else {
@@ -1273,7 +1304,9 @@ function resolveAsyncTaskNestedTryBodyPlan(
   }
 
   if (
-    (handlerSource != null && handler == null) ||
+    (handlerSource !== null &&
+      typeof handlerSource !== 'undefined' &&
+      (handler === null || typeof handler === 'undefined')) ||
     hasUnsupportedAsyncTaskTryControlFlow(prefixStatements) ||
     hasUnsupportedAsyncTaskTryControlFlow(successPreFinalizerStatements) ||
     hasUnsupportedAsyncTaskTryControlFlow(successStatements) ||
@@ -1295,7 +1328,11 @@ function resolveAsyncTaskNestedTryBodyPlan(
   let preHandlerFinalizerStatements: AsyncTaskAstNode[] = []
 
   if (handlerIndex >= 0) {
-    preHandlerFinalizerStatements = collectAsyncTaskTryFinalizerStatements(finalizers, finalizers.length - 1, handlerIndex + 1)
+    preHandlerFinalizerStatements = collectAsyncTaskTryFinalizerStatements(
+      finalizers,
+      finalizers.length - 1,
+      handlerIndex + 1
+    )
   }
 
   return createAsyncTaskBodyPlan({
@@ -1317,7 +1354,7 @@ function resolveAsyncTaskNestedTryBodyPlan(
 }
 
 function asyncTaskNestedTryChainOrEmpty(result: AsyncTaskNestedTryChain | null): AsyncTaskNestedTryChain {
-  if (result != null) {
+  if (result !== null && typeof result !== 'undefined') {
     return result
   }
 
@@ -1333,7 +1370,7 @@ function asyncTaskPrefixLocalsResultOrEmpty(
   result: AsyncTaskPrefixLocalsResult | null,
   context: AsyncTaskPlannerContext
 ): AsyncTaskPrefixLocalsResult {
-  if (result != null) {
+  if (result !== null && typeof result !== 'undefined') {
     return result
   }
 
@@ -1343,7 +1380,7 @@ function asyncTaskPrefixLocalsResultOrEmpty(
 }
 
 function asyncTaskAwaitStepsResultOrEmpty(result: AsyncTaskAwaitStepsResult | null): AsyncTaskAwaitStepsResult {
-  if (result != null) {
+  if (result !== null && typeof result !== 'undefined') {
     return result
   }
 
@@ -1380,7 +1417,13 @@ function splitAsyncTaskLeadingPrefixStatements(statements: AsyncTaskAstNode[]): 
 }
 
 function isAsyncTaskDirectAwaitStatementShape(statement: AsyncTaskAstNode | null | undefined): boolean {
-  if (statement == null || statement.type !== 'VariableDeclaration' || statement.init == null) {
+  if (
+    statement === null ||
+    typeof statement === 'undefined' ||
+    statement.type !== 'VariableDeclaration' ||
+    statement.init === null ||
+    typeof statement.init === 'undefined'
+  ) {
     return false
   }
 
@@ -1388,7 +1431,13 @@ function isAsyncTaskDirectAwaitStatementShape(statement: AsyncTaskAstNode | null
 }
 
 function isAsyncTaskStatementAwaitShape(statement: AsyncTaskAstNode | null | undefined): boolean {
-  if (statement == null || statement.type !== 'ExpressionStatement' || statement.expression == null) {
+  if (
+    statement === null ||
+    typeof statement === 'undefined' ||
+    statement.type !== 'ExpressionStatement' ||
+    statement.expression === null ||
+    typeof statement.expression === 'undefined'
+  ) {
     return false
   }
 
@@ -1399,11 +1448,23 @@ function isAsyncTaskLocalPromiseAwaitShape(
   promiseStatement: AsyncTaskAstNode | null | undefined,
   awaitStatement: AsyncTaskAstNode | null | undefined
 ): boolean {
-  if (promiseStatement == null || promiseStatement.type !== 'VariableDeclaration' || promiseStatement.init == null) {
+  if (
+    promiseStatement === null ||
+    typeof promiseStatement === 'undefined' ||
+    promiseStatement.type !== 'VariableDeclaration' ||
+    promiseStatement.init === null ||
+    typeof promiseStatement.init === 'undefined'
+  ) {
     return false
   }
 
-  if (awaitStatement == null || awaitStatement.type !== 'VariableDeclaration' || awaitStatement.init == null) {
+  if (
+    awaitStatement === null ||
+    typeof awaitStatement === 'undefined' ||
+    awaitStatement.type !== 'VariableDeclaration' ||
+    awaitStatement.init === null ||
+    typeof awaitStatement.init === 'undefined'
+  ) {
     return false
   }
 
@@ -1417,8 +1478,11 @@ function collectAsyncTaskNestedTryChain(tryStatement: AsyncTaskAstNode): AsyncTa
   let postNestedOwnerIndex = -1
   let current: AsyncTaskAstNode | null = tryStatement
 
-  while (current != null && current.type === 'TryStatement') {
-    if (current.handler == null && current.finalizer == null) {
+  while (current !== null && typeof current !== 'undefined' && current.type === 'TryStatement') {
+    if (
+      (current.handler === null || typeof current.handler === 'undefined') &&
+      (current.finalizer === null || typeof current.finalizer === 'undefined')
+    ) {
       return null
     }
 
@@ -1476,7 +1540,7 @@ function collectAsyncTaskTryFinalizers(tryChain: AsyncTaskAstNode[]): AsyncTaskA
 
 function findAsyncTaskNearestTryHandlerIndex(tryChain: AsyncTaskAstNode[]): number {
   for (let index = tryChain.length - 1; index >= 0; index = index - 1) {
-    if (tryChain[index].handler != null) {
+    if (tryChain[index].handler !== null && typeof tryChain[index].handler !== 'undefined') {
       return index
     }
   }
@@ -1513,7 +1577,7 @@ function resolveAsyncTaskPrefixLocals(
 
     let valueType = statement.valueType
 
-    if (valueType == null) {
+    if (valueType === null || typeof valueType === 'undefined') {
       valueType = asyncTaskDeps(context).inferExpressionType(statement.init, context)
     }
 
@@ -1536,9 +1600,14 @@ function resolveAsyncTaskPrefixLocals(
       let setElementType: string | null = null
 
       if (valueType === 'object') {
-        if (statement.shape != null) {
+        if (statement.shape !== null && typeof statement.shape !== 'undefined') {
           shape = statement.shape
-        } else if (statement.init != null && statement.init.shape != null) {
+        } else if (
+          statement.init !== null &&
+          typeof statement.init !== 'undefined' &&
+          statement.init.shape !== null &&
+          typeof statement.init.shape !== 'undefined'
+        ) {
           shape = statement.init.shape
         } else {
           shape = null
@@ -1546,14 +1615,22 @@ function resolveAsyncTaskPrefixLocals(
       }
 
       if (valueType === 'array') {
-        if (statement.arrayElementType != null) {
+        if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
           arrayElementType = statement.arrayElementType
-        } else if (statement.init != null && statement.init.arrayElementType != null) {
+        } else if (
+          statement.init !== null &&
+          typeof statement.init !== 'undefined' &&
+          statement.init.arrayElementType !== null &&
+          typeof statement.init.arrayElementType !== 'undefined'
+        ) {
           arrayElementType = statement.init.arrayElementType
         } else {
-          const resolvedArrayElementType = asyncTaskDeps(context).resolveRuntimeArrayElementType(statement.init, context)
+          const resolvedArrayElementType = asyncTaskDeps(context).resolveRuntimeArrayElementType(
+            statement.init,
+            context
+          )
 
-          if (resolvedArrayElementType != null) {
+          if (resolvedArrayElementType !== null && typeof resolvedArrayElementType !== 'undefined') {
             arrayElementType = resolvedArrayElementType
           } else {
             arrayElementType = 'unknown'
@@ -1564,21 +1641,31 @@ function resolveAsyncTaskPrefixLocals(
       if (valueType === 'map') {
         const resolvedMapType = asyncTaskDeps(context).resolveRuntimeMapType(statement.init, context)
 
-        if (statement.mapKeyType != null) {
+        if (statement.mapKeyType !== null && typeof statement.mapKeyType !== 'undefined') {
           mapKeyType = statement.mapKeyType
-        } else if (resolvedMapType != null) {
+        } else if (resolvedMapType !== null && typeof resolvedMapType !== 'undefined') {
           mapKeyType = resolvedMapType.key
-        } else if (statement.init != null && statement.init.mapKeyType != null) {
+        } else if (
+          statement.init !== null &&
+          typeof statement.init !== 'undefined' &&
+          statement.init.mapKeyType !== null &&
+          typeof statement.init.mapKeyType !== 'undefined'
+        ) {
           mapKeyType = statement.init.mapKeyType
         } else {
           mapKeyType = 'unknown'
         }
 
-        if (statement.mapValueType != null) {
+        if (statement.mapValueType !== null && typeof statement.mapValueType !== 'undefined') {
           mapValueType = statement.mapValueType
-        } else if (resolvedMapType != null) {
+        } else if (resolvedMapType !== null && typeof resolvedMapType !== 'undefined') {
           mapValueType = resolvedMapType.value
-        } else if (statement.init != null && statement.init.mapValueType != null) {
+        } else if (
+          statement.init !== null &&
+          typeof statement.init !== 'undefined' &&
+          statement.init.mapValueType !== null &&
+          typeof statement.init.mapValueType !== 'undefined'
+        ) {
           mapValueType = statement.init.mapValueType
         } else {
           mapValueType = 'unknown'
@@ -1586,14 +1673,19 @@ function resolveAsyncTaskPrefixLocals(
       }
 
       if (valueType === 'set') {
-        if (statement.setElementType != null) {
+        if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
           setElementType = statement.setElementType
         } else {
           const resolvedSetElementType = asyncTaskDeps(context).resolveRuntimeSetElementType(statement.init, context)
 
-          if (resolvedSetElementType != null) {
+          if (resolvedSetElementType !== null && typeof resolvedSetElementType !== 'undefined') {
             setElementType = resolvedSetElementType
-          } else if (statement.init != null && statement.init.setElementType != null) {
+          } else if (
+            statement.init !== null &&
+            typeof statement.init !== 'undefined' &&
+            statement.init.setElementType !== null &&
+            typeof statement.init.setElementType !== 'undefined'
+          ) {
             setElementType = statement.init.setElementType
           } else {
             setElementType = 'unknown'
@@ -1630,7 +1722,7 @@ function registerAsyncTaskStatementListLocals(context: AsyncTaskPlannerContext, 
 
     let valueType = statement.valueType
 
-    if (valueType == null) {
+    if (valueType === null || typeof valueType === 'undefined') {
       valueType = asyncTaskDeps(context).inferExpressionType(statement.init, context)
     }
 
@@ -1684,7 +1776,7 @@ function isRuntimeStringPrefixLocalDeclaration(statement: AsyncTaskAstNode, cont
   const expression = statement.init
 
   if (
-    asyncTaskDeps(context).resolveRuntimeStringReference(expression, context) != null ||
+    isPresent(asyncTaskDeps(context).resolveRuntimeStringReference(expression, context)) ||
     asyncTaskDeps(context).isRuntimeProducedStringExpression(expression, context) ||
     isRawStringLiteralExpression(expression)
   ) {
@@ -1694,7 +1786,7 @@ function isRuntimeStringPrefixLocalDeclaration(statement: AsyncTaskAstNode, cont
   if (asyncTaskDeps(context).isMemberAccessExpression(expression)) {
     const member = asyncTaskDeps(context).resolveKnownObjectMember(expression, context)
 
-    return member != null && member.valueType === 'string'
+    return member !== null && typeof member !== 'undefined' && member.valueType === 'string'
   }
 
   if (asyncTaskDeps(context).isIndexAccessExpression(expression)) {
@@ -1702,22 +1794,22 @@ function isRuntimeStringPrefixLocalDeclaration(statement: AsyncTaskAstNode, cont
     const field = asyncTaskDeps(context).resolveKnownObjectIndex(expression, context)
     const runtimeElement = asyncTaskDeps(context).resolveRuntimeArrayIndex(expression, context)
 
-    if (element != null && element.valueType === 'string') {
+    if (element !== null && typeof element !== 'undefined' && element.valueType === 'string') {
       return true
     }
 
-    if (field != null && field.valueType === 'string') {
+    if (field !== null && typeof field !== 'undefined' && field.valueType === 'string') {
       return true
     }
 
-    return runtimeElement != null && runtimeElement.valueType === 'string'
+    return runtimeElement !== null && typeof runtimeElement !== 'undefined' && runtimeElement.valueType === 'string'
   }
 
   return false
 }
 
 function isRawStringLiteralExpression(expression: AsyncTaskAstNode | null | undefined): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
@@ -1734,7 +1826,7 @@ function resolveAsyncTaskTryHandler(
   params: CAsyncTaskParam[],
   returnType: string
 ): CAsyncTaskTryHandlerPlan | null {
-  if (handler == null) {
+  if (handler === null || typeof handler === 'undefined') {
     return null
   }
 
@@ -1742,13 +1834,18 @@ function resolveAsyncTaskTryHandler(
   const returnStatement = getAsyncTaskLastStatement(statements)
   const handlerStatements = getAsyncTaskStatementsBeforeLast(statements)
 
-  if (returnStatement == null || returnStatement.type !== 'ReturnStatement' || hasUnsupportedAsyncTaskTryControlFlow(handlerStatements)) {
+  if (
+    returnStatement === null ||
+    typeof returnStatement === 'undefined' ||
+    returnStatement.type !== 'ReturnStatement' ||
+    hasUnsupportedAsyncTaskTryControlFlow(handlerStatements)
+  ) {
     return null
   }
 
   const catchScope = pushAsyncTaskExpressionContextScope(context, params, [])
 
-  if (handler.param != null) {
+  if (handler.param !== null && typeof handler.param !== 'undefined') {
     context.variables.set(handler.param, 'string')
     context.runtimeStrings.add(handler.param)
   }
@@ -1761,13 +1858,13 @@ function resolveAsyncTaskTryHandler(
   )
   asyncTaskDeps(context).restoreVariableScope(context, catchScope)
 
-  if (returnExpression == null) {
+  if (returnExpression === null || typeof returnExpression === 'undefined') {
     return null
   }
 
   let handlerParam: string | null = null
 
-  if (handler.param != null) {
+  if (handler.param !== null && typeof handler.param !== 'undefined') {
     handlerParam = handler.param
   }
 
@@ -1783,11 +1880,7 @@ function createAsyncTaskExpressionContext(
   params: CAsyncTaskParam[],
   awaits: Array<CAsyncTaskAwaitStep | CAsyncTaskPrefixLocal>
 ): AsyncTaskPlannerContext {
-  const result = asyncTaskDeps(context).createFunctionContext(
-    context,
-    context.returnType,
-    context.returnNullable
-  )
+  const result = asyncTaskDeps(context).createFunctionContext(context, context.returnType, context.returnNullable)
 
   result.arrayShapes = context.arrayShapes
   result.breakFlowUsed = context.breakFlowUsed
@@ -1831,16 +1924,16 @@ function createAsyncTaskExpressionContext(
   result.returnTargets = context.returnTargets
   result.runtimeArrayElementTypes = cloneOptionalAsyncTaskStringMap(context.runtimeArrayElementTypes)
   const runtimeCallbackCleanupLabel = context.runtimeCallbackCleanupLabel
-  if (runtimeCallbackCleanupLabel != null) {
+  if (runtimeCallbackCleanupLabel !== null && typeof runtimeCallbackCleanupLabel !== 'undefined') {
     result.runtimeCallbackCleanupLabel = runtimeCallbackCleanupLabel
   }
   const runtimeCallbackReturnOut = context.runtimeCallbackReturnOut
-  if (runtimeCallbackReturnOut != null) {
+  if (runtimeCallbackReturnOut !== null && typeof runtimeCallbackReturnOut !== 'undefined') {
     result.runtimeCallbackReturnOut = runtimeCallbackReturnOut
   }
   result.runtimeCallbackReturnShape = context.runtimeCallbackReturnShape
   const runtimeCallbackReturnType = context.runtimeCallbackReturnType
-  if (runtimeCallbackReturnType != null) {
+  if (runtimeCallbackReturnType !== null && typeof runtimeCallbackReturnType !== 'undefined') {
     result.runtimeCallbackReturnType = runtimeCallbackReturnType
   }
   result.runtimeCallbacks = context.runtimeCallbacks
@@ -1857,7 +1950,7 @@ function createAsyncTaskExpressionContext(
   }
 
   for (const item of awaits) {
-    if (item.name != null) {
+    if (item.name !== null && typeof item.name !== 'undefined') {
       registerAsyncTaskLocalMetadata(item.name, item.type, item, result)
     }
   }
@@ -1886,14 +1979,14 @@ function registerAsyncTaskExpressionContextMetadata(
   }
 
   for (const item of locals) {
-    if (item.name != null) {
+    if (item.name !== null && typeof item.name !== 'undefined') {
       registerAsyncTaskLocalMetadata(item.name, item.type, item, context)
     }
   }
 }
 
 function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): boolean {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return false
   }
 
@@ -1907,7 +2000,11 @@ function hasUnsupportedAsyncTaskTryControlFlow(value: AsyncTaskChildValue): bool
 
   const current = value as AsyncTaskAstNode
 
-  if (current.type != null && isUnsupportedAsyncTaskTryControlFlowType(current.type)) {
+  if (
+    current.type !== null &&
+    typeof current.type !== 'undefined' &&
+    isUnsupportedAsyncTaskTryControlFlowType(current.type)
+  ) {
     return true
   }
 
@@ -1925,7 +2022,7 @@ function hasUnsupportedAsyncTaskTryControlFlowArray(values: AsyncTaskAstNode[]):
 }
 
 function hasUnsupportedAsyncTaskTryControlFlowChild(value: AsyncTaskChildValue): boolean {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return false
   }
 
@@ -1985,7 +2082,7 @@ function resolveAsyncTaskAwaitSteps(
 ): CAsyncTaskAwaitStep[] | null {
   const result = resolveAsyncTaskAwaitStepsAndTrailingStatements(statements, context)
 
-  if (result != null && result.trailingStatements.length === 0) {
+  if (result !== null && typeof result !== 'undefined' && result.trailingStatements.length === 0) {
     return result.awaits
   }
 
@@ -2003,7 +2100,7 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
     const nextStatement = statements[index + 1]
     const directAwait = resolveAsyncTaskDirectAwaitStep(statement, context, awaits.length)
 
-    if (directAwait != null) {
+    if (directAwait !== null && typeof directAwait !== 'undefined') {
       awaits.push(directAwait)
       index = index + 1
       continue
@@ -2011,7 +2108,7 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
 
     const statementAwait = resolveAsyncTaskStatementAwaitStep(statement, context, awaits.length)
 
-    if (statementAwait != null) {
+    if (statementAwait !== null && typeof statementAwait !== 'undefined') {
       awaits.push(statementAwait)
       index = index + 1
       continue
@@ -2019,7 +2116,7 @@ function resolveAsyncTaskAwaitStepsAndTrailingStatements(
 
     const localPromiseAwait = resolveAsyncTaskLocalPromiseAwaitStep(statement, nextStatement, context, awaits.length)
 
-    if (localPromiseAwait != null) {
+    if (localPromiseAwait !== null && typeof localPromiseAwait !== 'undefined') {
       awaits.push(localPromiseAwait)
       index = index + 2
       continue
@@ -2050,7 +2147,13 @@ function resolveAsyncTaskDirectAwaitStep(
   context: AsyncTaskPlannerContext,
   index: number
 ): CAsyncTaskAwaitStep | null {
-  if (statement == null || statement.type !== 'VariableDeclaration' || statement.init == null) {
+  if (
+    statement === null ||
+    typeof statement === 'undefined' ||
+    statement.type !== 'VariableDeclaration' ||
+    statement.init === null ||
+    typeof statement.init === 'undefined'
+  ) {
     return null
   }
 
@@ -2060,9 +2163,9 @@ function resolveAsyncTaskDirectAwaitStep(
 
   let awaitedType: string = 'unknown'
 
-  if (statement.valueType != null) {
+  if (statement.valueType !== null && typeof statement.valueType !== 'undefined') {
     awaitedType = statement.valueType
-  } else if (statement.init.valueType != null) {
+  } else if (statement.init.valueType !== null && typeof statement.init.valueType !== 'undefined') {
     awaitedType = statement.init.valueType
   }
 
@@ -2084,41 +2187,61 @@ function resolveAsyncTaskDirectAwaitStep(
   let setElementType: string | null = null
 
   if (awaitedType === 'object') {
-    if (statement.shape != null) {
+    if (statement.shape !== null && typeof statement.shape !== 'undefined') {
       shape = statement.shape
-    } else if (statement.init.shape != null) {
+    } else if (statement.init.shape !== null && typeof statement.init.shape !== 'undefined') {
       shape = statement.init.shape
-    } else if (awaitedExpression != null && awaitedExpression.shape != null) {
+    } else if (
+      awaitedExpression !== null &&
+      typeof awaitedExpression !== 'undefined' &&
+      awaitedExpression.shape !== null &&
+      typeof awaitedExpression.shape !== 'undefined'
+    ) {
       shape = awaitedExpression.shape
     } else {
       shape = null
     }
   }
 
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     arrayElementType = statement.arrayElementType
-  } else if (statement.init.arrayElementType != null) {
+  } else if (statement.init.arrayElementType !== null && typeof statement.init.arrayElementType !== 'undefined') {
     arrayElementType = statement.init.arrayElementType
-  } else if (awaitedExpression != null && awaitedExpression.arrayElementType != null) {
+  } else if (
+    awaitedExpression !== null &&
+    typeof awaitedExpression !== 'undefined' &&
+    awaitedExpression.arrayElementType !== null &&
+    typeof awaitedExpression.arrayElementType !== 'undefined'
+  ) {
     arrayElementType = awaitedExpression.arrayElementType
   }
 
   if (awaitedType === 'map') {
-    if (statement.mapKeyType != null) {
+    if (statement.mapKeyType !== null && typeof statement.mapKeyType !== 'undefined') {
       mapKeyType = statement.mapKeyType
-    } else if (statement.init.mapKeyType != null) {
+    } else if (statement.init.mapKeyType !== null && typeof statement.init.mapKeyType !== 'undefined') {
       mapKeyType = statement.init.mapKeyType
-    } else if (awaitedExpression != null && awaitedExpression.mapKeyType != null) {
+    } else if (
+      awaitedExpression !== null &&
+      typeof awaitedExpression !== 'undefined' &&
+      awaitedExpression.mapKeyType !== null &&
+      typeof awaitedExpression.mapKeyType !== 'undefined'
+    ) {
       mapKeyType = awaitedExpression.mapKeyType
     } else {
       mapKeyType = 'unknown'
     }
 
-    if (statement.mapValueType != null) {
+    if (statement.mapValueType !== null && typeof statement.mapValueType !== 'undefined') {
       mapValueType = statement.mapValueType
-    } else if (statement.init.mapValueType != null) {
+    } else if (statement.init.mapValueType !== null && typeof statement.init.mapValueType !== 'undefined') {
       mapValueType = statement.init.mapValueType
-    } else if (awaitedExpression != null && awaitedExpression.mapValueType != null) {
+    } else if (
+      awaitedExpression !== null &&
+      typeof awaitedExpression !== 'undefined' &&
+      awaitedExpression.mapValueType !== null &&
+      typeof awaitedExpression.mapValueType !== 'undefined'
+    ) {
       mapValueType = awaitedExpression.mapValueType
     } else {
       mapValueType = 'unknown'
@@ -2126,11 +2249,16 @@ function resolveAsyncTaskDirectAwaitStep(
   }
 
   if (awaitedType === 'set') {
-    if (statement.setElementType != null) {
+    if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
       setElementType = statement.setElementType
-    } else if (statement.init.setElementType != null) {
+    } else if (statement.init.setElementType !== null && typeof statement.init.setElementType !== 'undefined') {
       setElementType = statement.init.setElementType
-    } else if (awaitedExpression != null && awaitedExpression.setElementType != null) {
+    } else if (
+      awaitedExpression !== null &&
+      typeof awaitedExpression !== 'undefined' &&
+      awaitedExpression.setElementType !== null &&
+      typeof awaitedExpression.setElementType !== 'undefined'
+    ) {
       setElementType = awaitedExpression.setElementType
     } else {
       setElementType = 'unknown'
@@ -2139,7 +2267,7 @@ function resolveAsyncTaskDirectAwaitStep(
 
   let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
 
-  if (awaitedPromiseExpression != null) {
+  if (awaitedPromiseExpression !== null && typeof awaitedPromiseExpression !== 'undefined') {
     storedAwaitedExpression = null
   }
 
@@ -2163,7 +2291,13 @@ function resolveAsyncTaskStatementAwaitStep(
   context: AsyncTaskPlannerContext,
   index: number
 ): CAsyncTaskAwaitStep | null {
-  if (statement == null || statement.type !== 'ExpressionStatement' || statement.expression == null) {
+  if (
+    statement === null ||
+    typeof statement === 'undefined' ||
+    statement.type !== 'ExpressionStatement' ||
+    statement.expression === null ||
+    typeof statement.expression === 'undefined'
+  ) {
     return null
   }
 
@@ -2173,7 +2307,7 @@ function resolveAsyncTaskStatementAwaitStep(
 
   let awaitedType = statement.expression.valueType
 
-  if (awaitedType == null) {
+  if (awaitedType === null || typeof awaitedType === 'undefined') {
     awaitedType = 'void'
   }
 
@@ -2190,7 +2324,7 @@ function resolveAsyncTaskStatementAwaitStep(
 
   let storedAwaitedExpression: AsyncTaskAstNode | null = awaitedExpression
 
-  if (awaitedPromiseExpression != null) {
+  if (awaitedPromiseExpression !== null && typeof awaitedPromiseExpression !== 'undefined') {
     storedAwaitedExpression = null
   }
 
@@ -2210,7 +2344,13 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
   context: AsyncTaskPlannerContext,
   index: number
 ): CAsyncTaskAwaitStep | null {
-  if (awaitStatement == null || awaitStatement.type !== 'VariableDeclaration' || awaitStatement.init == null) {
+  if (
+    awaitStatement === null ||
+    typeof awaitStatement === 'undefined' ||
+    awaitStatement.type !== 'VariableDeclaration' ||
+    awaitStatement.init === null ||
+    typeof awaitStatement.init === 'undefined'
+  ) {
     return null
   }
 
@@ -2220,15 +2360,15 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
 
   const awaitedPromiseExpression = resolveAsyncTaskAwaitedPromiseExpression(promiseStatement, awaitStatement, context)
 
-  if (awaitedPromiseExpression == null) {
+  if (awaitedPromiseExpression === null || typeof awaitedPromiseExpression === 'undefined') {
     return null
   }
 
   let awaitedType: string = 'unknown'
 
-  if (awaitStatement.valueType != null) {
+  if (awaitStatement.valueType !== null && typeof awaitStatement.valueType !== 'undefined') {
     awaitedType = awaitStatement.valueType
-  } else if (awaitStatement.init.valueType != null) {
+  } else if (awaitStatement.init.valueType !== null && typeof awaitStatement.init.valueType !== 'undefined') {
     awaitedType = awaitStatement.init.valueType
   }
 
@@ -2243,45 +2383,54 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
   let setElementType: string | null = null
 
   if (awaitedType === 'object') {
-    if (awaitStatement.shape != null) {
+    if (awaitStatement.shape !== null && typeof awaitStatement.shape !== 'undefined') {
       shape = awaitStatement.shape
-    } else if (awaitStatement.init.shape != null) {
+    } else if (awaitStatement.init.shape !== null && typeof awaitStatement.init.shape !== 'undefined') {
       shape = awaitStatement.init.shape
-    } else if (awaitedPromiseExpression.shape != null) {
+    } else if (awaitedPromiseExpression.shape !== null && typeof awaitedPromiseExpression.shape !== 'undefined') {
       shape = awaitedPromiseExpression.shape
     } else {
       shape = null
     }
   }
 
-  if (awaitStatement.arrayElementType != null) {
+  if (awaitStatement.arrayElementType !== null && typeof awaitStatement.arrayElementType !== 'undefined') {
     arrayElementType = awaitStatement.arrayElementType
-  } else if (awaitStatement.init.arrayElementType != null) {
+  } else if (
+    awaitStatement.init.arrayElementType !== null &&
+    typeof awaitStatement.init.arrayElementType !== 'undefined'
+  ) {
     arrayElementType = awaitStatement.init.arrayElementType
   } else {
     arrayElementType = awaitedPromiseExpression.arrayElementType
 
-    if (arrayElementType == null) {
+    if (arrayElementType === null || typeof arrayElementType === 'undefined') {
       arrayElementType = null
     }
   }
 
   if (awaitedType === 'map') {
-    if (awaitStatement.mapKeyType != null) {
+    if (awaitStatement.mapKeyType !== null && typeof awaitStatement.mapKeyType !== 'undefined') {
       mapKeyType = awaitStatement.mapKeyType
-    } else if (awaitStatement.init.mapKeyType != null) {
+    } else if (awaitStatement.init.mapKeyType !== null && typeof awaitStatement.init.mapKeyType !== 'undefined') {
       mapKeyType = awaitStatement.init.mapKeyType
-    } else if (awaitedPromiseExpression.mapKeyType != null) {
+    } else if (
+      awaitedPromiseExpression.mapKeyType !== null &&
+      typeof awaitedPromiseExpression.mapKeyType !== 'undefined'
+    ) {
       mapKeyType = awaitedPromiseExpression.mapKeyType
     } else {
       mapKeyType = 'unknown'
     }
 
-    if (awaitStatement.mapValueType != null) {
+    if (awaitStatement.mapValueType !== null && typeof awaitStatement.mapValueType !== 'undefined') {
       mapValueType = awaitStatement.mapValueType
-    } else if (awaitStatement.init.mapValueType != null) {
+    } else if (awaitStatement.init.mapValueType !== null && typeof awaitStatement.init.mapValueType !== 'undefined') {
       mapValueType = awaitStatement.init.mapValueType
-    } else if (awaitedPromiseExpression.mapValueType != null) {
+    } else if (
+      awaitedPromiseExpression.mapValueType !== null &&
+      typeof awaitedPromiseExpression.mapValueType !== 'undefined'
+    ) {
       mapValueType = awaitedPromiseExpression.mapValueType
     } else {
       mapValueType = 'unknown'
@@ -2289,11 +2438,17 @@ function resolveAsyncTaskLocalPromiseAwaitStep(
   }
 
   if (awaitedType === 'set') {
-    if (awaitStatement.setElementType != null) {
+    if (awaitStatement.setElementType !== null && typeof awaitStatement.setElementType !== 'undefined') {
       setElementType = awaitStatement.setElementType
-    } else if (awaitStatement.init.setElementType != null) {
+    } else if (
+      awaitStatement.init.setElementType !== null &&
+      typeof awaitStatement.init.setElementType !== 'undefined'
+    ) {
       setElementType = awaitStatement.init.setElementType
-    } else if (awaitedPromiseExpression.setElementType != null) {
+    } else if (
+      awaitedPromiseExpression.setElementType !== null &&
+      typeof awaitedPromiseExpression.setElementType !== 'undefined'
+    ) {
       setElementType = awaitedPromiseExpression.setElementType
     } else {
       setElementType = 'unknown'
@@ -2320,13 +2475,14 @@ function resolveAsyncTaskAwaitedPromiseExpression(
   awaitStatement: AsyncTaskAstNode,
   context: AsyncTaskPlannerContext
 ): AsyncTaskAstNode | null {
-  if (promiseStatement == null) {
+  if (promiseStatement === null || typeof promiseStatement === 'undefined') {
     return null
   }
 
   if (
     promiseStatement.type !== 'VariableDeclaration' ||
-    promiseStatement.init == null ||
+    promiseStatement.init === null ||
+    typeof promiseStatement.init === 'undefined' ||
     promiseStatement.init.valueType !== 'promise' ||
     !isSupportedAsyncTaskAwaitedPromiseExpression(promiseStatement.init, context)
   ) {
@@ -2335,11 +2491,11 @@ function resolveAsyncTaskAwaitedPromiseExpression(
 
   let awaited: AsyncTaskAstNode | null = null
 
-  if (awaitStatement.init != null) {
+  if (awaitStatement.init !== null && typeof awaitStatement.init !== 'undefined') {
     awaited = awaitStatement.init.argument
   }
 
-  if (awaited == null || awaited.type !== 'Reference') {
+  if (awaited === null || typeof awaited === 'undefined' || awaited.type !== 'Reference') {
     return null
   }
 
@@ -2356,7 +2512,7 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(
   expression: AsyncTaskAstNode | null | undefined,
   context: AsyncTaskPlannerContext
 ): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -2368,14 +2524,19 @@ function isSupportedAsyncTaskAwaitedPromiseExpression(
     return true
   }
 
-  if (expression.callee == null || expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'then') {
+  if (
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'then'
+  ) {
     return false
   }
 
   const receiver = asyncTaskMemberObjectOrNull(expression)
   const callback = asyncTaskNodeOrEmpty(asyncTaskFirstArgumentOrNull(expression))
 
-  if (receiver == null || receiver.type !== 'CallExpression') {
+  if (receiver === null || typeof receiver === 'undefined' || receiver.type !== 'CallExpression') {
     return false
   }
 
@@ -2394,7 +2555,7 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
   expression: AsyncTaskAstNode | null | undefined,
   context: AsyncTaskPlannerContext
 ): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -2414,7 +2575,10 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
     return true
   }
 
-  if (!isAsyncFunctionCallee(expression.callee, context) || asyncTaskDeps(context).isThrowingFunctionCallee(expression.callee, context)) {
+  if (
+    !isAsyncFunctionCallee(expression.callee, context) ||
+    asyncTaskDeps(context).isThrowingFunctionCallee(expression.callee, context)
+  ) {
     return false
   }
 
@@ -2423,17 +2587,14 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
   return isSupportedAsyncTaskValueType(valueType)
 }
 
-function resolvedAsyncFunctionAwaitValueType(
-  expression: AsyncTaskAstNode,
-  context: AsyncTaskPlannerContext
-): string {
+function resolvedAsyncFunctionAwaitValueType(expression: AsyncTaskAstNode, context: AsyncTaskPlannerContext): string {
   const resolvedValueType = resolveCAsyncFunctionAwaitValueType(expression.callee, context) ?? ''
 
   if (resolvedValueType !== '') {
     return resolvedValueType
   }
 
-  if (expression.promiseValueType != null) {
+  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
     return expression.promiseValueType
   }
 
@@ -2446,28 +2607,37 @@ function resolveAsyncTaskReturnValueExpression(
   context: AsyncTaskPlannerContext
 ): AsyncTaskAstNode | null {
   if (returnType === 'void') {
-    if (expression == null) {
+    if (expression === null || typeof expression === 'undefined') {
       return null
     }
 
     return expression
   }
 
-  if (expression != null && expression.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'resolve') {
-    if (expression.args[0] == null) {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'CallExpression' &&
+    cPromiseRuntimeCallName(expression.callee) === 'resolve'
+  ) {
+    if (expression.args[0] === null || typeof expression.args[0] === 'undefined') {
       return null
     }
 
     return expression.args[0]
   }
 
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   let expressionType = 'unknown'
 
-  if (expression.valueType != null && expression.valueType !== 'unknown') {
+  if (
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType !== 'unknown'
+  ) {
     expressionType = expression.valueType
   } else {
     expressionType = asyncTaskDeps(context).inferExpressionType(expression, context)
@@ -2581,7 +2751,9 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   lines.push(`static inox_status ${wrapper.startName}(${emitAsyncTaskStartParams(wrapper)}) {`)
   lines.push('  if (inox_loop == 0 || inox_loop->allocator == 0 || out == 0) return INOX_ERR_TYPE;')
   lines.push('  *out = 0;')
-  lines.push(`  ${wrapper.frameTypeName}* frame = inox_loop->allocator->alloc(inox_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`)
+  lines.push(
+    `  ${wrapper.frameTypeName}* frame = inox_loop->allocator->alloc(inox_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`
+  )
   lines.push('  if (frame == 0) return INOX_ERR_OOM;')
   lines.push('  frame->inox_loop = inox_loop;')
   lines.push('  frame->promise = 0;')
@@ -2648,14 +2820,18 @@ function registerAsyncTaskParams(wrapper: CAsyncTaskWrapper, context: AsyncTaskL
   }
 }
 
-function registerAsyncTaskAwaitLocals(wrapper: CAsyncTaskWrapper, context: AsyncTaskLocalMetadataContext, count: number): void {
+function registerAsyncTaskAwaitLocals(
+  wrapper: CAsyncTaskWrapper,
+  context: AsyncTaskLocalMetadataContext,
+  count: number
+): void {
   const locals: CAsyncTaskAwaitFrameLocal[] = collectAsyncTaskVisibleAwaitFrameLocals(wrapper, count)
 
   for (let index = 0; index < locals.length; index = index + 1) {
     const item = asyncTaskAwaitFrameLocalAt(locals, index)
     const name = item.name
 
-    if (name != null) {
+    if (name !== null && typeof name !== 'undefined') {
       registerAsyncTaskLocalMetadata(name, item.type, item, context)
     }
   }
@@ -2710,7 +2886,7 @@ function emitAsyncTaskVisibleLocalReads(
     appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(param.name, param.valueType, param.fieldName))
   }
 
-  if (options == null || options.includePrefixLocals !== false) {
+  if (options === null || typeof options === 'undefined' || options.includePrefixLocals !== false) {
     const prefixLocals: CAsyncTaskPrefixFrameLocal[] = collectAsyncTaskFrameLocals(wrapper, 'prefix')
 
     for (let index = 0; index < prefixLocals.length; index = index + 1) {
@@ -2727,7 +2903,7 @@ function emitAsyncTaskVisibleLocalReads(
     const name = item.name
     const fieldName = item.fieldName
 
-    if (name != null && fieldName != null) {
+    if (name !== null && typeof name !== 'undefined' && fieldName !== null && typeof fieldName !== 'undefined') {
       appendAsyncTaskLines(lines, emitAsyncTaskVisibleLocalRead(name, item.type, fieldName))
     }
   }
@@ -2766,7 +2942,7 @@ function collectAsyncTaskVisibleAwaitFrameLocals(
   for (let index = 0; index < source.length; index = index + 1) {
     const local = asyncTaskAwaitFrameLocalAt(source, index)
 
-    if (local.index < count && local.name != null) {
+    if (local.index < count && local.name !== null && typeof local.name !== 'undefined') {
       locals.push(local)
     }
   }
@@ -2789,7 +2965,7 @@ function registerAsyncTaskLocalMetadata(
   } else if (valueType === 'array') {
     let arrayElementType = item.arrayElementType
 
-    if (arrayElementType == null) {
+    if (arrayElementType === null || typeof arrayElementType === 'undefined') {
       arrayElementType = 'unknown'
     }
 
@@ -2805,7 +2981,7 @@ function registerAsyncTaskLocalMetadata(
   } else if (valueType === 'set') {
     let setElementType = item.setElementType
 
-    if (setElementType == null) {
+    if (setElementType === null || typeof setElementType === 'undefined') {
       setElementType = 'unknown'
     }
 
@@ -2818,7 +2994,7 @@ function registerAsyncTaskObjectShape(
   name: string,
   shape: CObjectShape | null | undefined
 ): void {
-  if (shape == null || shape.fields == null) {
+  if (shape === null || typeof shape === 'undefined' || shape.fields === null || typeof shape.fields === 'undefined') {
     return
   }
 
@@ -2838,7 +3014,14 @@ function registerAsyncTaskObjectShapeFields(
   for (const field of fields) {
     const shape = field.shape
 
-    if (field.valueType !== 'object' || shape == null || shape.fields == null || seen.has(shape)) {
+    if (
+      field.valueType !== 'object' ||
+      shape === null ||
+      typeof shape === 'undefined' ||
+      shape.fields === null ||
+      typeof shape.fields === 'undefined' ||
+      seen.has(shape)
+    ) {
       continue
     }
 
@@ -2886,7 +3069,7 @@ function emitAsyncTaskScheduleAwaitLines(
   const awaitedPromise = emitPreparedAsyncTaskAwaitedPromiseExpression(wrapper, item, context, options)
   let awaited: PreparedExpression | null = null
 
-  if (awaitedPromise == null) {
+  if (awaitedPromise === null || typeof awaitedPromise === 'undefined') {
     awaited = emitPreparedAsyncTaskAwaitedValueExpression(item, context)
   }
 
@@ -2898,26 +3081,28 @@ function emitAsyncTaskScheduleAwaitLines(
 
   let cleanupLines = options.cleanupLines
 
-  if (cleanupLines == null) {
+  if (cleanupLines === null || typeof cleanupLines === 'undefined') {
     cleanupLines = asyncTaskDeps(context).emitOwnedValueCleanup(context)
   }
 
   const lines: string[] = []
 
-  if (awaitedPromise == null) {
+  if (awaitedPromise === null || typeof awaitedPromise === 'undefined') {
     lines.push('status = inox_promise_new(inox_loop, &frame->awaited);')
     appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
   } else {
     appendAsyncTaskLines(lines, awaitedPromise.lines)
   }
 
-  lines.push(`status = inox_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`)
+  lines.push(
+    `status = inox_promise_then(frame->awaited, ${wrapper.resumeName}, ${wrapper.rejectName}, frame, ${finalizer});`
+  )
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
 
-  if (awaitedPromise == null) {
+  if (awaitedPromise === null || typeof awaitedPromise === 'undefined') {
     let awaitedExpression = 'inox_undefined_value()'
 
-    if (awaited != null) {
+    if (awaited !== null && typeof awaited !== 'undefined') {
       appendAsyncTaskLines(lines, awaited.lines)
       awaitedExpression = awaited.expression
     }
@@ -2951,7 +3136,9 @@ function emitAsyncTaskScheduleStatusCheck(
 
   lines.push('if (status != INOX_OK) {')
   appendIndentedAsyncTaskLines(lines, activeCleanupLines, '  ')
-  lines.push('  inox_status reject_status = inox_promise_reject(frame->promise, inox_number_value((inox_number)status));')
+  lines.push(
+    '  inox_status reject_status = inox_promise_reject(frame->promise, inox_number_value((inox_number)status));'
+  )
   lines.push(`  ${wrapper.finalizerName}(frame);`)
   lines.push('  return reject_status == INOX_OK ? status : reject_status;')
   lines.push('}')
@@ -2996,7 +3183,7 @@ function emitAsyncTaskResolveStatusCheck(
 }
 
 function asyncTaskLinesOrEmpty(lines: string[] | null): string[] {
-  if (lines != null) {
+  if (lines !== null && typeof lines !== 'undefined') {
     return lines
   }
 
@@ -3004,7 +3191,7 @@ function asyncTaskLinesOrEmpty(lines: string[] | null): string[] {
 }
 
 function asyncTaskNodeOrEmpty(node: AsyncTaskAstNode | null | undefined): AsyncTaskAstNode {
-  if (node != null) {
+  if (node !== null && typeof node !== 'undefined') {
     return node
   }
 
@@ -3014,13 +3201,13 @@ function asyncTaskNodeOrEmpty(node: AsyncTaskAstNode | null | undefined): AsyncT
 function asyncTaskMemberObjectOrNull(expression: AsyncTaskAstNode): AsyncTaskAstNode | null {
   const callee = expression.callee
 
-  if (callee == null) {
+  if (callee === null || typeof callee === 'undefined') {
     return null
   }
 
   const object = callee.object
 
-  if (object == null) {
+  if (object === null || typeof object === 'undefined') {
     return null
   }
 
@@ -3036,7 +3223,7 @@ function asyncTaskFirstArgumentOrNull(expression: AsyncTaskAstNode): AsyncTaskAs
 
   const argument = maybeAsyncTaskNodeAt(args, 0)
 
-  if (argument == null) {
+  if (argument === null || typeof argument === 'undefined') {
     return null
   }
 
@@ -3044,7 +3231,12 @@ function asyncTaskFirstArgumentOrNull(expression: AsyncTaskAstNode): AsyncTaskAs
 }
 
 function asyncTaskReferenceNameOrNull(expression: AsyncTaskAstNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
     return null
   }
 
@@ -3054,7 +3246,7 @@ function asyncTaskReferenceNameOrNull(expression: AsyncTaskAstNode | null | unde
 function asyncTaskLocationOrNull(expression: AsyncTaskAstNode): SourceLocation | null {
   const loc = expression.loc
 
-  if (loc == null) {
+  if (loc === null || typeof loc === 'undefined') {
     return null
   }
 
@@ -3069,19 +3261,19 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
 ): PreparedAsyncTaskPromise | null {
   const awaitedPromiseExpression = item.awaitedPromiseExpression
 
-  if (awaitedPromiseExpression == null) {
+  if (awaitedPromiseExpression === null || typeof awaitedPromiseExpression === 'undefined') {
     return null
   }
 
   const promiseSource = emitPreparedAsyncTaskPromiseSourceExpression(wrapper, item, context, options)
 
-  if (promiseSource != null) {
+  if (promiseSource !== null && typeof promiseSource !== 'undefined') {
     return promiseSource
   }
 
   const chain = emitPreparedAsyncTaskAwaitedPromiseChainExpression(wrapper, item, context, options)
 
-  if (chain != null) {
+  if (chain !== null && typeof chain !== 'undefined') {
     return chain
   }
 
@@ -3106,7 +3298,7 @@ function emitPreparedAsyncTaskAwaitedPromiseExpression(
 
   let awaitedValueExpression: AnyNode | null = null
 
-  if (awaitedPromiseExpression.args[0] != null) {
+  if (awaitedPromiseExpression.args[0] !== null && typeof awaitedPromiseExpression.args[0] !== 'undefined') {
     awaitedValueExpression = awaitedPromiseExpression.args[0]
   }
 
@@ -3138,43 +3330,43 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
 ): PreparedAsyncTaskPromise | null {
   const expression = item.awaitedPromiseExpression
 
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
   const rejected = emitPreparedAsyncTaskRejectedPromiseSourceExpression(expression, wrapper, context, options)
 
-  if (rejected != null) {
+  if (rejected !== null && typeof rejected !== 'undefined') {
     return rejected
   }
 
   const fsCall = emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, options)
 
-  if (fsCall != null) {
+  if (fsCall !== null && typeof fsCall !== 'undefined') {
     return fsCall
   }
 
   const fetchCall = emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context, options)
 
-  if (fetchCall != null) {
+  if (fetchCall !== null && typeof fetchCall !== 'undefined') {
     return fetchCall
   }
 
   const taskCall = emitPreparedAsyncTaskSourceCallExpression(expression, wrapper, context, options)
 
-  if (taskCall != null) {
+  if (taskCall !== null && typeof taskCall !== 'undefined') {
     return taskCall
   }
 
   const asyncCall = emitPreparedAsyncFunctionSourceCallExpression(expression, wrapper, context, options)
 
-  if (asyncCall != null) {
+  if (asyncCall !== null && typeof asyncCall !== 'undefined') {
     return asyncCall
   }
 
   const promiseCall = emitPreparedPlainPromiseSourceCallExpression(expression, wrapper, context, options)
 
-  if (promiseCall != null) {
+  if (promiseCall !== null && typeof promiseCall !== 'undefined') {
     return promiseCall
   }
 
@@ -3236,14 +3428,22 @@ function emitPreparedAsyncTaskFsSourceExpression(
       `status = inox_fs_append_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
     )
   } else if (method === 'copyFile') {
-    const destPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_dest_path')
+    const destPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(
+      expression.args[1],
+      context,
+      'inox_fs_dest_path'
+    )
 
     appendAsyncTaskLines(lines, destPath.lines)
     lines.push(
       `status = inox_fs_copy_file(inox_loop, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &frame->awaited);`
     )
   } else if (method === 'symlink') {
-    const linkPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_link_path')
+    const linkPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(
+      expression.args[1],
+      context,
+      'inox_fs_link_path'
+    )
 
     appendAsyncTaskLines(lines, linkPath.lines)
     lines.push(
@@ -3252,9 +3452,7 @@ function emitPreparedAsyncTaskFsSourceExpression(
   } else if (method === 'mkdir') {
     const recursiveFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')
 
-    lines.push(
-      `status = inox_fs_mkdir(inox_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, &frame->awaited);`
-    )
+    lines.push(`status = inox_fs_mkdir(inox_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, &frame->awaited);`)
   } else if (method === 'unlink') {
     lines.push(`status = inox_fs_unlink(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'rm') {
@@ -3265,7 +3463,11 @@ function emitPreparedAsyncTaskFsSourceExpression(
       `status = inox_fs_rm(inox_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, ${forceFlag}, &frame->awaited);`
     )
   } else if (method === 'rename') {
-    const newPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_new_path')
+    const newPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(
+      expression.args[1],
+      context,
+      'inox_fs_new_path'
+    )
 
     appendAsyncTaskLines(lines, newPath.lines)
     lines.push(
@@ -3318,7 +3520,9 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     if (init.expression === '0') {
       lines.push(`status = inox_fetch(inox_loop, ${url.bytes}, ${url.length}, &frame->awaited);`)
     } else {
-      lines.push(`status = inox_fetch_with_init(inox_loop, ${url.bytes}, ${url.length}, ${init.expression}, &frame->awaited);`)
+      lines.push(
+        `status = inox_fetch_with_init(inox_loop, ${url.bytes}, ${url.length}, ${init.expression}, &frame->awaited);`
+      )
     }
   } else {
     const response = asyncTaskDeps(context).emitCValueExpression(expression.callee.object, context)
@@ -3352,7 +3556,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
 
   const rejectArgument = asyncTaskFirstArgumentOrNull(expression)
 
-  if (rejectArgument != null && rejectArgument.type === 'StringLiteral') {
+  if (rejectArgument !== null && typeof rejectArgument !== 'undefined' && rejectArgument.type === 'StringLiteral') {
     const value = nextCName(context, 'inox_reject_value')
     const bytes = cStringLiteral(rejectArgument.value)
     const length = utf8ByteLength(rejectArgument.value)
@@ -3372,7 +3576,8 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   }
 
   if (
-    rejectArgument != null &&
+    rejectArgument !== null &&
+    typeof rejectArgument !== 'undefined' &&
     rejectArgument.type !== 'NumberLiteral' &&
     rejectArgument.type !== 'BooleanLiteral'
   ) {
@@ -3392,7 +3597,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
   let valueLines: string[] = []
   let valueExpression = 'inox_undefined_value()'
 
-  if (rejectArgument != null) {
+  if (rejectArgument !== null && typeof rejectArgument !== 'undefined') {
     const value = asyncTaskDeps(context).emitCValueExpression(rejectArgument, context)
 
     valueLines = value.lines
@@ -3418,13 +3623,13 @@ function emitPreparedAsyncTaskSourceCallExpression(
 ): PreparedAsyncTaskPromise | null {
   const sourceName = asyncTaskReferenceNameOrNull(expression.callee)
 
-  if (sourceName == null) {
+  if (sourceName === null || typeof sourceName === 'undefined') {
     return null
   }
 
   const target = context.asyncTaskWrappers.get(sourceName)
 
-  if (target != null) {
+  if (target !== null && typeof target !== 'undefined') {
     const prepared = asyncTaskDeps(context).emitPreparedCallArgs(expression, target.params, context)
     const args = ['inox_loop']
     const lines: string[] = []
@@ -3530,7 +3735,7 @@ function emitPreparedPlainPromiseSourceCallExpression(
 
   const params = asyncTaskDeps(context).resolveFunctionParams(expression.callee, context)
 
-  if (params == null) {
+  if (params === null || typeof params === 'undefined') {
     return null
   }
 
@@ -3555,7 +3760,7 @@ function emitPreparedPlainPromiseSourceCallExpression(
 }
 
 function asyncTaskFunctionParamsOrEmpty(params: CFunctionParam[] | null): CFunctionParam[] {
-  if (params != null) {
+  if (params !== null && typeof params !== 'undefined') {
     return params
   }
 
@@ -3571,9 +3776,11 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
   const expression = item.awaitedPromiseExpression
 
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'CallExpression' ||
-    expression.callee == null ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'then'
   ) {
@@ -3587,7 +3794,7 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
   chainWrapper = context.promiseChainArrowWrappers.get(callback)
 
   if (receiver.type === 'CallExpression' && cPromiseRuntimeCallName(receiver.callee) === 'resolve') {
-    if (chainWrapper != null) {
+    if (chainWrapper !== null && typeof chainWrapper !== 'undefined') {
       return emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
         wrapper,
         item,
@@ -3601,11 +3808,11 @@ function emitPreparedAsyncTaskAwaitedPromiseChainExpression(
   }
 
   context.diagnostics.push(
-      diagnostic(
-        'INOX_C_ASYNC',
-        'async task state-machine slice currently supports local Promise.resolve then-chain variables only',
-        asyncTaskLocationOrNull(expression)
-      )
+    diagnostic(
+      'INOX_C_ASYNC',
+      'async task state-machine slice currently supports local Promise.resolve then-chain variables only',
+      asyncTaskLocationOrNull(expression)
+    )
   )
 
   return {
@@ -3625,9 +3832,16 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
   const source = nextCName(context, 'inox_async_task_source')
   let sourceType: string = item.type
 
-  if (receiver.promiseValueType != null) {
+  if (receiver.promiseValueType !== null && typeof receiver.promiseValueType !== 'undefined') {
     sourceType = receiver.promiseValueType
-  } else if (callback != null && callback.params[0] != null && callback.params[0].valueType != null) {
+  } else if (
+    callback !== null &&
+    typeof callback !== 'undefined' &&
+    callback.params[0] !== null &&
+    typeof callback.params[0] !== 'undefined' &&
+    callback.params[0].valueType !== null &&
+    typeof callback.params[0].valueType !== 'undefined'
+  ) {
     sourceType = callback.params[0].valueType
   }
 
@@ -3646,7 +3860,9 @@ function emitPreparedAsyncTaskAwaitedPromiseChainForWrapper(
   appendAsyncTaskLines(lines, value.lines)
   lines.push(`status = inox_promise_resolved(inox_loop, ${value.expression}, &${source});`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
-  lines.push(`status = inox_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`)
+  lines.push(
+    `status = inox_promise_chain(${source}, ${chainWrapper.name}, 0, ${callbackContext.expression}, ${callbackContext.finalizer}, &frame->awaited);`
+  )
   lines.push(`inox_promise_release(${source});`)
   lines.push(`${source} = 0;`)
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, cleanupLines))
@@ -3662,7 +3878,7 @@ function emitAsyncTaskPromiseChainCallbackContext(
   context: AsyncTaskFunctionContext,
   options: AsyncTaskScheduleOptions
 ): AsyncTaskPromiseChainCallbackContext {
-  if (chainWrapper != null) {
+  if (chainWrapper !== null && typeof chainWrapper !== 'undefined') {
     if (isPromiseChainCallbackWrapperWithContext(chainWrapper)) {
       return emitAsyncTaskPromiseChainCallbackContextForWrapper(asyncWrapper, chainWrapper, context, options)
     }
@@ -3740,7 +3956,7 @@ function emitPreparedAsyncTaskAwaitedValueExpression(
 ): PreparedExpression {
   const awaitedExpression = item.awaitedExpression
 
-  if (awaitedExpression == null) {
+  if (awaitedExpression === null || typeof awaitedExpression === 'undefined') {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
@@ -3836,7 +4052,7 @@ function emitAsyncTaskResumeDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
 
   const returnValueOwnedValues: string[] = []
 
-  if (returnValue != null) {
+  if (returnValue !== null && typeof returnValue !== 'undefined') {
     for (const name of context.ownedValues) {
       returnValueOwnedValues.push(name)
     }
@@ -3845,7 +4061,10 @@ function emitAsyncTaskResumeDeclaration(wrapper: CAsyncTaskWrapper, baseContext:
   const cases: string[] = []
 
   for (const item of wrapper.awaits) {
-    appendAsyncTaskLines(cases, emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue, returnValueOwnedValues))
+    appendAsyncTaskLines(
+      cases,
+      emitAsyncTaskResumeCase(wrapper, item, baseContext, returnValue, returnValueOwnedValues)
+    )
   }
 
   const lines: string[] = []
@@ -3888,18 +4107,30 @@ function emitAsyncTaskResumeCase(
   lines.push('    frame->awaited = 0;')
   lines.push('  }')
 
-  if (nextItem == null) {
+  if (nextItem === null || typeof nextItem === 'undefined') {
     appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index + 1, null), '  ')
-    if (returnValue == null) {
-      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext), '  ')
+    if (returnValue === null || typeof returnValue === 'undefined') {
+      appendIndentedAsyncTaskLines(
+        lines,
+        emitAsyncTaskTrySuccessPreludeAndReturnLines(wrapper, item, baseContext),
+        '  '
+      )
     } else if (returnValueOwnedValues.length > 0) {
       for (const name of returnValueOwnedValues) {
         lines.push(`  inox_value ${name} = inox_undefined_value();`)
       }
 
-      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1), '  ')
+      appendIndentedAsyncTaskLines(
+        lines,
+        emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1),
+        '  '
+      )
       appendIndentedAsyncTaskLines(lines, returnValue.lines, '  ')
-      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1), '  ')
+      appendIndentedAsyncTaskLines(
+        lines,
+        emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1),
+        '  '
+      )
       lines.push(`  status = inox_promise_resolve(frame->promise, ${returnValue.expression});`)
 
       for (let index = returnValueOwnedValues.length - 1; index >= 0; index = index - 1) {
@@ -3908,9 +4139,17 @@ function emitAsyncTaskResumeCase(
 
       lines.push('  return status;')
     } else {
-      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1), '  ')
+      appendIndentedAsyncTaskLines(
+        lines,
+        emitAsyncTaskTrySuccessPreludeLines(wrapper, baseContext, item.index + 1),
+        '  '
+      )
       appendIndentedAsyncTaskLines(lines, returnValue.lines, '  ')
-      appendIndentedAsyncTaskLines(lines, emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1), '  ')
+      appendIndentedAsyncTaskLines(
+        lines,
+        emitAsyncTaskTrySuccessFinallyLines(wrapper, baseContext, item.index + 1),
+        '  '
+      )
       lines.push(`  return inox_promise_resolve(frame->promise, ${returnValue.expression});`)
     }
     lines.push('}')
@@ -3957,14 +4196,18 @@ function collectAsyncTaskSuccessPhaseStatements(
 ): AsyncTaskAstNode[] {
   let allowedKinds: Set<CAsyncTaskSuccessPhaseKind> | null = null
 
-  if (kinds != null) {
+  if (kinds !== null && typeof kinds !== 'undefined') {
     allowedKinds = asyncTaskSuccessPhaseKindSetFromArray(kinds)
   }
 
   const statements: AsyncTaskAstNode[] = []
 
   for (const phase of wrapper.successPhases) {
-    if (allowedKinds != null && !allowedKinds.has(phase.kind as CAsyncTaskSuccessPhaseKind)) {
+    if (
+      allowedKinds !== null &&
+      typeof allowedKinds !== 'undefined' &&
+      !allowedKinds.has(phase.kind as CAsyncTaskSuccessPhaseKind)
+    ) {
       continue
     }
 
@@ -3974,7 +4217,10 @@ function collectAsyncTaskSuccessPhaseStatements(
   return statements
 }
 
-function collectAsyncTaskTryPhaseStatements(wrapper: CAsyncTaskWrapper, kind: CAsyncTaskTryPhaseKind): AsyncTaskAstNode[] {
+function collectAsyncTaskTryPhaseStatements(
+  wrapper: CAsyncTaskWrapper,
+  kind: CAsyncTaskTryPhaseKind
+): AsyncTaskAstNode[] {
   const statements: AsyncTaskAstNode[] = []
 
   for (const phase of wrapper.tryPhases) {
@@ -4013,7 +4259,7 @@ function emitAsyncTaskFulfilledValueCheck(wrapper: CAsyncTaskWrapper, item: CAsy
 }
 
 function emitAsyncTaskStoreFulfilledValueLines(item: CAsyncTaskAwaitStep): string[] {
-  if (item.fieldName == null || item.type === 'void') {
+  if (item.fieldName === null || typeof item.fieldName === 'undefined' || item.type === 'void') {
     return []
   }
 
@@ -4091,7 +4337,10 @@ function emitAsyncTaskTrySuccessPreludeAndReturnLines(
   let preludeLines: string[] = []
   let returnValue: PreparedExpression = { lines: [], expression: '0' }
 
-  preludeLines = asyncTaskDeps(context).emitStatementList(collectAsyncTaskSuccessPhaseStatements(wrapper, null), context)
+  preludeLines = asyncTaskDeps(context).emitStatementList(
+    collectAsyncTaskSuccessPhaseStatements(wrapper, null),
+    context
+  )
   returnValue = emitPreparedAsyncTaskValueExpression(wrapper.returnExpression, wrapper.returnType, context)
   asyncTaskDeps(context).restoreVariableScope(context, resultScope)
 
@@ -4260,7 +4509,7 @@ function emitAsyncTaskTryRejectCase(
 ): string[] {
   let handler = wrapper.tryHandler
 
-  if (handler != null) {
+  if (handler !== null && typeof handler !== 'undefined') {
     return emitAsyncTaskTryRejectHandlerCase(wrapper, item, baseContext, handler)
   }
 
@@ -4287,7 +4536,7 @@ function emitAsyncTaskTryRejectHandlerCase(
   const lines = [`case ${item.index}: {`]
   const handlerParam = handler.param
 
-  if (handlerParam != null) {
+  if (handlerParam !== null && typeof handlerParam !== 'undefined') {
     lines.push('  if (inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0) {')
     appendIndentedAsyncTaskLines(
       lines,
@@ -4304,11 +4553,15 @@ function emitAsyncTaskTryRejectHandlerCase(
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskVisibleLocalReads(wrapper, item.index, null), '  ')
   appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryHandlerPreludeLines(wrapper, baseContext, item.index), '  ')
 
-  if (handlerParam != null) {
+  if (handlerParam !== null && typeof handlerParam !== 'undefined') {
     lines.push(`  inox_string* ${handlerParam} = (inox_string*)inox_error.as.ref;`)
   }
 
-  appendIndentedAsyncTaskLines(lines, emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler), '  ')
+  appendIndentedAsyncTaskLines(
+    lines,
+    emitAsyncTaskTryHandlerBodyAndReturnLines(wrapper, item, baseContext, handler),
+    '  '
+  )
   lines.push('}')
 
   return lines
@@ -4324,7 +4577,7 @@ function emitAsyncTaskTryHandlerBodyAndReturnLines(
   const context = createAsyncTaskEmitContext(baseContext, wrapper, wrapper.returnType, visibleAwaitCount)
   const handlerParam = handler.param
 
-  if (handlerParam != null) {
+  if (handlerParam !== null && typeof handlerParam !== 'undefined') {
     context.variables.set(handlerParam, 'string')
     context.runtimeStrings.add(handlerParam)
   }
@@ -4377,13 +4630,14 @@ function emitAsyncTaskFinalizerDeclaration(wrapper: CAsyncTaskWrapper): string[]
 
   lines.push('  if (frame->promise != 0) inox_promise_release(frame->promise);')
   lines.push('  if (frame->inox_loop != 0 && frame->inox_loop->allocator != 0) {')
-  lines.push('    frame->inox_loop->allocator->free(frame->inox_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));')
+  lines.push(
+    '    frame->inox_loop->allocator->free(frame->inox_loop->allocator->user, frame, sizeof(*frame), _Alignof(*frame));'
+  )
   lines.push('  }')
   lines.push('}')
 
   return lines
 }
-
 
 export function emitAsyncTaskFunctionStubDeclaration(
   statement: AsyncTaskAstNode,

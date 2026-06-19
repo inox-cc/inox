@@ -1,11 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectionConstructorNameFromPath } from '../../stdlib/descriptors/collections.ts'
-import {
-  emitPrepareOwnedValueWrite,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
-} from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
@@ -17,6 +12,7 @@ import type {
   CObjectShapeField,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 type PreparedCollectionCall = PreparedExpression
 type CollectionNode = AnyNode
@@ -126,7 +122,7 @@ function emitCollectionValueExpression(
 ): PreparedExpression {
   const deps = context.collectionLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.emitCValueExpression(expression, context)
   }
 
@@ -138,7 +134,7 @@ function emitCollectionValueExpression(
 function inferCollectionExpressionType(expression: CollectionNode, context: CollectionFunctionContext): string {
   const deps = context.collectionLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.inferExpressionType(expression, context)
   }
 
@@ -150,7 +146,7 @@ function inferCollectionExpressionType(expression: CollectionNode, context: Coll
 function isCollectionIndexAccessExpression(expression: CollectionNode, context: CollectionFunctionContext): boolean {
   const deps = context.collectionLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.isIndexAccessExpression(expression)
   }
 
@@ -162,7 +158,7 @@ function isCollectionIndexAccessExpression(expression: CollectionNode, context: 
 function isCollectionMemberAccessExpression(expression: CollectionNode, context: CollectionFunctionContext): boolean {
   const deps = context.collectionLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.isMemberAccessExpression(expression)
   }
 
@@ -180,7 +176,7 @@ function reportCollectionHashability(
   const checkedType = valueType ?? 'unknown'
   const deps = context.collectionLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     deps.reportCCollectionHashability(checkedType, subject, loc, context)
     return
   }
@@ -196,7 +192,7 @@ function resolveKnownCollectionObjectIndex(
 ): CObjectIndexFieldInfo | null {
   const deps = context.collectionLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.resolveKnownObjectIndex(expression, context)
   }
 
@@ -211,7 +207,7 @@ function resolveKnownCollectionObjectMember(
 ): CObjectFieldInfo | null {
   const deps = context.collectionLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.resolveKnownObjectMember(expression, context)
   }
 
@@ -230,7 +226,7 @@ function nodeLocOrFallback(
   node: AnyNode | null | undefined,
   fallback: SourceLocation | null | undefined
 ): SourceLocation | null | undefined {
-  if (node != null && node.loc != null) {
+  if (node !== null && typeof node !== 'undefined' && node.loc !== null && typeof node.loc !== 'undefined') {
     return node.loc
   }
 
@@ -238,7 +234,7 @@ function nodeLocOrFallback(
 }
 
 function stringOrUnknown(value: string | null | undefined): string {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -259,13 +255,13 @@ function functionReturnMapType(
 ): CFunctionReturnMapType | null {
   const functionReturnMapTypes = context.functionReturnMapTypes
 
-  if (functionReturnMapTypes == null) {
+  if (functionReturnMapTypes === null || typeof functionReturnMapTypes === 'undefined') {
     return null
   }
 
   const mapType = functionReturnMapTypes.get(functionReturn)
 
-  if (mapType != null) {
+  if (mapType !== null && typeof mapType !== 'undefined') {
     return mapType
   }
 
@@ -275,13 +271,13 @@ function functionReturnMapType(
 function functionReturnSetElementType(context: CollectionFunctionContext, functionReturn: string): string | null {
   const functionReturnSetElementTypes = context.functionReturnSetElementTypes
 
-  if (functionReturnSetElementTypes == null) {
+  if (functionReturnSetElementTypes === null || typeof functionReturnSetElementTypes === 'undefined') {
     return null
   }
 
   const elementType = functionReturnSetElementTypes.get(functionReturn)
 
-  if (elementType != null) {
+  if (elementType !== null && typeof elementType !== 'undefined') {
     return elementType
   }
 
@@ -322,7 +318,7 @@ export function emitPreparedCollectionReceiver(
       call = emitPreparedCollectionConstructorValueExpression(expression, context)
     }
 
-    if (call != null && call.expression !== '') {
+    if (call !== null && typeof call !== 'undefined' && call.expression !== '') {
       return {
         type: valueType,
         lines: call.lines,
@@ -362,12 +358,13 @@ export function emitPreparedCollectionReceiver(
 }
 
 export function isCollectionConstructorExpression(expression: AnyNode | null | undefined): boolean {
-  return collectionConstructorName(expression) != null
+  return isPresent(collectionConstructorName(expression))
 }
 
 export function collectionConstructorName(expression: AnyNode | null | undefined): string | null {
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'NewExpression' ||
     expression.callee.type !== 'Reference' ||
     expression.callee.path.length !== 1
@@ -382,13 +379,13 @@ export function emitPreparedCollectionConstructorValueExpression(
   expression: CollectionNode | null | undefined,
   context: CollectionFunctionContext
 ): PreparedExpression | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const collectionConstructor = collectionConstructorName(expression)
 
-  if (collectionConstructor == null) {
+  if (collectionConstructor === null || typeof collectionConstructor === 'undefined') {
     return null
   }
 
@@ -417,7 +414,10 @@ export function emitPreparedCollectionConstructorValueExpression(
   if (collectionConstructor === 'Map') {
     reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
     lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${temp})`, context))
-    pushAllLines(lines, emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc))
+    pushAllLines(
+      lines,
+      emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
+    )
 
     return {
       lines,
@@ -427,7 +427,10 @@ export function emitPreparedCollectionConstructorValueExpression(
 
   reportCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
   lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${temp})`, context))
-  pushAllLines(lines, emitSetConstructorValueElements(temp, collectionNodeAt(expression.args, 0), context, expression.loc))
+  pushAllLines(
+    lines,
+    emitSetConstructorValueElements(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
+  )
 
   return {
     lines,
@@ -441,14 +444,14 @@ function emitMapConstructorValueEntries(
   context: CollectionFunctionContext,
   loc: SourceLocation | null | undefined
 ): string[] {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return []
   }
 
   if (expression.type !== 'ArrayLiteral') {
     const source = emitPreparedCollectionReceiver(expression, context)
 
-    if (source != null && source.type === 'map') {
+    if (source !== null && typeof source !== 'undefined' && source.type === 'map') {
       return emitMapConstructorCopiedEntries(name, source, context)
     }
 
@@ -525,14 +528,14 @@ function emitSetConstructorValueElements(
   context: CollectionFunctionContext,
   loc: SourceLocation | null | undefined
 ): string[] {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return []
   }
 
   if (expression.type !== 'ArrayLiteral') {
     const source = emitPreparedCollectionReceiver(expression, context)
 
-    if (source != null && source.type === 'set') {
+    if (source !== null && typeof source !== 'undefined' && source.type === 'set') {
       return emitSetConstructorCopiedElements(name, source, context)
     }
 
@@ -592,13 +595,18 @@ export function emitPreparedCollectionCallExpression(
   expression: AnyNode | null | undefined,
   context: CollectionFunctionContext
 ): PreparedCollectionCall | null {
-  if (expression == null || expression.type !== 'CallExpression' || expression.callee.type !== 'MemberExpression') {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression'
+  ) {
     return null
   }
 
   const receiver = emitPreparedCollectionReceiver(expression.callee.object, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     if (receiver.type === 'map') {
       const call = emitPreparedMapMethodCall(receiver.expression, expression, context)
 
@@ -627,7 +635,11 @@ function createPreparedCollectionMethodCall(
   }
 }
 
-function emitPreparedMapMethodCall(name: string, expression: AnyNode, context: CollectionFunctionContext): PreparedExpression {
+function emitPreparedMapMethodCall(
+  name: string,
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): PreparedExpression {
   const method = expression.callee.property
 
   if (method === 'clear') {
@@ -730,7 +742,7 @@ export function emitPreparedMapIndexGetExpression(
 ): PreparedExpression | null {
   const mapIndex = emitPreparedMapIndexReceiver(expression, context)
 
-  if (mapIndex != null) {
+  if (mapIndex !== null && typeof mapIndex !== 'undefined') {
     reportCollectionHashability(
       inferCollectionExpressionType(mapIndex.key, context),
       'Map keys',
@@ -769,7 +781,7 @@ export function emitPreparedMapIndexAssignment(
 
   const mapIndex = emitPreparedMapIndexReceiver(expression.target, context)
 
-  if (mapIndex != null) {
+  if (mapIndex !== null && typeof mapIndex !== 'undefined') {
     reportCollectionHashability(
       inferCollectionExpressionType(mapIndex.key, context),
       'Map keys',
@@ -782,7 +794,9 @@ export function emitPreparedMapIndexAssignment(
     pushAllLines(lines, mapIndex.receiver.lines)
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context))
+    lines.push(
+      emitStatusCheck(`inox_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context)
+    )
 
     return {
       lines,
@@ -803,7 +817,7 @@ function emitPreparedMapIndexReceiver(
 
   const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
-  if (receiver == null || receiver.type !== 'map') {
+  if (receiver === null || typeof receiver === 'undefined' || receiver.type !== 'map') {
     return null
   }
 
@@ -813,7 +827,11 @@ function emitPreparedMapIndexReceiver(
   }
 }
 
-function emitPreparedSetMethodCall(name: string, expression: AnyNode, context: CollectionFunctionContext): PreparedExpression {
+function emitPreparedSetMethodCall(
+  name: string,
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): PreparedExpression {
   const method = expression.callee.property
 
   if (method === 'clear') {
@@ -891,7 +909,7 @@ export function emitPreparedCollectionSizeExpression(
 
   const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     let callName = 'inox_set_size'
     let tempPrefix = 'inox_set_size'
 
@@ -919,7 +937,7 @@ export function resolveRuntimeSetElementType(expression: AnyNode, context: Colle
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const elementType = context.setElementTypes.get(collectionStringAt(expression.path, 0))
 
-    if (elementType != null) {
+    if (elementType !== null && typeof elementType !== 'undefined') {
       return elementType
     }
 
@@ -937,14 +955,14 @@ export function resolveRuntimeSetElementType(expression: AnyNode, context: Colle
       return null
     }
 
-    if (expression.setElementType != null) {
+    if (expression.setElementType !== null && typeof expression.setElementType !== 'undefined') {
       return expression.setElementType
     }
 
-    if (functionReturn != null) {
+    if (functionReturn !== null && typeof functionReturn !== 'undefined') {
       const returnSetElementType = functionReturnSetElementType(context, functionReturn)
 
-      if (returnSetElementType != null) {
+      if (returnSetElementType !== null && typeof returnSetElementType !== 'undefined') {
         return returnSetElementType
       }
     }
@@ -955,7 +973,7 @@ export function resolveRuntimeSetElementType(expression: AnyNode, context: Colle
   if (expression.type === 'MemberExpression') {
     const member = resolveKnownCollectionObjectMember(expression, context)
 
-    if (member != null && member.valueType === 'set') {
+    if (member !== null && typeof member !== 'undefined' && member.valueType === 'set') {
       return stringOrUnknown(member.setElementType)
     }
 
@@ -965,7 +983,7 @@ export function resolveRuntimeSetElementType(expression: AnyNode, context: Colle
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const field = resolveKnownCollectionObjectIndex(expression, context)
 
-    if (field != null && field.valueType === 'set') {
+    if (field !== null && typeof field !== 'undefined' && field.valueType === 'set') {
       return stringOrUnknown(field.setElementType)
     }
 
@@ -979,7 +997,7 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const mapType = context.mapTypes.get(collectionStringAt(expression.path, 0))
 
-    if (mapType != null) {
+    if (mapType !== null && typeof mapType !== 'undefined') {
       return {
         key: stringOrUnknown(mapType.key),
         value: stringOrUnknown(mapType.value)
@@ -997,10 +1015,10 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
       functionReturn = resolveFunctionReturnNameFromCall(expression)
     }
 
-    if (functionReturn != null) {
+    if (functionReturn !== null && typeof functionReturn !== 'undefined') {
       const storedFunctionReturnMap = functionReturnMapType(context, functionReturn)
 
-      if (storedFunctionReturnMap != null) {
+      if (storedFunctionReturnMap !== null && typeof storedFunctionReturnMap !== 'undefined') {
         functionReturnMap = storedFunctionReturnMap
       }
     }
@@ -1018,7 +1036,7 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
   if (expression.type === 'MemberExpression') {
     const member = resolveKnownCollectionObjectMember(expression, context)
 
-    if (member != null && member.valueType === 'map') {
+    if (member !== null && typeof member !== 'undefined' && member.valueType === 'map') {
       return {
         key: stringOrUnknown(member.mapKeyType),
         value: stringOrUnknown(member.mapValueType)
@@ -1031,7 +1049,7 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const field = resolveKnownCollectionObjectIndex(expression, context)
 
-    if (field != null && field.valueType === 'map') {
+    if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
       return {
         key: stringOrUnknown(field.mapKeyType),
         value: stringOrUnknown(field.mapValueType)
@@ -1045,14 +1063,14 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
 }
 
 function resolveRuntimeMapKeyType(expression: AnyNode, functionReturnMap: CFunctionReturnMapType | null): string {
-  if (expression.mapKeyType != null) {
+  if (expression.mapKeyType !== null && typeof expression.mapKeyType !== 'undefined') {
     return expression.mapKeyType
   }
 
-  if (functionReturnMap != null) {
+  if (functionReturnMap !== null && typeof functionReturnMap !== 'undefined') {
     const key = functionReturnMap.key
 
-    if (key != null) {
+    if (key !== null && typeof key !== 'undefined') {
       return key
     }
   }
@@ -1061,14 +1079,14 @@ function resolveRuntimeMapKeyType(expression: AnyNode, functionReturnMap: CFunct
 }
 
 function resolveRuntimeMapValueType(expression: AnyNode, functionReturnMap: CFunctionReturnMapType | null): string {
-  if (expression.mapValueType != null) {
+  if (expression.mapValueType !== null && typeof expression.mapValueType !== 'undefined') {
     return expression.mapValueType
   }
 
-  if (functionReturnMap != null) {
+  if (functionReturnMap !== null && typeof functionReturnMap !== 'undefined') {
     const value = functionReturnMap.value
 
-    if (value != null) {
+    if (value !== null && typeof value !== 'undefined') {
       return value
     }
   }
@@ -1126,13 +1144,13 @@ export function resolveRuntimeForOfSet(
 ): RuntimeForOfSet | null {
   const elementType = resolveRuntimeSetElementType(expression, context)
 
-  if (elementType == null) {
+  if (elementType === null || typeof elementType === 'undefined') {
     return null
   }
 
   const receiver = emitPreparedCollectionReceiver(expression, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     if (receiver.type === 'set') {
       return {
         name: receiver.expression,
@@ -1151,13 +1169,13 @@ export function resolveRuntimeForOfMapKeys(
 ): RuntimeForOfMapValues | null {
   const keysReceiver = resolveCollectionKeysCallReceiver(expression, context)
 
-  if (keysReceiver == null || keysReceiver.type !== 'map') {
+  if (keysReceiver === null || typeof keysReceiver === 'undefined' || keysReceiver.type !== 'map') {
     return null
   }
 
   const mapType = resolveRuntimeMapType(expression.callee.object, context)
 
-  if (mapType == null) {
+  if (mapType === null || typeof mapType === 'undefined') {
     return null
   }
 
@@ -1175,13 +1193,13 @@ export function resolveRuntimeForOfMapValues(
 ): RuntimeForOfMapValues | null {
   const valuesReceiver = resolveCollectionValuesCallReceiver(expression, context)
 
-  if (valuesReceiver == null || valuesReceiver.type !== 'map') {
+  if (valuesReceiver === null || typeof valuesReceiver === 'undefined' || valuesReceiver.type !== 'map') {
     return null
   }
 
   const mapType = resolveRuntimeMapType(expression.callee.object, context)
 
-  if (mapType == null) {
+  if (mapType === null || typeof mapType === 'undefined') {
     return null
   }
 
@@ -1199,13 +1217,13 @@ export function resolveRuntimeForOfMap(
 ): RuntimeForOfMap | null {
   const mapType = resolveRuntimeMapType(expression, context)
 
-  if (mapType != null) {
+  if (mapType !== null && typeof mapType !== 'undefined') {
     const keyType = mapType.key
     const valueType = mapType.value
 
     const receiver = emitPreparedCollectionReceiver(expression, context)
 
-    if (receiver != null) {
+    if (receiver !== null && typeof receiver !== 'undefined') {
       if (receiver.type === 'map') {
         return {
           name: receiver.expression,

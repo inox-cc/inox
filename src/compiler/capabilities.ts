@@ -35,14 +35,7 @@ type CapabilityMemberNode = AnyNode & {
   type?: string | null
 }
 
-type RuntimeCapabilityKey =
-  | 'entropy'
-  | 'fs'
-  | 'heap'
-  | 'monotonicClock'
-  | 'os'
-  | 'timers'
-  | 'wallClock'
+type RuntimeCapabilityKey = 'entropy' | 'fs' | 'heap' | 'monotonicClock' | 'os' | 'timers' | 'wallClock'
 
 type RequiredCapability = {
   key: RuntimeCapabilityKey
@@ -112,7 +105,7 @@ function collectCapabilityUsages(programs: IrProgram[], options: CompileOptions)
     const usage = globalUsageAt(globalUsages, usageIndex)
     const required = requiredCapabilityForGlobalUsage(usage)
 
-    if (required != null) {
+    if (required !== null && typeof required !== 'undefined') {
       pushCapabilityUsage(usages, required, dotPath(usage.path), usage.loc)
     }
   }
@@ -138,7 +131,7 @@ function collectEntropyCapabilityUsages(
     const usage = globalUsageAt(globalUsages, usageIndex)
     const path = dotPath(usage.path)
 
-    if (path === 'Math.random' && random != null && random.backend === 'os') {
+    if (path === 'Math.random' && random !== null && typeof random !== 'undefined' && random.backend === 'os') {
       pushCapability(usages, 'entropy', 'entropy', path, usage.loc)
     } else if (isCryptoRuntimeMethodPath(usage.path)) {
       pushCapability(usages, 'entropy', 'entropy', path, usage.loc)
@@ -147,7 +140,7 @@ function collectEntropyCapabilityUsages(
 }
 
 function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages: CapabilityUsage[]): void {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return
   }
 
@@ -166,7 +159,7 @@ function visitCapabilityNode(node: AnyNode | NodeList | null | undefined, usages
 }
 
 function visitCapabilityChild(value: any, usages: CapabilityUsage[]): void {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return
   }
 
@@ -212,21 +205,21 @@ function recordNodeCapabilityUsages(expression: CapabilityNode, usages: Capabili
   const osConstant = expression.osRuntimeConstant
   const loc = expression.loc
 
-  if (osMethod != null) {
+  if (osMethod !== null && typeof osMethod !== 'undefined') {
     pushCapability(usages, 'os', 'os', `os.${osMethod}`, loc)
-  } else if (osConstant != null) {
+  } else if (osConstant !== null && typeof osConstant !== 'undefined') {
     pushCapability(usages, 'os', 'os', `os.${osConstant}`, loc)
   }
 
   const timerMethod = expression.timerRuntimeMethod
 
-  if (timerMethod != null) {
+  if (timerMethod !== null && typeof timerMethod !== 'undefined') {
     pushCapability(usages, 'timers', 'timers', timerMethod, loc)
   }
 
   const arrayMethod = arrayProducingMethodName(expression)
 
-  if (arrayMethod != null) {
+  if (arrayMethod !== null && typeof arrayMethod !== 'undefined') {
     pushCapability(usages, 'heap', 'heap', `Array.${arrayMethod}`, loc)
   }
 }
@@ -235,7 +228,7 @@ function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapabil
   const timeCapability = timeRuntimeCapabilityFromPath(usage.path)
   const path = dotPath(usage.path)
 
-  if (timeCapability != null) {
+  if (timeCapability !== null && typeof timeCapability !== 'undefined') {
     return timeCapability
   }
 
@@ -280,7 +273,7 @@ function arrayProducingMethodName(expression: CapabilityNode): string | null {
 
   const callee = expression.callee
 
-  if (callee == null || callee.type !== 'MemberExpression') {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
     return null
   }
 
@@ -294,18 +287,15 @@ function arrayProducingMethodName(expression: CapabilityNode): string | null {
 }
 
 function locationKey(loc: SourceLocation | undefined): string {
-  if (loc == null) {
+  if (loc === null || typeof loc === 'undefined') {
     return '1:1'
   }
 
   return `${loc.line}:${loc.column}`
 }
 
-function capabilityEnabled(
-  capabilities: RuntimeCapabilities | null | undefined,
-  key: RuntimeCapabilityKey
-): boolean {
-  if (capabilities == null) {
+function capabilityEnabled(capabilities: RuntimeCapabilities | null | undefined, key: RuntimeCapabilityKey): boolean {
+  if (capabilities === null || typeof capabilities === 'undefined') {
     return false
   }
 

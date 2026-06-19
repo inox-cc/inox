@@ -108,7 +108,7 @@ function lowerParamList(params: AnyNode[], context: LowerContext): AnyNode[] {
 function lowerClassFields(fields: AnyNode[] | null | undefined): AnyNode[] {
   const lowered: AnyNode[] = []
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return lowered
   }
 
@@ -149,7 +149,7 @@ function lowerClassField(field: AnyNode): AnyNode {
 function lowerClassMethods(methods: AnyNode[] | null | undefined, context: LowerContext): AnyNode[] {
   const lowered: AnyNode[] = []
 
-  if (methods == null) {
+  if (methods === null || typeof methods === 'undefined') {
     return lowered
   }
 
@@ -183,7 +183,7 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
 }
 
 function resolvedValueType(value: string | null | undefined, fallback: string): string {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -191,7 +191,7 @@ function resolvedValueType(value: string | null | undefined, fallback: string): 
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -199,7 +199,7 @@ function nullableString(value: string | null | undefined): string | null {
 }
 
 function nullableNode(value: AnyNode | null | undefined): AnyNode | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 

@@ -7,7 +7,7 @@ type CJsGlobalContext = {
 export function usesCJsGlobal(expression: AnyNode, context: CJsGlobalContext): boolean {
   const root = rootReferenceName(expression)
 
-  return root != null && isCJsGlobalRoot(root, context)
+  return root !== null && typeof root !== 'undefined' && isCJsGlobalRoot(root, context)
 }
 
 export function isCJsGlobalRoot(name: string, context: CJsGlobalContext): boolean {
@@ -15,7 +15,7 @@ export function isCJsGlobalRoot(name: string, context: CJsGlobalContext): boolea
 }
 
 export function rootReferenceName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 

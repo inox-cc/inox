@@ -66,7 +66,7 @@ export function createLowerContext(ast: ProgramNode): LowerContext {
 }
 
 export function resolveDeclaredType(name: string | null | undefined, context: LowerContext): LowerResolvedType {
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return unresolvedType()
   }
 
@@ -79,7 +79,7 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
 
   const unionTypeNames = unionTypeNamesFromTypeName(name)
 
-  if (unionTypeNames != null) {
+  if (unionTypeNames !== null && typeof unionTypeNames !== 'undefined') {
     return resolveUnionTypeNames(unionTypeNames, context, resolveDeclaredType)
   }
 
@@ -97,15 +97,15 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
   const mapTypeNames = mapTypeNamesFromTypeName(name)
   let isMalformedMapTypeName = false
 
-  if (mapTypeNames == null && name.startsWith('map<') && name.endsWith('>')) {
+  if ((mapTypeNames === null || typeof mapTypeNames === 'undefined') && name.startsWith('map<') && name.endsWith('>')) {
     isMalformedMapTypeName = true
   }
 
-  if (name === 'map' || mapTypeNames != null || isMalformedMapTypeName) {
+  if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') || isMalformedMapTypeName) {
     let keyType: LowerResolvedType | null = null
     let valueType: LowerResolvedType | null = null
 
-    if (mapTypeNames != null) {
+    if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
       keyType = resolveDeclaredType(mapTypeNames.key, context)
       valueType = resolveDeclaredType(mapTypeNames.value, context)
     }
@@ -154,7 +154,7 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
   const typeInfo = context.types.get(name)
   const cached = context.resolvedTypes.get(name)
 
-  if (cached != null) {
+  if (cached !== null && typeof cached !== 'undefined') {
     const resolved = cloneResolvedType(cached)
 
     if (!context.resolvingTypes.has(name)) {
@@ -172,18 +172,21 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
   }
 
   if (context.resolvingTypes.has(name)) {
-    if ((typeInfo != null && typeInfo.kind === 'object') || context.classNames.has(name)) {
+    if (
+      (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'object') ||
+      context.classNames.has(name)
+    ) {
       return namedResolvedType('object')
     }
 
-    if (typeInfo != null && typeInfo.kind === 'function') {
+    if (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'function') {
       return namedResolvedType('function')
     }
 
     return unresolvedType()
   }
 
-  if (typeInfo != null && typeInfo.kind === 'object') {
+  if (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'object') {
     context.resolvingTypes.add(name)
 
     try {
@@ -197,7 +200,7 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     }
   }
 
-  if (typeInfo != null && typeInfo.kind === 'alias') {
+  if (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'alias') {
     context.resolvingTypes.add(name)
 
     try {
@@ -210,7 +213,7 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     }
   }
 
-  if (typeInfo != null && typeInfo.kind === 'function') {
+  if (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'function') {
     context.resolvingTypes.add(name)
 
     try {
@@ -308,7 +311,7 @@ function resolveObjectShapeField(field: LowerTypeNode, fields: LowerTypeNode[], 
   }
   let functionType = resolvedFunctionType(field.functionType, declared.functionType)
 
-  if (functionType != null && functionType.resolved !== true) {
+  if (functionType !== null && typeof functionType !== 'undefined' && functionType.resolved !== true) {
     functionType = resolveFunctionType(functionType, context).functionType
   }
 
@@ -356,7 +359,7 @@ function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): L
   for (const name of baseTypes) {
     const base = context.types.get(name)
 
-    if (base == null || base.kind !== 'object') {
+    if (base === null || typeof base === 'undefined' || base.kind !== 'object') {
       continue
     }
 
@@ -376,11 +379,11 @@ function resolveObjectShapeBases(shape: LowerTypeNode, context: LowerContext): L
 }
 
 function hydrateResolvedType(resolved: LowerResolvedType, context: LowerContext): void {
-  if (resolved.shape != null) {
+  if (resolved.shape !== null && typeof resolved.shape !== 'undefined') {
     resolved.shape = hydrateObjectShape(resolved.shape, context)
   }
 
-  if (resolved.functionType != null) {
+  if (resolved.functionType !== null && typeof resolved.functionType !== 'undefined') {
     resolved.functionType = hydrateFunctionType(resolved.functionType, context)
   }
 }
@@ -404,19 +407,24 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
   let functionType: LowerTypeNode | null = null
   let functionTypeChanged = false
 
-  if (field.functionType != null) {
+  if (field.functionType !== null && typeof field.functionType !== 'undefined') {
     functionType = hydrateFunctionType(field.functionType, context)
     functionTypeChanged = true
   }
 
-  if (field.valueType === 'object' && field.shape == null && field.declaredType != null) {
+  if (
+    field.valueType === 'object' &&
+    (field.shape === null || typeof field.shape === 'undefined') &&
+    field.declaredType !== null &&
+    typeof field.declaredType !== 'undefined'
+  ) {
     if (context.resolvingTypes.has(field.declaredType)) {
       return field
     }
 
     const declared = resolveDeclaredType(field.declaredType, context)
 
-    if (declared.shape != null) {
+    if (declared.shape !== null && typeof declared.shape !== 'undefined') {
       return {
         name: field.name,
         optional: field.optional,
@@ -492,10 +500,15 @@ function hydrateFunctionType(functionType: LowerTypeNode, context: LowerContext)
 function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): LowerTypeNode {
   let shape = nullableNode(param.shape)
 
-  if (param.valueType === 'object' && param.declaredType != null && !context.resolvingTypes.has(param.declaredType)) {
+  if (
+    param.valueType === 'object' &&
+    param.declaredType !== null &&
+    typeof param.declaredType !== 'undefined' &&
+    !context.resolvingTypes.has(param.declaredType)
+  ) {
     const declared = resolveDeclaredType(param.declaredType, context)
 
-    if (declared.shape != null) {
+    if (declared.shape !== null && typeof declared.shape !== 'undefined') {
       shape = declared.shape
     }
   }
@@ -526,7 +539,7 @@ function resolveFieldDeclaredType(field: LowerTypeNode, context: LowerContext): 
   let valueType: string = field.valueType
   const declaredType = field.declaredType
 
-  if (declaredType != null) {
+  if (declaredType !== null && typeof declaredType !== 'undefined') {
     valueType = declaredType
   }
 
@@ -537,7 +550,7 @@ function resolveWeakFieldDeclaredType(field: LowerTypeNode, context: LowerContex
   let targetName: string = field.valueType
   const declaredType = field.declaredType
 
-  if (declaredType != null) {
+  if (declaredType !== null && typeof declaredType !== 'undefined') {
     targetName = declaredType
   }
 
@@ -547,7 +560,7 @@ function resolveWeakFieldDeclaredType(field: LowerTypeNode, context: LowerContex
 
   const typeInfo = context.types.get(targetName)
 
-  if (typeInfo != null && typeInfo.kind === 'object') {
+  if (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'object') {
     const resolved = namedResolvedType('object')
     resolved.nullable = true
     resolved.shape = resolveWeakTargetObjectShape(typeInfo, context)
@@ -615,7 +628,7 @@ function resolveWeakTargetShapeFieldType(field: LowerTypeNode, context: LowerCon
 }
 
 function resolveWeakTargetShapeTypeName(name: string | null | undefined, context: LowerContext): LowerResolvedType {
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return unresolvedType()
   }
 
@@ -628,7 +641,7 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
 
   const unionTypeNames = unionTypeNamesFromTypeName(name)
 
-  if (unionTypeNames != null) {
+  if (unionTypeNames !== null && typeof unionTypeNames !== 'undefined') {
     return resolveUnionTypeNames(unionTypeNames, context, resolveWeakTargetShapeTypeName)
   }
 
@@ -646,15 +659,15 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
   const mapTypeNames = mapTypeNamesFromTypeName(name)
   let isMalformedMapTypeName = false
 
-  if (mapTypeNames == null && name.startsWith('map<') && name.endsWith('>')) {
+  if ((mapTypeNames === null || typeof mapTypeNames === 'undefined') && name.startsWith('map<') && name.endsWith('>')) {
     isMalformedMapTypeName = true
   }
 
-  if (name === 'map' || mapTypeNames != null || isMalformedMapTypeName) {
+  if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') || isMalformedMapTypeName) {
     let keyType: LowerResolvedType | null = null
     let valueType: LowerResolvedType | null = null
 
-    if (mapTypeNames != null) {
+    if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
       keyType = resolveWeakTargetShapeTypeName(mapTypeNames.key, context)
       valueType = resolveWeakTargetShapeTypeName(mapTypeNames.value, context)
     }
@@ -687,7 +700,10 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
 
   const typeInfo = context.types.get(name)
 
-  if ((typeInfo != null && typeInfo.kind === 'object') || context.classNames.has(name)) {
+  if (
+    (typeInfo !== null && typeof typeInfo !== 'undefined' && typeInfo.kind === 'object') ||
+    context.classNames.has(name)
+  ) {
     return namedResolvedType('object')
   }
 
@@ -725,7 +741,7 @@ function collectObjectType(valueType: LowerTypeNode): LowerTypeNode {
 function collectObjectTypeFields(fields: LowerTypeNode[] | null | undefined): LowerTypeNode[] {
   const collected: LowerTypeNode[] = []
 
-  if (fields == null) {
+  if (fields === null || typeof fields === 'undefined') {
     return collected
   }
 
@@ -734,7 +750,7 @@ function collectObjectTypeFields(fields: LowerTypeNode[] | null | undefined): Lo
     const declaredType = fieldDeclaredType(field)
     let valueType = field.valueType
 
-    if (declaredType != null) {
+    if (declaredType !== null && typeof declaredType !== 'undefined') {
       valueType = declaredType
     }
 
@@ -765,7 +781,7 @@ function collectFunctionType(valueType: LowerTypeNode): LowerTypeNode {
 function collectFunctionParams(params: LowerTypeNode[] | null | undefined): LowerTypeNode[] {
   const collected: LowerTypeNode[] = []
 
-  if (params == null) {
+  if (params === null || typeof params === 'undefined') {
     return collected
   }
 
@@ -789,7 +805,7 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
       loc: param.loc
     }
 
-    if (param.defaultValue != null) {
+    if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
       collectedParam.defaultValue = param.defaultValue
     }
 
@@ -851,7 +867,7 @@ function resolveUnionTypeNames(
 
   const valueType = commonResolvedValueType(resolvedTypes)
 
-  if (valueType == null || valueType === 'unknown') {
+  if (valueType === null || typeof valueType === 'undefined' || valueType === 'unknown') {
     return unresolvedType()
   }
 
@@ -890,7 +906,7 @@ function commonResolvedValueType(values: LowerResolvedType[]): string | null {
 
   const first = values[0].valueType
 
-  if (first == null) {
+  if (first === null || typeof first === 'undefined') {
     return null
   }
 
@@ -910,14 +926,14 @@ function commonResolvedString(values: LowerResolvedType[], key: LowerResolvedStr
 
   const first = lowerResolvedStringValue(values[0], key)
 
-  if (first == null) {
+  if (first === null || typeof first === 'undefined') {
     return null
   }
 
   for (let index = 1; index < values.length; index = index + 1) {
     const value = lowerResolvedStringValue(values[index], key)
 
-    if (value == null || value !== first) {
+    if (value === null || typeof value === 'undefined' || value !== first) {
       return null
     }
   }
@@ -943,7 +959,7 @@ function lowerResolvedStringValue(value: LowerResolvedType, key: LowerResolvedSt
   }
 
   if (key === 'promiseValueType') {
-    if (value.promiseValueType != null) {
+    if (value.promiseValueType !== null && typeof value.promiseValueType !== 'undefined') {
       return value.promiseValueType
     }
 
@@ -953,7 +969,10 @@ function lowerResolvedStringValue(value: LowerResolvedType, key: LowerResolvedSt
   return value.setElementType
 }
 
-function arrayResolvedType(elementType: LowerResolvedType | null, elementDeclaredType: string | null): LowerResolvedType {
+function arrayResolvedType(
+  elementType: LowerResolvedType | null,
+  elementDeclaredType: string | null
+): LowerResolvedType {
   const resolved = namedResolvedType('array')
   resolved.arrayElementType = resolvedValueType(elementType, 'unknown')
   resolved.arrayElementDeclaredType = nullableString(elementDeclaredType)
@@ -997,7 +1016,7 @@ function cloneResolvedType(source: LowerResolvedType): LowerResolvedType {
     functionType: nullableNode(source.functionType)
   }
 
-  if (source.returnShape != null) {
+  if (source.returnShape !== null && typeof source.returnShape !== 'undefined') {
     resolved.returnShape = source.returnShape
   }
 
@@ -1020,25 +1039,28 @@ function unresolvedType(): LowerResolvedType {
 }
 
 function resolvedValueType(resolved: LowerResolvedType | null, fallback: string): string {
-  if (resolved == null) {
+  if (resolved === null || typeof resolved === 'undefined') {
     return fallback
   }
 
   const valueType = resolved.valueType
 
-  if (valueType != null) {
+  if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
   }
 
   return fallback
 }
 
-function resolvedFunctionType(primary: LowerTypeNode | null | undefined, fallback: LowerTypeNode | null | undefined): LowerTypeNode | null {
-  if (primary != null) {
+function resolvedFunctionType(
+  primary: LowerTypeNode | null | undefined,
+  fallback: LowerTypeNode | null | undefined
+): LowerTypeNode | null {
+  if (primary !== null && typeof primary !== 'undefined') {
     return primary
   }
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback
   }
 
@@ -1046,11 +1068,11 @@ function resolvedFunctionType(primary: LowerTypeNode | null | undefined, fallbac
 }
 
 function fieldDeclaredType(field: LowerTypeNode): string | null {
-  if (field.declaredType != null) {
+  if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
     return field.declaredType
   }
 
-  if (field.valueType != null) {
+  if (field.valueType !== null && typeof field.valueType !== 'undefined') {
     return field.valueType
   }
 
@@ -1058,7 +1080,7 @@ function fieldDeclaredType(field: LowerTypeNode): string | null {
 }
 
 function ownershipOrStrong(value: string | null | undefined): string {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -1066,7 +1088,7 @@ function ownershipOrStrong(value: string | null | undefined): string {
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -1074,7 +1096,7 @@ function nullableString(value: string | null | undefined): string | null {
 }
 
 function nullableNode(value: LowerTypeNode | null | undefined): LowerTypeNode | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -1084,7 +1106,7 @@ function nullableNode(value: LowerTypeNode | null | undefined): LowerTypeNode | 
 function copyStringArray(values: string[] | null | undefined): string[] {
   const copy: string[] = []
 
-  if (values == null) {
+  if (values === null || typeof values === 'undefined') {
     return copy
   }
 
@@ -1103,7 +1125,7 @@ function concatFields(left: LowerTypeNode[], right: LowerTypeNode[] | null | und
     fields.push(field)
   }
 
-  if (right == null) {
+  if (right === null || typeof right === 'undefined') {
     return fields
   }
 

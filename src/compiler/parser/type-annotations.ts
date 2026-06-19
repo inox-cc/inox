@@ -29,20 +29,29 @@ export function readTypeAnnotation(
   const startToken = tokenAt(tokens, position)
   const actualOptions = requiredTypeAnnotationReadOptions(typeAnnotationReadOptionsOrEmpty(options))
 
-  if (startToken != null) {
+  if (startToken !== null && typeof startToken !== 'undefined') {
     lastTokenLine = startToken.line
   }
 
   let currentToken = tokenAt(tokens, position)
 
-  while (currentToken != null && currentToken.type !== 'eof') {
+  while (currentToken !== null && typeof currentToken !== 'undefined' && currentToken.type !== 'eof') {
     const token = currentToken
 
-    if (genericDepth === 0 && stringArrayIncludes(stopValues, token.value) && !isArrayTypeSuffixClose(parts, token.value)) {
+    if (
+      genericDepth === 0 &&
+      stringArrayIncludes(stopValues, token.value) &&
+      !isArrayTypeSuffixClose(parts, token.value)
+    ) {
       break
     }
 
-    if (genericDepth === 0 && parts.length > 0 && actualOptions.stopAtLineBreak === true && token.line > lastTokenLine) {
+    if (
+      genericDepth === 0 &&
+      parts.length > 0 &&
+      actualOptions.stopAtLineBreak === true &&
+      token.line > lastTokenLine
+    ) {
       break
     }
 
@@ -105,7 +114,7 @@ function stringArrayValueAt(values: string[], index: number): string {
 }
 
 function typeAnnotationReadOptionsOrEmpty(options: TypeAnnotationReadOptions | null): TypeAnnotationReadOptions {
-  if (options != null) {
+  if (options !== null && typeof options !== 'undefined') {
     return options
   }
 
@@ -151,13 +160,13 @@ export function normalizeTypeName(name: string): string {
 
   const nullableInner = genericTypeInner(name, 'nullable')
 
-  if (nullableInner != null) {
+  if (nullableInner !== null && typeof nullableInner !== 'undefined') {
     return `nullable<${normalizeTypeName(nullableInner)}>`
   }
 
   const unionInner = genericTypeInner(name, 'union')
 
-  if (unionInner != null) {
+  if (unionInner !== null && typeof unionInner !== 'undefined') {
     const args = splitGenericArgs(unionInner)
 
     if (args.length === 0) {
@@ -173,19 +182,19 @@ export function normalizeTypeName(name: string): string {
 
   const normalizedArrayInner = genericTypeInner(name, 'array')
 
-  if (normalizedArrayInner != null) {
+  if (normalizedArrayInner !== null && typeof normalizedArrayInner !== 'undefined') {
     return `array<${normalizeTypeName(normalizedArrayInner)}>`
   }
 
   const arrayInner = genericTypeInner(name, 'Array')
 
-  if (arrayInner != null) {
+  if (arrayInner !== null && typeof arrayInner !== 'undefined') {
     return `array<${normalizeTypeName(arrayInner)}>`
   }
 
   const normalizedMapInner = genericTypeInner(name, 'map')
 
-  if (normalizedMapInner != null) {
+  if (normalizedMapInner !== null && typeof normalizedMapInner !== 'undefined') {
     const args = splitGenericArgs(normalizedMapInner)
 
     if (args.length === 2) {
@@ -197,7 +206,7 @@ export function normalizeTypeName(name: string): string {
 
   const mapInner = genericTypeInner(name, 'Map')
 
-  if (mapInner != null) {
+  if (mapInner !== null && typeof mapInner !== 'undefined') {
     const args = splitGenericArgs(mapInner)
 
     if (args.length === 2) {
@@ -209,7 +218,7 @@ export function normalizeTypeName(name: string): string {
 
   const normalizedRecordInner = genericTypeInner(name, 'record')
 
-  if (normalizedRecordInner != null) {
+  if (normalizedRecordInner !== null && typeof normalizedRecordInner !== 'undefined') {
     const args = splitGenericArgs(normalizedRecordInner)
 
     if (args.length === 2) {
@@ -221,7 +230,7 @@ export function normalizeTypeName(name: string): string {
 
   const recordInner = genericTypeInner(name, 'Record')
 
-  if (recordInner != null) {
+  if (recordInner !== null && typeof recordInner !== 'undefined') {
     const args = splitGenericArgs(recordInner)
 
     if (args.length === 2) {
@@ -233,7 +242,7 @@ export function normalizeTypeName(name: string): string {
 
   const normalizedSetInner = genericTypeInner(name, 'set')
 
-  if (normalizedSetInner != null) {
+  if (normalizedSetInner !== null && typeof normalizedSetInner !== 'undefined') {
     const args = splitGenericArgs(normalizedSetInner)
 
     if (args.length === 1) {
@@ -245,7 +254,7 @@ export function normalizeTypeName(name: string): string {
 
   const setInner = genericTypeInner(name, 'Set')
 
-  if (setInner != null) {
+  if (setInner !== null && typeof setInner !== 'undefined') {
     const args = splitGenericArgs(setInner)
 
     if (args.length === 1) {
@@ -257,7 +266,7 @@ export function normalizeTypeName(name: string): string {
 
   const normalizedPromiseInner = genericTypeInner(name, 'promise')
 
-  if (normalizedPromiseInner != null) {
+  if (normalizedPromiseInner !== null && typeof normalizedPromiseInner !== 'undefined') {
     const args = splitGenericArgs(normalizedPromiseInner)
 
     if (args.length === 1) {
@@ -269,7 +278,7 @@ export function normalizeTypeName(name: string): string {
 
   const promiseInner = genericTypeInner(name, 'Promise')
 
-  if (promiseInner != null) {
+  if (promiseInner !== null && typeof promiseInner !== 'undefined') {
     const args = splitGenericArgs(promiseInner)
 
     if (args.length === 1) {

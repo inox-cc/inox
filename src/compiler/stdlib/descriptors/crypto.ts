@@ -63,9 +63,7 @@ export const unsupportedNodeCryptoMethods = [
   'verify'
 ]
 
-export function cryptoRuntimeMethodNameFromPath(
-  path: string[]
-): CryptoRuntimeMethod | null {
+export function cryptoRuntimeMethodNameFromPath(path: string[]): CryptoRuntimeMethod | null {
   if (!isCryptoRuntimeMethodPath(path)) {
     return null
   }

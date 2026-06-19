@@ -31,7 +31,7 @@ function cPreludeRandomOptions(options: CEmitOptions): RandomOptions {
   const emitOptions = options as CPreludeEmitOptions
   const random = emitOptions.random
 
-  if (random != null) {
+  if (random !== null && typeof random !== 'undefined') {
     return random
   }
 
@@ -439,7 +439,7 @@ function emitRandomBackendHelper(backend: CRandomBackend): string[] {
 function emitRandomSeedLiteral(random: CPreludeRandomConfig): string {
   const backend = random.unsupportedBackend
 
-  if (backend != null) {
+  if (backend !== null && typeof backend !== 'undefined') {
     throw new Error(`unsupported random backend ${quoteDiagnosticString(backend)}`)
   }
 
@@ -463,7 +463,7 @@ function cPreludeRandomConfig(random: RandomOptions): CPreludeRandomConfig {
     randomBackend = 'os'
   } else if (backend === 'xorshift32') {
     randomBackend = 'xorshift32'
-  } else if (backend === 'simple' || backend == null) {
+  } else if (backend === 'simple' || backend === null || typeof backend === 'undefined') {
     randomBackend = 'simple'
   } else {
     unsupportedBackend = backend
@@ -479,7 +479,7 @@ function cPreludeRandomConfig(random: RandomOptions): CPreludeRandomConfig {
 function cPreludeRandomSeed(random: CPreludeRandomOptions): number {
   const seed = random.seed
 
-  if (seed != null) {
+  if (seed !== null && typeof seed !== 'undefined') {
     return seed
   }
 

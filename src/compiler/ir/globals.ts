@@ -102,7 +102,7 @@ export function collectIrGlobalRoots(programs: IrProgramWithGlobalUsages[]): str
 }
 
 function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: IrGlobalUsage[]): void {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return
   }
 
@@ -117,10 +117,10 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   const callItem = item as GlobalUsageCallNode
   const fsRuntimeMethod = callItem.fsRuntimeMethod
 
-  if (itemType === 'CallExpression' && fsRuntimeMethod != null) {
+  if (itemType === 'CallExpression' && fsRuntimeMethod !== null && typeof fsRuntimeMethod !== 'undefined') {
     const path = fsGlobalUsagePathForRuntimeMethod(fsRuntimeMethod)
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       pushGlobalUsage(usages, path, item)
 
       const args = callItem.args
@@ -133,7 +133,7 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   if (itemType === 'MemberExpression' || itemType === 'OptionalMemberExpression') {
     const path = globalUsagePath(item)
 
-    if (path != null) {
+    if (path !== null && typeof path !== 'undefined') {
       pushGlobalUsage(usages, path, item)
       return
     }
@@ -143,10 +143,10 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
     const indexItem = item as GlobalUsageIndexNode
     const objectNode = indexItem.object
 
-    if (objectNode != null) {
+    if (objectNode !== null && typeof objectNode !== 'undefined') {
       const path = globalUsagePath(objectNode)
 
-      if (path != null) {
+      if (path !== null && typeof path !== 'undefined') {
         pushGlobalUsage(usages, path, item)
         const indexNode = indexItem.index
         visitGlobalUsage(indexNode, usages)
@@ -159,14 +159,14 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
     const referenceItem = item as GlobalUsageReferenceNode
     const path = referenceItem.path
 
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       visitGlobalUsageChildren(item, usages)
       return
     }
 
     const root = firstString(path)
 
-    if (root != null && isJsStdGlobalRootName(root)) {
+    if (root !== null && typeof root !== 'undefined' && isJsStdGlobalRootName(root)) {
       pushGlobalUsage(usages, path, item)
       return
     }
@@ -183,7 +183,7 @@ function visitGlobalUsageList(nodes: NodeList, usages: IrGlobalUsage[]): void {
 }
 
 function visitOptionalGlobalUsageList(nodes: NodeList | null | undefined, usages: IrGlobalUsage[]): void {
-  if (nodes == null) {
+  if (nodes === null || typeof nodes === 'undefined') {
     return
   }
 
@@ -191,7 +191,7 @@ function visitOptionalGlobalUsageList(nodes: NodeList | null | undefined, usages
 }
 
 function visitGlobalUsageChild(value: any, usages: IrGlobalUsage[]): void {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return
   }
 
@@ -233,20 +233,20 @@ function visitGlobalUsageChildren(item: GlobalUsageNode, usages: IrGlobalUsage[]
 }
 
 function globalUsagePath(expression: GlobalUsageNode | null | undefined): string[] | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   if (expression.type === 'Reference') {
     const path = expression.path
 
-    if (path == null) {
+    if (path === null || typeof path === 'undefined') {
       return null
     }
 
     const root = firstString(path)
 
-    if (root != null && isJsStdGlobalRootName(root)) {
+    if (root !== null && typeof root !== 'undefined' && isJsStdGlobalRootName(root)) {
       return path
     }
   }
@@ -254,13 +254,13 @@ function globalUsagePath(expression: GlobalUsageNode | null | undefined): string
   if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
     const objectNode = expression.object
 
-    if (objectNode != null) {
+    if (objectNode !== null && typeof objectNode !== 'undefined') {
       const objectPath = globalUsagePath(objectNode)
 
-      if (objectPath != null) {
+      if (objectPath !== null && typeof objectPath !== 'undefined') {
         const property = expression.property
 
-        if (property != null) {
+        if (property !== null && typeof property !== 'undefined') {
           return appendString(objectPath, property)
         }
       }
@@ -273,10 +273,10 @@ function globalUsagePath(expression: GlobalUsageNode | null | undefined): string
 function pushGlobalUsage(usages: IrGlobalUsage[], path: string[], item: GlobalUsageNode): void {
   const root = firstString(path)
 
-  if (root != null) {
+  if (root !== null && typeof root !== 'undefined') {
     const loc = item.loc
 
-    if (loc != null) {
+    if (loc !== null && typeof loc !== 'undefined') {
       usages.push({
         root,
         path,

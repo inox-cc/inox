@@ -22,7 +22,7 @@ export type CompilerHost = {
 }
 
 export function requireCompilerHost(host: CompilerHost | undefined, caller: string): CompilerHost {
-  if (host == null) {
+  if (host === null || typeof host === 'undefined') {
     throw new Error(`${caller} requires a compiler host`)
   }
 

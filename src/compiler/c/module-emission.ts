@@ -12,7 +12,14 @@ import {
   mergeIrFunctionEffects
 } from '../ir.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
-import type { AnyNode, Diagnostic, IrFunctionDeclaration, IrFunctionEffect, IrProgram, IrRuntimeRequirement } from '../types.ts'
+import type {
+  AnyNode,
+  Diagnostic,
+  IrFunctionDeclaration,
+  IrFunctionEffect,
+  IrProgram,
+  IrRuntimeRequirement
+} from '../types.ts'
 import type {
   CCallbackWrapper,
   CFunctionParam,
@@ -88,17 +95,9 @@ import {
   emitDgramMessageHandlerHead
 } from './stdlib/dgram.ts'
 import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
-import {
-  collectHttpHandlers,
-  emitHttpHandlerDeclaration,
-  emitHttpHandlerHead
-} from './stdlib/http.ts'
+import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
 import type { HttpLoweringDependencies } from './stdlib/http.ts'
-import {
-  collectNetHandlers,
-  emitNetHandlerDeclaration,
-  emitNetHandlerHead
-} from './stdlib/net.ts'
+import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
@@ -169,10 +168,7 @@ function pushIrFunctionEffect(target: IrFunctionEffect[], effect: IrFunctionEffe
   target.push(effect)
 }
 
-function pushCModuleClassMethodFunctionDeclarations(
-  target: IrFunctionDeclaration[],
-  programs: IrProgram[]
-): void {
+function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaration[], programs: IrProgram[]): void {
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
     const program = programs[programIndex]
     const classes = collectIrTopLevelNodes(program, 'class')
@@ -216,10 +212,7 @@ function cModuleClassMethodAt(values: CClassMethod[], index: number): CClassMeth
   return values[index]
 }
 
-function cModuleFunctionDeclarationAt(
-  values: IrFunctionDeclaration[],
-  index: number
-): IrFunctionDeclaration {
+function cModuleFunctionDeclarationAt(values: IrFunctionDeclaration[], index: number): IrFunctionDeclaration {
   return values[index]
 }
 
@@ -243,17 +236,11 @@ function cModuleNodeAt(values: CModuleNode[], index: number): CModuleNode {
   return values[index]
 }
 
-function cModuleValueDeclarationAt(
-  values: CModuleValueDeclaration[],
-  index: number
-): CModuleValueDeclaration {
+function cModuleValueDeclarationAt(values: CModuleValueDeclaration[], index: number): CModuleValueDeclaration {
   return values[index]
 }
 
-function cModulePromiseChainWrapperAt(
-  values: CPromiseChainWrapper[],
-  index: number
-): CPromiseChainWrapper {
+function cModulePromiseChainWrapperAt(values: CPromiseChainWrapper[], index: number): CPromiseChainWrapper {
   return values[index]
 }
 
@@ -383,7 +370,7 @@ export function emitCModuleSource(
     const item = cModuleImportPlanAt(imports, importIndex)
     const importedModule = item.module
 
-    if (importedModule == null) {
+    if (importedModule === null || typeof importedModule === 'undefined') {
       continue
     }
 
@@ -437,15 +424,24 @@ export function emitCModuleSource(
 
   for (const wrapper of context.callbackWrappers.values()) {
     if (wrapper.kind === 'plain-arrow') {
-      pushCModuleLines(bodyLines, emitPlainArrowCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies))
+      pushCModuleLines(
+        bodyLines,
+        emitPlainArrowCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies)
+      )
     } else {
-      pushCModuleLines(bodyLines, emitRuntimeCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies))
+      pushCModuleLines(
+        bodyLines,
+        emitRuntimeCallbackWrapperDeclaration(wrapper, context, deps.callbackLoweringDependencies)
+      )
     }
     bodyLines.push('')
   }
 
   for (const wrapper of context.promiseChainWrappers.values()) {
-    pushCModuleLines(bodyLines, emitPromiseChainCallbackWrapperDeclaration(wrapper, context, deps.promiseChainLoweringDependencies))
+    pushCModuleLines(
+      bodyLines,
+      emitPromiseChainCallbackWrapperDeclaration(wrapper, context, deps.promiseChainLoweringDependencies)
+    )
     bodyLines.push('')
   }
 
@@ -480,7 +476,7 @@ export function emitCModuleSource(
     bodyLines.push('')
   }
 
-  if (!plan.isEntry && plan.initName != null) {
+  if (!plan.isEntry && plan.initName !== null && typeof plan.initName !== 'undefined') {
     pushCModuleLines(bodyLines, emitCModuleInitFunction(plan, context, deps))
   } else {
     pushCModuleLines(bodyLines, emitCModuleMainFunction(plan, context, deps))
@@ -512,7 +508,7 @@ export function emitCModuleHeader(
   lines.push('#include "inox/promise.h"')
   lines.push('')
 
-  if (plan.initName != null) {
+  if (plan.initName !== null && typeof plan.initName !== 'undefined') {
     lines.push(`void ${plan.initName}(void);`)
   }
 
@@ -596,18 +592,14 @@ function emitCModuleDeclarations(
     lines.push('')
   }
 
-  for (
-    let wrapperIndex = 0;
-    wrapperIndex < promiseChainCallbackWrappers.length;
-    wrapperIndex = wrapperIndex + 1
-  ) {
+  for (let wrapperIndex = 0; wrapperIndex < promiseChainCallbackWrappers.length; wrapperIndex = wrapperIndex + 1) {
     const wrapper = cModulePromiseChainWrapperAt(promiseChainCallbackWrappers, wrapperIndex)
 
     pushCModuleLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
   }
 
-  if (context.unhandledRejectionFlag != null) {
+  if (context.unhandledRejectionFlag !== null && typeof context.unhandledRejectionFlag !== 'undefined') {
     lines.push(`static int ${context.unhandledRejectionFlag} = 0;`)
     lines.push('')
   }
@@ -699,7 +691,12 @@ function emitCModuleFunctionPointerAdapterDefinition(
   const targetSeenTypes = functionPointerAdapterTargetSeenTypes(adapter, context)
   const targetNames = collectFunctionPointerParamNames(targetFunctionType, targetSeenTypes)
   const targetNameSet = stringSetFromArray(targetNames)
-  const targetArgs = emitFunctionPointerAdapterTargetArgs(adapter, expectedNames, targetNames, moduleObjectFunctionFields)
+  const targetArgs = emitFunctionPointerAdapterTargetArgs(
+    adapter,
+    expectedNames,
+    targetNames,
+    moduleObjectFunctionFields
+  )
 
   for (const name of expectedNames) {
     if (!targetNameSet.has(name)) {
@@ -765,10 +762,13 @@ function isPlainArrowFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapt
 function isThrowingFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapter, context: CEmitContext): boolean {
   const sourceName = cFunctionPointerAdapterTargetSourceName(adapter, context)
 
-  return sourceName != null && context.throwingFunctions.has(sourceName)
+  return sourceName !== null && typeof sourceName !== 'undefined' && context.throwingFunctions.has(sourceName)
 }
 
-function cFunctionPointerAdapterTargetSourceName(adapter: CFunctionPointerAdapter, context: CEmitContext): string | null {
+function cFunctionPointerAdapterTargetSourceName(
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext
+): string | null {
   for (const name of context.functionNames.keys()) {
     const target = context.functionNames.get(name)
 
@@ -780,7 +780,10 @@ function cFunctionPointerAdapterTargetSourceName(adapter: CFunctionPointerAdapte
   return null
 }
 
-function emitThrowingFunctionPointerAdapterTargetCall(adapter: CFunctionPointerAdapter, targetArgs: string[]): string[] {
+function emitThrowingFunctionPointerAdapterTargetCall(
+  adapter: CFunctionPointerAdapter,
+  targetArgs: string[]
+): string[] {
   const lines: string[] = []
   const callArgs: string[] = []
   const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
@@ -854,14 +857,14 @@ function emitFunctionPointerAdapterTargetArgs(
 
     const moduleObjectFunctionField = emitFunctionPointerAdapterModuleObjectFieldArg(name, moduleObjectFunctionFields)
 
-    if (moduleObjectFunctionField != null) {
+    if (moduleObjectFunctionField !== null && typeof moduleObjectFunctionField !== 'undefined') {
       args.push(moduleObjectFunctionField)
       continue
     }
 
     const defaultArg = emitFunctionPointerAdapterDefaultTargetArg(name, adapter)
 
-    if (defaultArg != null) {
+    if (defaultArg !== null && typeof defaultArg !== 'undefined') {
       args.push(defaultArg)
       continue
     }
@@ -878,7 +881,7 @@ function collectCModuleObjectFunctionFieldNames(context: CEmitContext): Set<stri
   for (const objectName of context.moduleObjectShapes.keys()) {
     const fields = context.moduleObjectShapes.get(objectName)
 
-    if (fields != null) {
+    if (fields !== null && typeof fields !== 'undefined') {
       collectCModuleObjectFunctionFieldNamesFromShape(names, objectName, fields)
     }
   }
@@ -900,7 +903,10 @@ function collectCModuleObjectFunctionFieldNamesFromShape(
   }
 }
 
-function emitFunctionPointerAdapterModuleObjectFieldArg(name: string, moduleObjectFunctionFields: Set<string>): string | null {
+function emitFunctionPointerAdapterModuleObjectFieldArg(
+  name: string,
+  moduleObjectFunctionFields: Set<string>
+): string | null {
   const prefix = 'inox_objfn_inox_arg_'
 
   if (!name.startsWith(prefix)) {
@@ -932,18 +938,19 @@ function emitFunctionPointerAdapterModuleObjectFieldArg(name: string, moduleObje
   return null
 }
 
-function emitFunctionPointerAdapterDefaultTargetArg(
-  name: string,
-  adapter: CFunctionPointerAdapter
-): string | null {
-  for (let index = adapter.functionType.params.length; index < adapter.targetFunctionType.params.length; index = index + 1) {
+function emitFunctionPointerAdapterDefaultTargetArg(name: string, adapter: CFunctionPointerAdapter): string | null {
+  for (
+    let index = adapter.functionType.params.length;
+    index < adapter.targetFunctionType.params.length;
+    index = index + 1
+  ) {
     if (name !== `inox_arg_${index}`) {
       continue
     }
 
     const param = adapter.targetFunctionType.params[index]
 
-    if (param.optional !== true && param.defaultValue == null) {
+    if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
       return null
     }
 
@@ -956,7 +963,7 @@ function emitFunctionPointerAdapterDefaultTargetArg(
 function emitFunctionPointerAdapterDefaultParamValue(param: CFunctionParam): string {
   const value = param.defaultValue
 
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     if (value.type === 'NullLiteral') {
       return 'inox_null_value()'
     }
@@ -1027,11 +1034,7 @@ function createCModuleBaseContext(
   pushCModuleClassMethodFunctionDeclarations(functionDeclarations, irPrograms)
 
   const importedEffects = collectImportedCModuleFunctionEffects(plan)
-  const inferredFunctionEffects = collectIrFunctionEffectsWithExternalEffects(
-    irPrograms,
-    importedEffects,
-    true
-  )
+  const inferredFunctionEffects = collectIrFunctionEffectsWithExternalEffects(irPrograms, importedEffects, true)
   const storedFunctionEffects = collectIrStoredFunctionEffects(irPrograms)
   const functionEffects = mergeIrFunctionEffects(inferredFunctionEffects, storedFunctionEffects)
 
@@ -1041,13 +1044,7 @@ function createCModuleBaseContext(
     pushIrFunctionEffect(functionEffects, effect)
   }
 
-  const context = deps.createBaseContext(
-    diagnostics,
-    functionDeclarations,
-    functionEffects,
-    jsGlobalRoots,
-    ir.body
-  )
+  const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots, ir.body)
 
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
@@ -1138,7 +1135,13 @@ function collectCModuleFunctionParamRuntimeTypes(
     types.add('function')
   }
 
-  if (param.valueType === 'object' && param.shape != null && param.shape.fields != null) {
+  if (
+    param.valueType === 'object' &&
+    param.shape !== null &&
+    typeof param.shape !== 'undefined' &&
+    param.shape.fields !== null &&
+    typeof param.shape.fields !== 'undefined'
+  ) {
     collectCModuleObjectShapeRuntimeTypes(types, param.shape.fields, seen)
   }
 }
@@ -1167,7 +1170,13 @@ function collectCModuleObjectShapeRuntimeTypes(
       types.add('function')
     }
 
-    if (field.valueType === 'object' && field.shape != null && field.shape.fields != null) {
+    if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined' &&
+      field.shape.fields !== null &&
+      typeof field.shape.fields !== 'undefined'
+    ) {
       collectCModuleObjectShapeRuntimeTypes(types, field.shape.fields, seen)
     }
   }
@@ -1191,7 +1200,7 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
     const item = cModuleImportPlanAt(plan.imports, importIndex)
     const importedModule = item.module
 
-    if (importedModule == null) {
+    if (importedModule === null || typeof importedModule === 'undefined') {
       continue
     }
 
@@ -1201,7 +1210,7 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
       const exported = importedModule.record.exports.get(specifier.imported)
 
-      if (exported == null || exported.type !== 'VariableDeclaration') {
+      if (exported === null || typeof exported === 'undefined' || exported.type !== 'VariableDeclaration') {
         continue
       }
 
@@ -1286,7 +1295,7 @@ function emitCModuleValueFunctionFieldDefinitions(
     const item = cModuleValueDeclarationAt(values, index)
     const fields = context.moduleObjectShapes.get(item.name)
 
-    if (fields == null) {
+    if (fields === null || typeof fields === 'undefined') {
       continue
     }
 
@@ -1329,19 +1338,31 @@ function emitCModuleObjectFunctionFieldDefinitions(
         lines.push(`static inox_value ${name};`)
         emitted = true
       }
-    } else if (field.valueType === 'object' && field.shape != null && field.shape.fields != null) {
-      if (field.declaredType != null && seenTypes.includes(field.declaredType)) {
+    } else if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined' &&
+      field.shape.fields !== null &&
+      typeof field.shape.fields !== 'undefined'
+    ) {
+      if (
+        field.declaredType !== null &&
+        typeof field.declaredType !== 'undefined' &&
+        seenTypes.includes(field.declaredType)
+      ) {
         continue
       }
 
       let pushedType = false
 
-      if (field.declaredType != null) {
+      if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
         seenTypes.push(field.declaredType)
         pushedType = true
       }
 
-      if (emitCModuleObjectFunctionFieldDefinitions(lines, `${objectName}_${field.name}`, field.shape.fields, seenTypes)) {
+      if (
+        emitCModuleObjectFunctionFieldDefinitions(lines, `${objectName}_${field.name}`, field.shape.fields, seenTypes)
+      ) {
         emitted = true
       }
 
@@ -1357,11 +1378,16 @@ function emitCModuleObjectFunctionFieldDefinitions(
 function cModuleValueType(node: AnyNode): string {
   const valueType = node.valueType
 
-  if (valueType == null || valueType === '') {
+  if (valueType === null || typeof valueType === 'undefined' || valueType === '') {
     return 'unknown'
   }
 
-  if (valueType === 'string' && node.init != null && node.init.type === 'AwaitExpression') {
+  if (
+    valueType === 'string' &&
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.type === 'AwaitExpression'
+  ) {
     return 'unknown'
   }
 
@@ -1490,11 +1516,11 @@ function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
     const item = cModuleImportPlanAt(plan.imports, index)
     const importedModule = item.module
 
-    if (importedModule == null) {
+    if (importedModule === null || typeof importedModule === 'undefined') {
       continue
     }
 
-    if (importedModule.initName != null) {
+    if (importedModule.initName !== null && typeof importedModule.initName !== 'undefined') {
       calls.push(`${importedModule.initName}();`)
     }
   }
@@ -1502,10 +1528,7 @@ function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
   return calls
 }
 
-function collectCModuleFunctionNodeEntries(
-  plan: CModulePlan,
-  programs: IrProgram[]
-): CModuleFunctionNodeEntry[] {
+function collectCModuleFunctionNodeEntries(plan: CModulePlan, programs: IrProgram[]): CModuleFunctionNodeEntry[] {
   const entries = collectIrFunctionNodeEntries(programs)
   const filtered: CModuleFunctionNodeEntry[] = []
 
@@ -1557,7 +1580,7 @@ function isCModuleImportFunctionWrapperBody(node: AnyNode, importedName: string)
     expression = statement.expression
   }
 
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -1616,7 +1639,7 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
     const item = cModuleImportPlanAt(plan.imports, importIndex)
     const importedModule = item.module
 
-    if (importedModule == null) {
+    if (importedModule === null || typeof importedModule === 'undefined') {
       continue
     }
 
@@ -1629,7 +1652,7 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
         specifier.imported
       )
 
-      if (declaration != null) {
+      if (declaration !== null && typeof declaration !== 'undefined') {
         const localName = cModuleImportedBindingName(item.declaration, specifier)
         declarations.push(cloneImportedCModuleFunctionDeclaration(declaration, localName))
       }
@@ -1652,7 +1675,7 @@ function collectCModulePlanFunctionEffectsWithVisited(
 ): IrFunctionEffect[] {
   const cached = cache.get(plan.record.path)
 
-  if (cached != null) {
+  if (cached !== null && typeof cached !== 'undefined') {
     return cached
   }
 
@@ -1693,7 +1716,7 @@ function collectImportedCModuleFunctionEffectsWithVisited(
     const item = cModuleImportPlanAt(plan.imports, importIndex)
     const importedModule = item.module
 
-    if (importedModule == null) {
+    if (importedModule === null || typeof importedModule === 'undefined') {
       continue
     }
 
@@ -1770,11 +1793,7 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
   const localNames: Set<string> = new Set()
   const localFunctionNodes = collectIrTopLevelNodes(plan.ir, 'function')
 
-  for (
-    let functionIndex = 0;
-    functionIndex < localFunctionNodes.length;
-    functionIndex = functionIndex + 1
-  ) {
+  for (let functionIndex = 0; functionIndex < localFunctionNodes.length; functionIndex = functionIndex + 1) {
     const node = cModuleNodeAt(localFunctionNodes, functionIndex)
 
     if (!isCModuleImportFunctionWrapper(plan, node)) {
@@ -1796,7 +1815,7 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
     const item = cModuleImportPlanAt(plan.imports, importIndex)
     const importedModule = item.module
 
-    if (importedModule == null) {
+    if (importedModule === null || typeof importedModule === 'undefined') {
       continue
     }
 

@@ -1,10 +1,4 @@
-export type FetchRuntimeMethod =
-  | 'abort'
-  | 'abortControllerNew'
-  | 'fetch'
-  | 'headersGet'
-  | 'headersHas'
-  | 'text'
+export type FetchRuntimeMethod = 'abort' | 'abortControllerNew' | 'fetch' | 'headersGet' | 'headersHas' | 'text'
 
 export type FetchHeaderMethod = 'get' | 'has'
 export type FetchResponseBodyMethod = 'arrayBuffer' | 'blob' | 'bytes' | 'formData' | 'json' | 'text'
@@ -71,7 +65,7 @@ export function isFetchAbortControllerMethod(method: string): boolean {
 }
 
 export function isAsyncFetchRuntimeMethod(method: string | null | undefined): boolean {
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return false
   }
 

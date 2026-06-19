@@ -1,11 +1,6 @@
 import { pathRuntimeConstantValue } from '../../stdlib/descriptors/path.ts'
 import type { AnyNode } from '../../types.ts'
-import {
-  emitPrepareOwnedValueWrite,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
-} from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type {
   CObjectShape,
@@ -34,13 +29,13 @@ export type PathLoweringDependencies = {
 }
 
 export function cPathRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
   const method = expression.pathRuntimeMethod
 
-  if (method != null) {
+  if (method !== null && typeof method !== 'undefined') {
     return method
   }
 
@@ -48,13 +43,13 @@ export function cPathRuntimeMethodName(expression: AnyNode | null | undefined): 
 }
 
 export function cPathRuntimeConstantName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const constant = expression.pathRuntimeConstant
 
-  if (constant != null) {
+  if (constant !== null && typeof constant !== 'undefined') {
     return constant
   }
 
@@ -76,11 +71,11 @@ export function emitPreparedPathConstantExpression(
   const constant = cPathRuntimeConstantName(expression)
   let value: string | null = null
 
-  if (constant != null) {
+  if (constant !== null && typeof constant !== 'undefined') {
     value = cPathRuntimeConstantValue(constant)
   }
 
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -113,7 +108,12 @@ export function emitPreparedPathObjectCallExpression(
 
   let out = nextCName(context, 'inox_path_object')
 
-  if (options != null && options.out != null) {
+  if (
+    options !== null &&
+    typeof options !== 'undefined' &&
+    options.out !== null &&
+    typeof options.out !== 'undefined'
+  ) {
     out = options.out
   }
 
@@ -125,7 +125,7 @@ export function emitPreparedPathObjectCallExpression(
   pushLines(lines, shape.lines)
   pushLines(lines, emitPrepareOwnedValueWrite(out))
 
-  if (options == null || options.owned !== false) {
+  if (options === null || typeof options === 'undefined' || options.owned !== false) {
     registerOwnedValue(context, out)
   }
 
@@ -153,18 +153,23 @@ export function emitPreparedPathStringCallExpression(
 ): PreparedExpression | null {
   const method = cPathRuntimeMethodName(expression)
 
-  if (method == null || method === 'isAbsolute' || method === 'parse') {
+  if (method === null || typeof method === 'undefined' || method === 'isAbsolute' || method === 'parse') {
     return null
   }
 
   let out = nextCName(context, 'inox_path_value')
   const lines: string[] = []
 
-  if (options != null && options.out != null) {
+  if (
+    options !== null &&
+    typeof options !== 'undefined' &&
+    options.out !== null &&
+    typeof options.out !== 'undefined'
+  ) {
     out = options.out
   }
 
-  if (options == null || options.owned !== false) {
+  if (options === null || typeof options === 'undefined' || options.owned !== false) {
     registerOwnedValue(context, out)
   }
 
@@ -231,7 +236,7 @@ export function emitPreparedPathStringCallExpression(
     }
     let suffixPresent = '0'
 
-    if (expression.args[1] != null) {
+    if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
       suffix = dependencies.emitCValueExpression(expression.args[1], context)
       suffixPresent = '1'
     }

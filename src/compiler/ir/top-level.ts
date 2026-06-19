@@ -77,7 +77,7 @@ export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
   for (let index = 0; index < modules.length; index = index + 1) {
     const moduleRecord: ModuleRecord = modules[index]
 
-    if (moduleRecord.ir != null) {
+    if (moduleRecord.ir !== null && typeof moduleRecord.ir !== 'undefined') {
       records.push({
         path: moduleRecord.path,
         ir: moduleRecord.ir
@@ -111,16 +111,18 @@ export function findIrEntryProgram(records: IrModuleRecord[], entry: string): Ir
   return null
 }
 
-export function collectIrFunctionDeclarations(
-  programs: IrProgramWithFunctionDeclarations[]
-): IrFunctionDeclaration[] {
+export function collectIrFunctionDeclarations(programs: IrProgramWithFunctionDeclarations[]): IrFunctionDeclaration[] {
   const declarations: IrFunctionDeclaration[] = []
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
     const program = programs[programIndex]
     const functionDeclarations = program.functionDeclarations
 
-    for (let declarationIndex = 0; declarationIndex < functionDeclarations.length; declarationIndex = declarationIndex + 1) {
+    for (
+      let declarationIndex = 0;
+      declarationIndex < functionDeclarations.length;
+      declarationIndex = declarationIndex + 1
+    ) {
       const declaration = functionDeclarations[declarationIndex]
       declarations.push(declaration)
     }
@@ -144,7 +146,7 @@ export function collectIrFunctionNodeEntries(programs: IrFunctionNodeProgram[]):
         const name = nodeNameForTopLevelLookup(item.node)
         const declaration = functionDeclarationForName(declarationsByName, name)
 
-        if (declaration != null) {
+        if (declaration !== null && typeof declaration !== 'undefined') {
           entries.push({
             declaration,
             node: item.node
@@ -158,7 +160,7 @@ export function collectIrFunctionNodeEntries(programs: IrFunctionNodeProgram[]):
 }
 
 export function hasIrFunctionDeclaration(program: IrProgram | null | undefined, name: string): boolean {
-  if (program == null) {
+  if (program === null || typeof program === 'undefined') {
     return false
   }
 
@@ -182,7 +184,7 @@ export function collectIrTopLevelNodeEntries(program: IrTopLevelProgram): IrTopL
     const item = program.topLevelItems[index]
     const node = nodeAt(program.body, item.index)
 
-    if (node != null) {
+    if (node !== null && typeof node !== 'undefined') {
       entries.push({
         kind: item.kind,
         node
@@ -208,10 +210,7 @@ export function collectIrTopLevelNodes(program: IrTopLevelProgram, kind: IrTopLe
   return nodes
 }
 
-export function collectIrTopLevelNodesFromPrograms(
-  programs: IrTopLevelProgram[],
-  kind: IrTopLevelItemKind
-): NodeList {
+export function collectIrTopLevelNodesFromPrograms(programs: IrTopLevelProgram[], kind: IrTopLevelItemKind): NodeList {
   const nodes: NodeList = []
 
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
@@ -237,7 +236,7 @@ export function collectTopLevelItems(program: ProgramNode): IrTopLevelItem[] {
       const kind = topLevelItemKind(item)
       const loc = item.loc
 
-      if (loc != null) {
+      if (loc !== null && typeof loc !== 'undefined') {
         items.push({
           kind,
           index,
@@ -302,7 +301,7 @@ function functionDeclarationForName(
 ): IrFunctionDeclaration | null {
   const declaration = declarationsByName.get(name)
 
-  if (declaration == null) {
+  if (declaration === null || typeof declaration === 'undefined') {
     return null
   }
 
@@ -320,7 +319,7 @@ function nodeAt(nodes: NodeList, index: number): AnyNode | null {
 function nodeNameForTopLevelLookup(node: IrTopLevelNode): string {
   const name = node.name
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return ''
   }
 
@@ -334,39 +333,39 @@ function createFunctionDeclaration(item: IrTopLevelNode, name: string): IrFuncti
 
   const loc = item.loc
 
-  if (loc != null) {
+  if (loc !== null && typeof loc !== 'undefined') {
     declaration.loc = loc
   }
 
-  if (item.declaredReturnType != null) {
+  if (item.declaredReturnType !== null && typeof item.declaredReturnType !== 'undefined') {
     declaration.declaredReturnType = item.declaredReturnType
   }
 
-  if (item.returnArrayElementType != null) {
+  if (item.returnArrayElementType !== null && typeof item.returnArrayElementType !== 'undefined') {
     declaration.returnArrayElementType = item.returnArrayElementType
   }
 
-  if (item.returnArrayElementDeclaredType != null) {
+  if (item.returnArrayElementDeclaredType !== null && typeof item.returnArrayElementDeclaredType !== 'undefined') {
     declaration.returnArrayElementDeclaredType = item.returnArrayElementDeclaredType
   }
 
-  if (item.returnMapKeyType != null) {
+  if (item.returnMapKeyType !== null && typeof item.returnMapKeyType !== 'undefined') {
     declaration.returnMapKeyType = item.returnMapKeyType
   }
 
-  if (item.returnMapValueType != null) {
+  if (item.returnMapValueType !== null && typeof item.returnMapValueType !== 'undefined') {
     declaration.returnMapValueType = item.returnMapValueType
   }
 
-  if (item.returnPromiseValueType != null) {
+  if (item.returnPromiseValueType !== null && typeof item.returnPromiseValueType !== 'undefined') {
     declaration.returnPromiseValueType = item.returnPromiseValueType
   }
 
-  if (item.returnSetElementType != null) {
+  if (item.returnSetElementType !== null && typeof item.returnSetElementType !== 'undefined') {
     declaration.returnSetElementType = item.returnSetElementType
   }
 
-  if (item.returnShape != null) {
+  if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
     declaration.returnShape = item.returnShape
   }
 

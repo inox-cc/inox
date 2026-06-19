@@ -14,13 +14,7 @@ export type ProcessRuntimeProperty =
   | 'versions'
   | 'versions.node'
 
-export type ProcessRuntimeStringProperty =
-  | 'arch'
-  | 'argv0'
-  | 'execPath'
-  | 'platform'
-  | 'version'
-  | 'versions.node'
+export type ProcessRuntimeStringProperty = 'arch' | 'argv0' | 'execPath' | 'platform' | 'version' | 'versions.node'
 
 export type ProcessRuntimeNumberProperty = 'argv.length' | 'exitCode' | 'pid'
 export type ProcessRuntimeObjectProperty = 'argv' | 'env' | 'versions'

@@ -14,7 +14,10 @@ export function lowerExpression(expression: LowerExpressionNode, context: LowerE
   return lowerExpressionWithContext(expression, context)
 }
 
-function lowerExpressionWithContext(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
+function lowerExpressionWithContext(
+  expression: LowerExpressionNode,
+  context: LowerExpressionContext
+): LowerExpressionNode {
   if (expression.type === 'StringLiteral') {
     return cloneStringLiteral(expression)
   }
@@ -149,7 +152,12 @@ function lowerExpressionWithContext(expression: LowerExpressionNode, context: Lo
     const elements = lowerExpressionList(expression.elements, context)
     const elementType = commonArrayElementTypeFromElements(elements)
 
-    return cloneArrayLiteralExpression(expression, elements, elementType, arrayLiteralDeclaredElementType(expression, elementType))
+    return cloneArrayLiteralExpression(
+      expression,
+      elements,
+      elementType,
+      arrayLiteralDeclaredElementType(expression, elementType)
+    )
   }
 
   if (expression.type === 'ObjectLiteral') {
@@ -159,12 +167,15 @@ function lowerExpressionWithContext(expression: LowerExpressionNode, context: Lo
   return cloneUnknownExpression(expression)
 }
 
-function lowerTypeAssertionExpression(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
+function lowerTypeAssertionExpression(
+  expression: LowerExpressionNode,
+  context: LowerExpressionContext
+): LowerExpressionNode {
   const lowered = lowerExpressionWithContext(expression.expression, context)
   let declaredType: string = expression.valueType
   const expressionDeclaredType = expression.declaredType
 
-  if (expressionDeclaredType != null) {
+  if (expressionDeclaredType !== null && typeof expressionDeclaredType !== 'undefined') {
     declaredType = expressionDeclaredType
   }
 
@@ -192,39 +203,39 @@ function applyResolvedTypeAssertion(
   let functionType = expression.functionType
   let valueType = expression.valueType
 
-  if (declared.arrayElementType != null) {
+  if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
     arrayElementType = declared.arrayElementType
   }
 
-  if (declared.arrayElementDeclaredType != null) {
+  if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
     arrayElementDeclaredType = declared.arrayElementDeclaredType
   }
 
-  if (declared.mapKeyType != null) {
+  if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
     mapKeyType = declared.mapKeyType
   }
 
-  if (declared.mapValueType != null) {
+  if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
     mapValueType = declared.mapValueType
   }
 
-  if (declared.promiseValueType != null) {
+  if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
     promiseValueType = declared.promiseValueType
   }
 
-  if (declared.setElementType != null) {
+  if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
     setElementType = declared.setElementType
   }
 
-  if (declared.shape != null) {
+  if (declared.shape !== null && typeof declared.shape !== 'undefined') {
     shape = declared.shape
   }
 
-  if (declared.functionType != null) {
+  if (declared.functionType !== null && typeof declared.functionType !== 'undefined') {
     functionType = declared.functionType
   }
 
-  if (declared.valueType != null) {
+  if (declared.valueType !== null && typeof declared.valueType !== 'undefined') {
     valueType = declared.valueType
   }
 
@@ -244,7 +255,7 @@ function applyResolvedTypeAssertion(
 }
 
 function fallbackString(value: string | null | undefined, fallback: string): string {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -252,7 +263,7 @@ function fallbackString(value: string | null | undefined, fallback: string): str
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -260,7 +271,7 @@ function nullableString(value: string | null | undefined): string | null {
 }
 
 function nullableNode(value: LowerExpressionNode | null | undefined): LowerExpressionNode | null {
-  if (value != null) {
+  if (value !== null && typeof value !== 'undefined') {
     return value
   }
 
@@ -386,21 +397,27 @@ function cloneThisExpression(expression: LowerExpressionNode): LowerExpressionNo
   )
 }
 
-function findReferenceVariable(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode | null {
+function findReferenceVariable(
+  expression: LowerExpressionNode,
+  context: LowerExpressionContext
+): LowerExpressionNode | null {
   if (expression.path.length !== 1) {
     return null
   }
 
   const variable = context.variables.get(expression.path[0])
 
-  if (variable == null) {
+  if (variable === null || typeof variable === 'undefined') {
     return null
   }
 
   return variable
 }
 
-function cloneReferenceExpression(expression: LowerExpressionNode, variable: LowerExpressionNode | null): LowerExpressionNode {
+function cloneReferenceExpression(
+  expression: LowerExpressionNode,
+  variable: LowerExpressionNode | null
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: 'Reference',
@@ -425,11 +442,16 @@ function cloneReferenceExpression(expression: LowerExpressionNode, variable: Low
 function referenceValueType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string {
   const known = knownValueType(expression.valueType)
 
-  if (known != null) {
+  if (known !== null && typeof known !== 'undefined') {
     return known
   }
 
-  if (variable != null && variable.valueType != null) {
+  if (
+    variable !== null &&
+    typeof variable !== 'undefined' &&
+    variable.valueType !== null &&
+    typeof variable.valueType !== 'undefined'
+  ) {
     return variable.valueType
   }
 
@@ -437,16 +459,19 @@ function referenceValueType(expression: LowerExpressionNode, variable: LowerExpr
 }
 
 function referenceVariableNullable(variable: LowerExpressionNode | null): boolean {
-  return variable != null && variable.nullable === true
+  return variable !== null && typeof variable !== 'undefined' && variable.nullable === true
 }
 
-function referenceArrayElementType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.arrayElementType != null) {
+function referenceArrayElementType(
+  expression: LowerExpressionNode,
+  variable: LowerExpressionNode | null
+): string | null {
+  if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
     return expression.arrayElementType
   }
 
-  if (variable != null) {
-    if (variable.arrayElementType != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.arrayElementType !== null && typeof variable.arrayElementType !== 'undefined') {
       return variable.arrayElementType
     }
   }
@@ -458,12 +483,12 @@ function referenceArrayElementDeclaredType(
   expression: LowerExpressionNode,
   variable: LowerExpressionNode | null
 ): string | null {
-  if (expression.arrayElementDeclaredType != null) {
+  if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
     return expression.arrayElementDeclaredType
   }
 
-  if (variable != null) {
-    if (variable.arrayElementDeclaredType != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.arrayElementDeclaredType !== null && typeof variable.arrayElementDeclaredType !== 'undefined') {
       return variable.arrayElementDeclaredType
     }
   }
@@ -472,12 +497,12 @@ function referenceArrayElementDeclaredType(
 }
 
 function referenceMapKeyType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.mapKeyType != null) {
+  if (expression.mapKeyType !== null && typeof expression.mapKeyType !== 'undefined') {
     return expression.mapKeyType
   }
 
-  if (variable != null) {
-    if (variable.mapKeyType != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.mapKeyType !== null && typeof variable.mapKeyType !== 'undefined') {
       return variable.mapKeyType
     }
   }
@@ -486,12 +511,12 @@ function referenceMapKeyType(expression: LowerExpressionNode, variable: LowerExp
 }
 
 function referenceMapValueType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.mapValueType != null) {
+  if (expression.mapValueType !== null && typeof expression.mapValueType !== 'undefined') {
     return expression.mapValueType
   }
 
-  if (variable != null) {
-    if (variable.mapValueType != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.mapValueType !== null && typeof variable.mapValueType !== 'undefined') {
       return variable.mapValueType
     }
   }
@@ -499,13 +524,16 @@ function referenceMapValueType(expression: LowerExpressionNode, variable: LowerE
   return null
 }
 
-function referencePromiseValueType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.promiseValueType != null) {
+function referencePromiseValueType(
+  expression: LowerExpressionNode,
+  variable: LowerExpressionNode | null
+): string | null {
+  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
     return expression.promiseValueType
   }
 
-  if (variable != null) {
-    if (variable.promiseValueType != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.promiseValueType !== null && typeof variable.promiseValueType !== 'undefined') {
       return variable.promiseValueType
     }
   }
@@ -514,12 +542,12 @@ function referencePromiseValueType(expression: LowerExpressionNode, variable: Lo
 }
 
 function referenceSetElementType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.setElementType != null) {
+  if (expression.setElementType !== null && typeof expression.setElementType !== 'undefined') {
     return expression.setElementType
   }
 
-  if (variable != null) {
-    if (variable.setElementType != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.setElementType !== null && typeof variable.setElementType !== 'undefined') {
       return variable.setElementType
     }
   }
@@ -528,12 +556,12 @@ function referenceSetElementType(expression: LowerExpressionNode, variable: Lowe
 }
 
 function referenceClassName(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.className != null) {
+  if (expression.className !== null && typeof expression.className !== 'undefined') {
     return expression.className
   }
 
-  if (variable != null) {
-    if (variable.className != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.className !== null && typeof variable.className !== 'undefined') {
       return variable.className
     }
   }
@@ -545,12 +573,12 @@ function referenceFunctionType(
   expression: LowerExpressionNode,
   variable: LowerExpressionNode | null
 ): LowerExpressionNode | null {
-  if (expression.functionType != null) {
+  if (expression.functionType !== null && typeof expression.functionType !== 'undefined') {
     return expression.functionType
   }
 
-  if (variable != null) {
-    if (variable.functionType != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.functionType !== null && typeof variable.functionType !== 'undefined') {
       return variable.functionType
     }
   }
@@ -558,13 +586,16 @@ function referenceFunctionType(
   return null
 }
 
-function referenceShape(expression: LowerExpressionNode, variable: LowerExpressionNode | null): LowerExpressionNode | null {
-  if (expression.shape != null) {
+function referenceShape(
+  expression: LowerExpressionNode,
+  variable: LowerExpressionNode | null
+): LowerExpressionNode | null {
+  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
     return expression.shape
   }
 
-  if (variable != null) {
-    if (variable.shape != null) {
+  if (variable !== null && typeof variable !== 'undefined') {
+    if (variable.shape !== null && typeof variable.shape !== 'undefined') {
       return variable.shape
     }
   }
@@ -575,7 +606,7 @@ function referenceShape(expression: LowerExpressionNode, variable: LowerExpressi
 function memberExpressionValueType(expression: LowerExpressionNode, object: LowerExpressionNode): string {
   const known = knownValueType(expression.valueType)
 
-  if (known != null) {
+  if (known !== null && typeof known !== 'undefined') {
     return known
   }
 
@@ -585,14 +616,18 @@ function memberExpressionValueType(expression: LowerExpressionNode, object: Lowe
 function indexExpressionValueType(expression: LowerExpressionNode, object: LowerExpressionNode): string {
   const known = knownValueType(expression.valueType)
 
-  if (known != null) {
+  if (known !== null && typeof known !== 'undefined') {
     return known
   }
 
   return inferIndexExpressionType(object)
 }
 
-function cloneMemberExpression(expression: LowerExpressionNode, object: LowerExpressionNode, valueType: string): LowerExpressionNode {
+function cloneMemberExpression(
+  expression: LowerExpressionNode,
+  object: LowerExpressionNode,
+  valueType: string
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: expression.type,
@@ -616,7 +651,12 @@ function cloneMemberExpression(expression: LowerExpressionNode, object: LowerExp
   )
 }
 
-function cloneIndexExpression(expression: LowerExpressionNode, object: LowerExpressionNode, index: LowerExpressionNode, valueType: string): LowerExpressionNode {
+function cloneIndexExpression(
+  expression: LowerExpressionNode,
+  object: LowerExpressionNode,
+  index: LowerExpressionNode,
+  valueType: string
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: expression.type,
@@ -640,7 +680,12 @@ function cloneIndexExpression(expression: LowerExpressionNode, object: LowerExpr
   )
 }
 
-function cloneCallExpression(expression: LowerExpressionNode, callee: LowerExpressionNode, args: LowerExpressionNode[], valueType: string): LowerExpressionNode {
+function cloneCallExpression(
+  expression: LowerExpressionNode,
+  callee: LowerExpressionNode,
+  args: LowerExpressionNode[],
+  valueType: string
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: expression.type,
@@ -664,7 +709,11 @@ function cloneCallExpression(expression: LowerExpressionNode, callee: LowerExpre
   )
 }
 
-function cloneAwaitExpression(expression: LowerExpressionNode, argument: LowerExpressionNode, valueType: string): LowerExpressionNode {
+function cloneAwaitExpression(
+  expression: LowerExpressionNode,
+  argument: LowerExpressionNode,
+  valueType: string
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: 'AwaitExpression',
@@ -687,7 +736,10 @@ function cloneAwaitExpression(expression: LowerExpressionNode, argument: LowerEx
   )
 }
 
-function cloneArrowFunctionExpression(expression: LowerExpressionNode, body: LowerExpressionNode | LowerExpressionNode[]): LowerExpressionNode {
+function cloneArrowFunctionExpression(
+  expression: LowerExpressionNode,
+  body: LowerExpressionNode | LowerExpressionNode[]
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: 'ArrowFunctionExpression',
@@ -705,7 +757,10 @@ function cloneArrowFunctionExpression(expression: LowerExpressionNode, body: Low
   )
 }
 
-function lowerArrowFunctionBody(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode | LowerExpressionNode[] {
+function lowerArrowFunctionBody(
+  expression: LowerExpressionNode,
+  context: LowerExpressionContext
+): LowerExpressionNode | LowerExpressionNode[] {
   if (expression.expressionBody === true) {
     return lowerExpressionWithContext(expression.body, context)
   }
@@ -719,7 +774,11 @@ function lowerArrowFunctionBody(expression: LowerExpressionNode, context: LowerE
   return body
 }
 
-function cloneAssignmentExpression(expression: LowerExpressionNode, target: LowerExpressionNode, value: LowerExpressionNode): LowerExpressionNode {
+function cloneAssignmentExpression(
+  expression: LowerExpressionNode,
+  target: LowerExpressionNode,
+  value: LowerExpressionNode
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: 'AssignmentExpression',
@@ -757,7 +816,12 @@ function cloneUpdateExpression(expression: LowerExpressionNode, argument: LowerE
   )
 }
 
-function cloneBinaryExpression(expression: LowerExpressionNode, left: LowerExpressionNode, right: LowerExpressionNode, valueType: string): LowerExpressionNode {
+function cloneBinaryExpression(
+  expression: LowerExpressionNode,
+  left: LowerExpressionNode,
+  right: LowerExpressionNode,
+  valueType: string
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: 'BinaryExpression',
@@ -781,7 +845,11 @@ function cloneBinaryExpression(expression: LowerExpressionNode, left: LowerExpre
   )
 }
 
-function cloneUnaryExpression(expression: LowerExpressionNode, argument: LowerExpressionNode, valueType: string): LowerExpressionNode {
+function cloneUnaryExpression(
+  expression: LowerExpressionNode,
+  argument: LowerExpressionNode,
+  valueType: string
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: 'UnaryExpression',
@@ -816,7 +884,10 @@ function unaryExpressionValueType(expression: LowerExpressionNode): string {
   return 'number'
 }
 
-function lowerExpressionList(expressions: LowerExpressionNode[], context: LowerExpressionContext): LowerExpressionNode[] {
+function lowerExpressionList(
+  expressions: LowerExpressionNode[],
+  context: LowerExpressionContext
+): LowerExpressionNode[] {
   const lowered: LowerExpressionNode[] = []
 
   for (const expression of expressions) {
@@ -854,7 +925,7 @@ function cloneArrayLiteralExpression(
 }
 
 function arrayLiteralDeclaredElementType(expression: LowerExpressionNode, elementType: string): string {
-  if (expression.arrayElementDeclaredType != null) {
+  if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
     return expression.arrayElementDeclaredType
   }
 
@@ -867,21 +938,24 @@ function commonArrayElementTypeFromElements(elements: LowerExpressionNode[]): st
   for (const element of elements) {
     const valueType = fallbackString(element.valueType, 'unknown')
 
-    if (first == null) {
+    if (first === null || typeof first === 'undefined') {
       first = valueType
     } else if (valueType !== first) {
       return 'unknown'
     }
   }
 
-  if (first == null) {
+  if (first === null || typeof first === 'undefined') {
     return 'unknown'
   }
 
   return first
 }
 
-function lowerObjectProperties(properties: LowerExpressionNode[], context: LowerExpressionContext): LowerExpressionNode[] {
+function lowerObjectProperties(
+  properties: LowerExpressionNode[],
+  context: LowerExpressionContext
+): LowerExpressionNode[] {
   const lowered: LowerExpressionNode[] = []
 
   for (const property of properties) {
@@ -899,7 +973,10 @@ function cloneObjectProperty(property: LowerExpressionNode, value: LowerExpressi
   }
 }
 
-function cloneObjectLiteralExpression(expression: LowerExpressionNode, properties: LowerExpressionNode[]): LowerExpressionNode {
+function cloneObjectLiteralExpression(
+  expression: LowerExpressionNode,
+  properties: LowerExpressionNode[]
+): LowerExpressionNode {
   return copyRuntimeMetadata(
     {
       type: 'ObjectLiteral',
@@ -934,7 +1011,7 @@ function cloneUnknownExpression(expression: LowerExpressionNode): LowerExpressio
 }
 
 function lowerBlockBodyStatement(statement: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
-  if (context.lowerStatement == null) {
+  if (context.lowerStatement === null || typeof context.lowerStatement === 'undefined') {
     return statement
   }
 
@@ -998,7 +1075,7 @@ function inferIndexExpressionType(object: LowerExpressionNode): string {
 }
 
 function knownValueType(valueType: string | null | undefined): string | null {
-  if (valueType == null || valueType === 'unknown') {
+  if (valueType === null || typeof valueType === 'undefined' || valueType === 'unknown') {
     return null
   }
 

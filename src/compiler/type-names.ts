@@ -35,7 +35,7 @@ export function nullableTypeNameFromKnownTypeName(name: string): string {
 export function mapTypeNamesFromTypeName(name: string): MapTypeNames | null {
   const inner = genericTypeInner(name, 'map')
 
-  if (inner != null) {
+  if (inner !== null && typeof inner !== 'undefined') {
     const args = splitGenericArgs(inner)
 
     if (args.length !== 2) {
@@ -54,7 +54,7 @@ export function mapTypeNamesFromTypeName(name: string): MapTypeNames | null {
 export function recordTypeNamesFromTypeName(name: string): RecordTypeNames | null {
   const inner = genericTypeInner(name, 'record')
 
-  if (inner == null) {
+  if (inner === null || typeof inner === 'undefined') {
     return null
   }
 
@@ -73,7 +73,7 @@ export function recordTypeNamesFromTypeName(name: string): RecordTypeNames | nul
 export function setElementTypeNameFromTypeName(name: string): string | null {
   const inner = genericTypeInner(name, 'set')
 
-  if (inner != null) {
+  if (inner !== null && typeof inner !== 'undefined') {
     const args = splitGenericArgs(inner)
 
     if (args.length === 1) {
@@ -97,7 +97,7 @@ export function setElementTypeNameFromKnownTypeName(name: string): string {
 export function promiseValueTypeNameFromTypeName(name: string): string | null {
   const inner = genericTypeInner(name, 'promise')
 
-  if (inner != null) {
+  if (inner !== null && typeof inner !== 'undefined') {
     const args = splitGenericArgs(inner)
 
     if (args.length === 1) {
@@ -129,7 +129,7 @@ export function splitUnionArgs(value: string): string[] {
 export function unionTypeNamesFromTypeName(name: string): string[] | null {
   const inner = genericTypeInner(name, 'union')
 
-  if (inner == null) {
+  if (inner === null || typeof inner === 'undefined') {
     return null
   }
 

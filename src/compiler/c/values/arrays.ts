@@ -32,6 +32,7 @@ import type {
   CPromiseConstructorHandler,
   CRuntimeArrayElement
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
@@ -115,7 +116,7 @@ type ArrayCallbackBody =
 function arrayDeps(context: ArrayFunctionContext): ArrayLoweringDependencies {
   const deps = context.arrayLoweringDependencies
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps
   }
 
@@ -123,7 +124,7 @@ function arrayDeps(context: ArrayFunctionContext): ArrayLoweringDependencies {
 }
 
 function optionalArrayDeps(context: ArrayFunctionContext): ArrayLoweringDependencies | null {
-  if (context.arrayLoweringDependencies == null) {
+  if (context.arrayLoweringDependencies === null || typeof context.arrayLoweringDependencies === 'undefined') {
     return null
   }
 
@@ -149,7 +150,7 @@ function appendPrefixedLines(out: string[], lines: string[], prefix: string): vo
 function ensureArrayShapes(context: ArrayFunctionContext): Map<string, CArrayElementInfo[]> {
   let shapes = context.arrayShapes
 
-  if (shapes != null) {
+  if (shapes !== null && typeof shapes !== 'undefined') {
     return shapes
   }
 
@@ -162,7 +163,7 @@ function ensureArrayShapes(context: ArrayFunctionContext): Map<string, CArrayEle
 function ensureClassInstanceTypes(context: ArrayFunctionContext): CStringMap {
   let classInstanceTypes = context.classInstanceTypes
 
-  if (classInstanceTypes != null) {
+  if (classInstanceTypes !== null && typeof classInstanceTypes !== 'undefined') {
     return classInstanceTypes
   }
 
@@ -175,7 +176,7 @@ function ensureClassInstanceTypes(context: ArrayFunctionContext): CStringMap {
 function ensureErrorObjectNames(context: ArrayFunctionContext): CStringSet {
   let errorObjectNames = context.errorObjectNames
 
-  if (errorObjectNames != null) {
+  if (errorObjectNames !== null && typeof errorObjectNames !== 'undefined') {
     return errorObjectNames
   }
 
@@ -188,7 +189,7 @@ function ensureErrorObjectNames(context: ArrayFunctionContext): CStringSet {
 function ensurePromiseConstructorHandlers(context: ArrayFunctionContext): CPromiseConstructorHandlerMap {
   let promiseConstructorHandlers = context.promiseConstructorHandlers
 
-  if (promiseConstructorHandlers != null) {
+  if (promiseConstructorHandlers !== null && typeof promiseConstructorHandlers !== 'undefined') {
     return promiseConstructorHandlers
   }
 
@@ -201,7 +202,7 @@ function ensurePromiseConstructorHandlers(context: ArrayFunctionContext): CPromi
 function ensurePromiseRejectionValueTypes(context: ArrayFunctionContext): CStringMap {
   let promiseRejectionValueTypes = context.promiseRejectionValueTypes
 
-  if (promiseRejectionValueTypes != null) {
+  if (promiseRejectionValueTypes !== null && typeof promiseRejectionValueTypes !== 'undefined') {
     return promiseRejectionValueTypes
   }
 
@@ -214,7 +215,7 @@ function ensurePromiseRejectionValueTypes(context: ArrayFunctionContext): CStrin
 function ensurePromiseValueTypes(context: ArrayFunctionContext): CStringMap {
   let promiseValueTypes = context.promiseValueTypes
 
-  if (promiseValueTypes != null) {
+  if (promiseValueTypes !== null && typeof promiseValueTypes !== 'undefined') {
     return promiseValueTypes
   }
 
@@ -225,7 +226,7 @@ function ensurePromiseValueTypes(context: ArrayFunctionContext): CStringMap {
 }
 
 function maybeArrayShapes(context: ArrayFunctionContext): Map<string, CArrayElementInfo[]> | null {
-  if (context.arrayShapes == null) {
+  if (context.arrayShapes === null || typeof context.arrayShapes === 'undefined') {
     return null
   }
 
@@ -235,13 +236,13 @@ function maybeArrayShapes(context: ArrayFunctionContext): Map<string, CArrayElem
 function findArrayShape(context: ArrayFunctionContext, name: string): CArrayElementInfo[] | null {
   const shapes = maybeArrayShapes(context)
 
-  if (shapes == null) {
+  if (shapes === null || typeof shapes === 'undefined') {
     return null
   }
 
   const shape = shapes.get(name)
 
-  if (shape == null) {
+  if (shape === null || typeof shape === 'undefined') {
     return null
   }
 
@@ -249,13 +250,16 @@ function findArrayShape(context: ArrayFunctionContext, name: string): CArrayElem
 }
 
 function resolveFunctionReturnArrayElementType(context: ArrayFunctionContext, name: string): string | null {
-  if (context.functionReturnArrayElementTypes == null) {
+  if (
+    context.functionReturnArrayElementTypes === null ||
+    typeof context.functionReturnArrayElementTypes === 'undefined'
+  ) {
     return null
   }
 
   const elementType = context.functionReturnArrayElementTypes.get(name)
 
-  if (elementType == null) {
+  if (elementType === null || typeof elementType === 'undefined') {
     return null
   }
 
@@ -347,11 +351,15 @@ function parseArrayIndex(value: string): number {
 function inferArrayMetadataExpressionType(expression: AnyNode, context: ArrayFunctionContext): string {
   const deps = optionalArrayDeps(context)
 
-  if (deps != null) {
+  if (deps !== null && typeof deps !== 'undefined') {
     return deps.inferExpressionType(expression, context)
   }
 
-  if (expression.valueType != null && expression.valueType !== 'unknown') {
+  if (
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType !== 'unknown'
+  ) {
     return expression.valueType
   }
 
@@ -374,7 +382,7 @@ function inferArrayMetadataExpressionType(expression: AnyNode, context: ArrayFun
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const valueType = context.variables.get(expression.path[0])
 
-    if (valueType != null) {
+    if (valueType !== null && typeof valueType !== 'undefined') {
       return valueType
     }
   }
@@ -417,7 +425,7 @@ function arrayElementInfoWithoutLast(elements: CArrayElementInfo[]): CArrayEleme
 }
 
 export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
@@ -431,11 +439,11 @@ export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
     return false
   }
 
-  return arrayRuntimeMethodName(callee.property) != null
+  return isPresent(arrayRuntimeMethodName(callee.property))
 }
 
 export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -445,7 +453,12 @@ export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {
 }
 
 export function isArrayJoinCall(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
-  if (expression == null || expression.type !== 'CallExpression' || expression.args.length > 1) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.args.length > 1
+  ) {
     return false
   }
 
@@ -457,11 +470,11 @@ export function isArrayJoinCall(expression: ArrayMaybeNode, context: ArrayFuncti
 
   const elementType = resolveArrayJoinReceiverElementType(callee.object, context)
 
-  return elementType != null && isSupportedRuntimeArrayElementType(elementType)
+  return elementType !== null && typeof elementType !== 'undefined' && isSupportedRuntimeArrayElementType(elementType)
 }
 
 export function isArrayUnshiftCall(expression: ArrayMaybeNode): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -471,7 +484,7 @@ export function isArrayUnshiftCall(expression: ArrayMaybeNode): boolean {
 }
 
 export function isArrayLengthExpression(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
@@ -486,7 +499,7 @@ export function resolveKnownArrayIndex(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): CKnownArrayElement | null {
-  if (expression == null || expression.type !== 'IndexExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'IndexExpression') {
     return null
   }
 
@@ -501,7 +514,7 @@ export function resolveKnownArrayIndex(
   const arrayName = path[0]
   const elements = findArrayShape(context, arrayName)
 
-  if (elements != null) {
+  if (elements !== null && typeof elements !== 'undefined') {
     const index = parseArrayIndex(indexExpression.value)
 
     if (index < 0 || index >= elements.length) {
@@ -524,13 +537,13 @@ export function resolveRuntimeArrayIndex(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): CRuntimeArrayElement | null {
-  if (expression == null || expression.type !== 'IndexExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'IndexExpression') {
     return null
   }
 
   const valueType = resolveRuntimeArrayElementType(expression.object, context)
 
-  if (valueType == null) {
+  if (valueType === null || typeof valueType === 'undefined') {
     return null
   }
 
@@ -563,13 +576,13 @@ export function resolveOptionalRuntimeArrayIndex(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): CRuntimeArrayElement | null {
-  if (expression == null || expression.type !== 'OptionalIndexExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'OptionalIndexExpression') {
     return null
   }
 
   const valueType = resolveRuntimeArrayElementType(expression.object, context)
 
-  if (valueType == null) {
+  if (valueType === null || typeof valueType === 'undefined') {
     return null
   }
 
@@ -598,13 +611,16 @@ export function resolveOptionalRuntimeArrayIndex(
   }
 }
 
-export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
-  if (expression == null) {
+export function resolveRuntimeArrayElementType(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): string | null {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   if (expression.valueType === 'array') {
-    if (expression.arrayElementType != null) {
+    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
       return expression.arrayElementType
     }
 
@@ -614,13 +630,13 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const runtimeElementType = context.runtimeArrayElementTypes.get(expression.path[0])
 
-    if (runtimeElementType != null) {
+    if (runtimeElementType !== null && typeof runtimeElementType !== 'undefined') {
       return runtimeElementType
     }
 
     const shape = findArrayShape(context, expression.path[0])
 
-    if (shape != null) {
+    if (shape !== null && typeof shape !== 'undefined') {
       return resolveForOfElementType(shape)
     }
 
@@ -634,14 +650,14 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
       return null
     }
 
-    if (expression.arrayElementType != null) {
+    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
       return expression.arrayElementType
     }
 
-    if (functionReturn != null) {
+    if (functionReturn !== null && typeof functionReturn !== 'undefined') {
       const functionElementType = resolveFunctionReturnArrayElementType(context, functionReturn)
 
-      if (functionElementType != null) {
+      if (functionElementType !== null && typeof functionElementType !== 'undefined') {
         return functionElementType
       }
     }
@@ -653,23 +669,27 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
     const deps = optionalArrayDeps(context)
     let member: CObjectFieldInfo | null = null
 
-    if (deps != null) {
+    if (deps !== null && typeof deps !== 'undefined') {
       member = deps.resolveKnownObjectMember(expression, context)
     }
 
-    if (member != null) {
+    if (member !== null && typeof member !== 'undefined') {
       if (member.valueType !== 'array') {
         return null
       }
 
-      if (member.arrayElementType != null) {
+      if (member.arrayElementType !== null && typeof member.arrayElementType !== 'undefined') {
         return member.arrayElementType
       }
 
       return 'unknown'
     }
 
-    if (deps != null && deps.inferExpressionType(expression.object, context) === 'object') {
+    if (
+      deps !== null &&
+      typeof deps !== 'undefined' &&
+      deps.inferExpressionType(expression.object, context) === 'object'
+    ) {
       return 'unknown'
     }
 
@@ -680,23 +700,27 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
     const deps = optionalArrayDeps(context)
     let field: CObjectFieldInfo | null = null
 
-    if (deps != null) {
+    if (deps !== null && typeof deps !== 'undefined') {
       field = deps.resolveKnownObjectIndex(expression, context)
     }
 
-    if (field != null) {
+    if (field !== null && typeof field !== 'undefined') {
       if (field.valueType !== 'array') {
         return null
       }
 
-      if (field.arrayElementType != null) {
+      if (field.arrayElementType !== null && typeof field.arrayElementType !== 'undefined') {
         return field.arrayElementType
       }
 
       return 'unknown'
     }
 
-    if (deps != null && deps.inferExpressionType(expression.object, context) === 'object') {
+    if (
+      deps !== null &&
+      typeof deps !== 'undefined' &&
+      deps.inferExpressionType(expression.object, context) === 'object'
+    ) {
       return 'unknown'
     }
 
@@ -707,7 +731,7 @@ export function resolveRuntimeArrayElementType(expression: ArrayMaybeNode, conte
 }
 
 function resolveFunctionReturnNameFromCall(expression: ArrayMaybeNode): string | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -751,7 +775,7 @@ function emitPreparedRuntimeArrayIndexExpression(
 ): PreparedExpression {
   const indexExpression = element.indexExpression
 
-  if (indexExpression == null) {
+  if (indexExpression === null || typeof indexExpression === 'undefined') {
     return {
       lines: [],
       expression: `${element.index}`
@@ -772,7 +796,7 @@ export function emitPreparedKnownArrayIndexValueExpression(
 ): PreparedExpression | null {
   const element = resolveKnownArrayIndex(expression, context)
 
-  if (element != null) {
+  if (element !== null && typeof element !== 'undefined') {
     const elementValueType = element.valueType
 
     if (elementValueType !== 'array' && elementValueType !== 'string') {
@@ -808,7 +832,7 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
 ): PreparedExpression | null {
   const runtimeElement = resolveRuntimeArrayIndex(expression, context)
 
-  if (runtimeElement != null) {
+  if (runtimeElement !== null && typeof runtimeElement !== 'undefined') {
     const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_value')
 
     if (runtimeElement.valueType === 'string') {
@@ -844,7 +868,12 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
 }
 
 export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
-  if (expression == null || expression.type !== 'MemberExpression' || expression.property !== 'length') {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'MemberExpression' ||
+    expression.property !== 'length'
+  ) {
     return null
   }
 
@@ -860,7 +889,7 @@ export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: Arr
   const arrayName = path[0]
   const elements = findArrayShape(context, arrayName)
 
-  if (elements == null) {
+  if (elements === null || typeof elements === 'undefined') {
     return null
   }
 
@@ -871,13 +900,18 @@ export function emitPreparedArrayLengthExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedExpression | null {
-  if (expression == null || expression.type !== 'MemberExpression' || expression.property !== 'length') {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'MemberExpression' ||
+    expression.property !== 'length'
+  ) {
     return null
   }
 
   const knownLength = resolveKnownArrayLength(expression, context)
 
-  if (knownLength != null) {
+  if (knownLength !== null && typeof knownLength !== 'undefined') {
     return {
       lines: [],
       expression: knownLength
@@ -912,14 +946,14 @@ function isDynamicObjectArrayLengthReceiver(
   context: ArrayFunctionContext,
   deps: ArrayLoweringDependencies
 ): boolean {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return false
   }
 
   if (expression.type === 'MemberExpression') {
     const member = deps.resolveKnownObjectMember(expression, context)
 
-    if (member != null) {
+    if (member !== null && typeof member !== 'undefined') {
       return false
     }
 
@@ -929,7 +963,7 @@ function isDynamicObjectArrayLengthReceiver(
   if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
     const field = deps.resolveKnownObjectIndex(expression, context)
 
-    if (field != null) {
+    if (field !== null && typeof field !== 'undefined') {
       return false
     }
 
@@ -943,14 +977,19 @@ export function resolveKnownForOfArray(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): KnownForOfArray | null {
-  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
     return null
   }
 
   const name = expression.path[0]
   const elements = findArrayShape(context, name)
 
-  if (elements == null) {
+  if (elements === null || typeof elements === 'undefined') {
     return null
   }
 
@@ -964,13 +1003,13 @@ export function resolveRuntimeForOfArray(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): RuntimeForOfArray | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const elementType = resolveRuntimeArrayElementType(expression, context)
 
-  if (elementType == null) {
+  if (elementType === null || typeof elementType === 'undefined') {
     return null
   }
 
@@ -1032,7 +1071,7 @@ export function updateKnownArrayElementValueType(
 
   const elements = findArrayShape(context, element.arrayName)
 
-  if (elements != null) {
+  if (elements !== null && typeof elements !== 'undefined') {
     if (element.index < 0 || element.index >= elements.length) {
       return
     }
@@ -1053,12 +1092,12 @@ export function emitArraySortVariableDeclaration(
 
   const shape = findArrayShape(context, sorted.expression)
 
-  if (shape != null) {
+  if (shape !== null && typeof shape !== 'undefined') {
     ensureArrayShapes(context).set(statement.name, cloneArrayShape(shape))
   } else {
     let elementType = sorted.elementType
 
-    if (statement.arrayElementType != null) {
+    if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
       elementType = statement.arrayElementType
     }
 
@@ -1085,7 +1124,7 @@ export function emitArrayFilterVariableDeclaration(
 
   let elementType = filtered.elementType
 
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     elementType = statement.arrayElementType
   }
 
@@ -1111,7 +1150,7 @@ export function emitArrayMapVariableDeclaration(
 
   let elementType = mapped.elementType
 
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     elementType = statement.arrayElementType
   }
 
@@ -1137,7 +1176,7 @@ export function emitArraySliceVariableDeclaration(
 
   let elementType = sliced.elementType
 
-  if (statement.arrayElementType != null) {
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
     elementType = statement.arrayElementType
   }
 
@@ -1157,7 +1196,7 @@ export function emitPreparedArraySortCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1169,7 +1208,7 @@ export function emitPreparedArraySortCallExpression(
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     if (expression.args.length === 1) {
       return emitPreparedArrayComparatorSortCallExpression(expression, receiver, context)
     }
@@ -1193,7 +1232,7 @@ export function emitPreparedArraySliceCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1205,7 +1244,7 @@ export function emitPreparedArraySliceCallExpression(
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver == null) {
+  if (receiver === null || typeof receiver === 'undefined') {
     return null
   }
 
@@ -1225,11 +1264,11 @@ export function emitPreparedArraySliceCallExpression(
   const out = nextCName(context, 'inox_array_slice')
   const lines: string[] = []
 
-  if (expression.args[0] != null) {
+  if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
     start = arrayDeps(context).emitPreparedNumberExpression(expression.args[0], context)
   }
 
-  if (expression.args[1] != null) {
+  if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
     end = arrayDeps(context).emitPreparedNumberExpression(expression.args[1], context)
   }
 
@@ -1242,7 +1281,10 @@ export function emitPreparedArraySliceCallExpression(
   lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${lengthName})`, context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${end.expression};`)
-  appendLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_array_slice_start'))
+  appendLines(
+    lines,
+    emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_array_slice_start')
+  )
   appendLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_array_slice_end'))
   lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
   appendLines(lines, emitPrepareOwnedValueWrite(out))
@@ -1264,7 +1306,7 @@ export function emitPreparedArrayJoinCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1276,7 +1318,11 @@ export function emitPreparedArrayJoinCallExpression(
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver == null || !isSupportedRuntimeArrayElementType(receiver.elementType)) {
+  if (
+    receiver === null ||
+    typeof receiver === 'undefined' ||
+    !isSupportedRuntimeArrayElementType(receiver.elementType)
+  ) {
     return null
   }
 
@@ -1286,8 +1332,12 @@ export function emitPreparedArrayJoinCallExpression(
     length: '1'
   }
 
-  if (expression.args[0] != null) {
-    separator = arrayDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_array_join_separator')
+  if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+    separator = arrayDeps(context).emitPreparedStringBytesOperand(
+      expression.args[0],
+      context,
+      'inox_array_join_separator'
+    )
   }
 
   const out = nextCName(context, 'inox_array_join')
@@ -1314,7 +1364,7 @@ export function emitPreparedArrayIncludesCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1330,13 +1380,13 @@ export function emitPreparedArrayIncludesCallExpression(
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver == null) {
+  if (receiver === null || typeof receiver === 'undefined') {
     return null
   }
 
   const search = expression.args[0]
 
-  if (search == null) {
+  if (search === null || typeof search === 'undefined') {
     return null
   }
 
@@ -1379,7 +1429,7 @@ export function emitPreparedArrayPushCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1391,10 +1441,10 @@ export function emitPreparedArrayPushCallExpression(
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     const arg = expression.args[0]
 
-    if (arg == null) {
+    if (arg === null || typeof arg === 'undefined') {
       return null
     }
 
@@ -1423,7 +1473,7 @@ export function emitPreparedArrayUnshiftCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1435,13 +1485,13 @@ export function emitPreparedArrayUnshiftCallExpression(
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver == null) {
+  if (receiver === null || typeof receiver === 'undefined') {
     return null
   }
 
   const arg = expression.args[0]
 
-  if (arg == null) {
+  if (arg === null || typeof arg === 'undefined') {
     return null
   }
 
@@ -1468,7 +1518,7 @@ export function emitPreparedArrayPopCallExpression(
   context: ArrayFunctionContext,
   options: PreparedCallOptions | null
 ): PreparedArrayExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1480,7 +1530,7 @@ export function emitPreparedArrayPopCallExpression(
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     const value = nextCName(context, 'inox_array_pop')
     registerOwnedValue(context, value)
     updatePoppedArrayMetadata(callee.object, context)
@@ -1491,7 +1541,7 @@ export function emitPreparedArrayPopCallExpression(
     appendLines(lines, emitPrepareOwnedValueWrite(value))
     lines.push(emitStatusCheck(`inox_array_pop(${receiver.expression}, &${value})`, context))
 
-    if (options != null && options.discard === true) {
+    if (options !== null && typeof options !== 'undefined' && options.discard === true) {
       lines.push(`inox_release(${value});`)
       lines.push(`${value} = inox_undefined_value();`)
     }
@@ -1515,9 +1565,11 @@ function emitPreparedArrayComparatorSortCallExpression(
   const returnExpression = resolveArrowReturnExpression(callback)
 
   if (
-    callback == null ||
+    callback === null ||
+    typeof callback === 'undefined' ||
     callback.type !== 'ArrowFunctionExpression' ||
-    returnExpression == null ||
+    returnExpression === null ||
+    typeof returnExpression === 'undefined' ||
     callback.params.length > 2 ||
     !isSupportedRuntimeArrayElementType(receiver.elementType)
   ) {
@@ -1577,7 +1629,7 @@ export function emitPreparedArrayMapCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1589,19 +1641,24 @@ export function emitPreparedArrayMapCallExpression(
 
   const callback = expression.args[0]
 
-  if (callback == null || callback.type !== 'ArrowFunctionExpression' || callback.params.length > 2) {
+  if (
+    callback === null ||
+    typeof callback === 'undefined' ||
+    callback.type !== 'ArrowFunctionExpression' ||
+    callback.params.length > 2
+  ) {
     return null
   }
 
   const callbackBody = resolveArrayCallbackBody(callback)
 
-  if (callbackBody == null) {
+  if (callbackBody === null || typeof callbackBody === 'undefined') {
     return null
   }
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     if (!isSupportedRuntimeArrayElementType(receiver.elementType)) {
       return null
     }
@@ -1612,7 +1669,7 @@ export function emitPreparedArrayMapCallExpression(
     const value = nextCName(context, 'inox_map_value')
     let mappedElementType = 'unknown'
 
-    if (expression.arrayElementType != null) {
+    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
       mappedElementType = expression.arrayElementType
     }
 
@@ -1670,7 +1727,7 @@ export function emitPreparedArrayFilterCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -1682,7 +1739,7 @@ export function emitPreparedArrayFilterCallExpression(
 
   const callback = expression.args[0]
 
-  if (callback == null) {
+  if (callback === null || typeof callback === 'undefined') {
     return null
   }
 
@@ -1696,14 +1753,14 @@ export function emitPreparedArrayFilterCallExpression(
 
     callbackBody = resolveArrayCallbackBody(callback)
 
-    if (callbackBody == null) {
+    if (callbackBody === null || typeof callbackBody === 'undefined') {
       return null
     }
   }
 
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
-  if (receiver != null) {
+  if (receiver !== null && typeof receiver !== 'undefined') {
     if (!isSupportedRuntimeArrayElementType(receiver.elementType)) {
       return null
     }
@@ -1723,7 +1780,7 @@ export function emitPreparedArrayFilterCallExpression(
     if (booleanCallback) {
       appendLines(body, emitArrayFilterBooleanCallbackBodyLines(receiver.elementType, out, value, context))
     } else {
-      if (callbackBody == null) {
+      if (callbackBody === null || typeof callbackBody === 'undefined') {
         bodyReady = false
       } else {
         const input = emitPreparedArrayCallbackInput(callback, receiver, value, index, context)
@@ -1764,7 +1821,7 @@ export function emitPreparedArrayFilterCallExpression(
 }
 
 function isArrayFilterBooleanCallback(callback: ArrayMaybeNode): boolean {
-  if (callback == null) {
+  if (callback === null || typeof callback === 'undefined') {
     return false
   }
 
@@ -1772,7 +1829,7 @@ function isArrayFilterBooleanCallback(callback: ArrayMaybeNode): boolean {
 }
 
 function resolveArrowReturnExpression(callback: ArrayMaybeNode): AnyNode | null {
-  if (callback == null || callback.type !== 'ArrowFunctionExpression') {
+  if (callback === null || typeof callback === 'undefined' || callback.type !== 'ArrowFunctionExpression') {
     return null
   }
 
@@ -1784,18 +1841,26 @@ function resolveArrowReturnExpression(callback: ArrayMaybeNode): AnyNode | null 
 
   if (Array.isArray(callback.body)) {
     statements = callback.body
-  } else if (callback.body != null && callback.body.type === 'BlockStatement') {
+  } else if (
+    callback.body !== null &&
+    typeof callback.body !== 'undefined' &&
+    callback.body.type === 'BlockStatement'
+  ) {
     statements = callback.body.body
   }
 
-  if (statements != null) {
+  if (statements !== null && typeof statements !== 'undefined') {
     if (statements.length !== 1) {
       return null
     }
 
     const statement = arrayCallbackStatementAt(statements, 0)
 
-    if (statement.type !== 'ReturnStatement' || statement.argument == null) {
+    if (
+      statement.type !== 'ReturnStatement' ||
+      statement.argument === null ||
+      typeof statement.argument === 'undefined'
+    ) {
       return null
     }
 
@@ -1808,14 +1873,19 @@ function resolveArrowReturnExpression(callback: ArrayMaybeNode): AnyNode | null 
 function resolveArrayCallbackBody(callback: ArrayMaybeNode): ArrayCallbackBody | null {
   const returnExpression = resolveArrowReturnExpression(callback)
 
-  if (returnExpression != null) {
+  if (returnExpression !== null && typeof returnExpression !== 'undefined') {
     return {
       kind: 'prepared-return',
       returnExpression
     }
   }
 
-  if (callback == null || callback.type !== 'ArrowFunctionExpression' || callback.expressionBody) {
+  if (
+    callback === null ||
+    typeof callback === 'undefined' ||
+    callback.type !== 'ArrowFunctionExpression' ||
+    callback.expressionBody
+  ) {
     return null
   }
 
@@ -1823,11 +1893,15 @@ function resolveArrayCallbackBody(callback: ArrayMaybeNode): ArrayCallbackBody |
 
   if (Array.isArray(callback.body)) {
     statements = callback.body
-  } else if (callback.body != null && callback.body.type === 'BlockStatement') {
+  } else if (
+    callback.body !== null &&
+    typeof callback.body !== 'undefined' &&
+    callback.body.type === 'BlockStatement'
+  ) {
     statements = callback.body.body
   }
 
-  if (statements == null || !canLowerArrayCallbackStatementList(statements)) {
+  if (statements === null || typeof statements === 'undefined' || !canLowerArrayCallbackStatementList(statements)) {
     return null
   }
 
@@ -1838,7 +1912,7 @@ function resolveArrayCallbackBody(callback: ArrayMaybeNode): ArrayCallbackBody |
 }
 
 function canLowerArrayCallbackStatementList(statements: AnyNode[] | null | undefined): boolean {
-  if (statements == null || statements.length === 0) {
+  if (statements === null || typeof statements === 'undefined' || statements.length === 0) {
     return false
   }
 
@@ -1858,19 +1932,19 @@ function canLowerArrayCallbackStatementList(statements: AnyNode[] | null | undef
 }
 
 function canLowerArrayCallbackTerminalStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return false
   }
 
   if (statement.type === 'ReturnStatement') {
-    return statement.argument != null
+    return statement.argument !== null && typeof statement.argument !== 'undefined'
   }
 
   if (statement.type === 'BlockStatement') {
     return canLowerArrayCallbackStatementList(statement.body)
   }
 
-  if (statement.type !== 'IfStatement' || statement.alternate == null) {
+  if (statement.type !== 'IfStatement' || statement.alternate === null || typeof statement.alternate === 'undefined') {
     return false
   }
 
@@ -1881,19 +1955,19 @@ function canLowerArrayCallbackTerminalStatement(statement: AnyNode | null | unde
 }
 
 function canLowerArrayCallbackReturnStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return false
   }
 
   if (statement.type === 'ReturnStatement') {
-    return statement.argument != null
+    return statement.argument !== null && typeof statement.argument !== 'undefined'
   }
 
   return false
 }
 
 function canLowerArrayCallbackEarlyReturnStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return false
   }
 
@@ -1907,7 +1981,9 @@ function canLowerArrayCallbackEarlyReturnStatement(statement: AnyNode | null | u
 
   return (
     canLowerArrayCallbackBranch(statement.consequent) &&
-    (statement.alternate == null || canLowerArrayCallbackBranch(statement.alternate))
+    (statement.alternate === null ||
+      typeof statement.alternate === 'undefined' ||
+      canLowerArrayCallbackBranch(statement.alternate))
   )
 }
 
@@ -1916,7 +1992,7 @@ function canLowerArrayCallbackBranch(statement: AnyNode | null | undefined): boo
     return true
   }
 
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return false
   }
 
@@ -1974,12 +2050,12 @@ function collectArrayCallbackReturnExpressionsFromStatement(
   statement: AnyNode | null | undefined,
   expressions: AnyNode[]
 ): void {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return
   }
 
   if (statement.type === 'ReturnStatement') {
-    if (statement.argument != null) {
+    if (statement.argument !== null && typeof statement.argument !== 'undefined') {
       expressions.push(statement.argument)
     }
 
@@ -2078,7 +2154,15 @@ function emitArrayCallbackBodyLines(
   }
 
   const doneLabel = nextCName(context, 'inox_array_callback_done')
-  const lines = emitArrayCallbackStatementListLines(body.statements, doneLabel, returnKind, elementType, out, value, context)
+  const lines = emitArrayCallbackStatementListLines(
+    body.statements,
+    doneLabel,
+    returnKind,
+    elementType,
+    out,
+    value,
+    context
+  )
 
   lines.push(`${doneLabel}:;`)
 
@@ -2115,12 +2199,19 @@ function emitArrayCallbackStatementLines(
   currentValue: string,
   context: ArrayFunctionContext
 ): string[] {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return []
   }
 
   if (statement.type === 'ReturnStatement') {
-    const lines = emitArrayCallbackReturnLines(statement.argument, returnKind, elementType, outValue, currentValue, context)
+    const lines = emitArrayCallbackReturnLines(
+      statement.argument,
+      returnKind,
+      elementType,
+      outValue,
+      currentValue,
+      context
+    )
 
     lines.push(`goto ${doneLabel};`)
 
@@ -2133,7 +2224,15 @@ function emitArrayCallbackStatementLines(
     lines.push('{')
     appendPrefixedLines(
       lines,
-      emitArrayCallbackStatementListLines(statement.body, doneLabel, returnKind, elementType, outValue, currentValue, context),
+      emitArrayCallbackStatementListLines(
+        statement.body,
+        doneLabel,
+        returnKind,
+        elementType,
+        outValue,
+        currentValue,
+        context
+      ),
       '  '
     )
     lines.push('}')
@@ -2162,7 +2261,7 @@ function emitArrayCallbackStatementLines(
   appendPrefixedLines(lines, consequent, '  ')
   lines.push('}')
 
-  if (statement.alternate != null) {
+  if (statement.alternate !== null && typeof statement.alternate !== 'undefined') {
     lines[lines.length - 1] = '} else {'
     appendPrefixedLines(
       lines,
@@ -2213,7 +2312,12 @@ function emitArrayMapReturnLines(
   return lines
 }
 
-function emitArrayFilterReturnLines(expression: AnyNode, out: string, value: string, context: ArrayFunctionContext): string[] {
+function emitArrayFilterReturnLines(
+  expression: AnyNode,
+  out: string,
+  value: string,
+  context: ArrayFunctionContext
+): string[] {
   const predicate = arrayDeps(context).emitPreparedNumberExpression(expression, context)
 
   const pushStatus = emitStatusCheck(`inox_array_push(${out}, ${value})`, context)
@@ -2246,7 +2350,7 @@ function emitPreparedArrayCallbackInput(
     indexParam = arrayNodeAt(callback.params, 1)
   }
 
-  if (valueParam != null) {
+  if (valueParam !== null && typeof valueParam !== 'undefined') {
     context.variables.set(valueParam.name, receiver.elementType)
 
     if (receiver.elementType === 'string') {
@@ -2262,7 +2366,7 @@ function emitPreparedArrayCallbackInput(
     }
   }
 
-  if (indexParam != null) {
+  if (indexParam !== null && typeof indexParam !== 'undefined') {
     context.variables.set(indexParam.name, 'number')
     lines.push(`double ${indexParam.name} = (double)${index};`)
   }
@@ -2271,18 +2375,24 @@ function emitPreparedArrayCallbackInput(
 }
 
 function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, context: ArrayFunctionContext): void {
-  if (receiver == null || receiver.type !== 'Reference' || receiver.path.length !== 1 || valueType === 'unknown') {
+  if (
+    receiver === null ||
+    typeof receiver === 'undefined' ||
+    receiver.type !== 'Reference' ||
+    receiver.path.length !== 1 ||
+    valueType === 'unknown'
+  ) {
     return
   }
 
   const name = receiver.path[0]
   const elements = findArrayShape(context, name)
 
-  if (elements == null) {
+  if (elements === null || typeof elements === 'undefined') {
     if (context.variables.get(name) === 'array') {
       const existingElementType = context.runtimeArrayElementTypes.get(name)
 
-      if (existingElementType == null) {
+      if (existingElementType === null || typeof existingElementType === 'undefined') {
         context.runtimeArrayElementTypes.set(name, valueType)
       } else {
         context.runtimeArrayElementTypes.set(name, existingElementType)
@@ -2312,19 +2422,29 @@ function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, 
   ensureArrayShapes(context).set(name, nextElements)
 }
 
-function updateUnshiftedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, context: ArrayFunctionContext): void {
-  if (receiver == null || receiver.type !== 'Reference' || receiver.path.length !== 1 || valueType === 'unknown') {
+function updateUnshiftedArrayMetadata(
+  receiver: ArrayMaybeNode,
+  valueType: string,
+  context: ArrayFunctionContext
+): void {
+  if (
+    receiver === null ||
+    typeof receiver === 'undefined' ||
+    receiver.type !== 'Reference' ||
+    receiver.path.length !== 1 ||
+    valueType === 'unknown'
+  ) {
     return
   }
 
   const name = receiver.path[0]
   const elements = findArrayShape(context, name)
 
-  if (elements == null) {
+  if (elements === null || typeof elements === 'undefined') {
     if (context.variables.get(name) === 'array') {
       const existingElementType = context.runtimeArrayElementTypes.get(name)
 
-      if (existingElementType == null) {
+      if (existingElementType === null || typeof existingElementType === 'undefined') {
         context.runtimeArrayElementTypes.set(name, valueType)
       } else {
         context.runtimeArrayElementTypes.set(name, existingElementType)
@@ -2356,19 +2476,28 @@ function updateUnshiftedArrayMetadata(receiver: ArrayMaybeNode, valueType: strin
 }
 
 function updatePoppedArrayMetadata(receiver: ArrayMaybeNode, context: ArrayFunctionContext): void {
-  if (receiver == null || receiver.type !== 'Reference' || receiver.path.length !== 1) {
+  if (
+    receiver === null ||
+    typeof receiver === 'undefined' ||
+    receiver.type !== 'Reference' ||
+    receiver.path.length !== 1
+  ) {
     return
   }
 
   const name = receiver.path[0]
   const elements = findArrayShape(context, name)
 
-  if (elements != null) {
+  if (elements !== null && typeof elements !== 'undefined') {
     ensureArrayShapes(context).set(name, arrayElementInfoWithoutLast(elements))
   }
 }
 
-function emitPreparedArrayMapValue(expression: AnyNode, valueType: string, context: ArrayFunctionContext): PreparedExpression {
+function emitPreparedArrayMapValue(
+  expression: AnyNode,
+  valueType: string,
+  context: ArrayFunctionContext
+): PreparedExpression {
   return emitPreparedArrayElementValue(expression, valueType, context)
 }
 
@@ -2413,11 +2542,11 @@ function emitPreparedArraySortComparatorInput(
     rightParam = arrayNodeAt(callback.params, 1)
   }
 
-  if (leftParam != null) {
+  if (leftParam !== null && typeof leftParam !== 'undefined') {
     appendLines(lines, emitPreparedArraySortComparatorParam(leftParam.name, receiver.elementType, left, context))
   }
 
-  if (rightParam != null) {
+  if (rightParam !== null && typeof rightParam !== 'undefined') {
     appendLines(lines, emitPreparedArraySortComparatorParam(rightParam.name, receiver.elementType, right, context))
   }
 
@@ -2454,7 +2583,7 @@ function emitPreparedArrayReceiver(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): PreparedArrayReceiver | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -2486,10 +2615,10 @@ function emitPreparedArrayReceiver(
 
     let elementType = context.runtimeArrayElementTypes.get(name)
 
-    if (elementType == null) {
+    if (elementType === null || typeof elementType === 'undefined') {
       const shape = findArrayShape(context, name)
 
-      if (shape == null) {
+      if (shape === null || typeof shape === 'undefined') {
         elementType = resolveForOfElementType([])
       } else {
         elementType = resolveForOfElementType(shape)
@@ -2528,23 +2657,23 @@ function emitPreparedArrayReceiver(
 
     let call = emitPreparedArrayMapCallExpression(expression, context)
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       call = emitPreparedArrayFilterCallExpression(expression, context)
     }
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       call = emitPreparedArraySliceCallExpression(expression, context)
     }
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       call = emitPreparedArraySortCallExpression(expression, context)
     }
 
-    if (call == null) {
+    if (call === null || typeof call === 'undefined') {
       call = arrayDeps(context).emitCStringSplitValueExpression(expression, context)
     }
 
-    if (call != null) {
+    if (call !== null && typeof call !== 'undefined') {
       return {
         lines: call.lines,
         expression: call.expression,
@@ -2559,7 +2688,7 @@ function emitPreparedArrayReceiver(
 }
 
 function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -2584,13 +2713,13 @@ function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context
 
     const elementType = context.runtimeArrayElementTypes.get(name)
 
-    if (elementType != null) {
+    if (elementType !== null && typeof elementType !== 'undefined') {
       return elementType
     }
 
     const shape = findArrayShape(context, name)
 
-    if (shape == null) {
+    if (shape === null || typeof shape === 'undefined') {
       return resolveForOfElementType([])
     }
 
@@ -2598,7 +2727,9 @@ function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context
   }
 
   if (
-    (expression.type === 'MemberExpression' || expression.type === 'IndexExpression' || expression.type === 'CallExpression') &&
+    (expression.type === 'MemberExpression' ||
+      expression.type === 'IndexExpression' ||
+      expression.type === 'CallExpression') &&
     arrayDeps(context).inferExpressionType(expression, context) === 'array'
   ) {
     return resolvePreparedArrayReceiverElementType(expression, context)
@@ -2610,11 +2741,11 @@ function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context
 function resolvePreparedArrayReceiverElementType(expression: AnyNode, context: ArrayFunctionContext): string {
   const runtimeElementType = resolveRuntimeArrayElementType(expression, context)
 
-  if (runtimeElementType != null) {
+  if (runtimeElementType !== null && typeof runtimeElementType !== 'undefined') {
     return runtimeElementType
   }
 
-  if (expression.arrayElementType != null) {
+  if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
     return expression.arrayElementType
   }
 

@@ -42,7 +42,7 @@ function containsConsoleRuntimeCallList(nodes: AnyNode[]): boolean {
 }
 
 function containsConsoleRuntimeCall(node: AnyNode | null | undefined): boolean {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return false
   }
 
@@ -54,7 +54,7 @@ function containsConsoleRuntimeCall(node: AnyNode | null | undefined): boolean {
 }
 
 function containsConsoleRuntimeCallChild(value: any): boolean {
-  if (value == null || typeof value !== 'object') {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
     return false
   }
 

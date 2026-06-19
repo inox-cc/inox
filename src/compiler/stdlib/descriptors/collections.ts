@@ -1,6 +1,18 @@
 import { stringListIncludes } from './string-list.ts'
+import { isPresent } from '../../nullish.ts'
 
-export const arrayMethods: string[] = ['filter', 'find', 'includes', 'join', 'map', 'pop', 'push', 'slice', 'sort', 'unshift']
+export const arrayMethods: string[] = [
+  'filter',
+  'find',
+  'includes',
+  'join',
+  'map',
+  'pop',
+  'push',
+  'slice',
+  'sort',
+  'unshift'
+]
 export const collectionConstructors: string[] = ['Map', 'Set']
 export const mapMethods: string[] = ['clear', 'delete', 'get', 'has', 'set']
 export const setMethods: string[] = ['add', 'clear', 'delete', 'has']
@@ -42,9 +54,7 @@ export function arrayRuntimeMethodName(method: string): string | null {
   return null
 }
 
-export function collectionConstructorNameFromPath(
-  path: string[]
-): string | null {
+export function collectionConstructorNameFromPath(path: string[]): string | null {
   if (path.length !== 1) {
     return null
   }
@@ -89,7 +99,7 @@ export function isCollectionConstructorName(name: string): boolean {
 }
 
 export function isCollectionConstructorGlobalUsagePath(path: string[]): boolean {
-  return collectionConstructorNameFromPath(path) != null
+  return isPresent(collectionConstructorNameFromPath(path))
 }
 
 export function isMapMethod(method: string): boolean {

@@ -1,11 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
-import {
-  emitEventLoopReference,
-  emitStatusCheck,
-  nextCName,
-  registerEventLoop
-} from '../context.ts'
+import { emitEventLoopReference, emitStatusCheck, nextCName, registerEventLoop } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { isConsoleLog } from './console.ts'
 import type { CEmitContext, CFunctionContext } from '../context.ts'
@@ -15,6 +10,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 type NetAstNode = AnyNode
 
@@ -50,7 +46,11 @@ export type NetLoweringDependencies = {
   createFunctionContext: (baseContext: CEmitContext, returnType: string, returnNullable: boolean) => CFunctionContext
   emitConsoleLogStatement: (method: string, args: NetAstNode[], context: CFunctionContext) => string[]
   emitPreparedNumberExpression: (expression: NetAstNode, context: CFunctionContext) => PreparedExpression
-  emitPreparedStringBytesOperand: (expression: NetAstNode, context: CFunctionContext, tempPrefix: string) => PreparedStringBytesOperand
+  emitPreparedStringBytesOperand: (
+    expression: NetAstNode,
+    context: CFunctionContext,
+    tempPrefix: string
+  ) => PreparedStringBytesOperand
   emitStatementList: (body: NetAstNode[], context: CFunctionContext) => string[]
   findObjectLiteralPropertyValue: (expression: NetAstNode, key: string) => NetAstNode | null
 }
@@ -61,7 +61,7 @@ type NetTopLevelNodeEntry = {
 }
 
 function netNodeLoc(node: NetAstNode | null | undefined): SourceLocation | null {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return null
   }
 
@@ -89,7 +89,12 @@ function pushNetNodes(target: NetAstNode[], nodes: NetAstNode[]): void {
 }
 
 function netReferenceName(expression: NetAstNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
     return null
   }
 
@@ -97,7 +102,7 @@ function netReferenceName(expression: NetAstNode | null | undefined): string | n
 }
 
 function netMemberObjectReferenceName(callee: NetAstNode | null | undefined): string | null {
-  if (callee == null || callee.type !== 'MemberExpression') {
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
     return null
   }
 
@@ -193,11 +198,11 @@ export function emitNetHandlerDeclaration(
   let socketName: string | null = null
   let dataName: string | null = null
 
-  if (wrapper.kind === 'connection' && firstParam != null) {
+  if (wrapper.kind === 'connection' && firstParam !== null && typeof firstParam !== 'undefined') {
     socketName = firstParam.name
   }
 
-  if (wrapper.kind === 'socket-data' && firstParam != null) {
+  if (wrapper.kind === 'socket-data' && firstParam !== null && typeof firstParam !== 'undefined') {
     dataName = firstParam.name
   }
 
@@ -210,11 +215,11 @@ export function emitNetHandlerDeclaration(
   const context = deps.createFunctionContext(baseContext, 'void', false)
   context.statusReturn = true
 
-  if (socketName != null) {
+  if (socketName !== null && typeof socketName !== 'undefined') {
     context.variables.set(socketName, 'net-socket')
   }
 
-  if (dataName != null) {
+  if (dataName !== null && typeof dataName !== 'undefined') {
     context.variables.set(dataName, 'string')
   }
 
@@ -236,11 +241,11 @@ export function emitNetHandlerDeclaration(
     lines.push('  (void)inox_server;')
   }
 
-  if (isSocketHandler && socketName == null) {
+  if (isSocketHandler && (socketName === null || typeof socketName === 'undefined')) {
     lines.push('  (void)inox_socket;')
   }
 
-  if (wrapper.kind === 'socket-data' && dataName == null) {
+  if (wrapper.kind === 'socket-data' && (dataName === null || typeof dataName === 'undefined')) {
     lines.push('  (void)inox_bytes;')
     lines.push('  (void)inox_len;')
   }
@@ -269,7 +274,7 @@ function emitNetHandlerStatement(
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return []
   }
 
@@ -288,7 +293,7 @@ function emitNetHandlerStatement(
   if (statement.type === 'VariableDeclaration') {
     const stringValue = emitNetStaticStringValue(statement.init, netContext)
 
-    if (stringValue != null) {
+    if (stringValue !== null && typeof stringValue !== 'undefined') {
       netContext.stringLocals.set(statement.name, stringValue)
       return []
     }
@@ -305,33 +310,38 @@ function emitNetHandlerStatement(
 
   if (
     statement.type === 'ExpressionStatement' &&
-    statement.expression != null &&
+    statement.expression !== null &&
+    typeof statement.expression !== 'undefined' &&
     statement.expression.type === 'CallExpression'
   ) {
     const logStatement = emitNetHandlerConsoleLogStatement(statement.expression, netContext, context, deps)
 
-    if (logStatement != null) {
+    if (logStatement !== null && typeof logStatement !== 'undefined') {
       return logStatement
     }
 
     const socketCall = emitNetHandlerSocketCallStatement(statement.expression, netContext, context, deps)
 
-    if (socketCall != null) {
+    if (socketCall !== null && typeof socketCall !== 'undefined') {
       return socketCall
     }
 
     const serverCall = emitNetHandlerServerCallStatement(statement.expression, context)
 
-    if (serverCall != null) {
+    if (serverCall !== null && typeof serverCall !== 'undefined') {
       return serverCall
     }
   }
 
   if (statement.type === 'ReturnStatement') {
-    if (statement.argument != null && statement.argument.type === 'CallExpression') {
+    if (
+      statement.argument !== null &&
+      typeof statement.argument !== 'undefined' &&
+      statement.argument.type === 'CallExpression'
+    ) {
       const socketCall = emitNetHandlerSocketCallStatement(statement.argument, netContext, context, deps)
 
-      if (socketCall != null) {
+      if (socketCall !== null && typeof socketCall !== 'undefined') {
         const lines: string[] = []
 
         pushNetLines(lines, socketCall)
@@ -363,9 +373,11 @@ function emitNetHandlerSocketCallStatement(
   const callee = expression.callee
 
   if (
-    callee == null ||
+    callee === null ||
+    typeof callee === 'undefined' ||
     callee.type !== 'MemberExpression' ||
-    callee.object == null ||
+    callee.object === null ||
+    typeof callee.object === 'undefined' ||
     callee.object.type !== 'Reference' ||
     callee.object.path.length !== 1
   ) {
@@ -374,12 +386,13 @@ function emitNetHandlerSocketCallStatement(
 
   const socketName = netMemberObjectReferenceName(callee)
 
-  if (socketName == null) {
+  if (socketName === null || typeof socketName === 'undefined') {
     return null
   }
 
   if (
-    netContext.socketName != null &&
+    netContext.socketName !== null &&
+    typeof netContext.socketName !== 'undefined' &&
     socketName !== netContext.socketName &&
     !isNetSocketCallbackKind(netContext.kind)
   ) {
@@ -392,13 +405,16 @@ function emitNetHandlerSocketCallStatement(
     const lastArg = lastNetArgument(expression.args)
     let callback: AnyNode | null = null
 
-    if (lastArg != null && lastArg.type === 'ArrowFunctionExpression') {
+    if (lastArg !== null && typeof lastArg !== 'undefined' && lastArg.type === 'ArrowFunctionExpression') {
       callback = lastArg
     }
 
     let bodyArg: AnyNode | null = null
 
-    if (!(callback != null && expression.args.length === 1) && expression.args.length > 0) {
+    if (
+      !(callback !== null && typeof callback !== 'undefined' && expression.args.length === 1) &&
+      expression.args.length > 0
+    ) {
       bodyArg = expression.args[0]
     }
 
@@ -406,9 +422,9 @@ function emitNetHandlerSocketCallStatement(
     const wrapper = findNetHandler(context, callback, 'socket-write')
     let runtime = 'inox_net_socket_write'
 
-    if (method === 'write' && wrapper != null) {
+    if (method === 'write' && wrapper !== null && typeof wrapper !== 'undefined') {
       runtime = 'inox_net_socket_write_with_callback'
-    } else if (method === 'end' && wrapper == null) {
+    } else if (method === 'end' && (wrapper === null || typeof wrapper === 'undefined')) {
       runtime = 'inox_net_socket_end'
     } else if (method === 'end') {
       runtime = 'inox_net_socket_end_with_callback'
@@ -416,14 +432,17 @@ function emitNetHandlerSocketCallStatement(
 
     let callbackArgs = ''
 
-    if (wrapper != null) {
+    if (wrapper !== null && typeof wrapper !== 'undefined') {
       callbackArgs = `, ${wrapper.name}, 0`
     }
 
     const lines: string[] = []
 
     pushNetLines(lines, body.lines)
-    pushNetLines(lines, emitNetStatusCheck(`${runtime}(inox_socket, ${body.bytes}, ${body.length}${callbackArgs})`, context))
+    pushNetLines(
+      lines,
+      emitNetStatusCheck(`${runtime}(inox_socket, ${body.bytes}, ${body.length}${callbackArgs})`, context)
+    )
 
     return lines
   }
@@ -471,8 +490,10 @@ function emitNetHandlerConsoleLogStatement(
 
   if (
     expression.args.length === 1 &&
-    netContext.dataName != null &&
-    firstArg != null &&
+    netContext.dataName !== null &&
+    typeof netContext.dataName !== 'undefined' &&
+    firstArg !== null &&
+    typeof firstArg !== 'undefined' &&
     firstArg.type === 'Reference' &&
     firstArg.path.length === 1 &&
     netReferenceName(firstArg) === netContext.dataName
@@ -491,9 +512,11 @@ function emitNetHandlerServerCallStatement(expression: AnyNode, context: CFuncti
   const callee = expression.callee
 
   if (
-    callee == null ||
+    callee === null ||
+    typeof callee === 'undefined' ||
     callee.type !== 'MemberExpression' ||
-    callee.object == null ||
+    callee.object === null ||
+    typeof callee.object === 'undefined' ||
     callee.object.type !== 'Reference' ||
     callee.object.path.length !== 1
   ) {
@@ -544,7 +567,7 @@ export function emitNetAddressVariableDeclaration(statement: AnyNode, context: C
 
   const receiverName = netMemberObjectReferenceName(statement.init.callee)
 
-  if (receiverName == null) {
+  if (receiverName === null || typeof receiverName === 'undefined') {
     return null
   }
 
@@ -562,10 +585,13 @@ export function emitNetAddressVariableDeclaration(statement: AnyNode, context: C
   ]
 }
 
-export function emitNetAddressMemberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
+export function emitNetAddressMemberVariableDeclaration(
+  statement: AnyNode,
+  context: CFunctionContext
+): string[] | null {
   const member = resolveNetSocketAddressMember(statement.init, context)
 
-  if (member != null) {
+  if (member !== null && typeof member !== 'undefined') {
     if (member.valueType === 'string') {
       context.variables.set(statement.name, 'string')
 
@@ -596,7 +622,7 @@ export function emitNetAddressMemberVariableDeclaration(statement: AnyNode, cont
 export function emitNetNumberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
   const counter = resolveNetSocketCounterMember(statement.init, context)
 
-  if (counter == null) {
+  if (counter === null || typeof counter === 'undefined') {
     return null
   }
 
@@ -622,7 +648,7 @@ export function emitNetSocketCallStatement(
   const socketName = netMemberObjectReferenceName(expression.callee)
 
   if (isNetSocketMethodCall(expression, 'on', context)) {
-    if (socketName == null) {
+    if (socketName === null || typeof socketName === 'undefined') {
       return null
     }
 
@@ -630,7 +656,7 @@ export function emitNetSocketCallStatement(
   }
 
   if (isNetSocketMethodCall(expression, 'write', context)) {
-    if (socketName == null) {
+    if (socketName === null || typeof socketName === 'undefined') {
       return null
     }
 
@@ -638,7 +664,7 @@ export function emitNetSocketCallStatement(
   }
 
   if (isNetSocketMethodCall(expression, 'end', context)) {
-    if (socketName == null) {
+    if (socketName === null || typeof socketName === 'undefined') {
       return null
     }
 
@@ -646,7 +672,7 @@ export function emitNetSocketCallStatement(
   }
 
   if (isNetSocketMethodCall(expression, 'destroy', context)) {
-    if (socketName == null) {
+    if (socketName === null || typeof socketName === 'undefined') {
       return null
     }
 
@@ -654,7 +680,7 @@ export function emitNetSocketCallStatement(
   }
 
   if (isNetSocketMethodCall(expression, 'close', context)) {
-    if (socketName == null) {
+    if (socketName === null || typeof socketName === 'undefined') {
       return null
     }
 
@@ -662,7 +688,7 @@ export function emitNetSocketCallStatement(
   }
 
   if (isNetSocketMethodCall(expression, 'setEncoding', context)) {
-    if (socketName == null) {
+    if (socketName === null || typeof socketName === 'undefined') {
       return null
     }
 
@@ -671,7 +697,7 @@ export function emitNetSocketCallStatement(
 
   const optionCall = emitNetSocketOptionCallStatement(expression, context, deps)
 
-  if (optionCall != null) {
+  if (optionCall !== null && typeof optionCall !== 'undefined') {
     return optionCall
   }
 
@@ -680,20 +706,16 @@ export function emitNetSocketCallStatement(
     let loc = netNodeLoc(expression)
     let property = 'unknown'
 
-    if (callee != null) {
+    if (callee !== null && typeof callee !== 'undefined') {
       property = callee.property
 
-      if (callee.loc != null) {
+      if (callee.loc !== null && typeof callee.loc !== 'undefined') {
         loc = callee.loc
       }
     }
 
     context.diagnostics.push(
-      diagnostic(
-        'INOX_NET_SOCKET',
-        `socket.${property} is not supported by the current C net backend slice`,
-        loc
-      )
+      diagnostic('INOX_NET_SOCKET', `socket.${property} is not supported by the current C net backend slice`, loc)
     )
     return []
   }
@@ -709,7 +731,8 @@ export function emitNetServerCallStatement(
   const callee = expression.callee
 
   if (
-    callee != null &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
     callee.type === 'MemberExpression' &&
     callee.property === 'listen' &&
     isNetCreateServerCall(callee.object, context)
@@ -732,7 +755,7 @@ export function emitNetServerCallStatement(
   if (isNetServerMethodCall(expression, 'listen', context)) {
     const serverName = netMemberObjectReferenceName(expression.callee)
 
-    if (serverName == null) {
+    if (serverName === null || typeof serverName === 'undefined') {
       return null
     }
 
@@ -744,7 +767,7 @@ export function emitNetServerCallStatement(
   if (isNetServerMethodCall(expression, 'on', context)) {
     const serverName = netMemberObjectReferenceName(expression.callee)
 
-    if (serverName == null) {
+    if (serverName === null || typeof serverName === 'undefined') {
       return null
     }
 
@@ -754,7 +777,7 @@ export function emitNetServerCallStatement(
   if (isNetServerMethodCall(expression, 'close', context)) {
     const serverName = netMemberObjectReferenceName(expression.callee)
 
-    if (serverName == null) {
+    if (serverName === null || typeof serverName === 'undefined') {
       return null
     }
 
@@ -765,20 +788,16 @@ export function emitNetServerCallStatement(
     let loc = netNodeLoc(expression)
     let property = 'unknown'
 
-    if (callee != null) {
+    if (callee !== null && typeof callee !== 'undefined') {
       property = callee.property
 
-      if (callee.loc != null) {
+      if (callee.loc !== null && typeof callee.loc !== 'undefined') {
         loc = callee.loc
       }
     }
 
     context.diagnostics.push(
-      diagnostic(
-        'INOX_NET_SERVER',
-        `server.${property} is not supported by the current C net backend slice`,
-        loc
-      )
+      diagnostic('INOX_NET_SERVER', `server.${property} is not supported by the current C net backend slice`, loc)
     )
     return []
   }
@@ -806,7 +825,7 @@ function emitNetSocketConnectLines(
 
   let optionsArg: AnyNode | null = null
 
-  if (firstArg != null && firstArg.type === 'ObjectLiteral') {
+  if (firstArg !== null && typeof firstArg !== 'undefined' && firstArg.type === 'ObjectLiteral') {
     optionsArg = firstArg
   }
 
@@ -814,22 +833,26 @@ function emitNetSocketConnectLines(
   let portArg: AnyNode | null | undefined = firstArg
   let hostArg: AnyNode | null | undefined = secondArg
 
-  if (optionsArg != null) {
+  if (optionsArg !== null && typeof optionsArg !== 'undefined') {
     portArg = deps.findObjectLiteralPropertyValue(optionsArg, 'port')
     hostArg = deps.findObjectLiteralPropertyValue(optionsArg, 'host')
-  } else if (secondArg != null && secondArg.type === 'ArrowFunctionExpression') {
+  } else if (secondArg !== null && typeof secondArg !== 'undefined' && secondArg.type === 'ArrowFunctionExpression') {
     hostArg = null
   }
 
   const wrapper = findNetHandler(context, callback, 'socket-event')
 
-  if (portArg == null) {
+  if (portArg === null || typeof portArg === 'undefined') {
     context.diagnostics.push(
       diagnostic('INOX_NET_SOCKET', 'net.connect in the C backend currently requires a port argument', expression.loc)
     )
   }
 
-  if (callback != null && (callback.type !== 'ArrowFunctionExpression' || wrapper == null)) {
+  if (
+    callback !== null &&
+    typeof callback !== 'undefined' &&
+    (callback.type !== 'ArrowFunctionExpression' || wrapper === null || typeof wrapper === 'undefined')
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
@@ -844,14 +867,14 @@ function emitNetSocketConnectLines(
     expression: '0'
   }
 
-  if (portArg != null) {
+  if (portArg !== null && typeof portArg !== 'undefined') {
     port = deps.emitPreparedNumberExpression(portArg, context)
   }
 
   const host = emitNetConnectHostExpression(hostArg, context)
   const lines: string[] = []
 
-  if (options == null || options.declare !== false) {
+  if (options === null || typeof options === 'undefined' || options.declare !== false) {
     lines.push(`inox_net_socket* ${socketName} = 0;`)
   }
 
@@ -863,7 +886,7 @@ function emitNetSocketConnectLines(
     )
   )
 
-  if (wrapper != null) {
+  if (wrapper !== null && typeof wrapper !== 'undefined') {
     lines.push(emitStatusCheck(`inox_net_socket_on_connect(${socketName}, ${wrapper.name}, 0)`, context))
   }
 
@@ -879,7 +902,7 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
 
   let eventName: string | null = null
 
-  if (eventArg != null && eventArg.type === 'StringLiteral') {
+  if (eventArg !== null && typeof eventArg !== 'undefined' && eventArg.type === 'StringLiteral') {
     eventName = eventArg.value
   }
 
@@ -887,7 +910,7 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
 
   if (eventName === 'data') {
     kind = 'socket-data'
-  } else if (eventName != null && isNetSocketLifecycleEvent(eventName)) {
+  } else if (eventName !== null && typeof eventName !== 'undefined' && isNetSocketLifecycleEvent(eventName)) {
     kind = 'socket-event'
   } else if (eventName === 'error') {
     kind = 'socket-error'
@@ -912,7 +935,13 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
 
   const wrapper = findNetHandler(context, listener, kind)
 
-  if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
+  if (
+    listener === null ||
+    typeof listener === 'undefined' ||
+    listener.type !== 'ArrowFunctionExpression' ||
+    wrapper === null ||
+    typeof wrapper === 'undefined'
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
@@ -958,13 +987,13 @@ function emitNetSocketWriteLines(
   const lastArg = lastNetArgument(args)
   let callback: AnyNode | null = null
 
-  if (lastArg != null && lastArg.type === 'ArrowFunctionExpression') {
+  if (lastArg !== null && typeof lastArg !== 'undefined' && lastArg.type === 'ArrowFunctionExpression') {
     callback = lastArg
   }
 
   let bodyArg: AnyNode | null = null
 
-  if (!(callback != null && args.length === 1) && args.length > 0) {
+  if (!(callback !== null && typeof callback !== 'undefined' && args.length === 1) && args.length > 0) {
     bodyArg = args[0]
   }
 
@@ -972,9 +1001,9 @@ function emitNetSocketWriteLines(
   const wrapper = findNetHandler(context, callback, 'socket-write')
   let runtime = 'inox_net_socket_write'
 
-  if (method === 'write' && wrapper != null) {
+  if (method === 'write' && wrapper !== null && typeof wrapper !== 'undefined') {
     runtime = 'inox_net_socket_write_with_callback'
-  } else if (method === 'end' && wrapper == null) {
+  } else if (method === 'end' && (wrapper === null || typeof wrapper === 'undefined')) {
     runtime = 'inox_net_socket_end'
   } else if (method === 'end') {
     runtime = 'inox_net_socket_end_with_callback'
@@ -982,11 +1011,11 @@ function emitNetSocketWriteLines(
 
   let callbackArgs = ''
 
-  if (wrapper != null) {
+  if (wrapper !== null && typeof wrapper !== 'undefined') {
     callbackArgs = `, ${wrapper.name}, 0`
   }
 
-  if (callback != null && wrapper == null) {
+  if (callback !== null && typeof callback !== 'undefined' && (wrapper === null || typeof wrapper === 'undefined')) {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
@@ -1013,7 +1042,7 @@ function emitNetSocketSetEncodingLines(socketName: string, args: AnyNode[], cont
 
   const value = emitNetStaticStringValue(firstArg, null)
 
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
@@ -1043,7 +1072,7 @@ function emitNetSocketOptionCallStatement(
 
   const socketName = netMemberObjectReferenceName(expression.callee)
 
-  if (socketName == null) {
+  if (socketName === null || typeof socketName === 'undefined') {
     return null
   }
 
@@ -1123,16 +1152,12 @@ function emitNetSocketOptionCallStatement(
     const callee = expression.callee
     let loc = netNodeLoc(expression)
 
-    if (callee != null && callee.loc != null) {
+    if (callee !== null && typeof callee !== 'undefined' && callee.loc !== null && typeof callee.loc !== 'undefined') {
       loc = callee.loc
     }
 
     context.diagnostics.push(
-      diagnostic(
-        'INOX_NET_SOCKET',
-        'socket.setTimeout is not supported by the current C net backend slice yet',
-        loc
-      )
+      diagnostic('INOX_NET_SOCKET', 'socket.setTimeout is not supported by the current C net backend slice yet', loc)
     )
     return []
   }
@@ -1158,7 +1183,11 @@ function emitNetServerCreateLines(
   const listener = emitNetCreateServerConnectionListener(expression)
   const wrapper = findNetHandler(context, listener, 'connection')
 
-  if (listener != null && (listener.type !== 'ArrowFunctionExpression' || wrapper == null)) {
+  if (
+    listener !== null &&
+    typeof listener !== 'undefined' &&
+    (listener.type !== 'ArrowFunctionExpression' || wrapper === null || typeof wrapper === 'undefined')
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
@@ -1170,13 +1199,13 @@ function emitNetServerCreateLines(
 
   const lines: string[] = []
 
-  if (options == null || options.declare !== false) {
+  if (options === null || typeof options === 'undefined' || options.declare !== false) {
     lines.push(`inox_net_server* ${serverName} = 0;`)
   }
 
   let wrapperName = '0'
 
-  if (wrapper != null) {
+  if (wrapper !== null && typeof wrapper !== 'undefined') {
     wrapperName = wrapper.name
   }
 
@@ -1204,7 +1233,7 @@ function emitNetServerListenLines(
 
   let options: AnyNode | null = null
 
-  if (firstArg != null && firstArg.type === 'ObjectLiteral') {
+  if (firstArg !== null && typeof firstArg !== 'undefined' && firstArg.type === 'ObjectLiteral') {
     options = firstArg
   }
 
@@ -1213,13 +1242,17 @@ function emitNetServerListenLines(
   let hostArg: AnyNode | null | undefined = emitNetListenHostArg(args)
   let backlogArg: AnyNode | null | undefined = emitNetListenBacklogArg(args)
 
-  if (options != null) {
+  if (options !== null && typeof options !== 'undefined') {
     portArg = deps.findObjectLiteralPropertyValue(options, 'port')
     hostArg = deps.findObjectLiteralPropertyValue(options, 'host')
     backlogArg = deps.findObjectLiteralPropertyValue(options, 'backlog')
   }
 
-  if (options != null && deps.findObjectLiteralPropertyValue(options, 'exclusive') != null) {
+  if (
+    options !== null &&
+    typeof options !== 'undefined' &&
+    isPresent(deps.findObjectLiteralPropertyValue(options, 'exclusive'))
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
@@ -1234,7 +1267,7 @@ function emitNetServerListenLines(
     expression: '0'
   }
 
-  if (portArg != null) {
+  if (portArg !== null && typeof portArg !== 'undefined') {
     port = deps.emitPreparedNumberExpression(portArg, context)
   }
 
@@ -1244,7 +1277,7 @@ function emitNetServerListenLines(
     expression: '128'
   }
 
-  if (backlogArg != null) {
+  if (backlogArg !== null && typeof backlogArg !== 'undefined') {
     backlog = deps.emitPreparedNumberExpression(backlogArg, context)
   }
 
@@ -1272,7 +1305,7 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
 
   let eventName: string | null = null
 
-  if (eventArg != null && eventArg.type === 'StringLiteral') {
+  if (eventArg !== null && typeof eventArg !== 'undefined' && eventArg.type === 'StringLiteral') {
     eventName = eventArg.value
   }
 
@@ -1305,7 +1338,13 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
 
   const wrapper = findNetHandler(context, listener, kind)
 
-  if (listener == null || listener.type !== 'ArrowFunctionExpression' || wrapper == null) {
+  if (
+    listener === null ||
+    typeof listener === 'undefined' ||
+    listener.type !== 'ArrowFunctionExpression' ||
+    wrapper === null ||
+    typeof wrapper === 'undefined'
+  ) {
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
@@ -1337,7 +1376,11 @@ function emitNetServerCloseLines(
 ): string[] {
   if (args.length > 1) {
     context.diagnostics.push(
-      diagnostic('INOX_NET_SERVER', 'server.close in the C backend supports only an optional callback', netNodeLoc(args[1]))
+      diagnostic(
+        'INOX_NET_SERVER',
+        'server.close in the C backend supports only an optional callback',
+        netNodeLoc(args[1])
+      )
     )
   }
 
@@ -1358,7 +1401,7 @@ function emitNetZeroArgCallbackLines(
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): string[] {
-  if (callback == null) {
+  if (callback === null || typeof callback === 'undefined') {
     return []
   }
 
@@ -1389,7 +1432,7 @@ function emitNetZeroArgCallbackLines(
 }
 
 function emitNetListenCallback(args: AnyNode[], options: AnyNode | null): AnyNode | null {
-  if (options != null) {
+  if (options !== null && typeof options !== 'undefined') {
     if (args.length > 1 && args[1].type === 'ArrowFunctionExpression') {
       return args[1]
     }
@@ -1449,7 +1492,7 @@ function emitNetListenBacklogArg(args: AnyNode[]): AnyNode | null {
 }
 
 function emitNetListenHostExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return '0'
   }
 
@@ -1472,7 +1515,7 @@ function emitNetListenHostExpression(expression: AnyNode | null | undefined, con
 }
 
 function emitNetConnectHostExpression(expression: AnyNode | null | undefined, context: CFunctionContext): string {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return '"127.0.0.1"'
   }
 
@@ -1485,7 +1528,7 @@ function emitNetBytesOperand(
   context: CFunctionContext,
   deps: NetLoweringDependencies
 ): PreparedStringBytesOperand {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return {
       lines: [],
       bytes: '""',
@@ -1494,8 +1537,10 @@ function emitNetBytesOperand(
   }
 
   if (
-    netContext != null &&
-    netContext.dataName != null &&
+    netContext !== null &&
+    typeof netContext !== 'undefined' &&
+    netContext.dataName !== null &&
+    typeof netContext.dataName !== 'undefined' &&
     expression.type === 'Reference' &&
     expression.path.length === 1 &&
     netReferenceName(expression) === netContext.dataName
@@ -1509,7 +1554,7 @@ function emitNetBytesOperand(
 
   const staticValue = emitNetStaticStringValue(expression, netContext)
 
-  if (staticValue != null) {
+  if (staticValue !== null && typeof staticValue !== 'undefined') {
     return {
       lines: [],
       bytes: cStringLiteral(staticValue),
@@ -1524,7 +1569,7 @@ function emitNetStaticStringValue(
   expression: AnyNode | null | undefined,
   netContext: NetHandlerContext | null
 ): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -1536,17 +1581,22 @@ function emitNetStaticStringValue(
     return expression.raw.slice(1, -1)
   }
 
-  if (expression.type === 'Reference' && expression.path.length === 1 && netContext != null) {
+  if (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    netContext !== null &&
+    typeof netContext !== 'undefined'
+  ) {
     const name = netReferenceName(expression)
 
-    if (name == null) {
+    if (name === null || typeof name === 'undefined') {
       return null
     }
 
     if (netContext.stringLocals.has(name)) {
       const value = netContext.stringLocals.get(name)
 
-      if (value != null) {
+      if (value !== null && typeof value !== 'undefined') {
         return value
       }
     }
@@ -1565,7 +1615,7 @@ export function emitPreparedNetAddressPortExpression(
   expression: AnyNode | null | undefined,
   context: CFunctionContext
 ): PreparedExpression | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -1574,10 +1624,12 @@ export function emitPreparedNetAddressPortExpression(
   if (
     expression.type !== 'MemberExpression' ||
     expression.property !== 'port' ||
-    expression.object == null ||
+    expression.object === null ||
+    typeof expression.object === 'undefined' ||
     expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1 ||
-    name == null ||
+    name === null ||
+    typeof name === 'undefined' ||
     context.variables.get(name) !== 'net-address'
   ) {
     return null
@@ -1595,10 +1647,12 @@ export function resolveNetAddressStringMember(expression: AnyNode, context: CFun
   if (
     expression.type !== 'MemberExpression' ||
     (expression.property !== 'address' && expression.property !== 'family') ||
-    expression.object == null ||
+    expression.object === null ||
+    typeof expression.object === 'undefined' ||
     expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1 ||
-    name == null ||
+    name === null ||
+    typeof name === 'undefined' ||
     context.variables.get(name) !== 'net-address'
   ) {
     return null
@@ -1612,17 +1666,19 @@ export function resolveNetAddressStringMember(expression: AnyNode, context: CFun
 }
 
 function isNetAddressCall(expression: AnyNode | null | undefined, context: CFunctionContext): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
   const callee = expression.callee
 
   if (
-    callee == null ||
+    callee === null ||
+    typeof callee === 'undefined' ||
     callee.type !== 'MemberExpression' ||
     callee.property !== 'address' ||
-    callee.object == null ||
+    callee.object === null ||
+    typeof callee.object === 'undefined' ||
     callee.object.type !== 'Reference' ||
     callee.object.path.length !== 1
   ) {
@@ -1631,7 +1687,7 @@ function isNetAddressCall(expression: AnyNode | null | undefined, context: CFunc
 
   const receiverName = netMemberObjectReferenceName(callee)
 
-  if (receiverName == null) {
+  if (receiverName === null || typeof receiverName === 'undefined') {
     return false
   }
 
@@ -1646,17 +1702,20 @@ function resolveNetSocketAddressMember(
 ): NetSocketAddressMember | null {
   let socketName: string | null = null
 
-  if (expression != null) {
+  if (expression !== null && typeof expression !== 'undefined') {
     socketName = netReferenceName(expression.object)
   }
 
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'MemberExpression' ||
-    expression.object == null ||
+    expression.object === null ||
+    typeof expression.object === 'undefined' ||
     expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1 ||
-    socketName == null ||
+    socketName === null ||
+    typeof socketName === 'undefined' ||
     context.variables.get(socketName) !== 'net-socket'
   ) {
     return null
@@ -1699,17 +1758,20 @@ function resolveNetSocketCounterMember(
 ): NetSocketCounterMember | null {
   let socketName: string | null = null
 
-  if (expression != null) {
+  if (expression !== null && typeof expression !== 'undefined') {
     socketName = netReferenceName(expression.object)
   }
 
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'MemberExpression' ||
-    expression.object == null ||
+    expression.object === null ||
+    typeof expression.object === 'undefined' ||
     expression.object.type !== 'Reference' ||
     expression.object.path.length !== 1 ||
-    socketName == null ||
+    socketName === null ||
+    typeof socketName === 'undefined' ||
     context.variables.get(socketName) !== 'net-socket'
   ) {
     return null
@@ -1745,12 +1807,15 @@ function isNetSocketAnyMethodCall(expression: AnyNode, context: CFunctionContext
   const socketName = netMemberObjectReferenceName(callee)
 
   if (
-    callee == null ||
+    callee === null ||
+    typeof callee === 'undefined' ||
     callee.type !== 'MemberExpression' ||
-    callee.object == null ||
+    callee.object === null ||
+    typeof callee.object === 'undefined' ||
     callee.object.type !== 'Reference' ||
     callee.object.path.length !== 1 ||
-    socketName == null
+    socketName === null ||
+    typeof socketName === 'undefined'
   ) {
     return false
   }
@@ -1771,12 +1836,15 @@ function isNetServerAnyMethodCall(expression: AnyNode, context: CFunctionContext
   const serverName = netMemberObjectReferenceName(callee)
 
   if (
-    callee == null ||
+    callee === null ||
+    typeof callee === 'undefined' ||
     callee.type !== 'MemberExpression' ||
-    callee.object == null ||
+    callee.object === null ||
+    typeof callee.object === 'undefined' ||
     callee.object.type !== 'Reference' ||
     callee.object.path.length !== 1 ||
-    serverName == null
+    serverName === null ||
+    typeof serverName === 'undefined'
   ) {
     return false
   }
@@ -1785,7 +1853,7 @@ function isNetServerAnyMethodCall(expression: AnyNode, context: CFunctionContext
 }
 
 function isNetCreateServerCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -1793,10 +1861,12 @@ function isNetCreateServerCall(expression: AnyNode | null | undefined, context: 
   const calleeName = netReferenceName(callee)
 
   if (
-    callee != null &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
     callee.type === 'Reference' &&
     callee.path.length === 1 &&
-    calleeName != null &&
+    calleeName !== null &&
+    typeof calleeName !== 'undefined' &&
     context.netCreateServerNames.has(calleeName)
   ) {
     return true
@@ -1805,19 +1875,22 @@ function isNetCreateServerCall(expression: AnyNode | null | undefined, context: 
   const objectName = netMemberObjectReferenceName(callee)
 
   return (
-    callee != null &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
     callee.type === 'MemberExpression' &&
     callee.property === 'createServer' &&
-    callee.object != null &&
+    callee.object !== null &&
+    typeof callee.object !== 'undefined' &&
     callee.object.type === 'Reference' &&
     callee.object.path.length === 1 &&
-    objectName != null &&
+    objectName !== null &&
+    typeof objectName !== 'undefined' &&
     context.netImportNames.has(objectName)
   )
 }
 
 function isNetConnectCall(expression: AnyNode | null | undefined, context: CEmitContext): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
@@ -1825,10 +1898,12 @@ function isNetConnectCall(expression: AnyNode | null | undefined, context: CEmit
   const calleeName = netReferenceName(callee)
 
   if (
-    callee != null &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
     callee.type === 'Reference' &&
     callee.path.length === 1 &&
-    calleeName != null &&
+    calleeName !== null &&
+    typeof calleeName !== 'undefined' &&
     context.netConnectNames.has(calleeName)
   ) {
     return true
@@ -1837,13 +1912,16 @@ function isNetConnectCall(expression: AnyNode | null | undefined, context: CEmit
   const objectName = netMemberObjectReferenceName(callee)
 
   return (
-    callee != null &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
     callee.type === 'MemberExpression' &&
     (callee.property === 'connect' || callee.property === 'createConnection') &&
-    callee.object != null &&
+    callee.object !== null &&
+    typeof callee.object !== 'undefined' &&
     callee.object.type === 'Reference' &&
     callee.object.path.length === 1 &&
-    objectName != null &&
+    objectName !== null &&
+    typeof objectName !== 'undefined' &&
     context.netImportNames.has(objectName)
   )
 }
@@ -1885,7 +1963,7 @@ function findNetHandler(
   expression: AnyNode | null | undefined,
   kind: string
 ): CNetHandler | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
@@ -1930,7 +2008,7 @@ function registerNetHandler(
   kind: string,
   expression: AnyNode | null | undefined
 ): void {
-  if (expression == null || expression.type !== 'ArrowFunctionExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ArrowFunctionExpression') {
     return
   }
 
@@ -1956,9 +2034,11 @@ function registerNetServerEventListener(
   expression: AnyNode | null | undefined
 ): void {
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'CallExpression' ||
-    expression.callee == null ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'on' ||
     expression.args.length === 0 ||
@@ -1983,9 +2063,11 @@ function registerNetSocketEventListener(
   expression: AnyNode | null | undefined
 ): void {
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'CallExpression' ||
-    expression.callee == null ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
     expression.callee.property !== 'on' ||
     expression.args.length === 0 ||
@@ -2010,9 +2092,11 @@ function registerNetSocketWriteCallback(
   expression: AnyNode | null | undefined
 ): void {
   if (
-    expression == null ||
+    expression === null ||
+    typeof expression === 'undefined' ||
     expression.type !== 'CallExpression' ||
-    expression.callee == null ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
     expression.callee.type !== 'MemberExpression' ||
     !isNetSocketWriteMethod(expression.callee.property)
   ) {
@@ -2021,7 +2105,7 @@ function registerNetSocketWriteCallback(
 
   const callback = lastNetArgument(expression.args)
 
-  if (callback != null && callback.type === 'ArrowFunctionExpression') {
+  if (callback !== null && typeof callback !== 'undefined' && callback.type === 'ArrowFunctionExpression') {
     registerNetHandler(handlers, 'socket-write', callback)
   }
 }
@@ -2031,7 +2115,7 @@ function visitNetHandlerStatement(
   context: CEmitContext,
   statement: AnyNode | null | undefined
 ): void {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return
   }
 
@@ -2073,7 +2157,11 @@ function visitNetHandlerStatement(
   }
 
   if (statement.type === 'ForStatement') {
-    if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+    if (
+      statement.init !== null &&
+      typeof statement.init !== 'undefined' &&
+      statement.init.type === 'VariableDeclaration'
+    ) {
       visitNetHandlerStatement(handlers, context, statement.init)
     } else {
       visitNetHandlerExpression(handlers, context, statement.init)
@@ -2109,7 +2197,7 @@ function visitNetHandlerStatement(
   if (statement.type === 'TryStatement') {
     const handler = statement.handler
     visitNetHandlerStatement(handlers, context, statement.block)
-    if (handler != null) {
+    if (handler !== null && typeof handler !== 'undefined') {
       visitNetHandlerStatement(handlers, context, handler.body)
     }
     visitNetHandlerStatement(handlers, context, statement.finalizer)
@@ -2121,7 +2209,7 @@ function visitNetHandlerExpression(
   context: CEmitContext,
   expression: AnyNode | null | undefined
 ): void {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return
   }
 

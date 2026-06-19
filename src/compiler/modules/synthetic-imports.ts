@@ -47,7 +47,7 @@ export function insertImportSyntheticDeclarations(
     if (item.type === 'ImportDeclaration') {
       const declarations = declarationsByImport.get(importIndex)
 
-      if (declarations != null) {
+      if (declarations !== null && typeof declarations !== 'undefined') {
         for (
           let declarationIndex = 0;
           declarationIndex < declarations.length;
@@ -62,7 +62,7 @@ export function insertImportSyntheticDeclarations(
 
             const existingIndex = declaredTypes.get(declaration.name)
 
-            if (existingIndex != null) {
+            if (existingIndex !== null && typeof existingIndex !== 'undefined') {
               if (isUnknownSyntheticTypeImport(body[existingIndex]) && !isUnknownSyntheticTypeImport(declaration)) {
                 body[existingIndex] = declaration
               }
@@ -104,7 +104,8 @@ function isUnknownSyntheticTypeImport(declaration: AnyNode): boolean {
   return (
     declaration.type === 'TypeAliasDeclaration' &&
     declaration.syntheticTypeImport === true &&
-    declaration.valueType != null &&
+    declaration.valueType !== null &&
+    typeof declaration.valueType !== 'undefined' &&
     declaration.valueType.kind === 'alias' &&
     declaration.valueType.valueType === 'unknown'
   )
@@ -130,7 +131,7 @@ function createAliasDeclaration(
 ): AnyNode | null {
   const declaration = findExportedDeclaration(importedProgram, specifier.imported)
 
-  if (declaration == null) {
+  if (declaration === null || typeof declaration === 'undefined') {
     return null
   }
 
@@ -162,7 +163,7 @@ export function createTypeImportDeclaration(specifier: AnyNode, exported: TypeAl
 export function createTypeImportDeclarations(specifier: AnyNode, importedProgram: ProgramNode): AnyNode[] {
   const exported = findExportedTypeAliasDeclaration(importedProgram, specifier.imported)
 
-  if (exported == null) {
+  if (exported === null || typeof exported === 'undefined') {
     return []
   }
 
@@ -190,7 +191,7 @@ function findExportedDeclaration(program: ProgramNode, name: string): SyntheticI
   const declarations = collectExportedDeclarationMap(program)
   const declaration = declarations.get(name)
 
-  if (declaration != null) {
+  if (declaration !== null && typeof declaration !== 'undefined') {
     return declaration
   }
 
@@ -200,7 +201,7 @@ function findExportedDeclaration(program: ProgramNode, name: string): SyntheticI
 function findExportedTypeAliasDeclaration(program: ProgramNode, name: string): TypeAliasDeclarationNode | null {
   const declaration = findExportedDeclaration(program, name)
 
-  if (declaration == null || declaration.type !== 'TypeAliasDeclaration') {
+  if (declaration === null || typeof declaration === 'undefined' || declaration.type !== 'TypeAliasDeclaration') {
     return null
   }
 
@@ -237,7 +238,7 @@ function addTypeImportDependency(
 
   const dependency = aliases.get(name)
 
-  if (dependency == null) {
+  if (dependency === null || typeof dependency === 'undefined') {
     declarations.push(createUnknownTypeAliasDeclaration(name))
     added.add(name)
     return
@@ -329,7 +330,7 @@ function collectTypeAliasDependencyNames(valueType: TypeAliasValueNode, names: s
 
       collectTypeNameDependencyNames(field.valueType, names)
 
-      if (field.functionType != null) {
+      if (field.functionType !== null && typeof field.functionType !== 'undefined') {
         collectTypeAliasDependencyNames(field.functionType, names)
       }
     }
@@ -337,7 +338,7 @@ function collectTypeAliasDependencyNames(valueType: TypeAliasValueNode, names: s
 }
 
 function collectTypeNameDependencyNames(typeName: string | null | undefined, names: string[]): void {
-  if (typeName == null) {
+  if (typeName === null || typeof typeName === 'undefined') {
     return
   }
 
@@ -387,11 +388,7 @@ function isTypeNameIdentifierChar(ch: string): boolean {
   const code = ch.charCodeAt(0)
 
   return (
-    (code >= 65 && code <= 90) ||
-    (code >= 97 && code <= 122) ||
-    (code >= 48 && code <= 57) ||
-    ch === '_' ||
-    ch === '$'
+    (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || ch === '_' || ch === '$'
   )
 }
 
@@ -597,7 +594,7 @@ function cloneStringArray(values: string[]): string[] {
 }
 
 function nodeArray(value: AnyNode[] | null | undefined): AnyNode[] {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return []
   }
 
@@ -605,7 +602,7 @@ function nodeArray(value: AnyNode[] | null | undefined): AnyNode[] {
 }
 
 function stringArray(value: string[] | null | undefined): string[] {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return []
   }
 
@@ -613,7 +610,7 @@ function stringArray(value: string[] | null | undefined): string[] {
 }
 
 function fallbackString(value: string | null | undefined, fallback: string): string {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return fallback
   }
 
@@ -621,7 +618,7 @@ function fallbackString(value: string | null | undefined, fallback: string): str
 }
 
 function nullableNodeValue(value: any): any {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 

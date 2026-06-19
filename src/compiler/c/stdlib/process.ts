@@ -4,12 +4,7 @@ import {
   processRuntimePropertyValueType
 } from '../../stdlib/descriptors/process.ts'
 import type { AnyNode } from '../../types.ts'
-import {
-  emitPrepareOwnedValueWrite,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
-} from '../context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
@@ -33,13 +28,13 @@ export type ProcessLoweringDependencies = {
 }
 
 export function cProcessRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
   const method = expression.processRuntimeMethod
 
-  if (method != null) {
+  if (method !== null && typeof method !== 'undefined') {
     return method
   }
 
@@ -47,13 +42,13 @@ export function cProcessRuntimeMethodName(expression: AnyNode | null | undefined
 }
 
 export function cProcessRuntimePropertyName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const property = expression.processRuntimeProperty
 
-  if (property != null) {
+  if (property !== null && typeof property !== 'undefined') {
     return property
   }
 
@@ -63,7 +58,7 @@ export function cProcessRuntimePropertyName(expression: AnyNode | null | undefin
 export function cProcessRuntimePropertyValueType(expression: AnyNode | null | undefined): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
-  if (property != null) {
+  if (property !== null && typeof property !== 'undefined') {
     return processRuntimePropertyValueType(property)
   }
 
@@ -73,7 +68,7 @@ export function cProcessRuntimePropertyValueType(expression: AnyNode | null | un
 export function cProcessRuntimeStringPropertyName(expression: AnyNode | null | undefined): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
-  if (property != null && isProcessRuntimeStringProperty(property)) {
+  if (property !== null && typeof property !== 'undefined' && isProcessRuntimeStringProperty(property)) {
     return property
   }
 
@@ -83,7 +78,7 @@ export function cProcessRuntimeStringPropertyName(expression: AnyNode | null | u
 export function cProcessRuntimeNumberPropertyName(expression: AnyNode | null | undefined): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
-  if (property != null && isProcessRuntimeNumberProperty(property)) {
+  if (property !== null && typeof property !== 'undefined' && isProcessRuntimeNumberProperty(property)) {
     return property
   }
 
@@ -103,13 +98,13 @@ export function cProcessRuntimeStringFunctionName(property: string): string | nu
 }
 
 export function cProcessRuntimeEnvName(expression: AnyNode | null | undefined): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const name = expression.processRuntimeEnvName
 
-  if (name != null) {
+  if (name !== null && typeof name !== 'undefined') {
     return name
   }
 
@@ -130,8 +125,8 @@ export function emitPreparedProcessStringExpression(
   if (
     method !== 'cwd' &&
     !(property === 'argv' && expression.type === 'IndexExpression') &&
-    stringProperty == null &&
-    envName == null
+    (stringProperty === null || typeof stringProperty === 'undefined') &&
+    (envName === null || typeof envName === 'undefined')
   ) {
     return null
   }
@@ -139,11 +134,16 @@ export function emitPreparedProcessStringExpression(
   let out = nextCName(context, 'inox_process_string')
   const lines: string[] = []
 
-  if (options != null && options.out != null) {
+  if (
+    options !== null &&
+    typeof options !== 'undefined' &&
+    options.out !== null &&
+    typeof options.out !== 'undefined'
+  ) {
     out = options.out
   }
 
-  if (options == null || options.owned !== false) {
+  if (options === null || typeof options === 'undefined' || options.owned !== false) {
     registerOwnedValue(context, out)
   }
 
@@ -158,10 +158,10 @@ export function emitPreparedProcessStringExpression(
     lines.push(
       emitStatusCheck(`inox_process_argv(&inox_default_allocator, (int)(${index.expression}), &${out})`, context)
     )
-  } else if (stringProperty != null) {
+  } else if (stringProperty !== null && typeof stringProperty !== 'undefined') {
     const functionName = cProcessRuntimeStringFunctionName(stringProperty)
 
-    if (functionName == null) {
+    if (functionName === null || typeof functionName === 'undefined') {
       return null
     }
 
@@ -170,7 +170,7 @@ export function emitPreparedProcessStringExpression(
   } else {
     let name = ''
 
-    if (envName != null) {
+    if (envName !== null && typeof envName !== 'undefined') {
       name = envName
     }
 
@@ -192,7 +192,7 @@ export function emitPreparedProcessStringExpression(
 export function emitPreparedProcessNumberExpression(expression: AnyNode): PreparedExpression | null {
   const property = cProcessRuntimeNumberPropertyName(expression)
 
-  if (property == null) {
+  if (property === null || typeof property === 'undefined') {
     return null
   }
 
@@ -230,7 +230,7 @@ export function emitProcessExitStatement(
     expression: '0'
   }
 
-  if (expression.args[0] != null) {
+  if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
     code = dependencies.emitPreparedNumberExpression(expression.args[0], context)
   }
 

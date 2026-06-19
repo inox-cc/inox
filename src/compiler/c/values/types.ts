@@ -9,6 +9,7 @@ import type {
   CPreparedExpression,
   CRuntimeArrayElement
 } from '../types.ts'
+import { isPresent } from '../../nullish.ts'
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
@@ -64,7 +65,7 @@ export type CExpressionTypeDependencies = {
 }
 
 function cValueTypeOrUnknown(expression: AnyNode): string {
-  if (expression.valueType != null) {
+  if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
     return expression.valueType
   }
 
@@ -134,21 +135,31 @@ function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext
   const name = cStringAt(expression.path, 0)
   let metadataType: string | null = null
 
-  if (expression.valueType != null && expression.valueType !== 'unknown') {
+  if (
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType !== 'unknown'
+  ) {
     metadataType = expression.valueType
   }
 
   const moduleValueType = context.moduleValueTypes.get(name)
 
-  if (moduleValueType != null) {
+  if (moduleValueType !== null && typeof moduleValueType !== 'undefined') {
     return moduleValueType
   }
 
-  if (metadataType != null && (variableType == null || (variableType === 'number' && metadataType !== 'number'))) {
+  if (
+    metadataType !== null &&
+    typeof metadataType !== 'undefined' &&
+    (variableType === null ||
+      typeof variableType === 'undefined' ||
+      (variableType === 'number' && metadataType !== 'number'))
+  ) {
     return metadataType
   }
 
-  if (variableType != null) {
+  if (variableType !== null && typeof variableType !== 'undefined') {
     return variableType
   }
 
@@ -160,7 +171,7 @@ function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext
     return 'js-global'
   }
 
-  if (metadataType != null) {
+  if (metadataType !== null && typeof metadataType !== 'undefined') {
     return metadataType
   }
 
@@ -174,7 +185,7 @@ export function inferExpressionType(
 ): string {
   const childProcessMethod = deps.cChildProcessRuntimeMethodName(expression)
 
-  if (childProcessMethod != null) {
+  if (childProcessMethod !== null && typeof childProcessMethod !== 'undefined') {
     if (childProcessMethod === 'spawnSync') {
       return 'object'
     }
@@ -182,13 +193,13 @@ export function inferExpressionType(
     return 'string'
   }
 
-  if (deps.cOsRuntimeConstantName(expression) != null || deps.cOsRuntimeMethodName(expression) != null) {
+  if (isPresent(deps.cOsRuntimeConstantName(expression)) || isPresent(deps.cOsRuntimeMethodName(expression))) {
     return 'string'
   }
 
   const processMethod = deps.cProcessRuntimeMethodName(expression)
 
-  if (processMethod != null) {
+  if (processMethod !== null && typeof processMethod !== 'undefined') {
     if (processMethod === 'cwd') {
       return 'string'
     }
@@ -204,17 +215,17 @@ export function inferExpressionType(
 
   const processPropertyType = deps.cProcessRuntimePropertyValueType(expression)
 
-  if (processPropertyType != null) {
+  if (processPropertyType !== null && typeof processPropertyType !== 'undefined') {
     return processPropertyType
   }
 
-  if (deps.cProcessRuntimeEnvName(expression) != null) {
+  if (isPresent(deps.cProcessRuntimeEnvName(expression))) {
     return 'string'
   }
 
   const urlMethod = deps.cUrlRuntimeMethodName(expression)
 
-  if (urlMethod != null) {
+  if (urlMethod !== null && typeof urlMethod !== 'undefined') {
     if (
       urlMethod === 'fileURLToPath' ||
       urlMethod === 'URLSearchParams.get' ||
@@ -240,13 +251,13 @@ export function inferExpressionType(
 
   const pathConstant = deps.cPathRuntimeConstantName(expression)
 
-  if (pathConstant != null) {
+  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
     return 'string'
   }
 
   const pathMethod = deps.cPathRuntimeMethodName(expression)
 
-  if (pathMethod != null) {
+  if (pathMethod !== null && typeof pathMethod !== 'undefined') {
     if (pathMethod === 'isAbsolute') {
       return 'boolean'
     }
@@ -258,11 +269,11 @@ export function inferExpressionType(
     return 'string'
   }
 
-  if (expression.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee) != null) {
+  if (expression.type === 'CallExpression' && isPresent(deps.cTimeRuntimeCallName(expression.callee))) {
     return 'number'
   }
 
-  if (expression.type === 'CallExpression' && deps.cFsRuntimeExpressionMethod(expression) != null) {
+  if (expression.type === 'CallExpression' && isPresent(deps.cFsRuntimeExpressionMethod(expression))) {
     if (expression.valueType === 'promise') {
       return 'promise'
     }
@@ -270,7 +281,7 @@ export function inferExpressionType(
     return cValueTypeOrUnknown(expression)
   }
 
-  if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression) != null) {
+  if (expression.type === 'CallExpression' && isPresent(deps.cFetchRuntimeExpressionMethod(expression))) {
     if (expression.valueType === 'promise') {
       return 'promise'
     }
@@ -281,8 +292,8 @@ export function inferExpressionType(
   if (expression.type === 'CallExpression') {
     const jsonCall = deps.cJsonRuntimeCallName(expression.callee)
 
-    if (jsonCall != null) {
-      if (expression.valueType != null) {
+    if (jsonCall !== null && typeof jsonCall !== 'undefined') {
+      if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
         return expression.valueType
       }
 
@@ -334,7 +345,7 @@ export function inferExpressionType(
 
   if (
     expression.type === 'CallExpression' &&
-    deps.cPromiseRuntimeCallName(expression.callee) != null &&
+    isPresent(deps.cPromiseRuntimeCallName(expression.callee)) &&
     expression.valueType === 'promise'
   ) {
     return 'promise'
@@ -348,14 +359,14 @@ export function inferExpressionType(
     return 'promise'
   }
 
-  if (expression.type === 'CallExpression' && deps.mathRuntimeMethodName(expression.callee) != null) {
+  if (expression.type === 'CallExpression' && isPresent(deps.mathRuntimeMethodName(expression.callee))) {
     return 'number'
   }
 
   if (expression.type === 'CallExpression') {
     const objectFunctionFieldReturnType = cObjectFunctionFieldCallReturnType(expression, context, deps)
 
-    if (objectFunctionFieldReturnType != null) {
+    if (objectFunctionFieldReturnType !== null && typeof objectFunctionFieldReturnType !== 'undefined') {
       return objectFunctionFieldReturnType
     }
   }
@@ -425,13 +436,13 @@ export function inferExpressionType(
   }
 
   if (deps.isBinaryRuntimeCall(expression)) {
-    if (expression.valueType != null) {
+    if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
       return expression.valueType
     }
 
     const binaryReturnType = deps.binaryRuntimeExpressionReturnType(expression)
 
-    if (binaryReturnType != null) {
+    if (binaryReturnType !== null && typeof binaryReturnType !== 'undefined') {
       return binaryReturnType
     }
 
@@ -442,7 +453,11 @@ export function inferExpressionType(
     return 'bytes'
   }
 
-  if (expression.type === 'CallExpression' && expression.objectRuntimeMethod != null) {
+  if (
+    expression.type === 'CallExpression' &&
+    expression.objectRuntimeMethod !== null &&
+    typeof expression.objectRuntimeMethod !== 'undefined'
+  ) {
     return cValueTypeOrUnknown(expression)
   }
 
@@ -461,11 +476,11 @@ export function inferExpressionType(
       valueType = null
     }
 
-    if (valueType == null) {
+    if (valueType === null || typeof valueType === 'undefined') {
       valueType = deps.resolvePromiseExpressionValueType(expression.argument, context)
     }
 
-    if (valueType != null) {
+    if (valueType !== null && typeof valueType !== 'undefined') {
       return valueType
     }
 
@@ -490,7 +505,11 @@ export function inferExpressionType(
     return cReferenceExpressionType(expression, context)
   }
 
-  if (expression.valueType != null && expression.valueType !== 'unknown') {
+  if (
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType !== 'unknown'
+  ) {
     return expression.valueType
   }
 
@@ -553,11 +572,11 @@ export function inferExpressionType(
   }
 
   if (deps.isMemberAccessExpression(expression)) {
-    if (deps.emitPreparedNetAddressPortExpression(expression, context) != null) {
+    if (isPresent(deps.emitPreparedNetAddressPortExpression(expression, context))) {
       return 'number'
     }
 
-    if (deps.resolveNetAddressStringMember(expression, context) != null) {
+    if (isPresent(deps.resolveNetAddressStringMember(expression, context))) {
       return 'string'
     }
 
@@ -567,13 +586,13 @@ export function inferExpressionType(
 
     const length = deps.resolveKnownArrayLength(expression, context)
 
-    if (length != null) {
+    if (length !== null && typeof length !== 'undefined') {
       return 'number'
     }
 
     const member = deps.resolveKnownObjectMember(expression, context)
 
-    if (member != null) {
+    if (member !== null && typeof member !== 'undefined') {
       return member.valueType
     }
 
@@ -593,15 +612,15 @@ export function inferExpressionType(
     const field = deps.resolveKnownObjectIndex(expression, context)
     const runtimeElement = deps.resolveRuntimeArrayIndex(expression, context)
 
-    if (element != null) {
+    if (element !== null && typeof element !== 'undefined') {
       return element.valueType
     }
 
-    if (field != null) {
+    if (field !== null && typeof field !== 'undefined') {
       return field.valueType
     }
 
-    if (runtimeElement != null) {
+    if (runtimeElement !== null && typeof runtimeElement !== 'undefined') {
       return runtimeElement.valueType
     }
 
@@ -613,7 +632,11 @@ export function inferExpressionType(
   }
 
   if (expression.type === 'CallExpression') {
-    if (expression.valueType != null && expression.valueType !== 'unknown') {
+    if (
+      expression.valueType !== null &&
+      typeof expression.valueType !== 'undefined' &&
+      expression.valueType !== 'unknown'
+    ) {
       return expression.valueType
     }
 
@@ -621,7 +644,7 @@ export function inferExpressionType(
       const name = cStringAt(expression.callee.path, 0)
       const returnType = context.functionReturnTypes.get(name)
 
-      if (returnType != null) {
+      if (returnType !== null && typeof returnType !== 'undefined') {
         return returnType
       }
 
@@ -657,7 +680,7 @@ function cObjectFunctionFieldCallReturnType(
 ): string | null {
   const callee = expression.callee
 
-  if (callee == null) {
+  if (callee === null || typeof callee === 'undefined') {
     return null
   }
 
@@ -669,7 +692,13 @@ function cObjectFunctionFieldCallReturnType(
     field = deps.resolveKnownObjectIndex(callee, context)
   }
 
-  if (field == null || field.valueType !== 'function' || field.functionType == null) {
+  if (
+    field === null ||
+    typeof field === 'undefined' ||
+    field.valueType !== 'function' ||
+    field.functionType === null ||
+    typeof field.functionType === 'undefined'
+  ) {
     return null
   }
 

@@ -11,7 +11,7 @@ export function checkCCompileBudgets(programs: IrProgram[], options: CompileOpti
   const budgets = options.budgets
   const diagnostics: Diagnostic[] = []
 
-  if (budgets != null) {
+  if (budgets !== null && typeof budgets !== 'undefined') {
     const features = collectIrFeatureRequirements(programs)
     const runtimeRequirements = collectIrRuntimeRequirements(programs)
 
@@ -49,22 +49,16 @@ function checkRequiredCCompileBudgets(
   }
 }
 
-function exceedsFeatureBudget(
-  items: IrFeature[],
-  max: number | undefined
-): boolean {
-  if (max == null) {
+function exceedsFeatureBudget(items: IrFeature[], max: number | undefined): boolean {
+  if (max === null || typeof max === 'undefined') {
     return false
   }
 
   return items.length > max
 }
 
-function exceedsRuntimeBudget(
-  items: IrRuntimeRequirement[],
-  max: number | undefined
-): boolean {
-  if (max == null) {
+function exceedsRuntimeBudget(items: IrRuntimeRequirement[], max: number | undefined): boolean {
+  if (max === null || typeof max === 'undefined') {
     return false
   }
 

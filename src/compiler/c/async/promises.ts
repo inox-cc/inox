@@ -13,6 +13,7 @@ import type {
 } from '../types.ts'
 import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
 import type { CallbackLoweringDependencies, CallbackScope, CallbackScopeBinding } from './callbacks.ts'
+import { isNullish } from '../../nullish.ts'
 
 type PromiseNode = AnyNode
 type PromiseAnyNodeWrapperMap = Map<AnyNode, CPromiseChainWrapper>
@@ -76,7 +77,7 @@ type PromiseFunctionContext = PromiseEmitContext & {
 }
 
 function promiseBooleanValueIsTrue(value: boolean | null | undefined): boolean {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return false
   }
 
@@ -88,7 +89,7 @@ function promiseBooleanValueIsTrue(value: boolean | null | undefined): boolean {
 }
 
 export function cPromiseRuntimeCallName(callee: AnyNode | null | undefined): string | null {
-  if (callee == null) {
+  if (callee === null || typeof callee === 'undefined') {
     return null
   }
 
@@ -112,7 +113,7 @@ export function cPromiseRuntimeCallName(callee: AnyNode | null | undefined): str
 }
 
 export function isPromiseConstructorExpression(expression: AnyNode | null | undefined): boolean {
-  if (expression == null || expression.type !== 'NewExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'NewExpression') {
     return false
   }
 
@@ -120,11 +121,15 @@ export function isPromiseConstructorExpression(expression: AnyNode | null | unde
 }
 
 export function isPromiseMethodAst(expression: AnyNode | null | undefined): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
-  if (expression.callee == null || expression.callee.type !== 'MemberExpression') {
+  if (
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.type !== 'MemberExpression'
+  ) {
     return false
   }
 
@@ -138,29 +143,41 @@ type PromiseEventLoopFunctionContext = {
 }
 
 export function isPlainPromiseReturningFunctionName(name: string, context: PromiseEventLoopFunctionContext): boolean {
-  return context.functionReturnTypes.get(name) === 'promise' && !promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))
+  return (
+    context.functionReturnTypes.get(name) === 'promise' &&
+    !promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))
+  )
 }
 
 export function functionTakesEventLoopParam(name: string, context: PromiseEventLoopFunctionContext): boolean {
   return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
 }
 
-export function isPromiseReturningFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEventLoopFunctionContext): boolean {
+export function isPromiseReturningFunctionCallee(
+  callee: AnyNode | null | undefined,
+  context: PromiseEventLoopFunctionContext
+): boolean {
   const name = promiseReferenceName(callee)
 
-  return name != null && isPlainPromiseReturningFunctionName(name, context)
+  return name !== null && typeof name !== 'undefined' && isPlainPromiseReturningFunctionName(name, context)
 }
 
-export function isExternalEventLoopFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEventLoopFunctionContext): boolean {
+export function isExternalEventLoopFunctionCallee(
+  callee: AnyNode | null | undefined,
+  context: PromiseEventLoopFunctionContext
+): boolean {
   const name = promiseReferenceName(callee)
 
-  return name != null && context.externalEventLoopFunctions.has(name)
+  return name !== null && typeof name !== 'undefined' && context.externalEventLoopFunctions.has(name)
 }
 
-export function resolvePromiseReturningFunctionValueType(callee: AnyNode | null | undefined, context: PromiseEmitContext): string {
+export function resolvePromiseReturningFunctionValueType(
+  callee: AnyNode | null | undefined,
+  context: PromiseEmitContext
+): string {
   const name = promiseReferenceName(callee)
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return 'unknown'
   }
 
@@ -170,7 +187,7 @@ export function resolvePromiseReturningFunctionValueType(callee: AnyNode | null 
 
   const valueType = context.functionReturnPromiseValueTypes.get(name)
 
-  if (valueType != null) {
+  if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
   }
 
@@ -181,13 +198,13 @@ export function resolvePromiseExpressionValueType(
   expression: AnyNode | null | undefined,
   context: PromiseFunctionContext
 ): string | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const directType = knownValueType(expression.promiseValueType)
 
-  if (directType != null) {
+  if (directType !== null && typeof directType !== 'undefined') {
     return directType
   }
 
@@ -203,7 +220,7 @@ export function resolvePromiseExpressionValueType(
 
   const expressionName = promiseReferenceName(expression)
 
-  if (expressionName != null) {
+  if (expressionName !== null && typeof expressionName !== 'undefined') {
     return knownValueType(context.promiseValueTypes.get(expressionName))
   }
 
@@ -211,7 +228,7 @@ export function resolvePromiseExpressionValueType(
 }
 
 export function knownValueType(valueType: string | null | undefined): string | null {
-  if (valueType == null || valueType === 'unknown') {
+  if (valueType === null || typeof valueType === 'undefined' || valueType === 'unknown') {
     return null
   }
 
@@ -219,7 +236,7 @@ export function knownValueType(valueType: string | null | undefined): string | n
 }
 
 function optionalString(value: string | null | undefined): string {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return ''
   }
 
@@ -233,7 +250,7 @@ function optionalBoolean(value: boolean | null | undefined): boolean {
 export function isAsyncFunctionCallee(callee: AnyNode | null | undefined, context: PromiseEmitContext): boolean {
   const name = promiseReferenceName(callee)
 
-  return name != null && promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))
+  return name !== null && typeof name !== 'undefined' && promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))
 }
 
 export function resolveCAsyncFunctionAwaitValueType(
@@ -242,7 +259,7 @@ export function resolveCAsyncFunctionAwaitValueType(
 ): string | null {
   const name = promiseReferenceName(callee)
 
-  if (name == null) {
+  if (name === null || typeof name === 'undefined') {
     return null
   }
 
@@ -252,13 +269,12 @@ export function resolveCAsyncFunctionAwaitValueType(
 
   const valueType = context.functionReturnPromiseValueTypes.get(name)
 
-  if (valueType != null) {
+  if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
   }
 
   return 'unknown'
 }
-
 
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import { diagnostic } from '../../diagnostics.ts'
@@ -273,7 +289,6 @@ import {
   registerOwnedPromise
 } from '../context.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
-
 
 export type PromiseChainLoweringDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies
@@ -306,9 +321,7 @@ export type PromiseChainLoweringDependencies = {
   emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: PromiseFunctionContext): string[]
   emitStatementList(statements: AnyNode[], context: PromiseFunctionContext): string[]
   functionUsesExternalEventLoop(node: AnyNode, externalNames: Set<string>): boolean
-  isPromiseChainCallbackWrapperWithContext(
-    wrapper: CPromiseChainWrapper | null | undefined
-  ): boolean
+  isPromiseChainCallbackWrapperWithContext(wrapper: CPromiseChainWrapper | null | undefined): boolean
 }
 
 export type PromiseLoweringDependencies = {
@@ -337,9 +350,7 @@ export type PromiseLoweringDependencies = {
   emitStatementList(statements: AnyNode[], context: PromiseFunctionContext): string[]
   inferExpressionType(expression: AnyNode, context: PromiseFunctionContext): string
   inferRejectedValueType(expression: AnyNode, context: PromiseFunctionContext): string
-  isPromiseChainCallbackWrapperWithContext(
-    wrapper: CPromiseChainWrapper | null | undefined
-  ): boolean
+  isPromiseChainCallbackWrapperWithContext(wrapper: CPromiseChainWrapper | null | undefined): boolean
 }
 
 type PromiseChainArrowBody = {
@@ -388,7 +399,12 @@ function promiseStringAt(values: string[], index: number): string {
 }
 
 function promiseReferenceName(expression: PromiseNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'Reference' || expression.path.length !== 1) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
     return null
   }
 
@@ -396,7 +412,7 @@ function promiseReferenceName(expression: PromiseNode | null | undefined): strin
 }
 
 function promiseMemberObjectReferenceName(expression: PromiseNode | null | undefined): string | null {
-  if (expression == null || expression.type !== 'MemberExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'MemberExpression') {
     return null
   }
 
@@ -409,13 +425,13 @@ export function emitPreparedPromiseStaticExpression(
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const method = cPromiseRuntimeCallName(expression.callee)
 
-  if (method == null) {
+  if (method === null || typeof method === 'undefined') {
     return null
   }
 
@@ -435,7 +451,9 @@ export function emitPreparedPromiseStaticExpression(
   const value = emitPreparedPromiseArgumentValue(expression.args[0], context, dependencies)
   const lines: string[] = []
   appendLines(lines, value.lines)
-  lines.push(emitStatusCheck(`${runtimeCall}(${emitEventLoopReference(context)}, ${value.expression}, &${out})`, context))
+  lines.push(
+    emitStatusCheck(`${runtimeCall}(${emitEventLoopReference(context)}, ${value.expression}, &${out})`, context)
+  )
 
   return {
     lines,
@@ -450,7 +468,7 @@ export function emitPreparedPromiseConstructorExpression(
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (expression == null || !isPromiseConstructorExpression(expression)) {
+  if (expression === null || typeof expression === 'undefined' || !isPromiseConstructorExpression(expression)) {
     return null
   }
 
@@ -471,7 +489,7 @@ export function emitPreparedPromiseConstructorExpression(
 
   const lines = [emitStatusCheck(`inox_promise_new(${emitEventLoopReference(context)}, &${out})`, context)]
 
-  if (executor == null || executor.type !== 'ArrowFunctionExpression') {
+  if (executor === null || typeof executor === 'undefined' || executor.type !== 'ArrowFunctionExpression') {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
@@ -513,19 +531,19 @@ export function emitPromiseConstructorSettlementCall(
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string[] | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
   const handlerName = promiseReferenceName(expression.callee)
 
-  if (handlerName == null) {
+  if (handlerName === null || typeof handlerName === 'undefined') {
     return null
   }
 
   const handler = context.promiseConstructorHandlers.get(handlerName)
 
-  if (handler == null) {
+  if (handler === null || typeof handler === 'undefined') {
     return null
   }
 
@@ -543,7 +561,9 @@ export function emitPromiseConstructorSettlementCall(
   const runtimeCall = promiseConstructorHandlerRuntimeCall(handler)
   const lines: string[] = []
   appendLines(lines, value.lines)
-  lines.push(emitStatusCheck(`${runtimeCall}(${promiseConstructorHandlerPromise(handler)}, ${value.expression})`, context))
+  lines.push(
+    emitStatusCheck(`${runtimeCall}(${promiseConstructorHandlerPromise(handler)}, ${value.expression})`, context)
+  )
 
   return lines
 }
@@ -554,7 +574,11 @@ export function emitPreparedPromiseMethodExpression(
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (expression == null || !isPromiseMethodCallExpression(expression, context, dependencies)) {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    !isPromiseMethodCallExpression(expression, context, dependencies)
+  ) {
     return null
   }
 
@@ -562,15 +586,15 @@ export function emitPreparedPromiseMethodExpression(
   const callback = expression.args[0]
   let wrapper: CPromiseChainWrapper | null = null
 
-  if (callback != null) {
+  if (callback !== null && typeof callback !== 'undefined') {
     const existingWrapper = context.promiseChainArrowWrappers.get(callback)
 
-    if (existingWrapper != null) {
+    if (existingWrapper !== null && typeof existingWrapper !== 'undefined') {
       wrapper = existingWrapper
     }
   }
 
-  if (wrapper == null) {
+  if (wrapper === null || typeof wrapper === 'undefined') {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
@@ -589,7 +613,7 @@ export function emitPreparedPromiseMethodExpression(
 
   const receiver = emitPreparedPromiseExpression(expression.callee.object, context, dependencies, {})
 
-  if (receiver == null) {
+  if (receiver === null || typeof receiver === 'undefined') {
     context.diagnostics.push(
       diagnostic(
         'INOX_C_ASYNC',
@@ -636,25 +660,28 @@ export function emitPreparedPromiseExpression(
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
   const fetchCall = dependencies.emitPreparedFetchCallExpression(expression, context, options)
 
-  if (fetchCall != null) {
-    return preparedPromiseWithValueType(fetchCall, resolvedPromiseExpressionValueType(expression, context, fetchCall.valueType))
+  if (fetchCall !== null && typeof fetchCall !== 'undefined') {
+    return preparedPromiseWithValueType(
+      fetchCall,
+      resolvedPromiseExpressionValueType(expression, context, fetchCall.valueType)
+    )
   }
 
   const fsCall = dependencies.emitPreparedFsCallExpression(expression, context, options)
 
-  if (fsCall != null) {
+  if (fsCall !== null && typeof fsCall !== 'undefined') {
     return preparedPromiseWithValueType(fsCall, resolvedPromiseExpressionValueType(expression, context, null))
   }
 
   const promiseConstructor = emitPreparedPromiseConstructorExpression(expression, context, dependencies, options)
 
-  if (promiseConstructor != null) {
+  if (promiseConstructor !== null && typeof promiseConstructor !== 'undefined') {
     return preparedPromiseWithValueType(
       promiseConstructor,
       resolvedPromiseExpressionValueType(expression, context, promiseConstructor.valueType)
@@ -663,31 +690,31 @@ export function emitPreparedPromiseExpression(
 
   const promiseResolve = emitPreparedPromiseStaticExpression(expression, context, dependencies, options)
 
-  if (promiseResolve != null) {
+  if (promiseResolve !== null && typeof promiseResolve !== 'undefined') {
     return preparedPromiseWithValueType(promiseResolve, resolvedPromiseExpressionValueType(expression, context, null))
   }
 
   const promiseMethod = emitPreparedPromiseMethodExpression(expression, context, dependencies, options)
 
-  if (promiseMethod != null) {
+  if (promiseMethod !== null && typeof promiseMethod !== 'undefined') {
     return preparedPromiseWithValueType(promiseMethod, resolvedPromiseExpressionValueType(expression, context, null))
   }
 
   const asyncPromiseCall = dependencies.emitPreparedAsyncFunctionPromiseCallExpression(expression, context, options)
 
-  if (asyncPromiseCall != null) {
+  if (asyncPromiseCall !== null && typeof asyncPromiseCall !== 'undefined') {
     return preparedPromiseWithValueType(asyncPromiseCall, resolvedPromiseExpressionValueType(expression, context, null))
   }
 
   const promiseCall = emitPreparedPromiseReturningCallExpression(expression, context, dependencies, options)
 
-  if (promiseCall != null) {
+  if (promiseCall !== null && typeof promiseCall !== 'undefined') {
     return promiseCall
   }
 
   const expressionName = promiseReferenceName(expression)
 
-  if (expressionName != null) {
+  if (expressionName !== null && typeof expressionName !== 'undefined') {
     if (context.variables.get(expressionName) === 'promise') {
       return {
         lines: [],
@@ -707,7 +734,7 @@ export function emitPreparedPromiseReturningCallExpression(
   dependencies: PromiseLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
   }
 
@@ -751,7 +778,7 @@ function appendIndentedLines(target: string[], values: string[], indent: string)
 function preparedPromiseOut(options: PreparedCallOptions, context: PromiseFunctionContext, prefix: string): string {
   const out = options.out
 
-  if (out != null) {
+  if (out !== null && typeof out !== 'undefined') {
     return out
   }
 
@@ -759,7 +786,7 @@ function preparedPromiseOut(options: PreparedCallOptions, context: PromiseFuncti
 }
 
 function expressionPromiseValueType(expression: AnyNode): string {
-  if (expression.promiseValueType != null) {
+  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
     return expression.promiseValueType
   }
 
@@ -792,7 +819,7 @@ function emitPreparedPromiseArgumentValue(
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): PreparedExpression {
-  if (argument == null) {
+  if (argument === null || typeof argument === 'undefined') {
     return {
       lines: [],
       expression: 'inox_undefined_value()'
@@ -805,11 +832,11 @@ function emitPreparedPromiseArgumentValue(
 function promiseExecutorParamName(executor: AnyNode, index: number): string | null {
   const param = executor.params[index]
 
-  if (param == null) {
+  if (param === null || typeof param === 'undefined') {
     return null
   }
 
-  if (param.name != null) {
+  if (param.name !== null && typeof param.name !== 'undefined') {
     return param.name
   }
 
@@ -820,7 +847,12 @@ function promiseExecutorStatements(executor: AnyNode): AnyNode[] {
   if (executor.expressionBody) {
     let loc: SourceLocation | null | undefined = executor.loc
 
-    if (executor.body != null && executor.body.loc != null) {
+    if (
+      executor.body !== null &&
+      typeof executor.body !== 'undefined' &&
+      executor.body.loc !== null &&
+      typeof executor.body.loc !== 'undefined'
+    ) {
       loc = executor.body.loc
     }
 
@@ -837,7 +869,7 @@ function promiseExecutorStatements(executor: AnyNode): AnyNode[] {
     return executor.body
   }
 
-  if (executor.body != null && Array.isArray(executor.body.body)) {
+  if (executor.body !== null && typeof executor.body !== 'undefined' && Array.isArray(executor.body.body)) {
     return executor.body.body
   }
 
@@ -853,7 +885,7 @@ function promiseConstructorRuntimeCall(kind: string): string {
 }
 
 function promiseConstructorHandlerRuntimeCall(handler: CPromiseConstructorHandler | null | undefined): string {
-  if (handler == null) {
+  if (handler === null || typeof handler === 'undefined') {
     return 'inox_promise_resolve'
   }
 
@@ -861,7 +893,7 @@ function promiseConstructorHandlerRuntimeCall(handler: CPromiseConstructorHandle
 }
 
 function promiseConstructorHandlerPromise(handler: CPromiseConstructorHandler | null | undefined): string {
-  if (handler == null) {
+  if (handler === null || typeof handler === 'undefined') {
     return '0'
   }
 
@@ -869,7 +901,7 @@ function promiseConstructorHandlerPromise(handler: CPromiseConstructorHandler | 
 }
 
 function preparedPromiseLines(prepared: PreparedExpression | null | undefined): string[] {
-  if (prepared == null) {
+  if (prepared === null || typeof prepared === 'undefined') {
     return []
   }
 
@@ -877,7 +909,7 @@ function preparedPromiseLines(prepared: PreparedExpression | null | undefined): 
 }
 
 function preparedPromiseExpression(prepared: PreparedExpression | null | undefined): string {
-  if (prepared == null) {
+  if (prepared === null || typeof prepared === 'undefined') {
     return '0'
   }
 
@@ -885,7 +917,7 @@ function preparedPromiseExpression(prepared: PreparedExpression | null | undefin
 }
 
 function preparedPromiseRejectionValueType(prepared: PreparedExpression | null | undefined): string {
-  if (prepared == null) {
+  if (prepared === null || typeof prepared === 'undefined') {
     return ''
   }
 
@@ -893,7 +925,7 @@ function preparedPromiseRejectionValueType(prepared: PreparedExpression | null |
 }
 
 function promiseChainWrapperName(wrapper: CPromiseChainWrapper | null | undefined): string {
-  if (wrapper == null) {
+  if (wrapper === null || typeof wrapper === 'undefined') {
     return '0'
   }
 
@@ -901,7 +933,7 @@ function promiseChainWrapperName(wrapper: CPromiseChainWrapper | null | undefine
 }
 
 function promiseChainWrapperFinalizerName(wrapper: CPromiseChainWrapper | null | undefined): string {
-  if (wrapper == null) {
+  if (wrapper === null || typeof wrapper === 'undefined') {
     return '0'
   }
 
@@ -982,11 +1014,11 @@ function resolvedPromiseExpressionValueType(
 ): string {
   const resolved = resolvePromiseExpressionValueType(expression, context)
 
-  if (resolved != null) {
+  if (resolved !== null && typeof resolved !== 'undefined') {
     return resolved
   }
 
-  if (fallback != null) {
+  if (fallback !== null && typeof fallback !== 'undefined') {
     return fallback
   }
 
@@ -996,7 +1028,7 @@ function resolvedPromiseExpressionValueType(
 function promiseContextValueType(context: PromiseFunctionContext, name: string): string {
   const valueType = context.promiseValueTypes.get(name)
 
-  if (valueType != null) {
+  if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
   }
 
@@ -1006,7 +1038,7 @@ function promiseContextValueType(context: PromiseFunctionContext, name: string):
 function promiseContextRejectionValueType(context: PromiseFunctionContext, name: string): string {
   const valueType = context.promiseRejectionValueTypes.get(name)
 
-  if (valueType != null) {
+  if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
   }
 
@@ -1028,11 +1060,11 @@ function appendCallbackScope(scopes: CallbackScope[], scope: CallbackScope): Cal
 }
 
 function promiseCallbackReturnType(callback: AnyNode, expression: AnyNode): string {
-  if (callback.returnType != null) {
+  if (callback.returnType !== null && typeof callback.returnType !== 'undefined') {
     return callback.returnType
   }
 
-  if (expression.promiseValueType != null) {
+  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
     return expression.promiseValueType
   }
 
@@ -1040,7 +1072,7 @@ function promiseCallbackReturnType(callback: AnyNode, expression: AnyNode): stri
 }
 
 function promiseCallbackReturnShape(callback: AnyNode): CObjectShape | null {
-  if (callback.returnShape != null) {
+  if (callback.returnShape !== null && typeof callback.returnShape !== 'undefined') {
     return callback.returnShape
   }
 
@@ -1048,7 +1080,7 @@ function promiseCallbackReturnShape(callback: AnyNode): CObjectShape | null {
 }
 
 function callbackParamValueType(param: AnyNode): string {
-  if (param.valueType != null) {
+  if (param.valueType !== null && typeof param.valueType !== 'undefined') {
     return param.valueType
   }
 
@@ -1060,7 +1092,7 @@ function promiseChainCallbackBodyStatements(callback: PromiseNode): PromiseNode[
     return callback.body
   }
 
-  if (callback.body != null && callback.body.type === 'BlockStatement') {
+  if (callback.body !== null && typeof callback.body !== 'undefined' && callback.body.type === 'BlockStatement') {
     return callback.body.body
   }
 
@@ -1068,7 +1100,7 @@ function promiseChainCallbackBodyStatements(callback: PromiseNode): PromiseNode[
 }
 
 function lastPromiseChainCallbackStatement(statements: PromiseNode[] | null | undefined): PromiseNode | null {
-  if (statements == null || statements.length === 0) {
+  if (statements === null || typeof statements === 'undefined' || statements.length === 0) {
     return null
   }
 
@@ -1078,7 +1110,7 @@ function lastPromiseChainCallbackStatement(statements: PromiseNode[] | null | un
 function promiseChainCallbackStatementsBeforeLast(statements: PromiseNode[] | null | undefined): PromiseNode[] {
   const result: PromiseNode[] = []
 
-  if (statements == null) {
+  if (statements === null || typeof statements === 'undefined') {
     return result
   }
 
@@ -1090,11 +1122,11 @@ function promiseChainCallbackStatementsBeforeLast(statements: PromiseNode[] | nu
 }
 
 function promiseReturnStatementArgument(statement: PromiseNode | null | undefined): PromiseNode | null {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return null
   }
 
-  if (statement.argument != null) {
+  if (statement.argument !== null && typeof statement.argument !== 'undefined') {
     return statement.argument
   }
 
@@ -1102,7 +1134,7 @@ function promiseReturnStatementArgument(statement: PromiseNode | null | undefine
 }
 
 function promiseStatementsOrEmpty(statements: PromiseNode[] | null | undefined): PromiseNode[] {
-  if (statements == null) {
+  if (statements === null || typeof statements === 'undefined') {
     return []
   }
 
@@ -1110,7 +1142,7 @@ function promiseStatementsOrEmpty(statements: PromiseNode[] | null | undefined):
 }
 
 function allStraightLinePromiseCallbackStatements(statements: PromiseNode[] | null | undefined): boolean {
-  if (statements == null) {
+  if (statements === null || typeof statements === 'undefined') {
     return false
   }
 
@@ -1126,7 +1158,7 @@ function allStraightLinePromiseCallbackStatements(statements: PromiseNode[] | nu
 }
 
 function allPromiseChainCallbackStatements(statements: PromiseNode[] | null | undefined): boolean {
-  if (statements == null) {
+  if (statements === null || typeof statements === 'undefined') {
     return false
   }
 
@@ -1149,7 +1181,7 @@ function pushPromiseConstructorHandlers(
 ): PromiseConstructorHandlerSnapshot[] {
   const snapshots: PromiseConstructorHandlerSnapshot[] = []
 
-  if (resolveName != null) {
+  if (resolveName !== null && typeof resolveName !== 'undefined') {
     snapshots.push({
       name: resolveName,
       previous: promiseConstructorHandlerOrNull(context.promiseConstructorHandlers.get(resolveName))
@@ -1160,7 +1192,7 @@ function pushPromiseConstructorHandlers(
     })
   }
 
-  if (rejectName != null) {
+  if (rejectName !== null && typeof rejectName !== 'undefined') {
     snapshots.push({
       name: rejectName,
       previous: promiseConstructorHandlerOrNull(context.promiseConstructorHandlers.get(rejectName))
@@ -1182,7 +1214,7 @@ function restorePromiseConstructorHandlers(
     const snapshot = promiseHandlerSnapshotAt(snapshots, index)
     const previous = snapshot.previous
 
-    if (previous == null) {
+    if (previous === null || typeof previous === 'undefined') {
       context.promiseConstructorHandlers.delete(snapshot.name)
     } else {
       context.promiseConstructorHandlers.set(snapshot.name, previous)
@@ -1193,7 +1225,7 @@ function restorePromiseConstructorHandlers(
 function promiseConstructorHandlerOrNull(
   value: CPromiseConstructorHandler | null | undefined
 ): CPromiseConstructorHandler | null {
-  if (value == null) {
+  if (value === null || typeof value === 'undefined') {
     return null
   }
 
@@ -1205,7 +1237,7 @@ function promiseConstructorRejectionValueType(
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): string {
-  if (executor == null || executor.type !== 'ArrowFunctionExpression') {
+  if (executor === null || typeof executor === 'undefined' || executor.type !== 'ArrowFunctionExpression') {
     return 'unknown'
   }
 
@@ -1228,7 +1260,7 @@ function visitPromiseConstructorRejectionNode(
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): void {
-  if (node == null) {
+  if (node === null || typeof node === 'undefined') {
     return
   }
 
@@ -1243,10 +1275,7 @@ function visitPromiseConstructorRejectionNode(
 
   const current = node
 
-  if (
-    current.type === 'CallExpression' &&
-    promiseReferenceName(current.callee) === rejectName
-  ) {
+  if (current.type === 'CallExpression' && promiseReferenceName(current.callee) === rejectName) {
     types.push(dependencies.inferRejectedValueType(promiseNodeAt(current.args, 0), context))
   }
 
@@ -1280,7 +1309,11 @@ function visitPromiseConstructorRejectionChildren(
     return
   }
 
-  if (current.type === 'CallExpression' || current.type === 'NewExpression' || current.type === 'OptionalCallExpression') {
+  if (
+    current.type === 'CallExpression' ||
+    current.type === 'NewExpression' ||
+    current.type === 'OptionalCallExpression'
+  ) {
     visitPromiseConstructorRejectionNode(current.args, rejectName, types, context, dependencies)
     return
   }
@@ -1297,11 +1330,7 @@ function visitPromiseConstructorRejectionChildren(
     return
   }
 
-  if (
-    current.type === 'UnaryExpression' ||
-    current.type === 'UpdateExpression' ||
-    current.type === 'AwaitExpression'
-  ) {
+  if (current.type === 'UnaryExpression' || current.type === 'UpdateExpression' || current.type === 'AwaitExpression') {
     visitPromiseConstructorRejectionNode(current.argument, rejectName, types, context, dependencies)
     return
   }
@@ -1373,7 +1402,7 @@ function visitPromiseConstructorRejectionChildren(
   if (current.type === 'TryStatement') {
     visitPromiseConstructorRejectionNode(current.block, rejectName, types, context, dependencies)
 
-    if (current.handler != null) {
+    if (current.handler !== null && typeof current.handler !== 'undefined') {
       visitPromiseConstructorRejectionNode(current.handler.body, rejectName, types, context, dependencies)
     }
 
@@ -1404,7 +1433,11 @@ function emitPromiseChainCallbackContext(
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): PromiseCallbackContext {
-  if (wrapper == null || !dependencies.isPromiseChainCallbackWrapperWithContext(wrapper)) {
+  if (
+    wrapper === null ||
+    typeof wrapper === 'undefined' ||
+    !dependencies.isPromiseChainCallbackWrapperWithContext(wrapper)
+  ) {
     return {
       lines: [],
       expression: '0',
@@ -1464,11 +1497,15 @@ function isPromiseMethodCallExpression(
   context: PromiseFunctionContext,
   dependencies: PromiseLoweringDependencies
 ): boolean {
-  if (expression == null || expression.type !== 'CallExpression') {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
   }
 
-  if (expression.callee == null || expression.callee.type !== 'MemberExpression') {
+  if (
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.type !== 'MemberExpression'
+  ) {
     return false
   }
 
@@ -1538,7 +1575,7 @@ function lookupPromiseCallbackBinding(name: string, scopes: CallbackScope[]): Ca
   for (let index = scopes.length - 1; index >= 0; index = index - 1) {
     const entry = scopes[index].get(name)
 
-    if (entry != null) {
+    if (entry !== null && typeof entry !== 'undefined') {
       return entry
     }
   }
@@ -1563,20 +1600,25 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
     return false
   }
 
-  if (statement.init != null && statement.init.type === 'StringLiteral') {
+  if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'StringLiteral') {
     return false
   }
 
-  if (statement.init != null && statement.init.type === 'TemplateLiteral' && !statement.init.raw.includes('${')) {
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.type === 'TemplateLiteral' &&
+    !statement.init.raw.includes('${')
+  ) {
     return false
   }
 
   const initName = promiseReferenceName(statement.init)
 
-  if (initName != null) {
+  if (initName !== null && typeof initName !== 'undefined') {
     const binding = lookupPromiseCallbackBinding(initName, scopes)
 
-    if (binding != null && binding.runtimeManaged === true) {
+    if (binding !== null && typeof binding !== 'undefined' && binding.runtimeManaged === true) {
       return true
     }
 
@@ -1612,7 +1654,7 @@ function registerPromiseChainExpression(
 
   const callback = expression.args[0]
 
-  if (callback == null || callback.type !== 'ArrowFunctionExpression') {
+  if (callback === null || typeof callback === 'undefined' || callback.type !== 'ArrowFunctionExpression') {
     return
   }
 
@@ -1620,7 +1662,7 @@ function registerPromiseChainExpression(
     return
   }
 
-  if (resolvePromiseChainArrowBody(callback) == null) {
+  if (isNullish(resolvePromiseChainArrowBody(callback))) {
     return
   }
 
@@ -1639,7 +1681,8 @@ function registerPromiseChainExpression(
     if (
       promiseBooleanValueIsTrue(capture.mutable) &&
       isPromiseRuntimeManagedOrScalarCapture(capture.valueType) &&
-      declaration != null
+      declaration !== null &&
+      typeof declaration !== 'undefined'
     ) {
       context.boxedMutableCaptureDeclarations.add(declaration)
     }
@@ -1673,7 +1716,7 @@ function visitPromiseChainStatement(
   context: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): void {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return
   }
 
@@ -1722,7 +1765,11 @@ function visitPromiseChainStatement(
     const scope: CallbackScope = new Map()
     const loopScopes = appendCallbackScope(scopes, scope)
 
-    if (statement.init != null && statement.init.type === 'VariableDeclaration') {
+    if (
+      statement.init !== null &&
+      typeof statement.init !== 'undefined' &&
+      statement.init.type === 'VariableDeclaration'
+    ) {
       visitPromiseChainStatement(statement.init, loopScopes, wrappers, context, deps)
     } else {
       visitPromiseChainExpression(statement.init, loopScopes, wrappers, context, deps)
@@ -1768,7 +1815,7 @@ function visitPromiseChainStatement(
   if (statement.type === 'TryStatement') {
     visitPromiseChainStatement(statement.block, scopes, wrappers, context, deps)
 
-    if (statement.handler != null) {
+    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
       visitPromiseChainStatement(statement.handler.body, scopes, wrappers, context, deps)
     }
 
@@ -1783,7 +1830,7 @@ function visitPromiseChainExpression(
   context: PromiseEmitContext,
   deps: PromiseChainLoweringDependencies
 ): void {
-  if (expression == null) {
+  if (expression === null || typeof expression === 'undefined') {
     return
   }
 
@@ -1884,7 +1931,10 @@ export function emitPromiseChainCallbackWrapperDeclaration(
   context.runtimeCallbackReturnOut = '(*out)'
   context.runtimeCallbackCleanupLabel = 'inox_promise_callback_cleanup'
   const bodyLines: string[] = []
-  appendLines(bodyLines, deps.emitRuntimeArrowCallbackContextLocals(wrapper, context, deps.callbackLoweringDependencies, 'context'))
+  appendLines(
+    bodyLines,
+    deps.emitRuntimeArrowCallbackContextLocals(wrapper, context, deps.callbackLoweringDependencies, 'context')
+  )
   appendLines(bodyLines, emitPromiseChainCallbackParamPrelude(wrapper, context))
   const statementLines = emitPromiseChainCallbackStatementLines(wrapper, context, deps)
 
@@ -1918,10 +1968,13 @@ export function emitPromiseChainCallbackWrapperDeclaration(
   return lines
 }
 
-function emitPromiseChainCallbackParamPrelude(wrapper: CPromiseChainWrapper, context: PromiseFunctionContext): string[] {
+function emitPromiseChainCallbackParamPrelude(
+  wrapper: CPromiseChainWrapper,
+  context: PromiseFunctionContext
+): string[] {
   const param = wrapper.expression.params[0]
 
-  if (param == null) {
+  if (param === null || typeof param === 'undefined') {
     return ['(void)inox_value_input;']
   }
 
@@ -1968,7 +2021,7 @@ function emitPromiseChainCallbackStatementLines(
 ): string[] {
   const body = resolvePromiseChainArrowBody(wrapper.expression)
 
-  if (body == null) {
+  if (body === null || typeof body === 'undefined') {
     return []
   }
 
@@ -1990,7 +2043,7 @@ function emitPromiseChainCallbackReturnLines(
   context: PromiseFunctionContext,
   deps: PromiseChainLoweringDependencies
 ): string[] {
-  if (returnExpression == null) {
+  if (returnExpression === null || typeof returnExpression === 'undefined') {
     return []
   }
 
@@ -2017,7 +2070,7 @@ function emitPromiseChainCallbackReturnLines(
 }
 
 export function resolvePromiseChainArrowBody(callback: AnyNode | null | undefined): PromiseChainArrowBody | null {
-  if (callback == null || callback.type !== 'ArrowFunctionExpression') {
+  if (callback === null || typeof callback === 'undefined' || callback.type !== 'ArrowFunctionExpression') {
     return null
   }
 
@@ -2032,13 +2085,17 @@ export function resolvePromiseChainArrowBody(callback: AnyNode | null | undefine
 
   const statements = promiseChainCallbackBodyStatements(callback)
 
-  if (statements == null || statements.length === 0) {
+  if (statements === null || typeof statements === 'undefined' || statements.length === 0) {
     return null
   }
 
   const returnStatement = lastPromiseChainCallbackStatement(statements)
 
-  if (returnStatement == null || returnStatement.type !== 'ReturnStatement') {
+  if (
+    returnStatement === null ||
+    typeof returnStatement === 'undefined' ||
+    returnStatement.type !== 'ReturnStatement'
+  ) {
     return null
   }
 
@@ -2066,7 +2123,7 @@ export function resolvePromiseChainArrowBody(callback: AnyNode | null | undefine
 }
 
 function isStraightLinePromiseCallbackStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return false
   }
 
@@ -2074,7 +2131,7 @@ function isStraightLinePromiseCallbackStatement(statement: AnyNode | null | unde
 }
 
 function isPromiseChainCallbackStatement(statement: AnyNode | null | undefined): boolean {
-  if (statement == null) {
+  if (statement === null || typeof statement === 'undefined') {
     return false
   }
 
@@ -2103,8 +2160,12 @@ function isPromiseChainCallbackStatement(statement: AnyNode | null | undefined):
   if (statement.type === 'TryStatement') {
     return (
       isPromiseChainCallbackStatement(statement.block) &&
-      (statement.handler == null || isPromiseChainCallbackStatement(statement.handler.body)) &&
-      (statement.finalizer == null || isPromiseChainCallbackStatement(statement.finalizer))
+      (statement.handler === null ||
+        typeof statement.handler === 'undefined' ||
+        isPromiseChainCallbackStatement(statement.handler.body)) &&
+      (statement.finalizer === null ||
+        typeof statement.finalizer === 'undefined' ||
+        isPromiseChainCallbackStatement(statement.finalizer))
     )
   }
 
@@ -2114,7 +2175,9 @@ function isPromiseChainCallbackStatement(statement: AnyNode | null | undefined):
 
   return (
     isPromiseChainCallbackStatement(statement.consequent) &&
-    (statement.alternate == null || isPromiseChainCallbackStatement(statement.alternate))
+    (statement.alternate === null ||
+      typeof statement.alternate === 'undefined' ||
+      isPromiseChainCallbackStatement(statement.alternate))
   )
 }
 

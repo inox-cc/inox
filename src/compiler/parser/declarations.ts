@@ -45,7 +45,7 @@ type VariableDeclarationOptions = {
 }
 
 function nullableTokenLocation(token: Token | null): SourceLocation | null {
-  if (token == null) {
+  if (token === null || typeof token === 'undefined') {
     return null
   }
 
@@ -99,7 +99,7 @@ export function createParam(
     loc: locFromToken(token)
   }
 
-  if (defaultValue != null) {
+  if (defaultValue !== null && typeof defaultValue !== 'undefined') {
     param.defaultValue = defaultValue
   }
 
@@ -195,7 +195,7 @@ export function createFieldDefinition(options: FieldDefinitionOptions): AnyNode 
   return {
     type: 'FieldDefinition',
     name: options.name.value,
-    static: options.staticToken != null,
+    static: options.staticToken !== null && typeof options.staticToken !== 'undefined',
     staticLoc: nullableTokenLocation(options.staticToken),
     readonly: options.readOnly,
     ownership: options.ownership,
@@ -209,7 +209,7 @@ export function createMethodDefinition(options: MethodDefinitionOptions): AnyNod
   return {
     type: 'MethodDefinition',
     name: options.name.value,
-    static: options.staticToken != null,
+    static: options.staticToken !== null && typeof options.staticToken !== 'undefined',
     staticLoc: nullableTokenLocation(options.staticToken),
     loc: locFromToken(options.name),
     params: options.params,
