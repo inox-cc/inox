@@ -5,8 +5,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CompileError, formatDiagnostics } from '../src/compiler/diagnostics.ts'
-import { compileFile, compileFileToCModules } from '../src/compiler/index.ts'
+import { CompileError, formatDiagnostics } from '../compiler/diagnostics.ts'
+import { compileFile, compileFileToCModules } from '../compiler/index.ts'
 import type {
   CompileOptions,
   IrRuntimeRequirement,
@@ -16,7 +16,7 @@ import type {
   TlsBackend,
   RuntimeLoopBackend,
   RuntimeProfile
-} from '../src/compiler/types.ts'
+} from '../compiler/types.ts'
 import { defaultEmitOutput, parseCliArgs, usage } from '../scripts/lib/cli-args.ts'
 import type { CliPlan } from '../scripts/lib/cli-args.ts'
 
@@ -42,34 +42,34 @@ type CompileCOptions = {
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 const cRuntimeSourceGroups = {
-  async: ['runtime/c/src/async/loop.c', 'runtime/c/src/async/promise.c'],
-  binary: ['runtime/c/src/binary/binary.c'],
-  childProcess: ['runtime/c/src/child_process/child_process.c'],
-  console: ['runtime/c/src/console/console.c'],
-  crypto: ['runtime/c/src/crypto/crypto.c'],
-  debug: ['runtime/c/src/core/debug.c'],
-  dgram: ['runtime/c/src/network/dgram.c'],
-  fetch: ['runtime/c/src/network/fetch.c'],
-  fs: ['runtime/c/src/fs/fs.c'],
-  http: ['runtime/c/src/network/http.c'],
-  json: ['runtime/c/src/json/json.c'],
-  net: ['runtime/c/src/network/net.c'],
-  os: ['runtime/c/src/os/os.c'],
-  path: ['runtime/c/src/path/path.c'],
-  process: ['runtime/c/src/process/process.c'],
-  url: ['runtime/c/src/url/url.c'],
+  async: ['runtime/src/async/loop.c', 'runtime/src/async/promise.c'],
+  binary: ['runtime/src/binary/binary.c'],
+  childProcess: ['runtime/src/child_process/child_process.c'],
+  console: ['runtime/src/console/console.c'],
+  crypto: ['runtime/src/crypto/crypto.c'],
+  debug: ['runtime/src/core/debug.c'],
+  dgram: ['runtime/src/network/dgram.c'],
+  fetch: ['runtime/src/network/fetch.c'],
+  fs: ['runtime/src/fs/fs.c'],
+  http: ['runtime/src/network/http.c'],
+  json: ['runtime/src/json/json.c'],
+  net: ['runtime/src/network/net.c'],
+  os: ['runtime/src/os/os.c'],
+  path: ['runtime/src/path/path.c'],
+  process: ['runtime/src/process/process.c'],
+  url: ['runtime/src/url/url.c'],
   managed: [
-    'runtime/c/src/core/value.c',
-    'runtime/c/src/core/allocator.c',
-    'runtime/c/src/core/callback.c',
-    'runtime/c/src/strings/string.c',
-    'runtime/c/src/objects/object.c',
-    'runtime/c/src/arrays/array.c',
-    'runtime/c/src/collections/map.c',
-    'runtime/c/src/collections/set.c'
+    'runtime/src/core/value.c',
+    'runtime/src/core/allocator.c',
+    'runtime/src/core/callback.c',
+    'runtime/src/strings/string.c',
+    'runtime/src/objects/object.c',
+    'runtime/src/arrays/array.c',
+    'runtime/src/collections/map.c',
+    'runtime/src/collections/set.c'
   ],
-  time: ['runtime/c/src/time/time.c'],
-  weak: ['runtime/c/src/core/weak.c']
+  time: ['runtime/src/time/time.c'],
+  weak: ['runtime/src/core/weak.c']
 }
 const configFileNames = ['inox.config.json', 'inox.json']
 
@@ -244,7 +244,7 @@ async function compileCExecutable(entry: string, out: string, options: CompileCO
       ...configCFlags(config),
       ...splitCommandWords(process.env.CFLAGS),
       ...cRuntimeCFlagsForRequirements(runtimeRequirements, tlsBackend),
-      `-I${join(repoRoot, 'runtime/c/include')}`,
+      `-I${join(repoRoot, 'runtime/include')}`,
       source,
       ...runtimeSources,
       ...cRuntimeLdFlagsForTlsBackend(tlsBackend),
@@ -434,14 +434,14 @@ function cRuntimeLdFlagsForTlsBackend(tlsBackend: TlsBackend): string[] {
 
 function cRuntimeTlsSource(tlsBackend: TlsBackend): string {
   if (tlsBackend === 'boringssl') {
-    return 'runtime/c/src/network/tls-boringssl.c'
+    return 'runtime/src/network/tls-boringssl.c'
   }
 
   if (tlsBackend === 'openssl') {
-    return 'runtime/c/src/network/tls-openssl.c'
+    return 'runtime/src/network/tls-openssl.c'
   }
 
-  return 'runtime/c/src/network/tls.c'
+  return 'runtime/src/network/tls.c'
 }
 
 function usesCHeader(code: string, name: string): boolean {

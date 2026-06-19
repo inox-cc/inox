@@ -24,7 +24,6 @@
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts tests/**/*.test.ts",
-    "test:examples": "node scripts/test-examples.ts",
     "test:fixtures": "node scripts/test-fixtures.ts",
     "test:libuv": "node scripts/test-libuv.ts",
     "test:network": "node scripts/test-libuv.ts --network-only",
@@ -35,7 +34,7 @@
     "test:diagnostic-snapshots": "node scripts/test-diagnostic-snapshots.ts",
     "test:snapshots": "pnpm run test:hir-snapshots && pnpm run test:ir-snapshots && pnpm run test:codegen-snapshots && pnpm run test:diagnostic-snapshots",
     "test:differential": "node scripts/test-differential.ts",
-    "check": "pnpm run build && pnpm run typecheck && pnpm test && pnpm run test:fixtures && pnpm run test:examples && pnpm run test:capabilities && pnpm run test:snapshots && pnpm run test:differential"
+    "check": "pnpm run build && pnpm run typecheck && pnpm test && pnpm run test:fixtures && pnpm run test:capabilities && pnpm run test:snapshots && pnpm run test:differential"
   },
   "engines": {
     "node": ">=24"

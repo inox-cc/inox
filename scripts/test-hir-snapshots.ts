@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import { compileSource } from '../src/compiler/index.ts'
-import type { AnyNode, ProgramNode, SourceLocation } from '../src/compiler/types.ts'
+import { compileSource } from '../compiler/index.ts'
+import type { AnyNode, ProgramNode, SourceLocation } from '../compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
 import { runSnapshotSuite } from './lib/snapshot-runner.ts'
 

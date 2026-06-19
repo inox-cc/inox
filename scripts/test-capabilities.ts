@@ -1,8 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { CompileError } from '../src/compiler/diagnostics.ts'
-import { compileFile } from '../src/compiler/index.ts'
-import type { CompileOptions, CompileTarget, RuntimeBudgets, RuntimeCapabilities } from '../src/compiler/types.ts'
+import { CompileError } from '../compiler/diagnostics.ts'
+import { compileFile } from '../compiler/index.ts'
+import type { CompileOptions, CompileTarget, RuntimeBudgets, RuntimeCapabilities } from '../compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
 
 type CapabilityExpectation = {

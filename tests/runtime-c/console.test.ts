@@ -72,17 +72,17 @@ int main(void) {
     )
 
     const compile = await runCommand('cc', [
-      '-Iruntime/c/include',
+      '-Iruntime/include',
       source,
-      'runtime/c/src/core/value.c',
-      'runtime/c/src/core/allocator.c',
-      'runtime/c/src/core/callback.c',
-      'runtime/c/src/strings/string.c',
-      'runtime/c/src/objects/object.c',
-      'runtime/c/src/arrays/array.c',
-      'runtime/c/src/collections/map.c',
-      'runtime/c/src/collections/set.c',
-      'runtime/c/src/console/console.c',
+      'runtime/src/core/value.c',
+      'runtime/src/core/allocator.c',
+      'runtime/src/core/callback.c',
+      'runtime/src/strings/string.c',
+      'runtime/src/objects/object.c',
+      'runtime/src/arrays/array.c',
+      'runtime/src/collections/map.c',
+      'runtime/src/collections/set.c',
+      'runtime/src/console/console.c',
       '-o',
       output
     ])

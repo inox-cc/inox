@@ -8,21 +8,21 @@ import {
   collectExports as collectExportsFromFacade,
   createMemoryCompilerHost,
   createNodeCompilerHost
-} from '../src/compiler/module-graph.ts'
-import { collectExports, moduleId } from '../src/compiler/modules/exports.ts'
-import { buildModuleGraph } from '../src/compiler/modules/graph.ts'
-import { resolveExistingSource, resolveImport } from '../src/compiler/modules/resolve.ts'
+} from '../compiler/module-graph.ts'
+import { collectExports, moduleId } from '../compiler/modules/exports.ts'
+import { buildModuleGraph } from '../compiler/modules/graph.ts'
+import { resolveExistingSource, resolveImport } from '../compiler/modules/resolve.ts'
 import {
   compileFileToCModules,
   compileMemoryPackageToCModules,
   compileMemoryPackageToIrModules
-} from '../src/compiler/index.ts'
+} from '../compiler/index.ts'
 import {
   createImportAliasDeclaration,
   insertImportSyntheticDeclarations
-} from '../src/compiler/modules/synthetic-imports.ts'
-import { isRuntimeBuiltinImportSource } from '../src/compiler/runtime-builtins.ts'
-import type { AnyNode, ProgramNode } from '../src/compiler/types.ts'
+} from '../compiler/modules/synthetic-imports.ts'
+import { isRuntimeBuiltinImportSource } from '../compiler/runtime-builtins.ts'
+import type { AnyNode, ProgramNode } from '../compiler/types.ts'
 
 const nodeCompilerHost = createNodeCompilerHost()
 

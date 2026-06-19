@@ -1,13 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { collectGlobalUsages, collectIrGlobalRoots, collectIrGlobalUsages } from '../src/compiler/ir/globals.ts'
+import { collectGlobalUsages, collectIrGlobalRoots, collectIrGlobalUsages } from '../compiler/ir/globals.ts'
 import {
   collectIrGlobalRoots as collectIrGlobalRootsFromFacade,
   collectIrGlobalUsages as collectIrGlobalUsagesFromFacade,
   lowerHirToIr
-} from '../src/compiler/ir.ts'
-import type { ProgramNode } from '../src/compiler/types.ts'
+} from '../compiler/ir.ts'
+import type { ProgramNode } from '../compiler/types.ts'
 
 test('collects IR global usages from references and member paths', () => {
   const program: ProgramNode = {

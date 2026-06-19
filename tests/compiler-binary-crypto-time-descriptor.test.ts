@@ -7,13 +7,13 @@ import {
   binaryRuntimeReturnType,
   binaryStaticRuntimeMethodNameFromPath,
   isBinaryGlobalUsagePath
-} from '../src/compiler/stdlib/descriptors/binary.ts'
-import { cryptoRuntimeMethodNameFromPath } from '../src/compiler/stdlib/descriptors/crypto.ts'
+} from '../compiler/stdlib/descriptors/binary.ts'
+import { cryptoRuntimeMethodNameFromPath } from '../compiler/stdlib/descriptors/crypto.ts'
 import {
   timeRuntimeCFunctionNameFromPath,
   timeRuntimeCapabilityFromPath,
   timeRuntimeMethodNameFromPath
-} from '../src/compiler/stdlib/descriptors/time.ts'
+} from '../compiler/stdlib/descriptors/time.ts'
 
 test('maps binary constructors and methods to runtime metadata', () => {
   assert.equal(binaryStaticRuntimeMethodNameFromPath(['Buffer', 'from']), 'from')

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { emitCIdentifier, escapeCString, utf8ByteLength } from '../../src/compiler/c/identifiers.ts'
+import { emitCIdentifier, escapeCString, utf8ByteLength } from '../../compiler/c/identifiers.ts'
 
 test('sanitizes C identifiers without regular expressions', () => {
   assert.equal(emitCIdentifier('module/file-name.ts'), 'module_file_name_ts')

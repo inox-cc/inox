@@ -3,9 +3,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { CompileError } from '../src/compiler/diagnostics.ts'
-import { compileSource } from '../src/compiler/index.ts'
-import type { CompileTarget } from '../src/compiler/types.ts'
+import { CompileError } from '../compiler/diagnostics.ts'
+import { compileSource } from '../compiler/index.ts'
+import type { CompileTarget } from '../compiler/types.ts'
 import { runCommand, type CommandResult } from '../scripts/lib/run-command.ts'
 
 test('lowers C console.log template interpolation', () => {
@@ -336,31 +336,31 @@ function assertDiagnostic(source: string, code: string, options: { target?: Comp
 
 function compileRuntimeProgram(source: string, output: string): Promise<CommandResult> {
   return runCommand('cc', [
-    '-Iruntime/c/include',
+    '-Iruntime/include',
     source,
-    'runtime/c/src/core/value.c',
-    'runtime/c/src/core/allocator.c',
-    'runtime/c/src/core/callback.c',
-    'runtime/c/src/core/debug.c',
-    'runtime/c/src/core/weak.c',
-    'runtime/c/src/binary/binary.c',
-    'runtime/c/src/crypto/crypto.c',
-    'runtime/c/src/async/loop.c',
-    'runtime/c/src/async/promise.c',
-    'runtime/c/src/strings/string.c',
-    'runtime/c/src/child_process/child_process.c',
-    'runtime/c/src/objects/object.c',
-    'runtime/c/src/arrays/array.c',
-    'runtime/c/src/collections/map.c',
-    'runtime/c/src/collections/set.c',
-    'runtime/c/src/console/console.c',
-    'runtime/c/src/fs/fs.c',
-    'runtime/c/src/json/json.c',
-    'runtime/c/src/os/os.c',
-    'runtime/c/src/path/path.c',
-    'runtime/c/src/process/process.c',
-    'runtime/c/src/time/time.c',
-    'runtime/c/src/url/url.c',
+    'runtime/src/core/value.c',
+    'runtime/src/core/allocator.c',
+    'runtime/src/core/callback.c',
+    'runtime/src/core/debug.c',
+    'runtime/src/core/weak.c',
+    'runtime/src/binary/binary.c',
+    'runtime/src/crypto/crypto.c',
+    'runtime/src/async/loop.c',
+    'runtime/src/async/promise.c',
+    'runtime/src/strings/string.c',
+    'runtime/src/child_process/child_process.c',
+    'runtime/src/objects/object.c',
+    'runtime/src/arrays/array.c',
+    'runtime/src/collections/map.c',
+    'runtime/src/collections/set.c',
+    'runtime/src/console/console.c',
+    'runtime/src/fs/fs.c',
+    'runtime/src/json/json.c',
+    'runtime/src/os/os.c',
+    'runtime/src/path/path.c',
+    'runtime/src/process/process.c',
+    'runtime/src/time/time.c',
+    'runtime/src/url/url.c',
     '-o',
     output
   ])

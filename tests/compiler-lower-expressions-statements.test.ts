@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { lowerExpression } from '../src/compiler/lower/expressions.ts'
-import { lowerStatement, lowerStatementList } from '../src/compiler/lower/statements.ts'
-import { createLowerContext } from '../src/compiler/lower/type-resolution.ts'
-import type { AnyNode, ProgramNode } from '../src/compiler/types.ts'
+import { lowerExpression } from '../compiler/lower/expressions.ts'
+import { lowerStatement, lowerStatementList } from '../compiler/lower/statements.ts'
+import { createLowerContext } from '../compiler/lower/type-resolution.ts'
+import type { AnyNode, ProgramNode } from '../compiler/types.ts'
 
 test('lowers expression trees and infers array and binary value types', () => {
   const expression: AnyNode = {

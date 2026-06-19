@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { emitRuntimeFieldValueCheck, emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../../src/compiler/c/runtime-values.ts'
+import { emitRuntimeFieldValueCheck, emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../../compiler/c/runtime-values.ts'
 
 function createContext() {
   return {

@@ -15,7 +15,7 @@ set(INOX_CLI "../bin/inox.ts")
 set(INOX_ENTRY "src/index.ts")
 set(INOX_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../runtime/c" "${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../runtime" "${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 
 file(GLOB_RECURSE INOX_TS_SOURCES CONFIGURE_DEPENDS
   "src/*.ts"
@@ -23,7 +23,7 @@ file(GLOB_RECURSE INOX_TS_SOURCES CONFIGURE_DEPENDS
 
 file(GLOB_RECURSE INOX_COMPILER_SOURCES CONFIGURE_DEPENDS
   "../bin/*.ts"
-  "../src/compiler/*.ts"
+  "../compiler/*.ts"
 )
 
 set(INOX_GENERATED_SOURCES)

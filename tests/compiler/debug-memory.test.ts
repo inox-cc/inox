@@ -3,7 +3,7 @@ import { assert, assertDiagnostic, compileSource } from '../helpers/compiler-smo
 import {
   debugRuntimeMethodNameFromKnownPath,
   isDebugRuntimeMethodPath
-} from '../../src/compiler/stdlib/descriptors/debug.ts'
+} from '../../compiler/stdlib/descriptors/debug.ts'
 
 test('lowers inox.__debug.memory to C debug memory snapshots', () => {
   const result = compileSource(

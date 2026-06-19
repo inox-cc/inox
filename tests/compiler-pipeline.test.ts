@@ -11,7 +11,7 @@ import {
   compileSourceToIr,
   emitTargetFromIr,
   runCStaticChecks
-} from '../src/compiler/index.ts'
+} from '../compiler/index.ts'
 
 test('compiles source to IR before emitting target code', () => {
   const compiled = compileSourceToIr(

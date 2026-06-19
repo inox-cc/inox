@@ -3,7 +3,7 @@ import { assert, cLibuvOptions, compileSource, CompileError } from '../helpers/c
 import {
   cryptoRuntimeMethodNameFromKnownPath,
   isCryptoRuntimeMethodPath
-} from '../../src/compiler/stdlib/descriptors/crypto.ts'
+} from '../../compiler/stdlib/descriptors/crypto.ts'
 
 test('lowers default node:crypto random methods to the C crypto runtime', () => {
   const result = compileSource(

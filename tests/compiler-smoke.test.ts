@@ -1,5 +1,5 @@
 import test from 'node:test'
-import { emitPreparedNumberExpression } from '../src/compiler/c/values/expressions.ts'
+import { emitPreparedNumberExpression } from '../compiler/c/values/expressions.ts'
 import {
   assert,
   assertDiagnostic,

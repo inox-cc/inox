@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { visitAstLike } from '../src/compiler/ast-visit.ts'
+import { visitAstLike } from '../compiler/ast-visit.ts'
 
 test('visits AST-like objects before their children', () => {
   const seen: string[] = []

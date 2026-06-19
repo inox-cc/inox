@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isJsonRuntimeMethod, jsonRuntimeMethodNameFromPath } from '../src/compiler/stdlib/descriptors/json.ts'
+import { isJsonRuntimeMethod, jsonRuntimeMethodNameFromPath } from '../compiler/stdlib/descriptors/json.ts'
 import {
   isMathRuntimeMethod,
   knownMathRuntimeArgCount,
   mathRuntimeArgCount,
   mathRuntimeMethodNameFromPath
-} from '../src/compiler/stdlib/descriptors/math.ts'
+} from '../compiler/stdlib/descriptors/math.ts'
 
 test('maps JSON paths to runtime methods', () => {
   assert.equal(jsonRuntimeMethodNameFromPath(['JSON', 'parse']), 'parse')

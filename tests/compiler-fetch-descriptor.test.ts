@@ -10,7 +10,7 @@ import {
   isFetchRedirectMode,
   isFetchResponseBodyMethod,
   isSupportedFetchResponseBodyMethod
-} from '../src/compiler/stdlib/descriptors/fetch.ts'
+} from '../compiler/stdlib/descriptors/fetch.ts'
 
 test('classifies fetch globals and init options', () => {
   assert.equal(isFetchGlobalRoot('fetch'), true)

@@ -2,45 +2,45 @@ import { test } from 'node:test'
 import { readdir } from 'node:fs/promises'
 import { dirname, relative } from 'node:path'
 
-import { compileMemoryPackageToCModules } from '../src/compiler/index.ts'
+import { compileMemoryPackageToCModules } from '../compiler/index.ts'
 import { assert, join, mkdir, mkdtemp, readFile, repoRoot, rm, runCommand, tmpdir, writeFile } from './helpers/runtime-c.ts'
 
 const runtimeSources = [
-  'runtime/c/src/arrays/array.c',
-  'runtime/c/src/async/loop.c',
-  'runtime/c/src/async/promise.c',
-  'runtime/c/src/binary/binary.c',
-  'runtime/c/src/child_process/child_process.c',
-  'runtime/c/src/collections/map.c',
-  'runtime/c/src/collections/set.c',
-  'runtime/c/src/console/console.c',
-  'runtime/c/src/core/allocator.c',
-  'runtime/c/src/core/callback.c',
-  'runtime/c/src/core/debug.c',
-  'runtime/c/src/core/value.c',
-  'runtime/c/src/core/weak.c',
-  'runtime/c/src/crypto/crypto.c',
-  'runtime/c/src/fs/fs.c',
-  'runtime/c/src/json/json.c',
-  'runtime/c/src/network/dgram.c',
-  'runtime/c/src/network/fetch.c',
-  'runtime/c/src/network/http.c',
-  'runtime/c/src/network/net.c',
-  'runtime/c/src/network/tls.c',
-  'runtime/c/src/objects/object.c',
-  'runtime/c/src/os/os.c',
-  'runtime/c/src/path/path.c',
-  'runtime/c/src/process/process.c',
-  'runtime/c/src/strings/string.c',
-  'runtime/c/src/time/time.c',
-  'runtime/c/src/url/url.c'
+  'runtime/src/arrays/array.c',
+  'runtime/src/async/loop.c',
+  'runtime/src/async/promise.c',
+  'runtime/src/binary/binary.c',
+  'runtime/src/child_process/child_process.c',
+  'runtime/src/collections/map.c',
+  'runtime/src/collections/set.c',
+  'runtime/src/console/console.c',
+  'runtime/src/core/allocator.c',
+  'runtime/src/core/callback.c',
+  'runtime/src/core/debug.c',
+  'runtime/src/core/value.c',
+  'runtime/src/core/weak.c',
+  'runtime/src/crypto/crypto.c',
+  'runtime/src/fs/fs.c',
+  'runtime/src/json/json.c',
+  'runtime/src/network/dgram.c',
+  'runtime/src/network/fetch.c',
+  'runtime/src/network/http.c',
+  'runtime/src/network/net.c',
+  'runtime/src/network/tls.c',
+  'runtime/src/objects/object.c',
+  'runtime/src/os/os.c',
+  'runtime/src/path/path.c',
+  'runtime/src/process/process.c',
+  'runtime/src/strings/string.c',
+  'runtime/src/time/time.c',
+  'runtime/src/url/url.c'
 ]
 
 test('emits C modules for the inox compileSource facade driver', { timeout: 180_000 }, async () => {
   const files = await readCompilerSources()
   files.push({
     path: '/project/selfhost-compile-driver.ts',
-    source: `import { compileSource } from './src/compiler/index.ts'
+    source: `import { compileSource } from './compiler/index.ts'
 
 try {
   const result = compileSource('const value: number = 1\\n', {
@@ -81,8 +81,8 @@ test('links and runs the inox self-hosted parser driver', { timeout: 180_000 }, 
     const files = await readCompilerSources()
     files.push({
       path: '/project/selfhost-driver.ts',
-      source: `import { tokenize } from './src/compiler/lexer.ts'
-import { parse } from './src/compiler/parser.ts'
+      source: `import { tokenize } from './compiler/lexer.ts'
+import { parse } from './compiler/parser.ts'
 
 try {
   const tokens = tokenize("function main(): void {}\\n", { file: null })
@@ -120,7 +120,7 @@ try {
       '-std=c11',
       '-DINOX_LOOP_BACKEND_EMBEDDED=1',
       '-DINOX_TLS_BACKEND_NONE=1',
-      '-Iruntime/c/include',
+      '-Iruntime/include',
       `-I${dir}`,
       ...generatedSources,
       ...runtimeSources,
@@ -140,7 +140,7 @@ try {
 })
 
 async function readCompilerSources(): Promise<Array<{ path: string; source: string }>> {
-  const sourceRoot = join(repoRoot, 'src/compiler')
+  const sourceRoot = join(repoRoot, 'compiler')
   const paths = await readCompilerSourcePaths(sourceRoot)
   paths.sort()
   const files: Array<{ path: string; source: string }> = []

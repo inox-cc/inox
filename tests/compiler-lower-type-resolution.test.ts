@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createLowerContext, resolveDeclaredType } from '../src/compiler/lower/type-resolution.ts'
-import type { ProgramNode } from '../src/compiler/types.ts'
+import { createLowerContext, resolveDeclaredType } from '../compiler/lower/type-resolution.ts'
+import type { ProgramNode } from '../compiler/types.ts'
 
 const typeProgram: ProgramNode = {
   type: 'Program',

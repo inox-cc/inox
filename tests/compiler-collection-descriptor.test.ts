@@ -10,7 +10,7 @@ import {
   setRuntimeMethodName,
   stringRuntimeMethodName,
   stringRuntimeReturnType
-} from '../src/compiler/stdlib/descriptors/collections.ts'
+} from '../compiler/stdlib/descriptors/collections.ts'
 
 test('maps array and collection constructors to runtime metadata', () => {
   assert.equal(arrayRuntimeMethodName('push'), 'push')

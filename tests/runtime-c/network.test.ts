@@ -72,9 +72,9 @@ int main(void) {
     )
 
     const compile = await runCommand('cc', [
-      '-Iruntime/c/include',
+      '-Iruntime/include',
       source,
-      'runtime/c/src/network/tls.c',
+      'runtime/src/network/tls.c',
       '-o',
       output
     ])
@@ -125,7 +125,7 @@ test('C runtime BoringSSL TLS client connects to local TLS server', async (t) =>
       `cmake_minimum_required(VERSION 3.22)
 project(inox_tls_smoke C CXX)
 
-add_subdirectory("${repoRoot}/runtime/c" inox_runtime_build)
+add_subdirectory("${repoRoot}/runtime" inox_runtime_build)
 add_executable(tls-client tls-client.c)
 set_property(TARGET tls-client PROPERTY LINKER_LANGUAGE CXX)
 target_link_libraries(tls-client PRIVATE inox_runtime)
@@ -380,7 +380,7 @@ console.log(response.status, text)
       `cmake_minimum_required(VERSION 3.22)
 project(inox_https_fetch_smoke C CXX)
 
-add_subdirectory("${repoRoot}/runtime/c" inox_runtime_build)
+add_subdirectory("${repoRoot}/runtime" inox_runtime_build)
 add_executable(fetch-client main.c)
 set_property(TARGET fetch-client PROPERTY LINKER_LANGUAGE CXX)
 target_link_libraries(fetch-client PRIVATE inox_runtime)
@@ -442,7 +442,7 @@ test('C runtime OpenSSL TLS backend builds when available', async (t) => {
       `cmake_minimum_required(VERSION 3.20)
 project(inox_openssl_smoke C)
 
-add_subdirectory("${repoRoot}/runtime/c" inox_runtime_build)
+add_subdirectory("${repoRoot}/runtime" inox_runtime_build)
 `
     )
 

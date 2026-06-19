@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { compileSource } from '../src/compiler/index.ts'
+import { compileSource } from '../compiler/index.ts'
 import { rootDir } from './lib/repo-checks.ts'
 import { runSnapshotSuite, type SnapshotOutput } from './lib/snapshot-runner.ts'
 

@@ -9,7 +9,7 @@ import {
   createParam,
   createTypeAliasDeclaration,
   createVariableDeclaration
-} from '../src/compiler/parser/declarations.ts'
+} from '../compiler/parser/declarations.ts'
 import {
   createArrowFunction,
   createCallExpression,
@@ -20,9 +20,9 @@ import {
   createReference,
   createReferenceFromName,
   createStringLiteral
-} from '../src/compiler/parser/expressions.ts'
-import { locFromToken } from '../src/compiler/parser/locations.ts'
-import type { Token } from '../src/compiler/types.ts'
+} from '../compiler/parser/expressions.ts'
+import { locFromToken } from '../compiler/parser/locations.ts'
+import type { Token } from '../compiler/types.ts'
 
 function token(type: string, value: string, line = 1, column = 1): Token {
   return {

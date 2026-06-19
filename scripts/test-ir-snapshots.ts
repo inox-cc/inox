@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { compileSource } from '../src/compiler/index.ts'
+import { compileSource } from '../compiler/index.ts'
 import type {
   AnyNode,
   IrFunctionDeclaration,
@@ -8,7 +8,7 @@ import type {
   IrSyntaxFeatureUsage,
   IrTopLevelItem,
   SourceLocation
-} from '../src/compiler/types.ts'
+} from '../compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
 import { runSnapshotSuite } from './lib/snapshot-runner.ts'
 

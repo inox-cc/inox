@@ -10,7 +10,7 @@ import {
   isFsSyncUsagePath,
   removedFsRuntimeMethodInfoFromPath,
   unsupportedFsRuntimeMethodMessage
-} from '../src/compiler/stdlib/descriptors/fs.ts'
+} from '../compiler/stdlib/descriptors/fs.ts'
 
 test('maps Node fs promise paths to runtime methods', () => {
   assert.deepEqual(fsRuntimeCallInfoFromPath(['fs', 'promises', 'readFile']), {

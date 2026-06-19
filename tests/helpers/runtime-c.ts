@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:tls'
 import { fileURLToPath } from 'node:url'
-import { compileSource } from '../../src/compiler/index.ts'
+import { compileSource } from '../../compiler/index.ts'
 
 export type CommandResult = {
   code: number
@@ -23,32 +23,32 @@ export function compileRuntimeProgram(
   extraArgs: string[] = []
 ): Promise<CommandResult> {
   return runCommand('cc', [
-    '-Iruntime/c/include',
+    '-Iruntime/include',
     ...extraArgs,
     source,
-    'runtime/c/src/core/value.c',
-    'runtime/c/src/core/allocator.c',
-    'runtime/c/src/core/callback.c',
-    'runtime/c/src/core/debug.c',
-    'runtime/c/src/binary/binary.c',
-    'runtime/c/src/crypto/crypto.c',
-    'runtime/c/src/core/weak.c',
-    'runtime/c/src/async/loop.c',
-    'runtime/c/src/async/promise.c',
-    'runtime/c/src/strings/string.c',
-    'runtime/c/src/child_process/child_process.c',
-    'runtime/c/src/objects/object.c',
-    'runtime/c/src/arrays/array.c',
-    'runtime/c/src/collections/map.c',
-    'runtime/c/src/collections/set.c',
-    'runtime/c/src/console/console.c',
-    'runtime/c/src/fs/fs.c',
-    'runtime/c/src/json/json.c',
-    'runtime/c/src/os/os.c',
-    'runtime/c/src/path/path.c',
-    'runtime/c/src/process/process.c',
-    'runtime/c/src/time/time.c',
-    'runtime/c/src/url/url.c',
+    'runtime/src/core/value.c',
+    'runtime/src/core/allocator.c',
+    'runtime/src/core/callback.c',
+    'runtime/src/core/debug.c',
+    'runtime/src/binary/binary.c',
+    'runtime/src/crypto/crypto.c',
+    'runtime/src/core/weak.c',
+    'runtime/src/async/loop.c',
+    'runtime/src/async/promise.c',
+    'runtime/src/strings/string.c',
+    'runtime/src/child_process/child_process.c',
+    'runtime/src/objects/object.c',
+    'runtime/src/arrays/array.c',
+    'runtime/src/collections/map.c',
+    'runtime/src/collections/set.c',
+    'runtime/src/console/console.c',
+    'runtime/src/fs/fs.c',
+    'runtime/src/json/json.c',
+    'runtime/src/os/os.c',
+    'runtime/src/path/path.c',
+    'runtime/src/process/process.c',
+    'runtime/src/time/time.c',
+    'runtime/src/url/url.c',
     '-o',
     output
   ])

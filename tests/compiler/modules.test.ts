@@ -2,8 +2,8 @@ import test from 'node:test'
 import {
   createTypeImportDeclarations,
   insertImportSyntheticDeclarations
-} from '../../src/compiler/modules/synthetic-imports.ts'
-import type { AnyNode } from '../../src/compiler/types.ts'
+} from '../../compiler/modules/synthetic-imports.ts'
+import type { AnyNode } from '../../compiler/types.ts'
 import {
   assert,
   assertDiagnostic,

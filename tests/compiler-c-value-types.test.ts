@@ -9,8 +9,8 @@ import {
   isManagedRuntimeReturnType,
   isOpaqueRuntimeValueType,
   isThrowingFunctionRuntimeOut
-} from '../src/compiler/c/value-types.ts'
-import { emitReturnValueDeclarations } from '../src/compiler/c/context.ts'
+} from '../compiler/c/value-types.ts'
+import { emitReturnValueDeclarations } from '../compiler/c/context.ts'
 
 test('treats named non-special C value types as opaque runtime values', () => {
   const names = ['CFunctionContext', 'StatementLoweringDependencies', 'ArrayCallbackBody']

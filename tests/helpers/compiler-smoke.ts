@@ -2,9 +2,9 @@ import assertModule from 'node:assert/strict'
 import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { emitCBundleFromIrModules, emitCFromIr } from '../../src/compiler/codegen-c.ts'
-import { CompileError } from '../../src/compiler/diagnostics.ts'
-import { compileFile, compileSource, compileSourceToIr } from '../../src/compiler/index.ts'
+import { emitCBundleFromIrModules, emitCFromIr } from '../../compiler/codegen-c.ts'
+import { CompileError } from '../../compiler/diagnostics.ts'
+import { compileFile, compileSource, compileSourceToIr } from '../../compiler/index.ts'
 import {
   collectIrFeatureRequirements,
   collectIrFunctionEffects,
@@ -16,8 +16,8 @@ import {
   collectIrTopLevelNodeEntries,
   collectIrTopLevelNodesFromPrograms,
   findIrEntryProgram
-} from '../../src/compiler/ir.ts'
-import type { CompileOptions } from '../../src/compiler/types.ts'
+} from '../../compiler/ir.ts'
+import type { CompileOptions } from '../../compiler/types.ts'
 
 const strictAssertMatch = assertModule.match.bind(assertModule)
 

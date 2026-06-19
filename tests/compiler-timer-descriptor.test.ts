@@ -8,7 +8,7 @@ import {
   isTimerStartMethod,
   timerRuntimeMethodNameFromPath,
   timerRuntimeMethods
-} from '../src/compiler/stdlib/descriptors/timers.ts'
+} from '../compiler/stdlib/descriptors/timers.ts'
 
 test('maps timer global paths to runtime methods', () => {
   assert.equal(timerRuntimeMethodNameFromPath(['setTimeout']), 'setTimeout')

@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { Scope } from '../src/compiler/checker/scope.ts'
-import type { SymbolInfo } from '../src/compiler/types.ts'
+import { Scope } from '../compiler/checker/scope.ts'
+import type { SymbolInfo } from '../compiler/types.ts'
 
 test('resolves bindings through parent scopes', () => {
   const parent = new Scope(null)

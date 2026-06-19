@@ -1,16 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { fsRuntimeCallInfo, isFsRuntimeImportSymbol } from '../src/compiler/checker/std/fs.ts'
-import { isJsonParseDeclaredType, jsonRuntimeMethodName } from '../src/compiler/checker/std/json.ts'
-import { isMathRuntimeMethod } from '../src/compiler/checker/std/math.ts'
-import { memberExpressionPath } from '../src/compiler/member-paths.ts'
+import { fsRuntimeCallInfo, isFsRuntimeImportSymbol } from '../compiler/checker/std/fs.ts'
+import { isJsonParseDeclaredType, jsonRuntimeMethodName } from '../compiler/checker/std/json.ts'
+import { isMathRuntimeMethod } from '../compiler/checker/std/math.ts'
+import { memberExpressionPath } from '../compiler/member-paths.ts'
 import {
   timerCallbackFunctionType,
   timerClearMethodName,
   timerRuntimeMethodName
-} from '../src/compiler/checker/std/timers.ts'
-import type { AnyNode, SymbolInfo } from '../src/compiler/types.ts'
+} from '../compiler/checker/std/timers.ts'
+import type { AnyNode, SymbolInfo } from '../compiler/types.ts'
 
 test('maps member expressions to runtime paths', () => {
   const expression: AnyNode = {

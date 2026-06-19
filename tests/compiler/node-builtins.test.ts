@@ -4,7 +4,7 @@ import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessage,
   unsupportedRuntimeBuiltinImportSources
-} from '../../src/compiler/stdlib/descriptors/node-builtins.ts'
+} from '../../compiler/stdlib/descriptors/node-builtins.ts'
 
 test('reports recognized but unsupported node builtin imports at compile time', () => {
   for (const source of unsupportedRuntimeBuiltinImportSources) {

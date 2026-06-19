@@ -11,9 +11,9 @@ import {
   collectIrTopLevelNodes,
   collectTopLevelItems,
   findIrEntryProgram
-} from '../src/compiler/ir/top-level.ts'
-import { collectIrTopLevelNodesFromPrograms } from '../src/compiler/ir.ts'
-import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from '../src/compiler/types.ts'
+} from '../compiler/ir/top-level.ts'
+import { collectIrTopLevelNodesFromPrograms } from '../compiler/ir.ts'
+import type { AnyNode, IrProgram, ModuleGraph, ProgramNode } from '../compiler/types.ts'
 
 function makeIr(body: AnyNode[]): IrProgram {
   const program: ProgramNode = {

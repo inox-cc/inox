@@ -5,7 +5,7 @@ import { createServer as createHttpServer } from 'node:http'
 import { connect, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { compileSource } from '../src/compiler/index.ts'
+import { compileSource } from '../compiler/index.ts'
 import { normalizeNewlines, runCommand } from './lib/run-command.ts'
 import { rootDir } from './lib/repo-checks.ts'
 
@@ -123,7 +123,7 @@ project(inox_libuv_timer_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_timer_smoke timer-smoke.c)
 target_link_libraries(inox_libuv_timer_smoke PRIVATE inox_runtime)
 `
@@ -297,7 +297,7 @@ project(inox_libuv_compiled_timer_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_timer_smoke generated-timer.c)
 target_link_libraries(inox_libuv_compiled_timer_smoke PRIVATE inox_runtime)
 `
@@ -365,7 +365,7 @@ project(inox_libuv_fs_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_fs_smoke fs-smoke.c)
 target_link_libraries(inox_libuv_fs_smoke PRIVATE inox_runtime)
 `
@@ -585,7 +585,7 @@ project(inox_libuv_console_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_console_smoke console-smoke.c)
 target_link_libraries(inox_libuv_console_smoke PRIVATE inox_runtime)
 `
@@ -649,7 +649,7 @@ project(inox_libuv_dgram_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_dgram_smoke dgram-smoke.c)
 target_link_libraries(inox_libuv_dgram_smoke PRIVATE inox_runtime)
 `
@@ -813,7 +813,7 @@ project(inox_libuv_dgram_connected_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_dgram_connected_smoke dgram-connected-smoke.c)
 target_link_libraries(inox_libuv_dgram_connected_smoke PRIVATE inox_runtime)
 `
@@ -958,7 +958,7 @@ project(inox_libuv_dgram_options_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_dgram_options_smoke dgram-options-smoke.c)
 target_link_libraries(inox_libuv_dgram_options_smoke PRIVATE inox_runtime)
 `
@@ -1076,7 +1076,7 @@ project(inox_libuv_compiled_dgram_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_dgram_smoke generated-dgram-server.c)
 target_link_libraries(inox_libuv_compiled_dgram_smoke PRIVATE inox_runtime)
 `
@@ -1192,7 +1192,7 @@ project(inox_libuv_compiled_dgram_connected_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_dgram_connected_smoke generated-dgram-connected-client.c)
 target_link_libraries(inox_libuv_compiled_dgram_connected_smoke PRIVATE inox_runtime)
 `
@@ -1304,7 +1304,7 @@ project(inox_libuv_compiled_dgram_options_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_dgram_options_smoke generated-dgram-options.c)
 target_link_libraries(inox_libuv_compiled_dgram_options_smoke PRIVATE inox_runtime)
 `
@@ -1349,7 +1349,7 @@ project(inox_libuv_net_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_net_smoke net-smoke.c)
 target_link_libraries(inox_libuv_net_smoke PRIVATE inox_runtime)
 `
@@ -1620,7 +1620,7 @@ project(inox_libuv_compiled_net_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_net_smoke generated-net-server.c)
 target_link_libraries(inox_libuv_compiled_net_smoke PRIVATE inox_runtime)
 `
@@ -1753,7 +1753,7 @@ project(inox_libuv_compiled_net_client_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_net_client_smoke generated-net-client.c)
 target_link_libraries(inox_libuv_compiled_net_client_smoke PRIVATE inox_runtime)
 `
@@ -1803,7 +1803,7 @@ project(inox_libuv_http_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_http_smoke http-smoke.c)
 target_link_libraries(inox_libuv_http_smoke PRIVATE inox_runtime)
 `
@@ -1965,7 +1965,7 @@ project(inox_libuv_compiled_http_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_http_smoke generated-http-server.c)
 target_link_libraries(inox_libuv_compiled_http_smoke PRIVATE inox_runtime)
 `
@@ -2064,7 +2064,7 @@ project(inox_libuv_fetch_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_fetch_smoke fetch-smoke.c)
 target_link_libraries(inox_libuv_fetch_smoke PRIVATE inox_runtime)
 `
@@ -2262,7 +2262,7 @@ project(inox_libuv_compiled_fetch_client_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_fetch_client_smoke generated-fetch-client.c)
 target_link_libraries(inox_libuv_compiled_fetch_client_smoke PRIVATE inox_runtime)
 `
@@ -2352,7 +2352,7 @@ project(inox_libuv_compiled_fetch_chunked_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_fetch_chunked_smoke generated-fetch-chunked.c)
 target_link_libraries(inox_libuv_compiled_fetch_chunked_smoke PRIVATE inox_runtime)
 `
@@ -2445,7 +2445,7 @@ project(inox_libuv_compiled_fetch_abort_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_fetch_abort_smoke generated-fetch-abort.c)
 target_link_libraries(inox_libuv_compiled_fetch_abort_smoke PRIVATE inox_runtime)
 `
@@ -2553,7 +2553,7 @@ project(inox_libuv_compiled_fetch_redirect_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_fetch_redirect_smoke generated-fetch-redirect.c)
 target_link_libraries(inox_libuv_compiled_fetch_redirect_smoke PRIVATE inox_runtime)
 `
@@ -2630,7 +2630,7 @@ project(inox_libuv_compiled_http_fetch_smoke C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_subdirectory("${rootDir}/runtime/c" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${rootDir}/runtime" "\${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 add_executable(inox_libuv_compiled_http_fetch_server generated-http-fetch-server.c)
 target_link_libraries(inox_libuv_compiled_http_fetch_server PRIVATE inox_runtime)
 add_executable(inox_libuv_compiled_http_fetch_client generated-http-fetch-client.c)

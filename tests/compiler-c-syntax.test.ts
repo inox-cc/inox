@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { compileSource } from '../src/compiler/core.ts'
-import { containsAwaitExpression } from '../src/compiler/c/syntax.ts'
-import type { AnyNode } from '../src/compiler/types.ts'
+import { compileSource } from '../compiler/core.ts'
+import { containsAwaitExpression } from '../compiler/c/syntax.ts'
+import type { AnyNode } from '../compiler/types.ts'
 
 test('detects await expressions inside syntax node arrays', () => {
   const nodes: AnyNode[] = [

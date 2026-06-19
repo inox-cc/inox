@@ -554,7 +554,7 @@ console.log('text', text)
 
     const build = await runCommand('cc', [
       '-I',
-      join(repoRoot, 'runtime/c/include'),
+      join(repoRoot, 'runtime/include'),
       join(generated, 'src/main.c'),
       join(generated, 'src/dep.c'),
       join(generated, 'src/util.c'),
@@ -651,8 +651,8 @@ exec cc "$@"
     assert.match(invocation, /-DINOX_TEST_CFLAG=1/)
     assert.match(invocation, /<-Llinker path with spaces>/)
     assert.match(invocation, /-DINOX_TEST_LDFLAG=1/)
-    assert.match(invocation, /runtime\/c\/src\/console\/console\.c/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\/fs\/fs\.c/)
+    assert.match(invocation, /runtime\/src\/console\/console\.c/)
+    assert.doesNotMatch(invocation, /runtime\/src\/fs\/fs\.c/)
     assert.equal(run.code, 0)
     assert.equal(run.stdout, 'hello\n')
   } finally {
@@ -706,11 +706,11 @@ exec cc "$@"
 
     const invocation = await readFile(log, 'utf8')
 
-    assert.match(invocation, /runtime\/c\/src\/time\/time\.c/)
-    assert.match(invocation, /runtime\/c\/src\/console\/console\.c/)
-    assert.match(invocation, /runtime\/c\/src\/core\/value\.c/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\/fs\/fs\.c/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\/json\/json\.c/)
+    assert.match(invocation, /runtime\/src\/time\/time\.c/)
+    assert.match(invocation, /runtime\/src\/console\/console\.c/)
+    assert.match(invocation, /runtime\/src\/core\/value\.c/)
+    assert.doesNotMatch(invocation, /runtime\/src\/fs\/fs\.c/)
+    assert.doesNotMatch(invocation, /runtime\/src\/json\/json\.c/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -764,8 +764,8 @@ exit 0
     const invocation = await readFile(log, 'utf8')
 
     assert.match(invocation, /-DINOX_ENABLE_WEAK=1/)
-    assert.match(invocation, /runtime\/c\/src\/core\/weak\.c/)
-    assert.match(invocation, /runtime\/c\/src\/objects\/object\.c/)
+    assert.match(invocation, /runtime\/src\/core\/weak\.c/)
+    assert.match(invocation, /runtime\/src\/objects\/object\.c/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -816,9 +816,9 @@ exec cc "$@"
 
     const invocation = await readFile(log, 'utf8')
 
-    assert.match(invocation, /runtime\/c\/src\/network\/fetch\.c/)
-    assert.match(invocation, /runtime\/c\/src\/network\/net\.c/)
-    assert.match(invocation, /runtime\/c\/src\/network\/tls\.c/)
+    assert.match(invocation, /runtime\/src\/network\/fetch\.c/)
+    assert.match(invocation, /runtime\/src\/network\/net\.c/)
+    assert.match(invocation, /runtime\/src\/network\/tls\.c/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -865,11 +865,11 @@ exit 0
 
     const invocation = await readFile(log, 'utf8')
 
-    assert.match(invocation, /runtime\/c\/src\/network\/fetch\.c/)
-    assert.match(invocation, /runtime\/c\/src\/network\/net\.c/)
-    assert.match(invocation, /runtime\/c\/src\/network\/tls-openssl\.c/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\/network\/tls\.c/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\/network\/tls-boringssl\.c/)
+    assert.match(invocation, /runtime\/src\/network\/fetch\.c/)
+    assert.match(invocation, /runtime\/src\/network\/net\.c/)
+    assert.match(invocation, /runtime\/src\/network\/tls-openssl\.c/)
+    assert.doesNotMatch(invocation, /runtime\/src\/network\/tls\.c/)
+    assert.doesNotMatch(invocation, /runtime\/src\/network\/tls-boringssl\.c/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -918,9 +918,9 @@ exit 0
     const invocation = await readFile(log, 'utf8')
 
     assert.match(invocation, /-DINOX_TLS_BACKEND_OPENSSL=1/)
-    assert.match(invocation, /runtime\/c\/src\/crypto\/crypto\.c/)
+    assert.match(invocation, /runtime\/src\/crypto\/crypto\.c/)
     assert.match(invocation, /-lcrypto/)
-    assert.doesNotMatch(invocation, /runtime\/c\/src\/network\/tls-openssl\.c/)
+    assert.doesNotMatch(invocation, /runtime\/src\/network\/tls-openssl\.c/)
   } finally {
     await rm(dir, {
       recursive: true,
@@ -1762,28 +1762,28 @@ function runCommand(command: string, args: string[], options: RunOptions = {}): 
 
 function cRuntimeSources(): string[] {
   return [
-    'runtime/c/src/arrays/array.c',
-    'runtime/c/src/async/loop.c',
-    'runtime/c/src/async/promise.c',
-    'runtime/c/src/binary/binary.c',
-    'runtime/c/src/child_process/child_process.c',
-    'runtime/c/src/collections/map.c',
-    'runtime/c/src/collections/set.c',
-    'runtime/c/src/console/console.c',
-    'runtime/c/src/core/allocator.c',
-    'runtime/c/src/core/callback.c',
-    'runtime/c/src/core/debug.c',
-    'runtime/c/src/core/value.c',
-    'runtime/c/src/crypto/crypto.c',
-    'runtime/c/src/core/weak.c',
-    'runtime/c/src/fs/fs.c',
-    'runtime/c/src/json/json.c',
-    'runtime/c/src/objects/object.c',
-    'runtime/c/src/path/path.c',
-    'runtime/c/src/process/process.c',
-    'runtime/c/src/strings/string.c',
-    'runtime/c/src/time/time.c',
-    'runtime/c/src/url/url.c'
+    'runtime/src/arrays/array.c',
+    'runtime/src/async/loop.c',
+    'runtime/src/async/promise.c',
+    'runtime/src/binary/binary.c',
+    'runtime/src/child_process/child_process.c',
+    'runtime/src/collections/map.c',
+    'runtime/src/collections/set.c',
+    'runtime/src/console/console.c',
+    'runtime/src/core/allocator.c',
+    'runtime/src/core/callback.c',
+    'runtime/src/core/debug.c',
+    'runtime/src/core/value.c',
+    'runtime/src/crypto/crypto.c',
+    'runtime/src/core/weak.c',
+    'runtime/src/fs/fs.c',
+    'runtime/src/json/json.c',
+    'runtime/src/objects/object.c',
+    'runtime/src/path/path.c',
+    'runtime/src/process/process.c',
+    'runtime/src/strings/string.c',
+    'runtime/src/time/time.c',
+    'runtime/src/url/url.c'
   ].map((source) => join(repoRoot, source))
 }
 

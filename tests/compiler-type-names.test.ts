@@ -18,7 +18,7 @@ import {
   setElementTypeNameFromTypeName,
   splitGenericArgs,
   splitUnionArgs
-} from '../src/compiler/type-names.ts'
+} from '../compiler/type-names.ts'
 
 test('splits nested generic type arguments', () => {
   assert.deepEqual(splitGenericArgs('string, Array<number>, Map<string, Array<boolean>>'), [

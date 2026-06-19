@@ -10,7 +10,7 @@ import {
   globals,
   libuvOnlyRuntimeImports,
   numericCastNames
-} from '../src/compiler/checker/builtins.ts'
+} from '../compiler/checker/builtins.ts'
 
 test('exports checker builtin object shapes', () => {
   assert.equal(errorObjectShape.fields.some((field) => field.name === 'message'), true)

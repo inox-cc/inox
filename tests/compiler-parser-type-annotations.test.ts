@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { tokenize } from '../src/compiler/lexer.ts'
-import { normalizeTypeName, readTypeAnnotation } from '../src/compiler/parser/type-annotations.ts'
+import { tokenize } from '../compiler/lexer.ts'
+import { normalizeTypeName, readTypeAnnotation } from '../compiler/parser/type-annotations.ts'
 
 test('normalizes TypeScript-style type names for parser lowering', () => {
   assert.equal(normalizeTypeName('string|null'), 'nullable<string>')

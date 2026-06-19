@@ -1,7 +1,7 @@
 import { join } from 'node:path'
-import { CompileError } from '../src/compiler/diagnostics.ts'
-import { compileSource } from '../src/compiler/index.ts'
-import type { Diagnostic } from '../src/compiler/types.ts'
+import { CompileError } from '../compiler/diagnostics.ts'
+import { compileSource } from '../compiler/index.ts'
+import type { Diagnostic } from '../compiler/types.ts'
 import { rootDir } from './lib/repo-checks.ts'
 import { runSnapshotSuite, type SnapshotOutput } from './lib/snapshot-runner.ts'
 

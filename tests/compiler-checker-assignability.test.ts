@@ -10,8 +10,8 @@ import {
   isEqualityOperator,
   isMatchingSwitchCaseType,
   isSwitchableType
-} from '../src/compiler/checker/assignability.ts'
-import { compileSource } from '../src/compiler/index.ts'
+} from '../compiler/checker/assignability.ts'
+import { compileSource } from '../compiler/index.ts'
 
 test('classifies binary and equality expression types', () => {
   assert.equal(inferBinaryExpressionType('+', 'number', 'number'), 'number')

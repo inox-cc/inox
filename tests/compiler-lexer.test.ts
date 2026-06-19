@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { tokenize } from '../src/compiler/lexer.ts'
+import { tokenize } from '../compiler/lexer.ts'
 
 test('tokenizes keywords and punctuators without runtime lookup tables', () => {
   const tokens = tokenize('async function f(){ return a !== b && foo?.bar ?? x++ }', {})

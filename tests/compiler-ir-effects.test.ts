@@ -5,14 +5,14 @@ import {
   collectIrFunctionEffects,
   collectIrLocalThrowValueTypes,
   collectIrStoredFunctionEffects
-} from '../src/compiler/ir/effects.ts'
+} from '../compiler/ir/effects.ts'
 import {
   collectIrFunctionEffects as collectIrFunctionEffectsFromFacade,
   collectIrLocalThrowValueTypes as collectIrLocalThrowValueTypesFromFacade,
   collectIrStoredFunctionEffects as collectIrStoredFunctionEffectsFromFacade
-} from '../src/compiler/ir.ts'
-import { collectTopLevelItems } from '../src/compiler/ir/top-level.ts'
-import type { AnyNode, IrThrowValueType, ProgramNode } from '../src/compiler/types.ts'
+} from '../compiler/ir.ts'
+import { collectTopLevelItems } from '../compiler/ir/top-level.ts'
+import type { AnyNode, IrThrowValueType, ProgramNode } from '../compiler/types.ts'
 
 test('collects IR function effects and propagates call throws', () => {
   const body: AnyNode[] = [
