@@ -1,4 +1,4 @@
-import assert, { name } from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import { fork } from 'node:child_process'
 import { availableParallelism } from 'node:os'
 import { test } from 'node:test'
