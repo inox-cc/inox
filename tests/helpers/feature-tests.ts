@@ -66,10 +66,6 @@ export async function runFeatureTest(featureFile: FeatureTestFile): Promise<void
   } else {
     await assertCompilesAndRuns(featureFile)
   }
-
-  if (process.env.TEST_REPORT === 'verbose') {
-    console.log(formatPassed(featureFile))
-  }
 }
 
 export function featureTestName(path: string): string {
@@ -268,14 +264,6 @@ function formatCompileError(error: unknown): string {
   }
 
   return String(error)
-}
-
-function formatPassed(featureFile: FeatureTestFile): string {
-  if (featureFile.expectation.kind === 'diagnostics') {
-    return `${featureFile.name}: passed (diagnostics: ${featureFile.expectation.codes.join(', ')})`
-  }
-
-  return `${featureFile.name}: passed (stdout: ${JSON.stringify(featureFile.expectedStdout)})`
 }
 
 function expectedText(lines: string[]): string {
