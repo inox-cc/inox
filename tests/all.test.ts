@@ -14,7 +14,7 @@ import {
 await assertCcAvailable()
 
 const files = await collectFeatureTestFiles(process.argv.slice(2))
-const parallelism = availableParallelism() * 4
+const parallelism = availableParallelism()
 
 assert.notEqual(files.length, 0, 'feature tests: no .test.ts files found')
 
