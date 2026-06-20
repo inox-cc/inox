@@ -22,13 +22,12 @@
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:features",
-    "test:smoke": "node tests/all.test.ts tests/smoke",
+    "test:node": "pnpm run test:features --compiler node",
+    "test:inox": "pnpm run test:features --compiler dist/inox",
     "test:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features",
+    "test:inox:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features --compiler dist/inox",
     "test:features": "node tests/all.test.ts",
-    "test:features:dist": "node tests/all.test.ts --compiler dist/inox",
-    "test:features:dist:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features:dist",
-    "test:features:plain-node": "node tests/all.test.ts --compiler plain-node",
-    "test:features:plain-node:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features:plain-node",
+    "test:smoke": "node tests/all.test.ts tests/smoke",
     "check": "pnpm run typecheck && pnpm run test:features"
   },
   "engines": {

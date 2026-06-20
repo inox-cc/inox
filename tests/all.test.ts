@@ -45,7 +45,7 @@ if (process.argv[2] === workerArg) {
 } else {
   const options = parseRunnerOptions(process.argv.slice(2))
 
-  if (options.compiler.kind !== 'plain-node') {
+  if (options.compiler.kind !== 'node') {
     await assertCcAvailable()
   }
   await assertFeatureCompilerAvailable(options.compiler)
@@ -370,11 +370,11 @@ function isFeatureTestCompiler(value: unknown): value is FeatureTestCompiler {
     return false
   }
 
-  if (value.kind === 'node') {
+  if (value.kind === 'hosted') {
     return true
   }
 
-  if (value.kind === 'plain-node') {
+  if (value.kind === 'node') {
     return true
   }
 
@@ -388,7 +388,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseRunnerOptions(args: string[]): RunnerOptions {
   const paths: string[] = []
   let compiler: FeatureTestCompiler = {
-    kind: 'node'
+    kind: 'hosted'
   }
 
   for (let index = 0; index < args.length; index = index + 1) {
@@ -403,7 +403,7 @@ function parseRunnerOptions(args: string[]): RunnerOptions {
       const value = args[index + 1]
       index = index + 1
 
-      assert.ok(value && !value.startsWith('-'), '--compiler expects node, plain-node or a compiler binary path')
+      assert.ok(value && !value.startsWith('-'), '--compiler expects hosted, node or a compiler binary path')
       compiler = parseFeatureTestCompiler(value)
       continue
     }
@@ -423,15 +423,15 @@ function parseRunnerOptions(args: string[]): RunnerOptions {
 }
 
 function parseFeatureTestCompiler(value: string): FeatureTestCompiler {
-  if (value === 'node') {
+  if (value === 'hosted') {
     return {
-      kind: 'node'
+      kind: 'hosted'
     }
   }
 
-  if (value === 'plain-node') {
+  if (value === 'node') {
     return {
-      kind: 'plain-node'
+      kind: 'node'
     }
   }
 
