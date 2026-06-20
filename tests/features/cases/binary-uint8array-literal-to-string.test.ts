@@ -1,6 +1,6 @@
 // @targets c
 // @expect pass
-// @stdout AB
+// @stdout 65,66
 
 const bytes = new Uint8Array([65, 66])
 console.log(bytes.toString())

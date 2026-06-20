@@ -210,7 +210,7 @@ import {
   emitProcessExitCodeAssignment,
   emitProcessExitStatement
 } from './stdlib/process.ts'
-import { cTimeRuntimeCallName, cTimeRuntimeMethodName } from './stdlib/time.ts'
+import { cTimeRuntimeCallName } from './stdlib/time.ts'
 import type { TimerLoweringDependencies } from './stdlib/timers.ts'
 import { emitPreparedTimerCallExpression, emitTimerVariableDeclaration } from './stdlib/timers.ts'
 import type { UrlLoweringDependencies } from './stdlib/url.ts'
@@ -1633,11 +1633,7 @@ function collectModuleObjectShapes(
     ) {
       registerModuleObjectShape(result, statement.name, statement.shape.fields)
 
-      if (
-        statement.init !== null &&
-        typeof statement.init !== 'undefined' &&
-        statement.init.type === 'ObjectLiteral'
-      ) {
+      if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'ObjectLiteral') {
         const fields = collectModuleObjectLiteralShapeFields(
           statement.init,
           functionParams,
@@ -4692,17 +4688,7 @@ function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeField[]): 
     'returnNullable',
     'typeOnly'
   ]
-  const arrayFields = [
-    'args',
-    'cases',
-    'elements',
-    'fields',
-    'methods',
-    'params',
-    'path',
-    'properties',
-    'specifiers'
-  ]
+  const arrayFields = ['args', 'cases', 'elements', 'fields', 'methods', 'params', 'path', 'properties', 'specifiers']
   const objectFields = [
     'argument',
     'callee',
@@ -6025,12 +6011,6 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
 }
 
 function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
-  const timeSleep = emitCTimeSleepAwaitExpression(expression, context)
-
-  if (timeSleep !== null && typeof timeSleep !== 'undefined') {
-    return timeSleep
-  }
-
   const asyncCall = emitCAsyncFunctionAwaitExpression(expression, context)
 
   if (asyncCall !== null && typeof asyncCall !== 'undefined') {
@@ -6104,42 +6084,6 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
   return {
     lines,
     expression: value
-  }
-}
-
-function emitCTimeSleepAwaitExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
-  const callExpression = expression.argument
-
-  if (
-    callExpression === null ||
-    typeof callExpression === 'undefined' ||
-    callExpression.type !== 'CallExpression' ||
-    cTimeRuntimeMethodName(callExpression.callee) !== 'sleep'
-  ) {
-    return null
-  }
-
-  if (callExpression.args.length !== 1) {
-    pushDiagnostic(
-      context,
-      diagnostic('INOX_C_TIME', 'time.sleep in the C backend requires a millisecond argument', callExpression.loc)
-    )
-
-    return {
-      lines: [],
-      expression: 'inox_undefined_value()'
-    }
-  }
-
-  const duration = emitPreparedNumberExpression(callExpression.args[0], context)
-  const lines: string[] = []
-
-  pushAll(lines, duration.lines)
-  lines.push(`if (${duration.expression} > 0) inox_time_sleep_ms(${duration.expression});`)
-
-  return {
-    lines,
-    expression: 'inox_undefined_value()'
   }
 }
 

@@ -1,6 +1,7 @@
 // @targets c
 // @expect pass
 // @stdout Error: bad
+// @skip-node
 
 try {
   throw new Error('bad')

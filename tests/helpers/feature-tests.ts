@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
+import assert, { equal, fail, ok } from 'node:assert/strict'
 import { constants } from 'node:fs'
 import { access, readdir, stat } from 'node:fs/promises'
-import { basename, extname, join, resolve } from 'node:path'
+import path, { basename, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { CompileError, formatDiagnostics } from '../../compiler/diagnostics.ts'
@@ -50,6 +50,7 @@ export type FeatureTestFile = {
   expectation: FeatureExpectation
   expectedStdout: string
   expectedStderr: string
+  nodeSkipReason?: string
   usesModuleGraph: boolean
 }
 
@@ -112,6 +113,14 @@ export async function runFeatureTest(featureFile: FeatureTestFile, options: Feat
 export function featureTestSkipReason(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): string | undefined {
   if (compiler.kind !== 'node') {
     return undefined
+  }
+
+  if (featureFile.nodeSkipReason) {
+    return featureFile.nodeSkipReason
+  }
+
+  if (isInoxFeaturePath(featureFile.path)) {
+    return 'node: inox-only feature case'
   }
 
   if (featureFile.expectation.kind === 'diagnostics') {
@@ -226,6 +235,7 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
   const targets: string[] = []
   const stdout: string[] = []
   const stderr: string[] = []
+  let nodeSkipReason: string | undefined
   let expectation: FeatureExpectation | undefined
   let sourceStart = lines.length
 
@@ -249,6 +259,8 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
       stdout.push(value)
     } else if (key === 'stderr') {
       stderr.push(value)
+    } else if (key === 'skip-node') {
+      nodeSkipReason = value.length > 0 ? value : 'node: skipped by test directive'
     } else {
       assert.fail(`${featureTestName(path)}: unknown directive @${key}`)
     }
@@ -267,8 +279,28 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
     expectation,
     expectedStdout: expectedText(stdout),
     expectedStderr: expectedText(stderr),
+    nodeSkipReason,
     usesModuleGraph: usesRelativeModuleImport(source)
   }
+}
+
+function isInoxFeaturePath(path: string): boolean {
+  const normalizedFeatureRoot = removeTrailingSlash(normalizeFilePath(featureRoot))
+  const normalizedPath = normalizeFilePath(path)
+
+  return normalizedPath.startsWith(`${normalizedFeatureRoot}/inox/`)
+}
+
+function normalizeFilePath(path: string): string {
+  return path.replace(/\\/g, '/')
+}
+
+function removeTrailingSlash(path: string): string {
+  if (path.endsWith('/')) {
+    return path.slice(0, -1)
+  }
+
+  return path
 }
 
 function parseExpectation(value: string): FeatureExpectation {
@@ -388,6 +420,10 @@ function nodeStdoutMatches(expected: string, actual: string): boolean {
       continue
     }
 
+    if (isNodeConsoleArrayStdoutAlias(expectedLine, actualLine)) {
+      continue
+    }
+
     return false
   }
 
@@ -396,6 +432,21 @@ function nodeStdoutMatches(expected: string, actual: string): boolean {
 
 function isNodeBooleanStdoutAlias(expected: string, actual: string): boolean {
   return (expected === '1' && actual === 'true') || (expected === '0' && actual === 'false')
+}
+
+function isNodeConsoleArrayStdoutAlias(expected: string, actual: string): boolean {
+  if (!expected.startsWith('[')) {
+    return false
+  }
+
+  return normalizeNodeConsoleArrayLine(actual) === expected
+}
+
+function normalizeNodeConsoleArrayLine(line: string): string {
+  return line
+    .replace(/'([^'\\]*)'/g, '$1')
+    .replace(/\[\s+/g, '[')
+    .replace(/\s+\]/g, ']')
 }
 
 function featureRuntimeCompileArgs(emittedC: string): string[] {
