@@ -34,6 +34,7 @@ import type {
   CFunctionParam,
   CFunctionReturnMapType,
   CFunctionType,
+  CArrayElementInfo,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
@@ -123,6 +124,7 @@ type CEmitContext = {
 
 type CFunctionContext = CEmitContext & {
   arrayLoweringDependencies: ArrayLoweringDependencies
+  arrayShapes: Map<string, CArrayElementInfo[]>
   boxedVariables: CStringSet
   cleanupEnabled: boolean
   diagnostics: Diagnostic[]
@@ -4722,8 +4724,12 @@ export function emitCValueExpression(
 
   if (expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
-    const valueType = context.variables.get(name) ?? ''
+    let valueType = context.variables.get(name) ?? ''
     const moduleValueName = context.moduleValueNames.get(name)
+
+    if (valueType === '' && (context.runtimeArrayElementTypes.has(name) || context.arrayShapes.has(name))) {
+      valueType = 'array'
+    }
 
     if (moduleValueName !== null && typeof moduleValueName !== 'undefined') {
       return {

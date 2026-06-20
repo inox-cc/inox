@@ -203,28 +203,40 @@ function applyResolvedTypeAssertion(
   let functionType = expression.functionType
   let valueType = expression.valueType
 
-  if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
-    arrayElementType = declared.arrayElementType
+  const declaredArrayElementType = nullableString(declared.arrayElementType)
+
+  if (declaredArrayElementType !== null && typeof declaredArrayElementType !== 'undefined') {
+    arrayElementType = declaredArrayElementType
   }
 
-  if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
-    arrayElementDeclaredType = declared.arrayElementDeclaredType
+  const declaredArrayElementDeclaredType = nullableString(declared.arrayElementDeclaredType)
+
+  if (declaredArrayElementDeclaredType !== null && typeof declaredArrayElementDeclaredType !== 'undefined') {
+    arrayElementDeclaredType = declaredArrayElementDeclaredType
   }
 
-  if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
-    mapKeyType = declared.mapKeyType
+  const declaredMapKeyType = nullableString(declared.mapKeyType)
+
+  if (declaredMapKeyType !== null && typeof declaredMapKeyType !== 'undefined') {
+    mapKeyType = declaredMapKeyType
   }
 
-  if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
-    mapValueType = declared.mapValueType
+  const declaredMapValueType = nullableString(declared.mapValueType)
+
+  if (declaredMapValueType !== null && typeof declaredMapValueType !== 'undefined') {
+    mapValueType = declaredMapValueType
   }
 
-  if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
-    promiseValueType = declared.promiseValueType
+  const declaredPromiseValueType = nullableString(declared.promiseValueType)
+
+  if (declaredPromiseValueType !== null && typeof declaredPromiseValueType !== 'undefined') {
+    promiseValueType = declaredPromiseValueType
   }
 
-  if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
-    setElementType = declared.setElementType
+  const declaredSetElementType = nullableString(declared.setElementType)
+
+  if (declaredSetElementType !== null && typeof declaredSetElementType !== 'undefined') {
+    setElementType = declaredSetElementType
   }
 
   if (declared.shape !== null && typeof declared.shape !== 'undefined') {
@@ -235,8 +247,10 @@ function applyResolvedTypeAssertion(
     functionType = declared.functionType
   }
 
-  if (declared.valueType !== null && typeof declared.valueType !== 'undefined') {
-    valueType = declared.valueType
+  const declaredValueType = nullableString(declared.valueType)
+
+  if (declaredValueType !== null && typeof declaredValueType !== 'undefined') {
+    valueType = declaredValueType
   }
 
   expression.declaredType = declaredType
@@ -255,7 +269,7 @@ function applyResolvedTypeAssertion(
 }
 
 function fallbackString(value: string | null | undefined, fallback: string): string {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 
@@ -263,7 +277,7 @@ function fallbackString(value: string | null | undefined, fallback: string): str
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 
@@ -446,13 +460,12 @@ function referenceValueType(expression: LowerExpressionNode, variable: LowerExpr
     return known
   }
 
-  if (
-    variable !== null &&
-    typeof variable !== 'undefined' &&
-    variable.valueType !== null &&
-    typeof variable.valueType !== 'undefined'
-  ) {
-    return variable.valueType
+  if (variable !== null && typeof variable !== 'undefined') {
+    const variableValueType = nullableString(variable.valueType)
+
+    if (variableValueType !== null && typeof variableValueType !== 'undefined') {
+      return variableValueType
+    }
   }
 
   return 'unknown'
@@ -466,13 +479,17 @@ function referenceArrayElementType(
   expression: LowerExpressionNode,
   variable: LowerExpressionNode | null
 ): string | null {
-  if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-    return expression.arrayElementType
+  const expressionArrayElementType = nullableString(expression.arrayElementType)
+
+  if (expressionArrayElementType !== null && typeof expressionArrayElementType !== 'undefined') {
+    return expressionArrayElementType
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    if (variable.arrayElementType !== null && typeof variable.arrayElementType !== 'undefined') {
-      return variable.arrayElementType
+    const variableArrayElementType = nullableString(variable.arrayElementType)
+
+    if (variableArrayElementType !== null && typeof variableArrayElementType !== 'undefined') {
+      return variableArrayElementType
     }
   }
 
@@ -483,13 +500,17 @@ function referenceArrayElementDeclaredType(
   expression: LowerExpressionNode,
   variable: LowerExpressionNode | null
 ): string | null {
-  if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
-    return expression.arrayElementDeclaredType
+  const expressionArrayElementDeclaredType = nullableString(expression.arrayElementDeclaredType)
+
+  if (expressionArrayElementDeclaredType !== null && typeof expressionArrayElementDeclaredType !== 'undefined') {
+    return expressionArrayElementDeclaredType
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    if (variable.arrayElementDeclaredType !== null && typeof variable.arrayElementDeclaredType !== 'undefined') {
-      return variable.arrayElementDeclaredType
+    const variableArrayElementDeclaredType = nullableString(variable.arrayElementDeclaredType)
+
+    if (variableArrayElementDeclaredType !== null && typeof variableArrayElementDeclaredType !== 'undefined') {
+      return variableArrayElementDeclaredType
     }
   }
 
@@ -497,13 +518,17 @@ function referenceArrayElementDeclaredType(
 }
 
 function referenceMapKeyType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.mapKeyType !== null && typeof expression.mapKeyType !== 'undefined') {
-    return expression.mapKeyType
+  const expressionMapKeyType = nullableString(expression.mapKeyType)
+
+  if (expressionMapKeyType !== null && typeof expressionMapKeyType !== 'undefined') {
+    return expressionMapKeyType
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    if (variable.mapKeyType !== null && typeof variable.mapKeyType !== 'undefined') {
-      return variable.mapKeyType
+    const variableMapKeyType = nullableString(variable.mapKeyType)
+
+    if (variableMapKeyType !== null && typeof variableMapKeyType !== 'undefined') {
+      return variableMapKeyType
     }
   }
 
@@ -511,13 +536,17 @@ function referenceMapKeyType(expression: LowerExpressionNode, variable: LowerExp
 }
 
 function referenceMapValueType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.mapValueType !== null && typeof expression.mapValueType !== 'undefined') {
-    return expression.mapValueType
+  const expressionMapValueType = nullableString(expression.mapValueType)
+
+  if (expressionMapValueType !== null && typeof expressionMapValueType !== 'undefined') {
+    return expressionMapValueType
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    if (variable.mapValueType !== null && typeof variable.mapValueType !== 'undefined') {
-      return variable.mapValueType
+    const variableMapValueType = nullableString(variable.mapValueType)
+
+    if (variableMapValueType !== null && typeof variableMapValueType !== 'undefined') {
+      return variableMapValueType
     }
   }
 
@@ -528,13 +557,17 @@ function referencePromiseValueType(
   expression: LowerExpressionNode,
   variable: LowerExpressionNode | null
 ): string | null {
-  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
-    return expression.promiseValueType
+  const expressionPromiseValueType = nullableString(expression.promiseValueType)
+
+  if (expressionPromiseValueType !== null && typeof expressionPromiseValueType !== 'undefined') {
+    return expressionPromiseValueType
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    if (variable.promiseValueType !== null && typeof variable.promiseValueType !== 'undefined') {
-      return variable.promiseValueType
+    const variablePromiseValueType = nullableString(variable.promiseValueType)
+
+    if (variablePromiseValueType !== null && typeof variablePromiseValueType !== 'undefined') {
+      return variablePromiseValueType
     }
   }
 
@@ -542,13 +575,17 @@ function referencePromiseValueType(
 }
 
 function referenceSetElementType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.setElementType !== null && typeof expression.setElementType !== 'undefined') {
-    return expression.setElementType
+  const expressionSetElementType = nullableString(expression.setElementType)
+
+  if (expressionSetElementType !== null && typeof expressionSetElementType !== 'undefined') {
+    return expressionSetElementType
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    if (variable.setElementType !== null && typeof variable.setElementType !== 'undefined') {
-      return variable.setElementType
+    const variableSetElementType = nullableString(variable.setElementType)
+
+    if (variableSetElementType !== null && typeof variableSetElementType !== 'undefined') {
+      return variableSetElementType
     }
   }
 
@@ -556,13 +593,17 @@ function referenceSetElementType(expression: LowerExpressionNode, variable: Lowe
 }
 
 function referenceClassName(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string | null {
-  if (expression.className !== null && typeof expression.className !== 'undefined') {
-    return expression.className
+  const expressionClassName = nullableString(expression.className)
+
+  if (expressionClassName !== null && typeof expressionClassName !== 'undefined') {
+    return expressionClassName
   }
 
   if (variable !== null && typeof variable !== 'undefined') {
-    if (variable.className !== null && typeof variable.className !== 'undefined') {
-      return variable.className
+    const variableClassName = nullableString(variable.className)
+
+    if (variableClassName !== null && typeof variableClassName !== 'undefined') {
+      return variableClassName
     }
   }
 
@@ -1075,7 +1116,7 @@ function inferIndexExpressionType(object: LowerExpressionNode): string {
 }
 
 function knownValueType(valueType: string | null | undefined): string | null {
-  if (valueType === null || typeof valueType === 'undefined' || valueType === 'unknown') {
+  if (valueType === null || typeof valueType === 'undefined' || valueType.length === 0 || valueType === 'unknown') {
     return null
   }
 

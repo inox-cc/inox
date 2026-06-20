@@ -66,7 +66,7 @@ export function createLowerContext(ast: ProgramNode): LowerContext {
 }
 
 export function resolveDeclaredType(name: string | null | undefined, context: LowerContext): LowerResolvedType {
-  if (name === null || typeof name === 'undefined') {
+  if (name === null || typeof name === 'undefined' || name.length === 0) {
     return unresolvedType()
   }
 
@@ -1043,7 +1043,7 @@ function resolvedValueType(resolved: LowerResolvedType | null, fallback: string)
     return fallback
   }
 
-  const valueType = resolved.valueType
+  const valueType = nullableString(resolved.valueType)
 
   if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
@@ -1080,7 +1080,7 @@ function fieldDeclaredType(field: LowerTypeNode): string | null {
 }
 
 function ownershipOrStrong(value: string | null | undefined): string {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 
@@ -1088,7 +1088,7 @@ function ownershipOrStrong(value: string | null | undefined): string {
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 

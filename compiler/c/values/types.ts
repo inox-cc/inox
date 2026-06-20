@@ -141,6 +141,13 @@ function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext
   }
 
   if (
+    (variableType === null || typeof variableType === 'undefined') &&
+    (context.runtimeArrayElementTypes.has(name) || context.arrayShapes.has(name))
+  ) {
+    return 'array'
+  }
+
+  if (
     metadataType !== null &&
     typeof metadataType !== 'undefined' &&
     (variableType === null ||

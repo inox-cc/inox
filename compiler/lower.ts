@@ -183,7 +183,7 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
 }
 
 function resolvedValueType(value: string | null | undefined, fallback: string): string {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 
@@ -191,7 +191,7 @@ function resolvedValueType(value: string | null | undefined, fallback: string): 
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 

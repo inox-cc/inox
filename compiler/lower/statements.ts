@@ -260,7 +260,7 @@ function prependLoweredStatements(prefix: LowerNode[], statement: LowerNode): Lo
 }
 
 function fallbackString(value: string | null | undefined, fallback: string): string {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 
@@ -268,7 +268,7 @@ function fallbackString(value: string | null | undefined, fallback: string): str
 }
 
 function nullableString(value: string | null | undefined): string | null {
-  if (value !== null && typeof value !== 'undefined') {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0) {
     return value
   }
 
@@ -540,12 +540,16 @@ function variableDeclarationArrayElementType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
-    return declared.arrayElementType
+  const declaredArrayElementType = nullableString(declared.arrayElementType)
+
+  if (declaredArrayElementType !== null && typeof declaredArrayElementType !== 'undefined') {
+    return declaredArrayElementType
   }
 
-  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
-    return statement.arrayElementType
+  const statementArrayElementType = nullableString(statement.arrayElementType)
+
+  if (statementArrayElementType !== null && typeof statementArrayElementType !== 'undefined') {
+    return statementArrayElementType
   }
 
   return inferArrayElementType(init)
@@ -556,12 +560,16 @@ function variableDeclarationArrayElementDeclaredType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
-    return declared.arrayElementDeclaredType
+  const declaredArrayElementDeclaredType = nullableString(declared.arrayElementDeclaredType)
+
+  if (declaredArrayElementDeclaredType !== null && typeof declaredArrayElementDeclaredType !== 'undefined') {
+    return declaredArrayElementDeclaredType
   }
 
-  if (statement.arrayElementDeclaredType !== null && typeof statement.arrayElementDeclaredType !== 'undefined') {
-    return statement.arrayElementDeclaredType
+  const statementArrayElementDeclaredType = nullableString(statement.arrayElementDeclaredType)
+
+  if (statementArrayElementDeclaredType !== null && typeof statementArrayElementDeclaredType !== 'undefined') {
+    return statementArrayElementDeclaredType
   }
 
   return inferArrayElementDeclaredType(init)
@@ -571,17 +579,18 @@ function variableDeclarationMapKeyType(
   declared: LowerResolvedType,
   inferredMapType: InferredMapType | null
 ): string | null {
-  if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
-    return declared.mapKeyType
+  const declaredMapKeyType = nullableString(declared.mapKeyType)
+
+  if (declaredMapKeyType !== null && typeof declaredMapKeyType !== 'undefined') {
+    return declaredMapKeyType
   }
 
-  if (
-    inferredMapType !== null &&
-    typeof inferredMapType !== 'undefined' &&
-    inferredMapType.key !== null &&
-    typeof inferredMapType.key !== 'undefined'
-  ) {
-    return inferredMapType.key
+  if (inferredMapType !== null && typeof inferredMapType !== 'undefined') {
+    const inferredMapKeyType = nullableString(inferredMapType.key)
+
+    if (inferredMapKeyType !== null && typeof inferredMapKeyType !== 'undefined') {
+      return inferredMapKeyType
+    }
   }
 
   return null
@@ -591,17 +600,18 @@ function variableDeclarationMapValueType(
   declared: LowerResolvedType,
   inferredMapType: InferredMapType | null
 ): string | null {
-  if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
-    return declared.mapValueType
+  const declaredMapValueType = nullableString(declared.mapValueType)
+
+  if (declaredMapValueType !== null && typeof declaredMapValueType !== 'undefined') {
+    return declaredMapValueType
   }
 
-  if (
-    inferredMapType !== null &&
-    typeof inferredMapType !== 'undefined' &&
-    inferredMapType.value !== null &&
-    typeof inferredMapType.value !== 'undefined'
-  ) {
-    return inferredMapType.value
+  if (inferredMapType !== null && typeof inferredMapType !== 'undefined') {
+    const inferredMapValueType = nullableString(inferredMapType.value)
+
+    if (inferredMapValueType !== null && typeof inferredMapValueType !== 'undefined') {
+      return inferredMapValueType
+    }
   }
 
   return null
@@ -612,12 +622,16 @@ function variableDeclarationPromiseValueType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
-    return declared.promiseValueType
+  const declaredPromiseValueType = nullableString(declared.promiseValueType)
+
+  if (declaredPromiseValueType !== null && typeof declaredPromiseValueType !== 'undefined') {
+    return declaredPromiseValueType
   }
 
-  if (statement.promiseValueType !== null && typeof statement.promiseValueType !== 'undefined') {
-    return statement.promiseValueType
+  const statementPromiseValueType = nullableString(statement.promiseValueType)
+
+  if (statementPromiseValueType !== null && typeof statementPromiseValueType !== 'undefined') {
+    return statementPromiseValueType
   }
 
   return inferPromiseValueType(init)
@@ -628,12 +642,16 @@ function variableDeclarationSetElementType(
   statement: LowerNode,
   init: LowerNode | null
 ): string | null {
-  if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
-    return declared.setElementType
+  const declaredSetElementType = nullableString(declared.setElementType)
+
+  if (declaredSetElementType !== null && typeof declaredSetElementType !== 'undefined') {
+    return declaredSetElementType
   }
 
-  if (statement.setElementType !== null && typeof statement.setElementType !== 'undefined') {
-    return statement.setElementType
+  const statementSetElementType = nullableString(statement.setElementType)
+
+  if (statementSetElementType !== null && typeof statementSetElementType !== 'undefined') {
+    return statementSetElementType
   }
 
   return inferSetElementType(init)
@@ -644,26 +662,26 @@ function variableDeclarationValueType(
   statement: LowerNode,
   init: LowerNode | null
 ): string {
-  const declaredValueType = declared.valueType
+  const declaredValueType = nullableString(declared.valueType)
 
   if (declaredValueType !== null && typeof declaredValueType !== 'undefined') {
     return declaredValueType
   }
 
-  const statementValueType = statement.valueType
+  const statementValueType = nullableString(statement.valueType)
 
   if (statementValueType !== null && typeof statementValueType !== 'undefined') {
     return statementValueType
   }
 
-  const statementDeclaredType = statement.declaredType
+  const statementDeclaredType = nullableString(statement.declaredType)
 
   if (statementDeclaredType !== null && typeof statementDeclaredType !== 'undefined') {
     return statementDeclaredType
   }
 
   if (init !== null && typeof init !== 'undefined') {
-    const initValueType = init.valueType
+    const initValueType = nullableString(init.valueType)
 
     if (initValueType !== null && typeof initValueType !== 'undefined') {
       return initValueType

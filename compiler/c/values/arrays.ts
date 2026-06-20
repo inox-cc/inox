@@ -379,10 +379,15 @@ function inferArrayMetadataExpressionType(expression: AnyNode, context: ArrayFun
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
-    const valueType = context.variables.get(expression.path[0])
+    const name = expression.path[0]
+    const valueType = context.variables.get(name)
 
     if (valueType !== null && typeof valueType !== 'undefined') {
       return valueType
+    }
+
+    if (context.runtimeArrayElementTypes.has(name) || context.arrayShapes.has(name)) {
+      return 'array'
     }
   }
 

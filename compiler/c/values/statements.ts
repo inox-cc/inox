@@ -3120,7 +3120,17 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitObjectVariableDeclaration(statement, context)
   }
 
-  if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'ArrayLiteral') {
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    (statement.init.type === 'ArrayLiteral' ||
+      ((statement.valueType === 'array' ||
+        (statement.arrayElementType !== null &&
+          typeof statement.arrayElementType !== 'undefined' &&
+          statement.arrayElementType !== 'unknown')) &&
+        statement.init.elements !== null &&
+        typeof statement.init.elements !== 'undefined'))
+  ) {
     return deps.emitArrayVariableDeclaration(statement, context)
   }
 
