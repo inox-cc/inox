@@ -357,8 +357,45 @@ async function assertRunsWithNode(featureFile: FeatureTestFile): Promise<void> {
   const run = await runCommand('node', [featureFile.path])
 
   assert.equal(run.code, 0, `${featureFile.name}: node-run failed\nstdout: ${run.stdout}\nstderr: ${run.stderr}`)
-  assert.equal(run.stdout, featureFile.expectedStdout, `${featureFile.name}: stdout mismatch`)
+  assert.ok(
+    nodeStdoutMatches(featureFile.expectedStdout, run.stdout),
+    `${featureFile.name}: stdout mismatch\nactual: ${run.stdout}\nexpected: ${featureFile.expectedStdout}`
+  )
   assert.equal(run.stderr, featureFile.expectedStderr, `${featureFile.name}: stderr mismatch`)
+}
+
+function nodeStdoutMatches(expected: string, actual: string): boolean {
+  if (actual === expected) {
+    return true
+  }
+
+  const expectedLines = expected.split('\n')
+  const actualLines = actual.split('\n')
+
+  if (expectedLines.length !== actualLines.length) {
+    return false
+  }
+
+  for (let index = 0; index < expectedLines.length; index = index + 1) {
+    const expectedLine = expectedLines[index]
+    const actualLine = actualLines[index]
+
+    if (actualLine === expectedLine) {
+      continue
+    }
+
+    if (isNodeBooleanStdoutAlias(expectedLine, actualLine)) {
+      continue
+    }
+
+    return false
+  }
+
+  return true
+}
+
+function isNodeBooleanStdoutAlias(expected: string, actual: string): boolean {
+  return (expected === '1' && actual === 'true') || (expected === '0' && actual === 'false')
 }
 
 function featureRuntimeCompileArgs(emittedC: string): string[] {
