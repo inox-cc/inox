@@ -331,6 +331,7 @@ export type StatementLoweringDependencies = {
     expression: StatementNode,
     context: CFunctionContext
   ): PreparedArrayExpression | null
+  emitPreparedArrayLengthExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayMapCallExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -1083,13 +1084,24 @@ export function emitNumberBooleanScalarVariableDeclaration(
     return [`double ${statement.name} = 0;`]
   }
 
+  const deps = statementDeps(context)
+  const arrayLength = deps.emitPreparedArrayLengthExpression(statement.init, context)
+
+  if (arrayLength !== null && typeof arrayLength !== 'undefined') {
+    const lines: string[] = []
+    pushAllLines(lines, arrayLength.lines)
+    lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${arrayLength.expression};`)
+
+    return lines
+  }
+
   const dynamicObjectField = emitDynamicObjectScalarVariableDeclaration(statement, inferred, context)
 
   if (dynamicObjectField !== null && typeof dynamicObjectField !== 'undefined') {
     return dynamicObjectField
   }
 
-  const value = statementDeps(context).emitPreparedNumberExpression(statement.init, context)
+  const value = deps.emitPreparedNumberExpression(statement.init, context)
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)

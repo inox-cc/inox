@@ -585,6 +585,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitOptionalRuntimeCallbackCallExpression,
   emitArraySliceVariableDeclaration,
   emitPreparedArrayFilterCallExpression,
+  emitPreparedArrayLengthExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArrayPushCallExpression,

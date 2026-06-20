@@ -23,19 +23,10 @@
     "audit:self-hosting:gate": "node scripts/audit-self-hosting.ts --gate",
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.ts tests/**/*.test.ts",
-    "test:self-hosting": "node --test tests/self-hosted-parser-driver.test.ts",
-    "test:fixtures": "node scripts/test-fixtures.ts",
-    "test:libuv": "node scripts/test-libuv.ts",
-    "test:network": "node scripts/test-libuv.ts --network-only",
-    "test:capabilities": "node scripts/test-capabilities.ts",
-    "test:hir-snapshots": "node scripts/test-hir-snapshots.ts",
-    "test:ir-snapshots": "node scripts/test-ir-snapshots.ts",
-    "test:codegen-snapshots": "node scripts/test-codegen-snapshots.ts",
-    "test:diagnostic-snapshots": "node scripts/test-diagnostic-snapshots.ts",
-    "test:snapshots": "pnpm run test:hir-snapshots && pnpm run test:ir-snapshots && pnpm run test:codegen-snapshots && pnpm run test:diagnostic-snapshots",
-    "test:differential": "node scripts/test-differential.ts",
-    "check": "pnpm run build && pnpm run typecheck && pnpm test && pnpm run test:fixtures && pnpm run test:capabilities && pnpm run test:snapshots && pnpm run test:differential"
+    "test": "pnpm run test:features",
+    "test:features": "node --test tests/all.test.ts",
+    "test:features:verbose": "INOX_FEATURE_TEST_REPORT=verbose node --test tests/all.test.ts",
+    "check": "pnpm run build && pnpm run typecheck && pnpm run test:features && pnpm run audit:self-hosting:gate"
   },
   "engines": {
     "node": ">=24"

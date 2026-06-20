@@ -1,8 +1,0 @@
-{
-  "targets": {
-    "c": {
-      "expect": "diagnostic",
-      "diagnostic": "INOX_NOT_IMPLEMENTED"
-    }
-  }
-}

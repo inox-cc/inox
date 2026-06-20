@@ -18,7 +18,7 @@ const requiredFiles: string[] = [
   'docs/runtime/c-value-layout.md',
   'docs/runtime/embedded-profiles.md',
   'docs/stdlib/README.md',
-  'docs/testing/compiler-tests.md',
+  'docs/testing/self-hosting-feature-tests.md',
   'runtime/include/inox/allocator.h',
   'runtime/include/inox/array.h',
   'runtime/include/inox/binary.h',
@@ -73,35 +73,10 @@ const requiredFiles: string[] = [
   'compiler/lower.ts',
   'compiler/parser.ts',
   'scripts/lib/run-command.ts',
-  'scripts/lib/snapshot-runner.ts',
   'scripts/bootstrap-boringssl.ts',
   'scripts/bootstrap-libuv.ts',
-  'scripts/test-capabilities.ts',
-  'scripts/test-codegen-snapshots.ts',
-  'scripts/test-diagnostic-snapshots.ts',
-  'scripts/test-differential.ts',
-  'scripts/test-hir-snapshots.ts',
-  'scripts/test-ir-snapshots.ts',
-  'scripts/test-libuv.ts',
-  'tests/README.md'
-]
-
-const requiredFixtureDirs: string[] = [
-  'tests/fixtures/parser/valid',
-  'tests/fixtures/parser/invalid',
-  'tests/fixtures/checker/pass',
-  'tests/fixtures/checker/fail',
-  'tests/fixtures/lower',
-  'tests/fixtures/codegen/ts',
-  'tests/fixtures/codegen/c',
-  'tests/fixtures/runtime',
-  'tests/fixtures/diagnostics',
-  'tests/fixtures/capabilities',
-  'tests/differential',
-  'tests/snapshots/codegen',
-  'tests/snapshots/diagnostics',
-  'tests/snapshots/hir',
-  'tests/snapshots/ir'
+  'tests/all.test.ts',
+  'tests/helpers/runtime-c.ts'
 ]
 
 export async function collectRepoChecks(): Promise<string[]> {
@@ -113,27 +88,11 @@ export async function collectRepoChecks(): Promise<string[]> {
     }
   }
 
-  for (const dir of requiredFixtureDirs) {
-    if (!(await exists(dir))) {
-      failures.push(`missing fixture directory ${dir}`)
-    }
-  }
-
   await checkDocIndex(failures, 'docs/language')
   await checkDocIndex(failures, 'docs/stdlib')
   await checkSourceLooseEquality(failures)
 
   return failures
-}
-
-export async function findFixtureFiles(): Promise<string[]> {
-  const root = join(rootDir, 'tests/fixtures')
-
-  if (!(await exists('tests/fixtures'))) {
-    return []
-  }
-
-  return findFiles(root, (file) => file.endsWith('.ts') || file.endsWith('.js'))
 }
 
 export function formatFailures(title: string, failures: string[]): string {
@@ -165,13 +124,7 @@ async function checkSourceLooseEquality(failures: string[]): Promise<void> {
   const files: string[] = []
 
   for (const sourceRoot of roots) {
-    files.push(
-      ...(await findFiles(join(rootDir, sourceRoot), (file) => {
-        const rel = relative(rootDir, file)
-
-        return file.endsWith('.ts') && !rel.startsWith('tests/fixtures/')
-      }))
-    )
+    files.push(...(await findFiles(join(rootDir, sourceRoot), (file) => file.endsWith('.ts'))))
   }
 
   for (const file of files.sort()) {
