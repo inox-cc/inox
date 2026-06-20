@@ -1,0 +1,5 @@
+// @targets c
+// @expect diagnostics INOX_NOT_IMPLEMENTED
+
+import process from 'node:process'
+process.nextTick(() => {})

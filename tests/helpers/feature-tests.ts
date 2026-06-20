@@ -4,6 +4,7 @@ import { basename, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { CompileError, formatDiagnostics } from '../../compiler/diagnostics.ts'
+import { compileFile } from '../../compiler/index.ts'
 import {
   compileRuntimeProgram,
   compileSource,
@@ -32,6 +33,7 @@ export type FeatureTestFile = {
   expectation: FeatureExpectation
   expectedStdout: string
   expectedStderr: string
+  usesModuleGraph: boolean
 }
 
 const featureRoot = fileURLToPath(new URL('../features/', import.meta.url))
@@ -62,7 +64,7 @@ export async function assertCcAvailable(): Promise<void> {
 
 export async function runFeatureTest(featureFile: FeatureTestFile): Promise<void> {
   if (featureFile.expectation.kind === 'diagnostics') {
-    assertExpectedDiagnostics(featureFile)
+    await assertExpectedDiagnostics(featureFile)
   } else {
     await assertCompilesAndRuns(featureFile)
   }
@@ -131,14 +133,17 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
   assert.ok(targets.length > 0, `${featureTestName(path)}: missing @targets directive`)
   assert.ok(expectation, `${featureTestName(path)}: missing @expect directive`)
 
+  const source = lines.slice(sourceStart).join('\n')
+
   return {
     path,
     name: featureTestName(path),
-    source: lines.slice(sourceStart).join('\n'),
+    source,
     targets,
     expectation,
     expectedStdout: expectedText(stdout),
-    expectedStderr: expectedText(stderr)
+    expectedStderr: expectedText(stderr),
+    usesModuleGraph: usesRelativeModuleImport(source)
   }
 }
 
@@ -176,10 +181,7 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile): Promise<void
     let emittedC: string
 
     try {
-      const result = compileSource(featureFile.source, {
-        target: 'c'
-      })
-      emittedC = result.code
+      emittedC = await compileFeatureTestToC(featureFile)
     } catch (error) {
       assert.fail(`${featureFile.name}: node-compile failed\n${formatCompileError(error)}`)
     }
@@ -223,7 +225,7 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile): Promise<void
   }
 }
 
-function assertExpectedDiagnostics(featureFile: FeatureTestFile): void {
+async function assertExpectedDiagnostics(featureFile: FeatureTestFile): Promise<void> {
   if (featureFile.expectation.kind !== 'diagnostics') {
     assert.fail(`${featureFile.name}: expected a diagnostics feature test`)
   }
@@ -231,9 +233,7 @@ function assertExpectedDiagnostics(featureFile: FeatureTestFile): void {
   const expectedCodes = featureFile.expectation.codes
 
   try {
-    compileSource(featureFile.source, {
-      target: 'c'
-    })
+    await compileFeatureTestToC(featureFile)
   } catch (error) {
     if (error instanceof CompileError) {
       const actualCodes = error.diagnostics.map((diagnostic) => diagnostic.code)
@@ -252,6 +252,22 @@ function assertExpectedDiagnostics(featureFile: FeatureTestFile): void {
   }
 
   assert.fail(`${featureFile.name}: expected diagnostics ${expectedCodes.join(', ')}, but emitted C`)
+}
+
+async function compileFeatureTestToC(featureFile: FeatureTestFile): Promise<string> {
+  if (featureFile.usesModuleGraph) {
+    const result = await compileFile(featureFile.path, {
+      target: 'c'
+    })
+
+    return result.code
+  }
+
+  const result = compileSource(featureFile.source, {
+    target: 'c'
+  })
+
+  return result.code
 }
 
 function formatCompileError(error: unknown): string {
@@ -280,4 +296,8 @@ function sanitizePath(path: string): string {
 
 function words(value: string): string[] {
   return value.split(/\s+/).filter((word) => word.length > 0)
+}
+
+function usesRelativeModuleImport(source: string): boolean {
+  return /(?:^|\n)\s*(?:import|export)\s+(?:[^'"]+\s+from\s+)?['"](?:\.\/|\.\.\/)/.test(source)
 }
