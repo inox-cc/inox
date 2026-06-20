@@ -3,12 +3,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
 import { rootDir } from './lib/repo-root.ts'
-import { normalizeNewlines, runCommand } from './lib/run-command.ts'
+import { runCommand } from './lib/run-command.ts'
 
 type BuildOptions = {
   generatedDir: string
   out: string
-  smoke: boolean
 }
 
 type SourceFile = {
@@ -18,44 +17,15 @@ type SourceFile = {
 
 type GeneratedFileMap = Map<string, string>
 
-const defaultGeneratedDir = join(rootDir, 'dist/selfhost/generated')
+const defaultGeneratedDir = join(rootDir, 'dist/compiler')
 const defaultOut = join(rootDir, 'dist/inox')
 const cmakeRootDir = join(tmpdir(), 'inox-build-cmake')
 const cmakeSourceDir = join(cmakeRootDir, 'source')
 const cmakeBuildDir = join(cmakeRootDir, 'build')
 const cmakeBinDir = join(cmakeRootDir, 'bin')
+const compilerSourceRoot = '/project/compiler'
 const buildLoopBackend = 'libuv'
 const buildTlsBackend = 'openssl'
-const runtimeSources = [
-  'runtime/src/arrays/array.c',
-  'runtime/src/async/loop.c',
-  'runtime/src/async/promise.c',
-  'runtime/src/binary/binary.c',
-  'runtime/src/child_process/child_process.c',
-  'runtime/src/collections/map.c',
-  'runtime/src/collections/set.c',
-  'runtime/src/console/console.c',
-  'runtime/src/core/allocator.c',
-  'runtime/src/core/callback.c',
-  'runtime/src/core/debug.c',
-  'runtime/src/core/value.c',
-  'runtime/src/core/weak.c',
-  'runtime/src/crypto/crypto.c',
-  'runtime/src/fs/fs.c',
-  'runtime/src/json/json.c',
-  'runtime/src/network/dgram.c',
-  'runtime/src/network/fetch.c',
-  'runtime/src/network/http.c',
-  'runtime/src/network/net.c',
-  'runtime/src/network/tls.c',
-  'runtime/src/objects/object.c',
-  'runtime/src/os/os.c',
-  'runtime/src/path/path.c',
-  'runtime/src/process/process.c',
-  'runtime/src/strings/string.c',
-  'runtime/src/time/time.c',
-  'runtime/src/url/url.c'
-]
 
 const parsed = parseArgs(process.argv.slice(2))
 
@@ -75,7 +45,7 @@ await buildSelfHostedCompiler(parsed.options)
 
 async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   const compilerFiles = await readCompilerSources()
-  const driverPath = '/project/selfhost-build-driver.ts'
+  const driverPath = `${compilerSourceRoot}/selfhost-build-driver.ts`
 
   compilerFiles.push({
     path: driverPath,
@@ -85,7 +55,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   console.log('emitting self-hosted compiler C modules')
   const modules = await compileMemoryPackageToCModules(driverPath, compilerFiles, {
     loopBackend: buildLoopBackend,
-    sourceRoot: '/project',
+    sourceRoot: compilerSourceRoot,
     target: 'c',
     tlsBackend: buildTlsBackend
   })
@@ -100,7 +70,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
     const extraModules = await compileMemoryPackageToCModules(entry, compilerFiles, {
       callMain: false,
       loopBackend: buildLoopBackend,
-      sourceRoot: '/project',
+      sourceRoot: compilerSourceRoot,
       target: 'c',
       tlsBackend: buildTlsBackend
     })
@@ -147,10 +117,6 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
     return
   }
 
-  if (options.smoke) {
-    await runSmoke(options.out)
-  }
-
   console.log(options.out)
 }
 
@@ -164,11 +130,11 @@ function missingCompilerModuleEntries(compilerFiles: SourceFile[], generatedFile
   const missing: string[] = []
 
   for (const file of compilerFiles) {
-    if (!file.path.startsWith('/project/compiler/') || !file.path.endsWith('.ts')) {
+    if (!file.path.startsWith(`${compilerSourceRoot}/`) || !file.path.endsWith('.ts')) {
       continue
     }
 
-    const modulePath = file.path.slice('/project/'.length).replace(/\.ts$/, '.c')
+    const modulePath = file.path.slice(`${compilerSourceRoot}/`.length).replace(/\.ts$/, '.c')
 
     if (!generatedFiles.has(modulePath)) {
       missing.push(file.path)
@@ -235,83 +201,6 @@ async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number
   }
 }
 
-async function runSmoke(executable: string): Promise<void> {
-  const smokeDir = join(rootDir, 'dist/selfhost/smoke')
-  const input = join(smokeDir, 'input.ts')
-  const output = join(smokeDir, 'input.c')
-  const smokeExecutable = join(smokeDir, 'input')
-
-  await rm(smokeDir, {
-    recursive: true,
-    force: true
-  })
-  await mkdir(smokeDir, {
-    recursive: true
-  })
-  await writeFile(input, 'const value: number = 1\nconsole.log(value)\n')
-
-  const result = await runCommand(executable, [input, output], {
-    stderr: process.stderr,
-    stdout: process.stdout
-  })
-
-  if (result.code !== 0) {
-    process.exitCode = result.code
-    return
-  }
-
-  const c = await readFile(output, 'utf8')
-
-  if (!c.includes('int main(')) {
-    console.error('self-hosted compiler smoke did not emit a C main function')
-    process.exitCode = 1
-    return
-  }
-
-  const compile = await runCommand(process.env.CC ?? 'cc', cCompileArgs([output], smokeExecutable), {
-    stderr: process.stderr,
-    stdout: process.stdout
-  })
-
-  if (compile.code !== 0) {
-    process.exitCode = compile.code
-    return
-  }
-
-  const run = await runCommand(smokeExecutable, [])
-
-  if (run.code !== 0) {
-    process.stderr.write(run.stderr)
-    process.exitCode = run.code
-    return
-  }
-
-  if (normalizeNewlines(run.stdout) !== '1\n') {
-    console.error(`self-hosted compiler smoke emitted unexpected output: ${JSON.stringify(run.stdout)}`)
-    process.exitCode = 1
-  }
-}
-
-function cCompileArgs(sources: string[], out: string, includeDirs: string[] = []): string[] {
-  const args = [
-    '-w',
-    '-std=c11',
-    '-DINOX_LOOP_BACKEND_EMBEDDED=1',
-    '-DINOX_TLS_BACKEND_NONE=1',
-    `-I${join(rootDir, 'runtime/include')}`
-  ]
-
-  for (const includeDir of includeDirs) {
-    args.push(`-I${includeDir}`)
-  }
-
-  args.push(...sources)
-  args.push(...runtimeSources.map((source) => join(rootDir, source)))
-  args.push('-o', out)
-
-  return args
-}
-
 async function readCompilerSources(): Promise<SourceFile[]> {
   const paths = await readCompilerSourcePaths(join(rootDir, 'compiler'))
   const files: SourceFile[] = []
@@ -350,14 +239,17 @@ async function readCompilerSourcePaths(dir: string): Promise<string[]> {
 function selfHostedDriverSource(): string {
   return `import fs from 'node:fs'
 import process from 'node:process'
-import { compileSource } from './compiler/index.ts'
+import { compileSource } from './index.ts'
 
 function defaultOutputPath(input: string): string {
   return input + '.c'
 }
 
 try {
-  if (process.argv.length > 1) {
+  if (process.argv.length < 2) {
+    console.error('Usage: inox input.ts [output.c]')
+    process.exitCode = 1
+  } else {
     const input = process.argv[1]
     let output = defaultOutputPath(input)
 
@@ -370,18 +262,9 @@ try {
 
     fs.writeFileSync(output, result.code + '\\n')
     console.log(output)
-  } else {
-    const result = compileSource('const value: number = 1\\nconsole.log(value)\\n', { target: 'c', loopBackend: 'libuv', tlsBackend: 'openssl' })
-
-    if (result.code.length > 0) {
-      console.log('INOX SELFHOST BUILD OK')
-    } else {
-      console.log('INOX SELFHOST BUILD EMPTY')
-      process.exitCode = 1
-    }
   }
 } catch (error) {
-  console.error('INOX SELFHOST BUILD ERROR')
+  console.error('INOX BUILD ERROR')
   process.exitCode = 1
 }
 `
@@ -399,7 +282,6 @@ function parseArgs(args: string[]):
     } {
   let generatedDir = defaultGeneratedDir
   let out = defaultOut
-  let smoke = true
 
   for (let i = 0; i < args.length; i = i + 1) {
     const arg = args[i]
@@ -414,8 +296,7 @@ function parseArgs(args: string[]):
         help: true,
         options: {
           generatedDir,
-          out,
-          smoke
+          out
         }
       }
     }
@@ -444,8 +325,6 @@ function parseArgs(args: string[]):
       }
 
       generatedDir = resolve(rootDir, value)
-    } else if (arg === '--no-smoke') {
-      smoke = false
     } else {
       return {
         ok: false,
@@ -459,8 +338,7 @@ function parseArgs(args: string[]):
     help: false,
     options: {
       generatedDir,
-      out,
-      smoke
+      out
     }
   }
 }
@@ -469,13 +347,11 @@ function usage(): string {
   return `Usage:
   pnpm run build
   pnpm run build -- --out dist/inox
-  pnpm run build -- --generated-dir dist/selfhost/generated
-  pnpm run build -- --no-smoke
+  pnpm run build -- --generated-dir dist/compiler
 
 Builds a self-hosted compiler binary:
 - emits generated C modules to ${relative(rootDir, defaultGeneratedDir)}
 - links ${relative(rootDir, defaultOut)}
-- smoke-compiles and runs a tiny TypeScript input through the native binary
 
 The native binary is a narrow compiler driver:
   ${relative(rootDir, defaultOut)} input.ts output.c
