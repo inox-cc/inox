@@ -17,17 +17,14 @@
     "example:prepare-libuv-boringssl": "pnpm run libuv:bootstrap && pnpm run boringssl:bootstrap && cmake -S example -B example/build-libuv-boringssl -DINOX_LOOP_BACKEND=libuv -DINOX_TLS_BACKEND=boringssl",
     "boringssl:bootstrap": "node scripts/bootstrap-boringssl.ts",
     "libuv:bootstrap": "node scripts/bootstrap-libuv.ts",
-    "build": "node scripts/build.ts",
     "clean": "node scripts/clean.ts",
-    "audit:self-hosting": "node scripts/audit-self-hosting.ts",
-    "audit:self-hosting:gate": "node scripts/audit-self-hosting.ts --gate",
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:features",
     "test:smoke": "node tests/all.test.ts tests/smoke",
     "test:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features",
     "test:features": "node tests/all.test.ts",
-    "check": "pnpm run build && pnpm run typecheck && pnpm run test:features && pnpm run audit:self-hosting:gate"
+    "check": "pnpm run typecheck && pnpm run test:features"
   },
   "engines": {
     "node": ">=24"

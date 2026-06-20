@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
-import { rootDir } from './lib/repo-checks.ts'
+import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
 
 const submodulePath = 'third_party/libuv'

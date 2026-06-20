@@ -1,7 +1,7 @@
 import { lstat, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
-import { rootDir } from './lib/repo-checks.ts'
+import { rootDir } from './lib/repo-root.ts'
 
 type CleanOptions = {
   dryRun: boolean

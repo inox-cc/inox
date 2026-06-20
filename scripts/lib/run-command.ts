@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { rootDir } from './repo-checks.ts'
+import { rootDir } from './repo-root.ts'
 
 export type CommandResult = {
   code: number
