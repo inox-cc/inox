@@ -55,11 +55,7 @@ if (process.argv[2] === workerArg) {
 
   assert.notEqual(files.length, 0, 'feature tests: no .test.ts files found')
 
-  if (process.env.INOX_FEATURE_TEST_REPORT === 'verbose') {
-    await runVerboseFeatureTests(files, parallelism, options.compiler)
-  } else {
-    await runBriefFeatureTests(files, parallelism, options.compiler)
-  }
+  await runFeatureTests(files, parallelism, options.compiler)
 }
 
 type RunnerOptions = {
@@ -67,7 +63,7 @@ type RunnerOptions = {
   paths: string[]
 }
 
-async function runVerboseFeatureTests(
+async function runFeatureTests(
   files: string[],
   parallelism: number,
   compiler: FeatureTestCompiler
@@ -88,69 +84,6 @@ async function runVerboseFeatureTests(
       )
     )
   })
-}
-
-async function runBriefFeatureTests(
-  files: string[],
-  parallelism: number,
-  compiler: FeatureTestCompiler
-): Promise<void> {
-  const results = await runFeatureFilesInWorkerPool(files, parallelism, compiler)
-  const passed = results.filter((result) => result.status === 'passed').length
-  const failed = results.filter((result) => result.status === 'failed').length
-  const skipped = results.filter((result) => result.status === 'skipped').length
-
-  for (const result of results) {
-    if (result.status === 'failed') {
-      console.error(result.message ?? `${result.name}: failed`)
-    }
-  }
-
-  console.log(`passed: ${passed}`)
-  console.log(`failed: ${failed}`)
-  console.log(`skipped: ${skipped}`)
-  console.log(`total: ${files.length}`)
-
-  if (failed > 0) {
-    process.exitCode = 1
-  }
-}
-
-async function runFeatureFilesInWorkerPool(
-  files: string[],
-  parallelism: number,
-  compiler: FeatureTestCompiler
-): Promise<FeatureTestResult[]> {
-  const workerCount = Math.max(1, Math.min(parallelism, files.length))
-  const results: FeatureTestResult[] = []
-  let nextIndex = 0
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      const worker = createFeatureWorker()
-
-      try {
-        while (nextIndex < files.length) {
-          const index = nextIndex
-          nextIndex = nextIndex + 1
-
-          try {
-            results[index] = await worker.run(files[index], compiler)
-          } catch (error) {
-            results[index] = {
-              name: featureTestName(files[index]),
-              status: 'failed',
-              message: formatBriefFailure(featureTestName(files[index]), error)
-            }
-          }
-        }
-      } finally {
-        worker.close()
-      }
-    })
-  )
-
-  return results
 }
 
 async function runFeatureFileInProcess(file: string, compiler: FeatureTestCompiler): Promise<FeatureTestResult> {
@@ -272,7 +205,7 @@ async function handleFeatureWorkerMessage(message: unknown): Promise<void> {
     result = {
       name: featureTestName(message.file),
       status: 'failed',
-      message: formatBriefFailure(featureTestName(message.file), error)
+      message: formatFeatureFailure(featureTestName(message.file), error)
     }
   }
 
@@ -297,7 +230,7 @@ async function runFeatureFile(file: string, compiler: FeatureTestCompiler): Prom
     return {
       name: featureTestName(file),
       status: 'failed',
-      message: formatBriefFailure(featureTestName(file), error)
+      message: formatFeatureFailure(featureTestName(file), error)
     }
   }
 
@@ -331,7 +264,7 @@ async function runFeatureFile(file: string, compiler: FeatureTestCompiler): Prom
     return {
       name: featureFile.name,
       status: 'failed',
-      message: formatBriefFailure(featureFile.name, error)
+      message: formatFeatureFailure(featureFile.name, error)
     }
   }
 }
@@ -441,7 +374,7 @@ function parseFeatureTestCompiler(value: string): FeatureTestCompiler {
   }
 }
 
-function formatBriefFailure(name: string, error: unknown): string {
+function formatFeatureFailure(name: string, error: unknown): string {
   if (error instanceof Error) {
     return [`${name}: failed`, error.stack ?? error.message].join('\n')
   }
@@ -450,7 +383,7 @@ function formatBriefFailure(name: string, error: unknown): string {
 }
 
 function formatWorkerProcessError(file: string, error: unknown, stdout: string, stderr: string): Error {
-  const details = [formatBriefFailure(featureTestName(file), error)]
+  const details = [formatFeatureFailure(featureTestName(file), error)]
 
   if (stdout.length > 0) {
     details.push(`worker stdout:\n${stdout}`)
