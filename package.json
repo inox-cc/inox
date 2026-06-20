@@ -25,6 +25,8 @@
     "test:smoke": "node tests/all.test.ts tests/smoke",
     "test:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features",
     "test:features": "node tests/all.test.ts",
+    "test:features:dist": "node tests/all.test.ts --compiler dist/inox",
+    "test:features:dist:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features:dist",
     "check": "pnpm run typecheck && pnpm run test:features"
   },
   "engines": {

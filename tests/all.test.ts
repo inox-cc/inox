@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import { fork } from 'node:child_process'
 import { availableParallelism } from 'node:os'
+import { resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import {
   assertCcAvailable,
+  assertFeatureCompilerAvailable,
   collectFeatureTestFiles,
+  type FeatureTestCompiler,
   type FeatureTestFile,
   featureTestName,
   readFeatureTestFile,
@@ -25,6 +28,7 @@ type FeatureTestResult = {
 type WorkerRequest = {
   id: number
   file: string
+  compiler: FeatureTestCompiler
 }
 
 type WorkerResponse = {
@@ -38,26 +42,38 @@ const workerScript = fileURLToPath(import.meta.url)
 if (process.argv[2] === workerArg) {
   await runFeatureWorkerProcess()
 } else {
-  await assertCcAvailable()
+  const options = parseRunnerOptions(process.argv.slice(2))
 
-  const files = await collectFeatureTestFiles(process.argv.slice(2))
+  await assertCcAvailable()
+  await assertFeatureCompilerAvailable(options.compiler)
+
+  const files = await collectFeatureTestFiles(options.paths)
   const parallelism = availableParallelism() * 4
 
   assert.notEqual(files.length, 0, 'feature tests: no .test.ts files found')
 
   if (process.env.INOX_FEATURE_TEST_REPORT === 'verbose') {
-    await runVerboseFeatureTests(files, parallelism)
+    await runVerboseFeatureTests(files, parallelism, options.compiler)
   } else {
-    await runBriefFeatureTests(files, parallelism)
+    await runBriefFeatureTests(files, parallelism, options.compiler)
   }
 }
 
-async function runVerboseFeatureTests(files: string[], parallelism: number): Promise<void> {
+type RunnerOptions = {
+  compiler: FeatureTestCompiler
+  paths: string[]
+}
+
+async function runVerboseFeatureTests(
+  files: string[],
+  parallelism: number,
+  compiler: FeatureTestCompiler
+): Promise<void> {
   await test('compiler feature matrix', { concurrency: parallelism }, async (t) => {
     await Promise.all(
       files.map((file) =>
         t.test(featureTestName(file), async (context) => {
-          const result = await runFeatureFileInProcess(file)
+          const result = await runFeatureFileInProcess(file, compiler)
 
           if (result.status === 'skipped') {
             context.skip(result.reason ?? 'skipped')
@@ -71,8 +87,12 @@ async function runVerboseFeatureTests(files: string[], parallelism: number): Pro
   })
 }
 
-async function runBriefFeatureTests(files: string[], parallelism: number): Promise<void> {
-  const results = await runFeatureFilesInWorkerPool(files, parallelism)
+async function runBriefFeatureTests(
+  files: string[],
+  parallelism: number,
+  compiler: FeatureTestCompiler
+): Promise<void> {
+  const results = await runFeatureFilesInWorkerPool(files, parallelism, compiler)
   const passed = results.filter((result) => result.status === 'passed').length
   const failed = results.filter((result) => result.status === 'failed').length
   const skipped = results.filter((result) => result.status === 'skipped').length
@@ -93,7 +113,11 @@ async function runBriefFeatureTests(files: string[], parallelism: number): Promi
   }
 }
 
-async function runFeatureFilesInWorkerPool(files: string[], parallelism: number): Promise<FeatureTestResult[]> {
+async function runFeatureFilesInWorkerPool(
+  files: string[],
+  parallelism: number,
+  compiler: FeatureTestCompiler
+): Promise<FeatureTestResult[]> {
   const workerCount = Math.max(1, Math.min(parallelism, files.length))
   const results: FeatureTestResult[] = []
   let nextIndex = 0
@@ -108,7 +132,7 @@ async function runFeatureFilesInWorkerPool(files: string[], parallelism: number)
           nextIndex = nextIndex + 1
 
           try {
-            results[index] = await worker.run(files[index])
+            results[index] = await worker.run(files[index], compiler)
           } catch (error) {
             results[index] = {
               name: featureTestName(files[index]),
@@ -126,18 +150,18 @@ async function runFeatureFilesInWorkerPool(files: string[], parallelism: number)
   return results
 }
 
-async function runFeatureFileInProcess(file: string): Promise<FeatureTestResult> {
+async function runFeatureFileInProcess(file: string, compiler: FeatureTestCompiler): Promise<FeatureTestResult> {
   const worker = createFeatureWorker()
 
   try {
-    return await worker.run(file)
+    return await worker.run(file, compiler)
   } finally {
     worker.close()
   }
 }
 
 function createFeatureWorker(): {
-  run: (file: string) => Promise<FeatureTestResult>
+  run: (file: string, compiler: FeatureTestCompiler) => Promise<FeatureTestResult>
   close: () => void
 } {
   const child = fork(workerScript, [workerArg], {
@@ -157,13 +181,14 @@ function createFeatureWorker(): {
   })
 
   return {
-    run: (file) =>
+    run: (file, compiler) =>
       new Promise<FeatureTestResult>((resolve, reject) => {
         const id = nextRequestId
         nextRequestId = nextRequestId + 1
         const request: WorkerRequest = {
           id,
-          file
+          file,
+          compiler
         }
 
         const cleanup = (): void => {
@@ -239,7 +264,7 @@ async function handleFeatureWorkerMessage(message: unknown): Promise<void> {
   let result: FeatureTestResult
 
   try {
-    result = await runFeatureFile(message.file)
+    result = await runFeatureFile(message.file, message.compiler)
   } catch (error) {
     result = {
       name: featureTestName(message.file),
@@ -260,7 +285,7 @@ function sendWorkerResponse(response: WorkerResponse): void {
   }
 }
 
-async function runFeatureFile(file: string): Promise<FeatureTestResult> {
+async function runFeatureFile(file: string, compiler: FeatureTestCompiler): Promise<FeatureTestResult> {
   let featureFile: FeatureTestFile
 
   try {
@@ -282,7 +307,9 @@ async function runFeatureFile(file: string): Promise<FeatureTestResult> {
   }
 
   try {
-    await runFeatureTest(featureFile)
+    await runFeatureTest(featureFile, {
+      compiler
+    })
     return {
       name: featureFile.name,
       status: 'passed'
@@ -301,7 +328,7 @@ function isWorkerRequest(value: unknown): value is WorkerRequest {
     return false
   }
 
-  return typeof value.id === 'number' && typeof value.file === 'string'
+  return typeof value.id === 'number' && typeof value.file === 'string' && isFeatureTestCompiler(value.compiler)
 }
 
 function isWorkerResponse(value: unknown): value is WorkerResponse {
@@ -325,8 +352,70 @@ function isFeatureTestResult(value: unknown): value is FeatureTestResult {
   )
 }
 
+function isFeatureTestCompiler(value: unknown): value is FeatureTestCompiler {
+  if (!isRecord(value)) {
+    return false
+  }
+
+  if (value.kind === 'node') {
+    return true
+  }
+
+  return value.kind === 'binary' && typeof value.path === 'string'
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function parseRunnerOptions(args: string[]): RunnerOptions {
+  const paths: string[] = []
+  let compiler: FeatureTestCompiler = {
+    kind: 'node'
+  }
+
+  for (let index = 0; index < args.length; index = index + 1) {
+    const arg = args[index]
+
+    if (arg === '--') {
+      paths.push(...args.slice(index + 1))
+      break
+    }
+
+    if (arg === '--compiler') {
+      const value = args[index + 1]
+      index = index + 1
+
+      assert.ok(value && !value.startsWith('-'), '--compiler expects node or a compiler binary path')
+      compiler = parseFeatureTestCompiler(value)
+      continue
+    }
+
+    if (arg.startsWith('--compiler=')) {
+      compiler = parseFeatureTestCompiler(arg.slice('--compiler='.length))
+      continue
+    }
+
+    paths.push(arg)
+  }
+
+  return {
+    compiler,
+    paths
+  }
+}
+
+function parseFeatureTestCompiler(value: string): FeatureTestCompiler {
+  if (value === 'node') {
+    return {
+      kind: 'node'
+    }
+  }
+
+  return {
+    kind: 'binary',
+    path: resolve(value)
+  }
 }
 
 function formatBriefFailure(name: string, error: unknown): string {

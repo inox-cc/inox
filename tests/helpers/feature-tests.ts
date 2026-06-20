@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { readdir, stat } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, readdir, stat } from 'node:fs/promises'
 import { basename, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -25,6 +26,19 @@ type FeatureExpectation =
       codes: string[]
     }
 
+export type FeatureTestCompiler =
+  | {
+      kind: 'node'
+    }
+  | {
+      kind: 'binary'
+      path: string
+    }
+
+export type FeatureTestOptions = {
+  compiler?: FeatureTestCompiler
+}
+
 export type FeatureTestFile = {
   path: string
   name: string
@@ -37,6 +51,9 @@ export type FeatureTestFile = {
 }
 
 const featureRoot = fileURLToPath(new URL('../features/', import.meta.url))
+const defaultFeatureTestCompiler: FeatureTestCompiler = {
+  kind: 'node'
+}
 
 export async function collectFeatureTestFiles(args: string[]): Promise<string[]> {
   const requestedRoots = args.filter((arg) => arg !== '--')
@@ -62,11 +79,25 @@ export async function assertCcAvailable(): Promise<void> {
   assert.equal(cc.code, 0, 'cc is not available')
 }
 
-export async function runFeatureTest(featureFile: FeatureTestFile): Promise<void> {
+export async function assertFeatureCompilerAvailable(compiler: FeatureTestCompiler): Promise<void> {
+  if (compiler.kind === 'node') {
+    return
+  }
+
+  try {
+    await access(compiler.path, constants.X_OK)
+  } catch {
+    assert.fail(`feature compiler is not executable: ${compiler.path}\nRun pnpm run build first.`)
+  }
+}
+
+export async function runFeatureTest(featureFile: FeatureTestFile, options: FeatureTestOptions = {}): Promise<void> {
+  const compiler = options.compiler ?? defaultFeatureTestCompiler
+
   if (featureFile.expectation.kind === 'diagnostics') {
-    await assertExpectedDiagnostics(featureFile)
+    await assertExpectedDiagnostics(featureFile, compiler)
   } else {
-    await assertCompilesAndRuns(featureFile)
+    await assertCompilesAndRuns(featureFile, compiler)
   }
 }
 
@@ -171,7 +202,7 @@ function parseExpectation(value: string): FeatureExpectation {
   assert.fail(`unknown @expect value: ${value}`)
 }
 
-async function assertCompilesAndRuns(featureFile: FeatureTestFile): Promise<void> {
+async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), 'inox-feature-'))
   const emittedCPath = join(dir, `${sanitizePath(featureFile.name)}.c`)
   const exePath = join(dir, sanitizePath(featureFile.name))
@@ -181,9 +212,9 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile): Promise<void
     let emittedC: string
 
     try {
-      emittedC = await compileFeatureTestToC(featureFile)
+      emittedC = await compileFeatureTestToC(featureFile, compiler)
     } catch (error) {
-      assert.fail(`${featureFile.name}: node-compile failed\n${formatCompileError(error)}`)
+      assert.fail(`${featureFile.name}: ${featureCompilerStage(compiler)} failed\n${formatCompileError(error)}`)
     }
 
     await writeFile(emittedCPath, emittedC)
@@ -225,7 +256,7 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile): Promise<void
   }
 }
 
-async function assertExpectedDiagnostics(featureFile: FeatureTestFile): Promise<void> {
+async function assertExpectedDiagnostics(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): Promise<void> {
   if (featureFile.expectation.kind !== 'diagnostics') {
     assert.fail(`${featureFile.name}: expected a diagnostics feature test`)
   }
@@ -233,7 +264,7 @@ async function assertExpectedDiagnostics(featureFile: FeatureTestFile): Promise<
   const expectedCodes = featureFile.expectation.codes
 
   try {
-    await compileFeatureTestToC(featureFile)
+    await compileFeatureTestToC(featureFile, compiler)
   } catch (error) {
     if (error instanceof CompileError) {
       const actualCodes = error.diagnostics.map((diagnostic) => diagnostic.code)
@@ -248,13 +279,30 @@ async function assertExpectedDiagnostics(featureFile: FeatureTestFile): Promise<
       return
     }
 
+    if (error instanceof FeatureBinaryCompilerError) {
+      const output = `${error.stdout}\n${error.stderr}\n${error.message}`
+
+      for (const expectedCode of expectedCodes) {
+        assert.ok(
+          output.includes(expectedCode),
+          `${featureFile.name}: missing diagnostic ${expectedCode}\n${formatCompileError(error)}`
+        )
+      }
+
+      return
+    }
+
     throw error
   }
 
   assert.fail(`${featureFile.name}: expected diagnostics ${expectedCodes.join(', ')}, but emitted C`)
 }
 
-async function compileFeatureTestToC(featureFile: FeatureTestFile): Promise<string> {
+async function compileFeatureTestToC(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): Promise<string> {
+  if (compiler.kind === 'binary') {
+    return await compileFeatureTestWithBinary(featureFile, compiler)
+  }
+
   if (featureFile.usesModuleGraph) {
     const result = await compileFile(featureFile.path, {
       target: 'c'
@@ -270,9 +318,33 @@ async function compileFeatureTestToC(featureFile: FeatureTestFile): Promise<stri
   return result.code
 }
 
+async function compileFeatureTestWithBinary(
+  featureFile: FeatureTestFile,
+  compiler: Extract<FeatureTestCompiler, { kind: 'binary' }>
+): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'inox-feature-compiler-'))
+  const outputPath = join(dir, `${sanitizePath(featureFile.name)}.c`)
+
+  try {
+    const compile = await runCommand(compiler.path, [featureFile.path, outputPath])
+
+    if (compile.code !== 0) {
+      throw new FeatureBinaryCompilerError(featureFile.name, compiler.path, featureFile.path, outputPath, compile)
+    }
+
+    return await readFile(outputPath, 'utf8')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 function formatCompileError(error: unknown): string {
   if (error instanceof CompileError) {
     return formatDiagnostics(error.diagnostics)
+  }
+
+  if (error instanceof FeatureBinaryCompilerError) {
+    return error.message
   }
 
   if (error instanceof Error) {
@@ -300,4 +372,40 @@ function words(value: string): string[] {
 
 function usesRelativeModuleImport(source: string): boolean {
   return /(?:^|\n)\s*(?:import|export)\s+(?:[^'"]+\s+from\s+)?['"](?:\.\/|\.\.\/)/.test(source)
+}
+
+function featureCompilerStage(compiler: FeatureTestCompiler): string {
+  if (compiler.kind === 'node') {
+    return 'node-compile'
+  }
+
+  return `binary-compile (${compiler.path})`
+}
+
+class FeatureBinaryCompilerError extends Error {
+  readonly stdout: string
+  readonly stderr: string
+
+  constructor(
+    name: string,
+    compilerPath: string,
+    inputPath: string,
+    outputPath: string,
+    result: { code: number; stdout: string; stderr: string }
+  ) {
+    super(
+      [
+        `${name}: binary compiler failed`,
+        `compiler: ${compilerPath}`,
+        `input: ${inputPath}`,
+        `output: ${outputPath}`,
+        `exit code: ${result.code}`,
+        `stdout: ${result.stdout}`,
+        `stderr: ${result.stderr}`
+      ].join('\n')
+    )
+    this.name = 'FeatureBinaryCompilerError'
+    this.stdout = result.stdout
+    this.stderr = result.stderr
+  }
 }
