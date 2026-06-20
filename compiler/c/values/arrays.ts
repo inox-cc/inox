@@ -913,6 +913,12 @@ export function emitPreparedArrayLengthExpression(
     return null
   }
 
+  const runtimeReferenceName = runtimeArrayLengthReferenceName(expression.object, context)
+
+  if (runtimeReferenceName !== null && typeof runtimeReferenceName !== 'undefined') {
+    return emitPreparedDirectRuntimeArrayLengthExpression(runtimeReferenceName, context)
+  }
+
   const knownLength = resolveKnownArrayLength(expression, context)
 
   if (knownLength !== null && typeof knownLength !== 'undefined') {
@@ -924,25 +930,97 @@ export function emitPreparedArrayLengthExpression(
 
   const deps = arrayDeps(context)
 
-  if (
-    deps.inferExpressionType(expression.object, context) !== 'array' &&
-    !isDynamicObjectArrayLengthReceiver(expression.object, context, deps)
-  ) {
+  if (!isArrayLengthReceiver(expression.object, context, deps)) {
     return null
   }
 
   const value = deps.emitCValueExpression(expression.object, context)
+
+  return emitPreparedRuntimeArrayLengthExpression(value.expression, value.lines, context)
+}
+
+function emitPreparedDirectRuntimeArrayLengthExpression(
+  arrayExpression: string,
+  context: ArrayFunctionContext
+): PreparedExpression {
+  const temp = nextCName(context, 'inox_array_len')
+
+  return {
+    lines: [
+      `size_t ${temp} = 0;`,
+      emitStatusCheck(`inox_array_len(${arrayExpression}, &${temp})`, context)
+    ],
+    expression: `((double)${temp})`
+  }
+}
+
+function emitPreparedRuntimeArrayLengthExpression(
+  arrayExpression: string,
+  valueLines: string[],
+  context: ArrayFunctionContext
+): PreparedExpression {
   const temp = nextCName(context, 'inox_array_len')
   const lines: string[] = []
 
-  appendLines(lines, value.lines)
+  appendLines(lines, valueLines)
   lines.push(`size_t ${temp} = 0;`)
-  lines.push(emitStatusCheck(`inox_array_len(${value.expression}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox_array_len(${arrayExpression}, &${temp})`, context))
 
   return {
     lines,
     expression: `((double)${temp})`
   }
+}
+
+function runtimeArrayLengthReferenceName(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): string | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+
+  if (context.arrayShapes.has(name) || !context.runtimeArrayElementTypes.has(name)) {
+    return null
+  }
+
+  return name
+}
+
+function isArrayLengthReceiver(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext,
+  deps: ArrayLoweringDependencies
+): boolean {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  if (deps.inferExpressionType(expression, context) === 'array') {
+    return true
+  }
+
+  if (expression.valueType === 'array') {
+    return true
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    return (
+      context.variables.get(name) === 'array' ||
+      context.runtimeArrayElementTypes.has(name) ||
+      context.arrayShapes.has(name)
+    )
+  }
+
+  return isDynamicObjectArrayLengthReceiver(expression, context, deps)
 }
 
 function isDynamicObjectArrayLengthReceiver(

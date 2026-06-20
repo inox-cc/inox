@@ -2824,7 +2824,11 @@ export function emitPreparedNumberExpression(
       return stringLength
     }
 
-    const length = deps.emitPreparedArrayLengthExpression(expression, context)
+    let length: PreparedExpression | null = null
+
+    if (expression.property === 'length') {
+      length = deps.emitPreparedArrayLengthExpression(expression, context)
+    }
 
     if (length !== null && typeof length !== 'undefined') {
       return length

@@ -5305,7 +5305,11 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
       }
     }
 
-    const length = emitPreparedArrayLengthExpression(expression, context)
+    let length: PreparedExpression | null = null
+
+    if (expression.property === 'length') {
+      length = emitPreparedArrayLengthExpression(expression, context)
+    }
 
     if (length !== null && typeof length !== 'undefined') {
       return {

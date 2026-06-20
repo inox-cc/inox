@@ -2522,6 +2522,7 @@ class Checker {
     }
 
     if (objectType === 'array' && expression.property === 'length') {
+      expression.valueType = 'number'
       return 'number'
     }
 
