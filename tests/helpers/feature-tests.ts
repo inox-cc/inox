@@ -56,12 +56,12 @@ const defaultFeatureTestCompiler: FeatureTestCompiler = {
 }
 
 export async function collectFeatureTestFiles(args: string[]): Promise<string[]> {
-  const requestedRoots = args.filter((arg) => arg !== '--')
-  const roots = requestedRoots.length > 0 ? requestedRoots.map((arg) => resolve(arg)) : [featureRoot]
+  const requestedArgs = args.filter((arg) => arg !== '--')
+  const requests = requestedArgs.length > 0 ? requestedArgs : [featureRoot]
   const files: string[] = []
 
-  for (const root of roots) {
-    files.push(...(await collectPath(root)))
+  for (const request of requests) {
+    files.push(...(await collectFeatureTestRequest(request)))
   }
 
   return [...new Set(files)].sort()
@@ -103,6 +103,75 @@ export async function runFeatureTest(featureFile: FeatureTestFile, options: Feat
 
 export function featureTestName(path: string): string {
   return basename(path, extname(path)).replace(/\.test$/, '')
+}
+
+async function collectFeatureTestRequest(request: string): Promise<string[]> {
+  const directPath = await collectExistingPath(request)
+
+  if (directPath) {
+    return directPath
+  }
+
+  if (!request.endsWith('.test.ts')) {
+    const testFilePath = await collectExistingPath(`${request}.test.ts`)
+
+    if (testFilePath) {
+      return testFilePath
+    }
+  }
+
+  if (!isBareTestName(request)) {
+    assert.fail(`feature tests: path not found: ${resolve(request)}`)
+  }
+
+  return await collectFeatureTestName(request)
+}
+
+async function collectExistingPath(path: string): Promise<string[] | undefined> {
+  try {
+    return await collectPath(resolve(path))
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return undefined
+    }
+
+    throw error
+  }
+}
+
+async function collectFeatureTestName(name: string): Promise<string[]> {
+  const normalizedName = normalizeFeatureTestName(name)
+  const matches = (await collectPath(featureRoot)).filter((file) => featureTestName(file) === normalizedName)
+
+  assert.ok(matches.length > 0, `feature tests: no test named ${name}`)
+
+  return matches
+}
+
+function normalizeFeatureTestName(name: string): string {
+  const fileName = basename(name)
+
+  if (fileName.endsWith('.test.ts')) {
+    return fileName.slice(0, -'.test.ts'.length)
+  }
+
+  if (fileName.endsWith('.ts')) {
+    return fileName.slice(0, -'.ts'.length)
+  }
+
+  return fileName
+}
+
+function isBareTestName(value: string): boolean {
+  return !value.includes('/') && !value.includes('\\')
+}
+
+function isMissingPathError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false
+  }
+
+  return error.code === 'ENOENT'
 }
 
 async function collectPath(path: string): Promise<string[]> {
