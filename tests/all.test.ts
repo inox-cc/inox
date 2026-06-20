@@ -536,7 +536,7 @@ console.log(module)
   }
 ]
 
-const featureReportMode: FeatureReportMode = process.env.INOX_FEATURE_TEST_REPORT === 'verbose' ? 'verbose' : 'brief'
+const featureReportMode: FeatureReportMode = process.env.TEST_REPORT === 'verbose' ? 'verbose' : 'brief'
 
 test('compiler feature matrix', { timeout: 120_000 }, async (t) => {
   const cc = await runCommand('cc', ['--version'])
