@@ -219,7 +219,9 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('debug-memory')
     } else if (feature === 'fs') {
       requirements.add('async-runtime')
+      requirements.add('collections')
       requirements.add('fs')
+      requirements.add('managed-values')
     } else if (feature === 'json') {
       requirements.add('collections')
       requirements.add('json')
@@ -744,9 +746,14 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
 
 function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): void {
   const callee = expression.callee
+  const timeCall = callee !== null && typeof callee !== 'undefined' ? timeRuntimeCallName(callee) : null
 
-  if (callee !== null && typeof callee !== 'undefined' && timeRuntimeCallName(callee)) {
+  if (timeCall !== null && typeof timeCall !== 'undefined') {
     features.add('clocks')
+
+    if (timeCall === 'sleep') {
+      features.add('runtime-values')
+    }
   }
 
   if (
@@ -803,6 +810,12 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
 
   if (timerRuntimeCallName(expression)) {
     features.add('timers')
+  }
+
+  if (isArrayFromCall(expression)) {
+    features.add('collections')
+    features.add('runtime-values')
+    features.add('string-bytes')
   }
 
   const arrayMethod = arrayMethodCallName(expression)
@@ -1158,6 +1171,18 @@ function arrayMethodCallName(expression: FeatureNode): string | null {
   }
 
   return method
+}
+
+function isArrayFromCall(expression: FeatureNode): boolean {
+  const path = memberExpressionPath(expression.callee)
+
+  return (
+    path !== null &&
+    typeof path !== 'undefined' &&
+    path.length === 2 &&
+    path[0] === 'Array' &&
+    path[1] === 'from'
+  )
 }
 
 function isStringConversionCall(expression: FeatureNode): boolean {

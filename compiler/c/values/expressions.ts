@@ -2734,6 +2734,10 @@ export function emitPreparedNumberExpression(
     }
   }
 
+  if (expression.type === 'ConditionalExpression') {
+    return emitPreparedConditionalNumberExpression(expression, context, deps)
+  }
+
   if (expression.type === 'AssignmentExpression') {
     const value = emitPreparedNumberExpression(expression.value, context, deps)
 
@@ -2803,6 +2807,14 @@ export function emitPreparedNumberExpression(
     }
 
     return deps.emitPreparedCallExpression(expression, context)
+  }
+
+  if (expression.type === 'OptionalCallExpression') {
+    const optionalPlainCall = emitPreparedOptionalPlainFunctionPointerCallExpression(expression, context, deps)
+
+    if (optionalPlainCall !== null && typeof optionalPlainCall !== 'undefined') {
+      return optionalPlainCall
+    }
   }
 
   if (deps.isMemberAccessExpression(expression)) {
@@ -3473,6 +3485,107 @@ function emitPreparedBooleanOperandExpression(
   }
 
   return emitPreparedNumberExpression(expression, context, deps)
+}
+
+function emitPreparedConditionalNumberExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression {
+  const test = emitPreparedBooleanOperandExpression(expression.test, context, deps)
+  const consequent = emitPreparedNumberExpression(expression.consequent, context, deps)
+  const alternate = emitPreparedNumberExpression(expression.alternate, context, deps)
+  const temp = nextCName(context, 'inox_conditional')
+  const lines: string[] = []
+
+  appendLines(lines, test.lines)
+  lines.push(`double ${temp} = 0;`)
+  lines.push(`if ${emitCConditionClause(test.expression)} {`)
+  appendPrefixedLines(lines, consequent.lines, '  ')
+  lines.push(`  ${temp} = ${consequent.expression};`)
+  lines.push('} else {')
+  appendPrefixedLines(lines, alternate.lines, '  ')
+  lines.push(`  ${temp} = ${alternate.expression};`)
+  lines.push('}')
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+function emitPreparedOptionalPlainFunctionPointerCallExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  const functionType = plainOptionalCallFunctionType(expression, context)
+
+  if (functionType === null || typeof functionType === 'undefined') {
+    return null
+  }
+
+  const returnType = functionType.returnType
+
+  if (returnType !== 'number' && returnType !== 'boolean') {
+    return null
+  }
+
+  return deps.emitPreparedCallExpression(asRequiredCallExpression(expression), context)
+}
+
+function plainOptionalCallFunctionType(
+  expression: CValueNode,
+  context: CFunctionContext
+): CFunctionType | null {
+  if (expression.type !== 'OptionalCallExpression') {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  const name = stringValueAt(callee.path, 0)
+
+  if (context.nullableVariables.has(name) || context.runtimeCallbacks.has(name)) {
+    return null
+  }
+
+  if (context.variables.get(name) !== 'function') {
+    return null
+  }
+
+  const functionType = context.functionTypes.get(name)
+
+  if (!isPlainFunctionPointerType(functionType)) {
+    return null
+  }
+
+  return functionType ?? null
+}
+
+function asRequiredCallExpression(expression: CValueNode): CValueNode {
+  return {
+    type: 'CallExpression',
+    callee: expression.callee,
+    args: expression.args,
+    valueType: expression.valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: expression.arrayElementType,
+    arrayElementDeclaredType: expression.arrayElementDeclaredType,
+    mapKeyType: expression.mapKeyType,
+    mapValueType: expression.mapValueType,
+    promiseValueType: expression.promiseValueType,
+    setElementType: expression.setElementType,
+    functionType: expression.functionType,
+    shape: expression.shape,
+    className: expression.className,
+    collectionKind: expression.collectionKind,
+    loc: expression.loc
+  }
 }
 
 function emitPreparedScalarNullishCoalescingExpression(

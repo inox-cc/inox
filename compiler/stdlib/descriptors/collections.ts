@@ -8,6 +8,7 @@ export const arrayMethods: string[] = [
   'map',
   'pop',
   'push',
+  'reduce',
   'slice',
   'sort',
   'unshift'

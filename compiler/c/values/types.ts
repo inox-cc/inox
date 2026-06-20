@@ -7,6 +7,7 @@ import type {
   CKnownObjectField,
   CKnownObjectIndexField,
   CPreparedExpression,
+  CFunctionType,
   CRuntimeArrayElement
 } from '../types.ts'
 
@@ -369,6 +370,14 @@ export function inferExpressionType(
     }
   }
 
+  if (expression.type === 'OptionalCallExpression') {
+    const functionType = optionalCallFunctionType(expression.callee, context)
+
+    if (functionType !== null && typeof functionType !== 'undefined') {
+      return functionType.returnType
+    }
+  }
+
   if (deps.isArrayIsArrayCall(expression)) {
     return 'boolean'
   }
@@ -489,6 +498,23 @@ export function inferExpressionType(
     }
 
     return argumentType
+  }
+
+  if (expression.type === 'ConditionalExpression') {
+    const knownType = deps.knownValueType(expression.valueType)
+
+    if (knownType !== null && typeof knownType !== 'undefined') {
+      return knownType
+    }
+
+    const consequentType = inferExpressionType(expression.consequent, context, deps)
+    const alternateType = inferExpressionType(expression.alternate, context, deps)
+
+    if (consequentType === alternateType) {
+      return consequentType
+    }
+
+    return 'unknown'
   }
 
   if (expression.type === 'StringLiteral') {
@@ -713,6 +739,25 @@ function cObjectFunctionFieldCallReturnType(
   }
 
   return field.functionType.returnType
+}
+
+function optionalCallFunctionType(callee: AnyNode, context: CFunctionContext): CFunctionType | null {
+  if (callee.functionType !== null && typeof callee.functionType !== 'undefined') {
+    return callee.functionType
+  }
+
+  if (callee.type !== 'Reference' || callee.path.length !== 1) {
+    return null
+  }
+
+  const name = callee.path[0]
+  const functionType = context.functionTypes.get(name)
+
+  if (functionType !== null && typeof functionType !== 'undefined') {
+    return functionType
+  }
+
+  return null
 }
 
 function anyNodeLikeObjectAccessValueType(expression: AnyNode, context: CFunctionContext): string | null {

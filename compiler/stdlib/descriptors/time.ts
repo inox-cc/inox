@@ -40,6 +40,10 @@ export const timeRuntimeDescriptors: TimeRuntimeDescriptor[] = [
 ]
 
 export function timeRuntimeMethodNameFromPath(path: string[] | null | undefined): string | null {
+  if (isTimeSleepRuntimePath(path)) {
+    return 'sleep'
+  }
+
   if (isDateNowRuntimePath(path)) {
     return 'dateNow'
   }
@@ -64,6 +68,13 @@ export function timeRuntimeCFunctionNameFromPath(path: string[] | null | undefin
 }
 
 export function timeRuntimeCapabilityFromPath(path: string[] | null | undefined): TimeRuntimeCapability | null {
+  if (isTimeSleepRuntimePath(path)) {
+    return {
+      key: 'monotonicClock',
+      name: 'monotonic-clock'
+    }
+  }
+
   if (isDateNowRuntimePath(path)) {
     return {
       key: 'wallClock',
@@ -89,4 +100,8 @@ function isPerformanceNowRuntimePath(path: string[] | null | undefined): boolean
   return (
     path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'performance' && path[1] === 'now'
   )
+}
+
+function isTimeSleepRuntimePath(path: string[] | null | undefined): boolean {
+  return path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'time' && path[1] === 'sleep'
 }

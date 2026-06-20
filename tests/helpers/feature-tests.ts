@@ -31,6 +31,9 @@ export type FeatureTestCompiler =
       kind: 'node'
     }
   | {
+      kind: 'plain-node'
+    }
+  | {
       kind: 'binary'
       path: string
     }
@@ -80,7 +83,7 @@ export async function assertCcAvailable(): Promise<void> {
 }
 
 export async function assertFeatureCompilerAvailable(compiler: FeatureTestCompiler): Promise<void> {
-  if (compiler.kind === 'node') {
+  if (compiler.kind === 'node' || compiler.kind === 'plain-node') {
     return
   }
 
@@ -94,11 +97,32 @@ export async function assertFeatureCompilerAvailable(compiler: FeatureTestCompil
 export async function runFeatureTest(featureFile: FeatureTestFile, options: FeatureTestOptions = {}): Promise<void> {
   const compiler = options.compiler ?? defaultFeatureTestCompiler
 
+  if (compiler.kind === 'plain-node') {
+    await assertRunsWithPlainNode(featureFile)
+    return
+  }
+
   if (featureFile.expectation.kind === 'diagnostics') {
     await assertExpectedDiagnostics(featureFile, compiler)
   } else {
     await assertCompilesAndRuns(featureFile, compiler)
   }
+}
+
+export function featureTestSkipReason(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): string | undefined {
+  if (compiler.kind !== 'plain-node') {
+    return undefined
+  }
+
+  if (featureFile.expectation.kind === 'diagnostics') {
+    return 'plain-node: compiler diagnostics are not checked'
+  }
+
+  if (usesExtensionlessRelativeModuleImport(featureFile.source)) {
+    return 'plain-node: case requires compiler module resolution'
+  }
+
+  return undefined
 }
 
 export function featureTestName(path: string): string {
@@ -288,7 +312,7 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: Fea
 
     await writeFile(emittedCPath, emittedC)
 
-    const compile = await compileRuntimeProgram(emittedCPath, exePath)
+    const compile = await compileRuntimeProgram(emittedCPath, exePath, featureRuntimeCompileArgs(emittedC))
     keepArtifacts = compile.code !== 0
 
     assert.equal(
@@ -323,6 +347,28 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: Fea
       await rm(dir, { recursive: true, force: true })
     }
   }
+}
+
+async function assertRunsWithPlainNode(featureFile: FeatureTestFile): Promise<void> {
+  if (featureFile.expectation.kind === 'diagnostics') {
+    assert.fail(`${featureFile.name}: plain-node mode cannot check compiler diagnostics`)
+  }
+
+  const run = await runCommand('node', [featureFile.path])
+
+  assert.equal(run.code, 0, `${featureFile.name}: plain-node-run failed\nstdout: ${run.stdout}\nstderr: ${run.stderr}`)
+  assert.equal(run.stdout, featureFile.expectedStdout, `${featureFile.name}: stdout mismatch`)
+  assert.equal(run.stderr, featureFile.expectedStderr, `${featureFile.name}: stderr mismatch`)
+}
+
+function featureRuntimeCompileArgs(emittedC: string): string[] {
+  const args: string[] = []
+
+  if (emittedC.includes('INOX_FIELD_WEAK')) {
+    args.push('-DINOX_ENABLE_WEAK=1')
+  }
+
+  return args
 }
 
 async function assertExpectedDiagnostics(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): Promise<void> {
@@ -448,7 +494,28 @@ function featureCompilerStage(compiler: FeatureTestCompiler): string {
     return 'node-compile'
   }
 
+  if (compiler.kind === 'plain-node') {
+    return 'plain-node-run'
+  }
+
   return `binary-compile (${compiler.path})`
+}
+
+function usesExtensionlessRelativeModuleImport(source: string): boolean {
+  const moduleSpecifierPattern = /(?:^|\n)\s*(?:import|export)\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]/g
+  let match = moduleSpecifierPattern.exec(source)
+
+  while (match) {
+    const specifier = match[1]
+
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && extname(specifier) === '') {
+      return true
+    }
+
+    match = moduleSpecifierPattern.exec(source)
+  }
+
+  return false
 }
 
 class FeatureBinaryCompilerError extends Error {

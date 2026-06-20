@@ -41,6 +41,16 @@ export function createBinaryExpression(operator: Token, left: AnyNode, right: An
   }
 }
 
+export function createConditionalExpression(test: AnyNode, consequent: AnyNode, alternate: AnyNode): AnyNode {
+  return {
+    type: 'ConditionalExpression',
+    test,
+    consequent,
+    alternate,
+    loc: test.loc
+  }
+}
+
 export function createAwaitExpression(token: Token, argument: AnyNode): AnyNode {
   return {
     type: 'AwaitExpression',

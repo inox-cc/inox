@@ -446,6 +446,36 @@ export function isArrayMethodCall(expression: ArrayMaybeNode): boolean {
   return !!arrayRuntimeMethodName(callee.property)
 }
 
+export function isArrayReduceCall(expression: ArrayMaybeNode): boolean {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const callee = expression.callee
+
+  return callee.type === 'MemberExpression' && callee.property === 'reduce'
+}
+
+function isArrayFromCall(expression: ArrayMaybeNode): boolean {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
+    return false
+  }
+
+  if (expression.args.length !== 1) {
+    return false
+  }
+
+  const callee = expression.callee
+
+  return (
+    callee.type === 'MemberExpression' &&
+    callee.property === 'from' &&
+    callee.object.type === 'Reference' &&
+    callee.object.path.length === 1 &&
+    callee.object.path[0] === 'Array'
+  )
+}
+
 export function isArrayIncludesCall(expression: ArrayMaybeNode): boolean {
   if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return false
@@ -1707,6 +1737,133 @@ function emitPreparedArrayComparatorSortCallExpression(
   }
 }
 
+export function emitPreparedArrayFromCallExpression(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): PreparedArrayExpression | null {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  if (!isArrayFromCall(expression)) {
+    return null
+  }
+
+  if (arrayDeps(context).inferExpressionType(expression.args[0], context) !== 'string') {
+    return null
+  }
+
+  const source = arrayDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_array_from_string')
+  const out = nextCName(context, 'inox_array_from')
+  const index = nextCName(context, 'inox_array_from_index')
+  const item = nextCName(context, 'inox_array_from_item')
+  const lines: string[] = []
+
+  registerOwnedValue(context, out)
+  registerOwnedValue(context, item)
+  appendLines(lines, source.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, 0, &${out})`, context))
+  lines.push(`for (size_t ${index} = 0; ${index} < ${source.length}; ${index} += 1) {`)
+  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(item), '  ')
+  lines.push(
+    `  ${emitStatusCheck(
+      `inox_string_slice_parts(&inox_default_allocator, ${source.bytes}, ${source.length}, ${index}, ${index} + 1, &${item})`,
+      context
+    )}`
+  )
+  lines.push(`  ${emitStatusCheck(`inox_array_push(${out}, ${item})`, context)}`)
+  lines.push('}')
+
+  return {
+    lines,
+    expression: out,
+    elementType: 'string'
+  }
+}
+
+export function emitPreparedArrayReduceCallExpression(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): PreparedExpression | null {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
+    return null
+  }
+
+  if (!isArrayReduceCall(expression) || expression.args.length !== 2) {
+    return null
+  }
+
+  if (expression.valueType !== 'number') {
+    return null
+  }
+
+  const callback = expression.args[0]
+  const initial = expression.args[1]
+  const returnExpression = resolveArrowReturnExpression(callback)
+
+  if (
+    callback === null ||
+    typeof callback === 'undefined' ||
+    callback.type !== 'ArrowFunctionExpression' ||
+    callback.params.length > 3 ||
+    returnExpression === null ||
+    typeof returnExpression === 'undefined' ||
+    initial === null ||
+    typeof initial === 'undefined' ||
+    arrayDeps(context).inferExpressionType(initial, context) !== 'number'
+  ) {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression') {
+    return null
+  }
+
+  const receiver = emitPreparedArrayReceiver(callee.object, context)
+
+  if (receiver === null || typeof receiver === 'undefined' || receiver.elementType !== 'number') {
+    return null
+  }
+
+  const accumulator = nextCName(context, 'inox_reduce_acc')
+  const length = nextCName(context, 'inox_reduce_length')
+  const index = nextCName(context, 'inox_reduce_index')
+  const value = nextCName(context, 'inox_reduce_value')
+  const initialValue = arrayDeps(context).emitPreparedNumberExpression(initial, context)
+  const bodyScope = pushArrayVariableScope(context)
+  const body: string[] = []
+  const input = emitPreparedArrayReduceCallbackInput(callback, accumulator, value, index, context)
+  const reduced = arrayDeps(context).emitPreparedNumberExpression(returnExpression, context)
+
+  appendLines(body, input)
+  appendLines(body, reduced.lines)
+  body.push(`${accumulator} = ${reduced.expression};`)
+  restoreArrayVariableScope(context, bodyScope)
+  registerOwnedValue(context, value)
+
+  const lines: string[] = []
+
+  appendLines(lines, receiver.lines)
+  appendLines(lines, initialValue.lines)
+  lines.push(`double ${accumulator} = ${initialValue.expression};`)
+  lines.push(`size_t ${length} = 0;`)
+  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
+  lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
+  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
+  lines.push(`  ${emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)}`)
+  appendPrefixedLines(lines, body, '  ')
+  lines.push('}')
+  appendLines(lines, emitPrepareOwnedValueWrite(value))
+
+  return {
+    lines,
+    expression: accumulator
+  }
+}
+
 export function emitPreparedArrayMapCallExpression(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
@@ -2456,6 +2613,49 @@ function emitPreparedArrayCallbackInput(
   return lines
 }
 
+function emitPreparedArrayReduceCallbackInput(
+  callback: AnyNode,
+  accumulator: string,
+  value: string,
+  index: string,
+  context: ArrayFunctionContext
+): string[] {
+  const lines: string[] = []
+  let accumulatorParam: ArrayNode | null = null
+  let valueParam: ArrayNode | null = null
+  let indexParam: ArrayNode | null = null
+
+  if (callback.params.length > 0) {
+    accumulatorParam = arrayNodeAt(callback.params, 0)
+  }
+
+  if (callback.params.length > 1) {
+    valueParam = arrayNodeAt(callback.params, 1)
+  }
+
+  if (callback.params.length > 2) {
+    indexParam = arrayNodeAt(callback.params, 2)
+  }
+
+  if (accumulatorParam !== null && typeof accumulatorParam !== 'undefined') {
+    context.variables.set(accumulatorParam.name, 'number')
+    lines.push(`double ${accumulatorParam.name} = ${accumulator};`)
+  }
+
+  if (valueParam !== null && typeof valueParam !== 'undefined') {
+    context.variables.set(valueParam.name, 'number')
+    lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
+    lines.push(`double ${valueParam.name} = ${value}.as.number;`)
+  }
+
+  if (indexParam !== null && typeof indexParam !== 'undefined') {
+    context.variables.set(indexParam.name, 'number')
+    lines.push(`double ${indexParam.name} = (double)${index};`)
+  }
+
+  return lines
+}
+
 function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, context: ArrayFunctionContext): void {
   if (
     receiver === null ||
@@ -2749,6 +2949,10 @@ function emitPreparedArrayReceiver(
 
     if (call === null || typeof call === 'undefined') {
       call = emitPreparedArraySortCallExpression(expression, context)
+    }
+
+    if (call === null || typeof call === 'undefined') {
+      call = emitPreparedArrayFromCallExpression(expression, context)
     }
 
     if (

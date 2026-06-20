@@ -85,20 +85,24 @@ function lowerExpressionWithContext(
   }
 
   if (expression.type === 'OptionalCallExpression') {
+    const callee = lowerExpressionWithContext(expression.callee, context)
+
     return cloneCallExpression(
       expression,
-      lowerExpressionWithContext(expression.callee, context),
+      callee,
       lowerExpressionList(expression.args, context),
-      fallbackString(expression.valueType, 'unknown')
+      callExpressionValueType(expression, callee)
     )
   }
 
   if (expression.type === 'CallExpression') {
+    const callee = lowerExpressionWithContext(expression.callee, context)
+
     return cloneCallExpression(
       expression,
-      lowerExpressionWithContext(expression.callee, context),
+      callee,
       lowerExpressionList(expression.args, context),
-      fallbackString(expression.valueType, 'unknown')
+      callExpressionValueType(expression, callee)
     )
   }
 
@@ -138,6 +142,19 @@ function lowerExpressionWithContext(
     const right = lowerExpressionWithContext(expression.right, context)
 
     return cloneBinaryExpression(expression, left, right, inferBinaryExpressionType(expression.operator, left, right))
+  }
+
+  if (expression.type === 'ConditionalExpression') {
+    const consequent = lowerExpressionWithContext(expression.consequent, context)
+    const alternate = lowerExpressionWithContext(expression.alternate, context)
+
+    return cloneConditionalExpression(
+      expression,
+      lowerExpressionWithContext(expression.test, context),
+      consequent,
+      alternate,
+      inferConditionalExpressionType(consequent, alternate)
+    )
   }
 
   if (expression.type === 'UnaryExpression') {
@@ -781,6 +798,8 @@ function cloneArrowFunctionExpression(
   expression: LowerExpressionNode,
   body: LowerExpressionNode | LowerExpressionNode[]
 ): LowerExpressionNode {
+  const functionType = arrowFunctionType(expression, body)
+
   return copyRuntimeMetadata(
     {
       type: 'ArrowFunctionExpression',
@@ -790,7 +809,7 @@ function cloneArrowFunctionExpression(
       expressionBody: expression.expressionBody === true,
       valueType: 'function',
       nullable: expression.nullable === true,
-      functionType: nullableNode(expression.functionType),
+      functionType,
       shape: nullableNode(expression.shape),
       loc: expression.loc
     },
@@ -813,6 +832,106 @@ function lowerArrowFunctionBody(
   }
 
   return body
+}
+
+function arrowFunctionType(
+  expression: LowerExpressionNode,
+  body: LowerExpressionNode | LowerExpressionNode[]
+): LowerExpressionNode | null {
+  const existing = nullableNode(expression.functionType)
+
+  if (existing !== null && typeof existing !== 'undefined') {
+    return existing
+  }
+
+  const returnType = arrowFunctionReturnType(expression, body)
+
+  if (returnType === null || typeof returnType === 'undefined') {
+    return null
+  }
+
+  const params: LowerExpressionNode[] = []
+
+  for (const param of expression.params) {
+    params.push(param)
+  }
+
+  return {
+    kind: 'function',
+    params,
+    returnType,
+    returnNullable: arrowFunctionReturnNullable(expression, body),
+    returnArrayElementType: arrowFunctionReturnStringMetadata(expression, body, 'arrayElementType'),
+    returnArrayElementDeclaredType: arrowFunctionReturnStringMetadata(expression, body, 'arrayElementDeclaredType'),
+    returnMapKeyType: arrowFunctionReturnStringMetadata(expression, body, 'mapKeyType'),
+    returnMapValueType: arrowFunctionReturnStringMetadata(expression, body, 'mapValueType'),
+    returnPromiseValueType: arrowFunctionReturnStringMetadata(expression, body, 'promiseValueType'),
+    returnSetElementType: arrowFunctionReturnStringMetadata(expression, body, 'setElementType'),
+    returnShape: arrowFunctionReturnShape(expression, body)
+  }
+}
+
+function arrowFunctionReturnType(
+  expression: LowerExpressionNode,
+  body: LowerExpressionNode | LowerExpressionNode[]
+): string | null {
+  const declared = nullableString(expression.returnType)
+
+  if (declared !== null && typeof declared !== 'undefined') {
+    return declared
+  }
+
+  if (!Array.isArray(body)) {
+    return nullableString(body.valueType)
+  }
+
+  return null
+}
+
+function arrowFunctionReturnNullable(
+  expression: LowerExpressionNode,
+  body: LowerExpressionNode | LowerExpressionNode[]
+): boolean {
+  if (expression.returnNullable === true) {
+    return true
+  }
+
+  return !Array.isArray(body) && body.nullable === true
+}
+
+function arrowFunctionReturnStringMetadata(
+  expression: LowerExpressionNode,
+  body: LowerExpressionNode | LowerExpressionNode[],
+  key: string
+): string | null {
+  const expressionValue = nullableString(expression[key])
+
+  if (expressionValue !== null && typeof expressionValue !== 'undefined') {
+    return expressionValue
+  }
+
+  if (!Array.isArray(body)) {
+    return nullableString(body[key])
+  }
+
+  return null
+}
+
+function arrowFunctionReturnShape(
+  expression: LowerExpressionNode,
+  body: LowerExpressionNode | LowerExpressionNode[]
+): LowerExpressionNode | null {
+  const expressionShape = nullableNode(expression.returnShape)
+
+  if (expressionShape !== null && typeof expressionShape !== 'undefined') {
+    return expressionShape
+  }
+
+  if (!Array.isArray(body)) {
+    return nullableNode(body.shape)
+  }
+
+  return null
 }
 
 function cloneAssignmentExpression(
@@ -880,6 +999,39 @@ function cloneBinaryExpression(
       functionType: nullableNode(expression.functionType),
       shape: nullableNode(expression.shape),
       className: nullableString(expression.className),
+      loc: expression.loc
+    },
+    expression
+  )
+}
+
+function cloneConditionalExpression(
+  expression: LowerExpressionNode,
+  test: LowerExpressionNode,
+  consequent: LowerExpressionNode,
+  alternate: LowerExpressionNode,
+  valueType: string
+): LowerExpressionNode {
+  return copyRuntimeMetadata(
+    {
+      type: 'ConditionalExpression',
+      test,
+      consequent,
+      alternate,
+      valueType,
+      nullable: expression.nullable === true || consequent.nullable === true || alternate.nullable === true,
+      arrayElementType: commonNullableString(consequent.arrayElementType, alternate.arrayElementType),
+      arrayElementDeclaredType: commonNullableString(
+        consequent.arrayElementDeclaredType,
+        alternate.arrayElementDeclaredType
+      ),
+      mapKeyType: commonNullableString(consequent.mapKeyType, alternate.mapKeyType),
+      mapValueType: commonNullableString(consequent.mapValueType, alternate.mapValueType),
+      promiseValueType: commonNullableString(consequent.promiseValueType, alternate.promiseValueType),
+      setElementType: commonNullableString(consequent.setElementType, alternate.setElementType),
+      functionType: nullableNode(expression.functionType),
+      shape: nullableNode(expression.shape),
+      className: commonNullableString(consequent.className, alternate.className),
       loc: expression.loc
     },
     expression
@@ -1075,6 +1227,36 @@ function inferBinaryExpressionType(operator: string, left: LowerExpressionNode, 
   return 'number'
 }
 
+function callExpressionValueType(expression: LowerExpressionNode, callee: LowerExpressionNode): string {
+  const known = knownCallExpressionValueType(expression.valueType)
+
+  if (known !== null && typeof known !== 'undefined') {
+    return known
+  }
+
+  const functionType = nullableNode(callee.functionType)
+
+  if (functionType !== null && typeof functionType !== 'undefined') {
+    const returnType = nullableString(functionType.returnType)
+
+    if (returnType !== null && typeof returnType !== 'undefined') {
+      return returnType
+    }
+  }
+
+  return fallbackString(expression.valueType, 'unknown')
+}
+
+function knownCallExpressionValueType(value: string | null | undefined): string | null {
+  const known = nullableString(value)
+
+  if (known !== null && typeof known !== 'undefined' && known !== 'unknown') {
+    return known
+  }
+
+  return null
+}
+
 function isBooleanBinaryOperator(operator: string): boolean {
   if (operator === '===' || operator === '!==') {
     return true
@@ -1093,6 +1275,36 @@ function inferNullishBinaryExpressionType(left: LowerExpressionNode, right: Lowe
   }
 
   return fallbackString(left.valueType, 'unknown')
+}
+
+function inferConditionalExpressionType(consequent: LowerExpressionNode, alternate: LowerExpressionNode): string {
+  const consequentType = fallbackString(consequent.valueType, 'unknown')
+  const alternateType = fallbackString(alternate.valueType, 'unknown')
+
+  if (consequentType === alternateType) {
+    return consequentType
+  }
+
+  if (consequentType === 'unknown') {
+    return alternateType
+  }
+
+  if (alternateType === 'unknown') {
+    return consequentType
+  }
+
+  return 'unknown'
+}
+
+function commonNullableString(left: string | null | undefined, right: string | null | undefined): string | null {
+  const leftValue = nullableString(left)
+  const rightValue = nullableString(right)
+
+  if (leftValue !== null && typeof leftValue !== 'undefined' && leftValue === rightValue) {
+    return leftValue
+  }
+
+  return null
 }
 
 function inferMemberExpressionType(property: string, object: LowerExpressionNode): string {

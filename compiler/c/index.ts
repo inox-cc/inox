@@ -210,7 +210,7 @@ import {
   emitProcessExitCodeAssignment,
   emitProcessExitStatement
 } from './stdlib/process.ts'
-import { cTimeRuntimeCallName } from './stdlib/time.ts'
+import { cTimeRuntimeCallName, cTimeRuntimeMethodName } from './stdlib/time.ts'
 import type { TimerLoweringDependencies } from './stdlib/timers.ts'
 import { emitPreparedTimerCallExpression, emitTimerVariableDeclaration } from './stdlib/timers.ts'
 import type { UrlLoweringDependencies } from './stdlib/url.ts'
@@ -262,12 +262,14 @@ import {
   emitArraySliceVariableDeclaration,
   emitArraySortVariableDeclaration,
   emitPreparedArrayFilterCallExpression,
+  emitPreparedArrayFromCallExpression,
   emitPreparedArrayIncludesCallExpression,
   emitPreparedArrayJoinCallExpression,
   emitPreparedArrayLengthExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArrayPushCallExpression,
+  emitPreparedArrayReduceCallExpression,
   emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
   emitPreparedArrayUnshiftCallExpression,
@@ -585,10 +587,12 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitOptionalRuntimeCallbackCallExpression,
   emitArraySliceVariableDeclaration,
   emitPreparedArrayFilterCallExpression,
+  emitPreparedArrayFromCallExpression,
   emitPreparedArrayLengthExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArrayPushCallExpression,
+  emitPreparedArrayReduceCallExpression,
   emitPreparedArraySliceCallExpression,
   emitPreparedArraySortCallExpression,
   emitPreparedArrayUnshiftCallExpression,
@@ -3055,6 +3059,17 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return functionScalarDeclaration
   }
 
+  const arrayReduceCall = emitPreparedArrayReduceCallExpression(statement.init, context)
+
+  if (arrayReduceCall !== null && typeof arrayReduceCall !== 'undefined') {
+    const lines: string[] = []
+
+    pushAll(lines, arrayReduceCall.lines)
+    lines.push(`double ${statement.name} = ${arrayReduceCall.expression};`)
+
+    return lines
+  }
+
   if (
     isArrayMethodCall(statement.init) &&
     !isArrayIncludesCall(statement.init) &&
@@ -4764,7 +4779,12 @@ function objectLiteralPropertyShapeField(
   return {
     name: property.key,
     readonlyField: false,
+    declaredType: property.value.arrayElementDeclaredType ?? property.value.declaredType,
     valueType,
+    arrayElementType: property.value.arrayElementType,
+    mapKeyType: property.value.mapKeyType,
+    mapValueType: property.value.mapValueType,
+    setElementType: property.value.setElementType,
     shape: propertyShape,
     functionType
   }
@@ -6005,6 +6025,12 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
 }
 
 function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+  const timeSleep = emitCTimeSleepAwaitExpression(expression, context)
+
+  if (timeSleep !== null && typeof timeSleep !== 'undefined') {
+    return timeSleep
+  }
+
   const asyncCall = emitCAsyncFunctionAwaitExpression(expression, context)
 
   if (asyncCall !== null && typeof asyncCall !== 'undefined') {
@@ -6078,6 +6104,42 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
   return {
     lines,
     expression: value
+  }
+}
+
+function emitCTimeSleepAwaitExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
+  const callExpression = expression.argument
+
+  if (
+    callExpression === null ||
+    typeof callExpression === 'undefined' ||
+    callExpression.type !== 'CallExpression' ||
+    cTimeRuntimeMethodName(callExpression.callee) !== 'sleep'
+  ) {
+    return null
+  }
+
+  if (callExpression.args.length !== 1) {
+    pushDiagnostic(
+      context,
+      diagnostic('INOX_C_TIME', 'time.sleep in the C backend requires a millisecond argument', callExpression.loc)
+    )
+
+    return {
+      lines: [],
+      expression: 'inox_undefined_value()'
+    }
+  }
+
+  const duration = emitPreparedNumberExpression(callExpression.args[0], context)
+  const lines: string[] = []
+
+  pushAll(lines, duration.lines)
+  lines.push(`if (${duration.expression} > 0) inox_time_sleep_ms(${duration.expression});`)
+
+  return {
+    lines,
+    expression: 'inox_undefined_value()'
   }
 }
 

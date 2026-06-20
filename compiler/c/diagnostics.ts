@@ -50,6 +50,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'Promise' ||
     path === 'Promise.resolve' ||
     path === 'Promise.reject' ||
+    path === 'Array.from' ||
     path === 'Array.isArray' ||
     path === 'Object.entries' ||
     path === 'Object.keys' ||

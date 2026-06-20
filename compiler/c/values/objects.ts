@@ -1664,7 +1664,12 @@ function objectVariableShapeFields(
     fields.push({
       name: property.key,
       readonlyField: false,
+      declaredType: property.value.arrayElementDeclaredType ?? property.value.declaredType,
       valueType,
+      arrayElementType: property.value.arrayElementType,
+      mapKeyType: property.value.mapKeyType,
+      mapValueType: property.value.mapValueType,
+      setElementType: property.value.setElementType,
       shape,
       functionType
     })

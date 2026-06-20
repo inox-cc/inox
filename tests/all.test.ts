@@ -11,6 +11,7 @@ import {
   collectFeatureTestFiles,
   type FeatureTestCompiler,
   type FeatureTestFile,
+  featureTestSkipReason,
   featureTestName,
   readFeatureTestFile,
   runFeatureTest
@@ -44,7 +45,9 @@ if (process.argv[2] === workerArg) {
 } else {
   const options = parseRunnerOptions(process.argv.slice(2))
 
-  await assertCcAvailable()
+  if (options.compiler.kind !== 'plain-node') {
+    await assertCcAvailable()
+  }
   await assertFeatureCompilerAvailable(options.compiler)
 
   const files = await collectFeatureTestFiles(options.paths)
@@ -306,6 +309,16 @@ async function runFeatureFile(file: string, compiler: FeatureTestCompiler): Prom
     }
   }
 
+  const skipReason = featureTestSkipReason(featureFile, compiler)
+
+  if (skipReason) {
+    return {
+      name: featureFile.name,
+      status: 'skipped',
+      reason: skipReason
+    }
+  }
+
   try {
     await runFeatureTest(featureFile, {
       compiler
@@ -361,6 +374,10 @@ function isFeatureTestCompiler(value: unknown): value is FeatureTestCompiler {
     return true
   }
 
+  if (value.kind === 'plain-node') {
+    return true
+  }
+
   return value.kind === 'binary' && typeof value.path === 'string'
 }
 
@@ -386,7 +403,7 @@ function parseRunnerOptions(args: string[]): RunnerOptions {
       const value = args[index + 1]
       index = index + 1
 
-      assert.ok(value && !value.startsWith('-'), '--compiler expects node or a compiler binary path')
+      assert.ok(value && !value.startsWith('-'), '--compiler expects node, plain-node or a compiler binary path')
       compiler = parseFeatureTestCompiler(value)
       continue
     }
@@ -409,6 +426,12 @@ function parseFeatureTestCompiler(value: string): FeatureTestCompiler {
   if (value === 'node') {
     return {
       kind: 'node'
+    }
+  }
+
+  if (value === 'plain-node') {
+    return {
+      kind: 'plain-node'
     }
   }
 

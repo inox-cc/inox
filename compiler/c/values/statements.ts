@@ -331,6 +331,10 @@ export type StatementLoweringDependencies = {
     expression: StatementNode,
     context: CFunctionContext
   ): PreparedArrayExpression | null
+  emitPreparedArrayFromCallExpression(
+    expression: StatementNode,
+    context: CFunctionContext
+  ): PreparedArrayExpression | null
   emitPreparedArrayLengthExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayMapCallExpression(
     expression: StatementNode,
@@ -342,6 +346,7 @@ export type StatementLoweringDependencies = {
     options: PreparedCallOptions | null
   ): PreparedExpression | null
   emitPreparedArrayPushCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayReduceCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArraySliceCallExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -1223,7 +1228,7 @@ export function registerRuntimeValueMetadata(
   context.variables.set(name, valueType)
 
   if (valueType === 'object') {
-    registerObjectShape(context, name, resolveRuntimeObjectShape(declaration, expression))
+    registerObjectShape(context, name, resolveRuntimeObjectShape(declaration, expression, context))
     registerObjectAlias(context, name, expression)
   } else if (valueType === 'array') {
     context.runtimeArrayElementTypes.set(name, resolveRuntimeArrayMetadataElementType(declaration, expression, context))
@@ -1267,7 +1272,8 @@ function registerObjectAlias(
 
 function resolveRuntimeObjectShape(
   declaration: StatementNode,
-  expression: StatementNode | null | undefined
+  expression: StatementNode | null | undefined,
+  context: CFunctionContext
 ): CObjectShape | null {
   if (declaration.shape !== null && typeof declaration.shape !== 'undefined') {
     return declaration.shape
@@ -1282,7 +1288,60 @@ function resolveRuntimeObjectShape(
     return expression.shape
   }
 
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'ObjectLiteral') {
+    const fields = resolveRuntimeObjectLiteralShapeFields(expression, context)
+
+    if (fields.length > 0) {
+      return {
+        fields
+      }
+    }
+  }
+
   return null
+}
+
+function resolveRuntimeObjectLiteralShapeFields(
+  expression: StatementNode,
+  context: CFunctionContext
+): CObjectShapeField[] {
+  const fields: CObjectShapeField[] = []
+  const properties: StatementNode[] = expression.properties
+
+  for (const property of properties) {
+    if (property.value === null || typeof property.value === 'undefined') {
+      continue
+    }
+
+    fields.push(resolveRuntimeObjectLiteralShapeField(property, context))
+  }
+
+  return fields
+}
+
+function resolveRuntimeObjectLiteralShapeField(
+  property: StatementNode,
+  context: CFunctionContext
+): CObjectShapeField {
+  const value: StatementNode = property.value
+  let shape = value.shape
+
+  if (shape === null || typeof shape === 'undefined') {
+    shape = resolveRuntimeObjectShape(value, value, context)
+  }
+
+  return {
+    name: property.key,
+    readonlyField: false,
+    declaredType: value.arrayElementDeclaredType ?? value.declaredType,
+    valueType: statementDeps(context).inferExpressionType(value, context),
+    arrayElementType: value.arrayElementType,
+    mapKeyType: value.mapKeyType,
+    mapValueType: value.mapValueType,
+    setElementType: value.setElementType,
+    shape,
+    functionType: value.functionType
+  }
 }
 
 function resolveRuntimeArrayMetadataElementType(
@@ -1884,6 +1943,15 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   if (deps.isCollectionConstructorExpression(statement.init)) {
     return {
       lines: emitCollectionVariableDeclaration(statement, context),
+      expression: ''
+    }
+  }
+
+  const arrayFromCall = deps.emitPreparedArrayFromCallExpression(statement.init, context)
+
+  if (arrayFromCall !== null && typeof arrayFromCall !== 'undefined') {
+    return {
+      lines: deps.emitArrayMapVariableDeclaration(statement, arrayFromCall, context),
       expression: ''
     }
   }
@@ -3158,6 +3226,12 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (deps.isCollectionConstructorExpression(statement.init)) {
     return emitCollectionVariableDeclaration(statement, context)
+  }
+
+  const arrayFromCall = deps.emitPreparedArrayFromCallExpression(statement.init, context)
+
+  if (arrayFromCall !== null && typeof arrayFromCall !== 'undefined') {
+    return deps.emitArrayMapVariableDeclaration(statement, arrayFromCall, context)
   }
 
   const arrayMapCall = deps.emitPreparedArrayMapCallExpression(statement.init, context)

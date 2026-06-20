@@ -23,6 +23,7 @@ import {
   createBinaryExpression,
   createBooleanLiteral,
   createCallExpression,
+  createConditionalExpression,
   createIndexExpression,
   createMemberExpression,
   createNewExpression,
@@ -1105,13 +1106,27 @@ class Parser {
       return this.parseArrowFunction(false)
     }
 
-    const expression = this.parseTypeAssertion()
+    const expression = this.parseConditional()
 
     if (this.matchValue('=')) {
       return createAssignmentExpression(expression, this.parseAssignment())
     }
 
     return expression
+  }
+
+  parseConditional(): AnyNode {
+    const test = this.parseTypeAssertion()
+
+    if (!this.matchValue('?')) {
+      return test
+    }
+
+    const consequent = this.parseAssignment()
+    this.expectValue(':', 'INOX_EXPECTED_CONDITIONAL', 'expected : in conditional expression')
+    const alternate = this.parseAssignment()
+
+    return createConditionalExpression(test, consequent, alternate)
   }
 
   parseTypeAssertion(): AnyNode {

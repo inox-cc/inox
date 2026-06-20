@@ -181,6 +181,10 @@ type OptionalParamInfo = {
   [key: string]: unknown
 }
 
+type PromiseCallbackParamMetadata = {
+  shape: ObjectShapeInfo | null
+}
+
 type CheckerNode = AnyNode
 type NullableNode = AnyNode | null
 type TypeAliasDeclarationNode = AnyNode & {
@@ -3369,6 +3373,12 @@ class Checker {
 
     if (stringMethodType !== null && typeof stringMethodType !== 'undefined') {
       return stringMethodType
+    }
+
+    const arrayFromType = this.checkArrayFromCall(expression)
+
+    if (arrayFromType !== null && typeof arrayFromType !== 'undefined') {
+      return arrayFromType
     }
 
     const arrayMethodType = this.checkArrayMethodCall(expression)
@@ -8184,6 +8194,7 @@ class Checker {
 
     expression.valueType = 'promise'
     expression.promiseValueType = 'unknown'
+    expression.promiseRejectionValueType = 'unknown'
 
     if (method === 'resolve') {
       expression.promiseValueType = 'void'
@@ -8191,6 +8202,8 @@ class Checker {
       if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         expression.promiseValueType = argTypes[0]
       }
+    } else {
+      expression.promiseRejectionValueType = this.resolveRejectedExpressionValueType(expression.args[0])
     }
 
     return 'promise'
@@ -8249,7 +8262,26 @@ class Checker {
         catchReturnType = null
       }
 
-      this.checkPromiseCallback(callback, ['unknown'], catchReturnType, 'promise.catch callback')
+      const catchParamTypes: ValueType[] = ['unknown']
+      const catchParamMetadata: PromiseCallbackParamMetadata[] = [
+        {
+          shape: null
+        }
+      ]
+      const rejectionValueType = this.resolveExpressionPromiseRejectionValueType(expression.callee.object)
+
+      if (rejectionValueType === 'error') {
+        catchParamTypes[0] = 'object'
+        catchParamMetadata[0].shape = errorObjectShape
+      }
+
+      this.checkPromiseCallback(
+        callback,
+        catchParamTypes,
+        catchReturnType,
+        'promise.catch callback',
+        catchParamMetadata
+      )
     }
 
     for (let index = 1; index < expression.args.length; index++) {
@@ -8266,7 +8298,8 @@ class Checker {
     expression: AnyNode,
     params: ValueType[],
     returnType: ValueType | null,
-    label: string
+    label: string,
+    paramMetadata: PromiseCallbackParamMetadata[] = []
   ): ValueType {
     if (expression.type !== 'ArrowFunctionExpression') {
       const callbackType = this.checkExpression(expression)
@@ -8309,6 +8342,13 @@ class Checker {
           expected = params[index]
         }
 
+        let shape: ObjectShapeInfo | null = null
+        const metadata = paramMetadata[index]
+
+        if (metadata !== null && typeof metadata !== 'undefined') {
+          shape = metadata.shape
+        }
+
         let actual = param.valueType
 
         if (param.valueType === 'unknown') {
@@ -8328,12 +8368,17 @@ class Checker {
         param.valueType = actual
         param.nullable = false
 
+        if (shape !== null && typeof shape !== 'undefined') {
+          param.shape = shape
+        }
+
         this.declare(
           param.name,
           {
             kind: 'param',
             mutable: true,
             valueType: actual,
+            shape,
             loc: param.loc
           },
           param.loc
@@ -8998,6 +9043,45 @@ class Checker {
       return 'array'
     }
 
+    if (expression.callee.property === 'reduce') {
+      if (expression.args.length !== 2) {
+        this.report(
+          'INOX_ARG_COUNT',
+          `array.reduce expects 2 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      let reducedType: ValueType = 'unknown'
+
+      if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
+        reducedType = this.checkExpression(expression.args[1])
+      }
+
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        const expectedReturnType = reducedType === 'unknown' ? null : reducedType
+        const callbackType = this.checkArrayCallback(
+          expression.args[0],
+          [reducedType, elementType, 'number'],
+          expectedReturnType
+        )
+
+        if (reducedType === 'unknown') {
+          reducedType = callbackType
+        }
+      }
+
+      for (let index = 2; index < expression.args.length; index = index + 1) {
+        this.checkExpression(expression.args[index])
+      }
+
+      expression.valueType = reducedType
+      expression.arrayElementType = null
+      expression.arrayElementDeclaredType = null
+
+      return reducedType
+    }
+
     if (expression.args.length !== 1) {
       this.report(
         'INOX_ARG_COUNT',
@@ -9305,6 +9389,55 @@ class Checker {
     }
 
     return 'string'
+  }
+
+  checkArrayFromCall(expression: AnyNode): ValueType | null {
+    if (
+      expression.callee.type !== 'MemberExpression' ||
+      expression.callee.property !== 'from' ||
+      expression.callee.object.type !== 'Reference' ||
+      expression.callee.object.path.length !== 1 ||
+      firstPathSegment(expression.callee.object.path) !== 'Array'
+    ) {
+      return null
+    }
+
+    if (this.scope.resolve('Array')) {
+      return null
+    }
+
+    if (expression.args.length !== 1) {
+      this.report('INOX_ARG_COUNT', `Array.from expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    let sourceType: ValueType = 'unknown'
+
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+      sourceType = this.checkExpression(expression.args[0])
+    }
+
+    for (let index = 1; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      this.checkExpression(arg)
+    }
+
+    if (sourceType !== 'string') {
+      const source = expression.args[0]
+      let loc = expression.loc
+
+      if (source !== null && typeof source !== 'undefined') {
+        loc = source.loc
+      }
+
+      this.report('INOX_TYPE_MISMATCH', `Array.from expects string, got ${sourceType}`, loc)
+    }
+
+    expression.valueType = 'array'
+    expression.arrayElementType = 'string'
+    expression.arrayElementDeclaredType = 'string'
+
+    return 'array'
   }
 
   checkNumberConversionCall(expression: AnyNode): ValueType | null {
@@ -13761,6 +13894,67 @@ class Checker {
     }
 
     return null
+  }
+
+  resolveExpressionPromiseRejectionValueType(expression: AnyNode | null | undefined): ValueType | null {
+    if (expression === null || typeof expression === 'undefined') {
+      return null
+    }
+
+    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+      if (
+        expression.valueType === 'promise' &&
+        expression.promiseRejectionValueType !== null &&
+        typeof expression.promiseRejectionValueType !== 'undefined'
+      ) {
+        return expression.promiseRejectionValueType
+      }
+
+      return null
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const objectRejectionValueType = this.resolveExpressionPromiseRejectionValueType(expression.object)
+
+      if (objectRejectionValueType !== null && typeof objectRejectionValueType !== 'undefined') {
+        return objectRejectionValueType
+      }
+    }
+
+    return null
+  }
+
+  resolveRejectedExpressionValueType(expression: AnyNode | null | undefined): ValueType {
+    if (expression === null || typeof expression === 'undefined') {
+      return 'unknown'
+    }
+
+    if (this.isErrorObjectExpression(expression)) {
+      return 'error'
+    }
+
+    if (expression.valueType === 'string') {
+      return 'string'
+    }
+
+    return 'unknown'
+  }
+
+  isErrorObjectExpression(expression: AnyNode): boolean {
+    if (
+      expression.type === 'NewExpression' &&
+      expression.callee !== null &&
+      typeof expression.callee !== 'undefined' &&
+      expression.callee.type === 'Reference' &&
+      expression.callee.path.length === 1 &&
+      firstPathSegment(expression.callee.path) === 'Error'
+    ) {
+      return true
+    }
+
+    const shape = this.resolveExpressionShape(expression)
+
+    return shape === errorObjectShape
   }
 
   declare(name: string, symbol: SymbolInfo, loc: SourceLocation): void {
