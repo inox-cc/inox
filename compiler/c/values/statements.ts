@@ -240,6 +240,11 @@ type RuntimeArrayConditionNarrowing = {
   falseNames: string[]
 }
 
+type RuntimeObjectConditionNarrowing = {
+  trueNames: string[]
+  falseNames: string[]
+}
+
 export type StatementLoweringDependencies = {
   emitArrayVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitArrayFilterVariableDeclaration(
@@ -693,6 +698,13 @@ function emptyRuntimeArrayConditionNarrowing(): RuntimeArrayConditionNarrowing {
   }
 }
 
+function emptyRuntimeObjectConditionNarrowing(): RuntimeObjectConditionNarrowing {
+  return {
+    trueNames: [],
+    falseNames: []
+  }
+}
+
 function resolveRuntimeArrayConditionNarrowing(
   expression: StatementNode | null | undefined
 ): RuntimeArrayConditionNarrowing {
@@ -718,6 +730,34 @@ function resolveRuntimeArrayConditionNarrowing(
   return {
     trueNames: [name],
     falseNames: []
+  }
+}
+
+function resolveRuntimeObjectConditionNarrowing(
+  expression: StatementNode | null | undefined
+): RuntimeObjectConditionNarrowing {
+  if (expression === null || typeof expression === 'undefined') {
+    return emptyRuntimeObjectConditionNarrowing()
+  }
+
+  if (expression.type === 'UnaryExpression' && expression.operator === '!') {
+    const inner = resolveRuntimeObjectConditionNarrowing(expression.argument)
+
+    return {
+      trueNames: inner.falseNames,
+      falseNames: inner.trueNames
+    }
+  }
+
+  const name = arrayIsArrayReferenceName(expression)
+
+  if (name === null || typeof name === 'undefined') {
+    return emptyRuntimeObjectConditionNarrowing()
+  }
+
+  return {
+    trueNames: [],
+    falseNames: [name]
   }
 }
 
@@ -754,6 +794,12 @@ function narrowRuntimeArrays(context: CFunctionContext, names: string[]): void {
     if (!context.runtimeArrayElementTypes.has(name)) {
       context.runtimeArrayElementTypes.set(name, 'unknown')
     }
+  }
+}
+
+function narrowRuntimeObjects(context: CFunctionContext, names: string[]): void {
+  for (const name of names) {
+    context.variables.set(name, 'object')
   }
 }
 
@@ -813,11 +859,13 @@ function emitScopedStatementBody(
   statement: StatementNode,
   context: CFunctionContext,
   narrowedNames: string[],
-  runtimeArrayNames: string[]
+  runtimeArrayNames: string[],
+  runtimeObjectNames: string[]
 ): string[] {
   const variableScope = pushVariableScope(context)
   const nullableScope = pushNullableScalarNarrowing(context, narrowedNames)
   narrowRuntimeArrays(context, runtimeArrayNames)
+  narrowRuntimeObjects(context, runtimeObjectNames)
   const lines = emitStatementBody(statement, context)
 
   restoreNullableScalarNarrowing(context, nullableScope)
@@ -839,12 +887,19 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
   const condition = emitPreparedConditionExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.condition)
+  const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.condition)
   const lines: string[] = []
   pushAllLines(lines, condition.lines)
   lines.push(`if ${emitCConditionClause(condition.expression)} {`)
   pushIndentedLines(
     lines,
-    emitScopedStatementBody(statement.consequent, context, narrowing.trueNames, arrayNarrowing.trueNames),
+    emitScopedStatementBody(
+      statement.consequent,
+      context,
+      narrowing.trueNames,
+      arrayNarrowing.trueNames,
+      objectNarrowing.trueNames
+    ),
     '  '
   )
 
@@ -856,7 +911,13 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
   lines.push('} else {')
   pushIndentedLines(
     lines,
-    emitScopedStatementBody(statement.alternate, context, narrowing.falseNames, arrayNarrowing.falseNames),
+    emitScopedStatementBody(
+      statement.alternate,
+      context,
+      narrowing.falseNames,
+      arrayNarrowing.falseNames,
+      objectNarrowing.falseNames
+    ),
     '  '
   )
   lines.push('}')
@@ -868,11 +929,18 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   const condition = emitPreparedConditionExpression(statement.condition, context)
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.condition)
+  const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.condition)
   const breakLabel = nextCName(context, 'inox_break')
   const continueLabel = nextCName(context, 'inox_continue')
   pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
   pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-  const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames, arrayNarrowing.trueNames)
+  const body = emitScopedStatementBody(
+    statement.body,
+    context,
+    narrowing.trueNames,
+    arrayNarrowing.trueNames,
+    objectNarrowing.trueNames
+  )
   popFlowTarget(context.continueTargets)
   popFlowTarget(context.breakTargets)
 
@@ -908,11 +976,18 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     const update = emitPreparedForExpressionClause(statement.update, context)
     const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.test, context)
     const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.test)
+    const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.test)
     const breakLabel = nextCName(context, 'inox_break')
     const continueLabel = nextCName(context, 'inox_continue')
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-    const body = emitScopedStatementBody(statement.body, context, narrowing.trueNames, arrayNarrowing.trueNames)
+    const body = emitScopedStatementBody(
+      statement.body,
+      context,
+      narrowing.trueNames,
+      arrayNarrowing.trueNames,
+      objectNarrowing.trueNames
+    )
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const needsPreparedLowering = init.lines.length > 0 || test.lines.length > 0 || update.lines.length > 0
@@ -2392,7 +2467,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     registerForOfElementMetadata(context, statement.name, elementType, statement)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-    const body = emitScopedStatementBody(statement.body, context, [], [])
+    const body = emitScopedStatementBody(statement.body, context, [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
@@ -2459,7 +2534,7 @@ function emitRuntimeMapForOfStatement(
     context.arrayShapes.set(statement.name, fields)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-    const body = emitScopedStatementBody(statement.body, context, [], [])
+    const body = emitScopedStatementBody(statement.body, context, [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const createEntryStatus = emitStatusCheck(`inox_array_new(&inox_default_allocator, 2, &${statement.name})`, context)
@@ -2580,7 +2655,7 @@ function emitRuntimeCollectionValueForOfStatement(
     registerForOfElementMetadata(context, statement.name, elementType, statement)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-    const body = emitScopedStatementBody(statement.body, context, [], [])
+    const body = emitScopedStatementBody(statement.body, context, [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
@@ -2728,7 +2803,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     pushFlowTarget(context.continueTargets, { label: finallyLabel, throughFinally: true })
   }
 
-  const tryBody = emitScopedStatementBody(statement.block, context, [], [])
+  const tryBody = emitScopedStatementBody(statement.block, context, [], [], [])
 
   if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
     popFlowTarget(context.continueTargets)
@@ -2843,7 +2918,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       })
     }
 
-    const finalizerBody = emitScopedStatementBody(statement.finalizer, context, [], [])
+    const finalizerBody = emitScopedStatementBody(statement.finalizer, context, [], [], [])
 
     if (outerContinueLabel !== null && typeof outerContinueLabel !== 'undefined') {
       popFlowTarget(context.continueTargets)

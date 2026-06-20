@@ -166,6 +166,11 @@ function readTemplateToken(state: LexerState): Token {
       continue
     }
 
+    if (unit === '$' && state.index < state.source.length && lexerCurrentChar(state) === '{') {
+      raw = raw + readTemplatePlaceholderRaw(state)
+      continue
+    }
+
     if (unit === '`') {
       return makeToken('template', raw, startLine, startColumn, startIndex, state.file)
     }
@@ -180,6 +185,133 @@ function readTemplateToken(state: LexerState): Token {
   )
 
   return makeToken('template', raw, startLine, startColumn, startIndex, state.file)
+}
+
+function readTemplatePlaceholderRaw(state: LexerState): string {
+  let raw = '{'
+  let depth = 1
+
+  advanceLexer(state, '{')
+
+  while (state.index < state.source.length && depth > 0) {
+    const unit = lexerCurrentChar(state)
+
+    if (unit === "'" || unit === '"') {
+      raw = raw + readQuotedRaw(state, unit)
+      continue
+    }
+
+    if (unit === '`') {
+      raw = raw + readNestedTemplateRaw(state)
+      continue
+    }
+
+    if (unit === '/' && lexerNextChar(state) === '/') {
+      raw = raw + readLineCommentRaw(state)
+      continue
+    }
+
+    if (unit === '/' && lexerNextChar(state) === '*') {
+      raw = raw + readBlockCommentRaw(state)
+      continue
+    }
+
+    raw = raw + unit
+    advanceLexer(state, unit)
+
+    if (unit === '{') {
+      depth = depth + 1
+    } else if (unit === '}') {
+      depth = depth - 1
+    }
+  }
+
+  return raw
+}
+
+function readNestedTemplateRaw(state: LexerState): string {
+  let raw = '`'
+
+  advanceLexer(state, '`')
+
+  while (state.index < state.source.length) {
+    const unit = lexerCurrentChar(state)
+    raw = raw + unit
+    advanceLexer(state, unit)
+
+    if (unit === '\\' && state.index < state.source.length) {
+      const escaped = lexerCurrentChar(state)
+      raw = raw + escaped
+      advanceLexer(state, escaped)
+      continue
+    }
+
+    if (unit === '$' && state.index < state.source.length && lexerCurrentChar(state) === '{') {
+      raw = raw + readTemplatePlaceholderRaw(state)
+      continue
+    }
+
+    if (unit === '`') {
+      return raw
+    }
+  }
+
+  return raw
+}
+
+function readQuotedRaw(state: LexerState, quote: string): string {
+  let raw = quote
+
+  advanceLexer(state, quote)
+
+  while (state.index < state.source.length) {
+    const unit = lexerCurrentChar(state)
+    raw = raw + unit
+    advanceLexer(state, unit)
+
+    if (unit === '\\' && state.index < state.source.length) {
+      const escaped = lexerCurrentChar(state)
+      raw = raw + escaped
+      advanceLexer(state, escaped)
+      continue
+    }
+
+    if (isMatchingStringQuote(unit, quote)) {
+      return raw
+    }
+  }
+
+  return raw
+}
+
+function readLineCommentRaw(state: LexerState): string {
+  let raw = ''
+
+  while (state.index < state.source.length && lexerCurrentChar(state) !== '\n') {
+    const unit = lexerCurrentChar(state)
+    raw = raw + unit
+    advanceLexer(state, unit)
+  }
+
+  return raw
+}
+
+function readBlockCommentRaw(state: LexerState): string {
+  let raw = ''
+
+  while (state.index < state.source.length) {
+    const unit = lexerCurrentChar(state)
+    raw = raw + unit
+    advanceLexer(state, unit)
+
+    if (unit === '*' && state.index < state.source.length && lexerCurrentChar(state) === '/') {
+      raw = raw + '/'
+      advanceLexer(state, '/')
+      return raw
+    }
+  }
+
+  return raw
 }
 
 function readNumberToken(state: LexerState): Token {

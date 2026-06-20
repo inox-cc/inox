@@ -559,6 +559,38 @@ function optionalParamAt(values: OptionalParamInfo[], index: number): OptionalPa
   return values[index]
 }
 
+function isOptionalParam(param: OptionalParamInfo): boolean {
+  if (param.optional === true) {
+    return true
+  }
+
+  return param.defaultValue !== null && typeof param.defaultValue !== 'undefined'
+}
+
+function conditionalExpressionValueType(consequentType: ValueType, alternateType: ValueType): ValueType {
+  if (consequentType === alternateType) {
+    return consequentType
+  }
+
+  if (consequentType === 'null') {
+    return alternateType
+  }
+
+  if (alternateType === 'null') {
+    return consequentType
+  }
+
+  if (consequentType === 'unknown') {
+    return alternateType
+  }
+
+  if (alternateType === 'unknown') {
+    return consequentType
+  }
+
+  return 'unknown'
+}
+
 function resolvedTypeInfoAt(values: ResolvedTypeInfo[], index: number): ResolvedTypeInfo {
   return values[index]
 }
@@ -921,7 +953,7 @@ class Checker {
       name: param.name,
       loc: param.loc,
       declaredType,
-      optional: param.optional === true,
+      optional: isOptionalParam(param),
       valueType: paramInfo.valueType,
       nullable: paramInfo.nullable,
       arrayElementType: paramInfo.arrayElementType,
@@ -963,7 +995,7 @@ class Checker {
     for (let index = 0; index < params.length; index = index + 1) {
       const param = optionalParamAt(params, index)
 
-      if (param.optional !== true) {
+      if (!isOptionalParam(param)) {
         count = count + 1
       }
     }
@@ -2222,6 +2254,10 @@ class Checker {
       return this.checkBinaryExpression(expression)
     }
 
+    if (expression.type === 'ConditionalExpression') {
+      return this.checkConditionalExpression(expression)
+    }
+
     if (expression.type === 'UnaryExpression') {
       this.checkExpression(expression.argument)
       if (expression.operator === 'typeof') {
@@ -2259,6 +2295,92 @@ class Checker {
     }
 
     return 'unknown'
+  }
+
+  checkConditionalExpression(expression: AnyNode): ValueType {
+    this.checkExpression(expression.test)
+    const narrowing = this.resolveNullableConditionNarrowing(expression.test)
+    let consequentType: ValueType = 'unknown'
+    let alternateType: ValueType = 'unknown'
+
+    const consequentNarrowingState = this.pushNarrowedNullableNames(narrowing.trueNames)
+
+    try {
+      consequentType = this.checkExpression(expression.consequent)
+    } finally {
+      this.restoreNarrowedNullableNames(consequentNarrowingState)
+    }
+
+    const alternateNarrowingState = this.pushNarrowedNullableNames(narrowing.falseNames)
+
+    try {
+      alternateType = this.checkExpression(expression.alternate)
+    } finally {
+      this.restoreNarrowedNullableNames(alternateNarrowingState)
+    }
+
+    const valueType = conditionalExpressionValueType(consequentType, alternateType)
+
+    expression.valueType = valueType
+    expression.nullable = this.expressionCanBeNull(expression.consequent) || this.expressionCanBeNull(expression.alternate)
+    this.applyConditionalExpressionMetadata(expression, valueType)
+
+    return valueType
+  }
+
+  applyConditionalExpressionMetadata(expression: AnyNode, valueType: ValueType): void {
+    if (valueType === 'array') {
+      expression.arrayElementType =
+        this.resolveExpressionArrayElementType(expression.consequent) ??
+        this.resolveExpressionArrayElementType(expression.alternate)
+      expression.arrayElementDeclaredType =
+        this.resolveExpressionArrayElementDeclaredType(expression.consequent) ??
+        this.resolveExpressionArrayElementDeclaredType(expression.alternate)
+      return
+    }
+
+    if (valueType === 'map') {
+      const consequentMap = this.resolveExpressionMapType(expression.consequent)
+      const alternateMap = this.resolveExpressionMapType(expression.alternate)
+      let mapKeyType: ValueType | null = null
+      let mapValueType: ValueType | null = null
+
+      if (consequentMap !== null && typeof consequentMap !== 'undefined') {
+        mapKeyType = consequentMap.key
+        mapValueType = consequentMap.value
+      } else if (alternateMap !== null && typeof alternateMap !== 'undefined') {
+        mapKeyType = alternateMap.key
+        mapValueType = alternateMap.value
+      }
+
+      expression.mapKeyType = mapKeyType
+      expression.mapValueType = mapValueType
+      return
+    }
+
+    if (valueType === 'promise') {
+      expression.promiseValueType =
+        this.resolveExpressionPromiseValueType(expression.consequent) ??
+        this.resolveExpressionPromiseValueType(expression.alternate)
+      return
+    }
+
+    if (valueType === 'set') {
+      expression.setElementType =
+        this.resolveExpressionSetElementType(expression.consequent) ??
+        this.resolveExpressionSetElementType(expression.alternate)
+      return
+    }
+
+    if (valueType === 'object') {
+      expression.shape =
+        this.resolveExpressionShape(expression.consequent) ?? this.resolveExpressionShape(expression.alternate)
+      return
+    }
+
+    if (valueType === 'function') {
+      expression.functionType = expression.consequent.functionType ?? expression.alternate.functionType ?? null
+    }
   }
 
   checkAssignment(expression: AnyNode): ValueType {
@@ -12734,7 +12856,7 @@ class Checker {
             const resolvedParam = {
               name: param.name,
               loc: param.loc,
-              optional: param.optional,
+              optional: isOptionalParam(param),
               declaredType,
               valueType: paramInfo.valueType,
               nullable: paramInfo.nullable,
@@ -13000,7 +13122,7 @@ class Checker {
       params.push({
         name: param.name,
         loc: param.loc,
-        optional: param.optional,
+        optional: isOptionalParam(param),
         declaredType,
         valueType: paramInfo.valueType,
         nullable: paramInfo.nullable,

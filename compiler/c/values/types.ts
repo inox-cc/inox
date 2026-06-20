@@ -510,11 +510,7 @@ export function inferExpressionType(
     const consequentType = inferExpressionType(expression.consequent, context, deps)
     const alternateType = inferExpressionType(expression.alternate, context, deps)
 
-    if (consequentType === alternateType) {
-      return consequentType
-    }
-
-    return 'unknown'
+    return inferConditionalExpressionType(consequentType, alternateType)
   }
 
   if (expression.type === 'StringLiteral') {
@@ -707,6 +703,30 @@ export function inferExpressionType(
   }
 
   return 'number'
+}
+
+function inferConditionalExpressionType(consequentType: string, alternateType: string): string {
+  if (consequentType === alternateType) {
+    return consequentType
+  }
+
+  if (consequentType === 'null') {
+    return alternateType
+  }
+
+  if (alternateType === 'null') {
+    return consequentType
+  }
+
+  if (consequentType === 'unknown') {
+    return alternateType
+  }
+
+  if (alternateType === 'unknown') {
+    return consequentType
+  }
+
+  return 'unknown'
 }
 
 function cObjectFunctionFieldCallReturnType(

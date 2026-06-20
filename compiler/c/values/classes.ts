@@ -613,6 +613,36 @@ function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): CConstr
   return args
 }
 
+function classMethodAcceptsArgumentCount(params: CFunctionParam[], count: number): boolean {
+  return count >= requiredClassMethodParamCount(params) && count <= params.length
+}
+
+function classMethodArgumentCountMessage(method: string, params: CFunctionParam[], count: number): string {
+  const min = requiredClassMethodParamCount(params)
+  const max = params.length
+  let expected = `${max}`
+
+  if (min !== max) {
+    expected = `${min}-${max}`
+  }
+
+  return `method ${method} expects ${expected} argument(s), got ${count}`
+}
+
+function requiredClassMethodParamCount(params: CFunctionParam[]): number {
+  let count = 0
+
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = params[index]
+
+    if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
+      count = count + 1
+    }
+  }
+
+  return count
+}
+
 function classConstructorParams(info: CClassInfo): AnyNode[] {
   const constructorMethod = info.constructor
 
@@ -846,11 +876,11 @@ function emitKnownPreparedClassMethodCallExpression(
   method: AnyNode,
   options: PreparedCallOptions
 ): PreparedExpression {
-  if (method.params.length !== expression.args.length) {
+  if (!classMethodAcceptsArgumentCount(method.params, expression.args.length)) {
     context.diagnostics.push(
       diagnostic(
         'INOX_ARG_COUNT',
-        `method ${expression.callee.property} expects ${method.params.length} argument(s), got ${expression.args.length}`,
+        classMethodArgumentCountMessage(expression.callee.property, method.params, expression.args.length),
         expression.loc
       )
     )

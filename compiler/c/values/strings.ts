@@ -30,7 +30,8 @@ import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpres
 import type {
   CObjectFieldInfo,
   CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand as PreparedStringBytesOperand
+  CPreparedStringBytesOperand as PreparedStringBytesOperand,
+  CRuntimeArrayElement
 } from '../types.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
@@ -146,6 +147,12 @@ export type StringLoweringDependencies = {
     context: StringCContext
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
+  emitPreparedRuntimeArrayIndexValue(
+    expression: AnyNode,
+    element: CRuntimeArrayElement,
+    context: StringCContext,
+    tempPrefix: string
+  ): PreparedExpression
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
   isBoxedRuntimeStringName(name: string, context: StringCContext): boolean
@@ -154,6 +161,7 @@ export type StringLoweringDependencies = {
   resolveKnownObjectIndex(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveNetAddressStringMember(expression: AnyNode, context: StringCContext): string | null
+  resolveRuntimeArrayIndex(expression: AnyNode, context: StringCContext): CRuntimeArrayElement | null
 }
 
 const unconfiguredStringLoweringDependencies = {} as StringLoweringDependencies
@@ -826,6 +834,12 @@ export function emitPreparedStringBytesOperand(
     return dynamicRuntimeString
   }
 
+  const runtimeArrayString = emitPreparedRuntimeArrayStringBytesOperand(expression, context, tempPrefix)
+
+  if (runtimeArrayString !== null && typeof runtimeArrayString !== 'undefined') {
+    return runtimeArrayString
+  }
+
   if (
     !isKnownOptionalObjectStringField(expression, context) &&
     stringDeps(context).inferExpressionType(expression, context) === 'string'
@@ -872,6 +886,37 @@ function isNullableRuntimeStringReference(name: string, context: StringCContext)
     typeof nullableVariables !== 'undefined' &&
     nullableVariables.has(name)
   )
+}
+
+function emitPreparedRuntimeArrayStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  const runtimeElement = stringDeps(context).resolveRuntimeArrayIndex(expression, context)
+
+  if (runtimeElement === null || typeof runtimeElement === 'undefined' || runtimeElement.valueType !== 'string') {
+    return null
+  }
+
+  const value = stringDeps(context).emitPreparedRuntimeArrayIndexValue(
+    expression,
+    runtimeElement,
+    context,
+    tempPrefix
+  )
+  const string = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
 }
 
 function emitPreparedKnownObjectStringBytesOperand(

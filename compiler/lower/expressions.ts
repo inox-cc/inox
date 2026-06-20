@@ -1285,6 +1285,14 @@ function inferConditionalExpressionType(consequent: LowerExpressionNode, alterna
     return consequentType
   }
 
+  if (consequentType === 'null') {
+    return alternateType
+  }
+
+  if (alternateType === 'null') {
+    return consequentType
+  }
+
   if (consequentType === 'unknown') {
     return alternateType
   }

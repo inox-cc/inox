@@ -117,6 +117,10 @@ type CDynamicObjectFieldAccess = {
   key: string
 }
 
+type CDynamicObjectArrayReceiver = PreparedExpression & {
+  key: string
+}
+
 type CEmitContext = {
   objectAccessorReturnPaths: CObjectAccessorReturnPathMap
   throwingFunctions: CStringSet
@@ -4045,16 +4049,10 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
     return null
   }
 
-  const access = dynamicObjectFieldAccess(expression.object, context, deps)
-
-  if (access === null || typeof access === 'undefined') {
-    return null
-  }
-
-  const object = deps.emitCValueExpression(access.object, context)
+  const receiver = emitPreparedDynamicObjectArrayReceiver(expression.object, context, deps)
   const index = emitPreparedDynamicArrayIndexExpression(expression.index, context, deps)
 
-  if (index === null || typeof index === 'undefined') {
+  if (receiver === null || typeof receiver === 'undefined' || index === null || typeof index === 'undefined') {
     return null
   }
 
@@ -4065,12 +4063,12 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
 
   registerOwnedValue(context, array)
   registerOwnedValue(context, value)
-  appendLines(lines, object.lines)
+  appendLines(lines, receiver.lines)
   appendLines(lines, index.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(array))
   lines.push(
     emitStatusCheck(
-      `inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${array})`,
+      `inox_object_get(${receiver.expression}, ${cStringLiteral(receiver.key)}, ${utf8ByteLength(receiver.key)}, &${array})`,
       context
     )
   )
@@ -4085,6 +4083,49 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
   return {
     lines,
     expression: value
+  }
+}
+
+function emitPreparedDynamicObjectArrayReceiver(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): CDynamicObjectArrayReceiver | null {
+  const access = dynamicObjectFieldAccess(expression, context, deps)
+
+  if (access !== null && typeof access !== 'undefined') {
+    const object = deps.emitCValueExpression(access.object, context)
+
+    return {
+      lines: object.lines,
+      expression: object.expression,
+      key: access.key
+    }
+  }
+
+  const runtimeAccess = dynamicRuntimeObjectFieldAccess(expression)
+
+  if (runtimeAccess === null || typeof runtimeAccess === 'undefined') {
+    return null
+  }
+
+  const object = emitPreparedDynamicRuntimeObjectValueExpression(runtimeAccess.object, context, deps)
+
+  if (object === null || typeof object === 'undefined') {
+    return null
+  }
+
+  const lines: string[] = []
+
+  appendLines(lines, object.lines)
+  lines.push(
+    emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)
+  )
+
+  return {
+    lines,
+    expression: object.expression,
+    key: runtimeAccess.key
   }
 }
 
@@ -4137,7 +4178,17 @@ function isDynamicObjectArrayIndexValueExpression(
     return false
   }
 
-  if (!dynamicObjectFieldAccess(expression.object, context, deps)) {
+  if (dynamicObjectFieldAccess(expression.object, context, deps)) {
+    return isDynamicArrayIndexExpression(expression.index, context, deps)
+  }
+
+  const runtimeAccess = dynamicRuntimeObjectFieldAccess(expression.object)
+
+  if (runtimeAccess === null || typeof runtimeAccess === 'undefined') {
+    return false
+  }
+
+  if (!isDynamicRuntimeObjectValueExpression(runtimeAccess.object, context, deps)) {
     return false
   }
 

@@ -322,6 +322,7 @@ import {
   emitPreparedNumberExpression as emitPreparedNumberExpressionWithDependencies,
   emitPreparedRuntimeTruthinessExpression as emitPreparedRuntimeTruthinessExpressionWithDependencies,
   emitPreparedUpdateExpression as emitPreparedUpdateExpressionWithDependencies,
+  emitCConditionClause,
   isDynamicRuntimeValueExpression as isDynamicRuntimeValueExpressionWithDependencies,
   isThrowingFunctionCallee as isThrowingFunctionCalleeFromExpressions,
   isThrowingFunctionName as isThrowingFunctionNameFromExpressions,
@@ -860,6 +861,7 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedNumberExpression,
+  emitPreparedRuntimeArrayIndexValue,
   emitReference,
   inferExpressionType,
   isBoxedRuntimeStringName,
@@ -867,7 +869,8 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   isMemberAccessExpression,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
-  resolveNetAddressStringMember
+  resolveNetAddressStringMember,
+  resolveRuntimeArrayIndex
 }
 
 cryptoLoweringDependencies = {
@@ -4369,6 +4372,12 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     return mapIndexGet
   }
 
+  const conditional = emitPreparedNullableConditionalValueExpression(expression, context)
+
+  if (conditional !== null && typeof conditional !== 'undefined') {
+    return conditional
+  }
+
   if (
     expression !== null &&
     typeof expression !== 'undefined' &&
@@ -4407,6 +4416,57 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     lines: [],
     expression: 'inox_null_value()'
   }
+}
+
+function emitPreparedNullableConditionalValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (expression.type !== 'ConditionalExpression') {
+    return null
+  }
+
+  const valueType = inferExpressionType(expression, context)
+
+  if (!isNullableScalarType(valueType)) {
+    return null
+  }
+
+  const test = emitPreparedNullableConditionalTestExpression(expression.test, context)
+  const consequent = emitNullableScalarValueExpression(expression.consequent, context)
+  const alternate = emitNullableScalarValueExpression(expression.alternate, context)
+  const temp = nextCName(context, 'inox_nullable_conditional')
+  const expectedTag = cRuntimeValueTag(valueType)
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  pushAll(lines, test.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(`if ${emitCConditionClause(test.expression)} {`)
+  pushIndented(lines, consequent.lines, '  ')
+  lines.push(`  ${temp} = ${consequent.expression};`)
+  lines.push(`  inox_retain(${temp});`)
+  lines.push('} else {')
+  pushIndented(lines, alternate.lines, '  ')
+  lines.push(`  ${temp} = ${alternate.expression};`)
+  lines.push(`  inox_retain(${temp});`)
+  lines.push('}')
+  pushAll(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context))
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+function emitPreparedNullableConditionalTestExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+  const truthiness = emitPreparedStatementRuntimeTruthinessExpression(expression, context)
+
+  if (truthiness !== null && typeof truthiness !== 'undefined') {
+    return truthiness
+  }
+
+  return emitPreparedNumberExpression(expression, context)
 }
 
 function emitPreparedNullableScalarFieldValueExpression(
@@ -5282,6 +5342,23 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     }
 
     const reference = emitReference(expression, context)
+
+    if (
+      context.variables.get(name) === 'string' &&
+      context.nullableVariables.has(name) &&
+      context.narrowedNullableScalars.has(name)
+    ) {
+      const string = nextCName(context, 'inox_log_string')
+
+      return {
+        lines: [
+          emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context),
+          `inox_string* ${string} = (inox_string*)${reference}.as.ref;`
+        ],
+        format: '%.*s',
+        values: [`(int)${string}->len`, `${string}->bytes`]
+      }
+    }
 
     if (context.runtimeStrings.has(reference)) {
       return {
