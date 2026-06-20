@@ -76,6 +76,8 @@ const requiredFiles: string[] = [
   'scripts/bootstrap-boringssl.ts',
   'scripts/bootstrap-libuv.ts',
   'tests/all.test.ts',
+  'tests/features/cases/empty-program.test.ts',
+  'tests/helpers/feature-tests.ts',
   'tests/helpers/runtime-c.ts'
 ]
 
