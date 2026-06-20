@@ -24,6 +24,7 @@
     "lint": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:features",
+    "test:smoke": "node tests/all.test.ts tests/smoke",
     "test:verbose": "INOX_FEATURE_TEST_REPORT=verbose pnpm run test:features",
     "test:features": "node tests/all.test.ts",
     "check": "pnpm run build && pnpm run typecheck && pnpm run test:features && pnpm run audit:self-hosting:gate"
