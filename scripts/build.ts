@@ -1,4 +1,5 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
 import { rootDir } from './lib/repo-root.ts'
@@ -15,8 +16,16 @@ type SourceFile = {
   source: string
 }
 
+type GeneratedFileMap = Map<string, string>
+
 const defaultGeneratedDir = join(rootDir, 'dist/selfhost/generated')
-const defaultOut = join(rootDir, 'dist/inox-selfhost')
+const defaultOut = join(rootDir, 'dist/inox')
+const cmakeRootDir = join(tmpdir(), 'inox-build-cmake')
+const cmakeSourceDir = join(cmakeRootDir, 'source')
+const cmakeBuildDir = join(cmakeRootDir, 'build')
+const cmakeBinDir = join(cmakeRootDir, 'bin')
+const buildLoopBackend = 'libuv'
+const buildTlsBackend = 'openssl'
 const runtimeSources = [
   'runtime/src/arrays/array.c',
   'runtime/src/async/loop.c',
@@ -73,12 +82,31 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
     source: selfHostedDriverSource()
   })
 
-  console.log('emitting self-hosted compiler-core C modules')
+  console.log('emitting self-hosted compiler C modules')
   const modules = await compileMemoryPackageToCModules(driverPath, compilerFiles, {
+    loopBackend: buildLoopBackend,
     sourceRoot: '/project',
-    target: 'c'
+    target: 'c',
+    tlsBackend: buildTlsBackend
   })
-  const generatedSources: string[] = []
+  const generatedFiles: GeneratedFileMap = new Map()
+
+  addGeneratedFiles(generatedFiles, modules.files)
+
+  const missingEntries = missingCompilerModuleEntries(compilerFiles, generatedFiles)
+
+  for (const entry of missingEntries) {
+    console.log(`emitting compiler module ${entry.slice('/project/'.length)}`)
+    const extraModules = await compileMemoryPackageToCModules(entry, compilerFiles, {
+      callMain: false,
+      loopBackend: buildLoopBackend,
+      sourceRoot: '/project',
+      target: 'c',
+      tlsBackend: buildTlsBackend
+    })
+
+    addGeneratedFiles(generatedFiles, extraModules.files)
+  }
 
   await rm(options.generatedDir, {
     recursive: true,
@@ -88,17 +116,23 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
     recursive: true
   })
 
-  for (const file of modules.files) {
-    const output = join(options.generatedDir, file.path)
+  const generatedPaths = Array.from(generatedFiles.keys())
+
+  generatedPaths.sort()
+
+  for (const path of generatedPaths) {
+    const code = generatedFiles.get(path)
+
+    if (typeof code === 'undefined') {
+      continue
+    }
+
+    const output = join(options.generatedDir, path)
 
     await mkdir(dirname(output), {
       recursive: true
     })
-    await writeFile(output, file.code)
-
-    if (file.path.endsWith('.c')) {
-      generatedSources.push(output)
-    }
+    await writeFile(output, code)
   }
 
   await mkdir(dirname(options.out), {
@@ -106,14 +140,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   })
 
   console.log(`linking ${relative(rootDir, options.out)}`)
-  const compile = await runCommand(
-    process.env.CC ?? 'cc',
-    cCompileArgs(generatedSources, options.out, [options.generatedDir]),
-    {
-      stderr: process.stderr,
-      stdout: process.stdout
-    }
-  )
+  const compile = await linkNativeCompiler(options)
 
   if (compile.code !== 0) {
     process.exitCode = compile.code
@@ -125,6 +152,87 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   }
 
   console.log(options.out)
+}
+
+function addGeneratedFiles(files: GeneratedFileMap, generated: { path: string; code: string }[]): void {
+  for (const file of generated) {
+    files.set(file.path, file.code)
+  }
+}
+
+function missingCompilerModuleEntries(compilerFiles: SourceFile[], generatedFiles: GeneratedFileMap): string[] {
+  const missing: string[] = []
+
+  for (const file of compilerFiles) {
+    if (!file.path.startsWith('/project/compiler/') || !file.path.endsWith('.ts')) {
+      continue
+    }
+
+    const modulePath = file.path.slice('/project/'.length).replace(/\.ts$/, '.c')
+
+    if (!generatedFiles.has(modulePath)) {
+      missing.push(file.path)
+    }
+  }
+
+  missing.sort()
+
+  return missing
+}
+
+async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number }> {
+  await rm(cmakeSourceDir, {
+    recursive: true,
+    force: true
+  })
+  await rm(cmakeBuildDir, {
+    recursive: true,
+    force: true
+  })
+  await rm(cmakeBinDir, {
+    recursive: true,
+    force: true
+  })
+  await mkdir(cmakeSourceDir, {
+    recursive: true
+  })
+  await writeFile(join(cmakeSourceDir, 'CMakeLists.txt'), nativeCompilerCMakeLists(options.generatedDir))
+
+  const configure = await runCommand(
+    'cmake',
+    [
+      '-S',
+      cmakeSourceDir,
+      '-B',
+      cmakeBuildDir,
+      `-DINOX_LOOP_BACKEND=${buildLoopBackend}`,
+      `-DINOX_TLS_BACKEND=${buildTlsBackend}`
+    ],
+    {
+      stderr: process.stderr,
+      stdout: process.stdout
+    }
+  )
+
+  if (configure.code !== 0) {
+    return configure
+  }
+
+  const build = await runCommand('cmake', ['--build', cmakeBuildDir, '--target', 'inox', '--parallel'], {
+    stderr: process.stderr,
+    stdout: process.stdout
+  })
+
+  if (build.code !== 0) {
+    return build
+  }
+
+  await copyFile(join(cmakeBinDir, 'inox'), options.out)
+  await chmod(options.out, 0o755)
+
+  return {
+    code: 0
+  }
 }
 
 async function runSmoke(executable: string): Promise<void> {
@@ -242,7 +350,7 @@ async function readCompilerSourcePaths(dir: string): Promise<string[]> {
 function selfHostedDriverSource(): string {
   return `import fs from 'node:fs'
 import process from 'node:process'
-import { compileSource } from './compiler/core.ts'
+import { compileSource } from './compiler/index.ts'
 
 function defaultOutputPath(input: string): string {
   return input + '.c'
@@ -258,12 +366,12 @@ try {
     }
 
     const source = fs.readFileSync(input, 'utf8')
-    const result = compileSource(source, { target: 'c' })
+    const result = compileSource(source, { target: 'c', loopBackend: 'libuv', tlsBackend: 'openssl' })
 
     fs.writeFileSync(output, result.code + '\\n')
     console.log(output)
   } else {
-    const result = compileSource('const value: number = 1\\nconsole.log(value)\\n', { target: 'c' })
+    const result = compileSource('const value: number = 1\\nconsole.log(value)\\n', { target: 'c', loopBackend: 'libuv', tlsBackend: 'openssl' })
 
     if (result.code.length > 0) {
       console.log('INOX SELFHOST BUILD OK')
@@ -360,16 +468,39 @@ function parseArgs(args: string[]):
 function usage(): string {
   return `Usage:
   pnpm run build
-  pnpm run build -- --out dist/inox-selfhost
+  pnpm run build -- --out dist/inox
   pnpm run build -- --generated-dir dist/selfhost/generated
   pnpm run build -- --no-smoke
 
-Builds a self-hosted compiler-core binary:
+Builds a self-hosted compiler binary:
 - emits generated C modules to ${relative(rootDir, defaultGeneratedDir)}
 - links ${relative(rootDir, defaultOut)}
 - smoke-compiles and runs a tiny TypeScript input through the native binary
 
-The native binary is a narrow compiler-core driver:
+The native binary is a narrow compiler driver:
   ${relative(rootDir, defaultOut)} input.ts output.c
 `
+}
+
+function nativeCompilerCMakeLists(generatedDir: string): string {
+  return `cmake_minimum_required(VERSION 3.20)
+
+project(inox_selfhost C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${cmakeString(cmakeBinDir)}")
+
+add_subdirectory("${cmakeString(join(rootDir, 'runtime'))}" "${cmakeString(join(cmakeBuildDir, 'inox_runtime'))}")
+
+file(GLOB_RECURSE INOX_GENERATED_SOURCES CONFIGURE_DEPENDS "${cmakeString(generatedDir)}/*.c")
+
+add_executable(inox \${INOX_GENERATED_SOURCES})
+target_include_directories(inox PRIVATE "${cmakeString(generatedDir)}")
+target_link_libraries(inox PRIVATE inox_runtime)
+`
+}
+
+function cmakeString(value: string): string {
+  return value.replaceAll('\\', '/').replaceAll('"', '\\"')
 }

@@ -166,6 +166,7 @@ export async function compileFileToCModules(
   runCStaticChecks(irModules, options)
 
   const emitOptions: CModuleEmitOptions = {
+    callMain: options.callMain,
     host: options.host,
     random: options.random,
     sourceRoot: options.sourceRoot

@@ -77,15 +77,16 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     const headerPath = replaceCModuleExtension(relativeSourcePath, '.h', host)
     const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path, host)
     let initName: CModuleInitName = null
+    const isEntry = record.path === graph.entry && options.callMain !== false
 
-    if (record.path !== graph.entry) {
+    if (!isEntry) {
       initName = `${symbolPrefix}_init`
     }
 
     plans.push({
       record,
       ir: record.ir,
-      isEntry: record.path === graph.entry,
+      isEntry,
       relativeSourcePath,
       sourcePath,
       headerPath,

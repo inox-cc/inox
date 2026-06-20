@@ -15,6 +15,7 @@ export function collectExports(ast: ProgramNode): Map<string, ExportNode> {
 
     if (
       (item.type === 'FunctionDeclaration' ||
+        item.type === 'ClassDeclaration' ||
         item.type === 'VariableDeclaration' ||
         item.type === 'TypeAliasDeclaration') &&
       item.exported === true

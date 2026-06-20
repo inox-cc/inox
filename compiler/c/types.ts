@@ -349,6 +349,7 @@ export type CModuleOutputFile = {
 }
 
 export type CModuleEmitOptions = CEmitOptions & {
+  callMain?: boolean
   host: CompilerHost
   sourceRoot?: string
 }
