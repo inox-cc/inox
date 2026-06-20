@@ -89,6 +89,7 @@ type AsyncTaskEmitContext = {
 
 type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   arrayShapes: AsyncTaskArrayShapeMap
+  byteKinds: AsyncTaskStringMap
   breakFlowUsed: boolean
   breakTargets: AsyncTaskLoopFlowTarget[]
   boxedValueTypes: AsyncTaskStringMap
@@ -147,6 +148,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
 }
 
 type AsyncTaskLocalMetadataContext = {
+  byteKinds: AsyncTaskStringMap
   mapTypes: AsyncTaskMapTypeMap
   objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
@@ -159,6 +161,7 @@ type AsyncTaskLocalMetadataContext = {
 
 type AsyncTaskVariableScopeSnapshot = {
   arrayShapes: AsyncTaskArrayShapeMap
+  byteKinds: AsyncTaskStringMap
   boxedVariables: AsyncTaskStringSet
   classInstanceTypes: AsyncTaskStringMap
   errorObjectNames: AsyncTaskStringSet

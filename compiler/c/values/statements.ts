@@ -52,9 +52,15 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
 import { resolveRuntimeArrayElementType } from './arrays.ts'
+import { resolveBinaryExpressionKind } from '../stdlib/binary.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
-import { resolveRuntimeForOfMapKeys, resolveRuntimeMapType, resolveRuntimeSetElementType } from './collections.ts'
+import {
+  resolveRuntimeForOfMapEntries,
+  resolveRuntimeForOfMapKeys,
+  resolveRuntimeMapType,
+  resolveRuntimeSetElementType
+} from './collections.ts'
 import { emitCConditionClause, emitCNegatedConditionClause, objectExpressionPathName } from './expressions.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
 import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
@@ -80,6 +86,7 @@ type CFunctionContext = {
   arrayShapes: Map<string, CArrayElementInfo[]>
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   asyncTaskWrappers: Map<string, CAsyncTaskWrapper>
+  byteKinds: CStringMap
   boxedMutableCaptureDeclarations: Set<StatementNode>
   boxedValueTypes: CStringMap
   boxedValues: string[]
@@ -1248,6 +1255,14 @@ export function registerRuntimeValueMetadata(
     )
   } else if (valueType === 'set') {
     context.setElementTypes.set(name, resolveRuntimeSetMetadataElementType(declaration, expression, context))
+  } else if (valueType === 'bytes') {
+    const byteKind = resolveBinaryExpressionKind(expression, context)
+
+    if (byteKind !== null && typeof byteKind !== 'undefined') {
+      context.byteKinds.set(name, byteKind)
+    } else {
+      context.byteKinds.delete(name)
+    }
   }
 }
 
@@ -2245,6 +2260,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   let array: KnownForOfArray | null = statementDeps(context).resolveKnownForOfArray(statement.iterable, context)
   let runtimeArray: RuntimeForOfArray | null = null
   let runtimeMap: RuntimeForOfMap | null = null
+  let runtimeMapEntries: RuntimeForOfMap | null = null
   let runtimeMapKeys: RuntimeForOfMapValues | null = null
   let runtimeMapValues: RuntimeForOfMapValues | null = null
   let runtimeSet: RuntimeForOfSet | null = null
@@ -2264,6 +2280,17 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
   if (array === null || typeof array === 'undefined') {
     runtimeArray = statementDeps(context).resolveRuntimeForOfArray(statement.iterable, context)
+  }
+
+  if (
+    (array === null || typeof array === 'undefined') &&
+    (runtimeArray === null || typeof runtimeArray === 'undefined')
+  ) {
+    runtimeMapEntries = resolveRuntimeForOfMapEntries(statement.iterable, context)
+  }
+
+  if (runtimeMapEntries !== null && typeof runtimeMapEntries !== 'undefined') {
+    return emitRuntimeMapForOfStatement(statement, runtimeMapEntries, context)
   }
 
   if (
@@ -2419,57 +2446,33 @@ function emitRuntimeMapForOfStatement(
 
   const index = nextCName(context, 'inox_for_map_index')
   const map = nextCName(context, 'inox_for_map')
-  const shapeName = nextCName(context, 'inox_shape_map_entry')
-  const fieldsName = `${shapeName}_fields`
   const breakLabel = nextCName(context, 'inox_break')
   const continueLabel = nextCName(context, 'inox_continue')
-  const fields = [
-    {
-      name: 'key',
-      readonlyField: true,
-      valueType: keyType
-    },
-    {
-      name: 'value',
-      readonlyField: true,
-      valueType: valueType
-    }
-  ]
+  const fields = [{ valueType: keyType }, { valueType }]
 
   registerOwnedValue(context, statement.name)
 
   const variableScope = pushVariableScope(context)
 
   try {
-    context.variables.set(statement.name, 'object')
-    context.objectShapes.set(statement.name, fields)
+    context.variables.set(statement.name, 'array')
+    context.arrayShapes.set(statement.name, fields)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
     const body = emitScopedStatementBody(statement.body, context, [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
-    const createEntryStatus = emitStatusCheck(
-      `inox_object_new(&inox_default_allocator, &${shapeName}, &${statement.name})`,
-      context
-    )
+    const createEntryStatus = emitStatusCheck(`inox_array_new(&inox_default_allocator, 2, &${statement.name})`, context)
     const initKeyStatus = emitStatusCheck(
-      `inox_object_init_known(${statement.name}, 0, ${map}->entries[${index}].key)`,
+      `inox_array_set(${statement.name}, 0, ${map}->entries[${index}].key)`,
       context
     )
     const initValueStatus = emitStatusCheck(
-      `inox_object_init_known(${statement.name}, 1, ${map}->entries[${index}].value)`,
+      `inox_array_set(${statement.name}, 1, ${map}->entries[${index}].value)`,
       context
     )
 
     const lines: string[] = []
-    lines.push(`static const inox_field_info ${fieldsName}[] = {`)
-    lines.push('  { "key", INOX_FIELD_READONLY },')
-    lines.push('  { "value", INOX_FIELD_READONLY },')
-    lines.push('};')
-    lines.push(`static const inox_shape ${shapeName} = {`)
-    lines.push('  2,')
-    lines.push(`  ${fieldsName}`)
-    lines.push('};')
     pushAllLines(lines, runtimeMap.lines)
     lines.push(`inox_map* ${map} = (inox_map*)${runtimeMap.name}.as.ref;`)
     lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`)
@@ -3475,6 +3478,16 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
   lines.push(`inox_retain(${value.expression});`)
   lines.push(`inox_release(${target});`)
   lines.push(`${target} = ${value.expression};`)
+
+  if (targetType === 'bytes') {
+    const byteKind = resolveBinaryExpressionKind(expression.value, context)
+
+    if (byteKind !== null && typeof byteKind !== 'undefined') {
+      context.byteKinds.set(target, byteKind)
+    } else {
+      context.byteKinds.delete(target)
+    }
+  }
 
   return lines
 }

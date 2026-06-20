@@ -217,6 +217,7 @@ type CNullableScalarContext = {
 
 type CVariableScopeContext = {
   arrayShapes: CArrayShapeMap
+  byteKinds: CStringMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   errorObjectNames: CStringSet
@@ -240,6 +241,7 @@ type CVariableScopeContext = {
 
 export type CFunctionContext = CEmitContext & {
   arrayShapes: CArrayShapeMap
+  byteKinds: CStringMap
   breakFlowUsed: boolean
   breakTargets: CLoopFlowTarget[]
   boxedValueTypes: CStringMap
@@ -299,6 +301,7 @@ export type CFunctionContext = CEmitContext & {
 
 export type CVariableScopeSnapshot = {
   arrayShapes: CArrayShapeMap
+  byteKinds: CStringMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   errorObjectNames: CStringSet
@@ -385,6 +388,7 @@ export function createFunctionContext(
     throwingFunctions: baseContext.throwingFunctions,
     unhandledRejectionFlag: baseContext.unhandledRejectionFlag,
     arrayShapes: new Map(),
+    byteKinds: new Map(),
     breakFlowUsed: false,
     breakTargets: [],
     boxedValueTypes: new Map(),
@@ -948,6 +952,7 @@ export function nextCName(context: CNameContext, prefix: string): string {
 export function pushVariableScope(context: CVariableScopeContext): CVariableScopeSnapshot {
   const previousVariables = context.variables
   const previousArrayShapes = context.arrayShapes
+  const previousByteKinds = context.byteKinds
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
   const previousErrorObjectNames = context.errorObjectNames
@@ -969,6 +974,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
 
   context.variables = cloneCStringMap(previousVariables)
   context.arrayShapes = cloneCArrayShapeMap(previousArrayShapes)
+  context.byteKinds = cloneCStringMap(previousByteKinds)
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
@@ -990,6 +996,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
 
   return {
     arrayShapes: previousArrayShapes,
+    byteKinds: previousByteKinds,
     boxedVariables: previousBoxedVariables,
     classInstanceTypes: previousClassInstanceTypes,
     errorObjectNames: previousErrorObjectNames,
@@ -1015,6 +1022,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
 export function restoreVariableScope(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {
   context.variables = snapshot.variables
   context.arrayShapes = snapshot.arrayShapes
+  context.byteKinds = snapshot.byteKinds
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.errorObjectNames = snapshot.errorObjectNames

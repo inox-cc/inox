@@ -5093,6 +5093,14 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return emitRuntimeErrorLogValue(expression, context)
   }
 
+  if (valueType === 'array') {
+    const knownArray = emitKnownArrayShapeLogValue(expression, context)
+
+    if (knownArray !== null && typeof knownArray !== 'undefined') {
+      return knownArray
+    }
+  }
+
   if (isRuntimeLogValueType(valueType)) {
     return emitRuntimeValueLogValue(expression, context)
   }
@@ -5115,6 +5123,97 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     format: '%g',
     values: ['0']
   }
+}
+
+function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+  const shape = context.arrayShapes.get(name)
+
+  if (shape === null || typeof shape === 'undefined' || !isSupportedKnownArrayShapeLogShape(shape)) {
+    return null
+  }
+
+  const lines: string[] = []
+  const parts: string[] = []
+  const values: string[] = []
+
+  if (shape.length === 0) {
+    return {
+      lines,
+      format: '[]',
+      values
+    }
+  }
+
+  parts.push('[ ')
+
+  for (let index = 0; index < shape.length; index = index + 1) {
+    const field = shape[index]
+
+    if (index > 0) {
+      parts.push(', ')
+    }
+
+    if (field.valueType === 'string') {
+      const value = nextCName(context, 'inox_log_value')
+      const string = nextCName(context, 'inox_log_string')
+
+      registerOwnedValue(context, value)
+      pushAll(lines, emitPrepareOwnedValueWrite(value))
+      lines.push(emitStatusCheck(`inox_array_get(${name}, ${index}, &${value})`, context))
+      lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_STRING', context))
+      lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
+      parts.push("'%.*s'")
+      values.push(`(int)${string}->len`)
+      values.push(`${string}->bytes`)
+    } else if (field.valueType === 'number') {
+      const value = nextCName(context, 'inox_log_value')
+
+      registerOwnedValue(context, value)
+      pushAll(lines, emitPrepareOwnedValueWrite(value))
+      lines.push(emitStatusCheck(`inox_array_get(${name}, ${index}, &${value})`, context))
+      lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_NUMBER', context))
+      parts.push('%g')
+      values.push(`${value}.as.number`)
+    } else if (field.valueType === 'boolean') {
+      const value = nextCName(context, 'inox_log_value')
+
+      registerOwnedValue(context, value)
+      pushAll(lines, emitPrepareOwnedValueWrite(value))
+      lines.push(emitStatusCheck(`inox_array_get(${name}, ${index}, &${value})`, context))
+      lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
+      parts.push('%s')
+      values.push(`(${value}.as.boolean ? "true" : "false")`)
+    } else {
+      return null
+    }
+  }
+
+  parts.push(' ]')
+
+  return {
+    lines,
+    format: joinStrings(parts, ''),
+    values
+  }
+}
+
+function isSupportedKnownArrayShapeLogShape(shape: CArrayElementInfo[]): boolean {
+  let hasString = false
+
+  for (const field of shape) {
+    if (field.valueType === 'string') {
+      hasString = true
+    } else if (field.valueType !== 'number' && field.valueType !== 'boolean') {
+      return false
+    }
+  }
+
+  return hasString
 }
 
 function isRuntimeLogValueType(valueType: string): boolean {

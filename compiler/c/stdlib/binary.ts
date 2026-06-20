@@ -16,6 +16,8 @@ import type {
 } from '../types.ts'
 import { emitSliceIndexNormalizationLines } from '../values/slices.ts'
 
+export type BinaryBytesKind = 'buffer' | 'uint8array'
+
 export type BinaryLoweringDependencies = {
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
   emitPreparedNumberExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
@@ -108,6 +110,45 @@ export function binaryRuntimeExpressionReturnType(expression: AnyNode | null | u
 
   if (expression.binaryRuntimeMethod !== null && typeof expression.binaryRuntimeMethod !== 'undefined') {
     return binaryRuntimeReturnType(expression.binaryRuntimeMethod)
+  }
+
+  return null
+}
+
+export function resolveBinaryExpressionKind(
+  expression: AnyNode | null | undefined,
+  context: CFunctionContext
+): BinaryBytesKind | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const kind = context.byteKinds.get(binaryStringAt(expression.path, 0))
+
+    if (kind === 'buffer' || kind === 'uint8array') {
+      return kind
+    }
+
+    return null
+  }
+
+  if (isBinaryConstructorExpression(expression)) {
+    return 'uint8array'
+  }
+
+  if (isBufferFromCall(expression) || isBufferAllocCall(expression)) {
+    return 'buffer'
+  }
+
+  if (
+    isBinaryRuntimeCall(expression) &&
+    expression.binaryRuntimeMethod === 'slice' &&
+    expression.callee !== null &&
+    typeof expression.callee !== 'undefined' &&
+    expression.callee.type === 'MemberExpression'
+  ) {
+    return resolveBinaryExpressionKind(expression.callee.object, context)
   }
 
   return null
@@ -293,14 +334,17 @@ function emitCBytesToStringValueExpression(
 ): PreparedExpression {
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
   const temp = nextCName(context, 'inox_bytes_string')
+  let helper = 'inox_bytes_to_string'
   registerOwnedValue(context, temp)
   const lines: string[] = []
 
+  if (resolveBinaryExpressionKind(expression.callee.object, context) === 'uint8array') {
+    helper = 'inox_bytes_to_uint8array_string'
+  }
+
   pushBinaryLines(lines, receiver.lines)
   pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(`inox_bytes_to_string(&inox_default_allocator, ${receiver.expression}, &${temp})`, context)
-  )
+  lines.push(emitStatusCheck(`${helper}(&inox_default_allocator, ${receiver.expression}, &${temp})`, context))
   lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_STRING', context))
 
   return {
@@ -316,10 +360,16 @@ export function emitPreparedBinaryNumberCallExpression(
 ): PreparedExpression | null {
   if (expression.type === 'CallExpression' && expression.binaryRuntimeMethod === 'isBuffer') {
     const value = dependencies.emitCValueExpression(expression.args[0], context)
+    const kind = resolveBinaryExpressionKind(expression.args[0], context)
+    let isBufferExpression = `(${value.expression}.tag == INOX_TAG_BYTES ? 1 : 0)`
+
+    if (kind === 'uint8array') {
+      isBufferExpression = '0'
+    }
 
     return {
       lines: value.lines,
-      expression: `(${value.expression}.tag == INOX_TAG_BYTES ? 1 : 0)`
+      expression: isBufferExpression
     }
   }
 

@@ -1171,6 +1171,22 @@ function resolveCollectionValuesCallReceiver(
   return emitPreparedCollectionReceiver(expression.callee.object, context)
 }
 
+function resolveCollectionEntriesCallReceiver(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): PreparedCollectionReceiver | null {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'entries' ||
+    expression.args.length !== 0
+  ) {
+    return null
+  }
+
+  return emitPreparedCollectionReceiver(expression.callee.object, context)
+}
+
 export function resolveRuntimeForOfSet(
   expression: AnyNode,
   context: CollectionFunctionContext
@@ -1217,6 +1233,30 @@ export function resolveRuntimeForOfMapKeys(
     elementType: stringOrUnknown(mapType.key),
     lines: keysReceiver.lines,
     useKey: true
+  }
+}
+
+export function resolveRuntimeForOfMapEntries(
+  expression: AnyNode,
+  context: CollectionFunctionContext
+): RuntimeForOfMap | null {
+  const entriesReceiver = resolveCollectionEntriesCallReceiver(expression, context)
+
+  if (entriesReceiver === null || typeof entriesReceiver === 'undefined' || entriesReceiver.type !== 'map') {
+    return null
+  }
+
+  const mapType = resolveRuntimeMapType(expression.callee.object, context)
+
+  if (mapType === null || typeof mapType === 'undefined') {
+    return null
+  }
+
+  return {
+    name: entriesReceiver.expression,
+    keyType: stringOrUnknown(mapType.key),
+    valueType: stringOrUnknown(mapType.value),
+    lines: entriesReceiver.lines
   }
 }
 
