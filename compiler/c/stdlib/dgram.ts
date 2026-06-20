@@ -15,6 +15,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { cookTemplateLiteralText } from '../values/strings.ts'
 
 type DgramMessageContext = {
   messageName: string | null
@@ -1422,7 +1423,7 @@ function emitDgramHostExpression(
   }
 
   if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return cStringLiteral(expression.raw.slice(1, -1))
+    return cStringLiteral(cookTemplateLiteralText(expression.raw.slice(1, -1)))
   }
 
   const expressionName = dgramReferenceName(expression)
@@ -1516,7 +1517,7 @@ function emitDgramStaticStringValue(
   }
 
   if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return expression.raw.slice(1, -1)
+    return cookTemplateLiteralText(expression.raw.slice(1, -1))
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {

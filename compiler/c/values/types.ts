@@ -591,6 +591,12 @@ export function inferExpressionType(
       return 'optional'
     }
 
+    const anyNodeValueType = anyNodeLikeObjectAccessValueType(expression, context)
+
+    if (anyNodeValueType !== null && typeof anyNodeValueType !== 'undefined') {
+      return anyNodeValueType
+    }
+
     return 'number'
   }
 
@@ -617,6 +623,12 @@ export function inferExpressionType(
 
     if (expression.type === 'OptionalIndexExpression') {
       return 'optional'
+    }
+
+    const anyNodeValueType = anyNodeLikeObjectAccessValueType(expression, context)
+
+    if (anyNodeValueType !== null && typeof anyNodeValueType !== 'undefined') {
+      return anyNodeValueType
     }
 
     return 'number'
@@ -694,4 +706,144 @@ function cObjectFunctionFieldCallReturnType(
   }
 
   return field.functionType.returnType
+}
+
+function anyNodeLikeObjectAccessValueType(expression: AnyNode, context: CFunctionContext): string | null {
+  const rootName = objectAccessRootName(expression)
+
+  if (rootName === null || typeof rootName === 'undefined') {
+    return null
+  }
+
+  const declaredType = context.objectDeclaredTypes.get(rootName)
+
+  if (declaredType === null || typeof declaredType === 'undefined') {
+    return null
+  }
+
+  if (!isAnyNodeLikeDeclaredType(declaredType)) {
+    return null
+  }
+
+  const fieldName = objectAccessFieldName(expression)
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return 'unknown'
+  }
+
+  return anyNodeLikeFieldValueType(fieldName)
+}
+
+function objectAccessRootName(expression: AnyNode): string | null {
+  let current = expression
+
+  while (
+    current.type === 'MemberExpression' ||
+    current.type === 'OptionalMemberExpression' ||
+    current.type === 'IndexExpression' ||
+    current.type === 'OptionalIndexExpression'
+  ) {
+    current = current.object
+  }
+
+  if (current.type === 'Reference' && current.path.length === 1) {
+    return current.path[0]
+  }
+
+  return null
+}
+
+function isAnyNodeLikeDeclaredType(value: string): boolean {
+  return value === 'AnyNode' || value.endsWith('Node') || value.endsWith('AstNode')
+}
+
+function objectAccessFieldName(expression: AnyNode): string | null {
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    return expression.property
+  }
+
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral'
+  ) {
+    return expression.index.value
+  }
+
+  return null
+}
+
+function anyNodeLikeFieldValueType(fieldName: string): string {
+  if (anyNodeLikeStringFields().includes(fieldName)) {
+    return 'string'
+  }
+
+  if (anyNodeLikeBooleanFields().includes(fieldName)) {
+    return 'boolean'
+  }
+
+  if (anyNodeLikeArrayFields().includes(fieldName)) {
+    return 'array'
+  }
+
+  if (anyNodeLikeObjectFields().includes(fieldName)) {
+    return 'object'
+  }
+
+  return 'unknown'
+}
+
+function anyNodeLikeStringFields(): string[] {
+  return [
+    'type',
+    'name',
+    'property',
+    'operator',
+    'declaredType',
+    'valueType',
+    'arrayElementType',
+    'arrayElementDeclaredType',
+    'mapKeyType',
+    'mapValueType',
+    'promiseValueType',
+    'setElementType',
+    'propertyValueType',
+    'returnType',
+    'declaredReturnType',
+    'returnArrayElementType',
+    'returnMapKeyType',
+    'returnMapValueType',
+    'returnPromiseValueType',
+    'returnSetElementType',
+    'className',
+    'collectionKind'
+  ]
+}
+
+function anyNodeLikeBooleanFields(): string[] {
+  return ['async', 'exported', 'expressionBody', 'nullable', 'optional', 'readonly', 'returnNullable', 'typeOnly']
+}
+
+function anyNodeLikeArrayFields(): string[] {
+  return ['args', 'cases', 'elements', 'fields', 'methods', 'params', 'path', 'properties', 'specifiers']
+}
+
+function anyNodeLikeObjectFields(): string[] {
+  return [
+    'argument',
+    'callee',
+    'condition',
+    'consequent',
+    'alternate',
+    'expression',
+    'functionType',
+    'handler',
+    'index',
+    'init',
+    'left',
+    'loc',
+    'object',
+    'right',
+    'shape',
+    'target'
+  ]
 }

@@ -73,6 +73,7 @@ export type ArrayLoweringDependencies = {
   ): PreparedStringBytesOperand
   emitPreparedNumberExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: ArrayFunctionContext): string
+  isStringSplitCall(expression: AnyNode, context: ArrayFunctionContext): boolean
   resolveKnownObjectIndex(expression: AnyNode, context: ArrayFunctionContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: ArrayFunctionContext): CObjectFieldInfo | null
 }
@@ -2667,7 +2668,10 @@ function emitPreparedArrayReceiver(
       call = emitPreparedArraySortCallExpression(expression, context)
     }
 
-    if (call === null || typeof call === 'undefined') {
+    if (
+      (call === null || typeof call === 'undefined') &&
+      arrayDeps(context).isStringSplitCall(expression, context)
+    ) {
       call = arrayDeps(context).emitCStringSplitValueExpression(expression, context)
     }
 
@@ -2679,7 +2683,13 @@ function emitPreparedArrayReceiver(
       }
     }
 
-    return null
+    const value = arrayDeps(context).emitCValueExpression(expression, context)
+
+    return {
+      lines: value.lines,
+      expression: value.expression,
+      elementType: resolvePreparedArrayReceiverElementType(expression, context)
+    }
   }
 
   return null

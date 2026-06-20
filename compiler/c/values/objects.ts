@@ -31,6 +31,9 @@ import {
   isNullableScalarType,
   isOpaqueRuntimeValueType
 } from '../value-types.ts'
+import { inferExpressionType } from './types.ts'
+import { emitPreparedStringBytesOperand } from './strings.ts'
+import { emitCValueExpression } from './expressions.ts'
 
 type ObjectShapeContext = {
   objectDeclaredTypes?: Map<string, string | null>
@@ -521,6 +524,7 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
   return {
     key,
     index,
+    optional: field.optional,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     mapKeyType: field.mapKeyType,
@@ -722,8 +726,14 @@ function emitPreparedDynamicObjectIndexExpressionValueExpression(
   appendLines(lines, object.lines)
   appendLines(lines, key.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_object_get(${object.expression}, ${key.bytes}, ${key.length}, &${temp})`, context))
-  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+  appendObjectFieldReadLines(
+    lines,
+    `inox_object_get(${object.expression}, ${key.bytes}, ${key.length}, &${temp})`,
+    temp,
+    context,
+    true
+  )
+  appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
 
   return {
     lines,
@@ -850,8 +860,18 @@ function emitPreparedObjectExpressionFieldValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_object_get_known(${object.expression}, ${field.index}, &${temp})`, context))
-  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+  appendObjectFieldReadLines(
+    lines,
+    `inox_object_get_known(${object.expression}, ${field.index}, &${temp})`,
+    temp,
+    context,
+    field.optional === true
+  )
+  if (field.optional === true) {
+    appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
+  } else {
+    appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+  }
 
   return {
     lines,
@@ -880,13 +900,14 @@ function emitPreparedDynamicObjectFieldValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`,
-      context
-    )
+  appendObjectFieldReadLines(
+    lines,
+    `inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`,
+    temp,
+    context,
+    true
   )
-  appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
+  appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
 
   return {
     lines,
@@ -1399,6 +1420,27 @@ function appendKnownObjectFieldReadLines(
   const status = nextCName(context, 'inox_field_status')
 
   lines.push(`inox_status ${status} = ${optionalKnownObjectFieldReadCall(access, temp, context)};`)
+  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`  ${temp} = inox_undefined_value();`)
+  lines.push('}')
+  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
+}
+
+function appendObjectFieldReadLines(
+  lines: string[],
+  getCall: string,
+  temp: string,
+  context: ObjectFunctionContext,
+  allowMissing: boolean
+): void {
+  if (!allowMissing) {
+    lines.push(emitStatusCheck(getCall, context))
+    return
+  }
+
+  const status = nextCName(context, 'inox_field_status')
+
+  lines.push(`inox_status ${status} = ${getCall};`)
   lines.push(`if (${status} == INOX_ERR_FIELD) {`)
   lines.push(`  ${temp} = inox_undefined_value();`)
   lines.push('}')

@@ -67,6 +67,8 @@ export function isReadonlyCObjectShapeField(field: AnyNode): boolean {
 
 export type CObjectShape = {
   builtin?: string | null
+  dynamic?: boolean
+  dynamicField?: CObjectShapeField | null
   fields?: CObjectShapeField[] | null
 }
 

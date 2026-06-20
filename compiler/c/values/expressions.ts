@@ -99,6 +99,12 @@ type RuntimeObjectFunctionCallee = {
   name: string
 }
 
+type ObjectFunctionFieldResolution = {
+  field: CObjectShapeField
+  fieldName: string
+  objectName: string
+}
+
 type CDynamicObjectArrayIndexDependencies = {
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
@@ -1257,66 +1263,19 @@ function isRuntimeObjectFunctionField(field: CObjectShapeField): boolean {
 }
 
 function objectFunctionFieldCallee(callee: CValueNode, context: CFunctionContext): string | null {
-  let object: CValueNode | null = null
-  let fieldName: string | null = null
+  const resolved = resolveObjectFunctionField(callee, context)
 
-  if (callee.type === 'MemberExpression') {
-    object = callee.object
-    fieldName = callee.property
-  } else if (callee.type === 'IndexExpression' && callee.index.type === 'StringLiteral') {
-    object = callee.object
-    fieldName = callee.index.value
-  }
-
-  if (object === null || typeof object === 'undefined' || fieldName === null || typeof fieldName === 'undefined') {
+  if (resolved === null || typeof resolved === 'undefined') {
     return null
   }
 
-  const objectName = objectExpressionName(object, context)
-
-  if (objectName === null || typeof objectName === 'undefined') {
-    return null
-  }
-
-  let fields = context.objectShapes.get(objectName)
-
-  if ((fields === null || typeof fields === 'undefined') && object.type === 'Reference' && object.path.length === 1) {
-    const directObjectName = object.path[0]
-    fields = context.objectShapes.get(directObjectName)
-  }
-
-  if (
-    (fields === null || typeof fields === 'undefined') &&
-    object.shape !== null &&
-    typeof object.shape !== 'undefined'
-  ) {
-    fields = object.shape.fields
-  }
-
-  if (fields === null || typeof fields === 'undefined') {
-    const returnShape = objectFunctionReturnShape(object, context)
-
-    if (
-      returnShape !== null &&
-      typeof returnShape !== 'undefined' &&
-      returnShape.fields !== null &&
-      typeof returnShape.fields !== 'undefined'
-    ) {
-      fields = returnShape.fields
-    }
-  }
-
-  if (!objectFunctionFieldAt(fields, fieldName)) {
-    return null
-  }
-
-  return emitCObjectFunctionFieldName(objectName, fieldName)
+  return emitCObjectFunctionFieldName(resolved.objectName, resolved.fieldName)
 }
 
-function runtimeObjectFunctionFieldCallee(
+function resolveObjectFunctionField(
   callee: CValueNode,
   context: CFunctionContext
-): RuntimeObjectFunctionCallee | null {
+): ObjectFunctionFieldResolution | null {
   let object: CValueNode | null = null
   let fieldName: string | null = null
 
@@ -1368,22 +1327,39 @@ function runtimeObjectFunctionFieldCallee(
 
   const field = objectFunctionFieldAt(fields, fieldName)
 
-  if (
-    field === null ||
-    typeof field === 'undefined' ||
-    field.functionType === null ||
-    typeof field.functionType === 'undefined'
-  ) {
-    return null
-  }
-
-  if (!isRuntimeObjectFunctionField(field)) {
+  if (field === null || typeof field === 'undefined') {
     return null
   }
 
   return {
-    functionType: field.functionType,
-    name: emitCObjectFunctionFieldName(objectName, fieldName)
+    field,
+    fieldName,
+    objectName
+  }
+}
+
+function runtimeObjectFunctionFieldCallee(
+  callee: CValueNode,
+  context: CFunctionContext
+): RuntimeObjectFunctionCallee | null {
+  const resolved = resolveObjectFunctionField(callee, context)
+
+  if (
+    resolved === null ||
+    typeof resolved === 'undefined' ||
+    resolved.field.functionType === null ||
+    typeof resolved.field.functionType === 'undefined'
+  ) {
+    return null
+  }
+
+  if (!isRuntimeObjectFunctionField(resolved.field)) {
+    return null
+  }
+
+  return {
+    functionType: resolved.field.functionType,
+    name: emitCObjectFunctionFieldName(resolved.objectName, resolved.fieldName)
   }
 }
 
@@ -1755,6 +1731,11 @@ export type CCallExpressionDependencies = {
   currentErrorTarget(errorTargets: string[]): string
   emitCExpression(expression: CValueNode, context: CFunctionContext): string
   emitCNumberConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitCObjectLiteralValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    shape?: CObjectShape | null
+  ): PreparedExpression
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitFunctionValueExpression(expression: CValueNode, context: CFunctionContext): string
   emitFunctionPointerAdapter(
@@ -1814,6 +1795,7 @@ export type CCallExpressionDependencies = {
     functionType: CFunctionType | null | undefined,
     context: CFunctionContext
   ): PreparedExpression
+  inferExpressionType(expression: CValueNode, context: CFunctionContext): string
   isExternalEventLoopFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
   isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean
   isPromiseReturningFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
@@ -2156,7 +2138,11 @@ function appendPreparedCallArg(
     appendLines(lines, value.lines)
     args.push(value.expression)
   } else if (paramValueType === 'object') {
-    const value = deps.emitCValueExpression(arg, context)
+    let value = deps.emitCValueExpression(arg, context)
+
+    if (arg.type === 'ObjectLiteral') {
+      value = deps.emitCObjectLiteralValueExpression(arg, context, param.shape)
+    }
 
     appendLines(lines, value.lines)
     args.push(value.expression)
@@ -2178,13 +2164,28 @@ function appendPreparedCallArg(
       args.push(deps.emitFunctionValueExpression(arg, context))
     }
   } else if (paramValueType === 'number' || paramValueType === 'boolean') {
-    const value = deps.emitPreparedNumberExpression(arg, context)
+    const value = emitPreparedScalarCallArgumentExpression(arg, paramValueType, context, deps)
 
     appendLines(lines, value.lines)
     args.push(value.expression)
   } else {
     args.push(deps.emitCExpression(arg, context))
   }
+}
+
+function emitPreparedScalarCallArgumentExpression(
+  expression: CValueNode,
+  valueType: string,
+  context: CFunctionContext,
+  deps: CCallExpressionDependencies
+): PreparedExpression {
+  const dynamicValue = emitPreparedExpectedDynamicRuntimeScalarValueExpression(expression, valueType, context, deps)
+
+  if (dynamicValue !== null && typeof dynamicValue !== 'undefined') {
+    return dynamicValue
+  }
+
+  return deps.emitPreparedNumberExpression(expression, context)
 }
 
 function emitDefaultOptionalArg(param: CFunctionParam): string {
@@ -3739,6 +3740,19 @@ function emitPreparedDynamicRuntimeScalarValueExpression(
     return null
   }
 
+  return emitPreparedExpectedDynamicRuntimeScalarValueExpression(expression, valueType, context, deps)
+}
+
+function emitPreparedExpectedDynamicRuntimeScalarValueExpression(
+  expression: CValueNode,
+  valueType: string,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): PreparedExpression | null {
+  if (!isNumberOrBooleanValueType(valueType)) {
+    return null
+  }
+
   const value = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)
 
   if (value === null || typeof value === 'undefined') {
@@ -3807,7 +3821,7 @@ export function isDynamicRuntimeValueExpression(
 function emitPreparedDynamicRuntimeValueExpression(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CScalarExpressionDependencies
+  deps: CDynamicObjectArrayIndexDependencies
 ): PreparedExpression | null {
   const runtimeReference = emitPreparedRuntimeValueReferenceExpression(expression, context)
 
@@ -4956,7 +4970,15 @@ function callExpressionReturnsNullableRuntimeValue(
   }
 
   if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
-    return false
+    const resolved = resolveObjectFunctionField(expression.callee, context)
+
+    if (resolved === null || typeof resolved === 'undefined') {
+      return false
+    }
+
+    const functionType = resolved.field.functionType
+
+    return functionType !== null && typeof functionType !== 'undefined' && functionType.returnNullable === true
   }
 
   const path = expression.callee.path

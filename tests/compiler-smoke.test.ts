@@ -54,6 +54,15 @@ test('emits C for a minimal console program', () => {
   assert.match(result.code, /printf\("%s %s\\n", "hello", name\);/)
 })
 
+test('cooks template literal escape sequences', () => {
+  const result = compileSource('const value: string = `a\\nb`\n', {
+    target: 'c'
+  })
+
+  assert.ok(result.code.includes('const char* value = "a\\nb";'))
+  assert.ok(!result.code.includes('const char* value = "a\\\\nb";'))
+})
+
 test('emits C console warn and error through stderr runtime stream', () => {
   const result = compileSource(
     `console.warn('heads up')
@@ -164,6 +173,25 @@ test('lowers Array.isArray calls to C runtime tag checks', () => {
   assert.match(result.code, /inox_array_new\(&inox_default_allocator, 3, &values\)/)
   assert.match(result.code, /\(values\.tag == INOX_TAG_ARRAY\)/)
   assert.match(result.code, /\(inox_number_value\(7\)\.tag == INOX_TAG_ARRAY\)/)
+})
+
+test('lowers includes on function-returned arrays', () => {
+  const result = compileSource(
+    `function names(): string[] {
+  return ['type', 'name']
+}
+
+function hasName(value: string): boolean {
+  return names().includes(value)
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /inox_array_len\(inox_value_\d+, &inox_array_includes_length_\d+\)/)
+  assert.match(result.code, /inox_array_get\(inox_value_\d+, inox_array_includes_index_\d+, &inox_array_includes_value_\d+\)/)
 })
 
 test('lowers Object.keys and Object.values calls to C object arrays', () => {
@@ -3528,6 +3556,68 @@ function resolveDeclaredName(node: AnyNode): string {
   assert.match(result.code, /declaredType_value_\d+\.tag != INOX_TAG_STRING \|\| declaredType_value_\d+\.as\.ref == 0/)
   assert.match(result.code, /declaredType = \(inox_string\*\)declaredType_value_\d+\.as\.ref;/)
   assert.doesNotMatch(result.code, /double declaredType/)
+})
+
+test('stringifies AnyNode dynamic fields in template literals', () => {
+  const result = compileSource(
+    `type AnyNode = {
+  type?: string
+  [key: string]: any
+}
+
+function emitName(statement: AnyNode): string {
+  return \`double \${statement.name} = 0;\`
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /inox_object_get\(statement, "name", 4, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_value_\d+\.tag != INOX_TAG_STRING/)
+  assert.doesNotMatch(result.code, /inox_string_from_number/)
+})
+
+test('lowers AnyNode value fields as expected scalar call args in template literals', () => {
+  const result = compileSource(
+    `type AnyNode = {
+  type?: string
+  [key: string]: any
+}
+
+function numberText(value: number): string {
+  return \`\${value}\`
+}
+
+function boolText(value: boolean): string {
+  if (value) {
+    return 'true'
+  }
+
+  return 'false'
+}
+
+function emitValue(expression: AnyNode): string {
+  if (expression.type === 'NumberLiteral') {
+    return \`n \${numberText(expression.value)}\`
+  }
+
+  if (expression.type === 'BooleanLiteral') {
+    return \`b \${boolText(expression.value)}\`
+  }
+
+  return ''
+}
+`,
+    {
+      target: 'c'
+    }
+  )
+
+  assert.match(result.code, /inox_object_get\(expression, "value", 5, &inox_value_\d+\)/)
+  assert.match(result.code, /inox_value_\d+\.tag != INOX_TAG_NUMBER/)
+  assert.match(result.code, /inox_value_\d+\.tag != INOX_TAG_BOOL/)
 })
 
 test('resolves ValueType metadata fields as runtime strings', () => {

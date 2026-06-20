@@ -9,6 +9,7 @@ import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../types.ts'
+import { cookTemplateLiteralText } from '../values/strings.ts'
 import { isConsoleLog } from './console.ts'
 
 type NetAstNode = AnyNode
@@ -1492,7 +1493,7 @@ function emitNetListenHostExpression(expression: AnyNode | null | undefined, con
   }
 
   if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return cStringLiteral(expression.raw.slice(1, -1))
+    return cStringLiteral(cookTemplateLiteralText(expression.raw.slice(1, -1)))
   }
 
   context.diagnostics.push(
@@ -1569,7 +1570,7 @@ function emitNetStaticStringValue(
   }
 
   if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return expression.raw.slice(1, -1)
+    return cookTemplateLiteralText(expression.raw.slice(1, -1))
   }
 
   if (

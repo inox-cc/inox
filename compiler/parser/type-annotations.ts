@@ -122,7 +122,10 @@ function typeAnnotationReadOptionsOrEmpty(options: TypeAnnotationReadOptions | n
 }
 
 function requiredTypeAnnotationReadOptions(options: TypeAnnotationReadOptions): RequiredTypeAnnotationReadOptions {
-  return options as RequiredTypeAnnotationReadOptions
+  return {
+    stopAtLineBreak: options.stopAtLineBreak === true,
+    stopAtStatementBoundary: options.stopAtStatementBoundary === true
+  }
 }
 
 function tokenAt(tokens: Token[], position: number): Token | null {

@@ -7,6 +7,7 @@ import type { CModuleCompileResult } from '../compiler/index.ts'
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
 import {
   assert,
+  compileRuntimeProgram,
   join,
   mkdir,
   mkdtemp,
@@ -21,6 +22,38 @@ import {
 const selfHostedCompileSourceDriverPath = '/project/selfhost-compile-driver.ts'
 const selfHostedCompileSourceDriverModuleCount = 214
 const selfHostedCompileSourceDriverSourceCount = 107
+const selfHostedCompileSourceBeginPrefix = 'SELFHOST COMPILED CASE BEGIN '
+const selfHostedCompileSourceEndPrefix = 'SELFHOST COMPILED CASE END '
+
+const selfHostedCompileSourceCases = [
+  {
+    name: 'number-console',
+    source: `const value: number = 1
+console.log(value)
+`,
+    expectedStdout: '1\n'
+  },
+  {
+    name: 'empty-array-reverse-loop',
+    source: `const values: number[] = []
+for (let index = values.length - 1; index >= 0; index--) {
+  console.log(values[index])
+}
+console.log(values.length)
+`,
+    expectedStdout: '0\n'
+  },
+  {
+    name: 'object-nullish-guard',
+    source: `type Ref = { type: string, name: string }
+const expression: Ref | null = { type: 'Reference', name: 'value' }
+if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
+  console.log(expression.name)
+}
+`,
+    expectedStdout: 'value\n'
+  }
+]
 
 const runtimeSources = [
   'runtime/src/arrays/array.c',
@@ -98,10 +131,56 @@ async function compileAndRunSelfHostedCompileSourceDriver(modules: CModuleCompil
     const run = await runCommand(exe, [])
 
     assert.equal(run.code, 0, formatCommandFailure('self-hosted compileSource driver run', run))
-    assert.match(run.stdout.trim(), /^\d+$/)
+    await compileAndRunSelfHostedCompileSourceOutputs(dir, run.stdout)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+}
+
+async function compileAndRunSelfHostedCompileSourceOutputs(dir: string, stdout: string): Promise<void> {
+  for (const selfHostedCase of selfHostedCompileSourceCases) {
+    const source = extractSelfHostedCompileSourceOutput(stdout, selfHostedCase.name)
+    const cPath = join(dir, `${selfHostedCase.name}.c`)
+    const exe = join(dir, selfHostedCase.name)
+
+    await writeFile(cPath, source)
+
+    const compile = await compileRuntimeProgram(cPath, exe)
+
+    assert.equal(
+      compile.code,
+      0,
+      formatCommandFailure(`self-hosted generated ${selfHostedCase.name} compile`, compile)
+    )
+
+    const run = await runCommand(exe, [])
+
+    assert.equal(run.code, 0, formatCommandFailure(`self-hosted generated ${selfHostedCase.name} run`, run))
+    assert.equal(run.stdout, selfHostedCase.expectedStdout)
+  }
+}
+
+function extractSelfHostedCompileSourceOutput(stdout: string, name: string): string {
+  const begin = `${selfHostedCompileSourceBeginPrefix}${name}\n`
+  const end = `${selfHostedCompileSourceEndPrefix}${name}\n`
+  const beginIndex = stdout.indexOf(begin)
+
+  assert.notEqual(beginIndex, -1, formatMissingSelfHostedOutputMarker('begin', name, stdout))
+
+  const sourceStart = beginIndex + begin.length
+  const endIndex = stdout.indexOf(end, sourceStart)
+
+  assert.notEqual(endIndex, -1, formatMissingSelfHostedOutputMarker('end', name, stdout))
+
+  return stdout.slice(sourceStart, endIndex)
+}
+
+function formatMissingSelfHostedOutputMarker(kind: 'begin' | 'end', name: string, stdout: string): string {
+  return [
+    `Missing self-hosted compileSource ${kind} marker for ${name}.`,
+    'Driver stdout prefix:',
+    stdout.slice(0, 2000)
+  ].join('\n')
 }
 
 async function compileAndRunSelfHostedParserDriver(): Promise<void> {
@@ -174,22 +253,7 @@ async function compileSelfHostedCompileSourceDriverOnce(): Promise<CModuleCompil
   const files = await readCompilerSources()
   files.push({
     path: selfHostedCompileSourceDriverPath,
-    source: `import process from 'node:process'
-import { compileSource } from './compiler/index.ts'
-
-try {
-  const result = compileSource('const value: number = 1\\n', {
-    target: 'c',
-    loopBackend: 'libuv',
-    tlsBackend: 'boringssl'
-  })
-
-  console.log(result.code.length)
-} catch (error) {
-  console.log('compile failed')
-  process.exit(1)
-}
-`
+    source: selfHostedCompileSourceDriverSource()
   })
 
   return compileMemoryPackageToCModules(selfHostedCompileSourceDriverPath, files, {
@@ -198,6 +262,32 @@ try {
     loopBackend: 'libuv',
     tlsBackend: 'boringssl'
   })
+}
+
+function selfHostedCompileSourceDriverSource(): string {
+  const caseBlocks: string[] = []
+
+  for (let index = 0; index < selfHostedCompileSourceCases.length; index = index + 1) {
+    const selfHostedCase = selfHostedCompileSourceCases[index]
+    caseBlocks.push(`  const result${index} = compileSource(${JSON.stringify(selfHostedCase.source)}, {
+    target: 'c'
+  })
+  console.log(${JSON.stringify(`${selfHostedCompileSourceBeginPrefix}${selfHostedCase.name}`)})
+  console.log(result${index}.code)
+  console.log(${JSON.stringify(`${selfHostedCompileSourceEndPrefix}${selfHostedCase.name}`)})
+`)
+  }
+
+  return `import process from 'node:process'
+import { compileSource } from './compiler/index.ts'
+
+try {
+${caseBlocks.join('\n')}
+} catch (error) {
+  console.log('compile failed')
+  process.exit(1)
+}
+`
 }
 
 async function writeCModuleFiles(dir: string, files: Array<{ path: string; code: string }>): Promise<string[]> {

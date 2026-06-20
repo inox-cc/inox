@@ -1093,7 +1093,7 @@ export function emitRuntimeValueVariableDeclaration(
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${value.expression};`)
 
-  if (statement.nullable === true && isNullableScalarType(valueType)) {
+  if (statement.nullable === true && isRuntimeNullableType(valueType)) {
     pushAllLines(lines, emitRuntimeNullableValueCheck(statement.name, expectedTag, context))
   } else {
     const valueCheck = emitRuntimeValueCheck(statement.name, expectedTag, context)

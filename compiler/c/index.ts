@@ -386,6 +386,7 @@ import type { StringLoweringDependencies } from './values/strings.ts'
 import {
   canEmitStringBytesOperand,
   collectTemplatePlaceholderExpressions,
+  cookTemplateLiteralText,
   emitCNumberConversionValueExpression,
   emitCNumberToStringValueExpression,
   emitCStringCaseValueExpression,
@@ -839,6 +840,7 @@ const arrayLoweringDependencies: ArrayLoweringDependencies = {
   emitPreparedStringBytesOperand,
   emitPreparedNumberExpression,
   inferExpressionType,
+  isStringSplitCall,
   resolveKnownObjectIndex,
   resolveKnownObjectMember
 }
@@ -1047,6 +1049,7 @@ const cCallExpressionDependencies = {
   currentErrorTarget: currentCExpressionErrorTarget,
   emitCExpression,
   emitCNumberConversionValueExpression,
+  emitCObjectLiteralValueExpression,
   emitCValueExpression,
   emitFunctionPointerAdapter,
   emitFunctionValueExpression,
@@ -1089,6 +1092,7 @@ const cCallExpressionDependencies = {
     emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
   emitRuntimeCallbackCall,
   emitRuntimeCallbackValue,
+  inferExpressionType,
   isExternalEventLoopFunctionCallee,
   isNullableFunctionType,
   isPromiseReturningFunctionCallee,
@@ -2341,7 +2345,7 @@ function staticObjectStringPropertyValue(expression: AnyNode, key: string): stri
   }
 
   if (value !== null && typeof value !== 'undefined' && value.type === 'TemplateLiteral' && !value.raw.includes('${')) {
-    return value.raw.slice(1, -1)
+    return cookTemplateLiteralText(value.raw.slice(1, -1))
   }
 
   return null
@@ -4514,24 +4518,8 @@ function emitCObjectLiteralValueExpression(
   const temp = nextCName(context, 'inox_object')
   const shapeName = nextCName(context, 'inox_shape_value')
   const fieldsName = `${shapeName}_fields`
-  const fields: CObjectShapeField[] = []
+  const fields = objectLiteralValueShapeFields(expression, context, shape)
   const lines = [`static const inox_field_info ${fieldsName}[] = {`]
-
-  if (shape !== null && typeof shape !== 'undefined' && shape.fields !== null && typeof shape.fields !== 'undefined') {
-    for (const field of shape.fields) {
-      fields.push(field)
-    }
-  } else {
-    for (const property of expression.properties) {
-      fields.push({
-        name: property.key,
-        readonlyField: false,
-        valueType: inferExpressionType(property.value, context),
-        shape: property.value.shape,
-        functionType: resolveFunctionValueType(property.value, context)
-      })
-    }
-  }
 
   for (const field of fields) {
     lines.push(`  { ${cStringLiteral(field.name)}, ${emitCFieldFlags(field)} },`)
@@ -4571,6 +4559,224 @@ function emitCObjectLiteralValueExpression(
     lines,
     expression: temp
   }
+}
+
+function objectLiteralValueShapeFields(
+  expression: AnyNode,
+  context: CFunctionContext,
+  shape: CObjectShape | null | undefined
+): CObjectShapeField[] {
+  const fields: CObjectShapeField[] = []
+  if (
+    shape !== null &&
+    typeof shape !== 'undefined' &&
+    shape.builtin !== 'compiler.AnyNode' &&
+    shape.fields !== null &&
+    typeof shape.fields !== 'undefined' &&
+    shape.fields.length > 0
+  ) {
+    for (const field of shape.fields) {
+      fields.push(field)
+    }
+
+    if (shape.dynamic !== true) {
+      return fields
+    }
+  }
+
+  for (const property of expression.properties) {
+    if (objectLiteralShapeFieldIndex(fields, property.key) !== -1) {
+      continue
+    }
+
+    fields.push(objectLiteralPropertyShapeField(property, context, shape))
+  }
+
+  if (isCompilerAnyNodeObjectShape(shape) || isEmptyObjectShape(shape)) {
+    appendCompilerAnyNodeFallbackShapeFields(fields)
+  }
+
+  return fields
+}
+
+function isCompilerAnyNodeObjectShape(shape: CObjectShape | null | undefined): boolean {
+  return shape !== null && typeof shape !== 'undefined' && shape.builtin === 'compiler.AnyNode'
+}
+
+function isEmptyObjectShape(shape: CObjectShape | null | undefined): boolean {
+  return (
+    shape !== null &&
+    typeof shape !== 'undefined' &&
+    shape.fields !== null &&
+    typeof shape.fields !== 'undefined' &&
+    shape.fields.length === 0
+  )
+}
+
+function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeField[]): void {
+  const stringFields = [
+    'type',
+    'name',
+    'property',
+    'operator',
+    'declaredType',
+    'valueType',
+    'arrayElementType',
+    'arrayElementDeclaredType',
+    'mapKeyType',
+    'mapValueType',
+    'promiseValueType',
+    'setElementType',
+    'propertyValueType',
+    'pathRuntimeMethod',
+    'pathRuntimeConstant',
+    'processRuntimeMethod',
+    'processRuntimeProperty',
+    'processRuntimeEnvName',
+    'dgramMessageHandlerName',
+    'urlRuntimeMethod',
+    'urlRuntimeField',
+    'httpHandlerName',
+    'binaryRuntimeMethod',
+    'bufferRuntimeConstant',
+    'childProcessRuntimeMethod',
+    'cryptoHashDigestEncoding',
+    'cryptoRuntimeMethod',
+    'debugRuntimeMethod',
+    'fetchRuntimeMethod',
+    'fsRuntimeConstant',
+    'fsRuntimeMethod',
+    'jsonRuntimeMethod',
+    'mathRuntimeMethod',
+    'osRuntimeConstant',
+    'osRuntimeMethod',
+    'objectRuntimeMethod',
+    'stringRuntimeMethod',
+    'timerRuntimeMethod',
+    'numericCast',
+    'returnType',
+    'declaredReturnType',
+    'returnArrayElementType',
+    'returnMapKeyType',
+    'returnMapValueType',
+    'returnPromiseValueType',
+    'returnSetElementType',
+    'className',
+    'collectionKind'
+  ]
+  const booleanFields = [
+    'async',
+    'exported',
+    'expressionBody',
+    'fsForce',
+    'fsRecursive',
+    'nullable',
+    'optional',
+    'readonly',
+    'returnNullable',
+    'typeOnly'
+  ]
+  const arrayFields = [
+    'args',
+    'cases',
+    'elements',
+    'fields',
+    'methods',
+    'params',
+    'path',
+    'properties',
+    'specifiers'
+  ]
+  const objectFields = [
+    'argument',
+    'callee',
+    'condition',
+    'consequent',
+    'alternate',
+    'expression',
+    'functionType',
+    'handler',
+    'index',
+    'init',
+    'left',
+    'loc',
+    'object',
+    'right',
+    'shape',
+    'target'
+  ]
+  const unknownFields = ['body', 'raw', 'source', 'value']
+
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, stringFields, 'string')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, booleanFields, 'boolean')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, arrayFields, 'array')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, objectFields, 'object')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, unknownFields, 'unknown')
+}
+
+function appendCompilerAnyNodeFallbackShapeFieldGroup(
+  fields: CObjectShapeField[],
+  names: string[],
+  valueType: string
+): void {
+  for (const name of names) {
+    if (objectLiteralShapeFieldIndex(fields, name) !== -1) {
+      continue
+    }
+
+    fields.push({
+      name,
+      optional: true,
+      readonlyField: false,
+      valueType
+    })
+  }
+}
+
+function objectLiteralPropertyShapeField(
+  property: CObjectLiteralPropertyNode,
+  context: CFunctionContext,
+  shape: CObjectShape | null | undefined
+): CObjectShapeField {
+  let valueType = inferExpressionType(property.value, context)
+  let propertyShape = property.value.shape
+  let functionType = resolveFunctionValueType(property.value, context)
+
+  if (shape !== null && typeof shape !== 'undefined') {
+    const dynamicField = shape.dynamicField
+
+    if (dynamicField !== null && typeof dynamicField !== 'undefined') {
+      if (dynamicField.valueType !== null && typeof dynamicField.valueType !== 'undefined') {
+        valueType = dynamicField.valueType
+      }
+
+      if (dynamicField.shape !== null && typeof dynamicField.shape !== 'undefined') {
+        propertyShape = dynamicField.shape
+      }
+
+      if (dynamicField.functionType !== null && typeof dynamicField.functionType !== 'undefined') {
+        functionType = dynamicField.functionType
+      }
+    }
+  }
+
+  return {
+    name: property.key,
+    readonlyField: false,
+    valueType,
+    shape: propertyShape,
+    functionType
+  }
+}
+
+function objectLiteralShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
+  for (let index = 0; index < fields.length; index = index + 1) {
+    if (fields[index].name === key) {
+      return index
+    }
+  }
+
+  return -1
 }
 
 function emitErrorObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {

@@ -11,6 +11,7 @@ import {
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type { CHttpHandler, CPreparedExpression as PreparedExpression } from '../types.ts'
+import { cookTemplateLiteralText } from '../values/strings.ts'
 import { cJsonRuntimeCallName } from './json.ts'
 
 type HttpAstNode = AnyNode
@@ -606,7 +607,7 @@ function emitHttpStaticStringValue(
   }
 
   if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return expression.raw.slice(1, -1)
+    return cookTemplateLiteralText(expression.raw.slice(1, -1))
   }
 
   if (expression.type === 'NumberLiteral') {
@@ -665,7 +666,7 @@ function emitHttpStaticJsonValue(expression: AnyNode | null | undefined, context
   }
 
   if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return JSON.stringify(expression.raw.slice(1, -1))
+    return JSON.stringify(cookTemplateLiteralText(expression.raw.slice(1, -1)))
   }
 
   if (expression.type === 'NumberLiteral') {
@@ -1096,7 +1097,7 @@ function emitHttpListenHostExpression(expression: AnyNode | null | undefined, co
   }
 
   if (expression.type === 'TemplateLiteral' && !expression.raw.includes('${')) {
-    return cStringLiteral(expression.raw.slice(1, -1))
+    return cStringLiteral(cookTemplateLiteralText(expression.raw.slice(1, -1)))
   }
 
   context.diagnostics.push(

@@ -263,7 +263,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     expression.type === 'TemplateLiteral' &&
     !expression.raw.includes('${')
   ) {
-    return JSON.stringify(expression.raw.slice(1, -1))
+    return JSON.stringify(cookTemplateLiteralText(expression.raw.slice(1, -1)))
   }
 
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
@@ -696,7 +696,7 @@ export function emitPreparedStringBytesOperand(
     expression.type === 'TemplateLiteral' &&
     !expression.raw.includes('${')
   ) {
-    const value = expression.raw.slice(1, -1)
+    const value = cookTemplateLiteralText(expression.raw.slice(1, -1))
 
     return {
       lines: [],
@@ -1181,10 +1181,12 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
 
   for (const part of parts) {
     if (part.kind === 'text') {
+      const value = cookTemplateLiteralText(part.value)
+
       operands.push({
         lines: [],
-        bytes: cStringLiteral(part.value),
-        length: `${utf8ByteLength(part.value)}`
+        bytes: cStringLiteral(value),
+        length: `${utf8ByteLength(value)}`
       })
       continue
     }
@@ -2176,6 +2178,42 @@ function parseTemplateLiteralParts(
   }
 
   return parts
+}
+
+export function cookTemplateLiteralText(value: string): string {
+  let result = ''
+  let index = 0
+
+  while (index < value.length) {
+    const unit = value[index]
+
+    if (unit === '\\' && index + 1 < value.length) {
+      index = index + 1
+      result = result + templateEscapeValue(value[index])
+    } else {
+      result = result + unit
+    }
+
+    index = index + 1
+  }
+
+  return result
+}
+
+function templateEscapeValue(unit: string): string {
+  if (unit === 'n') {
+    return '\n'
+  }
+
+  if (unit === 't') {
+    return '\t'
+  }
+
+  if (unit === 'r') {
+    return '\r'
+  }
+
+  return unit
 }
 
 function currentTemplateLocation(loc: SourceLocation | undefined, state: TemplateLocationState): SourceLocation {
