@@ -108,6 +108,7 @@ type ObjectFunctionFieldResolution = {
 
 type CDynamicObjectArrayIndexDependencies = {
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedRuntimeArrayIndexValue(
     expression: CValueNode,
@@ -1773,6 +1774,7 @@ export type CCallExpressionDependencies = {
   emitNullableScalarValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedArrayFilterCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayMapCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayPopCallExpression(
     expression: CValueNode,
@@ -3989,6 +3991,14 @@ function emitPreparedExpectedDynamicRuntimeScalarValueExpression(
 ): PreparedExpression | null {
   if (!isNumberOrBooleanValueType(valueType)) {
     return null
+  }
+
+  if (expression.type === 'MemberExpression' && expression.property === 'length') {
+    const arrayLength = deps.emitPreparedArrayLengthExpression(expression, context)
+
+    if (arrayLength !== null && typeof arrayLength !== 'undefined') {
+      return arrayLength
+    }
   }
 
   const value = emitPreparedDynamicRuntimeValueExpression(expression, context, deps)

@@ -33,6 +33,7 @@ import type {
 import { cRuntimeValueTag } from '../value-types.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
+import { isAnyNodeLikeArrayFieldName, isAnyNodeLikeDeclaredType } from './types.ts'
 
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
@@ -1075,20 +1076,131 @@ function isArrayLengthReceiver(
   if (expression.type === 'Reference') {
     const path: string[] = expression.path
 
-    if (path.length !== 1) {
-      return false
+    if (path.length === 1) {
+      const name: string = path[0]
+
+      return (
+        context.variables.get(name) === 'array' ||
+        context.runtimeArrayElementTypes.has(name) ||
+        context.arrayShapes.has(name)
+      )
     }
 
-    const name: string = path[0]
+    return isAnyNodeLikeArrayFieldReceiver(expression, context, deps)
+  }
 
-    return (
-      context.variables.get(name) === 'array' ||
-      context.runtimeArrayElementTypes.has(name) ||
-      context.arrayShapes.has(name)
-    )
+  if (isAnyNodeLikeArrayFieldReceiver(expression, context, deps)) {
+    return true
   }
 
   return isDynamicObjectArrayLengthReceiver(expression, context, deps)
+}
+
+function isAnyNodeLikeArrayFieldReceiver(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext,
+  deps: ArrayLoweringDependencies
+): boolean {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  const fieldName = anyNodeLikeArrayFieldReceiverName(expression)
+
+  if (fieldName === null || typeof fieldName === 'undefined' || !isAnyNodeLikeArrayFieldName(fieldName)) {
+    return false
+  }
+
+  const rootName = anyNodeLikeArrayFieldReceiverRootName(expression)
+
+  if (rootName === null || typeof rootName === 'undefined') {
+    return false
+  }
+
+  const declaredType = context.objectDeclaredTypes.get(rootName)
+  const declaredAnyNode =
+    declaredType !== null &&
+    typeof declaredType !== 'undefined' &&
+    isAnyNodeLikeDeclaredType(declaredType)
+
+  if (declaredAnyNode) {
+    return true
+  }
+
+  const knownField = anyNodeLikeKnownArrayField(expression, context, deps)
+
+  if (knownField !== null && typeof knownField !== 'undefined') {
+    return knownField.valueType === 'array'
+  }
+
+  return context.variables.get(rootName) === 'object'
+}
+
+function anyNodeLikeKnownArrayField(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext,
+  deps: ArrayLoweringDependencies
+): CObjectFieldInfo | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type === 'MemberExpression') {
+    return deps.resolveKnownObjectMember(expression, context)
+  }
+
+  if (expression.type === 'IndexExpression') {
+    return deps.resolveKnownObjectIndex(expression, context)
+  }
+
+  return null
+}
+
+function anyNodeLikeArrayFieldReceiverName(expression: ArrayMaybeNode): string | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type === 'MemberExpression') {
+    return expression.property
+  }
+
+  if (expression.type === 'Reference' && expression.path.length > 1) {
+    return expression.path[expression.path.length - 1]
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return expression.index.value
+  }
+
+  return null
+}
+
+function anyNodeLikeArrayFieldReceiverRootName(expression: ArrayMaybeNode): string | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type === 'Reference' && expression.path.length > 1) {
+    return expression.path[0]
+  }
+
+  let current: AnyNode = expression
+
+  while (
+    current.type === 'MemberExpression' ||
+    current.type === 'OptionalMemberExpression' ||
+    current.type === 'IndexExpression' ||
+    current.type === 'OptionalIndexExpression'
+  ) {
+    current = current.object
+  }
+
+  if (current.type !== 'Reference' || current.path.length !== 1) {
+    return null
+  }
+
+  return current.path[0]
 }
 
 function isDynamicObjectArrayLengthReceiver(

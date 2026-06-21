@@ -1069,6 +1069,7 @@ const cCallExpressionDependencies = {
   emitNullableScalarValueExpression,
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayJoinCallExpression,
+  emitPreparedArrayLengthExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArraySliceCallExpression,

@@ -985,6 +985,10 @@ function anyNodeLikeFieldValueType(fieldName: string): string {
   return 'unknown'
 }
 
+export function isAnyNodeLikeArrayFieldName(fieldName: string): boolean {
+  return anyNodeLikeArrayFields().includes(fieldName)
+}
+
 export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | null {
   if (
     fieldName === 'argument' ||
