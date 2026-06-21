@@ -14,7 +14,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
-import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -941,7 +941,12 @@ function emitKnownPreparedClassMethodCallExpression(
     pushAllLines(lines, callLines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(value))
     lines.push(`${value} = ${callExpression};`)
-    lines.push(emitRuntimeValueCheck(value, tag, context))
+
+    if (method.returnNullable === true) {
+      pushAllLines(lines, emitRuntimeNullableValueCheck(value, tag, context))
+    } else {
+      lines.push(emitRuntimeValueCheck(value, tag, context))
+    }
 
     return {
       lines,

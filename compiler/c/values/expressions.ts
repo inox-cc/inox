@@ -5321,6 +5321,10 @@ function callExpressionReturnsNullableRuntimeValue(
     return false
   }
 
+  if (expression.nullable === true) {
+    return true
+  }
+
   if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
     const resolved = resolveObjectFunctionField(expression.callee, context)
 
