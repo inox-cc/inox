@@ -73,7 +73,11 @@ type StoredFunctionEffectProgram = {
 }
 
 export function collectIrFunctionEffects(programs: FunctionEffectProgram[]): IrFunctionEffect[] {
-  return collectFunctionEffects(collectFunctionEffectNodes(programs, false), [], false)
+  const nodes = collectFunctionEffectNodes(programs, false)
+  const externalEffects: IrFunctionEffect[] = []
+  const effects = collectFunctionEffects(nodes, externalEffects, false)
+
+  return effects
 }
 
 export function collectIrFunctionEffectsWithExternalEffects(
@@ -81,11 +85,10 @@ export function collectIrFunctionEffectsWithExternalEffects(
   externalEffects: IrFunctionEffect[],
   includeClassMethods: boolean
 ): IrFunctionEffect[] {
-  return collectFunctionEffects(
-    collectFunctionEffectNodes(programs, includeClassMethods),
-    externalEffects,
-    includeClassMethods
-  )
+  const nodes = collectFunctionEffectNodes(programs, includeClassMethods)
+  const effects = collectFunctionEffects(nodes, externalEffects, includeClassMethods)
+
+  return effects
 }
 
 export function irClassMethodEffectName(className: string, methodName: string): string {
@@ -173,18 +176,18 @@ export function collectIrLocalThrowValueTypes(
   const functionThrowValueTypes = cloneFunctionThrowValueTypeMap(options.functionThrowValueTypes)
   const functionNames = functionNameSetFromMap(functionThrowValueTypes)
   const errorObjectNames = cloneOptionalStringSet(options.errorObjectNames)
-
-  return uniqueThrowValueTypes(
-    collectEscapingThrowValueTypesFromStatement(
-      statement,
-      functionThrowValueTypes,
-      functionNames,
-      errorObjectNames,
-      createStringMap(),
-      false,
-      false
-    )
+  const types = collectEscapingThrowValueTypesFromStatement(
+    statement,
+    functionThrowValueTypes,
+    functionNames,
+    errorObjectNames,
+    createStringMap(),
+    false,
+    false
   )
+  const result = uniqueThrowValueTypes(types)
+
+  return result
 }
 
 function collectFunctionEffects(
@@ -1239,5 +1242,7 @@ function normalizedEffectThrowValueTypes(effect: IrFunctionEffect): IrThrowValue
     return throwValueTypes
   }
 
-  return uniqueThrowValueTypes(effect.throwValueTypes)
+  const result = uniqueThrowValueTypes(effect.throwValueTypes)
+
+  return result
 }

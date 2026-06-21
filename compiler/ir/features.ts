@@ -92,7 +92,9 @@ export function collectIrFeatures(program: ProgramNode): IrFeature[] {
 
   visitNode(program, features)
 
-  return sortedIrFeatures(features)
+  const result = sortedIrFeatures(features)
+
+  return result
 }
 
 function featureProgramAt(programs: FeatureProgram[], index: number): FeatureProgram {
@@ -164,7 +166,9 @@ export function collectIrFeatureRequirements(programs: FeatureProgram[]): IrFeat
     }
   }
 
-  return sortedIrFeatures(features)
+  const result = sortedIrFeatures(features)
+
+  return result
 }
 
 export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement[] {
@@ -246,7 +250,9 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
     }
   }
 
-  return sortedRuntimeRequirements(requirements)
+  const result = sortedRuntimeRequirements(requirements)
+
+  return result
 }
 
 export function collectIrRuntimeRequirements(programs: RuntimeRequirementProgram[]): IrRuntimeRequirement[] {
@@ -266,7 +272,9 @@ export function collectIrRuntimeRequirements(programs: RuntimeRequirementProgram
     }
   }
 
-  return sortedRuntimeRequirements(requirements)
+  const result = sortedRuntimeRequirements(requirements)
+
+  return result
 }
 
 export function collectSyntaxFeatureUsages(program: ProgramNode): IrSyntaxFeatureUsage[] {

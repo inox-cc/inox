@@ -11,7 +11,9 @@ export type LowerExpressionContext = LowerContext & {
 }
 
 export function lowerExpression(expression: LowerExpressionNode, context: LowerExpressionContext): LowerExpressionNode {
-  return lowerExpressionWithContext(expression, context)
+  const lowered = lowerExpressionWithContext(expression, context)
+
+  return lowered
 }
 
 function lowerExpressionWithContext(
@@ -47,138 +49,149 @@ function lowerExpressionWithContext(
   }
 
   if (expression.type === 'Reference') {
-    return cloneReferenceExpression(expression, findReferenceVariable(expression, context))
+    const variable = findReferenceVariable(expression, context)
+    const reference = cloneReferenceExpression(expression, variable)
+
+    return reference
   }
 
   if (expression.type === 'MemberExpression') {
     const object = lowerExpressionWithContext(expression.object, context)
+    const valueType = memberExpressionValueType(expression, object)
+    const member = cloneMemberExpression(expression, object, valueType)
 
-    return cloneMemberExpression(expression, object, memberExpressionValueType(expression, object))
+    return member
   }
 
   if (expression.type === 'IndexExpression') {
     const object = lowerExpressionWithContext(expression.object, context)
+    const index = lowerExpressionWithContext(expression.index, context)
+    const valueType = indexExpressionValueType(expression, object)
+    const indexed = cloneIndexExpression(expression, object, index, valueType)
 
-    return cloneIndexExpression(
-      expression,
-      object,
-      lowerExpressionWithContext(expression.index, context),
-      indexExpressionValueType(expression, object)
-    )
+    return indexed
   }
 
   if (expression.type === 'OptionalMemberExpression') {
-    return cloneMemberExpression(
-      expression,
-      lowerExpressionWithContext(expression.object, context),
-      fallbackString(expression.valueType, 'unknown')
-    )
+    const object = lowerExpressionWithContext(expression.object, context)
+    const valueType = fallbackString(expression.valueType, 'unknown')
+    const member = cloneMemberExpression(expression, object, valueType)
+
+    return member
   }
 
   if (expression.type === 'OptionalIndexExpression') {
-    return cloneIndexExpression(
-      expression,
-      lowerExpressionWithContext(expression.object, context),
-      lowerExpressionWithContext(expression.index, context),
-      fallbackString(expression.valueType, 'unknown')
-    )
+    const object = lowerExpressionWithContext(expression.object, context)
+    const index = lowerExpressionWithContext(expression.index, context)
+    const valueType = fallbackString(expression.valueType, 'unknown')
+    const indexed = cloneIndexExpression(expression, object, index, valueType)
+
+    return indexed
   }
 
   if (expression.type === 'OptionalCallExpression') {
     const callee = lowerExpressionWithContext(expression.callee, context)
+    const args = lowerExpressionList(expression.args, context)
+    const valueType = callExpressionValueType(expression, callee)
+    const call = cloneCallExpression(expression, callee, args, valueType)
 
-    return cloneCallExpression(
-      expression,
-      callee,
-      lowerExpressionList(expression.args, context),
-      callExpressionValueType(expression, callee)
-    )
+    return call
   }
 
   if (expression.type === 'CallExpression') {
     const callee = lowerExpressionWithContext(expression.callee, context)
+    const args = lowerExpressionList(expression.args, context)
+    const valueType = callExpressionValueType(expression, callee)
+    const call = cloneCallExpression(expression, callee, args, valueType)
 
-    return cloneCallExpression(
-      expression,
-      callee,
-      lowerExpressionList(expression.args, context),
-      callExpressionValueType(expression, callee)
-    )
+    return call
   }
 
   if (expression.type === 'NewExpression') {
-    return cloneCallExpression(
-      expression,
-      lowerExpressionWithContext(expression.callee, context),
-      lowerExpressionList(expression.args, context),
-      fallbackString(expression.valueType, 'object')
-    )
+    const callee = lowerExpressionWithContext(expression.callee, context)
+    const args = lowerExpressionList(expression.args, context)
+    const valueType = fallbackString(expression.valueType, 'object')
+    const call = cloneCallExpression(expression, callee, args, valueType)
+
+    return call
   }
 
   if (expression.type === 'AwaitExpression') {
-    return cloneAwaitExpression(
-      expression,
-      lowerExpressionWithContext(expression.argument, context),
-      fallbackString(expression.valueType, 'unknown')
-    )
+    const argument = lowerExpressionWithContext(expression.argument, context)
+    const valueType = fallbackString(expression.valueType, 'unknown')
+    const awaited = cloneAwaitExpression(expression, argument, valueType)
+
+    return awaited
   }
 
   if (expression.type === 'ArrowFunctionExpression') {
-    return cloneArrowFunctionExpression(expression, lowerArrowFunctionBody(expression, context))
+    const body = lowerArrowFunctionBody(expression, context)
+    const arrow = cloneArrowFunctionExpression(expression, body)
+
+    return arrow
   }
 
   if (expression.type === 'AssignmentExpression') {
     const value = lowerExpressionWithContext(expression.value, context)
+    const target = lowerExpressionWithContext(expression.target, context)
+    const assignment = cloneAssignmentExpression(expression, target, value)
 
-    return cloneAssignmentExpression(expression, lowerExpressionWithContext(expression.target, context), value)
+    return assignment
   }
 
   if (expression.type === 'UpdateExpression') {
-    return cloneUpdateExpression(expression, lowerExpressionWithContext(expression.argument, context))
+    const argument = lowerExpressionWithContext(expression.argument, context)
+    const update = cloneUpdateExpression(expression, argument)
+
+    return update
   }
 
   if (expression.type === 'BinaryExpression') {
     const left = lowerExpressionWithContext(expression.left, context)
     const right = lowerExpressionWithContext(expression.right, context)
+    const valueType = inferBinaryExpressionType(expression.operator, left, right)
+    const binary = cloneBinaryExpression(expression, left, right, valueType)
 
-    return cloneBinaryExpression(expression, left, right, inferBinaryExpressionType(expression.operator, left, right))
+    return binary
   }
 
   if (expression.type === 'ConditionalExpression') {
+    const test = lowerExpressionWithContext(expression.test, context)
     const consequent = lowerExpressionWithContext(expression.consequent, context)
     const alternate = lowerExpressionWithContext(expression.alternate, context)
+    const valueType = inferConditionalExpressionType(consequent, alternate)
+    const conditional = cloneConditionalExpression(expression, test, consequent, alternate, valueType)
 
-    return cloneConditionalExpression(
-      expression,
-      lowerExpressionWithContext(expression.test, context),
-      consequent,
-      alternate,
-      inferConditionalExpressionType(consequent, alternate)
-    )
+    return conditional
   }
 
   if (expression.type === 'UnaryExpression') {
-    return cloneUnaryExpression(
-      expression,
-      lowerExpressionWithContext(expression.argument, context),
-      unaryExpressionValueType(expression)
-    )
+    const argument = lowerExpressionWithContext(expression.argument, context)
+    const valueType = unaryExpressionValueType(expression)
+    const unary = cloneUnaryExpression(expression, argument, valueType)
+
+    return unary
   }
 
   if (expression.type === 'ArrayLiteral') {
     const elements = lowerExpressionList(expression.elements, context)
     const elementType = commonArrayElementTypeFromElements(elements)
-
-    return cloneArrayLiteralExpression(
+    const declaredElementType = arrayLiteralDeclaredElementType(expression, elementType)
+    const loweredArray = cloneArrayLiteralExpression(
       expression,
       elements,
       elementType,
-      arrayLiteralDeclaredElementType(expression, elementType)
+      declaredElementType
     )
+
+    return loweredArray
   }
 
   if (expression.type === 'ObjectLiteral') {
-    return cloneObjectLiteralExpression(expression, lowerObjectProperties(expression.properties, context))
+    const properties = lowerObjectProperties(expression.properties, context)
+    const object = cloneObjectLiteralExpression(expression, properties)
+
+    return object
   }
 
   return cloneUnknownExpression(expression)
@@ -310,38 +323,164 @@ function nullableNode(value: LowerExpressionNode | null | undefined): LowerExpre
 }
 
 function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressionNode): LowerExpressionNode {
-  target.binaryRuntimeMethod = nullableString(source.binaryRuntimeMethod)
-  target.bufferRuntimeConstant = nullableString(source.bufferRuntimeConstant)
-  target.childProcessRuntimeMethod = nullableString(source.childProcessRuntimeMethod)
-  target.cryptoHashDigestEncoding = nullableString(source.cryptoHashDigestEncoding)
-  target.cryptoRuntimeMethod = nullableString(source.cryptoRuntimeMethod)
-  target.debugRuntimeMethod = nullableString(source.debugRuntimeMethod)
-  target.fetchRuntimeMethod = nullableString(source.fetchRuntimeMethod)
-  target.fsRuntimeConstant = nullableString(source.fsRuntimeConstant)
-  target.fsRuntimeMethod = nullableString(source.fsRuntimeMethod)
-  target.jsonRuntimeMethod = nullableString(source.jsonRuntimeMethod)
-  target.mathRuntimeMethod = nullableString(source.mathRuntimeMethod)
-  target.osRuntimeConstant = nullableString(source.osRuntimeConstant)
-  target.osRuntimeMethod = nullableString(source.osRuntimeMethod)
-  target.objectRuntimeMethod = nullableString(source.objectRuntimeMethod)
-  target.pathRuntimeConstant = nullableString(source.pathRuntimeConstant)
-  target.pathRuntimeMethod = nullableString(source.pathRuntimeMethod)
-  target.processRuntimeEnvName = nullableString(source.processRuntimeEnvName)
-  target.processRuntimeMethod = nullableString(source.processRuntimeMethod)
-  target.processRuntimeProperty = nullableString(source.processRuntimeProperty)
-  target.stringRuntimeMethod = nullableString(source.stringRuntimeMethod)
-  target.timerRuntimeMethod = nullableString(source.timerRuntimeMethod)
-  target.urlRuntimeField = nullableString(source.urlRuntimeField)
-  target.urlRuntimeMethod = nullableString(source.urlRuntimeMethod)
-  target.numericCast = nullableString(source.numericCast)
-  target.returnType = nullableString(source.returnType)
-  target.declaredReturnType = nullableString(source.declaredReturnType)
-  target.returnNullable = source.returnNullable === true
-  target.returnArrayElementType = nullableString(source.returnArrayElementType)
-  target.returnMapKeyType = nullableString(source.returnMapKeyType)
-  target.returnMapValueType = nullableString(source.returnMapValueType)
-  target.returnPromiseValueType = nullableString(source.returnPromiseValueType)
-  target.returnSetElementType = nullableString(source.returnSetElementType)
+  const binaryRuntimeMethod = nullableString(source.binaryRuntimeMethod)
+  if (binaryRuntimeMethod !== null && typeof binaryRuntimeMethod !== 'undefined') {
+    target.binaryRuntimeMethod = binaryRuntimeMethod
+  }
+
+  const bufferRuntimeConstant = nullableString(source.bufferRuntimeConstant)
+  if (bufferRuntimeConstant !== null && typeof bufferRuntimeConstant !== 'undefined') {
+    target.bufferRuntimeConstant = bufferRuntimeConstant
+  }
+
+  const childProcessRuntimeMethod = nullableString(source.childProcessRuntimeMethod)
+  if (childProcessRuntimeMethod !== null && typeof childProcessRuntimeMethod !== 'undefined') {
+    target.childProcessRuntimeMethod = childProcessRuntimeMethod
+  }
+
+  const cryptoHashDigestEncoding = nullableString(source.cryptoHashDigestEncoding)
+  if (cryptoHashDigestEncoding !== null && typeof cryptoHashDigestEncoding !== 'undefined') {
+    target.cryptoHashDigestEncoding = cryptoHashDigestEncoding
+  }
+
+  const cryptoRuntimeMethod = nullableString(source.cryptoRuntimeMethod)
+  if (cryptoRuntimeMethod !== null && typeof cryptoRuntimeMethod !== 'undefined') {
+    target.cryptoRuntimeMethod = cryptoRuntimeMethod
+  }
+
+  const debugRuntimeMethod = nullableString(source.debugRuntimeMethod)
+  if (debugRuntimeMethod !== null && typeof debugRuntimeMethod !== 'undefined') {
+    target.debugRuntimeMethod = debugRuntimeMethod
+  }
+
+  const fetchRuntimeMethod = nullableString(source.fetchRuntimeMethod)
+  if (fetchRuntimeMethod !== null && typeof fetchRuntimeMethod !== 'undefined') {
+    target.fetchRuntimeMethod = fetchRuntimeMethod
+  }
+
+  const fsRuntimeConstant = nullableString(source.fsRuntimeConstant)
+  if (fsRuntimeConstant !== null && typeof fsRuntimeConstant !== 'undefined') {
+    target.fsRuntimeConstant = fsRuntimeConstant
+  }
+
+  const fsRuntimeMethod = nullableString(source.fsRuntimeMethod)
+  if (fsRuntimeMethod !== null && typeof fsRuntimeMethod !== 'undefined') {
+    target.fsRuntimeMethod = fsRuntimeMethod
+  }
+
+  const jsonRuntimeMethod = nullableString(source.jsonRuntimeMethod)
+  if (jsonRuntimeMethod !== null && typeof jsonRuntimeMethod !== 'undefined') {
+    target.jsonRuntimeMethod = jsonRuntimeMethod
+  }
+
+  const mathRuntimeMethod = nullableString(source.mathRuntimeMethod)
+  if (mathRuntimeMethod !== null && typeof mathRuntimeMethod !== 'undefined') {
+    target.mathRuntimeMethod = mathRuntimeMethod
+  }
+
+  const osRuntimeConstant = nullableString(source.osRuntimeConstant)
+  if (osRuntimeConstant !== null && typeof osRuntimeConstant !== 'undefined') {
+    target.osRuntimeConstant = osRuntimeConstant
+  }
+
+  const osRuntimeMethod = nullableString(source.osRuntimeMethod)
+  if (osRuntimeMethod !== null && typeof osRuntimeMethod !== 'undefined') {
+    target.osRuntimeMethod = osRuntimeMethod
+  }
+
+  const objectRuntimeMethod = nullableString(source.objectRuntimeMethod)
+  if (objectRuntimeMethod !== null && typeof objectRuntimeMethod !== 'undefined') {
+    target.objectRuntimeMethod = objectRuntimeMethod
+  }
+
+  const pathRuntimeConstant = nullableString(source.pathRuntimeConstant)
+  if (pathRuntimeConstant !== null && typeof pathRuntimeConstant !== 'undefined') {
+    target.pathRuntimeConstant = pathRuntimeConstant
+  }
+
+  const pathRuntimeMethod = nullableString(source.pathRuntimeMethod)
+  if (pathRuntimeMethod !== null && typeof pathRuntimeMethod !== 'undefined') {
+    target.pathRuntimeMethod = pathRuntimeMethod
+  }
+
+  const processRuntimeEnvName = nullableString(source.processRuntimeEnvName)
+  if (processRuntimeEnvName !== null && typeof processRuntimeEnvName !== 'undefined') {
+    target.processRuntimeEnvName = processRuntimeEnvName
+  }
+
+  const processRuntimeMethod = nullableString(source.processRuntimeMethod)
+  if (processRuntimeMethod !== null && typeof processRuntimeMethod !== 'undefined') {
+    target.processRuntimeMethod = processRuntimeMethod
+  }
+
+  const processRuntimeProperty = nullableString(source.processRuntimeProperty)
+  if (processRuntimeProperty !== null && typeof processRuntimeProperty !== 'undefined') {
+    target.processRuntimeProperty = processRuntimeProperty
+  }
+
+  const stringRuntimeMethod = nullableString(source.stringRuntimeMethod)
+  if (stringRuntimeMethod !== null && typeof stringRuntimeMethod !== 'undefined') {
+    target.stringRuntimeMethod = stringRuntimeMethod
+  }
+
+  const timerRuntimeMethod = nullableString(source.timerRuntimeMethod)
+  if (timerRuntimeMethod !== null && typeof timerRuntimeMethod !== 'undefined') {
+    target.timerRuntimeMethod = timerRuntimeMethod
+  }
+
+  const urlRuntimeField = nullableString(source.urlRuntimeField)
+  if (urlRuntimeField !== null && typeof urlRuntimeField !== 'undefined') {
+    target.urlRuntimeField = urlRuntimeField
+  }
+
+  const urlRuntimeMethod = nullableString(source.urlRuntimeMethod)
+  if (urlRuntimeMethod !== null && typeof urlRuntimeMethod !== 'undefined') {
+    target.urlRuntimeMethod = urlRuntimeMethod
+  }
+
+  const numericCast = nullableString(source.numericCast)
+  if (numericCast !== null && typeof numericCast !== 'undefined') {
+    target.numericCast = numericCast
+  }
+
+  const returnType = nullableString(source.returnType)
+  if (returnType !== null && typeof returnType !== 'undefined') {
+    target.returnType = returnType
+  }
+
+  const declaredReturnType = nullableString(source.declaredReturnType)
+  if (declaredReturnType !== null && typeof declaredReturnType !== 'undefined') {
+    target.declaredReturnType = declaredReturnType
+  }
+
+  if (source.returnNullable === true) {
+    target.returnNullable = true
+  }
+
+  const returnArrayElementType = nullableString(source.returnArrayElementType)
+  if (returnArrayElementType !== null && typeof returnArrayElementType !== 'undefined') {
+    target.returnArrayElementType = returnArrayElementType
+  }
+
+  const returnMapKeyType = nullableString(source.returnMapKeyType)
+  if (returnMapKeyType !== null && typeof returnMapKeyType !== 'undefined') {
+    target.returnMapKeyType = returnMapKeyType
+  }
+
+  const returnMapValueType = nullableString(source.returnMapValueType)
+  if (returnMapValueType !== null && typeof returnMapValueType !== 'undefined') {
+    target.returnMapValueType = returnMapValueType
+  }
+
+  const returnPromiseValueType = nullableString(source.returnPromiseValueType)
+  if (returnPromiseValueType !== null && typeof returnPromiseValueType !== 'undefined') {
+    target.returnPromiseValueType = returnPromiseValueType
+  }
+
+  const returnSetElementType = nullableString(source.returnSetElementType)
+  if (returnSetElementType !== null && typeof returnSetElementType !== 'undefined') {
+    target.returnSetElementType = returnSetElementType
+  }
 
   if (source.fsRecursive === true) {
     target.fsRecursive = true
@@ -449,25 +588,38 @@ function cloneReferenceExpression(
   expression: LowerExpressionNode,
   variable: LowerExpressionNode | null
 ): LowerExpressionNode {
-  return copyRuntimeMetadata(
-    {
-      type: 'Reference',
-      path: expression.path,
-      valueType: referenceValueType(expression, variable),
-      nullable: expression.nullable === true || referenceVariableNullable(variable),
-      arrayElementType: referenceArrayElementType(expression, variable),
-      arrayElementDeclaredType: referenceArrayElementDeclaredType(expression, variable),
-      mapKeyType: referenceMapKeyType(expression, variable),
-      mapValueType: referenceMapValueType(expression, variable),
-      promiseValueType: referencePromiseValueType(expression, variable),
-      setElementType: referenceSetElementType(expression, variable),
-      functionType: referenceFunctionType(expression, variable),
-      shape: referenceShape(expression, variable),
-      className: referenceClassName(expression, variable),
-      loc: expression.loc
-    },
-    expression
-  )
+  const path = expression.path
+  const valueType = referenceValueType(expression, variable)
+  const nullable = expression.nullable === true || referenceVariableNullable(variable)
+  const arrayElementType = referenceArrayElementType(expression, variable)
+  const arrayElementDeclaredType = referenceArrayElementDeclaredType(expression, variable)
+  const mapKeyType = referenceMapKeyType(expression, variable)
+  const mapValueType = referenceMapValueType(expression, variable)
+  const promiseValueType = referencePromiseValueType(expression, variable)
+  const setElementType = referenceSetElementType(expression, variable)
+  const functionType = referenceFunctionType(expression, variable)
+  const shape = referenceShape(expression, variable)
+  const className = referenceClassName(expression, variable)
+  const loc = nullableNode(expression.loc)
+  const target: LowerExpressionNode = {
+    type: 'Reference',
+    path,
+    valueType,
+    nullable,
+    arrayElementType,
+    arrayElementDeclaredType,
+    mapKeyType,
+    mapValueType,
+    promiseValueType,
+    setElementType,
+    functionType,
+    shape,
+    className,
+    loc
+  }
+  const result = copyRuntimeMetadata(target, expression)
+
+  return result
 }
 
 function referenceValueType(expression: LowerExpressionNode, variable: LowerExpressionNode | null): string {
@@ -686,27 +838,32 @@ function cloneMemberExpression(
   object: LowerExpressionNode,
   valueType: string
 ): LowerExpressionNode {
-  return copyRuntimeMetadata(
-    {
-      type: expression.type,
-      object,
-      property: expression.property,
-      valueType,
-      nullable: expression.nullable === true,
-      arrayElementType: nullableString(expression.arrayElementType),
-      arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
-      mapKeyType: nullableString(expression.mapKeyType),
-      mapValueType: nullableString(expression.mapValueType),
-      promiseValueType: nullableString(expression.promiseValueType),
-      setElementType: nullableString(expression.setElementType),
-      functionType: nullableNode(expression.functionType),
-      shape: nullableNode(expression.shape),
-      className: nullableString(expression.className),
-      collectionKind: nullableString(expression.collectionKind),
-      loc: expression.loc
-    },
-    expression
-  )
+  const target: LowerExpressionNode = {
+    type: expression.type,
+    object,
+    property: expression.property,
+    valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+
+  const result = copyRuntimeMetadata(target, expression)
+
+  if (expression.property === 'length') {
+    result.shape = null
+  }
+
+  return result
 }
 
 function cloneIndexExpression(
@@ -744,27 +901,27 @@ function cloneCallExpression(
   args: LowerExpressionNode[],
   valueType: string
 ): LowerExpressionNode {
-  return copyRuntimeMetadata(
-    {
-      type: expression.type,
-      callee,
-      args,
-      valueType,
-      nullable: expression.nullable === true,
-      arrayElementType: nullableString(expression.arrayElementType),
-      arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
-      mapKeyType: nullableString(expression.mapKeyType),
-      mapValueType: nullableString(expression.mapValueType),
-      promiseValueType: nullableString(expression.promiseValueType),
-      setElementType: nullableString(expression.setElementType),
-      functionType: nullableNode(expression.functionType),
-      shape: nullableNode(expression.shape),
-      className: nullableString(expression.className),
-      collectionKind: nullableString(expression.collectionKind),
-      loc: expression.loc
-    },
-    expression
-  )
+  const target: LowerExpressionNode = {
+    type: expression.type,
+    callee,
+    args,
+    valueType,
+    nullable: expression.nullable === true,
+    arrayElementType: nullableString(expression.arrayElementType),
+    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    mapKeyType: nullableString(expression.mapKeyType),
+    mapValueType: nullableString(expression.mapValueType),
+    promiseValueType: nullableString(expression.promiseValueType),
+    setElementType: nullableString(expression.setElementType),
+    functionType: nullableNode(expression.functionType),
+    shape: nullableNode(expression.shape),
+    className: nullableString(expression.className),
+    collectionKind: nullableString(expression.collectionKind),
+    loc: expression.loc
+  }
+  const result = copyRuntimeMetadata(target, expression)
+
+  return result
 }
 
 function cloneAwaitExpression(
@@ -1083,8 +1240,11 @@ function lowerExpressionList(
 ): LowerExpressionNode[] {
   const lowered: LowerExpressionNode[] = []
 
-  for (const expression of expressions) {
-    lowered.push(lowerExpressionWithContext(expression, context))
+  for (let index = 0; index < expressions.length; index = index + 1) {
+    const expression = expressions[index]
+    const loweredExpression = lowerExpressionWithContext(expression, context)
+
+    lowered.push(loweredExpression)
   }
 
   return lowered
@@ -1128,7 +1288,8 @@ function arrayLiteralDeclaredElementType(expression: LowerExpressionNode, elemen
 function commonArrayElementTypeFromElements(elements: LowerExpressionNode[]): string {
   let first: string | null = null
 
-  for (const element of elements) {
+  for (let index = 0; index < elements.length; index = index + 1) {
+    const element = elements[index]
     const valueType = fallbackString(element.valueType, 'unknown')
 
     if (first === null || typeof first === 'undefined') {

@@ -1605,6 +1605,32 @@ function objectVariableDeclaredTypes(statement: AnyNode): string[] {
   return seenTypes
 }
 
+function objectPropertyValueType(
+  property: ObjectPropertyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): string {
+  const value = property.value
+
+  if (value.type === 'NumberLiteral') {
+    return 'number'
+  }
+
+  if (value.type === 'StringLiteral' || value.type === 'TemplateLiteral') {
+    return 'string'
+  }
+
+  if (value.type === 'BooleanLiteral') {
+    return 'boolean'
+  }
+
+  if (value.type === 'NullLiteral') {
+    return 'null'
+  }
+
+  return dependencies.inferExpressionType(value, context)
+}
+
 function objectVariableShapeFields(
   statement: AnyNode,
   context: ObjectFunctionContext,
@@ -1636,7 +1662,7 @@ function objectVariableShapeFields(
       continue
     }
 
-    let valueType = dependencies.inferExpressionType(property.value, context)
+    let valueType = objectPropertyValueType(property, context, dependencies)
     let shape = property.value.shape
     let functionType = dependencies.resolveFunctionValueType(property.value, context)
 

@@ -342,9 +342,9 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
     dynamicField: anyNodeField('', 'unknown', null, true, loc),
     fields: [
       anyNodeField('type', 'string', null, true, loc),
-      anyNodeField('loc', 'object', null, false, loc, { shape: anyNodeLocObjectShape(loc) }),
+      anyNodeField('loc', 'object', null, true, loc, { shape: anyNodeLocObjectShape(loc) }),
       anyNodeField('name', 'string', null, false, loc),
-      anyNodeField('path', 'array', 'string[]', false, loc, {
+      anyNodeField('path', 'array', null, false, loc, {
         arrayElementType: 'string',
         arrayElementDeclaredType: 'string'
       }),
@@ -3747,10 +3747,9 @@ class Checker {
     }
 
     if (!this.acceptsArgumentCount(params, expression.args.length)) {
-      const path: string[] = expression.callee.path
       this.report(
         'INOX_ARG_COUNT',
-        this.argumentCountMessage(`function ${path[0]}`, params, expression.args.length),
+        this.argumentCountMessage(this.callExpressionArgumentLabel(expression), params, expression.args.length),
         expression.loc
       )
     }
@@ -3770,6 +3769,33 @@ class Checker {
     }
 
     return returnType
+  }
+
+  callExpressionArgumentLabel(expression: AnyNode): string {
+    const callee = expression.callee
+
+    if (
+      callee !== null &&
+      typeof callee !== 'undefined' &&
+      callee.type === 'Reference' &&
+      callee.path !== null &&
+      typeof callee.path !== 'undefined' &&
+      callee.path.length > 0
+    ) {
+      return `function ${callee.path[0]}`
+    }
+
+    if (
+      callee !== null &&
+      typeof callee !== 'undefined' &&
+      callee.type === 'MemberExpression' &&
+      callee.property !== null &&
+      typeof callee.property !== 'undefined'
+    ) {
+      return `function ${callee.property}`
+    }
+
+    return 'function'
   }
 
   checkBinaryCall(expression: AnyNode): ValueType | null {

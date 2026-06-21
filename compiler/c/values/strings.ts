@@ -1145,7 +1145,15 @@ function isDynamicRuntimeStringFieldExpression(expression: AnyNode, context: Str
 }
 
 function isDynamicRuntimeObjectExpression(expression: AnyNode, context: StringCContext): boolean {
+  if (isRuntimeObjectValueReferenceExpression(expression, context)) {
+    return true
+  }
+
   if (stringDeps(context).inferExpressionType(expression, context) === 'object') {
+    return true
+  }
+
+  if (isRuntimeArrayObjectIndexExpression(expression, context)) {
     return true
   }
 
@@ -1162,6 +1170,72 @@ function isDynamicRuntimeObjectExpression(expression: AnyNode, context: StringCC
   }
 
   return isDynamicRuntimeObjectExpression(object, context)
+}
+
+function isRuntimeObjectValueReferenceExpression(expression: AnyNode, context: StringCContext): boolean {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return false
+  }
+
+  const variables = context.variables
+
+  if (variables === null || typeof variables === 'undefined') {
+    return false
+  }
+
+  const name = expression.path[0]
+  const valueType = variables.get(name)
+
+  if (valueType !== 'object' && valueType !== 'unknown' && !isOpaqueRuntimeValueType(valueType)) {
+    return false
+  }
+
+  return runtimeValueReferenceUsesInoxValueStorage(name, valueType, context)
+}
+
+function runtimeValueReferenceUsesInoxValueStorage(
+  name: string,
+  valueType: string | null | undefined,
+  context: StringCContext
+): boolean {
+  if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
+    return true
+  }
+
+  if (!isManagedRuntimeReturnType(valueType)) {
+    return false
+  }
+
+  if (valueType === 'string') {
+    return isOwnedRuntimeValueName(name, context)
+  }
+
+  return true
+}
+
+function isOwnedRuntimeValueName(name: string, context: StringCContext): boolean {
+  for (const value of context.ownedValues) {
+    if (value === name) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function isRuntimeArrayObjectIndexExpression(expression: AnyNode, context: StringCContext): boolean {
+  const element = stringDeps(context).resolveRuntimeArrayIndex(expression, context)
+
+  if (element === null || typeof element === 'undefined') {
+    return false
+  }
+
+  return element.valueType === 'object' || element.valueType === 'unknown'
 }
 
 function knownObjectFieldValueType(expression: AnyNode, context: StringCContext): string | null {

@@ -109,7 +109,14 @@ type ObjectFunctionFieldResolution = {
 type CDynamicObjectArrayIndexDependencies = {
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedRuntimeArrayIndexValue(
+    expression: CValueNode,
+    element: CRuntimeArrayElement,
+    context: CFunctionContext,
+    tempPrefix: string
+  ): PreparedExpression
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
+  resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
 type CDynamicObjectFieldAccess = {
@@ -1782,6 +1789,12 @@ export type CCallExpressionDependencies = {
   emitPreparedPathStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedRuntimeArrayIndexValue(
+    expression: CValueNode,
+    element: CRuntimeArrayElement,
+    context: CFunctionContext,
+    tempPrefix: string
+  ): PreparedExpression
   emitPreparedTimerCallExpression(
     expression: CValueNode,
     context: CFunctionContext,
@@ -1808,6 +1821,7 @@ export type CCallExpressionDependencies = {
   registerErrorChannel(context: CFunctionContext): void
   resolveFunctionValueType(expression: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveFunctionParams(callee: CValueNode, context: CFunctionContext): CFunctionParam[] | null
+  resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
   resolveRuntimeCallbackCalleeType(callee: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveRuntimeFunctionArgumentType(
     callee: CValueNode,
@@ -3938,6 +3952,10 @@ export function isDynamicRuntimeValueExpression(
     return true
   }
 
+  if (isRuntimeArrayObjectIndexExpression(expression, context, deps)) {
+    return true
+  }
+
   return isDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
 }
 
@@ -3960,6 +3978,12 @@ function emitPreparedDynamicRuntimeValueExpression(
 
   if (arrayIndexValue !== null && typeof arrayIndexValue !== 'undefined') {
     return arrayIndexValue
+  }
+
+  const runtimeArrayIndexValue = emitPreparedRuntimeArrayObjectIndexValueExpression(expression, context, deps)
+
+  if (runtimeArrayIndexValue !== null && typeof runtimeArrayIndexValue !== 'undefined') {
+    return runtimeArrayIndexValue
   }
 
   return emitPreparedDynamicRuntimeObjectFieldValueExpression(expression, context, deps)
@@ -4209,6 +4233,38 @@ function isDynamicArrayIndexExpression(
 
 function isRuntimeValueReferenceExpression(expression: CValueNode, context: CFunctionContext): boolean {
   return !!runtimeValueReferenceName(expression, context)
+}
+
+function isRuntimeArrayObjectIndexExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): boolean {
+  const element = deps.resolveRuntimeArrayIndex(expression, context)
+
+  if (element === null || typeof element === 'undefined') {
+    return false
+  }
+
+  return element.valueType === 'object' || element.valueType === 'unknown'
+}
+
+function emitPreparedRuntimeArrayObjectIndexValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CDynamicObjectArrayIndexDependencies
+): PreparedExpression | null {
+  const element = deps.resolveRuntimeArrayIndex(expression, context)
+
+  if (
+    element === null ||
+    typeof element === 'undefined' ||
+    (element.valueType !== 'object' && element.valueType !== 'unknown')
+  ) {
+    return null
+  }
+
+  return deps.emitPreparedRuntimeArrayIndexValue(expression, element, context, 'inox_object_value')
 }
 
 function runtimeValueReferenceName(expression: CValueNode, context: CFunctionContext): string | null {
@@ -4508,7 +4564,11 @@ export type CValueExpressionDependencies = {
   emitCErrorObjectValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCNullishCoalescingValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCNumberConversionValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitCObjectLiteralValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitCObjectLiteralValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    shape?: CObjectShape | null
+  ): PreparedExpression
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCOptionalIndexValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCOptionalMemberValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression

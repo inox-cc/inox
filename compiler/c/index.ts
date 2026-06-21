@@ -358,6 +358,8 @@ import {
   resolveCObjectExpressionName,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
+  resolveObjectExpressionIndex,
+  resolveObjectExpressionMember,
   updateKnownObjectMemberValueType
 } from './values/objects.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
@@ -1041,6 +1043,8 @@ const expressionTypeDependencies = {
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
   resolveNetAddressStringMember,
+  resolveObjectExpressionIndex,
+  resolveObjectExpressionMember,
   resolvePromiseExpressionValueType,
   resolveRuntimeArrayIndex
 }
@@ -1094,6 +1098,7 @@ const cCallExpressionDependencies = {
     emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies),
   emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies),
+  emitPreparedRuntimeArrayIndexValue,
   emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -1107,6 +1112,7 @@ const cCallExpressionDependencies = {
   registerErrorChannel,
   resolveFunctionValueType,
   resolveFunctionParams,
+  resolveRuntimeArrayIndex,
   resolveRuntimeCallbackCalleeType,
   resolveRuntimeFunctionArgumentType
 }
@@ -1329,7 +1335,12 @@ const cModuleEmissionDependencies = {
 }
 
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
-  return formatGeneratedC(emitCUnit([ir], options, [ir]), 'inox.generated.c')
+  const irPrograms = [ir]
+  const entryIrPrograms = [ir]
+  const unit = emitCUnit(irPrograms, options, entryIrPrograms)
+  const code = formatGeneratedC(unit, 'inox.generated.c')
+
+  return code
 }
 
 export function emitCBundleFromIrModules(
@@ -1362,7 +1373,10 @@ export function emitCBundleFromIrModules(
 
   const entryIrPrograms = collectIrPrograms(entryModules)
 
-  return formatGeneratedC(emitCUnit(irPrograms, options, entryIrPrograms), 'inox.bundle.c')
+  const unit = emitCUnit(irPrograms, options, entryIrPrograms)
+  const code = formatGeneratedC(unit, 'inox.bundle.c')
+
+  return code
 }
 
 export function emitCModuleFilesFromGraph(graph: ModuleGraph, options: CModuleEmitOptions): CModuleOutputFile[] {
@@ -1388,7 +1402,9 @@ function emitCModuleSourceForGraph(
 }
 
 function emitCUnit(irPrograms: IrProgram[], options: CEmitOptions, entryIrPrograms: IrProgram[]): string {
-  return emitCUnitWithDependencies(irPrograms, options, entryIrPrograms, cUnitDependencies)
+  const code = emitCUnitWithDependencies(irPrograms, options, entryIrPrograms, cUnitDependencies)
+
+  return code
 }
 
 function createThrowingFunctionInfo(
@@ -3600,7 +3616,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       fields.push({
         name: property.key,
         readonlyField: false,
-        valueType: inferExpressionType(property.value, context),
+        valueType: inferObjectFieldValueType(property.value, context),
         shape: property.value.shape,
         functionType: resolveFunctionValueType(property.value, context)
       })
@@ -4189,6 +4205,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
     typeof statement.arrayElementType !== 'undefined' &&
     statement.arrayElementType !== 'unknown'
   ) {
+    context.arrayShapes.set(statement.name, shapes)
     context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType)
   } else {
     context.arrayShapes.set(statement.name, shapes)
@@ -4293,6 +4310,12 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
     return emitCValueExpression(expression, context)
   }
 
+  const runtimeStringReference = emitNullableRuntimeStringReferenceValueExpression(expression, context)
+
+  if (runtimeStringReference !== null && typeof runtimeStringReference !== 'undefined') {
+    return runtimeStringReference
+  }
+
   if (!isNullableScalarType(valueType)) {
     pushDiagnostic(
       context,
@@ -4320,6 +4343,34 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
     lines: value.lines,
     expression: runtimeExpression
   }
+}
+
+function emitNullableRuntimeStringReferenceValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return null
+  }
+
+  const name = expression.path[0]
+  const reference = emitReference(expression, context)
+
+  if (
+    context.variables.get(name) === 'string' ||
+    context.runtimeStrings.has(name) ||
+    context.runtimeStrings.has(reference) ||
+    isBoxedRuntimeStringName(name, context)
+  ) {
+    return emitCValueExpression(expression, context)
+  }
+
+  return null
 }
 
 function emitPreparedNullableScalarRuntimeValueExpression(
@@ -4800,7 +4851,7 @@ function objectLiteralPropertyShapeField(
   context: CFunctionContext,
   shape: CObjectShape | null | undefined
 ): CObjectShapeField {
-  let valueType = inferExpressionType(property.value, context)
+  let valueType = inferObjectFieldValueType(property.value, context)
   let propertyShape = property.value.shape
   let functionType = resolveFunctionValueType(property.value, context)
 
@@ -4834,6 +4885,32 @@ function objectLiteralPropertyShapeField(
     shape: propertyShape,
     functionType
   }
+}
+
+function inferObjectFieldValueType(expression: AnyNode, context: CFunctionContext): string {
+  if (expression.type === 'NumberLiteral') {
+    return 'number'
+  }
+
+  if (expression.type === 'BooleanLiteral') {
+    return 'boolean'
+  }
+
+  if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
+    return 'string'
+  }
+
+  if (expression.type === 'NullLiteral') {
+    return 'null'
+  }
+
+  const known = knownValueType(expression.valueType)
+
+  if (known !== null && typeof known !== 'undefined') {
+    return known
+  }
+
+  return inferExpressionType(expression, context)
 }
 
 function objectLiteralShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
@@ -5513,7 +5590,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     const element = resolveKnownArrayIndex(expression, context)
 
     if (element !== null && typeof element !== 'undefined' && isNullableScalarType(element.valueType)) {
-      return emitRuntimeNumberLogValue(element.valueType, { kind: 'known-array', element }, context)
+      return emitKnownArrayScalarLogValue(element.valueType, element, context)
     }
 
     const field = resolveKnownObjectIndex(expression, context)
@@ -5597,21 +5674,67 @@ function emitRuntimeNumberLogValue(
   }
 }
 
+function emitKnownArrayScalarLogValue(
+  valueType: string,
+  element: CKnownArrayElement,
+  context: CFunctionContext
+): ConsoleLogValue {
+  const value = nextCName(context, 'inox_log_value')
+  const lines: string[] = []
+  let tag = 'INOX_TAG_NUMBER'
+  let formattedValue = `${value}.as.number`
+
+  registerOwnedValue(context, value)
+
+  if (valueType === 'boolean') {
+    tag = 'INOX_TAG_BOOL'
+    formattedValue = `((double)(${value}.as.boolean ? 1 : 0))`
+  }
+
+  pushAll(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${value})`, context))
+  lines.push(emitRuntimeValueCheck(value, tag, context))
+
+  return {
+    lines,
+    format: '%g',
+    values: [formattedValue]
+  }
+}
+
 function emitRuntimeLogGetCall(source: RuntimeLogGetSource, temp: string, context: CFunctionContext): string {
   if (source.kind === 'known-array') {
-    return `inox_array_get(${source.element.arrayName}, ${source.element.index}, &${temp})`
+    const element = source.element
+
+    if (element === null || typeof element === 'undefined') {
+      return 'INOX_ERR_FIELD'
+    }
+
+    return `inox_array_get(${element.arrayName}, ${element.index}, &${temp})`
   }
 
   if (source.kind === 'known-object-index') {
-    const object = emitObjectValueReference(source.field.objectName, context)
-    const key = cStringLiteral(source.field.key)
-    const keyLength = utf8ByteLength(source.field.key)
+    const field = source.field
+
+    if (field === null || typeof field === 'undefined') {
+      return 'INOX_ERR_FIELD'
+    }
+
+    const object = emitObjectValueReference(field.objectName, context)
+    const key = cStringLiteral(field.key)
+    const keyLength = utf8ByteLength(field.key)
 
     return `inox_object_get(${object}, ${key}, ${keyLength}, &${temp})`
   }
 
-  const object = emitObjectValueReference(source.member.objectName, context)
-  const key = knownObjectMemberKey(source.member)
+  const member = source.member
+
+  if (member === null || typeof member === 'undefined') {
+    return 'INOX_ERR_FIELD'
+  }
+
+  const object = emitObjectValueReference(member.objectName, context)
+  const key = knownObjectMemberKey(member)
 
   return `inox_object_get(${object}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`
 }

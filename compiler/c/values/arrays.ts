@@ -2268,15 +2268,23 @@ function resolveArrayCallbackReturnType(body: ArrayCallbackBody, context: ArrayF
 function collectArrayCallbackReturnExpressions(body: ArrayCallbackBody): AnyNode[] {
   if (body.kind === 'prepared-return') {
     const preparedExpressions: AnyNode[] = []
+    const returnExpression = body.returnExpression
 
-    preparedExpressions.push(body.returnExpression)
+    if (returnExpression === null || typeof returnExpression === 'undefined') {
+      return preparedExpressions
+    }
+
+    preparedExpressions.push(returnExpression)
 
     return preparedExpressions
   }
 
   const expressions: AnyNode[] = []
+  let statements: ArrayNode[] = []
 
-  const statements: ArrayNode[] = body.statements
+  if (body.statements !== null && typeof body.statements !== 'undefined') {
+    statements = body.statements
+  }
 
   for (const statement of statements) {
     collectArrayCallbackReturnExpressionsFromStatement(statement, expressions)
@@ -2389,12 +2397,24 @@ function emitArrayCallbackBodyLines(
   context: ArrayFunctionContext
 ): string[] {
   if (body.kind === 'prepared-return') {
-    return emitArrayCallbackReturnLines(body.returnExpression, returnKind, elementType, out, value, context)
+    const returnExpression = body.returnExpression
+
+    if (returnExpression === null || typeof returnExpression === 'undefined') {
+      return []
+    }
+
+    return emitArrayCallbackReturnLines(returnExpression, returnKind, elementType, out, value, context)
   }
 
   const doneLabel = nextCName(context, 'inox_array_callback_done')
+  let statements: ArrayNode[] = []
+
+  if (body.statements !== null && typeof body.statements !== 'undefined') {
+    statements = body.statements
+  }
+
   const lines = emitArrayCallbackStatementListLines(
-    body.statements,
+    statements,
     doneLabel,
     returnKind,
     elementType,

@@ -199,9 +199,17 @@ function genericTypeInner(name: string, wrapper: string): string | null {
 }
 
 function hasGenericTypeInner(name: string, wrapper: string): boolean {
-  const prefix = `${wrapper}<`
+  const prefixLength = wrapper.length + 1
 
-  if (!name.startsWith(prefix)) {
+  if (!name.startsWith(wrapper)) {
+    return false
+  }
+
+  if (name.length <= prefixLength) {
+    return false
+  }
+
+  if (name[wrapper.length] !== '<') {
     return false
   }
 
@@ -209,13 +217,13 @@ function hasGenericTypeInner(name: string, wrapper: string): boolean {
     return false
   }
 
-  return name.length - prefix.length - 1 > 0
+  return name.length - prefixLength - 1 > 0
 }
 
 function knownGenericTypeInner(name: string, wrapper: string): string {
-  const prefix = `${wrapper}<`
+  const prefixLength = wrapper.length + 1
 
-  return name.slice(prefix.length, name.length - 1)
+  return name.slice(prefixLength, name.length - 1)
 }
 
 function splitDelimitedTypeArgs(value: string, delimiter: string): string[] {

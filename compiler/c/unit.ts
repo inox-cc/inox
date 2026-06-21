@@ -530,5 +530,7 @@ export function emitCUnit(
 
   throwDiagnostics(diagnostics)
 
-  return joinCUnitLines(lines)
+  const code = joinCUnitLines(lines)
+
+  return code
 }

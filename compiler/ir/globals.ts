@@ -67,7 +67,9 @@ export function collectIrGlobalRoots(programs: IrProgramWithGlobalUsages[]): str
     roots.add(usage.root)
   }
 
-  return sortedStringSet(roots)
+  const result = sortedStringSet(roots)
+
+  return result
 }
 
 function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: IrGlobalUsage[]): void {

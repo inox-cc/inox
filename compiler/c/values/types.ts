@@ -8,8 +8,10 @@ import type {
   CKnownObjectIndexField,
   CPreparedExpression,
   CFunctionType,
+  CObjectFieldInfo,
   CRuntimeArrayElement
 } from '../types.ts'
+import { isOpaqueRuntimeValueType } from '../value-types.ts'
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
@@ -60,6 +62,8 @@ export type CExpressionTypeDependencies = {
   resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
   resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
   resolveNetAddressStringMember: (expression: AnyNode, context: CFunctionContext) => string | null
+  resolveObjectExpressionIndex: (expression: AnyNode) => CObjectFieldInfo | null
+  resolveObjectExpressionMember: (expression: AnyNode) => CObjectFieldInfo | null
   resolvePromiseExpressionValueType: (expression: AnyNode, context: CFunctionContext) => string | null
   resolveRuntimeArrayIndex: (expression: AnyNode, context: CFunctionContext) => CRuntimeArrayElement | null
 }
@@ -88,6 +92,71 @@ function cDottedPath(path: string[]): string {
   }
 
   return output
+}
+
+function cObjectExpressionPathName(expression: AnyNode): string | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return expression.path[0]
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return 'this'
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    const objectName = cObjectExpressionPathName(expression.object)
+
+    if (objectName !== null && typeof objectName !== 'undefined') {
+      return `${objectName}_${expression.property}`
+    }
+  }
+
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral'
+  ) {
+    const objectName = cObjectExpressionPathName(expression.object)
+
+    if (objectName !== null && typeof objectName !== 'undefined') {
+      return `${objectName}_${expression.index.value}`
+    }
+  }
+
+  return null
+}
+
+function contextObjectShapeFieldValueType(
+  objectExpression: AnyNode,
+  fieldName: string,
+  context: CFunctionContext
+): string | null {
+  const objectName = cObjectExpressionPathName(objectExpression)
+
+  if (objectName === null || typeof objectName === 'undefined') {
+    return null
+  }
+
+  const fields = context.objectShapes.get(objectName)
+
+  if (fields === null || typeof fields === 'undefined') {
+    return null
+  }
+
+  const fieldValueTypes: Map<string, string> = new Map()
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+
+    fieldValueTypes.set(field.name, field.valueType)
+  }
+
+  const valueType = fieldValueTypes.get(fieldName)
+
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    return valueType
+  }
+
+  return null
 }
 
 function isBooleanBinaryOperator(operator: string): boolean {
@@ -122,7 +191,11 @@ function isBooleanBinaryOperator(operator: string): boolean {
   return operator === '||'
 }
 
-function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext): string {
+function cReferenceExpressionType(
+  expression: AnyNode,
+  context: CFunctionContext,
+  deps: CExpressionTypeDependencies
+): string {
   const variableType = context.variables.get(cDottedPath(expression.path))
   const name = cStringAt(expression.path, 0)
   let metadataType: string | null = null
@@ -148,14 +221,12 @@ function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext
     return 'array'
   }
 
-  if (
-    metadataType !== null &&
-    typeof metadataType !== 'undefined' &&
-    (variableType === null ||
-      typeof variableType === 'undefined' ||
-      (variableType === 'number' && metadataType !== 'number'))
-  ) {
-    return metadataType
+  if (shouldPreferReferenceMetadataType(variableType, metadataType)) {
+    const resolvedMetadataType = metadataType
+
+    if (resolvedMetadataType !== null && typeof resolvedMetadataType !== 'undefined') {
+      return resolvedMetadataType
+    }
   }
 
   if (variableType !== null && typeof variableType !== 'undefined') {
@@ -175,6 +246,25 @@ function cReferenceExpressionType(expression: AnyNode, context: CFunctionContext
   }
 
   return 'number'
+}
+
+function shouldPreferReferenceMetadataType(
+  variableType: string | null | undefined,
+  metadataType: string | null | undefined
+): boolean {
+  if (metadataType === null || typeof metadataType === 'undefined') {
+    return false
+  }
+
+  if (variableType === null || typeof variableType === 'undefined') {
+    return true
+  }
+
+  if (variableType === 'number' && metadataType !== 'number') {
+    return true
+  }
+
+  return isOpaqueRuntimeValueType(variableType)
 }
 
 export function inferExpressionType(
@@ -522,7 +612,7 @@ export function inferExpressionType(
   }
 
   if (expression.type === 'Reference') {
-    return cReferenceExpressionType(expression, context)
+    return cReferenceExpressionType(expression, context, deps)
   }
 
   if (
@@ -616,6 +706,18 @@ export function inferExpressionType(
       return member.valueType
     }
 
+    const contextShapeValueType = contextObjectShapeFieldValueType(expression.object, expression.property, context)
+
+    if (contextShapeValueType !== null && typeof contextShapeValueType !== 'undefined') {
+      return contextShapeValueType
+    }
+
+    const shapeField = deps.resolveObjectExpressionMember(expression)
+
+    if (shapeField !== null && typeof shapeField !== 'undefined') {
+      return shapeField.valueType
+    }
+
     if (expression.type === 'OptionalMemberExpression') {
       return 'optional'
     }
@@ -644,6 +746,20 @@ export function inferExpressionType(
 
     if (field !== null && typeof field !== 'undefined') {
       return field.valueType
+    }
+
+    if (expression.index.type === 'StringLiteral') {
+      const contextShapeValueType = contextObjectShapeFieldValueType(expression.object, expression.index.value, context)
+
+      if (contextShapeValueType !== null && typeof contextShapeValueType !== 'undefined') {
+        return contextShapeValueType
+      }
+    }
+
+    const shapeField = deps.resolveObjectExpressionIndex(expression)
+
+    if (shapeField !== null && typeof shapeField !== 'undefined') {
+      return shapeField.valueType
     }
 
     if (runtimeElement !== null && typeof runtimeElement !== 'undefined') {

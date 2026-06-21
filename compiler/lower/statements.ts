@@ -34,11 +34,16 @@ export function lowerStatement(statement: LowerNode, context: LowerContext): Low
 export function lowerStatementList(statements: LowerNode[], context: LowerContext): LowerNode[] {
   const lowered: LowerNode[] = []
 
-  for (const statement of statements) {
-    appendLoweredStatement(lowered, lowerStatementInternal(statement, context))
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const statement = statements[index]
+    const loweredStatement = lowerStatementInternal(statement, context)
+
+    appendLoweredStatement(lowered, loweredStatement)
   }
 
-  return lowered
+  const output = lowered
+
+  return output
 }
 
 function lowerStatementInternal(statement: LowerNode, context: LowerContext): LoweredStatement {
@@ -407,7 +412,8 @@ function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerC
 }
 
 function appendLoweredStatement(out: LowerNode[], statements: LoweredStatement): void {
-  for (const statement of statements) {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const statement = statements[index]
     out.push(statement)
   }
 }
@@ -430,6 +436,67 @@ function lowerVariableDeclaration(
   const promiseValueType = variableDeclarationPromiseValueType(declared, statement, init)
   const setElementType = variableDeclarationSetElementType(declared, statement, init)
   const valueType = variableDeclarationValueType(declared, statement, init)
+  const lowered = createLoweredVariableDeclaration(
+    statement,
+    init,
+    nullable,
+    shape,
+    functionType,
+    arrayElementType,
+    arrayElementDeclaredType,
+    mapKeyType,
+    mapValueType,
+    promiseValueType,
+    setElementType,
+    valueType
+  )
+
+  if (!allowArrayMethodExpansion || statement.exported === true || init === null || typeof init === 'undefined') {
+    declareLowerVariable(context, lowered)
+    const statements = [lowered]
+
+    return statements
+  }
+
+  const expanded = lowerArrayMethodVariableDeclaration(lowered, init, context)
+
+  if (expanded === null || typeof expanded === 'undefined') {
+    const hoisted = lowerArrayMethodSubexpressions(init, context)
+
+    if (hoisted !== null && typeof hoisted !== 'undefined') {
+      const declaration = cloneVariableDeclarationWithInit(lowered, hoisted.expression)
+
+      declareLoweredTopLevelVariables(context, hoisted.statements)
+      declareLowerVariable(context, declaration)
+
+      return prependLoweredStatements(hoisted.statements, declaration)
+    }
+
+    declareLowerVariable(context, lowered)
+    const statements = [lowered]
+
+    return statements
+  }
+
+  declareLoweredTopLevelVariables(context, expanded)
+
+  return expanded
+}
+
+function createLoweredVariableDeclaration(
+  statement: LowerNode,
+  init: LowerNode | null,
+  nullable: boolean,
+  shape: LowerNode | null,
+  functionType: LowerNode | null,
+  arrayElementType: string | null,
+  arrayElementDeclaredType: string | null,
+  mapKeyType: string | null,
+  mapValueType: string | null,
+  promiseValueType: string | null,
+  setElementType: string | null,
+  valueType: string
+): LowerNode {
   const lowered: LowerNode = {
     type: 'VariableDeclaration',
     kind: statement.kind,
@@ -450,32 +517,7 @@ function lowerVariableDeclaration(
     init
   }
 
-  if (!allowArrayMethodExpansion || statement.exported === true || init === null || typeof init === 'undefined') {
-    declareLowerVariable(context, lowered)
-    return [lowered]
-  }
-
-  const expanded = lowerArrayMethodVariableDeclaration(lowered, init, context)
-
-  if (expanded === null || typeof expanded === 'undefined') {
-    const hoisted = lowerArrayMethodSubexpressions(init, context)
-
-    if (hoisted !== null && typeof hoisted !== 'undefined') {
-      const declaration = cloneVariableDeclarationWithInit(lowered, hoisted.expression)
-
-      declareLoweredTopLevelVariables(context, hoisted.statements)
-      declareLowerVariable(context, declaration)
-
-      return prependLoweredStatements(hoisted.statements, declaration)
-    }
-
-    declareLowerVariable(context, lowered)
-    return [lowered]
-  }
-
-  declareLoweredTopLevelVariables(context, expanded)
-
-  return expanded
+  return lowered
 }
 
 function variableDeclarationNullable(declared: LowerResolvedType, init: LowerNode | null): boolean {
@@ -2722,11 +2764,13 @@ function nextLowerName(context: LowerContext, prefix: string): string {
 }
 
 function lowerStatementExpression(expression: LowerNode, context: LowerContext): LowerNode {
-  return lowerExpression(expression, expressionContext(context))
+  const lowered = lowerExpression(expression, expressionContext(context))
+
+  return lowered
 }
 
 function expressionContext(context: LowerContext): LowerExpressionContext {
-  return {
+  const result = {
     types: context.types,
     resolvedTypes: context.resolvedTypes,
     classNames: context.classNames,
@@ -2735,6 +2779,8 @@ function expressionContext(context: LowerContext): LowerExpressionContext {
     resolvingTypes: context.resolvingTypes,
     lowerStatement
   }
+
+  return result
 }
 
 function inferArrayElementType(expression: LowerNode | null): string | null {

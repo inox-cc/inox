@@ -630,14 +630,24 @@ export function emitStatementBody(statement: StatementNode, context: CFunctionCo
 export function emitStatementList(statements: StatementNode[], context: CFunctionContext): string[] {
   const result: string[] = []
 
-  for (const statement of statements) {
-    const lines = statementDeps(context).emitStatement(statement, context)
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const statement = statements[index]
+    const lines = emitStatementListItem(statement, context)
     pushAllLines(result, lines)
 
     applyNullableScalarEarlyReturnNarrowing(statement, context)
   }
 
-  return result
+  const output = result
+
+  return output
+}
+
+function emitStatementListItem(statement: StatementNode, context: CFunctionContext): string[] {
+  const deps = statementDeps(context)
+  const lines = deps.emitStatement(statement, context)
+
+  return lines
 }
 
 function applyNullableScalarEarlyReturnNarrowing(statement: StatementNode, context: CFunctionContext): void {
@@ -1171,15 +1181,33 @@ export function emitNumberBooleanScalarVariableDeclaration(
     return [`double ${statement.name} = 0;`]
   }
 
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.type === 'MemberExpression' &&
+    statement.init.property === 'length'
+  ) {
+    const object = statement.init.object
+
+    if (object.type === 'ArrayLiteral') {
+      return [`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${object.elements.length};`]
+    }
+
+    if (object.type === 'Reference' && object.path.length === 1) {
+      const path: string[] = object.path
+      const elements = context.arrayShapes.get(path[0])
+
+      if (elements !== null && typeof elements !== 'undefined') {
+        return [`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${elements.length};`]
+      }
+    }
+  }
+
   const deps = statementDeps(context)
-  const arrayLength = deps.emitPreparedArrayLengthExpression(statement.init, context)
+  const arrayLengthLines = emitArrayLengthScalarVariableDeclaration(statement, context, deps)
 
-  if (arrayLength !== null && typeof arrayLength !== 'undefined') {
-    const lines: string[] = []
-    pushAllLines(lines, arrayLength.lines)
-    lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${arrayLength.expression};`)
-
-    return lines
+  if (arrayLengthLines !== null && typeof arrayLengthLines !== 'undefined') {
+    return arrayLengthLines
   }
 
   const dynamicObjectField = emitDynamicObjectScalarVariableDeclaration(statement, inferred, context)
@@ -1192,6 +1220,30 @@ export function emitNumberBooleanScalarVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)
+
+  return lines
+}
+
+function emitArrayLengthScalarVariableDeclaration(
+  statement: StatementNode,
+  context: CFunctionContext,
+  deps: StatementLoweringDependencies
+): string[] | null {
+  const init = statement.init
+
+  if (init === null || typeof init === 'undefined') {
+    return null
+  }
+
+  const arrayLength = deps.emitPreparedArrayLengthExpression(init, context)
+
+  if (arrayLength === null || typeof arrayLength === 'undefined') {
+    return null
+  }
+
+  const lines: string[] = []
+  pushAllLines(lines, arrayLength.lines)
+  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${arrayLength.expression};`)
 
   return lines
 }
@@ -1424,7 +1476,7 @@ function resolveRuntimeObjectLiteralShapeField(
     name: property.key,
     readonlyField: false,
     declaredType: value.arrayElementDeclaredType ?? value.declaredType,
-    valueType: statementDeps(context).inferExpressionType(value, context),
+    valueType: runtimeObjectLiteralFieldValueType(value, context),
     arrayElementType: value.arrayElementType,
     mapKeyType: value.mapKeyType,
     mapValueType: value.mapValueType,
@@ -1432,6 +1484,38 @@ function resolveRuntimeObjectLiteralShapeField(
     shape,
     functionType: value.functionType
   }
+}
+
+function runtimeObjectLiteralFieldValueType(value: StatementNode, context: CFunctionContext): string {
+  if (value.type === 'NumberLiteral') {
+    return 'number'
+  }
+
+  if (value.type === 'BooleanLiteral') {
+    return 'boolean'
+  }
+
+  if (value.type === 'StringLiteral' || value.type === 'TemplateLiteral') {
+    return 'string'
+  }
+
+  if (value.type === 'NullLiteral') {
+    return 'null'
+  }
+
+  const knownValueType = value.valueType
+
+  if (knownValueType !== null && typeof knownValueType !== 'undefined') {
+    if (knownValueType.length === 0) {
+      return statementDeps(context).inferExpressionType(value, context)
+    }
+
+    if (knownValueType !== 'unknown') {
+      return knownValueType
+    }
+  }
+
+  return statementDeps(context).inferExpressionType(value, context)
 }
 
 function resolveRuntimeArrayMetadataElementType(
@@ -2428,7 +2512,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   if (runtimeArray !== null && typeof runtimeArray !== 'undefined') {
     elementType = runtimeArray.elementType
   } else if (array !== null && typeof array !== 'undefined') {
-    elementType = statementDeps(context).resolveForOfElementType(array.elements)
+    elementType = knownForOfArrayElementType(array, context)
   }
 
   if (!isCForOfArrayElementType(elementType)) {
@@ -2497,6 +2581,18 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
   } finally {
     restoreVariableScope(context, variableScope)
   }
+}
+
+function knownForOfArrayElementType(array: KnownForOfArray, context: CFunctionContext): string {
+  if (array.elements.length === 0) {
+    const runtimeElementType = context.runtimeArrayElementTypes.get(array.name)
+
+    if (runtimeElementType !== null && typeof runtimeElementType !== 'undefined') {
+      return runtimeElementType
+    }
+  }
+
+  return statementDeps(context).resolveForOfElementType(array.elements)
 }
 
 function emitRuntimeMapForOfStatement(
@@ -3592,7 +3688,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   const expression: StatementNode = statement.expression
 
   if (deps.isConsoleLog(expression)) {
-    return deps.emitConsoleLogStatement(expression.callee.property, expression.args, context)
+    const callee = expression.callee
+    const method: string = callee.property
+    const args: StatementNode[] = expression.args
+    const lines = deps.emitConsoleLogStatement(method, args, context)
+
+    return lines
   }
 
   const promiseSettlement = deps.emitPromiseConstructorSettlementCall(expression, context)

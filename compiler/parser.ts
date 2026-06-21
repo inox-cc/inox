@@ -105,6 +105,93 @@ function stringArrayOrEmpty(values: string[] | null): string[] {
   return []
 }
 
+function cloneObjectTypeField(field: AnyNode): AnyNode {
+  const cloned: AnyNode = {
+    name: field.name,
+    optional: field.optional === true,
+    readonly: field.readonly === true,
+    ownership: ownershipFromWeakToken(null),
+    weakLoc: null,
+    valueType: field.valueType,
+    loc: field.loc
+  }
+
+  if (field.ownership !== null && typeof field.ownership !== 'undefined') {
+    cloned.ownership = field.ownership
+  }
+
+  if (field.weakLoc !== null && typeof field.weakLoc !== 'undefined') {
+    cloned.weakLoc = field.weakLoc
+  }
+
+  if (field.functionType !== null && typeof field.functionType !== 'undefined') {
+    cloned.functionType = field.functionType
+  }
+
+  if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
+    cloned.declaredType = field.declaredType
+  }
+
+  return cloned
+}
+
+function findObjectTypeFieldIndex(fields: AnyNode[], name: string): number {
+  for (let index = 0; index < fields.length; index = index + 1) {
+    if (fields[index].name === name) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function mergeUnionObjectTypes(variants: AnyNode[]): AnyNode {
+  const fields: AnyNode[] = []
+  const counts: Map<string, number> = new Map()
+  let dynamic = false
+  let dynamicField: AnyNode | null = null
+
+  for (const variant of variants) {
+    dynamic = dynamic || variant.dynamic === true
+
+    if (dynamicField === null && variant.dynamicField !== null && typeof variant.dynamicField !== 'undefined') {
+      dynamicField = variant.dynamicField
+    }
+
+    for (const field of variant.fields) {
+      const name: string = field.name
+      const count = counts.get(name)
+      const existingIndex = findObjectTypeFieldIndex(fields, name)
+      let nextCount = 1
+
+      if (count !== null && typeof count !== 'undefined') {
+        nextCount = count + 1
+      }
+
+      counts.set(name, nextCount)
+
+      if (existingIndex === -1) {
+        fields.push(cloneObjectTypeField(field))
+      }
+    }
+  }
+
+  for (const field of fields) {
+    const count = counts.get(field.name)
+    let fieldCount = 0
+
+    if (count !== null && typeof count !== 'undefined') {
+      fieldCount = count
+    }
+
+    if (field.optional === true || fieldCount !== variants.length) {
+      field.optional = true
+    }
+  }
+
+  return createObjectType(fields, [], dynamic, dynamicField)
+}
+
 class Parser {
   tokens: Token[]
   position: number
@@ -317,6 +404,10 @@ class Parser {
       return createTypeAliasDeclaration(exported, name, this.parseIntersectionObjectType())
     }
 
+    if (this.isValue('|') && this.peek(1).value === '{') {
+      return createTypeAliasDeclaration(exported, name, this.parseUnionObjectType())
+    }
+
     if (this.isValue('{')) {
       return createTypeAliasDeclaration(exported, name, this.parseObjectType(null))
     }
@@ -327,6 +418,23 @@ class Parser {
     this.matchValue(';')
 
     return createTypeAliasDeclaration(exported, name, createAliasType(valueType))
+  }
+
+  parseUnionObjectType(): AnyNode {
+    const variants: AnyNode[] = []
+
+    while (this.matchValue('|')) {
+      if (!this.isValue('{')) {
+        this.report('INOX_EXPECTED_TYPE', 'expected object type after | in union type', this.current())
+        break
+      }
+
+      variants.push(this.parseObjectType(null))
+    }
+
+    this.matchValue(';')
+
+    return mergeUnionObjectTypes(variants)
   }
 
   parseFunctionType(stopReturnAtLineBreak: boolean): AnyNode {
