@@ -1,6 +1,8 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { tokenize } from '../../lexer.ts'
+import { memberExpressionPath } from '../../member-paths.ts'
 import { parse } from '../../parser.ts'
+import { nullableTypeNameFromTypeName } from '../../type-names.ts'
 import {
   isStringIndexMethod,
   isStringPredicateMethod,
@@ -48,6 +50,7 @@ type StringCContext = {
   functionNames?: Map<string, string>
   jsGlobalRoots?: Set<string>
   nullableVariables?: Set<string>
+  narrowedNullableScalars?: Set<string>
   nextId: number
   ownedValues: string[]
   returnType?: string
@@ -976,13 +979,61 @@ function knownObjectStringField(expression: AnyNode, context: StringCContext): C
   if (
     field === null ||
     typeof field === 'undefined' ||
-    field.valueType !== 'string' ||
-    field.optional === true
+    knownObjectFieldStringType(field) !== 'string' ||
+    (field.optional === true && !isNarrowedNullableStringField(expression, field, context))
   ) {
     return null
   }
 
   return field
+}
+
+function knownObjectFieldStringType(field: CObjectFieldInfo): string | null {
+  if (field.valueType === 'string') {
+    return 'string'
+  }
+
+  const declaredType = field.declaredType
+
+  if (declaredType === null || typeof declaredType === 'undefined') {
+    return null
+  }
+
+  const nullableType = nullableTypeNameFromTypeName(declaredType)
+
+  if (nullableType === 'string') {
+    return 'string'
+  }
+
+  return null
+}
+
+function isNarrowedNullableStringField(
+  expression: AnyNode,
+  field: CObjectFieldInfo,
+  context: StringCContext
+): boolean {
+  if (knownObjectFieldStringType(field) !== 'string') {
+    return false
+  }
+
+  if (field.nullable !== true && field.optional !== true && expression.nullable !== true) {
+    return false
+  }
+
+  const narrowedNullableScalars = context.narrowedNullableScalars
+
+  if (narrowedNullableScalars === null || typeof narrowedNullableScalars === 'undefined') {
+    return false
+  }
+
+  const path = memberExpressionPath(expression)
+
+  if (path.length === 0) {
+    return false
+  }
+
+  return narrowedNullableScalars.has(joinStrings(path, '.'))
 }
 
 function isKnownOptionalObjectStringField(expression: AnyNode, context: StringCContext): boolean {

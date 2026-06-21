@@ -86,6 +86,7 @@ type AsyncTaskEmitContext = {
   nextId: number
   promiseChainArrowWrappers: AsyncTaskPromiseChainWrapperMap
   runtimeFunctionParams: AsyncTaskFunctionTypeMap
+  throwingFunctions: AsyncTaskStringSet
 }
 
 type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
@@ -231,7 +232,6 @@ export type AsyncTaskLoweringDependencies = {
   isMemberAccessExpression(expression: AsyncTaskAstNode): boolean
   isRuntimeProducedStringExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
   isThrowingFunctionCallee(callee: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
-  isThrowingFunctionName(name: string, context: AsyncTaskEmitContext): boolean
   pushVariableScope(context: AsyncTaskFunctionContext): AsyncTaskVariableScopeSnapshot
   registerObjectShape(context: AsyncTaskFunctionContext, name: string, shape: CObjectShape | null | undefined): void
   registerRuntimeValueMetadata(
@@ -241,11 +241,6 @@ export type AsyncTaskLoweringDependencies = {
     expression: AsyncTaskAstNode,
     context: AsyncTaskFunctionContext
   ): void
-  resolveFunctionDeclarationParams(
-    name: string,
-    fallback: CFunctionParam[],
-    context: AsyncTaskEmitContext
-  ): CFunctionParam[]
   resolveFunctionParams(callee: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CFunctionParam[] | null
   resolveKnownArrayIndex(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): CKnownArrayElement | null
   resolveKnownObjectIndex(
@@ -903,6 +898,24 @@ function getAsyncTaskStatementsBeforeLast(statements: AsyncTaskAstNode[]): Async
   return asyncTaskStatementsBeforeLast(statements)
 }
 
+function isAsyncTaskThrowingFunctionName(name: string, context: AsyncTaskPlannerContext): boolean {
+  return context.throwingFunctions.has(name)
+}
+
+function resolveAsyncTaskFunctionDeclarationParams(
+  name: string,
+  fallback: CFunctionParam[],
+  context: AsyncTaskPlannerContext
+): CFunctionParam[] {
+  const params = context.functionParams.get(name)
+
+  if (params !== null && typeof params !== 'undefined') {
+    return params
+  }
+
+  return fallback
+}
+
 function resolveAsyncTaskWrapperParams(
   declaration: IrFunctionDeclaration,
   context: AsyncTaskPlannerContext
@@ -912,12 +925,11 @@ function resolveAsyncTaskWrapperParams(
   if (
     declaration.async !== true ||
     declaration.returnType !== 'promise' ||
-    asyncTaskDeps(context).isThrowingFunctionName(functionName, context)
+    isAsyncTaskThrowingFunctionName(functionName, context)
   ) {
     return null
   }
-
-  const params = asyncTaskDeps(context).resolveFunctionDeclarationParams(
+  const params = resolveAsyncTaskFunctionDeclarationParams(
     functionName,
     declaration.params as CFunctionParam[],
     context
@@ -973,11 +985,10 @@ function resolveAsyncTaskBodyPlan(
   if (
     declaration.async !== true ||
     declaration.returnType !== 'promise' ||
-    asyncTaskDeps(context).isThrowingFunctionName(functionName, context)
+    isAsyncTaskThrowingFunctionName(functionName, context)
   ) {
     return null
   }
-
   const returnType = resolveAsyncTaskDeclarationReturnType(declaration, context)
 
   if (!isSupportedAsyncTaskValueType(returnType)) {

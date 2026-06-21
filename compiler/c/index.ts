@@ -961,12 +961,10 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   isMemberAccessExpression,
   isRuntimeProducedStringExpression,
   isThrowingFunctionCallee: (callee, context) => isThrowingFunctionCallee(callee, context as CFunctionContext),
-  isThrowingFunctionName,
   pushVariableScope,
   registerObjectShape,
   registerRuntimeValueMetadata: (name, valueType, declaration, expression, context) =>
     registerRuntimeValueMetadata(name, valueType, declaration, expression, context as CFunctionContext),
-  resolveFunctionDeclarationParams,
   resolveFunctionParams: (callee, context) => resolveFunctionParams(callee, context as CFunctionContext),
   resolveKnownArrayIndex,
   resolveKnownObjectIndex,

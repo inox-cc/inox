@@ -1,4 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
+import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import {
   cloneCStringSet,
@@ -84,6 +85,20 @@ function nullableBooleanValueIsTrue(value: boolean | null | undefined): boolean 
 
 function nullableStringAt(values: string[], index: number): string {
   return values[index]
+}
+
+function joinNullablePath(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 export type NullableLoweringDependencies = {
@@ -270,13 +285,13 @@ function resolveNullableScalarTruthinessNarrowing(
   expression: AnyNode,
   context: NullableFunctionContext
 ): NullableScalarNarrowing {
-  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+  const name = nullableScalarNarrowingKey(expression)
+
+  if (name === null || typeof name === 'undefined') {
     return emptyNullableScalarNarrowing()
   }
 
-  const name = nullableStringAt(expression.path, 0)
-
-  if (!context.nullableVariables.has(name) || !isRuntimeNullableType(context.variables.get(name))) {
+  if (!isNullableScalarNarrowingExpression(expression, name, context)) {
     return emptyNullableScalarNarrowing()
   }
 
@@ -307,16 +322,14 @@ function resolveNullableScalarNullCheckNarrowing(
     typeof maybeNull === 'undefined' ||
     maybeNull.type !== 'NullLiteral' ||
     nullable === null ||
-    typeof nullable === 'undefined' ||
-    nullable.type !== 'Reference' ||
-    nullable.path.length !== 1
+    typeof nullable === 'undefined'
   ) {
     return emptyNullableScalarNarrowing()
   }
 
-  const name = nullableStringAt(nullable.path, 0)
+  const name = nullableScalarNarrowingKey(nullable)
 
-  if (!context.nullableVariables.has(name) || !isRuntimeNullableType(context.variables.get(name))) {
+  if (name === null || typeof name === 'undefined' || !isNullableScalarNarrowingExpression(nullable, name, context)) {
     return emptyNullableScalarNarrowing()
   }
 
@@ -331,6 +344,78 @@ function resolveNullableScalarNullCheckNarrowing(
     trueNames: [],
     falseNames: [name]
   }
+}
+
+function nullableScalarNarrowingKey(expression: AnyNode | null | undefined): string | null {
+  const path = memberExpressionPath(expression)
+
+  if (path.length === 0) {
+    return null
+  }
+
+  return joinNullablePath(path, '.')
+}
+
+function isNullableScalarNarrowingExpression(
+  expression: AnyNode,
+  name: string,
+  context: NullableFunctionContext
+): boolean {
+  if (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    context.nullableVariables.has(name) &&
+    isRuntimeNullableType(context.variables.get(name))
+  ) {
+    return true
+  }
+
+  const field = nullableScalarObjectField(expression, context)
+
+  if (
+    field !== null &&
+    typeof field !== 'undefined' &&
+    isNullableScalarType(field.valueType) &&
+    (field.nullable === true || field.optional === true || expression.nullable === true)
+  ) {
+    return true
+  }
+
+  if (expression.nullable === true && isNullableScalarType(nullableDeps(context).inferExpressionType(expression, context))) {
+    return true
+  }
+
+  return false
+}
+
+function nullableScalarObjectField(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): CObjectFieldInfo | null {
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    const member = resolveKnownObjectMember(expression, context)
+
+    if (member !== null && typeof member !== 'undefined') {
+      return member
+    }
+
+    return resolveObjectExpressionMember(expression)
+  }
+
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral'
+  ) {
+    const field = resolveKnownObjectIndex(expression, context)
+
+    if (field !== null && typeof field !== 'undefined') {
+      return field
+    }
+
+    return resolveObjectExpressionIndex(expression)
+  }
+
+  return null
 }
 
 function emptyNullableScalarNarrowing(): NullableScalarNarrowing {

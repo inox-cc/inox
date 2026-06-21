@@ -1,3 +1,5 @@
+import { memberExpressionPath } from '../../member-paths.ts'
+import { nullableTypeNameFromTypeName } from '../../type-names.ts'
 import type { AnyNode } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
@@ -11,7 +13,7 @@ import type {
   CObjectFieldInfo,
   CRuntimeArrayElement
 } from '../types.ts'
-import { isOpaqueRuntimeValueType } from '../value-types.ts'
+import { isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
@@ -155,6 +157,125 @@ function contextObjectShapeFieldValueType(
 
   if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
+  }
+
+  return null
+}
+
+function narrowedNullableScalarExpressionType(
+  expression: AnyNode,
+  context: CFunctionContext,
+  deps: CExpressionTypeDependencies
+): string | null {
+  const path = memberExpressionPath(expression)
+
+  if (path.length === 0) {
+    return null
+  }
+
+  if (!context.narrowedNullableScalars.has(cDottedPath(path))) {
+    return null
+  }
+
+  const valueType = narrowedNullableScalarMetadataType(expression, context, deps)
+
+  if (isNullableScalarType(valueType)) {
+    return valueType
+  }
+
+  return null
+}
+
+function narrowedNullableScalarMetadataType(
+  expression: AnyNode,
+  context: CFunctionContext,
+  deps: CExpressionTypeDependencies
+): string | null {
+  if (
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType !== 'unknown'
+  ) {
+    return expression.valueType
+  }
+
+  const path = memberExpressionPath(expression)
+  const pathName = cDottedPath(path)
+  const variableType = context.variables.get(pathName)
+
+  if (variableType !== null && typeof variableType !== 'undefined') {
+    return variableType
+  }
+
+  if (deps.isMemberAccessExpression(expression)) {
+    const member = deps.resolveKnownObjectMember(expression, context)
+
+    if (member !== null && typeof member !== 'undefined') {
+      return narrowedNullableScalarFieldType(member)
+    }
+
+    const contextShapeValueType = contextObjectShapeFieldValueType(expression.object, expression.property, context)
+
+    if (contextShapeValueType !== null && typeof contextShapeValueType !== 'undefined') {
+      return contextShapeValueType
+    }
+
+    const shapeField = deps.resolveObjectExpressionMember(expression)
+
+    if (shapeField !== null && typeof shapeField !== 'undefined') {
+      return narrowedNullableScalarFieldType(shapeField)
+    }
+  }
+
+  if (deps.isIndexAccessExpression(expression)) {
+    const field = deps.resolveKnownObjectIndex(expression, context)
+
+    if (field !== null && typeof field !== 'undefined') {
+      return narrowedNullableScalarFieldType(field)
+    }
+
+    if (expression.index.type === 'StringLiteral') {
+      const contextShapeValueType = contextObjectShapeFieldValueType(expression.object, expression.index.value, context)
+
+      if (contextShapeValueType !== null && typeof contextShapeValueType !== 'undefined') {
+        return contextShapeValueType
+      }
+    }
+
+    const shapeField = deps.resolveObjectExpressionIndex(expression)
+
+    if (shapeField !== null && typeof shapeField !== 'undefined') {
+      return narrowedNullableScalarFieldType(shapeField)
+    }
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+    const valueType = context.variables.get(name)
+
+    if (valueType !== null && typeof valueType !== 'undefined') {
+      return valueType
+    }
+  }
+
+  return null
+}
+
+function narrowedNullableScalarFieldType(field: CObjectFieldInfo): string | null {
+  if (isNullableScalarType(field.valueType)) {
+    return field.valueType
+  }
+
+  const declaredType = field.declaredType
+
+  if (declaredType === null || typeof declaredType === 'undefined') {
+    return null
+  }
+
+  const nullableType = nullableTypeNameFromTypeName(declaredType)
+
+  if (isNullableScalarType(nullableType)) {
+    return nullableType
   }
 
   return null
@@ -687,6 +808,12 @@ export function inferExpressionType(
   }
 
   if (deps.isMemberAccessExpression(expression)) {
+    const narrowedType = narrowedNullableScalarExpressionType(expression, context, deps)
+
+    if (narrowedType !== null && typeof narrowedType !== 'undefined') {
+      return narrowedType
+    }
+
     if (deps.emitPreparedNetAddressPortExpression(expression, context)) {
       return 'number'
     }
@@ -737,6 +864,12 @@ export function inferExpressionType(
   }
 
   if (deps.isIndexAccessExpression(expression)) {
+    const narrowedType = narrowedNullableScalarExpressionType(expression, context, deps)
+
+    if (narrowedType !== null && typeof narrowedType !== 'undefined') {
+      return narrowedType
+    }
+
     if (expression.collectionKind === 'map') {
       return cValueTypeOrUnknown(expression)
     }
