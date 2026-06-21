@@ -231,6 +231,66 @@ export function knownValueType(valueType: string | null | undefined): string | n
     return null
   }
 
+  if (valueType === 'array') {
+    return 'array'
+  }
+
+  if (valueType === 'boolean') {
+    return 'boolean'
+  }
+
+  if (valueType === 'bytes') {
+    return 'bytes'
+  }
+
+  if (valueType === 'class') {
+    return 'class'
+  }
+
+  if (valueType === 'error') {
+    return 'error'
+  }
+
+  if (valueType === 'function') {
+    return 'function'
+  }
+
+  if (valueType === 'map') {
+    return 'map'
+  }
+
+  if (valueType === 'null') {
+    return 'null'
+  }
+
+  if (valueType === 'number') {
+    return 'number'
+  }
+
+  if (valueType === 'object') {
+    return 'object'
+  }
+
+  if (valueType === 'optional') {
+    return 'optional'
+  }
+
+  if (valueType === 'promise') {
+    return 'promise'
+  }
+
+  if (valueType === 'set') {
+    return 'set'
+  }
+
+  if (valueType === 'string') {
+    return 'string'
+  }
+
+  if (valueType === 'void') {
+    return 'void'
+  }
+
   return valueType
 }
 

@@ -5,6 +5,7 @@ import {
   cloneCArrayShapeMap,
   cloneCFunctionReturnMapTypeMap,
   cloneCFunctionTypeMap,
+  cloneCNumberMap,
   cloneCObjectShapeFieldMap,
   cloneCPromiseConstructorHandlerMap,
   cloneCStringMap,
@@ -38,11 +39,13 @@ type CFunctionTypeMap = Map<string, CFunctionType>
 type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 type CStringMap = Map<string, string>
+type CNumberMap = Map<string, number>
 type CStringSet = Set<string>
 
 type ArrayFunctionContext = CFunctionContext
 
 type ArrayVariableScopeSnapshot = {
+  arrayLengths: CNumberMap
   arrayShapes: Map<string, CArrayElementInfo[]>
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
@@ -159,6 +162,19 @@ function ensureArrayShapes(context: ArrayFunctionContext): Map<string, CArrayEle
   return nextShapes
 }
 
+function ensureArrayLengths(context: ArrayFunctionContext): CNumberMap {
+  let lengths = context.arrayLengths
+
+  if (lengths !== null && typeof lengths !== 'undefined') {
+    return lengths
+  }
+
+  const nextLengths: CNumberMap = new Map()
+  context.arrayLengths = nextLengths
+
+  return nextLengths
+}
+
 function ensureClassInstanceTypes(context: ArrayFunctionContext): CStringMap {
   let classInstanceTypes = context.classInstanceTypes
 
@@ -267,6 +283,7 @@ function resolveFunctionReturnArrayElementType(context: ArrayFunctionContext, na
 
 function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableScopeSnapshot {
   const snapshot = {
+    arrayLengths: ensureArrayLengths(context),
     arrayShapes: ensureArrayShapes(context),
     boxedVariables: context.boxedVariables,
     classInstanceTypes: ensureClassInstanceTypes(context),
@@ -286,6 +303,7 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
     variables: context.variables
   }
 
+  context.arrayLengths = cloneCNumberMap(snapshot.arrayLengths)
   context.arrayShapes = cloneCArrayShapeMap(snapshot.arrayShapes)
   context.boxedVariables = cloneCStringSet(snapshot.boxedVariables)
   context.classInstanceTypes = cloneCStringMap(snapshot.classInstanceTypes)
@@ -308,6 +326,7 @@ function pushArrayVariableScope(context: ArrayFunctionContext): ArrayVariableSco
 }
 
 function restoreArrayVariableScope(context: ArrayFunctionContext, snapshot: ArrayVariableScopeSnapshot): void {
+  context.arrayLengths = snapshot.arrayLengths
   context.arrayShapes = snapshot.arrayShapes
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
@@ -661,14 +680,21 @@ export function resolveRuntimeArrayElementType(
     return 'unknown'
   }
 
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const runtimeElementType = context.runtimeArrayElementTypes.get(expression.path[0])
+  if (expression.type === 'Reference') {
+    const path: string[] = expression.path
+
+    if (path.length !== 1) {
+      return null
+    }
+
+    const name: string = path[0]
+    const runtimeElementType = context.runtimeArrayElementTypes.get(name)
 
     if (runtimeElementType !== null && typeof runtimeElementType !== 'undefined') {
       return runtimeElementType
     }
 
-    const shape = findArrayShape(context, expression.path[0])
+    const shape = findArrayShape(context, name)
 
     if (shape !== null && typeof shape !== 'undefined') {
       return resolveForOfElementType(shape)
@@ -921,13 +947,13 @@ export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: Arr
 
   const path: string[] = expression.object.path
   const arrayName = path[0]
-  const elements = findArrayShape(context, arrayName)
+  const length = context.arrayLengths.get(arrayName)
 
-  if (elements === null || typeof elements === 'undefined') {
+  if (length === null || typeof length === 'undefined') {
     return null
   }
 
-  return `${elements.length}`
+  return `${length}`
 }
 
 export function emitPreparedArrayLengthExpression(
@@ -943,12 +969,6 @@ export function emitPreparedArrayLengthExpression(
     return null
   }
 
-  const runtimeReferenceName = runtimeArrayLengthReferenceName(expression.object, context)
-
-  if (runtimeReferenceName !== null && typeof runtimeReferenceName !== 'undefined') {
-    return emitPreparedDirectRuntimeArrayLengthExpression(runtimeReferenceName, context)
-  }
-
   const knownLength = resolveKnownArrayLength(expression, context)
 
   if (knownLength !== null && typeof knownLength !== 'undefined') {
@@ -956,6 +976,12 @@ export function emitPreparedArrayLengthExpression(
       lines: [],
       expression: knownLength
     }
+  }
+
+  const directReference = arrayLengthDirectReferenceName(expression.object, context)
+
+  if (directReference !== null && typeof directReference !== 'undefined') {
+    return emitPreparedDirectRuntimeArrayLengthExpression(directReference, context)
   }
 
   const deps = arrayDeps(context)
@@ -1002,7 +1028,7 @@ function emitPreparedRuntimeArrayLengthExpression(
   }
 }
 
-function runtimeArrayLengthReferenceName(
+function arrayLengthDirectReferenceName(
   expression: ArrayMaybeNode,
   context: ArrayFunctionContext
 ): string | null {
@@ -1010,17 +1036,23 @@ function runtimeArrayLengthReferenceName(
     return null
   }
 
-  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+  if (expression.type !== 'Reference') {
     return null
   }
 
-  const name = expression.path[0]
+  const path: string[] = expression.path
 
-  if (context.arrayShapes.has(name) || !context.runtimeArrayElementTypes.has(name)) {
+  if (path.length !== 1) {
     return null
   }
 
-  return name
+  const name: string = path[0]
+
+  if (context.runtimeArrayElementTypes.has(name)) {
+    return name
+  }
+
+  return null
 }
 
 function isArrayLengthReceiver(
@@ -1040,8 +1072,14 @@ function isArrayLengthReceiver(
     return true
   }
 
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
+  if (expression.type === 'Reference') {
+    const path: string[] = expression.path
+
+    if (path.length !== 1) {
+      return false
+    }
+
+    const name: string = path[0]
 
     return (
       context.variables.get(name) === 'array' ||
@@ -1205,7 +1243,10 @@ export function emitArraySortVariableDeclaration(
   const shape = findArrayShape(context, sorted.expression)
 
   if (shape !== null && typeof shape !== 'undefined') {
-    ensureArrayShapes(context).set(statement.name, cloneArrayShape(shape))
+    const clonedShape = cloneArrayShape(shape)
+
+    ensureArrayShapes(context).set(statement.name, clonedShape)
+    ensureArrayLengths(context).set(statement.name, clonedShape.length)
   } else {
     let elementType = sorted.elementType
 
@@ -2717,11 +2758,13 @@ function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, 
 
   if (elementType === 'unknown') {
     ensureArrayShapes(context).delete(name)
+    ensureArrayLengths(context).delete(name)
     context.runtimeArrayElementTypes.set(name, 'unknown')
     return
   }
 
   ensureArrayShapes(context).set(name, nextElements)
+  ensureArrayLengths(context).set(name, nextElements.length)
 }
 
 function updateUnshiftedArrayMetadata(
@@ -2770,11 +2813,13 @@ function updateUnshiftedArrayMetadata(
 
   if (elementType === 'unknown') {
     ensureArrayShapes(context).delete(name)
+    ensureArrayLengths(context).delete(name)
     context.runtimeArrayElementTypes.set(name, 'unknown')
     return
   }
 
   ensureArrayShapes(context).set(name, nextElements)
+  ensureArrayLengths(context).set(name, nextElements.length)
 }
 
 function updatePoppedArrayMetadata(receiver: ArrayMaybeNode, context: ArrayFunctionContext): void {
@@ -2791,7 +2836,10 @@ function updatePoppedArrayMetadata(receiver: ArrayMaybeNode, context: ArrayFunct
   const elements = findArrayShape(context, name)
 
   if (elements !== null && typeof elements !== 'undefined') {
-    ensureArrayShapes(context).set(name, arrayElementInfoWithoutLast(elements))
+    const nextElements = arrayElementInfoWithoutLast(elements)
+
+    ensureArrayShapes(context).set(name, nextElements)
+    ensureArrayLengths(context).set(name, nextElements.length)
   }
 }
 

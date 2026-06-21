@@ -135,6 +135,7 @@ type CEmitContext = {
 
 type CFunctionContext = CEmitContext & {
   arrayLoweringDependencies: ArrayLoweringDependencies
+  arrayLengths: Map<string, number>
   arrayShapes: Map<string, CArrayElementInfo[]>
   boxedVariables: CStringSet
   cleanupEnabled: boolean

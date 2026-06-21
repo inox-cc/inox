@@ -63,6 +63,7 @@ type AsyncTaskObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 type AsyncTaskPromiseChainWrapperMap = Map<AsyncTaskAstNode, CPromiseChainWrapper>
 type AsyncTaskPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
 type AsyncTaskStringMap = Map<string, string>
+type AsyncTaskNumberMap = Map<string, number>
 type AsyncTaskStringNullableMap = Map<string, string | null>
 type AsyncTaskStringSet = Set<string>
 type AsyncTaskMetadataItem = CAsyncTaskFrameLocal | CAsyncTaskAwaitStep | CAsyncTaskParam | CAsyncTaskPrefixLocal
@@ -88,6 +89,7 @@ type AsyncTaskEmitContext = {
 }
 
 type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
+  arrayLengths: AsyncTaskNumberMap
   arrayShapes: AsyncTaskArrayShapeMap
   byteKinds: AsyncTaskStringMap
   breakFlowUsed: boolean
@@ -160,6 +162,7 @@ type AsyncTaskLocalMetadataContext = {
 }
 
 type AsyncTaskVariableScopeSnapshot = {
+  arrayLengths: AsyncTaskNumberMap
   arrayShapes: AsyncTaskArrayShapeMap
   byteKinds: AsyncTaskStringMap
   boxedVariables: AsyncTaskStringSet

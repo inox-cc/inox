@@ -83,6 +83,7 @@ type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 
 type CFunctionContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
+  arrayLengths: Map<string, number>
   arrayShapes: Map<string, CArrayElementInfo[]>
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   asyncTaskWrappers: Map<string, CAsyncTaskWrapper>
@@ -631,7 +632,7 @@ export function emitStatementList(statements: StatementNode[], context: CFunctio
   const result: string[] = []
 
   for (let index = 0; index < statements.length; index = index + 1) {
-    const statement = statements[index]
+    const statement: StatementNode = statements[index]
     const lines = emitStatementListItem(statement, context)
     pushAllLines(result, lines)
 
@@ -1190,15 +1191,18 @@ export function emitNumberBooleanScalarVariableDeclaration(
     const object = statement.init.object
 
     if (object.type === 'ArrayLiteral') {
-      return [`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${object.elements.length};`]
+      return emitKnownArrayLengthScalarDeclaration(statement, `${object.elements.length}`)
     }
 
-    if (object.type === 'Reference' && object.path.length === 1) {
+    if (object.type === 'Reference') {
       const path: string[] = object.path
-      const elements = context.arrayShapes.get(path[0])
 
-      if (elements !== null && typeof elements !== 'undefined') {
-        return [`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${elements.length};`]
+      if (path.length === 1) {
+        const length = context.arrayLengths.get(path[0])
+
+        if (length !== null && typeof length !== 'undefined') {
+          return emitKnownArrayLengthScalarDeclaration(statement, `${length}`)
+        }
       }
     }
   }
@@ -1224,6 +1228,14 @@ export function emitNumberBooleanScalarVariableDeclaration(
   return lines
 }
 
+function emitKnownArrayLengthScalarDeclaration(statement: StatementNode, length: string): string[] {
+  const lines: string[] = []
+
+  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${length};`)
+
+  return lines
+}
+
 function emitArrayLengthScalarVariableDeclaration(
   statement: StatementNode,
   context: CFunctionContext,
@@ -1233,6 +1245,25 @@ function emitArrayLengthScalarVariableDeclaration(
 
   if (init === null || typeof init === 'undefined') {
     return null
+  }
+
+  if (init.type === 'MemberExpression' && init.property === 'length' && init.object.type === 'Reference') {
+    const path: string[] = init.object.path
+
+    if (path.length === 1) {
+      const name: string = path[0]
+
+      if (context.runtimeArrayElementTypes.has(name)) {
+        const temp = `inox_array_len_${statement.name}`
+        const lines: string[] = []
+
+        lines.push(`size_t ${temp} = 0;`)
+        lines.push(emitStatusCheck(`inox_array_len(${name}, &${temp})`, context))
+        lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ((double)${temp});`)
+
+        return lines
+      }
+    }
   }
 
   const arrayLength = deps.emitPreparedArrayLengthExpression(init, context)
@@ -2628,6 +2659,7 @@ function emitRuntimeMapForOfStatement(
   try {
     context.variables.set(statement.name, 'array')
     context.arrayShapes.set(statement.name, fields)
+    context.arrayLengths.set(statement.name, fields.length)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
     const body = emitScopedStatementBody(statement.body, context, [], [], [])
@@ -3686,6 +3718,10 @@ function isRuntimeValueDeclarationValueType(valueType: string | null | undefined
 export function emitExpressionStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const deps = statementDeps(context)
   const expression: StatementNode = statement.expression
+
+  if (expression.type === 'Reference') {
+    return []
+  }
 
   if (deps.isConsoleLog(expression)) {
     const callee = expression.callee

@@ -41,6 +41,7 @@ export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CFunctionPointerAdapterMap = Map<string, string>
 export type CHttpHandlerMap = Map<string, CHttpHandler>
 export type CNetHandlerMap = Map<string, CNetHandler>
+export type CNumberMap = Map<string, number>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 export type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 export type CPromiseChainWrapperMap = Map<string, CPromiseChainWrapper>
@@ -62,6 +63,10 @@ export function cloneCStringSet(values: CStringSet): CStringSet {
 }
 
 export function cloneCStringMap(values: CStringMap): CStringMap {
+  return new Map(values)
+}
+
+export function cloneCNumberMap(values: CNumberMap): CNumberMap {
   return new Map(values)
 }
 
@@ -216,6 +221,7 @@ type CNullableScalarContext = {
 }
 
 type CVariableScopeContext = {
+  arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
   byteKinds: CStringMap
   boxedVariables: CStringSet
@@ -240,6 +246,7 @@ type CVariableScopeContext = {
 }
 
 export type CFunctionContext = CEmitContext & {
+  arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
   byteKinds: CStringMap
   breakFlowUsed: boolean
@@ -300,6 +307,7 @@ export type CFunctionContext = CEmitContext & {
 }
 
 export type CVariableScopeSnapshot = {
+  arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
   byteKinds: CStringMap
   boxedVariables: CStringSet
@@ -387,6 +395,7 @@ export function createFunctionContext(
     stringLoweringDependencies: baseContext.stringLoweringDependencies,
     throwingFunctions: baseContext.throwingFunctions,
     unhandledRejectionFlag: baseContext.unhandledRejectionFlag,
+    arrayLengths: new Map(),
     arrayShapes: new Map(),
     byteKinds: new Map(),
     breakFlowUsed: false,
@@ -951,6 +960,7 @@ export function nextCName(context: CNameContext, prefix: string): string {
 
 export function pushVariableScope(context: CVariableScopeContext): CVariableScopeSnapshot {
   const previousVariables = context.variables
+  const previousArrayLengths = context.arrayLengths
   const previousArrayShapes = context.arrayShapes
   const previousByteKinds = context.byteKinds
   const previousBoxedVariables = context.boxedVariables
@@ -973,6 +983,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousRuntimeStrings = context.runtimeStrings
 
   context.variables = cloneCStringMap(previousVariables)
+  context.arrayLengths = cloneCNumberMap(previousArrayLengths)
   context.arrayShapes = cloneCArrayShapeMap(previousArrayShapes)
   context.byteKinds = cloneCStringMap(previousByteKinds)
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
@@ -995,6 +1006,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.runtimeStrings = cloneCStringSet(previousRuntimeStrings)
 
   return {
+    arrayLengths: previousArrayLengths,
     arrayShapes: previousArrayShapes,
     byteKinds: previousByteKinds,
     boxedVariables: previousBoxedVariables,
@@ -1021,6 +1033,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
 
 export function restoreVariableScope(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {
   context.variables = snapshot.variables
+  context.arrayLengths = snapshot.arrayLengths
   context.arrayShapes = snapshot.arrayShapes
   context.byteKinds = snapshot.byteKinds
   context.boxedVariables = snapshot.boxedVariables

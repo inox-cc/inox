@@ -176,12 +176,11 @@ function lowerExpressionWithContext(
   if (expression.type === 'ArrayLiteral') {
     const elements = lowerExpressionList(expression.elements, context)
     const elementType = commonArrayElementTypeFromElements(elements)
-    const declaredElementType = arrayLiteralDeclaredElementType(expression, elementType)
     const loweredArray = cloneArrayLiteralExpression(
       expression,
       elements,
       elementType,
-      declaredElementType
+      elementType
     )
 
     return loweredArray
@@ -838,32 +837,51 @@ function cloneMemberExpression(
   object: LowerExpressionNode,
   valueType: string
 ): LowerExpressionNode {
+  const isLengthProperty = expression.property === 'length'
+  let arrayElementType: string | null = null
+  let arrayElementDeclaredType: string | null = null
+  let mapKeyType: string | null = null
+  let mapValueType: string | null = null
+  let promiseValueType: string | null = null
+  let setElementType: string | null = null
+  let functionType: LowerExpressionNode | null = null
+  let shape: LowerExpressionNode | null = null
+  let className: string | null = null
+  let collectionKind: string | null = null
+
+  if (!isLengthProperty) {
+    arrayElementType = nullableString(expression.arrayElementType)
+    arrayElementDeclaredType = nullableString(expression.arrayElementDeclaredType)
+    mapKeyType = nullableString(expression.mapKeyType)
+    mapValueType = nullableString(expression.mapValueType)
+    promiseValueType = nullableString(expression.promiseValueType)
+    setElementType = nullableString(expression.setElementType)
+    functionType = nullableNode(expression.functionType)
+    shape = nullableNode(expression.shape)
+    className = nullableString(expression.className)
+    collectionKind = nullableString(expression.collectionKind)
+  }
+
   const target: LowerExpressionNode = {
     type: expression.type,
     object,
     property: expression.property,
     valueType,
     nullable: expression.nullable === true,
-    arrayElementType: nullableString(expression.arrayElementType),
-    arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
-    mapKeyType: nullableString(expression.mapKeyType),
-    mapValueType: nullableString(expression.mapValueType),
-    promiseValueType: nullableString(expression.promiseValueType),
-    setElementType: nullableString(expression.setElementType),
-    functionType: nullableNode(expression.functionType),
-    shape: nullableNode(expression.shape),
-    className: nullableString(expression.className),
-    collectionKind: nullableString(expression.collectionKind),
+    arrayElementType,
+    arrayElementDeclaredType,
+    mapKeyType,
+    mapValueType,
+    promiseValueType,
+    setElementType,
+    functionType,
+    shape,
+    className,
+    collectionKind,
     loc: expression.loc
   }
 
-  const result = copyRuntimeMetadata(target, expression)
-
-  if (expression.property === 'length') {
-    result.shape = null
-  }
-
-  return result
+  return copyRuntimeMetadata(target, expression)
 }
 
 function cloneIndexExpression(
@@ -1256,33 +1274,15 @@ function cloneArrayLiteralExpression(
   arrayElementType: string,
   arrayElementDeclaredType: string
 ): LowerExpressionNode {
-  return copyRuntimeMetadata(
-    {
-      type: 'ArrayLiteral',
-      elements,
-      valueType: 'array',
-      nullable: expression.nullable === true,
-      arrayElementType,
-      arrayElementDeclaredType,
-      mapKeyType: nullableString(expression.mapKeyType),
-      mapValueType: nullableString(expression.mapValueType),
-      promiseValueType: nullableString(expression.promiseValueType),
-      setElementType: nullableString(expression.setElementType),
-      functionType: nullableNode(expression.functionType),
-      shape: nullableNode(expression.shape),
-      className: nullableString(expression.className),
-      loc: expression.loc
-    },
-    expression
-  )
-}
-
-function arrayLiteralDeclaredElementType(expression: LowerExpressionNode, elementType: string): string {
-  if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
-    return expression.arrayElementDeclaredType
+  return {
+    type: 'ArrayLiteral',
+    elements,
+    valueType: 'array',
+    nullable: expression.nullable === true,
+    arrayElementType,
+    arrayElementDeclaredType,
+    loc: expression.loc
   }
-
-  return elementType
 }
 
 function commonArrayElementTypeFromElements(elements: LowerExpressionNode[]): string {

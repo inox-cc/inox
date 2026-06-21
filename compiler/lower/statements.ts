@@ -423,8 +423,12 @@ function lowerVariableDeclaration(
   context: LowerContext,
   allowArrayMethodExpansion: boolean
 ): LoweredStatement {
-  const init = lowerOptionalStatementExpression(statement.init, context)
   const declared = resolveDeclaredType(statement.declaredType, context)
+  const init = variableDeclarationInitWithDeclaredType(
+    lowerOptionalStatementExpression(statement.init, context),
+    statement.declaredType,
+    declared
+  )
   const inferredMapType = inferMapType(init)
   const nullable = variableDeclarationNullable(declared, init)
   const shape = variableDeclarationShape(declared, statement, init)
@@ -481,6 +485,45 @@ function lowerVariableDeclaration(
   declareLoweredTopLevelVariables(context, expanded)
 
   return expanded
+}
+
+function variableDeclarationInitWithDeclaredType(
+  init: LowerNode | null,
+  declaredType: string | null | undefined,
+  declared: LowerResolvedType
+): LowerNode | null {
+  if (init === null || typeof init === 'undefined' || init.type !== 'ArrayLiteral') {
+    return init
+  }
+
+  const statementDeclaredType = nullableString(declaredType)
+
+  if (statementDeclaredType === null || typeof statementDeclaredType === 'undefined') {
+    return init
+  }
+
+  init.declaredType = statementDeclaredType
+  init.nullable = init.nullable === true || declared.nullable
+
+  const declaredValueType = nullableString(declared.valueType)
+
+  if (declaredValueType !== null && typeof declaredValueType !== 'undefined') {
+    init.valueType = declaredValueType
+  }
+
+  const declaredArrayElementType = nullableString(declared.arrayElementType)
+
+  if (declaredArrayElementType !== null && typeof declaredArrayElementType !== 'undefined') {
+    init.arrayElementType = declaredArrayElementType
+  }
+
+  const declaredArrayElementDeclaredType = nullableString(declared.arrayElementDeclaredType)
+
+  if (declaredArrayElementDeclaredType !== null && typeof declaredArrayElementDeclaredType !== 'undefined') {
+    init.arrayElementDeclaredType = declaredArrayElementDeclaredType
+  }
+
+  return init
 }
 
 function createLoweredVariableDeclaration(

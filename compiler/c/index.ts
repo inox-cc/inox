@@ -3060,7 +3060,9 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
   }
 
   const inferred = inferScalarDeclarationValueType(statement, context)
-  context.variables.set(statement.name, inferred)
+  const declared = knownValueType(statement.valueType)
+  const variableType = declared ?? inferred
+  context.variables.set(statement.name, variableType)
 
   const stringScalarDeclaration = emitStringScalarVariableDeclaration(statement, context, inferred)
 
@@ -4205,11 +4207,10 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
     typeof statement.arrayElementType !== 'undefined' &&
     statement.arrayElementType !== 'unknown'
   ) {
-    context.arrayShapes.set(statement.name, shapes)
     context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType)
-  } else {
-    context.arrayShapes.set(statement.name, shapes)
   }
+  context.arrayLengths.set(statement.name, elements.length)
+  context.arrayShapes.set(statement.name, shapes)
 
   for (let index = 0; index < elements.length; index++) {
     const element: AnyNode = elements[index]
@@ -5274,11 +5275,12 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
     return null
   }
 
+  const length = context.arrayLengths.get(name) ?? shape.length
   const lines: string[] = []
   const parts: string[] = []
   const values: string[] = []
 
-  if (shape.length === 0) {
+  if (length === 0) {
     return {
       lines,
       format: '[]',
