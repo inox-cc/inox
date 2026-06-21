@@ -1032,6 +1032,8 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
 }
 
 export function restoreVariableScope(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {
+  mergeScopedArrayMetadata(context, snapshot)
+
   context.variables = snapshot.variables
   context.arrayLengths = snapshot.arrayLengths
   context.arrayShapes = snapshot.arrayShapes
@@ -1054,6 +1056,120 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.runtimeStringValues = snapshot.runtimeStringValues
   context.setElementTypes = snapshot.setElementTypes
   context.runtimeStrings = snapshot.runtimeStrings
+}
+
+function mergeScopedArrayMetadata(context: CVariableScopeContext, snapshot: CVariableScopeSnapshot): void {
+  for (const name of snapshot.variables.keys()) {
+    if (snapshot.variables.get(name) !== 'array') {
+      continue
+    }
+
+    const lengthChanged = !optionalNumbersEqual(context.arrayLengths.get(name), snapshot.arrayLengths.get(name))
+    const shapeChanged = !optionalArrayShapesEqual(context.arrayShapes.get(name), snapshot.arrayShapes.get(name))
+
+    if (lengthChanged || shapeChanged) {
+      const elementType = mergedScopedArrayElementType(context, snapshot, name)
+      snapshot.arrayLengths.delete(name)
+      snapshot.arrayShapes.delete(name)
+
+      if (elementType !== null && typeof elementType !== 'undefined') {
+        snapshot.runtimeArrayElementTypes.set(name, elementType)
+      }
+    } else {
+      mergeScopedStringMapValue(context.runtimeArrayElementTypes, snapshot.runtimeArrayElementTypes, name)
+    }
+  }
+}
+
+function optionalNumbersEqual(first: number | null | undefined, second: number | null | undefined): boolean {
+  if (first === null || typeof first === 'undefined') {
+    return second === null || typeof second === 'undefined'
+  }
+
+  if (second === null || typeof second === 'undefined') {
+    return false
+  }
+
+  return first === second
+}
+
+function optionalArrayShapesEqual(
+  first: CArrayElementInfo[] | null | undefined,
+  second: CArrayElementInfo[] | null | undefined
+): boolean {
+  if (first === null || typeof first === 'undefined') {
+    return second === null || typeof second === 'undefined'
+  }
+
+  if (second === null || typeof second === 'undefined') {
+    return false
+  }
+
+  if (first.length !== second.length) {
+    return false
+  }
+
+  for (let index = 0; index < first.length; index = index + 1) {
+    if (first[index].valueType !== second[index].valueType) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function mergedScopedArrayElementType(
+  context: CVariableScopeContext,
+  snapshot: CVariableScopeSnapshot,
+  name: string
+): string | null {
+  const scopedRuntimeType = context.runtimeArrayElementTypes.get(name)
+
+  if (scopedRuntimeType !== null && typeof scopedRuntimeType !== 'undefined') {
+    return scopedRuntimeType
+  }
+
+  const previousRuntimeType = snapshot.runtimeArrayElementTypes.get(name)
+
+  if (previousRuntimeType !== null && typeof previousRuntimeType !== 'undefined') {
+    return previousRuntimeType
+  }
+
+  const scopedShapeType = arrayShapeElementType(context.arrayShapes.get(name))
+
+  if (scopedShapeType !== null && typeof scopedShapeType !== 'undefined') {
+    return scopedShapeType
+  }
+
+  return arrayShapeElementType(snapshot.arrayShapes.get(name))
+}
+
+function arrayShapeElementType(elements: CArrayElementInfo[] | null | undefined): string | null {
+  if (elements === null || typeof elements === 'undefined' || elements.length === 0) {
+    return null
+  }
+
+  let elementType: string | null = null
+
+  for (const element of elements) {
+    if (elementType === null || typeof elementType === 'undefined') {
+      elementType = element.valueType
+    } else if (elementType !== element.valueType) {
+      return 'unknown'
+    }
+  }
+
+  return elementType
+}
+
+function mergeScopedStringMapValue(source: CStringMap, target: CStringMap, name: string): void {
+  const value = source.get(name)
+
+  if (value !== null && typeof value !== 'undefined') {
+    target.set(name, value)
+  } else {
+    target.delete(name)
+  }
 }
 
 export function pushNullableScalarNarrowing(

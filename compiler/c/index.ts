@@ -591,7 +591,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitArraySliceVariableDeclaration,
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayFromCallExpression,
-  emitPreparedArrayLengthExpression,
   emitPreparedArrayMapCallExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArrayPushCallExpression,
@@ -1212,6 +1211,7 @@ const cValueExpressionDependencies = {
   emitCTemplateLiteralValueExpression,
   emitCValueExpression,
   emitOptionalRuntimeCallbackCallValueExpression,
+  emitPreparedArrayLengthExpression,
   emitPreparedArrayPopCallExpression,
   emitPreparedArrayJoinCallExpression,
   emitPreparedArraySliceCallExpression,
@@ -2598,16 +2598,31 @@ function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContex
   }
 
   if (types.length === 0) {
-    return 'string'
+    return 'unknown'
   }
+
+  let allErrors = true
+  let allStrings = true
 
   for (const valueType of types) {
     if (valueType !== 'error') {
-      return 'string'
+      allErrors = false
+    }
+
+    if (valueType !== 'string') {
+      allStrings = false
     }
   }
 
-  return 'object'
+  if (allErrors) {
+    return 'object'
+  }
+
+  if (allStrings) {
+    return 'string'
+  }
+
+  return 'unknown'
 }
 
 function pushAll(target: string[], values: string[]): void {
@@ -4447,6 +4462,11 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     pushAll(lines, call.lines)
     pushAll(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`${temp} = ${call.expression};`)
+
+    if (isOwnedRuntimeValueName(call.expression, context)) {
+      lines.push(`inox_retain(${temp});`)
+    }
+
     pushAll(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context))
 
     return {
@@ -5366,6 +5386,10 @@ function isRuntimeLogValueType(valueType: string): boolean {
   )
 }
 
+function isOwnedRuntimeValueName(name: string, context: CFunctionContext): boolean {
+  return context.ownedValues.includes(name)
+}
+
 function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionContext): boolean {
   if (
     expression === null ||
@@ -5378,7 +5402,7 @@ function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionCon
 
   const name = expression.path[0]
 
-  return context.variables.get(name) === 'unknown' && context.ownedValues.includes(name)
+  return context.variables.get(name) === 'unknown' && isOwnedRuntimeValueName(name, context)
 }
 
 function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {

@@ -61,22 +61,85 @@ export function escapeCString(value: string): string {
   for (let index = 0; index < value.length; index = index + 1) {
     const code = value.charCodeAt(index)
 
-    if (code === 92) {
-      result = result + '\\\\'
-    } else if (code === 34) {
-      result = result + '\\"'
-    } else if (code === 10) {
-      result = result + '\\n'
-    } else if (code === 13) {
-      result = result + '\\r'
-    } else if (code === 9) {
-      result = result + '\\t'
+    if (code <= 127) {
+      result = result + cHexByteEscape(code)
     } else {
       result = result + value.slice(index, index + 1)
     }
   }
 
   return result
+}
+
+function cHexByteEscape(code: number): string {
+  const high = Math.floor(code / 16)
+  const low = code - high * 16
+
+  return `\\x${hexDigit(high)}${hexDigit(low)}`
+}
+
+function hexDigit(value: number): string {
+  if (value === 0) {
+    return '0'
+  }
+
+  if (value === 1) {
+    return '1'
+  }
+
+  if (value === 2) {
+    return '2'
+  }
+
+  if (value === 3) {
+    return '3'
+  }
+
+  if (value === 4) {
+    return '4'
+  }
+
+  if (value === 5) {
+    return '5'
+  }
+
+  if (value === 6) {
+    return '6'
+  }
+
+  if (value === 7) {
+    return '7'
+  }
+
+  if (value === 8) {
+    return '8'
+  }
+
+  if (value === 9) {
+    return '9'
+  }
+
+  if (value === 10) {
+    return 'a'
+  }
+
+  if (value === 11) {
+    return 'b'
+  }
+
+  if (value === 12) {
+    return 'c'
+  }
+
+  if (value === 13) {
+    return 'd'
+  }
+
+  if (value === 14) {
+    return 'e'
+  }
+
+  return 'f'
 }
 
 function isHighSurrogate(code: number): boolean {

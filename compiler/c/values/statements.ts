@@ -51,7 +51,7 @@ import {
   isRuntimeNullableType
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
-import { resolveRuntimeArrayElementType } from './arrays.ts'
+import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
 import { resolveBinaryExpressionKind } from '../stdlib/binary.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
@@ -348,7 +348,6 @@ export type StatementLoweringDependencies = {
     expression: StatementNode,
     context: CFunctionContext
   ): PreparedArrayExpression | null
-  emitPreparedArrayLengthExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayMapCallExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -1182,38 +1181,24 @@ export function emitNumberBooleanScalarVariableDeclaration(
     return [`double ${statement.name} = 0;`]
   }
 
-  if (
-    statement.init !== null &&
-    typeof statement.init !== 'undefined' &&
-    statement.init.type === 'MemberExpression' &&
-    statement.init.property === 'length'
-  ) {
-    const object = statement.init.object
+  let arrayLength: PreparedExpression | null = null
 
-    if (object.type === 'ArrayLiteral') {
-      return emitKnownArrayLengthScalarDeclaration(statement, `${object.elements.length}`)
-    }
+  if (statement.init.type === 'MemberExpression' && statement.init.property === 'length') {
+    arrayLength = emitPreparedArrayLengthExpression(statement.init, context)
+  }
 
-    if (object.type === 'Reference') {
-      const path: string[] = object.path
+  if (arrayLength !== null && typeof arrayLength !== 'undefined') {
+    const lines: string[] = []
+    const lengthExpression: string = arrayLength.expression
+    const line: string = `${constPrefix(statement.kind === 'const')}double ${statement.name} = ${lengthExpression};`
 
-      if (path.length === 1) {
-        const length = context.arrayLengths.get(path[0])
+    pushAllLines(lines, arrayLength.lines)
+    lines.push(line)
 
-        if (length !== null && typeof length !== 'undefined') {
-          return emitKnownArrayLengthScalarDeclaration(statement, `${length}`)
-        }
-      }
-    }
+    return lines
   }
 
   const deps = statementDeps(context)
-  const arrayLengthLines = emitArrayLengthScalarVariableDeclaration(statement, context, deps)
-
-  if (arrayLengthLines !== null && typeof arrayLengthLines !== 'undefined') {
-    return arrayLengthLines
-  }
-
   const dynamicObjectField = emitDynamicObjectScalarVariableDeclaration(statement, inferred, context)
 
   if (dynamicObjectField !== null && typeof dynamicObjectField !== 'undefined') {
@@ -1224,57 +1209,6 @@ export function emitNumberBooleanScalarVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)
-
-  return lines
-}
-
-function emitKnownArrayLengthScalarDeclaration(statement: StatementNode, length: string): string[] {
-  const lines: string[] = []
-
-  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${length};`)
-
-  return lines
-}
-
-function emitArrayLengthScalarVariableDeclaration(
-  statement: StatementNode,
-  context: CFunctionContext,
-  deps: StatementLoweringDependencies
-): string[] | null {
-  const init = statement.init
-
-  if (init === null || typeof init === 'undefined') {
-    return null
-  }
-
-  if (init.type === 'MemberExpression' && init.property === 'length' && init.object.type === 'Reference') {
-    const path: string[] = init.object.path
-
-    if (path.length === 1) {
-      const name: string = path[0]
-
-      if (context.runtimeArrayElementTypes.has(name)) {
-        const temp = `inox_array_len_${statement.name}`
-        const lines: string[] = []
-
-        lines.push(`size_t ${temp} = 0;`)
-        lines.push(emitStatusCheck(`inox_array_len(${name}, &${temp})`, context))
-        lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ((double)${temp});`)
-
-        return lines
-      }
-    }
-  }
-
-  const arrayLength = deps.emitPreparedArrayLengthExpression(init, context)
-
-  if (arrayLength === null || typeof arrayLength === 'undefined') {
-    return null
-  }
-
-  const lines: string[] = []
-  pushAllLines(lines, arrayLength.lines)
-  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${arrayLength.expression};`)
 
   return lines
 }
@@ -2956,7 +2890,11 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     catchLabel !== null &&
     typeof catchLabel !== 'undefined'
   ) {
-    const catchValueType = statementDeps(context).inferCatchBindingValueType(statement, context)
+    let catchValueType = 'unknown'
+
+    if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
+      catchValueType = statementDeps(context).inferCatchBindingValueType(statement, context)
+    }
     if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
       pushStringTarget(context.returnTargets, finallyLabel)
       pushFlowTarget(context.breakTargets, { label: finallyLabel, throughFinally: true })
@@ -2972,10 +2910,13 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
           context.variables.set(statement.handler.param, 'object')
           statementDeps(context).registerErrorObjectShape(context, statement.handler.param)
           catchBody.push(`inox_value ${statement.handler.param} = inox_error;`)
-        } else {
+        } else if (catchValueType === 'string') {
           context.variables.set(statement.handler.param, 'string')
           context.runtimeStrings.add(statement.handler.param)
           catchBody.push(`inox_string* ${statement.handler.param} = (inox_string*)inox_error.as.ref;`)
+        } else {
+          context.variables.set(statement.handler.param, 'unknown')
+          catchBody.push(`inox_value ${statement.handler.param} = inox_error;`)
         }
       }
 
@@ -3692,7 +3633,41 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
     }
   }
 
+  if (targetType === 'array') {
+    updateRuntimeArrayAssignmentMetadata(target, expression.value, context)
+  }
+
   return lines
+}
+
+function updateRuntimeArrayAssignmentMetadata(
+  target: string,
+  value: StatementNode,
+  context: CFunctionContext
+): void {
+  context.arrayLengths.delete(target)
+  context.arrayShapes.delete(target)
+  context.runtimeArrayElementTypes.set(target, resolveRuntimeArrayAssignmentElementType(target, value, context))
+}
+
+function resolveRuntimeArrayAssignmentElementType(
+  target: string,
+  value: StatementNode,
+  context: CFunctionContext
+): string {
+  const elementType = resolveRuntimeArrayElementType(value, context)
+
+  if (elementType !== null && typeof elementType !== 'undefined') {
+    return elementType
+  }
+
+  const current = context.runtimeArrayElementTypes.get(target)
+
+  if (current !== null && typeof current !== 'undefined') {
+    return current
+  }
+
+  return 'unknown'
 }
 
 function isDynamicRuntimeValueDeclaration(statement: StatementNode, context: CFunctionContext): boolean {
@@ -4308,6 +4283,10 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
 export function emitCatchBindingTypeCheck(valueType: string): string {
   if (valueType === 'object') {
     return 'inox_error.tag != INOX_TAG_OBJECT || inox_error.as.ref == 0'
+  }
+
+  if (valueType === 'unknown') {
+    return '0'
   }
 
   return 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'

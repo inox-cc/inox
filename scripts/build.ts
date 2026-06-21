@@ -267,7 +267,7 @@ try {
     fs.writeFileSync(output, result.code + '\\n')
     console.log(output)
   }
-} catch (error) {
+} catch {
   console.error('INOX BUILD ERROR')
   process.exitCode = 1
 }

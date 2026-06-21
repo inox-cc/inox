@@ -2006,6 +2006,8 @@ export function emitPreparedCallExpression(
   const params = deps.resolveFunctionParams(expression.callee, context)
 
   if (params === null || typeof params === 'undefined') {
+    invalidateArrayReferenceArguments(expression, [], context)
+
     return {
       lines: [],
       expression: emitCallExpression(expression, context, deps)
@@ -2021,6 +2023,7 @@ export function emitPreparedCallExpression(
   )
   const lines = prepared.lines
   const args = prepared.args
+  invalidateArrayReferenceArguments(expression, params, context)
 
   if (isThrowingFunctionCallee(expression.callee, context)) {
     return emitPreparedThrowingCallExpression(expression, args, lines, context, deps)
@@ -2056,6 +2059,92 @@ export function emitPreparedCallExpression(
     lines,
     expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
   }
+}
+
+function invalidateArrayReferenceArguments(
+  expression: CValueNode,
+  params: CFunctionParam[],
+  context: CFunctionContext
+): void {
+  for (let index = 0; index < expression.args.length; index = index + 1) {
+    const param = functionParamAt(params, index)
+
+    invalidateArrayReferenceArgument(expression.args[index], param, context)
+  }
+}
+
+function invalidateArrayReferenceArgument(
+  argument: CValueNode,
+  param: CFunctionParam | null,
+  context: CFunctionContext
+): void {
+  if (argument.type !== 'Reference' || argument.path.length !== 1) {
+    return
+  }
+
+  const name = argument.path[0]
+
+  if (context.variables.get(name) !== 'array') {
+    return
+  }
+
+  const elementType = invalidatedArrayElementType(name, argument, param, context)
+
+  context.arrayShapes.delete(name)
+  context.arrayLengths.delete(name)
+  context.runtimeArrayElementTypes.set(name, elementType)
+}
+
+function invalidatedArrayElementType(
+  name: string,
+  argument: CValueNode,
+  param: CFunctionParam | null,
+  context: CFunctionContext
+): string {
+  const current = context.runtimeArrayElementTypes.get(name)
+
+  if (current !== null && typeof current !== 'undefined') {
+    return current
+  }
+
+  if (argument.arrayElementType !== null && typeof argument.arrayElementType !== 'undefined') {
+    return argument.arrayElementType
+  }
+
+  if (
+    param !== null &&
+    typeof param !== 'undefined' &&
+    param.arrayElementType !== null &&
+    typeof param.arrayElementType !== 'undefined'
+  ) {
+    return param.arrayElementType
+  }
+
+  const elements = context.arrayShapes.get(name)
+
+  if (elements === null || typeof elements === 'undefined') {
+    return 'unknown'
+  }
+
+  return arrayShapeElementType(elements)
+}
+
+function arrayShapeElementType(elements: CArrayElementInfo[]): string {
+  let elementType: string | null = null
+
+  for (const element of elements) {
+    if (elementType === null || typeof elementType === 'undefined') {
+      elementType = element.valueType
+    } else if (elementType !== element.valueType) {
+      return 'unknown'
+    }
+  }
+
+  if (elementType !== null && typeof elementType !== 'undefined') {
+    return elementType
+  }
+
+  return 'unknown'
 }
 
 function emitPreparedMathCallExpression(
@@ -4584,6 +4673,7 @@ export type CValueExpressionDependencies = {
   emitCStringTrimValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCTemplateLiteralValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitOptionalRuntimeCallbackCallValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayPopCallExpression(
     expression: CValueNode,
     context: CFunctionContext,
@@ -4830,6 +4920,18 @@ export function emitCValueExpression(
     return {
       lines: collectionSize.lines,
       expression: `inox_number_value(${collectionSize.expression})`
+    }
+  }
+
+  if (expression.type === 'MemberExpression' && expression.property === 'length') {
+    let arrayLength: PreparedExpression | null = null
+    arrayLength = deps.emitPreparedArrayLengthExpression(expression, context)
+
+    if (arrayLength !== null && typeof arrayLength !== 'undefined') {
+      return {
+        lines: arrayLength.lines,
+        expression: `inox_number_value(${arrayLength.expression})`
+      }
     }
   }
 
@@ -5179,6 +5281,10 @@ export function emitCValueExpression(
     appendLines(lines, call.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(`${temp} = ${call.expression};`)
+
+    if (isOwnedRuntimeValueName(call.expression, context)) {
+      lines.push(`inox_retain(${temp});`)
+    }
 
     if (callExpressionReturnsNullableRuntimeValue(expression, valueType, context)) {
       appendLines(lines, emitRuntimeNullableValueCheck(temp, tag, context))
