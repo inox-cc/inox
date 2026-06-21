@@ -12787,11 +12787,20 @@ class Checker {
       }
     }
 
-    const classSymbol = this.scope.resolve(name)
+    const classKnown = this.classNames.has(name)
+    let classSymbol: SymbolInfo | null = null
+
+    if (classKnown) {
+      const foundClassSymbol = this.scope.resolve(name)
+
+      if (foundClassSymbol !== null && typeof foundClassSymbol !== 'undefined' && foundClassSymbol.kind === 'class') {
+        classSymbol = foundClassSymbol
+      }
+    }
 
     if (
-      (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class') ||
-      this.classNames.has(name)
+      classKnown ||
+      (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class')
     ) {
       let classShape: ObjectShapeInfo | null = null
 
@@ -13066,7 +13075,13 @@ class Checker {
     let functionType = fieldInfo.functionType
 
     if (functionType === null || typeof functionType === 'undefined') {
-      functionType = this.resolveFunctionTypeMetadata(field.functionType, field.loc)
+      const fieldFunctionType = field.functionType
+
+      if (fieldFunctionType !== null && typeof fieldFunctionType !== 'undefined') {
+        functionType = this.resolveFunctionTypeMetadata(fieldFunctionType, field.loc)
+      } else {
+        functionType = null
+      }
     }
 
     if (fieldInfo.promiseValueType !== null && typeof fieldInfo.promiseValueType !== 'undefined') {

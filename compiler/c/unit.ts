@@ -110,16 +110,26 @@ export type CUnitDependencies = {
   stringLoweringDependencies: StringLoweringDependencies
 }
 
+type CUnitFunctionNodeEntry = {
+  node: AnyNode
+}
+
 function pushUnitLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
   }
 }
 
-function collectUnitFunctionNodes(functionEntries: AnyNode[]): AnyNode[] {
+function cUnitFunctionEntryAt(values: CUnitFunctionNodeEntry[], index: number): CUnitFunctionNodeEntry {
+  return values[index]
+}
+
+function collectUnitFunctionNodes(functionEntries: CUnitFunctionNodeEntry[]): AnyNode[] {
   const functions: AnyNode[] = []
 
-  for (const entry of functionEntries) {
+  for (let index = 0; index < functionEntries.length; index = index + 1) {
+    const entry = cUnitFunctionEntryAt(functionEntries, index)
+
     functions.push(entry.node)
   }
 
