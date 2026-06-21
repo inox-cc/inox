@@ -1014,6 +1014,7 @@ const expressionTypeDependencies = {
   collectionConstructorName,
   cryptoRuntimeMethodName,
   emitPreparedNetAddressPortExpression,
+  isArrayIncludesCall,
   isArrayIsArrayCall,
   isArrayJoinCall,
   isArrayLengthExpression,

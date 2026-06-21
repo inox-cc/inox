@@ -1814,6 +1814,7 @@ function registerForOfElementMetadata(
     context.runtimeStrings.add(name)
   } else if (elementType === 'object') {
     registerObjectShape(context, name, statement.shape)
+    registerForOfObjectElementDeclaredType(context, name, statement)
   } else if (elementType === 'array') {
     context.runtimeArrayElementTypes.set(name, stringOrUnknown(statement.arrayElementType))
   } else if (elementType === 'map') {
@@ -1823,6 +1824,20 @@ function registerForOfElementMetadata(
     )
   } else if (elementType === 'set') {
     context.setElementTypes.set(name, stringOrUnknown(statement.setElementType))
+  }
+}
+
+function registerForOfObjectElementDeclaredType(
+  context: CFunctionContext,
+  name: string,
+  statement: StatementNode
+): void {
+  const declaredType = statement.arrayElementDeclaredType ?? statement.declaredType
+
+  if (declaredType !== null && typeof declaredType !== 'undefined') {
+    context.objectDeclaredTypes.set(name, declaredType)
+  } else {
+    context.objectDeclaredTypes.delete(name)
   }
 }
 
