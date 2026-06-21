@@ -195,6 +195,7 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
   ]
   const booleanFields = [
     'async',
+    'default',
     'exported',
     'expressionBody',
     'fsForce',
@@ -211,6 +212,7 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'callee',
     'condition',
     'consequent',
+    'defaultValue',
     'alternate',
     'expression',
     'functionType',
