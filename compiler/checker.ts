@@ -10087,7 +10087,7 @@ class Checker {
       expression.mapKeyType = 'unknown'
       expression.mapValueType = 'unknown'
 
-      if (argTypes[0] === 'map') {
+      if (argTypes.length > 0 && argTypes[0] === 'map') {
         const mapType = this.resolveExpressionMapType(expression.args[0])
 
         if (mapType !== null && typeof mapType !== 'undefined') {
@@ -10108,7 +10108,7 @@ class Checker {
       expression.valueType = 'set'
       expression.setElementType = 'unknown'
 
-      if (argTypes[0] === 'set') {
+      if (argTypes.length > 0 && argTypes[0] === 'set') {
         const elementType = this.resolveExpressionSetElementType(expression.args[0])
 
         if (elementType !== null && typeof elementType !== 'undefined') {
