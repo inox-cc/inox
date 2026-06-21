@@ -1690,7 +1690,11 @@ export type CScalarExpressionDependencies = {
   emitPreparedBytesLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayIsArrayCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedClassMethodCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedClassMethodCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCryptoNumberCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -1783,7 +1787,11 @@ export type CCallExpressionDependencies = {
   ): PreparedExpression | null
   emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArraySortCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedClassMethodCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedClassMethodCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCryptoCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCryptoHashCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -1888,7 +1896,7 @@ export function emitPreparedCallExpression(
     return numberConversion
   }
 
-  const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
+  const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})
 
   if (classMethodCall !== null && typeof classMethodCall !== 'undefined') {
     return classMethodCall
@@ -2575,7 +2583,7 @@ export function emitPreparedNumberExpression(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
-  const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
+  const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})
 
   if (classMethodCall !== null && typeof classMethodCall !== 'undefined' && classMethodCall.expression !== '') {
     return classMethodCall
@@ -3495,7 +3503,7 @@ function isDynamicReferenceObjectFieldExpression(
 ): boolean {
   const access = dynamicObjectFieldAccess(expression, context, deps)
 
-  if (access === null || typeof access === 'undefined' || access.object.type !== 'Reference') {
+  if (access === null || typeof access === 'undefined') {
     return false
   }
 
@@ -4706,7 +4714,11 @@ export type CValueExpressionDependencies = {
   emitPreparedBinaryValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedChildProcessCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedClassMethodCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedClassMethodCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionConstructorValueExpression(
     expression: CValueNode,
@@ -5304,7 +5316,7 @@ export function emitCValueExpression(
       return collectionCall
     }
 
-    const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
+    const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})
 
     if (classMethodCall !== null && typeof classMethodCall !== 'undefined') {
       return classMethodCall

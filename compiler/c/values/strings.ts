@@ -384,6 +384,12 @@ export function emitPreparedStringLengthExpression(
 }
 
 export function emitPreparedStringCompareExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
+  const runtimeLiteralCompare = emitPreparedRuntimeStringLiteralCompareExpression(expression, context)
+
+  if (runtimeLiteralCompare !== null && typeof runtimeLiteralCompare !== 'undefined') {
+    return runtimeLiteralCompare
+  }
+
   const left = emitPreparedStringBytesOperand(expression.left, context, 'inox_cmp_string')
   const right = emitPreparedStringBytesOperand(expression.right, context, 'inox_cmp_string')
   const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
@@ -401,6 +407,76 @@ export function emitPreparedStringCompareExpression(expression: AnyNode, context
     lines,
     expression: resultExpression
   }
+}
+
+function emitPreparedRuntimeStringLiteralCompareExpression(
+  expression: AnyNode,
+  context: StringCContext
+): PreparedExpression | null {
+  if (expression.operator !== '===' && expression.operator !== '!==') {
+    return null
+  }
+
+  if (expression.left.type === 'StringLiteral') {
+    return emitPreparedRuntimeValueStringLiteralCompare(expression.right, expression.left.value, expression.operator, context)
+  }
+
+  if (expression.right.type === 'StringLiteral') {
+    return emitPreparedRuntimeValueStringLiteralCompare(expression.left, expression.right.value, expression.operator, context)
+  }
+
+  return null
+}
+
+function emitPreparedRuntimeValueStringLiteralCompare(
+  expression: AnyNode,
+  literal: string,
+  operator: string,
+  context: StringCContext
+): PreparedExpression | null {
+  if (!isRuntimeObjectStringFieldExpression(expression, context)) {
+    return null
+  }
+
+  const value = stringDeps(context).emitCValueExpression(expression, context)
+  const temp = nextCName(context, 'inox_string_cmp_value')
+  const literalLength = utf8ByteLength(literal)
+  const string = `((inox_string*)${temp}.as.ref)`
+  const equals =
+    `(${temp}.tag == INOX_TAG_STRING && ${temp}.as.ref != 0 && ` +
+    `${string}->len == ${literalLength} && memcmp(${string}->bytes, ${cStringLiteral(literal)}, ${literalLength}) == 0)`
+  const lines: string[] = []
+  let resultExpression = `(!${equals})`
+
+  pushAllLines(lines, value.lines)
+  lines.push(`inox_value ${temp} = ${value.expression};`)
+
+  if (operator === '===') {
+    resultExpression = equals
+  }
+
+  return {
+    lines,
+    expression: resultExpression
+  }
+}
+
+function isRuntimeObjectStringFieldExpression(expression: AnyNode, context: StringCContext): boolean {
+  const object = dynamicRuntimeObjectFieldObject(expression)
+
+  if (object === null || typeof object === 'undefined') {
+    return false
+  }
+
+  if (knownObjectStringField(expression, context)) {
+    return true
+  }
+
+  if (isKnownOptionalObjectStringField(expression, context)) {
+    return true
+  }
+
+  return isDynamicRuntimeStringFieldExpression(expression, context)
 }
 
 export function canEmitStringBytesOperand(expression: AnyNode | null | undefined, context: StringCContext): boolean {

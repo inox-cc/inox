@@ -5420,6 +5420,24 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     }
   }
 
+  if (expression.type === 'CallExpression') {
+    const classMethodCall = emitPreparedClassMethodCallExpression(expression, context, {})
+
+    if (classMethodCall !== null && typeof classMethodCall !== 'undefined' && classMethodCall.expression !== '') {
+      const string = nextCName(context, 'inox_log_string')
+      const lines: string[] = []
+
+      pushAll(lines, classMethodCall.lines)
+      lines.push(`inox_string* ${string} = (inox_string*)${classMethodCall.expression}.as.ref;`)
+
+      return {
+        lines,
+        format: '%.*s',
+        values: [`(int)${string}->len`, `${string}->bytes`]
+      }
+    }
+  }
+
   if (isRuntimeProducedStringExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
     const string = nextCName(context, 'inox_log_string')

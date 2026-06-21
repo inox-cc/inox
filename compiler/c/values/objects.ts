@@ -231,26 +231,40 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, stringFields, 'string')
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, booleanFields, 'boolean')
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, arrayFields, 'array')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, objectFields, 'object')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, objectFields, 'object', 'AnyNode', {
+    builtin: 'compiler.AnyNode'
+  })
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, unknownFields, 'unknown')
 }
 
 function appendCompilerAnyNodeFallbackShapeFieldGroup(
   fields: CObjectShapeField[],
   names: string[],
-  valueType: string
+  valueType: string,
+  declaredType: string | null = null,
+  shape: CObjectShape | null = null
 ): void {
   for (const name of names) {
     if (findObjectShapeFieldIndex(fields, name) !== -1) {
       continue
     }
 
-    fields.push({
+    const field: CObjectShapeField = {
       name,
       optional: true,
       readonlyField: false,
       valueType
-    })
+    }
+
+    if (declaredType !== null && typeof declaredType !== 'undefined') {
+      field.declaredType = declaredType
+    }
+
+    if (shape !== null && typeof shape !== 'undefined') {
+      field.shape = shape
+    }
+
+    fields.push(field)
   }
 }
 
@@ -414,6 +428,15 @@ function registerObjectShapeFields(
     const fieldPath = `${name}_${field.name}`
 
     if (
+      field.declaredType !== null &&
+      typeof field.declaredType !== 'undefined' &&
+      context.objectDeclaredTypes !== null &&
+      typeof context.objectDeclaredTypes !== 'undefined'
+    ) {
+      context.objectDeclaredTypes.set(fieldPath, field.declaredType)
+    }
+
+    if (
       field.valueType !== 'object' ||
       shape === null ||
       typeof shape === 'undefined' ||
@@ -423,15 +446,6 @@ function registerObjectShapeFields(
       seen.has(shape)
     ) {
       continue
-    }
-
-    if (
-      field.declaredType !== null &&
-      typeof field.declaredType !== 'undefined' &&
-      context.objectDeclaredTypes !== null &&
-      typeof context.objectDeclaredTypes !== 'undefined'
-    ) {
-      context.objectDeclaredTypes.set(fieldPath, field.declaredType)
     }
 
     seen.add(shape)
@@ -1623,6 +1637,13 @@ export function registerObjectShape(
   }
 
   if (shape.builtin === 'compiler.AnyNode') {
+    const fields: CObjectShapeField[] = []
+
+    appendCompilerAnyNodeFallbackShapeFields(fields)
+    const seen: Set<CObjectShape> = new Set()
+
+    seen.add(shape)
+    registerObjectShapeFields(context, name, fields, seen)
     return
   }
 

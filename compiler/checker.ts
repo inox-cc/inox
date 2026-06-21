@@ -1570,15 +1570,6 @@ class Checker {
 
       let statementArrayElementDeclaredType = arrayElementDeclaredType
 
-      if (
-        valueType === 'object' &&
-        statement.init !== null &&
-        typeof statement.init !== 'undefined' &&
-        statement.init.arrayElementDeclaredType === 'fs.Dirent'
-      ) {
-        statementArrayElementDeclaredType = 'fs.Dirent'
-      }
-
       let mapKeyType: ValueType | null = null
       let mapValueType: ValueType | null = null
 
@@ -1616,9 +1607,9 @@ class Checker {
         shape = statement.init.shape
       } else if (
         valueType === 'object' &&
-        statement.init !== null &&
-        typeof statement.init !== 'undefined' &&
-        (statement.init.arrayElementDeclaredType === 'fs.Dirent' || statementArrayElementDeclaredType === 'fs.Dirent')
+        statementArrayElementDeclaredType !== null &&
+        typeof statementArrayElementDeclaredType !== 'undefined' &&
+        statementArrayElementDeclaredType === 'fs.Dirent'
       ) {
         shape = fsDirentObjectShape
       }

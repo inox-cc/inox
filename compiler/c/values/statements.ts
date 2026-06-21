@@ -3924,7 +3924,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return arraySortCall.lines
     }
 
-    const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context)
+    const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})
 
     if (classMethodCall !== null && typeof classMethodCall !== 'undefined') {
       if (classMethodCall.expression === '') {
