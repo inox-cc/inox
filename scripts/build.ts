@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
@@ -193,8 +193,12 @@ async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number
     return build
   }
 
-  await copyFile(join(cmakeBinDir, 'inox'), options.out)
-  await chmod(options.out, 0o755)
+  const outputTemp = `${options.out}.tmp`
+
+  await rm(outputTemp, { force: true })
+  await copyFile(join(cmakeBinDir, 'inox'), outputTemp)
+  await chmod(outputTemp, 0o755)
+  await rename(outputTemp, options.out)
 
   return {
     code: 0
