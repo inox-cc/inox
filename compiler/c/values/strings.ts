@@ -133,6 +133,10 @@ function stringNodeAt(values: StringMethodNode[], index: number): StringMethodNo
   return values[index]
 }
 
+function stringPathAt(values: string[], index: number): string {
+  return values[index]
+}
+
 export type StringLoweringDependencies = {
   canLowerCNullishCoalescingExpression(expression: AnyNode, context: StringCContext): boolean
   emitCallExpression(expression: AnyNode, context: StringCContext): string
@@ -1401,6 +1405,15 @@ function emitPreparedTemplatePlaceholderBytesOperand(
   context: StringCContext
 ): PreparedStringBytesOperand {
   const valueType = stringDeps(context).inferExpressionType(expression, context)
+  const knownString = emitPreparedKnownTemplatePlaceholderStringBytesOperand(
+    expression,
+    context,
+    'inox_template_string'
+  )
+
+  if (knownString !== null && typeof knownString !== 'undefined') {
+    return knownString
+  }
 
   if (valueType === 'string') {
     return emitPreparedStringBytesOperand(expression, context, 'inox_template_string')
@@ -1447,6 +1460,74 @@ function emitPreparedTemplatePlaceholderBytesOperand(
     bytes: '""',
     length: '0'
   }
+}
+
+function emitPreparedKnownTemplatePlaceholderStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  const known = emitPreparedKnownObjectStringBytesOperand(expression, context, tempPrefix)
+
+  if (known !== null && typeof known !== 'undefined') {
+    return known
+  }
+
+  return emitPreparedRuntimeObjectNameStringBytesOperand(expression, context, tempPrefix)
+}
+
+function emitPreparedRuntimeObjectNameStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  const objectName = runtimeObjectNameStringMemberObjectName(expression, context)
+
+  if (objectName === null || typeof objectName === 'undefined') {
+    return null
+  }
+
+  const value = nextCName(context, 'inox_expr_value')
+  const string = nextCName(context, tempPrefix)
+  const object = stringDeps(context).emitObjectValueReference(objectName, context)
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(emitStatusCheck(`inox_object_get(${object}, "name", 4, &${value})`, context))
+  lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function runtimeObjectNameStringMemberObjectName(expression: AnyNode, context: StringCContext): string | null {
+  if (!stringDeps(context).isMemberAccessExpression(expression) || expression.property !== 'name') {
+    return null
+  }
+
+  if (expression.object.type !== 'Reference' || expression.object.path.length !== 1) {
+    return null
+  }
+
+  const objectName = stringPathAt(expression.object.path, 0)
+  const variables = context.variables
+
+  if (variables === null || typeof variables === 'undefined') {
+    return null
+  }
+
+  const valueType = variables.get(objectName)
+
+  if (valueType !== 'object' && valueType !== 'unknown') {
+    return null
+  }
+
+  return objectName
 }
 
 function isTemplatePlaceholderStringifiableValueType(valueType: string): boolean {

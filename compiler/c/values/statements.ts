@@ -3321,6 +3321,20 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitModuleValueVariableAssignment(statement, context)
   }
 
+  if (statement.init !== null && typeof statement.init !== 'undefined') {
+    const arrayReduceCall = deps.emitPreparedArrayReduceCallExpression(statement.init, context)
+
+    if (arrayReduceCall !== null && typeof arrayReduceCall !== 'undefined') {
+      const lines: string[] = []
+
+      context.variables.set(statement.name, 'number')
+      pushAllLines(lines, arrayReduceCall.lines)
+      lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${arrayReduceCall.expression};`)
+
+      return lines
+    }
+  }
+
   const dgramSocket = deps.emitDgramSocketVariableDeclaration(statement, context)
 
   if (dgramSocket !== null && typeof dgramSocket !== 'undefined') {

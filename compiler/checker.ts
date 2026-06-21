@@ -9201,20 +9201,26 @@ class Checker {
       }
 
       let reducedType: ValueType = 'unknown'
+      let expectedReturnType: ValueType | null = null
 
       if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
         reducedType = this.checkExpression(expression.args[1])
+
+        if (reducedType !== 'unknown') {
+          expectedReturnType = reducedType
+        }
       }
 
       if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        const expectedReturnType = reducedType === 'unknown' ? null : reducedType
         const callbackType = this.checkArrayCallback(
           expression.args[0],
           [reducedType, elementType, 'number'],
           expectedReturnType
         )
 
-        if (reducedType === 'unknown') {
+        if (expectedReturnType !== null && typeof expectedReturnType !== 'undefined') {
+          reducedType = expectedReturnType
+        } else if (reducedType === 'unknown') {
           reducedType = callbackType
         }
       }

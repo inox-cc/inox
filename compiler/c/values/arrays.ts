@@ -1835,10 +1835,6 @@ export function emitPreparedArrayReduceCallExpression(
     return null
   }
 
-  if (expression.valueType !== 'number') {
-    return null
-  }
-
   const callback = expression.args[0]
   const initial = expression.args[1]
   const returnExpression = resolveArrowReturnExpression(callback)
@@ -1851,8 +1847,7 @@ export function emitPreparedArrayReduceCallExpression(
     returnExpression === null ||
     typeof returnExpression === 'undefined' ||
     initial === null ||
-    typeof initial === 'undefined' ||
-    arrayDeps(context).inferExpressionType(initial, context) !== 'number'
+    typeof initial === 'undefined'
   ) {
     return null
   }

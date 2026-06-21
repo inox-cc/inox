@@ -1682,6 +1682,7 @@ export type CScalarExpressionDependencies = {
   emitObjectValueReference(name: string, context: CFunctionContext): string
   emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayIncludesCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedArrayReduceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayUnshiftCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBinaryNumberCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBytesIndexExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -2892,6 +2893,12 @@ export function emitPreparedNumberExpression(
 
     if (arrayIncludesCall !== null && typeof arrayIncludesCall !== 'undefined') {
       return arrayIncludesCall
+    }
+
+    const arrayReduceCall = deps.emitPreparedArrayReduceCallExpression(expression, context)
+
+    if (arrayReduceCall !== null && typeof arrayReduceCall !== 'undefined') {
+      return arrayReduceCall
     }
 
     const arrayUnshiftCall = deps.emitPreparedArrayUnshiftCallExpression(expression, context)
@@ -4683,6 +4690,7 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext,
     options: PreparedCallOptions | null
   ): PreparedExpression | null
+  emitPreparedArrayReduceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBinaryValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -5260,6 +5268,15 @@ export function emitCValueExpression(
   }
 
   if (expression.type === 'CallExpression') {
+    const arrayReduceCall = deps.emitPreparedArrayReduceCallExpression(expression, context)
+
+    if (arrayReduceCall !== null && typeof arrayReduceCall !== 'undefined') {
+      return {
+        lines: arrayReduceCall.lines,
+        expression: `inox_number_value(${arrayReduceCall.expression})`
+      }
+    }
+
     const valueType = deps.inferExpressionType(expression, context)
 
     if (

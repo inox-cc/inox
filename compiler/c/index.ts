@@ -1126,6 +1126,7 @@ const cScalarExpressionDependencies = {
   emitPreparedArrayLengthExpression,
   emitPreparedArrayIncludesCallExpression,
   emitPreparedArrayIsArrayCallExpression,
+  emitPreparedArrayReduceCallExpression,
   emitPreparedArrayUnshiftCallExpression,
   emitPreparedBinaryNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBinaryNumberCallExpression(expression, context, binaryLoweringDependencies),
@@ -1214,6 +1215,7 @@ const cValueExpressionDependencies = {
   emitOptionalRuntimeCallbackCallValueExpression,
   emitPreparedArrayLengthExpression,
   emitPreparedArrayPopCallExpression,
+  emitPreparedArrayReduceCallExpression,
   emitPreparedArrayJoinCallExpression,
   emitPreparedArraySliceCallExpression,
   emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -3051,6 +3053,18 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return emitNullableRuntimeValueVariableDeclaration(statement, context)
   }
 
+  const arrayReduceCall = emitPreparedArrayReduceCallExpression(statement.init, context)
+
+  if (arrayReduceCall !== null && typeof arrayReduceCall !== 'undefined') {
+    const lines: string[] = []
+
+    context.variables.set(statement.name, 'number')
+    pushAll(lines, arrayReduceCall.lines)
+    lines.push(`${uninitializedDeclarationPrefix(statement)}double ${statement.name} = ${arrayReduceCall.expression};`)
+
+    return lines
+  }
+
   if (isErrorConstructorExpression(statement.init)) {
     return emitErrorObjectVariableDeclaration(statement, context)
   }
@@ -3092,17 +3106,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
 
   if (functionScalarDeclaration !== null && typeof functionScalarDeclaration !== 'undefined') {
     return functionScalarDeclaration
-  }
-
-  const arrayReduceCall = emitPreparedArrayReduceCallExpression(statement.init, context)
-
-  if (arrayReduceCall !== null && typeof arrayReduceCall !== 'undefined') {
-    const lines: string[] = []
-
-    pushAll(lines, arrayReduceCall.lines)
-    lines.push(`double ${statement.name} = ${arrayReduceCall.expression};`)
-
-    return lines
   }
 
   if (
