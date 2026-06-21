@@ -419,6 +419,10 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     return true
   }
 
+  if (isMapGetCallExpression(expression, context)) {
+    return true
+  }
+
   if (
     expression.type === 'CallExpression' &&
     expression.callee.type === 'Reference' &&
@@ -445,6 +449,24 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
     expression.nullable === true &&
     isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
   )
+}
+
+function isMapGetCallExpression(expression: AnyNode, context: NullableFunctionContext): boolean {
+  if (expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const callee = expression.callee
+
+  if (callee.type !== 'MemberExpression' || callee.property !== 'get') {
+    return false
+  }
+
+  if (expression.collectionKind === 'map') {
+    return true
+  }
+
+  return nullableDeps(context).inferExpressionType(callee.object, context) === 'map'
 }
 
 export function emitNullableRuntimeValueVariableDeclaration(

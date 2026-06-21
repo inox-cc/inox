@@ -3720,7 +3720,7 @@ function emitPreparedScalarNullishCoalescingExpression(
 
   appendLines(lines, left.lines)
   lines.push(`double ${temp} = 0;`)
-  lines.push(`if (${left.expression}.tag == INOX_TAG_NULL) {`)
+  lines.push(`if (${left.expression}.tag == INOX_TAG_NULL || ${left.expression}.tag == INOX_TAG_UNDEFINED) {`)
   appendPrefixedLines(lines, right.lines, '  ')
   lines.push(`  ${temp} = ${right.expression};`)
   lines.push('} else {')
