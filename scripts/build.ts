@@ -244,6 +244,7 @@ function selfHostedDriverSource(): string {
   return `import fs from 'node:fs'
 import process from 'node:process'
 import { compileSource } from './index.ts'
+import { formatDiagnostics } from './diagnostics.ts'
 
 function defaultOutputPath(input: string): string {
   return input + '.c'
@@ -267,8 +268,12 @@ try {
     fs.writeFileSync(output, result.code + '\\n')
     console.log(output)
   }
-} catch {
-  console.error('INOX BUILD ERROR')
+} catch (error) {
+  if (error !== null && typeof error !== 'undefined' && error.diagnostics !== null && typeof error.diagnostics !== 'undefined') {
+    console.error(formatDiagnostics(error.diagnostics))
+  } else {
+    console.error('INOX BUILD ERROR')
+  }
   process.exitCode = 1
 }
 `
