@@ -67,6 +67,7 @@ import { emitNullableRuntimeValueVariableDeclaration } from './nullable.ts'
 import { registerObjectShape } from './objects.ts'
 import type { StringLoweringDependencies } from './strings.ts'
 import { isRawStringLiteralExpression } from './strings.ts'
+import { anyNodeLikeObjectFieldDeclaredType, isAnyNodeLikeDeclaredType } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
 
@@ -1329,6 +1330,7 @@ export function registerRuntimeValueMetadata(
   if (valueType === 'object') {
     registerObjectShape(context, name, resolveRuntimeObjectShape(declaration, expression, context))
     registerObjectAlias(context, name, expression)
+    registerRuntimeObjectDeclaredType(context, name, declaration, expression)
   } else if (valueType === 'array') {
     context.runtimeArrayElementTypes.set(name, resolveRuntimeArrayMetadataElementType(declaration, expression, context))
   } else if (valueType === 'map') {
@@ -1356,6 +1358,119 @@ export function registerRuntimeValueMetadata(
       context.byteKinds.delete(name)
     }
   }
+}
+
+function registerRuntimeObjectDeclaredType(
+  context: CFunctionContext,
+  name: string,
+  declaration: StatementNode,
+  expression: StatementNode | null | undefined
+): void {
+  const declaredType = resolveRuntimeObjectDeclaredType(declaration, expression, context)
+
+  if (declaredType !== null && typeof declaredType !== 'undefined') {
+    context.objectDeclaredTypes.set(name, declaredType)
+  } else {
+    context.objectDeclaredTypes.delete(name)
+  }
+}
+
+function resolveRuntimeObjectDeclaredType(
+  declaration: StatementNode,
+  expression: StatementNode | null | undefined,
+  context: CFunctionContext
+): string | null {
+  const declarationType = knownDeclaredType(declaration.declaredType)
+
+  if (declarationType !== null && typeof declarationType !== 'undefined') {
+    return declarationType
+  }
+
+  if (expression !== null && typeof expression !== 'undefined') {
+    const expressionType = knownDeclaredType(expression.declaredType)
+
+    if (expressionType !== null && typeof expressionType !== 'undefined') {
+      return expressionType
+    }
+
+    return anyNodeLikeObjectAccessDeclaredType(expression, context)
+  }
+
+  return null
+}
+
+function knownDeclaredType(value: string | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined' || value === '' || value === 'unknown') {
+    return null
+  }
+
+  return value
+}
+
+function anyNodeLikeObjectAccessDeclaredType(expression: StatementNode, context: CFunctionContext): string | null {
+  const root = objectAccessRootName(expression)
+
+  if (root === null || typeof root === 'undefined') {
+    return null
+  }
+
+  const rootDeclaredType = context.objectDeclaredTypes.get(root)
+
+  if (
+    rootDeclaredType === null ||
+    typeof rootDeclaredType === 'undefined' ||
+    !isAnyNodeLikeDeclaredType(rootDeclaredType)
+  ) {
+    return null
+  }
+
+  const field = objectAccessFieldName(expression)
+
+  if (field === null || typeof field === 'undefined') {
+    return null
+  }
+
+  return anyNodeLikeObjectFieldDeclaredType(field)
+}
+
+function objectAccessRootName(expression: StatementNode): string | null {
+  let current: StatementNode = expression
+
+  while (
+    current.type === 'MemberExpression' ||
+    current.type === 'OptionalMemberExpression' ||
+    current.type === 'IndexExpression' ||
+    current.type === 'OptionalIndexExpression'
+  ) {
+    current = current.object
+  }
+
+  if (current.type !== 'Reference') {
+    return null
+  }
+
+  const path: string[] = current.path
+
+  if (path.length !== 1) {
+    return null
+  }
+
+  return path[0]
+}
+
+function objectAccessFieldName(expression: StatementNode): string | null {
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    return expression.property
+  }
+
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral'
+  ) {
+    return expression.index.value
+  }
+
+  return null
 }
 
 function registerObjectAlias(

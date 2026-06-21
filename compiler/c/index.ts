@@ -1257,6 +1257,7 @@ const cValueExpressionDependencies = {
     emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, null),
   emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null),
+  emitPreparedRuntimeArrayIndexValue,
   emitPreparedRuntimeArrayIndexValueExpression,
   emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies),
@@ -1281,7 +1282,8 @@ const cValueExpressionDependencies = {
   isStringPadStartCall,
   isStringSliceCall,
   isStringSplitCall,
-  isStringTrimCall
+  isStringTrimCall,
+  resolveRuntimeArrayIndex
 }
 
 const cUnitDependencies = {

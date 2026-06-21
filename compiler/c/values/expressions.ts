@@ -119,6 +119,10 @@ type CDynamicObjectArrayIndexDependencies = {
   resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
+type CDynamicObjectFieldAccessDependencies = {
+  inferExpressionType(expression: CValueNode, context: CFunctionContext): string
+}
+
 type CDynamicObjectFieldAccess = {
   object: CValueNode
   key: string
@@ -4453,7 +4457,7 @@ function parseArrayIndexExpression(value: string): string {
 function dynamicObjectFieldAccess(
   expression: CValueNode,
   context: CFunctionContext,
-  deps: CDynamicObjectArrayIndexDependencies
+  deps: CDynamicObjectFieldAccessDependencies
 ): CDynamicObjectFieldAccess | null {
   if (expression.type === 'MemberExpression' && deps.inferExpressionType(expression.object, context) === 'object') {
     return {
@@ -4741,6 +4745,12 @@ export type CValueExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext
   ): PreparedExpression | null
+  emitPreparedRuntimeArrayIndexValue(
+    expression: CValueNode,
+    element: CRuntimeArrayElement,
+    context: CFunctionContext,
+    tempPrefix: string
+  ): PreparedExpression
   emitPreparedUrlObjectExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedUrlSearchParamsCallExpression(
     expression: CValueNode,
@@ -4767,6 +4777,7 @@ export type CValueExpressionDependencies = {
   isStringSliceCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringSplitCall(expression: CValueNode, context: CFunctionContext): boolean
   isStringTrimCall(expression: CValueNode, context: CFunctionContext): boolean
+  resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
 }
 
 export function emitCValueExpression(

@@ -941,7 +941,7 @@ function objectAccessRootName(expression: AnyNode): string | null {
   return null
 }
 
-function isAnyNodeLikeDeclaredType(value: string): boolean {
+export function isAnyNodeLikeDeclaredType(value: string): boolean {
   return value === 'AnyNode' || value.endsWith('Node') || value.endsWith('AstNode')
 }
 
@@ -978,6 +978,32 @@ function anyNodeLikeFieldValueType(fieldName: string): string {
   }
 
   return 'unknown'
+}
+
+export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | null {
+  if (
+    fieldName === 'argument' ||
+    fieldName === 'callee' ||
+    fieldName === 'condition' ||
+    fieldName === 'consequent' ||
+    fieldName === 'alternate' ||
+    fieldName === 'expression' ||
+    fieldName === 'handler' ||
+    fieldName === 'index' ||
+    fieldName === 'init' ||
+    fieldName === 'left' ||
+    fieldName === 'object' ||
+    fieldName === 'right' ||
+    fieldName === 'target'
+  ) {
+    return 'AnyNode'
+  }
+
+  if (fieldName === 'loc') {
+    return 'SourceLocation'
+  }
+
+  return null
 }
 
 function anyNodeLikeStringFields(): string[] {
