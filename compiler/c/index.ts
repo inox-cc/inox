@@ -341,6 +341,7 @@ import {
 } from './values/nullable.ts'
 import type { ObjectExpressionFieldDependencies, ObjectVariableDeclarationDependencies } from './values/objects.ts'
 import {
+  appendCompilerAnyNodeFallbackShapeFields,
   emitDynamicObjectFieldAssignment,
   emitObjectValueReference,
   emitObjectVariableDeclaration,
@@ -4760,116 +4761,6 @@ function isEmptyObjectShape(shape: CObjectShape | null | undefined): boolean {
     typeof shape.fields !== 'undefined' &&
     shape.fields.length === 0
   )
-}
-
-function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeField[]): void {
-  const stringFields = [
-    'type',
-    'name',
-    'property',
-    'operator',
-    'declaredType',
-    'valueType',
-    'arrayElementType',
-    'arrayElementDeclaredType',
-    'mapKeyType',
-    'mapValueType',
-    'promiseValueType',
-    'setElementType',
-    'propertyValueType',
-    'pathRuntimeMethod',
-    'pathRuntimeConstant',
-    'processRuntimeMethod',
-    'processRuntimeProperty',
-    'processRuntimeEnvName',
-    'dgramMessageHandlerName',
-    'urlRuntimeMethod',
-    'urlRuntimeField',
-    'httpHandlerName',
-    'binaryRuntimeMethod',
-    'bufferRuntimeConstant',
-    'childProcessRuntimeMethod',
-    'cryptoHashDigestEncoding',
-    'cryptoRuntimeMethod',
-    'debugRuntimeMethod',
-    'fetchRuntimeMethod',
-    'fsRuntimeConstant',
-    'fsRuntimeMethod',
-    'jsonRuntimeMethod',
-    'mathRuntimeMethod',
-    'osRuntimeConstant',
-    'osRuntimeMethod',
-    'objectRuntimeMethod',
-    'stringRuntimeMethod',
-    'timerRuntimeMethod',
-    'numericCast',
-    'returnType',
-    'declaredReturnType',
-    'returnArrayElementType',
-    'returnMapKeyType',
-    'returnMapValueType',
-    'returnPromiseValueType',
-    'returnSetElementType',
-    'className',
-    'collectionKind'
-  ]
-  const booleanFields = [
-    'async',
-    'exported',
-    'expressionBody',
-    'fsForce',
-    'fsRecursive',
-    'nullable',
-    'optional',
-    'readonly',
-    'returnNullable',
-    'typeOnly'
-  ]
-  const arrayFields = ['args', 'cases', 'elements', 'fields', 'methods', 'params', 'path', 'properties', 'specifiers']
-  const objectFields = [
-    'argument',
-    'callee',
-    'condition',
-    'consequent',
-    'alternate',
-    'expression',
-    'functionType',
-    'handler',
-    'index',
-    'init',
-    'left',
-    'loc',
-    'object',
-    'right',
-    'shape',
-    'target'
-  ]
-  const unknownFields = ['body', 'raw', 'source', 'value']
-
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, stringFields, 'string')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, booleanFields, 'boolean')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, arrayFields, 'array')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, objectFields, 'object')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, unknownFields, 'unknown')
-}
-
-function appendCompilerAnyNodeFallbackShapeFieldGroup(
-  fields: CObjectShapeField[],
-  names: string[],
-  valueType: string
-): void {
-  for (const name of names) {
-    if (objectLiteralShapeFieldIndex(fields, name) !== -1) {
-      continue
-    }
-
-    fields.push({
-      name,
-      optional: true,
-      readonlyField: false,
-      valueType
-    })
-  }
 }
 
 function objectLiteralPropertyShapeField(
