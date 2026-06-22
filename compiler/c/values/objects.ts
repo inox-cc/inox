@@ -134,7 +134,9 @@ function appendLines(out: string[], lines: string[]): void {
 
 function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
   for (let index = 0; index < fields.length; index = index + 1) {
-    if (fields[index].name === key) {
+    const field: AnyNode = fields[index]
+
+    if (field.name === key) {
       return index
     }
   }
@@ -155,6 +157,7 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'mapKeyType',
     'mapValueType',
     'promiseValueType',
+    'promiseRejectionValueType',
     'setElementType',
     'propertyValueType',
     'pathRuntimeMethod',
@@ -186,12 +189,14 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'returnType',
     'declaredReturnType',
     'returnArrayElementType',
+    'returnArrayElementDeclaredType',
     'returnMapKeyType',
     'returnMapValueType',
     'returnPromiseValueType',
     'returnSetElementType',
     'className',
-    'collectionKind'
+    'collectionKind',
+    'param'
   ]
   const booleanFields = [
     'async',
@@ -209,12 +214,14 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
   const arrayFields = ['args', 'cases', 'elements', 'fields', 'methods', 'params', 'path', 'properties', 'specifiers']
   const objectFields = [
     'argument',
+    'block',
     'callee',
     'condition',
     'consequent',
     'defaultValue',
     'alternate',
     'expression',
+    'finalizer',
     'functionType',
     'handler',
     'index',
@@ -222,6 +229,8 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'left',
     'loc',
     'object',
+    'paramLoc',
+    'returnShape',
     'right',
     'shape',
     'target'
@@ -1784,6 +1793,10 @@ function objectVariableShapeFields(
   dependencies: ObjectVariableDeclarationDependencies
 ): CObjectShapeField[] {
   const fields: CObjectShapeField[] = []
+  const shouldAppendAnyNodeFallback =
+    isCompilerAnyNodeShape(statement.shape) ||
+    isEmptyObjectShape(statement.shape) ||
+    isCompilerAnyNodeLikeObjectLiteral(statement.init)
 
   if (
     statement.shape !== null &&
@@ -1798,6 +1811,10 @@ function objectVariableShapeFields(
     }
 
     if (statement.shape.dynamic !== true) {
+      if (shouldAppendAnyNodeFallback) {
+        appendCompilerAnyNodeFallbackShapeFields(fields)
+      }
+
       return fields
     }
   }
@@ -1848,11 +1865,38 @@ function objectVariableShapeFields(
     })
   }
 
-  if (isCompilerAnyNodeShape(statement.shape) || isEmptyObjectShape(statement.shape)) {
+  if (shouldAppendAnyNodeFallback) {
     appendCompilerAnyNodeFallbackShapeFields(fields)
   }
 
   return fields
+}
+
+function isCompilerAnyNodeLikeObjectLiteral(expression: AnyNode | null | undefined): boolean {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ObjectLiteral') {
+    return false
+  }
+
+  const properties = objectNodeProperties(expression)
+  let hasName = false
+  let hasLoc = false
+  let hasValueType = false
+
+  for (const property of properties) {
+    if (property.key === 'type' && property.value.type === 'StringLiteral') {
+      return true
+    }
+
+    if (property.key === 'name') {
+      hasName = true
+    } else if (property.key === 'loc') {
+      hasLoc = true
+    } else if (property.key === 'valueType') {
+      hasValueType = true
+    }
+  }
+
+  return hasName && hasLoc && hasValueType
 }
 
 function objectNodeProperties(node: ObjectFieldNode): ObjectPropertyNode[] {

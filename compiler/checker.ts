@@ -378,9 +378,13 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('left', 'unknown', null, false, loc),
       anyNodeField('right', 'unknown', null, false, loc),
       anyNodeField('argument', 'unknown', null, false, loc),
+      anyNodeField('block', 'unknown', null, false, loc),
       anyNodeField('object', 'unknown', null, false, loc),
       anyNodeField('index', 'unknown', null, false, loc),
-      anyNodeField('handler', 'unknown', null, false, loc),
+      anyNodeField('handler', 'object', 'AnyNode', true, loc),
+      anyNodeField('finalizer', 'unknown', null, true, loc),
+      anyNodeField('param', 'string', null, true, loc),
+      anyNodeField('paramLoc', 'object', null, true, loc, { shape: anyNodeLocObjectShape(loc) }),
       anyNodeField('expressionBody', 'boolean', null, false, loc),
       anyNodeField('property', 'string', null, false, loc),
       anyNodeField('operator', 'string', null, false, loc),
@@ -391,8 +395,19 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('mapKeyType', 'string', null, true, loc),
       anyNodeField('mapValueType', 'string', null, true, loc),
       anyNodeField('promiseValueType', 'string', null, true, loc),
+      anyNodeField('promiseRejectionValueType', 'string', null, true, loc),
       anyNodeField('setElementType', 'string', null, true, loc),
       anyNodeField('propertyValueType', 'string', null, true, loc),
+      anyNodeField('returnType', 'string', null, true, loc),
+      anyNodeField('declaredReturnType', 'string', null, true, loc),
+      anyNodeField('returnArrayElementType', 'string', null, true, loc),
+      anyNodeField('returnArrayElementDeclaredType', 'string', null, true, loc),
+      anyNodeField('returnMapKeyType', 'string', null, true, loc),
+      anyNodeField('returnMapValueType', 'string', null, true, loc),
+      anyNodeField('returnPromiseValueType', 'string', null, true, loc),
+      anyNodeField('returnSetElementType', 'string', null, true, loc),
+      anyNodeField('returnNullable', 'boolean', null, false, loc),
+      anyNodeField('returnShape', 'object', null, true, loc),
       anyNodeField('functionType', 'object', null, true, loc),
       anyNodeField('shape', 'object', null, true, loc),
       anyNodeField('pathRuntimeMethod', 'string', null, true, loc),
@@ -1822,15 +1837,21 @@ class Checker {
 
       try {
         if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
+          let paramLoc = statement.handler.loc
+
+          if (statement.handler.paramLoc !== null && typeof statement.handler.paramLoc !== 'undefined') {
+            paramLoc = statement.handler.paramLoc
+          }
+
           this.declare(
             statement.handler.param,
             {
               kind: 'catch',
               mutable: false,
               valueType: 'unknown',
-              loc: statement.handler.paramLoc
+              loc: paramLoc
             },
-            statement.handler.paramLoc
+            paramLoc
           )
         }
 
@@ -10909,18 +10930,22 @@ class Checker {
           if (
             functionType !== null &&
             typeof functionType !== 'undefined' &&
+            functionType.returnType !== null &&
+            typeof functionType.returnType !== 'undefined' &&
             isBuiltinValueType(functionType.returnType)
           ) {
+            const expectedReturnType: ValueType = functionType.returnType
+
             this.checkAssignableType(
               actualReturnType,
-              functionType.returnType,
+              expectedReturnType,
               expression.body.loc,
               functionType.returnNullable === true,
               this.expressionCanBeNull(expression.body)
             )
 
             if (
-              functionType.returnType === 'promise' &&
+              expectedReturnType === 'promise' &&
               functionType.returnPromiseValueType !== null &&
               typeof functionType.returnPromiseValueType !== 'undefined'
             ) {
@@ -10957,7 +10982,13 @@ class Checker {
         const previousFunctionDepth = this.functionDepth
 
         try {
-          this.currentReturnType = functionType.returnType
+          let expectedReturnType: ValueType = 'unknown'
+
+          if (functionType.returnType !== null && typeof functionType.returnType !== 'undefined') {
+            expectedReturnType = functionType.returnType
+          }
+
+          this.currentReturnType = expectedReturnType
           this.currentReturnNullable = functionType.returnNullable === true
           this.currentReturnPromiseValueType = null
 

@@ -314,6 +314,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
 
   const declared = resolveDeclaredType(declaredType, context)
   const promiseValueType = nullableString(declared.promiseValueType)
+  const shape = lowerParamShape(param, declared)
   const loweredParam: LowerNode = {
     name: param.name,
     loc: param.loc,
@@ -328,7 +329,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     promiseValueType,
     setElementType: declared.setElementType,
     functionType: declared.functionType,
-    shape: declared.shape
+    shape
   }
 
   if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
@@ -336,6 +337,16 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
   }
 
   return loweredParam
+}
+
+function lowerParamShape(param: LowerNode, declared: LowerResolvedType): LowerNode | null {
+  const paramShape = nullableNode(param.shape)
+
+  if (paramShape !== null && typeof paramShape !== 'undefined') {
+    return paramShape
+  }
+
+  return declared.shape
 }
 
 function lowerForInitializer(init: LowerNode, context: LowerContext): LowerNode {

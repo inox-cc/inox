@@ -231,6 +231,7 @@ export type CPromiseChainWrapper = {
   contextTypeName: string
   expression: AnyNode
   finalizerName: string
+  inputRejectionValueType: string
   needsEventLoop: boolean
   returnShape: CObjectShape | null
   returnType: string

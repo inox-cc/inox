@@ -1,4 +1,5 @@
 import type { AnyNode, Diagnostic, IrProgram, SourceLocation } from '../../types.ts'
+import { collectArrowCaptures, functionUsesExternalEventLoop } from './callbacks.ts'
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
@@ -346,16 +347,12 @@ import {
   registerEventLoop,
   registerOwnedPromise
 } from '../context.ts'
+import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
+import { registerObjectShape } from '../values/objects.ts'
 
 export type PromiseChainLoweringDependencies = {
   callbackLoweringDependencies: CallbackLoweringDependencies
-  collectArrowCaptures(
-    expression: AnyNode,
-    outerScopes: CallbackScope[],
-    context: PromiseEmitContext,
-    deps: CallbackLoweringDependencies
-  ): CRuntimeArrowCapture[]
   createFunctionContext(
     baseContext: PromiseEmitContext,
     returnType: string,
@@ -378,7 +375,6 @@ export type PromiseChainLoweringDependencies = {
   ): string[]
   emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: PromiseFunctionContext): string[]
   emitStatementList(statements: AnyNode[], context: PromiseFunctionContext): string[]
-  functionUsesExternalEventLoop(node: AnyNode, externalNames: Set<string>): boolean
   isPromiseChainCallbackWrapperWithContext(wrapper: CPromiseChainWrapper | null | undefined): boolean
 }
 
@@ -1118,15 +1114,190 @@ function appendCallbackScope(scopes: CallbackScope[], scope: CallbackScope): Cal
 }
 
 function promiseCallbackReturnType(callback: AnyNode, expression: AnyNode): string {
-  if (callback.returnType !== null && typeof callback.returnType !== 'undefined') {
-    return callback.returnType
+  const callbackReturnType = knownPromiseValueType(callback.returnType)
+
+  if (callbackReturnType !== null && typeof callbackReturnType !== 'undefined') {
+    return callbackReturnType
   }
 
-  if (expression.promiseValueType !== null && typeof expression.promiseValueType !== 'undefined') {
-    return expression.promiseValueType
+  const catchErrorMemberReturnType = promiseCatchErrorMemberReturnType(callback, expression)
+
+  if (catchErrorMemberReturnType !== null && typeof catchErrorMemberReturnType !== 'undefined') {
+    return catchErrorMemberReturnType
+  }
+
+  const bodyReturnType = promiseCallbackBodyReturnType(callback)
+
+  if (bodyReturnType !== null && typeof bodyReturnType !== 'undefined') {
+    return bodyReturnType
+  }
+
+  const expressionValueType = knownPromiseValueType(expression.promiseValueType)
+
+  if (expressionValueType !== null && typeof expressionValueType !== 'undefined') {
+    return expressionValueType
   }
 
   return 'unknown'
+}
+
+function knownPromiseValueType(valueType: string | null | undefined): string | null {
+  if (valueType !== null && typeof valueType !== 'undefined' && valueType !== 'unknown') {
+    return valueType
+  }
+
+  return null
+}
+
+function promiseCallbackBodyReturnType(callback: AnyNode): string | null {
+  const expression = promiseCallbackReturnExpression(callback)
+
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  const valueType = knownPromiseValueType(expression.valueType)
+
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    return valueType
+  }
+
+  return promiseCallbackParamMemberReturnType(callback, expression)
+}
+
+function promiseCallbackReturnExpression(callback: AnyNode): AnyNode | null {
+  const body = resolvePromiseChainArrowBody(callback)
+
+  if (body === null || typeof body === 'undefined' || body.kind !== 'prepared-return') {
+    return null
+  }
+
+  return body.returnExpression
+}
+
+function promiseCatchErrorMemberReturnType(callback: AnyNode, expression: AnyNode): string | null {
+  const fieldName = promiseCatchErrorMemberReturnFieldName(callback, expression)
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return null
+  }
+
+  return promiseErrorObjectFieldValueType(fieldName)
+}
+
+function promiseCatchErrorMemberReturnFieldName(callback: AnyNode, expression: AnyNode): string | null {
+  if (promiseChainCallbackInputRejectionValueType(expression) !== 'error') {
+    return null
+  }
+
+  if (callback.params === null || typeof callback.params === 'undefined' || callback.params.length === 0) {
+    return null
+  }
+
+  const param = promiseNodeAt(callback.params, 0)
+  const returnExpression = promiseCallbackReturnExpression(callback)
+
+  return promiseMemberFieldNameForReference(returnExpression, param.name)
+}
+
+function promiseMemberFieldNameForReference(expression: AnyNode | null | undefined, referenceName: string): string | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'MemberExpression' ||
+    expression.object === null ||
+    typeof expression.object === 'undefined' ||
+    expression.object.type !== 'Reference' ||
+    expression.object.path.length !== 1 ||
+    expression.object.path[0] !== referenceName
+  ) {
+    return null
+  }
+
+  return expression.property
+}
+
+function promiseErrorObjectFieldValueType(fieldName: string): string | null {
+  if (fieldName === 'name' || fieldName === 'message' || fieldName === 'code') {
+    return 'string'
+  }
+
+  if (fieldName === 'cause') {
+    return 'object'
+  }
+
+  return null
+}
+
+function promiseCallbackParamMemberReturnType(callback: AnyNode, expression: AnyNode): string | null {
+  const field = promiseCallbackParamMemberShapeField(callback, expression)
+
+  if (field !== null && typeof field !== 'undefined') {
+    return knownPromiseValueType(field.valueType)
+  }
+
+  return null
+}
+
+function promiseCallbackParamMemberShapeField(
+  callback: AnyNode,
+  expression: AnyNode
+): CObjectShapeField | null {
+  if (
+    expression.type !== 'MemberExpression' ||
+    expression.object === null ||
+    typeof expression.object === 'undefined' ||
+    expression.object.type !== 'Reference' ||
+    expression.object.path.length !== 1
+  ) {
+    return null
+  }
+
+  const paramName = expression.object.path[0]
+  const param = promiseCallbackParamByName(callback, paramName)
+
+  if (param === null || typeof param === 'undefined') {
+    return null
+  }
+
+  return promiseShapeFieldByName(param.shape, expression.property)
+}
+
+function promiseCallbackParamByName(callback: AnyNode, name: string): AnyNode | null {
+  if (callback.params === null || typeof callback.params === 'undefined') {
+    return null
+  }
+
+  for (let index = 0; index < callback.params.length; index = index + 1) {
+    const param = promiseNodeAt(callback.params, index)
+
+    if (param.name === name) {
+      return param
+    }
+  }
+
+  return null
+}
+
+function promiseShapeFieldByName(shape: CObjectShape | null | undefined, name: string): CObjectShapeField | null {
+  if (
+    shape === null ||
+    typeof shape === 'undefined' ||
+    shape.fields === null ||
+    typeof shape.fields === 'undefined'
+  ) {
+    return null
+  }
+
+  for (let index = 0; index < shape.fields.length; index = index + 1) {
+    const field = promiseObjectShapeFieldAt(shape.fields, index)
+
+    if (field.name === name) {
+      return field
+    }
+  }
+
+  return null
 }
 
 function promiseCallbackReturnShape(callback: AnyNode): CObjectShape | null {
@@ -1134,7 +1305,27 @@ function promiseCallbackReturnShape(callback: AnyNode): CObjectShape | null {
     return callback.returnShape
   }
 
+  const expression = promiseCallbackReturnExpression(callback)
+
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
+    return expression.shape
+  }
+
+  const field = promiseCallbackParamMemberShapeField(callback, expression)
+
+  if (field !== null && typeof field !== 'undefined' && field.shape !== null && typeof field.shape !== 'undefined') {
+    return field.shape
+  }
+
   return null
+}
+
+function promiseObjectShapeFieldAt(fields: CObjectShapeField[], index: number): CObjectShapeField {
+  return fields[index]
 }
 
 function callbackParamValueType(param: AnyNode): string {
@@ -1619,7 +1810,6 @@ function declarePromiseCallbackParams(scope: CallbackScope, params: AnyNode[]): 
     declarePromiseCallbackBinding(scope, param.name, {
       name: param.name,
       valueType: param.valueType,
-      declaration: param,
       functionType: param.functionType,
       nullable: param.nullable === true,
       shape: param.shape,
@@ -1631,7 +1821,13 @@ function declarePromiseCallbackParams(scope: CallbackScope, params: AnyNode[]): 
 
 function lookupPromiseCallbackBinding(name: string, scopes: CallbackScope[]): CallbackScopeBinding | null {
   for (let index = scopes.length - 1; index >= 0; index = index - 1) {
-    const entry = scopes[index].get(name)
+    const scope = scopes[index]
+
+    if (!scope.has(name)) {
+      continue
+    }
+
+    const entry = scope.get(name)
 
     if (entry !== null && typeof entry !== 'undefined') {
       return entry
@@ -1687,15 +1883,23 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
 }
 
 function declarePromiseCallbackVariable(scope: CallbackScope, statement: AnyNode, scopes: CallbackScope[]): void {
+  const mutable = statement.kind === 'let'
+  const runtimeManaged = isRuntimeManagedCaptureBinding(statement, scopes, statement.valueType)
+  let declaration: AnyNode | null = null
+
+  if (mutable) {
+    declaration = statement
+  }
+
   declarePromiseCallbackBinding(scope, statement.name, {
     name: statement.name,
     valueType: statement.valueType,
-    declaration: statement,
+    declaration: declaration,
     functionType: statement.functionType,
     nullable: statement.nullable === true,
     shape: statement.shape,
-    runtimeManaged: isRuntimeManagedCaptureBinding(statement, scopes, statement.valueType),
-    mutable: statement.kind === 'let'
+    runtimeManaged: runtimeManaged,
+    mutable: mutable
   })
 }
 
@@ -1730,7 +1934,8 @@ function registerPromiseChainExpression(
 
   const index = wrappers.size
   const key = `promise-chain-arrow:${index}`
-  const captures = deps.collectArrowCaptures(callback, scopes, context, deps.callbackLoweringDependencies)
+  const captures = collectArrowCaptures(callback, scopes, context, deps.callbackLoweringDependencies)
+  const inputRejectionValueType = promiseChainCallbackInputRejectionValueType(expression)
 
   for (let captureIndex = 0; captureIndex < captures.length; captureIndex = captureIndex + 1) {
     const capture = promiseRuntimeArrowCaptureAt(captures, captureIndex)
@@ -1746,6 +1951,9 @@ function registerPromiseChainExpression(
     }
   }
 
+  const returnType = promiseCallbackReturnType(callback, expression)
+  const returnShape = promiseCallbackReturnShape(callback)
+  const needsEventLoop = functionUsesExternalEventLoop(callback, context.externalEventLoopFunctions)
   const wrapper: CPromiseChainWrapper = {
     kind: 'promise-chain-arrow',
     key: key,
@@ -1753,14 +1961,31 @@ function registerPromiseChainExpression(
     contextTypeName: `inox_promise_chain_context_${index}`,
     finalizerName: `inox_promise_chain_context_${index}_finalize`,
     expression: callback,
-    returnType: promiseCallbackReturnType(callback, expression),
-    returnShape: promiseCallbackReturnShape(callback),
-    needsEventLoop: deps.functionUsesExternalEventLoop(callback, context.externalEventLoopFunctions),
+    inputRejectionValueType: inputRejectionValueType,
+    returnType: returnType,
+    returnShape: returnShape,
+    needsEventLoop: needsEventLoop,
     captures: captures
   }
 
   wrappers.set(key, wrapper)
   context.promiseChainArrowWrappers.set(callback, wrapper)
+}
+
+function promiseChainCallbackInputRejectionValueType(expression: AnyNode): string {
+  if (
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.property !== 'catch' ||
+    expression.callee.object === null ||
+    typeof expression.callee.object === 'undefined' ||
+    expression.callee.object.promiseRejectionValueType === null ||
+    typeof expression.callee.object.promiseRejectionValueType === 'undefined'
+  ) {
+    return 'unknown'
+  }
+
+  return expression.callee.object.promiseRejectionValueType
 }
 
 function isPromiseRuntimeManagedOrScalarCapture(valueType: string): boolean {
@@ -2038,6 +2263,7 @@ function emitPromiseChainCallbackParamPrelude(
 
   const valueType = callbackParamValueType(param)
   context.variables.set(param.name, valueType)
+  registerPromiseCallbackParamShape(param, context)
 
   if (valueType === 'number') {
     return [
@@ -2070,6 +2296,14 @@ function emitPromiseChainCallbackParamPrelude(
   }
 
   return [`inox_value ${param.name} = inox_value_input;`]
+}
+
+function registerPromiseCallbackParamShape(param: AnyNode, context: PromiseFunctionContext): void {
+  if (param.valueType !== 'object') {
+    return
+  }
+
+  registerObjectShape(context, param.name, param.shape)
 }
 
 function emitPromiseChainCallbackStatementLines(
@@ -2105,6 +2339,12 @@ function emitPromiseChainCallbackReturnLines(
     return []
   }
 
+  const catchErrorMemberLines = emitPromiseCatchErrorMemberReturnLines(returnExpression, wrapper, context)
+
+  if (catchErrorMemberLines !== null && typeof catchErrorMemberLines !== 'undefined') {
+    return catchErrorMemberLines
+  }
+
   if (wrapper.returnType === 'number' || wrapper.returnType === 'boolean') {
     const value = deps.emitPreparedNumberExpression(returnExpression, context)
     let expression = `inox_bool_value((${value.expression}) != 0)`
@@ -2125,6 +2365,65 @@ function emitPromiseChainCallbackReturnLines(
   }
 
   return []
+}
+
+function emitPromiseCatchErrorMemberReturnLines(
+  returnExpression: AnyNode,
+  wrapper: CPromiseChainWrapper,
+  context: PromiseFunctionContext
+): string[] | null {
+  if (wrapper.inputRejectionValueType !== 'error') {
+    return null
+  }
+
+  const param = wrapper.expression.params[0]
+
+  if (param === null || typeof param === 'undefined') {
+    return null
+  }
+
+  const fieldName = promiseMemberFieldNameForReference(returnExpression, param.name)
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return null
+  }
+
+  const fieldType = promiseErrorObjectFieldValueType(fieldName)
+
+  if (fieldType === null || typeof fieldType === 'undefined') {
+    return null
+  }
+
+  const lines: string[] = []
+  const key = cStringLiteral(fieldName)
+  const keyLength = utf8ByteLength(fieldName)
+  lines.push(emitStatusCheck(`inox_object_get(${param.name}, ${key}, ${keyLength}, out)`, context))
+
+  const typeCheck = promiseErrorObjectFieldTypeCheck(fieldType)
+
+  if (typeCheck !== '') {
+    const failure = emitFailureStatement(context)
+
+    lines.push(`if (${typeCheck}) {`)
+    lines.push('  inox_release(*out);')
+    lines.push('  *out = inox_undefined_value();')
+    lines.push(`  ${failure}`)
+    lines.push('}')
+  }
+
+  return lines
+}
+
+function promiseErrorObjectFieldTypeCheck(valueType: string): string {
+  if (valueType === 'string') {
+    return 'out->tag != INOX_TAG_STRING || out->as.ref == 0'
+  }
+
+  if (valueType === 'object') {
+    return '(out->tag != INOX_TAG_OBJECT || out->as.ref == 0) && out->tag != INOX_TAG_NULL'
+  }
+
+  return ''
 }
 
 export function resolvePromiseChainArrowBody(callback: AnyNode | null | undefined): PromiseChainArrowBody | null {

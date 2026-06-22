@@ -16,7 +16,6 @@ import type {
 } from '../types.ts'
 import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
-  collectArrowCaptures,
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
   emitRuntimeArrowCallbackContextFinalizerDeclaration,
@@ -920,7 +919,6 @@ const callbackLoweringDependencies: CallbackLoweringDependencies = {
 
 const promiseChainLoweringDependencies: PromiseChainLoweringDependencies = {
   callbackLoweringDependencies,
-  collectArrowCaptures,
   createFunctionContext,
   emitBoxedValueCleanup,
   emitBoxedValueDeclarations,
@@ -935,7 +933,6 @@ const promiseChainLoweringDependencies: PromiseChainLoweringDependencies = {
   emitRuntimeCallbackRuntimeValueReturnLines: (argument, context) =>
     emitRuntimeCallbackRuntimeValueReturnLines(argument, context as CFunctionContext),
   emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
-  functionUsesExternalEventLoop,
   isPromiseChainCallbackWrapperWithContext
 }
 
@@ -1667,7 +1664,8 @@ function collectModuleObjectShapes(
           functionReturnPromiseValueTypes,
           functionReturnSetElementTypes,
           functionReturnShapes,
-          functionReturnTypes
+          functionReturnTypes,
+          result
         )
 
         if (fields.length > 0) {
@@ -1694,7 +1692,8 @@ function collectModuleObjectShapes(
         functionReturnPromiseValueTypes,
         functionReturnSetElementTypes,
         functionReturnShapes,
-        functionReturnTypes
+        functionReturnTypes,
+        result
       )
 
       if (fields.length > 0) {
@@ -1725,7 +1724,8 @@ function collectModuleObjectShapes(
       functionReturnPromiseValueTypes,
       functionReturnSetElementTypes,
       functionReturnShapes,
-      functionReturnTypes
+      functionReturnTypes,
+      result
     )
 
     if (fields.length > 0) {
@@ -1902,6 +1902,18 @@ function moduleObjectShapeFieldIndex(fields: CObjectShapeField[], name: string):
   return -1
 }
 
+function moduleObjectShapeFieldAt(fields: CObjectShapeField[], name: string): CObjectShapeField | null {
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+
+    if (field.name === name) {
+      return field
+    }
+  }
+
+  return null
+}
+
 function collectModuleObjectLiteralShapeFields(
   expression: CAccessorNode,
   functionParams: Map<string, CFunctionParam[]>,
@@ -1911,7 +1923,8 @@ function collectModuleObjectLiteralShapeFields(
   functionReturnPromiseValueTypes: Map<string, any>,
   functionReturnSetElementTypes: Map<string, any>,
   functionReturnShapes: Map<string, any>,
-  functionReturnTypes: CStringMap
+  functionReturnTypes: CStringMap,
+  knownObjectShapes: Map<string, CObjectShapeField[]>
 ): CObjectShapeField[] {
   const fields: CObjectShapeField[] = []
 
@@ -1962,7 +1975,8 @@ function collectModuleObjectLiteralShapeFields(
         functionReturnPromiseValueTypes,
         functionReturnSetElementTypes,
         functionReturnShapes,
-        functionReturnTypes
+        functionReturnTypes,
+        knownObjectShapes
       )
 
       if (nestedFields.length > 0) {
@@ -1973,10 +1987,40 @@ function collectModuleObjectLiteralShapeFields(
           shape: { fields: nestedFields }
         })
       }
+
+      continue
+    }
+
+    const referencedFields = moduleObjectReferenceShapeFields(value, knownObjectShapes)
+
+    if (referencedFields !== null && typeof referencedFields !== 'undefined' && referencedFields.length > 0) {
+      fields.push({
+        name: property.key,
+        readonlyField: false,
+        valueType: 'object',
+        shape: { fields: referencedFields }
+      })
     }
   }
 
   return fields
+}
+
+function moduleObjectReferenceShapeFields(
+  expression: CAccessorNode,
+  knownObjectShapes: Map<string, CObjectShapeField[]>
+): CObjectShapeField[] | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const fields = knownObjectShapes.get(expression.path[0])
+
+  if (fields !== null && typeof fields !== 'undefined') {
+    return fields
+  }
+
+  return null
 }
 
 function resolveModuleObjectFunctionType(
@@ -3388,7 +3432,19 @@ function emitModuleObjectFunctionFieldAssignmentsFromShape(
           )
         )
       } else {
-        pushAll(lines, emitModuleObjectFunctionFieldDefaultAssignments(`${objectName}_${field.name}`, nestedFields))
+        const copied = emitModuleObjectFunctionFieldAssignmentsFromReference(
+          `${objectName}_${field.name}`,
+          value,
+          nestedFields,
+          context,
+          seenTypes
+        )
+
+        if (copied !== null && typeof copied !== 'undefined') {
+          pushAll(lines, copied)
+        } else {
+          pushAll(lines, emitModuleObjectFunctionFieldDefaultAssignments(`${objectName}_${field.name}`, nestedFields))
+        }
       }
 
       if (pushedType) {
@@ -3396,6 +3452,201 @@ function emitModuleObjectFunctionFieldAssignmentsFromShape(
       }
     }
   }
+
+  return lines
+}
+
+function emitModuleObjectFunctionFieldAssignmentsFromReference(
+  targetObjectName: string,
+  expression: AnyNode | null | undefined,
+  targetFields: CObjectShapeField[],
+  context: CFunctionContext,
+  seenTypes: string[]
+): string[] | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return null
+  }
+
+  const sourceObjectName = expression.path[0]
+  const sourceFields = moduleObjectFunctionFieldSourceFields(sourceObjectName, context)
+
+  if (sourceFields === null || typeof sourceFields === 'undefined') {
+    return null
+  }
+
+  return emitModuleObjectFunctionFieldCopyAssignments(
+    targetObjectName,
+    sourceObjectName,
+    targetFields,
+    sourceFields,
+    context,
+    seenTypes
+  )
+}
+
+function moduleObjectFunctionFieldSourceFields(
+  objectName: string,
+  context: CFunctionContext
+): CObjectShapeField[] | null {
+  const fields = context.objectShapes.get(objectName)
+
+  if (fields !== null && typeof fields !== 'undefined') {
+    return fields
+  }
+
+  const moduleFields = context.moduleObjectShapes.get(objectName)
+
+  if (moduleFields !== null && typeof moduleFields !== 'undefined') {
+    return moduleFields
+  }
+
+  return null
+}
+
+function emitModuleObjectFunctionFieldCopyAssignments(
+  targetObjectName: string,
+  sourceObjectName: string,
+  targetFields: CObjectShapeField[],
+  sourceFields: CObjectShapeField[],
+  context: CFunctionContext,
+  seenTypes: string[]
+): string[] {
+  const lines: string[] = []
+
+  for (const field of targetFields) {
+    const sourceField = moduleObjectShapeFieldAt(sourceFields, field.name)
+
+    if (field.valueType === 'function') {
+      pushAll(
+        lines,
+        emitModuleObjectFunctionFieldCopyAssignment(
+          targetObjectName,
+          sourceObjectName,
+          field,
+          sourceField,
+          context,
+          seenTypes
+        )
+      )
+    } else if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined' &&
+      field.shape.fields !== null &&
+      typeof field.shape.fields !== 'undefined'
+    ) {
+      const targetNestedFields = field.shape.fields
+      const sourceNestedFields = moduleObjectFunctionFieldNestedSourceFields(sourceObjectName, sourceField, field, context)
+
+      if (sourceNestedFields !== null && typeof sourceNestedFields !== 'undefined') {
+        pushAll(
+          lines,
+          emitModuleObjectFunctionFieldCopyAssignments(
+            `${targetObjectName}_${field.name}`,
+            `${sourceObjectName}_${field.name}`,
+            targetNestedFields,
+            sourceNestedFields,
+            context,
+            seenTypes
+          )
+        )
+      } else {
+        pushAll(lines, emitModuleObjectFunctionFieldDefaultAssignments(`${targetObjectName}_${field.name}`, targetNestedFields))
+      }
+    }
+  }
+
+  return lines
+}
+
+function emitModuleObjectFunctionFieldCopyAssignment(
+  targetObjectName: string,
+  sourceObjectName: string,
+  targetField: CObjectShapeField,
+  sourceField: CObjectShapeField | null,
+  context: CFunctionContext,
+  seenTypes: string[]
+): string[] {
+  const targetName = emitCObjectFunctionFieldName(targetObjectName, targetField.name)
+
+  if (
+    sourceField === null ||
+    typeof sourceField === 'undefined' ||
+    sourceField.valueType !== 'function' ||
+    !isSupportedModuleObjectFunctionField(sourceField)
+  ) {
+    if (isPlainFunctionPointerType(targetField.functionType)) {
+      return [`${targetName} = 0;`]
+    }
+
+    if (isRuntimeFunctionType(targetField.functionType)) {
+      return emitUndefinedRuntimeCallbackValueInto(targetName)
+    }
+
+    return []
+  }
+
+  const sourceName = emitCObjectFunctionFieldName(sourceObjectName, targetField.name)
+
+  if (isPlainFunctionPointerType(targetField.functionType)) {
+    return [
+      `${targetName} = ${emitAdaptedModuleFunctionPointerExpression(
+        sourceName,
+        sourceField.functionType,
+        targetField.functionType,
+        context,
+        seenTypes,
+        moduleObjectFunctionFieldSeenTypes(sourceObjectName, context)
+      )};`
+    ]
+  }
+
+  if (isRuntimeFunctionType(targetField.functionType)) {
+    return emitRuntimeCallbackValueCopyInto(sourceName, targetName)
+  }
+
+  return []
+}
+
+function moduleObjectFunctionFieldNestedSourceFields(
+  sourceObjectName: string,
+  sourceField: CObjectShapeField | null,
+  targetField: CObjectShapeField,
+  context: CFunctionContext
+): CObjectShapeField[] | null {
+  if (
+    sourceField !== null &&
+    typeof sourceField !== 'undefined' &&
+    sourceField.shape !== null &&
+    typeof sourceField.shape !== 'undefined' &&
+    sourceField.shape.fields !== null &&
+    typeof sourceField.shape.fields !== 'undefined'
+  ) {
+    return sourceField.shape.fields
+  }
+
+  return moduleObjectFunctionFieldSourceFields(`${sourceObjectName}_${targetField.name}`, context)
+}
+
+function moduleObjectFunctionFieldSeenTypes(sourceObjectName: string, context: CFunctionContext): string[] {
+  if (context.moduleObjectShapes.has(sourceObjectName)) {
+    return ['CFunctionContext']
+  }
+
+  return []
+}
+
+function emitRuntimeCallbackValueCopyInto(sourceName: string, out: string): string[] {
+  const lines: string[] = []
+
+  pushAll(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(`${out} = ${sourceName};`)
+  lines.push(`inox_retain(${out});`)
 
   return lines
 }
@@ -4717,6 +4968,9 @@ function objectLiteralValueShapeFields(
   shape: CObjectShape | null | undefined
 ): CObjectShapeField[] {
   const fields: CObjectShapeField[] = []
+  const shouldAppendAnyNodeFallback =
+    isCompilerAnyNodeObjectShape(shape) || isEmptyObjectShape(shape) || isCompilerAnyNodeLikeObjectLiteral(expression)
+
   if (
     shape !== null &&
     typeof shape !== 'undefined' &&
@@ -4730,6 +4984,10 @@ function objectLiteralValueShapeFields(
     }
 
     if (shape.dynamic !== true) {
+      if (shouldAppendAnyNodeFallback) {
+        appendCompilerAnyNodeFallbackShapeFields(fields)
+      }
+
       return fields
     }
   }
@@ -4742,11 +5000,36 @@ function objectLiteralValueShapeFields(
     fields.push(objectLiteralPropertyShapeField(property, context, shape))
   }
 
-  if (isCompilerAnyNodeObjectShape(shape) || isEmptyObjectShape(shape)) {
+  if (shouldAppendAnyNodeFallback) {
     appendCompilerAnyNodeFallbackShapeFields(fields)
   }
 
   return fields
+}
+
+function isCompilerAnyNodeLikeObjectLiteral(expression: AnyNode | null | undefined): boolean {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'ObjectLiteral') {
+    return false
+  }
+
+  const typeValue = findObjectLiteralPropertyValue(expression, 'type')
+
+  if (typeValue !== null && typeof typeValue !== 'undefined' && typeValue.type === 'StringLiteral') {
+    return true
+  }
+
+  const nameValue = findObjectLiteralPropertyValue(expression, 'name')
+  const locValue = findObjectLiteralPropertyValue(expression, 'loc')
+  const valueTypeValue = findObjectLiteralPropertyValue(expression, 'valueType')
+
+  return (
+    nameValue !== null &&
+    typeof nameValue !== 'undefined' &&
+    locValue !== null &&
+    typeof locValue !== 'undefined' &&
+    valueTypeValue !== null &&
+    typeof valueTypeValue !== 'undefined'
+  )
 }
 
 function isCompilerAnyNodeObjectShape(shape: CObjectShape | null | undefined): boolean {

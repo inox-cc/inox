@@ -195,12 +195,13 @@ function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[
       }
 
       const methodEffectName = irClassMethodEffectName(classNode.name, method.name)
+      const methodReturnType = unitNodeReturnType(method)
       const declaration: IrFunctionDeclaration = {
         name: methodEffectName,
         exported: false,
         async: method.async === true,
         params: method.params,
-        returnType: method.returnType,
+        returnType: methodReturnType,
         returnNullable: method.returnNullable === true,
         returnArrayElementType: method.returnArrayElementType,
         returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
@@ -215,6 +216,14 @@ function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[
       target.push(declaration)
     }
   }
+}
+
+function unitNodeReturnType(node: AnyNode): string {
+  if (node.returnType !== null && typeof node.returnType !== 'undefined') {
+    return node.returnType
+  }
+
+  return 'unknown'
 }
 
 function runtimeRequirementSetFromArray(values: IrRuntimeRequirement[]): Set<IrRuntimeRequirement> {

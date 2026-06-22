@@ -52,7 +52,8 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
   }
 
   if (item.type === 'FunctionDeclaration') {
-    const returnType = resolveDeclaredType(item.returnType, context)
+    const returnTypeName = lowerNodeReturnTypeName(item)
+    const returnType = resolveDeclaredType(returnTypeName, context)
 
     return [
       {
@@ -63,7 +64,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         loc: item.loc,
         params: lowerParamList(item.params, context),
         declaredReturnType: item.returnType,
-        returnType: resolvedValueType(returnType.valueType, item.returnType),
+        returnType: resolvedValueType(returnType.valueType, returnTypeName),
         returnNullable: returnType.nullable,
         returnArrayElementType: returnType.arrayElementType,
         returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
@@ -162,7 +163,8 @@ function lowerClassMethods(methods: AnyNode[] | null | undefined, context: Lower
 }
 
 function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
-  const returnType = resolveDeclaredType(method.returnType, context)
+  const returnTypeName = lowerNodeReturnTypeName(method)
+  const returnType = resolveDeclaredType(returnTypeName, context)
 
   return {
     type: 'MethodDefinition',
@@ -170,7 +172,7 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     loc: method.loc,
     params: lowerParamList(method.params, context),
     declaredReturnType: method.returnType,
-    returnType: resolvedValueType(returnType.valueType, method.returnType),
+    returnType: resolvedValueType(returnType.valueType, returnTypeName),
     returnNullable: returnType.nullable,
     returnArrayElementType: returnType.arrayElementType,
     returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
@@ -180,6 +182,14 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     returnSetElementType: returnType.setElementType,
     body: lowerStatementList(method.body, context)
   }
+}
+
+function lowerNodeReturnTypeName(node: AnyNode): string {
+  if (node.returnType !== null && typeof node.returnType !== 'undefined') {
+    return node.returnType
+  }
+
+  return 'unknown'
 }
 
 function resolvedValueType(value: string | null | undefined, fallback: string): string {

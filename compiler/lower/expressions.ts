@@ -461,6 +461,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.returnArrayElementType = returnArrayElementType
   }
 
+  const returnArrayElementDeclaredType = nullableString(source.returnArrayElementDeclaredType)
+  if (returnArrayElementDeclaredType !== null && typeof returnArrayElementDeclaredType !== 'undefined') {
+    target.returnArrayElementDeclaredType = returnArrayElementDeclaredType
+  }
+
   const returnMapKeyType = nullableString(source.returnMapKeyType)
   if (returnMapKeyType !== null && typeof returnMapKeyType !== 'undefined') {
     target.returnMapKeyType = returnMapKeyType
@@ -476,9 +481,19 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.returnPromiseValueType = returnPromiseValueType
   }
 
+  const promiseRejectionValueType = nullableString(source.promiseRejectionValueType)
+  if (promiseRejectionValueType !== null && typeof promiseRejectionValueType !== 'undefined') {
+    target.promiseRejectionValueType = promiseRejectionValueType
+  }
+
   const returnSetElementType = nullableString(source.returnSetElementType)
   if (returnSetElementType !== null && typeof returnSetElementType !== 'undefined') {
     target.returnSetElementType = returnSetElementType
+  }
+
+  const returnShape = nullableNode(source.returnShape)
+  if (returnShape !== null && typeof returnShape !== 'undefined') {
+    target.returnShape = returnShape
   }
 
   if (source.fsRecursive === true) {

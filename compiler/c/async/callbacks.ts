@@ -45,6 +45,7 @@ type CallbackPromiseConstructorHandlerMap = Map<
 type CallbackStringMap = Map<string, string>
 type CallbackStringSet = Set<string>
 type CallbackWrapperMap = Map<string, CCallbackWrapper>
+type RuntimeArrowLocalScope = Set<string>
 type RuntimeArrowCaptureMap = Map<string, CRuntimeArrowCapture>
 
 type CallbackEmitContext = {
@@ -151,7 +152,7 @@ type RuntimeArrowCaptureScanState = {
   captures: RuntimeArrowCaptureMap
   context: CallbackEmitContext
   deps: CallbackLoweringDependencies
-  localScopes: CallbackScope[]
+  localScopes: RuntimeArrowLocalScope[]
   outerScopes: CallbackScope[]
 }
 
@@ -1486,7 +1487,13 @@ function declareCallbackParams(scope: CallbackScope, params: CFunctionParam[]): 
 
 function lookupCallbackBinding(name: string, scopes: CallbackScope[]): CallbackScopeBinding | null {
   for (let index = scopes.length - 1; index >= 0; index = index - 1) {
-    const entry = scopes[index].get(name)
+    const scope = scopes[index]
+
+    if (!scope.has(name)) {
+      continue
+    }
+
+    const entry = scope.get(name)
 
     if (entry !== null && typeof entry !== 'undefined') {
       return entry
@@ -1494,6 +1501,18 @@ function lookupCallbackBinding(name: string, scopes: CallbackScope[]): CallbackS
   }
 
   return null
+}
+
+function hasRuntimeArrowLocalBinding(name: string, scopes: RuntimeArrowLocalScope[]): boolean {
+  for (let index = scopes.length - 1; index >= 0; index = index - 1) {
+    const scope = scopes[index]
+
+    if (scope.has(name)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function declareCallbackVariable(
@@ -2260,18 +2279,15 @@ export function collectArrowCaptures(
   deps: CallbackLoweringDependencies
 ): CRuntimeArrowCapture[] {
   const captures: RuntimeArrowCaptureMap = new Map()
-  const localScope: CallbackScope = new Map()
-  const localScopes: CallbackScope[] = [localScope]
+  const localScope: RuntimeArrowLocalScope = new Set()
 
   for (let index = 0; index < expression.params.length; index = index + 1) {
     const param = callbackNodeAt(expression.params, index)
 
-    declareCallbackBinding(localScope, param.name, {
-      name: param.name,
-      valueType: param.valueType,
-      mutable: true
-    })
+    localScope.add(param.name)
   }
+
+  const localScopes: RuntimeArrowLocalScope[] = [localScope]
 
   const state: RuntimeArrowCaptureScanState = {
     captures: captures,
@@ -2306,12 +2322,18 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
   }
 
   const name = reference.path[0]
+  const context: AnyNode = state.context
+  const functionNames: CallbackStringMap = context.functionNames
 
-  if (
-    lookupCallbackBinding(name, state.localScopes) ||
-    state.context.functionNames.has(name) ||
-    isCJsGlobalRoot(name, state.context)
-  ) {
+  if (hasRuntimeArrowLocalBinding(name, state.localScopes)) {
+    return
+  }
+
+  if (functionNames !== null && typeof functionNames !== 'undefined' && functionNames.has(name)) {
+    return
+  }
+
+  if (isCJsGlobalRoot(name, state.context)) {
     return
   }
 
@@ -2339,13 +2361,7 @@ function runtimeArrowCaptureFromBinding(name: string, binding: CallbackScopeBind
 function declareRuntimeArrowCaptureLocal(statement: AnyNode, state: RuntimeArrowCaptureScanState): void {
   const scope = state.localScopes[state.localScopes.length - 1]
 
-  declareCallbackBinding(scope, statement.name, {
-    name: statement.name,
-    valueType: statement.valueType,
-    functionType: statement.functionType,
-    shape: statement.shape,
-    mutable: statement.kind === 'let'
-  })
+  scope.add(statement.name)
 }
 
 function visitRuntimeArrowCaptureStatement(
@@ -2373,7 +2389,7 @@ function visitRuntimeArrowCaptureStatement(
   }
 
   if (statement.type === 'BlockStatement') {
-    const scope: CallbackScope = new Map()
+    const scope: RuntimeArrowLocalScope = new Set()
     state.localScopes.push(scope)
 
     for (let index = 0; index < statement.body.length; index = index + 1) {
@@ -2400,7 +2416,7 @@ function visitRuntimeArrowCaptureStatement(
   }
 
   if (statement.type === 'ForStatement') {
-    const scope: CallbackScope = new Map()
+    const scope: RuntimeArrowLocalScope = new Set()
     state.localScopes.push(scope)
 
     if (
@@ -2423,12 +2439,8 @@ function visitRuntimeArrowCaptureStatement(
   if (statement.type === 'ForOfStatement') {
     visitRuntimeArrowCaptureExpression(statement.iterable, state)
 
-    const scope: CallbackScope = new Map()
-    declareCallbackBinding(scope, statement.name, {
-      name: statement.name,
-      valueType: 'unknown',
-      mutable: statement.kind === 'let'
-    })
+    const scope: RuntimeArrowLocalScope = new Set()
+    scope.add(statement.name)
 
     state.localScopes.push(scope)
     visitRuntimeArrowCaptureStatement(statement.body, state)
@@ -2443,7 +2455,7 @@ function visitRuntimeArrowCaptureStatement(
       const item = callbackNodeAt(statement.cases, index)
 
       visitRuntimeArrowCaptureExpression(item.test, state)
-      const scope: CallbackScope = new Map()
+      const scope: RuntimeArrowLocalScope = new Set()
       state.localScopes.push(scope)
 
       for (let consequentIndex = 0; consequentIndex < item.consequent.length; consequentIndex = consequentIndex + 1) {
@@ -2461,14 +2473,10 @@ function visitRuntimeArrowCaptureStatement(
     visitRuntimeArrowCaptureStatement(statement.block, state)
 
     if (statement.handler !== null && typeof statement.handler !== 'undefined') {
-      const catchScope: CallbackScope = new Map()
+      const catchScope: RuntimeArrowLocalScope = new Set()
 
       if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
-        declareCallbackBinding(catchScope, statement.handler.param, {
-          name: statement.handler.param,
-          valueType: 'string',
-          mutable: true
-        })
+        catchScope.add(statement.handler.param)
       }
 
       state.localScopes.push(catchScope)

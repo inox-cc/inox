@@ -11,6 +11,7 @@ import {
   cloneCStringMap,
   cloneCStringSet,
   emitPrepareOwnedValueWrite,
+  emitFailureStatement,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
@@ -822,12 +823,29 @@ export function emitPreparedRuntimeArrayIndexValue(
   appendLines(lines, array.lines)
   appendLines(lines, index.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`inox_array_get(${array.expression}, ${index.expression}, &${value})`, context))
+  appendLines(lines, emitRuntimeArrayGetAllowMissing(array.expression, index.expression, value, context))
 
   return {
     lines,
     expression: value
   }
+}
+
+function emitRuntimeArrayGetAllowMissing(
+  arrayExpression: string,
+  indexExpression: string,
+  out: string,
+  context: ArrayFunctionContext
+): string[] {
+  const status = nextCName(context, 'inox_array_status')
+
+  return [
+    `inox_status ${status} = inox_array_get(${arrayExpression}, ${indexExpression}, &${out});`,
+    `if (${status} == INOX_ERR_FIELD) {`,
+    `  ${out} = inox_undefined_value();`,
+    '}',
+    `if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`
+  ]
 }
 
 function emitPreparedRuntimeArrayIndexExpression(
@@ -900,7 +918,7 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
       const lines: string[] = []
 
       appendLines(lines, value.lines)
-      appendLines(lines, emitRuntimeFieldValueCheck(value.expression, 'INOX_TAG_STRING', expression, context))
+      appendLines(lines, emitRuntimeArrayIndexValueCheck(value.expression, 'INOX_TAG_STRING', expression, context))
 
       return {
         lines,
@@ -917,7 +935,7 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
     const checkedLines: string[] = []
 
     appendLines(checkedLines, value.lines)
-    appendLines(checkedLines, emitRuntimeFieldValueCheck(value.expression, tag, expression, context))
+    appendLines(checkedLines, emitRuntimeArrayIndexValueCheck(value.expression, tag, expression, context))
 
     return {
       lines: checkedLines,
@@ -926,6 +944,30 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
   }
 
   return null
+}
+
+function emitRuntimeArrayIndexValueCheck(
+  value: string,
+  expectedTag: string,
+  expression: AnyNode,
+  context: ArrayFunctionContext
+): string[] {
+  let missingCheck = `${value}.tag != INOX_TAG_UNDEFINED`
+
+  if (expression.nullable === true) {
+    missingCheck = `${missingCheck} && ${value}.tag != INOX_TAG_NULL`
+  }
+
+  if (expectedTag === 'INOX_TAG_BOOL' || expectedTag === 'INOX_TAG_NUMBER') {
+    return [emitRuntimeTypeCheck(`${missingCheck} && ${value}.tag != ${expectedTag}`, context)]
+  }
+
+  return [
+    emitRuntimeTypeCheck(
+      `${missingCheck} && (${value}.tag != ${expectedTag} || ${value}.as.ref == 0)`,
+      context
+    )
+  ]
 }
 
 export function resolveKnownArrayLength(expression: ArrayMaybeNode, context: ArrayFunctionContext): string | null {

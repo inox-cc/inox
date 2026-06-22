@@ -183,12 +183,13 @@ function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaratio
         }
 
         const methodEffectName = irClassMethodEffectName(classNode.name, method.name)
+        const methodReturnType = cModuleNodeReturnType(method)
         const declaration: IrFunctionDeclaration = {
           name: methodEffectName,
           exported: false,
           async: method.async === true,
           params: method.params,
-          returnType: method.returnType,
+          returnType: methodReturnType,
           returnNullable: method.returnNullable === true,
           returnArrayElementType: method.returnArrayElementType,
           returnArrayElementDeclaredType: method.returnArrayElementDeclaredType,
@@ -204,6 +205,14 @@ function pushCModuleClassMethodFunctionDeclarations(target: IrFunctionDeclaratio
       }
     }
   }
+}
+
+function cModuleNodeReturnType(node: CModuleNode): string {
+  if (node.returnType !== null && typeof node.returnType !== 'undefined') {
+    return node.returnType
+  }
+
+  return 'unknown'
 }
 
 function cModuleClassMethodAt(values: CClassMethod[], index: number): CClassMethod {

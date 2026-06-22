@@ -234,7 +234,13 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
 }
 
 function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): LowerResolvedType {
-  const returnType = resolveDeclaredType(typeInfo.returnType, context)
+  let returnTypeName = 'unknown'
+
+  if (typeInfo.returnType !== null && typeof typeInfo.returnType !== 'undefined') {
+    returnTypeName = typeInfo.returnType
+  }
+
+  const returnType = resolveDeclaredType(returnTypeName, context)
   const resolved = namedResolvedType('function')
   const params: LowerTypeNode[] = []
 
@@ -245,7 +251,7 @@ function resolveFunctionType(typeInfo: LowerTypeNode, context: LowerContext): Lo
   resolved.functionType = {
     kind: 'function',
     params,
-    returnType: resolvedValueType(returnType, typeInfo.returnType),
+    returnType: resolvedValueType(returnType, returnTypeName),
     returnNullable: returnType.nullable,
     returnArrayElementType: returnType.arrayElementType,
     returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,
