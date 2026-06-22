@@ -16,6 +16,10 @@ import type {
 } from '../types.ts'
 import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
+  callbackContextWrapperCaptures,
+  callbackContextWrapperContextTypeName,
+  callbackContextWrapperFinalizerName,
+  callbackContextWrapperNeedsEventLoop,
   emitFunctionPointerParams,
   emitFunctionPointerReturnType,
   emitRuntimeArrowCallbackContextFinalizerDeclaration,
@@ -824,7 +828,7 @@ promiseLoweringDependencies = {
   emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
   emitRuntimeArrowCaptureStoreLines,
-  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
+  emitStatementList,
   inferExpressionType,
   inferRejectedValueType,
   isPromiseChainCallbackWrapperWithContext
@@ -910,9 +914,8 @@ const callbackLoweringDependencies: CallbackLoweringDependencies = {
   emitPreparedNumberExpression,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
-  emitRuntimeCallbackRuntimeValueReturnLines: (argument, context) =>
-    emitRuntimeCallbackRuntimeValueReturnLines(argument, context as CFunctionContext),
-  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
+  emitRuntimeCallbackRuntimeValueReturnLines,
+  emitStatementList,
   registerObjectShape,
   shouldEmitCleanupLabel
 }
@@ -930,9 +933,8 @@ const promiseChainLoweringDependencies: PromiseChainLoweringDependencies = {
   emitReturnFlowDeclarations,
   emitRuntimeArrowCallbackContextFinalizerDeclaration,
   emitRuntimeArrowCallbackContextLocals,
-  emitRuntimeCallbackRuntimeValueReturnLines: (argument, context) =>
-    emitRuntimeCallbackRuntimeValueReturnLines(argument, context as CFunctionContext),
-  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
+  emitRuntimeCallbackRuntimeValueReturnLines,
+  emitStatementList,
   isPromiseChainCallbackWrapperWithContext
 }
 
@@ -953,7 +955,7 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeArrowCaptureStoreLines,
-  emitStatementList: (statements, context) => emitStatementList(statements, context as CFunctionContext),
+  emitStatementList,
   inferExpressionType,
   isIndexAccessExpression,
   isMemberAccessExpression,
@@ -1340,9 +1342,8 @@ export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
   const irPrograms = [ir]
   const entryIrPrograms = [ir]
   const unit = emitCUnit(irPrograms, options, entryIrPrograms)
-  const code = formatGeneratedC(unit, 'inox.generated.c')
 
-  return code
+  return formatGeneratedC(unit, 'inox.generated.c')
 }
 
 export function emitCBundleFromIrModules(
@@ -1404,9 +1405,7 @@ function emitCModuleSourceForGraph(
 }
 
 function emitCUnit(irPrograms: IrProgram[], options: CEmitOptions, entryIrPrograms: IrProgram[]): string {
-  const code = emitCUnitWithDependencies(irPrograms, options, entryIrPrograms, cUnitDependencies)
-
-  return code
+  return emitCUnitWithDependencies(irPrograms, options, entryIrPrograms, cUnitDependencies)
 }
 
 function createThrowingFunctionInfo(
@@ -6972,10 +6971,11 @@ function emitRuntimeArrowCallbackValueInto(
   context: CFunctionContext
 ): string[] {
   const lines: string[] = []
+  const captures = callbackContextWrapperCaptures(wrapper)
 
   pushAll(lines, emitPrepareOwnedValueWrite(out))
 
-  for (const capture of wrapper.captures) {
+  for (const capture of captures) {
     if (capture.mutable && !isSupportedMutableRuntimeArrowCapture(capture, context)) {
       pushDiagnostic(
         context,
@@ -7005,25 +7005,27 @@ function emitRuntimeArrowCallbackValueInto(
   }
 
   const contextName = nextCName(context, 'inox_callback_ctx')
+  const contextTypeName = callbackContextWrapperContextTypeName(wrapper)
 
   lines.push(
-    `${wrapper.contextTypeName}* ${contextName} = inox_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
+    `${contextTypeName}* ${contextName} = inox_default_alloc(0, sizeof(${contextTypeName}), _Alignof(${contextTypeName}));`
   )
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
 
-  if (wrapper.needsEventLoop === true) {
+  if (callbackContextWrapperNeedsEventLoop(wrapper)) {
     registerEventLoop(context)
     lines.push(`${contextName}->inox_loop = ${emitEventLoopReference(context)};`)
   }
 
-  for (const capture of wrapper.captures) {
+  for (const capture of captures) {
     pushAll(lines, emitRuntimeArrowCaptureStoreLines(capture, contextName, context))
   }
 
+  const finalizerName = callbackContextWrapperFinalizerName(wrapper)
   lines.push(
-    `if (inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${contextName}, ${wrapper.finalizerName}, &${out}) != INOX_OK) {`
+    `if (inox_callback_new(&inox_default_allocator, ${wrapper.name}, ${contextName}, ${finalizerName}, &${out}) != INOX_OK) {`
   )
-  lines.push(`  ${wrapper.finalizerName}(${contextName});`)
+  lines.push(`  ${finalizerName}(${contextName});`)
   lines.push(`  ${emitFailureStatement(context)}`)
   lines.push('}')
 

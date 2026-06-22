@@ -2867,12 +2867,7 @@ function registerAsyncTaskLocalMetadata(
   } else if (valueType === 'object') {
     registerAsyncTaskObjectShape(context, name, item.shape)
   } else if (valueType === 'array') {
-    let arrayElementType = item.arrayElementType
-
-    if (arrayElementType === null || typeof arrayElementType === 'undefined') {
-      arrayElementType = 'unknown'
-    }
-
+    const arrayElementType = asyncTaskMetadataStringOrUnknown(item.arrayElementType)
     context.runtimeArrayElementTypes.set(name, arrayElementType)
   } else if (valueType === 'map') {
     const mapKeyType = asyncTaskMapKeyType(item)
@@ -2883,12 +2878,7 @@ function registerAsyncTaskLocalMetadata(
       value: mapValueType
     })
   } else if (valueType === 'set') {
-    let setElementType = item.setElementType
-
-    if (setElementType === null || typeof setElementType === 'undefined') {
-      setElementType = 'unknown'
-    }
-
+    const setElementType = asyncTaskMetadataStringOrUnknown(item.setElementType)
     context.setElementTypes.set(name, setElementType)
   }
 }

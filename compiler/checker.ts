@@ -671,6 +671,342 @@ function commonResolvedSetElementType(infos: ResolvedTypeInfo[]): ValueType | nu
   return commonResolvedOptionalValueType(infos, resolvedSetElementTypeKind)
 }
 
+function commonResolvedObjectShape(infos: ResolvedTypeInfo[]): ObjectShapeInfo | null {
+  if (infos.length === 0) {
+    return null
+  }
+
+  const fields: AnyNode[] = []
+
+  for (let infoIndex = 0; infoIndex < infos.length; infoIndex = infoIndex + 1) {
+    const info = resolvedTypeInfoAt(infos, infoIndex)
+    const shape = info.shape
+
+    if (
+      shape === null ||
+      typeof shape === 'undefined' ||
+      shape.fields === null ||
+      typeof shape.fields === 'undefined'
+    ) {
+      return null
+    }
+
+    for (let fieldIndex = 0; fieldIndex < shape.fields.length; fieldIndex = fieldIndex + 1) {
+      const field = shape.fields[fieldIndex]
+
+      if (objectShapeFieldByName({ kind: 'object', fields }, field.name)) {
+        continue
+      }
+
+      const common = commonResolvedObjectShapeField(field.name, infos)
+
+      if (common !== null && typeof common !== 'undefined') {
+        fields.push(common)
+      }
+    }
+  }
+
+  if (fields.length === 0) {
+    return null
+  }
+
+  return {
+    kind: 'object',
+    fields
+  }
+}
+
+function commonResolvedObjectShapeField(name: string, infos: ResolvedTypeInfo[]): AnyNode | null {
+  const fields: AnyNode[] = []
+  const valueTypes: ValueType[] = []
+  let nullable = false
+  let optional = false
+  let missing = false
+
+  for (let index = 0; index < infos.length; index = index + 1) {
+    const info = resolvedTypeInfoAt(infos, index)
+    const shape = info.shape
+
+    if (shape === null || typeof shape === 'undefined') {
+      return null
+    }
+
+    const field = objectShapeFieldByName(shape, name)
+
+    if (field === null || typeof field === 'undefined') {
+      missing = true
+      continue
+    }
+
+    fields.push(field)
+    valueTypes.push(field.valueType)
+
+    if (field.nullable === true) {
+      nullable = true
+    }
+
+    if (field.optional === true) {
+      optional = true
+    }
+  }
+
+  const valueType = commonValueType(valueTypes)
+
+  if (valueTypes.length === 0 || valueType === 'unknown') {
+    return null
+  }
+
+  const first = fields[0]
+
+  return {
+    type: first.type,
+    name,
+    optional: optional || missing,
+    readonly: commonResolvedObjectShapeFieldReadonly(fields),
+    ownership: commonResolvedObjectShapeFieldOwnership(fields),
+    weakLoc: first.weakLoc,
+    static: first.static,
+    staticLoc: first.staticLoc,
+    weakTypeValidated: first.weakTypeValidated,
+    loc: first.loc,
+    declaredType: commonResolvedObjectShapeFieldDeclaredType(fields),
+    valueType,
+    nullable,
+    arrayElementType: commonResolvedObjectShapeFieldArrayElementType(fields),
+    arrayElementDeclaredType: commonResolvedObjectShapeFieldArrayElementDeclaredType(fields),
+    mapKeyType: commonResolvedObjectShapeFieldMapKeyType(fields),
+    mapValueType: commonResolvedObjectShapeFieldMapValueType(fields),
+    promiseValueType: commonResolvedObjectShapeFieldPromiseValueType(fields),
+    setElementType: commonResolvedObjectShapeFieldSetElementType(fields),
+    functionType: commonResolvedObjectShapeFieldFunctionType(fields),
+    shape: commonResolvedObjectShapeFieldShape(fields)
+  }
+}
+
+function objectShapeFieldByName(shape: ObjectShapeInfo, name: string): AnyNode | null {
+  const fields = shape.fields
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+
+    if (field.name === name) {
+      return field
+    }
+  }
+
+  return null
+}
+
+function commonResolvedObjectShapeFieldReadonly(fields: AnyNode[]): boolean {
+  for (let index = 0; index < fields.length; index = index + 1) {
+    if (fields[index].readonly !== true) {
+      return false
+    }
+  }
+
+  return fields.length > 0
+}
+
+function commonResolvedObjectShapeFieldOwnership(fields: AnyNode[]): string | null {
+  const first = fields[0]
+  let ownership: string | null = null
+
+  if (first.ownership !== null && typeof first.ownership !== 'undefined') {
+    ownership = first.ownership
+  }
+
+  for (let index = 1; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    let current: string | null = null
+
+    if (field.ownership !== null && typeof field.ownership !== 'undefined') {
+      current = field.ownership
+    }
+
+    if (current !== ownership) {
+      return null
+    }
+  }
+
+  return ownership
+}
+
+function commonResolvedObjectShapeFieldDeclaredType(fields: AnyNode[]): string | null {
+  const first = fields[0]
+  let declaredType: string | null = null
+
+  if (first.declaredType !== null && typeof first.declaredType !== 'undefined') {
+    declaredType = first.declaredType
+  }
+
+  for (let index = 1; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    let current: string | null = null
+
+    if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
+      current = field.declaredType
+    }
+
+    if (current !== declaredType) {
+      return null
+    }
+  }
+
+  return declaredType
+}
+
+function commonResolvedObjectShapeFieldArrayElementType(fields: AnyNode[]): ValueType | null {
+  const values: ValueType[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const value = fields[index].arrayElementType
+
+    if (value === null || typeof value === 'undefined') {
+      return null
+    }
+
+    values.push(value)
+  }
+
+  return commonValueType(values)
+}
+
+function commonResolvedObjectShapeFieldArrayElementDeclaredType(fields: AnyNode[]): string | null {
+  const first = fields[0]
+  let declaredType: string | null = null
+
+  if (first.arrayElementDeclaredType !== null && typeof first.arrayElementDeclaredType !== 'undefined') {
+    declaredType = first.arrayElementDeclaredType
+  }
+
+  for (let index = 1; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    let current: string | null = null
+
+    if (field.arrayElementDeclaredType !== null && typeof field.arrayElementDeclaredType !== 'undefined') {
+      current = field.arrayElementDeclaredType
+    }
+
+    if (current !== declaredType) {
+      return null
+    }
+  }
+
+  return declaredType
+}
+
+function commonResolvedObjectShapeFieldMapKeyType(fields: AnyNode[]): ValueType | null {
+  const values: ValueType[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const value = fields[index].mapKeyType
+
+    if (value === null || typeof value === 'undefined') {
+      return null
+    }
+
+    values.push(value)
+  }
+
+  return commonValueType(values)
+}
+
+function commonResolvedObjectShapeFieldMapValueType(fields: AnyNode[]): ValueType | null {
+  const values: ValueType[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const value = fields[index].mapValueType
+
+    if (value === null || typeof value === 'undefined') {
+      return null
+    }
+
+    values.push(value)
+  }
+
+  return commonValueType(values)
+}
+
+function commonResolvedObjectShapeFieldPromiseValueType(fields: AnyNode[]): ValueType | null {
+  const values: ValueType[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const value = fields[index].promiseValueType
+
+    if (value === null || typeof value === 'undefined') {
+      return null
+    }
+
+    values.push(value)
+  }
+
+  return commonValueType(values)
+}
+
+function commonResolvedObjectShapeFieldSetElementType(fields: AnyNode[]): ValueType | null {
+  const values: ValueType[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const value = fields[index].setElementType
+
+    if (value === null || typeof value === 'undefined') {
+      return null
+    }
+
+    values.push(value)
+  }
+
+  return commonValueType(values)
+}
+
+function commonResolvedObjectShapeFieldFunctionType(fields: AnyNode[]): FunctionTypeMetadata | null {
+  const first = fields[0]
+  let functionType: FunctionTypeMetadata | null = null
+
+  if (first.functionType !== null && typeof first.functionType !== 'undefined') {
+    functionType = first.functionType
+  }
+
+  for (let index = 1; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    let current: FunctionTypeMetadata | null = null
+
+    if (field.functionType !== null && typeof field.functionType !== 'undefined') {
+      current = field.functionType
+    }
+
+    if (current !== functionType) {
+      return null
+    }
+  }
+
+  return functionType
+}
+
+function commonResolvedObjectShapeFieldShape(fields: AnyNode[]): ObjectShapeInfo | null {
+  const first = fields[0]
+  let shape: ObjectShapeInfo | null = null
+
+  if (first.shape !== null && typeof first.shape !== 'undefined') {
+    shape = first.shape
+  }
+
+  for (let index = 1; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    let current: ObjectShapeInfo | null = null
+
+    if (field.shape !== null && typeof field.shape !== 'undefined') {
+      current = field.shape
+    }
+
+    if (current !== shape) {
+      return null
+    }
+  }
+
+  return shape
+}
+
 function resolvedTypeInfoValue(info: ResolvedTypeInfo, kind: ResolvedTypeInfoValueKind): ValueType | null {
   if (kind === resolvedArrayElementTypeKind) {
     return info.arrayElementType
@@ -13039,6 +13375,8 @@ class Checker {
       result.promiseValueType = commonResolvedPromiseValueType(infos)
     } else if (valueType === 'set') {
       result.setElementType = commonResolvedSetElementType(infos)
+    } else if (valueType === 'object') {
+      result.shape = commonResolvedObjectShape(infos)
     }
 
     return result

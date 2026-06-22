@@ -22,6 +22,7 @@ import type {
 } from '../types.ts'
 import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
+  callbackContextWrapperFinalizerName,
   collectCallbackWrappers,
   emitPlainArrowCallbackWrapperDeclaration,
   emitPlainArrowCallbackWrapperHead,
@@ -456,25 +457,26 @@ export function emitCUnit(
   if (callbackWrappers.size > 0) {
     for (const wrapper of callbackWrappers.values()) {
       if (wrapper.kind === 'plain-arrow') {
-        lines.push(`${emitPlainArrowCallbackWrapperHead(wrapper)};`)
+        lines.push(emitPlainArrowCallbackWrapperHead(wrapper) + ';')
         continue
       }
 
       if (wrapper.kind === 'arrow' && isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
-        lines.push(`static void ${wrapper.finalizerName}(void* context);`)
+        lines.push(emitCallbackFinalizerPrototype(callbackContextWrapperFinalizerName(wrapper)))
       }
 
-      lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)};`)
+      const runtimeHead = emitRuntimeCallbackWrapperHead(wrapper)
+      lines.push(runtimeHead + ';')
     }
   }
 
   if (promiseChainWrappers.size > 0) {
     for (const wrapper of promiseChainWrappers.values()) {
       if (isPromiseChainCallbackWrapperWithContext(wrapper)) {
-        lines.push(`static void ${wrapper.finalizerName}(void* context);`)
+        lines.push(emitCallbackFinalizerPrototype(callbackContextWrapperFinalizerName(wrapper)))
       }
 
-      lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
+      lines.push(emitPromiseChainCallbackWrapperHead(wrapper) + ';')
     }
   }
 
@@ -582,4 +584,8 @@ export function emitCUnit(
   const code = joinCUnitLines(lines)
 
   return code
+}
+
+function emitCallbackFinalizerPrototype(finalizerName: string): string {
+  return 'static void ' + finalizerName + '(void* context);'
 }

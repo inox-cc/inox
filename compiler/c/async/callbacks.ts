@@ -45,7 +45,6 @@ type CallbackPromiseConstructorHandlerMap = Map<
 type CallbackStringMap = Map<string, string>
 type CallbackStringSet = Set<string>
 type CallbackWrapperMap = Map<string, CCallbackWrapper>
-type RuntimeArrowLocalScope = Set<string>
 type RuntimeArrowCaptureMap = Map<string, CRuntimeArrowCapture>
 
 type CallbackEmitContext = {
@@ -152,7 +151,7 @@ type RuntimeArrowCaptureScanState = {
   captures: RuntimeArrowCaptureMap
   context: CallbackEmitContext
   deps: CallbackLoweringDependencies
-  localScopes: RuntimeArrowLocalScope[]
+  localScopes: CallbackScope[]
   outerScopes: CallbackScope[]
 }
 
@@ -1058,6 +1057,7 @@ function registerArrowCallbackWrapper(
     }
   }
 
+  const resolvedFunctionType = refineArrowCallbackFunctionType(expression, functionType)
   const wrapper: CCallbackWrapper = {
     kind: 'arrow',
     key: key,
@@ -1065,7 +1065,7 @@ function registerArrowCallbackWrapper(
     contextTypeName: `inox_callback_context_${index}`,
     finalizerName: `inox_callback_context_${index}_finalize`,
     expression: expression,
-    functionType: functionType,
+    functionType: resolvedFunctionType,
     needsEventLoop: functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions),
     captures: captures
   }
@@ -1501,18 +1501,6 @@ function lookupCallbackBinding(name: string, scopes: CallbackScope[]): CallbackS
   }
 
   return null
-}
-
-function hasRuntimeArrowLocalBinding(name: string, scopes: RuntimeArrowLocalScope[]): boolean {
-  for (let index = scopes.length - 1; index >= 0; index = index - 1) {
-    const scope = scopes[index]
-
-    if (scope.has(name)) {
-      return true
-    }
-  }
-
-  return false
 }
 
 function declareCallbackVariable(
@@ -2218,8 +2206,10 @@ function visitPromiseConstructorCallbackExpression(
   if (executor.expressionBody) {
     visitCallbackExpression(executor.body, executorScopes, wrappers, pendingPlainFunctionArgs, context, deps)
   } else {
-    for (let index = 0; index < executor.body.length; index = index + 1) {
-      const statement = callbackNodeAt(executor.body, index)
+    const statements = callbackBlockStatements(executor.body)
+
+    for (let index = 0; index < statements.length; index = index + 1) {
+      const statement = callbackNodeAt(statements, index)
 
       visitCallbackStatement(statement, executorScopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2264,8 +2254,10 @@ function visitNestedCallbackArrowExpression(
   if (expression.expressionBody) {
     visitCallbackExpression(expression.body, arrowScopes, wrappers, pendingPlainFunctionArgs, context, deps)
   } else {
-    for (let index = 0; index < expression.body.length; index = index + 1) {
-      const statement = callbackNodeAt(expression.body, index)
+    const statements = callbackBlockStatements(expression.body)
+
+    for (let index = 0; index < statements.length; index = index + 1) {
+      const statement = callbackNodeAt(statements, index)
 
       visitCallbackStatement(statement, arrowScopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2279,15 +2271,19 @@ export function collectArrowCaptures(
   deps: CallbackLoweringDependencies
 ): CRuntimeArrowCapture[] {
   const captures: RuntimeArrowCaptureMap = new Map()
-  const localScope: RuntimeArrowLocalScope = new Set()
+  const localScope: CallbackScope = new Map()
 
   for (let index = 0; index < expression.params.length; index = index + 1) {
     const param = callbackNodeAt(expression.params, index)
 
-    localScope.add(param.name)
+    declareCallbackBinding(localScope, param.name, {
+      name: param.name,
+      valueType: param.valueType,
+      mutable: true
+    })
   }
 
-  const localScopes: RuntimeArrowLocalScope[] = [localScope]
+  const localScopes: CallbackScope[] = [localScope]
 
   const state: RuntimeArrowCaptureScanState = {
     captures: captures,
@@ -2300,8 +2296,10 @@ export function collectArrowCaptures(
   if (expression.expressionBody) {
     visitRuntimeArrowCaptureExpression(expression.body, state)
   } else {
-    for (let index = 0; index < expression.body.length; index = index + 1) {
-      const statement = callbackNodeAt(expression.body, index)
+    const statements = callbackBlockStatements(expression.body)
+
+    for (let index = 0; index < statements.length; index = index + 1) {
+      const statement = callbackNodeAt(statements, index)
 
       visitRuntimeArrowCaptureStatement(statement, state)
     }
@@ -2325,7 +2323,8 @@ function addRuntimeArrowCaptureReference(reference: AnyNode, state: RuntimeArrow
   const context: AnyNode = state.context
   const functionNames: CallbackStringMap = context.functionNames
 
-  if (hasRuntimeArrowLocalBinding(name, state.localScopes)) {
+  const local = lookupCallbackBinding(name, state.localScopes)
+  if (local) {
     return
   }
 
@@ -2361,7 +2360,13 @@ function runtimeArrowCaptureFromBinding(name: string, binding: CallbackScopeBind
 function declareRuntimeArrowCaptureLocal(statement: AnyNode, state: RuntimeArrowCaptureScanState): void {
   const scope = state.localScopes[state.localScopes.length - 1]
 
-  scope.add(statement.name)
+  declareCallbackBinding(scope, statement.name, {
+    name: statement.name,
+    valueType: statement.valueType,
+    functionType: statement.functionType,
+    shape: statement.shape,
+    mutable: statement.kind === 'let'
+  })
 }
 
 function visitRuntimeArrowCaptureStatement(
@@ -2389,7 +2394,7 @@ function visitRuntimeArrowCaptureStatement(
   }
 
   if (statement.type === 'BlockStatement') {
-    const scope: RuntimeArrowLocalScope = new Set()
+    const scope: CallbackScope = new Map()
     state.localScopes.push(scope)
 
     for (let index = 0; index < statement.body.length; index = index + 1) {
@@ -2416,7 +2421,7 @@ function visitRuntimeArrowCaptureStatement(
   }
 
   if (statement.type === 'ForStatement') {
-    const scope: RuntimeArrowLocalScope = new Set()
+    const scope: CallbackScope = new Map()
     state.localScopes.push(scope)
 
     if (
@@ -2439,8 +2444,12 @@ function visitRuntimeArrowCaptureStatement(
   if (statement.type === 'ForOfStatement') {
     visitRuntimeArrowCaptureExpression(statement.iterable, state)
 
-    const scope: RuntimeArrowLocalScope = new Set()
-    scope.add(statement.name)
+    const scope: CallbackScope = new Map()
+    declareCallbackBinding(scope, statement.name, {
+      name: statement.name,
+      valueType: 'unknown',
+      mutable: statement.kind === 'let'
+    })
 
     state.localScopes.push(scope)
     visitRuntimeArrowCaptureStatement(statement.body, state)
@@ -2455,7 +2464,7 @@ function visitRuntimeArrowCaptureStatement(
       const item = callbackNodeAt(statement.cases, index)
 
       visitRuntimeArrowCaptureExpression(item.test, state)
-      const scope: RuntimeArrowLocalScope = new Set()
+      const scope: CallbackScope = new Map()
       state.localScopes.push(scope)
 
       for (let consequentIndex = 0; consequentIndex < item.consequent.length; consequentIndex = consequentIndex + 1) {
@@ -2473,10 +2482,14 @@ function visitRuntimeArrowCaptureStatement(
     visitRuntimeArrowCaptureStatement(statement.block, state)
 
     if (statement.handler !== null && typeof statement.handler !== 'undefined') {
-      const catchScope: RuntimeArrowLocalScope = new Set()
+      const catchScope: CallbackScope = new Map()
 
       if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
-        catchScope.add(statement.handler.param)
+        declareCallbackBinding(catchScope, statement.handler.param, {
+          name: statement.handler.param,
+          valueType: 'string',
+          mutable: true
+        })
       }
 
       state.localScopes.push(catchScope)
@@ -2616,7 +2629,7 @@ export function runtimeCallbackWrapperFor(
 }
 
 export function emitRuntimeCallbackWrapperHead(wrapper: CRuntimeCallbackWrapper): string {
-  return `static inox_status ${wrapper.name}(void* inox_context, const inox_value* args, size_t arg_count, inox_value* out)`
+  return 'static inox_status ' + wrapper.name + '(void* inox_context, const inox_value* args, size_t arg_count, inox_value* out)'
 }
 
 export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): boolean {
@@ -2624,7 +2637,15 @@ export function isRuntimeCallbackWrapper(wrapper: CCallbackWrapper): boolean {
 }
 
 export function emitPlainArrowCallbackWrapperHead(wrapper: CPlainArrowCallbackWrapper): string {
-  return `static ${emitFunctionPointerReturnType(wrapper.functionType)} ${wrapper.name}(${emitPlainArrowCallbackParams(wrapper)})`
+  return (
+    'static ' +
+    emitFunctionPointerReturnType(wrapper.functionType) +
+    ' ' +
+    wrapper.name +
+    '(' +
+    emitPlainArrowCallbackParams(wrapper) +
+    ')'
+  )
 }
 
 function emitPlainArrowCallbackParams(wrapper: CPlainArrowCallbackWrapper): string {
@@ -2732,20 +2753,9 @@ export function emitPlainArrowCallbackWrapperDeclaration(
     }
   }
 
-  let statements: AnyNode[] = wrapper.expression.body
-
-  if (wrapper.expression.expressionBody) {
-    statements = [
-      {
-        type: 'ReturnStatement',
-        argument: wrapper.expression.body,
-        loc: wrapper.expression.loc
-      }
-    ]
-  }
-
+  const statements = plainArrowCallbackStatements(wrapper.expression)
   const statementLines = deps.emitStatementList(statements, context)
-  const lines: string[] = [`${emitPlainArrowCallbackWrapperHead(wrapper)} {`]
+  const lines: string[] = [emitPlainArrowCallbackWrapperHead(wrapper) + ' {']
 
   pushIndentedLines(lines, deps.emitReturnValueDeclarations(context))
   pushIndentedLines(lines, deps.emitReturnFlowDeclarations(context))
@@ -2764,6 +2774,32 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   lines.push('}')
 
   return lines
+}
+
+function plainArrowCallbackStatements(expression: AnyNode): AnyNode[] {
+  if (expression.expressionBody) {
+    return [
+      {
+        type: 'ReturnStatement',
+        argument: expression.body,
+        loc: expression.loc
+      }
+    ]
+  }
+
+  return callbackBlockStatements(expression.body)
+}
+
+function callbackBlockStatements(body: AnyNode | AnyNode[]): AnyNode[] {
+  if (Array.isArray(body)) {
+    return body
+  }
+
+  if (body !== null && typeof body !== 'undefined' && body.type === 'BlockStatement') {
+    return body.body
+  }
+
+  return [body]
 }
 
 function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index: number): string {
@@ -2830,7 +2866,7 @@ export function emitRuntimeCallbackWrapperDeclaration(
   }
 
   const targetTakesEventLoop = functionTakesEventLoopParam(wrapper.target, context)
-  const lines: string[] = [`${emitRuntimeCallbackWrapperHead(wrapper)} {`]
+  const lines: string[] = [emitRuntimeCallbackWrapperHead(wrapper) + ' {']
 
   if (targetTakesEventLoop) {
     lines.push('  if (inox_context == 0) return INOX_ERR_TYPE;')
@@ -3050,48 +3086,77 @@ export function isPromiseChainCallbackWrapperWithContext(wrapper: CPromiseChainW
 }
 
 export function hasRuntimeArrowCallbackContext(wrapper: CCallbackContextWrapper): boolean {
-  return wrapper.captures.length > 0 || wrapper.needsEventLoop === true
+  return callbackContextWrapperCaptures(wrapper).length > 0 || callbackContextWrapperNeedsEventLoop(wrapper)
+}
+
+export function callbackContextWrapperCaptures(wrapper: AnyNode): CRuntimeArrowCapture[] {
+  return wrapper.captures
+}
+
+export function callbackContextWrapperContextTypeName(wrapper: AnyNode): string {
+  return wrapper.contextTypeName
+}
+
+export function callbackContextWrapperFinalizerName(wrapper: AnyNode): string {
+  return wrapper.finalizerName
+}
+
+export function callbackContextWrapperNeedsEventLoop(wrapper: AnyNode): boolean {
+  return wrapper.needsEventLoop === true
 }
 
 export function emitRuntimeArrowCallbackContextType(wrapper: CCallbackContextWrapper): string[] {
-  const lines: string[] = [`typedef struct ${wrapper.contextTypeName} {`]
+  const captures = callbackContextWrapperCaptures(wrapper)
+  const contextTypeName = callbackContextWrapperContextTypeName(wrapper)
+  const lines: string[] = ['typedef struct ' + contextTypeName + ' {']
 
-  if (wrapper.needsEventLoop === true) {
+  if (callbackContextWrapperNeedsEventLoop(wrapper)) {
     lines.push('  inox_loop* inox_loop;')
   }
 
-  for (const capture of wrapper.captures) {
-    lines.push(`  ${emitRuntimeArrowCaptureCType(capture)} ${emitRuntimeArrowCaptureField(capture)};`)
+  for (let index = 0; index < captures.length; index = index + 1) {
+    const capture = callbackRuntimeArrowCaptureAt(captures, index)
+    lines.push('  ' + emitRuntimeArrowCaptureCType(capture) + ' ' + emitRuntimeArrowCaptureField(capture) + ';')
   }
 
-  lines.push(`} ${wrapper.contextTypeName};`)
+  lines.push('} ' + contextTypeName + ';')
 
   return lines
 }
 
 export function emitRuntimeArrowCallbackContextFinalizerDeclaration(wrapper: CCallbackContextWrapper): string[] {
+  const captures = callbackContextWrapperCaptures(wrapper)
+  const contextTypeName = callbackContextWrapperContextTypeName(wrapper)
+  const finalizerName = callbackContextWrapperFinalizerName(wrapper)
   const lines = [
-    `static void ${wrapper.finalizerName}(void* context) {`,
+    'static void ' + finalizerName + '(void* context) {',
     '  if (context == 0) return;',
-    `  ${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)context;`
+    '  ' + contextTypeName + '* captured = (' + contextTypeName + '*)context;'
   ]
 
-  for (const capture of wrapper.captures) {
+  for (let index = 0; index < captures.length; index = index + 1) {
+    const capture = callbackRuntimeArrowCaptureAt(captures, index)
     if (isRetainedRuntimeArrowCapture(capture)) {
-      lines.push(`  inox_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+      lines.push('  inox_release(captured->' + emitRuntimeArrowCaptureField(capture) + ');')
     }
   }
 
-  for (const capture of wrapper.captures) {
+  for (let index = 0; index < captures.length; index = index + 1) {
+    const capture = callbackRuntimeArrowCaptureAt(captures, index)
     if (isPromiseSettlementRuntimeArrowCapture(capture)) {
-      lines.push(`  if (captured->${emitRuntimeArrowCaptureField(capture)} != 0) {`)
-      lines.push(`    inox_promise_release(captured->${emitRuntimeArrowCaptureField(capture)});`)
+      const field = emitRuntimeArrowCaptureField(capture)
+      lines.push('  if (captured->' + field + ' != 0) {')
+      lines.push('    inox_promise_release(captured->' + field + ');')
       lines.push('  }')
     }
   }
 
   lines.push(
-    `  inox_default_free(0, context, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
+    '  inox_default_free(0, context, sizeof(' +
+      contextTypeName +
+      '), _Alignof(' +
+      contextTypeName +
+      '));'
   )
   lines.push('}')
 
@@ -3127,7 +3192,7 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   pushLines(bodyLines, emitRuntimeArrowCallbackParamPrelude(wrapper, context, deps))
   const statementLines = emitRuntimeArrowCallbackStatementLines(wrapper, context, deps)
 
-  lines.push(`${emitRuntimeCallbackWrapperHead(wrapper)} {`)
+  lines.push(emitRuntimeCallbackWrapperHead(wrapper) + ' {')
 
   if (isRuntimeArrowCallbackWrapperWithContext(wrapper)) {
     lines.push('  if (inox_context == 0) return INOX_ERR_TYPE;')
@@ -3162,7 +3227,7 @@ function emitRuntimeArrowCallbackStatementLines(
 ): string[] {
   if (wrapper.functionType.returnType === 'number' || wrapper.functionType.returnType === 'boolean') {
     if (!wrapper.expression.expressionBody) {
-      return deps.emitStatementList(wrapper.expression.body, context)
+      return deps.emitStatementList(callbackBlockStatements(wrapper.expression.body), context)
     }
 
     const value = deps.emitPreparedNumberExpression(wrapper.expression.body, context)
@@ -3181,13 +3246,13 @@ function emitRuntimeArrowCallbackStatementLines(
 
   if (isManagedRuntimeReturnType(wrapper.functionType.returnType)) {
     if (!wrapper.expression.expressionBody) {
-      return deps.emitStatementList(wrapper.expression.body, context)
+      return deps.emitStatementList(callbackBlockStatements(wrapper.expression.body), context)
     }
 
     return deps.emitRuntimeCallbackRuntimeValueReturnLines(wrapper.expression.body, context)
   }
 
-  let statements: AnyNode[] = wrapper.expression.body
+  let statements = callbackBlockStatements(wrapper.expression.body)
 
   if (wrapper.expression.expressionBody) {
     statements = [
@@ -3205,22 +3270,27 @@ export function emitRuntimeArrowCallbackContextLocals(
   wrapper: CCallbackContextWrapper,
   context: CallbackFunctionContext,
   deps: CallbackLoweringDependencies,
-  contextParameterName = 'inox_context'
+  contextParameterName: string = 'inox_context'
 ): string[] {
   if (!hasRuntimeArrowCallbackContext(wrapper)) {
     return []
   }
 
-  const lines = [`${wrapper.contextTypeName}* captured = (${wrapper.contextTypeName}*)${contextParameterName};`]
+  const captures = callbackContextWrapperCaptures(wrapper)
+  const contextTypeName = callbackContextWrapperContextTypeName(wrapper)
+  const lines = [
+    contextTypeName + '* captured = (' + contextTypeName + '*)' + contextParameterName + ';'
+  ]
 
-  if (wrapper.needsEventLoop === true) {
+  if (callbackContextWrapperNeedsEventLoop(wrapper)) {
     context.eventLoopUsed = true
     context.externalEventLoop = true
     lines.push('if (captured->inox_loop == 0) return INOX_ERR_TYPE;')
     lines.push('inox_loop* inox_loop = captured->inox_loop;')
   }
 
-  for (const capture of wrapper.captures) {
+  for (let index = 0; index < captures.length; index = index + 1) {
+    const capture = callbackRuntimeArrowCaptureAt(captures, index)
     if (capture.valueType === 'promise-settlement') {
       const promise = capture.name
       let kind: 'reject' | 'resolve' = 'resolve'
@@ -3233,7 +3303,7 @@ export function emitRuntimeArrowCallbackContextLocals(
         kind: kind,
         promise
       })
-      lines.push(`inox_promise* ${promise} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+      lines.push('inox_promise* ' + promise + ' = captured->' + emitRuntimeArrowCaptureField(capture) + ';')
       continue
     }
 
@@ -3247,7 +3317,7 @@ export function emitRuntimeArrowCallbackContextLocals(
       }
 
       lines.push(
-        `${emitRuntimeArrowCaptureCType(capture)} ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`
+        emitRuntimeArrowCaptureCType(capture) + ' ' + capture.name + ' = captured->' + emitRuntimeArrowCaptureField(capture) + ';'
       )
       continue
     }
@@ -3256,20 +3326,24 @@ export function emitRuntimeArrowCallbackContextLocals(
       if (capture.valueType === 'string') {
         context.runtimeStrings.add(capture.name)
         lines.push(
-          `inox_string* ${capture.name} = (inox_string*)captured->${emitRuntimeArrowCaptureField(capture)}.as.ref;`
+          'inox_string* ' +
+            capture.name +
+            ' = (inox_string*)captured->' +
+            emitRuntimeArrowCaptureField(capture) +
+            '.as.ref;'
         )
         continue
       }
 
       if (capture.valueType === 'object') {
         deps.registerObjectShape(context, capture.name, capture.shape)
-        lines.push(`inox_value ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`)
+        lines.push('inox_value ' + capture.name + ' = captured->' + emitRuntimeArrowCaptureField(capture) + ';')
         continue
       }
     }
 
     lines.push(
-      `${emitRuntimeArrowCaptureCType(capture)} ${capture.name} = captured->${emitRuntimeArrowCaptureField(capture)};`
+      emitRuntimeArrowCaptureCType(capture) + ' ' + capture.name + ' = captured->' + emitRuntimeArrowCaptureField(capture) + ';'
     )
   }
 
