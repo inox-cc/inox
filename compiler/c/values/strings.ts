@@ -2326,17 +2326,32 @@ function isStringTrimMethod(method: string): boolean {
 }
 
 function stringIndexMethodName(expression: any): string | null {
+  if (expression.stringRuntimeMethod === 'indexOf') {
+    return 'indexOf'
+  }
+
+  if (expression.stringRuntimeMethod === 'lastIndexOf') {
+    return 'lastIndexOf'
+  }
+
   if (
     expression.type !== 'CallExpression' ||
     expression.callee === null ||
     typeof expression.callee === 'undefined' ||
-    expression.callee.type !== 'MemberExpression' ||
-    !isStringIndexMethod(expression.callee.property)
+    expression.callee.type !== 'MemberExpression'
   ) {
     return null
   }
 
-  return expression.callee.property
+  if (expression.callee.property === 'indexOf') {
+    return 'indexOf'
+  }
+
+  if (expression.callee.property === 'lastIndexOf') {
+    return 'lastIndexOf'
+  }
+
+  return null
 }
 
 function isStringLengthObject(expression: AnyNode | null | undefined, context: StringCContext): boolean {
