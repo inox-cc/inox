@@ -1787,12 +1787,116 @@ function objectPropertyValueType(
   return dependencies.inferExpressionType(value, context)
 }
 
+function shouldUseObjectPropertyStringMetadata(
+  target: string | null | undefined,
+  source: string | null | undefined
+): boolean {
+  if (source === null || typeof source === 'undefined' || source === 'unknown') {
+    return false
+  }
+
+  return target === null || typeof target === 'undefined' || target === 'unknown'
+}
+
+function objectPropertyDeclaredType(value: ObjectFieldNode): string | null | undefined {
+  const arrayElementDeclaredType = value.arrayElementDeclaredType
+
+  if (arrayElementDeclaredType !== null && typeof arrayElementDeclaredType !== 'undefined') {
+    return arrayElementDeclaredType
+  }
+
+  return value.declaredType
+}
+
+function objectShapeFieldWithPropertyMetadata(
+  field: CObjectShapeField,
+  property: ObjectPropertyNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies
+): CObjectShapeField {
+  const value = property.value
+  const declaredType = objectPropertyDeclaredType(value)
+  const next: CObjectShapeField = {
+    name: field.name,
+    optional: field.optional,
+    ownership: field.ownership,
+    readonlyField: field.readonlyField,
+    declaredType: field.declaredType,
+    nullable: field.nullable,
+    valueType: field.valueType,
+    arrayElementType: field.arrayElementType,
+    mapKeyType: field.mapKeyType,
+    mapValueType: field.mapValueType,
+    setElementType: field.setElementType,
+    shapeOwnership: field.shapeOwnership,
+    shape: field.shape,
+    functionTypeOwnership: field.functionTypeOwnership,
+    functionType: field.functionType,
+    loc: field.loc
+  }
+
+  if (next.valueType === 'unknown') {
+    next.valueType = objectPropertyValueType(property, context, dependencies)
+  }
+
+  if (shouldUseObjectPropertyStringMetadata(next.declaredType, declaredType)) {
+    next.declaredType = declaredType
+  }
+
+  if (shouldUseObjectPropertyStringMetadata(next.arrayElementType, value.arrayElementType)) {
+    next.arrayElementType = value.arrayElementType
+  }
+
+  if (shouldUseObjectPropertyStringMetadata(next.mapKeyType, value.mapKeyType)) {
+    next.mapKeyType = value.mapKeyType
+  }
+
+  if (shouldUseObjectPropertyStringMetadata(next.mapValueType, value.mapValueType)) {
+    next.mapValueType = value.mapValueType
+  }
+
+  if (shouldUseObjectPropertyStringMetadata(next.setElementType, value.setElementType)) {
+    next.setElementType = value.setElementType
+  }
+
+  if (next.shape === null || typeof next.shape === 'undefined') {
+    next.shape = value.shape
+  }
+
+  if (next.functionType === null || typeof next.functionType === 'undefined') {
+    next.functionType = dependencies.resolveFunctionValueType(value, context)
+  }
+
+  return next
+}
+
+function objectShapeFieldFromProperty(
+  property: ObjectPropertyNode,
+  valueType: string,
+  shape: CObjectShape | null | undefined,
+  functionType: CFunctionType | null
+): CObjectShapeField {
+  return {
+    name: property.key,
+    readonlyField: false,
+    declaredType: objectPropertyDeclaredType(property.value),
+    valueType,
+    arrayElementType: property.value.arrayElementType,
+    mapKeyType: property.value.mapKeyType,
+    mapValueType: property.value.mapValueType,
+    setElementType: property.value.setElementType,
+    shape,
+    functionType
+  }
+}
+
 function objectVariableShapeFields(
   statement: AnyNode,
   context: ObjectFunctionContext,
   dependencies: ObjectVariableDeclarationDependencies
 ): CObjectShapeField[] {
   const fields: CObjectShapeField[] = []
+  const initProperties = objectNodeProperties(statement.init)
   const shouldAppendAnyNodeFallback =
     isCompilerAnyNodeShape(statement.shape) ||
     isEmptyObjectShape(statement.shape) ||
@@ -1807,7 +1911,13 @@ function objectVariableShapeFields(
     const shapeFields: CObjectShapeField[] = statement.shape.fields
 
     for (const field of shapeFields) {
-      fields.push(field)
+      const property = findObjectProperty(initProperties, field.name)
+
+      if (property !== null && typeof property !== 'undefined') {
+        fields.push(objectShapeFieldWithPropertyMetadata(field, property, context, dependencies))
+      } else {
+        fields.push(field)
+      }
     }
 
     if (statement.shape.dynamic !== true) {
@@ -1818,8 +1928,6 @@ function objectVariableShapeFields(
       return fields
     }
   }
-
-  const initProperties = objectNodeProperties(statement.init)
 
   for (const property of initProperties) {
     if (findObjectShapeFieldIndex(fields, property.key) !== -1) {
@@ -1851,18 +1959,7 @@ function objectVariableShapeFields(
       }
     }
 
-    fields.push({
-      name: property.key,
-      readonlyField: false,
-      declaredType: property.value.arrayElementDeclaredType ?? property.value.declaredType,
-      valueType,
-      arrayElementType: property.value.arrayElementType,
-      mapKeyType: property.value.mapKeyType,
-      mapValueType: property.value.mapValueType,
-      setElementType: property.value.setElementType,
-      shape,
-      functionType
-    })
+    fields.push(objectShapeFieldFromProperty(property, valueType, shape, functionType))
   }
 
   if (shouldAppendAnyNodeFallback) {

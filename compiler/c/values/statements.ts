@@ -1555,7 +1555,7 @@ function resolveRuntimeObjectLiteralShapeField(
   return {
     name: property.key,
     readonlyField: false,
-    declaredType: value.arrayElementDeclaredType ?? value.declaredType,
+    declaredType: runtimeObjectLiteralFieldDeclaredType(value),
     valueType: runtimeObjectLiteralFieldValueType(value, context),
     arrayElementType: value.arrayElementType,
     mapKeyType: value.mapKeyType,
@@ -1564,6 +1564,16 @@ function resolveRuntimeObjectLiteralShapeField(
     shape,
     functionType: value.functionType
   }
+}
+
+function runtimeObjectLiteralFieldDeclaredType(value: StatementNode): string | null | undefined {
+  const arrayElementDeclaredType = value.arrayElementDeclaredType
+
+  if (arrayElementDeclaredType !== null && typeof arrayElementDeclaredType !== 'undefined') {
+    return arrayElementDeclaredType
+  }
+
+  return value.declaredType
 }
 
 function runtimeObjectLiteralFieldValueType(value: StatementNode, context: CFunctionContext): string {
