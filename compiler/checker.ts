@@ -8839,7 +8839,11 @@ class Checker {
         }
 
         let shape: ObjectShapeInfo | null = null
-        const metadata = paramMetadata[index]
+        let metadata: PromiseCallbackParamMetadata | null = null
+
+        if (index < paramMetadata.length) {
+          metadata = paramMetadata[index]
+        }
 
         if (metadata !== null && typeof metadata !== 'undefined') {
           shape = metadata.shape
