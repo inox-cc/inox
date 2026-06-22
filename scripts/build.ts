@@ -243,9 +243,8 @@ async function readCompilerSourcePaths(dir: string): Promise<string[]> {
 function selfHostedDriverSource(): string {
   return `import fs from 'node:fs'
 import process from 'node:process'
-import { compileSource } from './index.ts'
+import { compileFileSync } from './index.ts'
 import { formatDiagnostics } from './diagnostics.ts'
-
 function defaultOutputPath(input: string): string {
   return input + '.c'
 }
@@ -262,8 +261,7 @@ try {
       output = process.argv[2]
     }
 
-    const source = fs.readFileSync(input, 'utf8')
-    const result = compileSource(source, { target: 'c', loopBackend: 'libuv', tlsBackend: 'openssl' })
+    const result = compileFileSync(input, { target: 'c', loopBackend: 'libuv', tlsBackend: 'openssl' })
 
     fs.writeFileSync(output, result.code + '\\n')
     console.log(output)

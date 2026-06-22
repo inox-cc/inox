@@ -10,7 +10,7 @@ import { tokenize } from './lexer.ts'
 import { lowerProgram } from './lower.ts'
 import type { MemoryCompilerSourceFile } from './memory-host.ts'
 import { createMemoryCompilerHost } from './memory-host.ts'
-import { buildModuleGraph } from './modules/graph.ts'
+import { buildModuleGraphWithHostSync } from './modules/graph.ts'
 import { parse } from './parser.ts'
 import type {
   CompileOptions,
@@ -127,6 +127,23 @@ export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: 
 
 export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
   const compiled = await compileGraphToIrModules(entry, options)
+
+  return emitFileCompileResult(compiled, options)
+}
+
+export function compileFileSync(entry: string, options: CompileOptions = {}): FileCompileResult {
+  const compiled = compileGraphToIrModulesSync(entry, options)
+
+  return emitFileCompileResult(compiled, options)
+}
+
+export function compileFileWithHostSync(entry: string, options: CompileOptions, host: CompilerHost): FileCompileResult {
+  const compiled = compileGraphToIrModulesWithHostSync(entry, options, host)
+
+  return emitFileCompileResult(compiled, compileOptionsWithHostAndTarget(options, host, compiled.target))
+}
+
+function emitFileCompileResult(compiled: GraphIrCompileResult, options: CompileOptions): FileCompileResult {
   const irModules: IrProgram[] = []
 
   for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
@@ -203,14 +220,24 @@ export async function compileGraphToIrModules(
   entry: string,
   options: CompileOptions = {}
 ): Promise<GraphIrCompileResult> {
-  const target = resolveCompileTarget(options)
+  return compileGraphToIrModulesSync(entry, options)
+}
 
+export function compileGraphToIrModulesSync(entry: string, options: CompileOptions = {}): GraphIrCompileResult {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileGraphToIrModules requires a compiler host')
   }
 
-  const host = options.host
-  const graph = await buildModuleGraph(entry, compileOptionsWithHostAndTarget(options, host, target))
+  return compileGraphToIrModulesWithHostSync(entry, options, options.host)
+}
+
+export function compileGraphToIrModulesWithHostSync(
+  entry: string,
+  options: CompileOptions,
+  host: CompilerHost
+): GraphIrCompileResult {
+  const target = resolveCompileTarget(options)
+  const graph = buildModuleGraphWithHostSync(entry, compileOptionsWithHostAndTarget(options, host, target), host)
 
   return {
     target,

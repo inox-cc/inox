@@ -34,15 +34,32 @@ type ModuleGraphContext = {
 }
 
 export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
+  return buildModuleGraphSync(entry, options)
+}
+
+export function buildModuleGraphSync(entry: string, options: CompileOptions = {}): ModuleGraph {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('buildModuleGraph requires a compiler host')
   }
 
-  const host = options.host
+  return buildModuleGraphWithHostSync(entry, options, options.host)
+}
+
+export function buildModuleGraphWithHostSync(entry: string, options: CompileOptions, host: CompilerHost): ModuleGraph {
   const entryPath = resolveExistingSource(entry, host)
   const context: ModuleGraphContext = {
-    host: options.host,
-    options,
+    host,
+    options: {
+      target: options.target,
+      callMain: options.callMain,
+      budgets: options.budgets,
+      capabilities: options.capabilities,
+      host,
+      loopBackend: options.loopBackend,
+      profile: options.profile,
+      random: options.random,
+      tlsBackend: options.tlsBackend
+    },
     modules: new Map(),
     order: [],
     visiting: new Set(),
