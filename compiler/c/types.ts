@@ -37,10 +37,12 @@ export type CPreparedCallOptions = {
 
 export type CShapeValueMetadata = {
   arrayElementType?: string | null
+  arrayElementDeclaredType?: string | null
   declaredType?: string | null
   mapKeyType?: string | null
   mapValueType?: string | null
   nullable?: boolean
+  promiseValueType?: string | null
   setElementType?: string | null
   valueType: string
 }

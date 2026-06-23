@@ -4819,6 +4819,10 @@ export function emitCValueExpression(
     return deps.emitCNullishCoalescingValueExpression(expression, context)
   }
 
+  if (expression.type === 'ConditionalExpression') {
+    return emitCConditionalValueExpression(expression, context, deps)
+  }
+
   if (expression.type === 'AwaitExpression') {
     return deps.emitCAwaitValueExpression(expression, context)
   }
@@ -5403,6 +5407,70 @@ function emitUnsupportedCValueExpression(
     lines: [],
     expression: 'inox_undefined_value()'
   }
+}
+
+function emitCConditionalValueExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CValueExpressionDependencies
+): PreparedExpression {
+  const test = deps.emitPreparedNumberExpression(expression.test, context)
+  const consequent = emitCConditionalBranchValueExpression(expression.consequent, expression, context, deps)
+  const alternate = emitCConditionalBranchValueExpression(expression.alternate, expression, context, deps)
+  const temp = nextCName(context, 'inox_conditional_value')
+  const valueType = deps.inferExpressionType(expression, context)
+  const tag = cRuntimeValueTag(valueType)
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  appendLines(lines, test.lines)
+  lines.push(`if ${emitCConditionClause(test.expression)} {`)
+  appendPrefixedLines(lines, consequent.lines, '  ')
+  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(temp), '  ')
+  lines.push(`  ${temp} = ${consequent.expression};`)
+  appendPrefixedLines(lines, retainConditionalBranchValueExpression(consequent.expression, context), '  ')
+  lines.push('} else {')
+  appendPrefixedLines(lines, alternate.lines, '  ')
+  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(temp), '  ')
+  lines.push(`  ${temp} = ${alternate.expression};`)
+  appendPrefixedLines(lines, retainConditionalBranchValueExpression(alternate.expression, context), '  ')
+  lines.push('}')
+
+  if (expression.nullable === true) {
+    appendLines(lines, emitRuntimeNullableValueCheck(temp, tag, context))
+  } else {
+    const check = emitRuntimeValueCheck(temp, tag, context)
+
+    if (check.length > 0) {
+      lines.push(check)
+    }
+  }
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+function emitCConditionalBranchValueExpression(
+  branch: CValueNode,
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CValueExpressionDependencies
+): PreparedExpression {
+  if (branch.type === 'ObjectLiteral') {
+    return deps.emitCObjectLiteralValueExpression(branch, context, expression.shape)
+  }
+
+  return deps.emitCValueExpression(branch, context)
+}
+
+function retainConditionalBranchValueExpression(expression: string, context: CFunctionContext): string[] {
+  if (isOwnedRuntimeValueName(expression, context)) {
+    return [`inox_retain(${expression});`]
+  }
+
+  return []
 }
 
 function emitPreparedScalarRuntimeValueExpression(

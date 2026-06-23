@@ -962,6 +962,8 @@ function cloneAwaitExpression(
   argument: LowerExpressionNode,
   valueType: string
 ): LowerExpressionNode {
+  const shape = awaitExpressionShape(expression, argument, valueType)
+
   return copyRuntimeMetadata(
     {
       type: 'AwaitExpression',
@@ -975,13 +977,31 @@ function cloneAwaitExpression(
       promiseValueType: nullableString(expression.promiseValueType),
       setElementType: nullableString(expression.setElementType),
       functionType: nullableNode(expression.functionType),
-      shape: nullableNode(expression.shape),
+      shape,
       className: nullableString(expression.className),
       collectionKind: nullableString(expression.collectionKind),
       loc: expression.loc
     },
     expression
   )
+}
+
+function awaitExpressionShape(
+  expression: LowerExpressionNode,
+  argument: LowerExpressionNode,
+  valueType: string
+): LowerExpressionNode | null {
+  const expressionShape = nullableNode(expression.shape)
+
+  if (expressionShape !== null && typeof expressionShape !== 'undefined') {
+    return expressionShape
+  }
+
+  if (valueType === 'object') {
+    return nullableNode(argument.shape)
+  }
+
+  return null
 }
 
 function cloneArrowFunctionExpression(

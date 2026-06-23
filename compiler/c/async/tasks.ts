@@ -362,10 +362,10 @@ export function collectAsyncTaskWrappers(
   dependencies: AsyncTaskLoweringDependencies
 ): Map<string, CAsyncTaskWrapper> {
   context.asyncTaskLoweringDependencies = dependencies
-  const plannerContext = asAsyncTaskPlannerContext(context)
   const wrappers: Map<string, CAsyncTaskWrapper> = new Map()
 
   for (const entry of functions) {
+    const plannerContext = asAsyncTaskPlannerContext(dependencies.createFunctionContext(context, 'void', false))
     const declaration = entry.declaration
     const item = entry.node
     const params = resolveAsyncTaskWrapperParams(declaration, plannerContext)

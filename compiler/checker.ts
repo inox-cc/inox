@@ -8691,12 +8691,14 @@ class Checker {
     expression.valueType = 'promise'
     expression.promiseValueType = 'unknown'
     expression.promiseRejectionValueType = 'unknown'
+    expression.shape = null
 
     if (method === 'resolve') {
       expression.promiseValueType = 'void'
 
       if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         expression.promiseValueType = argTypes[0]
+        expression.shape = this.resolveExpressionShape(expression.args[0])
       }
     } else {
       expression.promiseRejectionValueType = this.resolveRejectedExpressionValueType(expression.args[0])
@@ -8719,6 +8721,7 @@ class Checker {
     const property = expression.callee.property
     let promiseValueType: ValueType = 'unknown'
     const resolvedPromiseValueType = this.resolveExpressionPromiseValueType(expression.callee.object)
+    const promiseShape = this.resolveExpressionShape(expression.callee.object)
 
     if (resolvedPromiseValueType !== null && typeof resolvedPromiseValueType !== 'undefined') {
       promiseValueType = resolvedPromiseValueType
@@ -8738,7 +8741,17 @@ class Checker {
       let mappedType: ValueType = 'unknown'
 
       if (callback !== null && typeof callback !== 'undefined') {
-        mappedType = this.checkPromiseCallback(callback, [promiseValueType], null, 'promise.then callback')
+        mappedType = this.checkPromiseCallback(
+          callback,
+          [promiseValueType],
+          null,
+          'promise.then callback',
+          [
+            {
+              shape: promiseShape
+            }
+          ]
+        )
       }
 
       for (let index = 1; index < expression.args.length; index++) {
@@ -8747,6 +8760,7 @@ class Checker {
 
       expression.valueType = 'promise'
       expression.promiseValueType = mappedType
+      expression.shape = this.resolveExpressionShape(callback)
 
       return 'promise'
     }
@@ -8786,6 +8800,7 @@ class Checker {
 
     expression.valueType = 'promise'
     expression.promiseValueType = promiseValueType
+    expression.shape = promiseShape
 
     return 'promise'
   }
@@ -13115,7 +13130,7 @@ class Checker {
         valueType: 'promise',
         nullable: false,
         functionType: null,
-        shape: null,
+        shape: valueInfo.shape,
         arrayElementType: null,
         arrayElementDeclaredType: null,
         mapKeyType: null,

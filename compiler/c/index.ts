@@ -6798,23 +6798,45 @@ function emitFunctionValueExpression(expression: AnyNode, context: CFunctionCont
 }
 
 function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionContext): CFunctionType | null {
-  if (callee.type !== 'Reference' || callee.path.length !== 1) {
-    return null
+  const objectField = objectFunctionFieldReference(callee, context)
+
+  if (objectField !== null && typeof objectField !== 'undefined') {
+    const functionType = objectField.field.functionType
+
+    if (isRuntimeFunctionType(functionType)) {
+      return normalizeFunctionType(functionType)
+    }
   }
 
-  const name = callee.path[0]
+  if (callee.type === 'Reference' && callee.path.length === 1) {
+    const name = callee.path[0]
 
-  if (!context.runtimeCallbacks.has(name)) {
-    return null
-  }
+    if (!context.runtimeCallbacks.has(name)) {
+      return null
+    }
 
-  const functionType = context.functionTypes.get(name)
+    const functionType = context.functionTypes.get(name)
 
-  if (isSupportedRuntimeCallbackType(functionType)) {
-    return normalizeFunctionType(functionType)
+    if (isSupportedRuntimeCallbackType(functionType)) {
+      return normalizeFunctionType(functionType)
+    }
   }
 
   return null
+}
+
+function emitRuntimeCallbackCalleeReference(callee: AnyNode, context: CFunctionContext): string {
+  const objectField = objectFunctionFieldReference(callee, context)
+
+  if (
+    objectField !== null &&
+    typeof objectField !== 'undefined' &&
+    isRuntimeFunctionType(objectField.field.functionType)
+  ) {
+    return objectField.name
+  }
+
+  return emitReference(callee, context)
 }
 
 function emitRuntimeCallbackVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
@@ -7091,6 +7113,7 @@ function emitRuntimeCallbackCall(
 ): PreparedExpression {
   const lines: string[] = []
   const args: string[] = []
+  const callee = emitRuntimeCallbackCalleeReference(expression.callee, context)
 
   for (const arg of expression.args) {
     const value = emitCValueExpression(arg, context)
@@ -7104,19 +7127,12 @@ function emitRuntimeCallbackCall(
   pushAll(lines, emitPrepareOwnedValueWrite(out))
 
   if (args.length === 0) {
-    lines.push(
-      emitStatusCheck(`inox_callback_call(${emitReference(expression.callee, context)}, 0, 0, &${out})`, context)
-    )
+    lines.push(emitStatusCheck(`inox_callback_call(${callee}, 0, 0, &${out})`, context))
   } else {
     const argArray = nextCName(context, 'inox_callback_args')
 
     lines.push(`inox_value ${argArray}[] = { ${joinStrings(args, ', ')} };`)
-    lines.push(
-      emitStatusCheck(
-        `inox_callback_call(${emitReference(expression.callee, context)}, ${argArray}, ${args.length}, &${out})`,
-        context
-      )
-    )
+    lines.push(emitStatusCheck(`inox_callback_call(${callee}, ${argArray}, ${args.length}, &${out})`, context))
   }
 
   return {
@@ -7140,7 +7156,7 @@ function emitOptionalRuntimeCallbackCallExpression(expression: AnyNode, context:
     return []
   }
 
-  const callee = emitReference(expression.callee, context)
+  const callee = emitRuntimeCallbackCalleeReference(expression.callee, context)
   const calleeTypeCheck = `${callee}.tag != INOX_TAG_FUNCTION || ${callee}.as.ref == 0`
   const lines: string[] = []
   const args: string[] = []
@@ -7205,7 +7221,7 @@ function emitOptionalRuntimeCallbackCallValueExpression(
     }
   }
 
-  const callee = emitReference(expression.callee, context)
+  const callee = emitRuntimeCallbackCalleeReference(expression.callee, context)
   const out = nextCName(context, 'inox_optional_call')
   const calleeTypeCheck = `${callee}.tag != INOX_TAG_FUNCTION || ${callee}.as.ref == 0`
   const lines: string[] = []
@@ -7252,6 +7268,12 @@ type FunctionParamContext = {
   objectAccessorReturnPaths: Map<string, CObjectAccessorReturnPath>
   objectAliases: Map<string, string>
   objectShapes: Map<string, CObjectShapeField[]>
+}
+
+type ObjectFunctionFieldReference = {
+  field: CObjectShapeField
+  fieldName: string
+  name: string
 }
 
 function functionParamArgumentAt(args: CAccessorNode[], expectedIndex: number): CAccessorNode | null {
@@ -7363,7 +7385,10 @@ function objectFunctionParamFields(
   return null
 }
 
-function objectFunctionFieldParams(callee: CAccessorNode, context: FunctionParamContext): CFunctionParam[] | null {
+function objectFunctionFieldReference(
+  callee: CAccessorNode,
+  context: FunctionParamContext
+): ObjectFunctionFieldReference | null {
   let object: CAccessorNode | null = null
   let fieldName: string | null = null
 
@@ -7398,11 +7423,21 @@ function objectFunctionFieldParams(callee: CAccessorNode, context: FunctionParam
       field.functionType !== null &&
       typeof field.functionType !== 'undefined'
     ) {
-      return field.functionType.params
+      return {
+        field,
+        fieldName,
+        name: emitCObjectFunctionFieldName(objectName, fieldName)
+      }
     }
   }
 
   return null
+}
+
+function objectFunctionFieldParams(callee: CAccessorNode, context: FunctionParamContext): CFunctionParam[] | null {
+  const objectField = objectFunctionFieldReference(callee, context)
+
+  return objectField?.field.functionType?.params ?? null
 }
 
 function resolveFunctionParams(callee: CAccessorNode, context: FunctionParamContext): CFunctionParam[] | null {

@@ -401,13 +401,19 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     optional: field.optional,
     ownership: objectShapeFieldOwnership(field),
     readonlyField: isReadonlyCObjectShapeField(field),
+    nullable: field.nullable,
+    loc: field.loc,
     declaredType: field.declaredType,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
+    arrayElementDeclaredType: field.arrayElementDeclaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
+    promiseValueType: field.promiseValueType,
     setElementType: field.setElementType,
+    functionTypeOwnership: field.functionTypeOwnership,
     shape: field.shape,
+    shapeOwnership: field.shapeOwnership,
     functionType: field.functionType
   }
 }
@@ -510,6 +516,7 @@ function knownObjectMemberField(objectName: string, index: number, field: CObjec
     key: field.name,
     index,
     optional: field.optional,
+    nullable: field.nullable,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
@@ -623,6 +630,7 @@ function knownObjectIndexField(
     key,
     index,
     optional: field.optional,
+    nullable: field.nullable,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
     declaredType: field.declaredType,
@@ -674,8 +682,10 @@ function resolveObjectExpressionShapeField(objectExpression: AnyNode, key: strin
     key,
     index,
     optional: field.optional,
+    nullable: field.nullable,
     valueType: field.valueType,
     arrayElementType: field.arrayElementType,
+    declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
     setElementType: field.setElementType,
@@ -1016,7 +1026,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
     context,
     field.optional === true
   )
-  if (field.optional === true) {
+  if (objectFieldValueMayBeNullish(field)) {
     appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
   } else {
     appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
@@ -1603,11 +1613,15 @@ function emitKnownObjectFieldValueCheck(
   expression: AnyNode,
   context: ObjectFunctionContext
 ): string[] {
-  if (field.optional === true) {
+  if (objectFieldValueMayBeNullish(field)) {
     return emitRuntimeOptionalObjectFieldValueCheck(value, expectedTag, context)
   }
 
   return emitRuntimeFieldValueCheck(value, expectedTag, expression, context)
+}
+
+function objectFieldValueMayBeNullish(field: CObjectFieldInfo): boolean {
+  return field.optional === true || field.nullable === true
 }
 
 function emitRuntimeOptionalObjectFieldValueCheck(

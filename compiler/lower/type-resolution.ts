@@ -1004,6 +1004,9 @@ function setResolvedType(elementType: LowerResolvedType | null): LowerResolvedTy
 function promiseResolvedType(valueType: LowerResolvedType | null): LowerResolvedType {
   const resolved = namedResolvedType('promise')
   resolved.promiseValueType = resolvedValueType(valueType, 'unknown')
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    resolved.shape = nullableNode(valueType.shape)
+  }
 
   return resolved
 }
