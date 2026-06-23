@@ -6803,7 +6803,7 @@ function resolveRuntimeCallbackCalleeType(callee: AnyNode, context: CFunctionCon
   if (objectField !== null && typeof objectField !== 'undefined') {
     const functionType = objectField.field.functionType
 
-    if (isRuntimeFunctionType(functionType)) {
+    if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
       return normalizeFunctionType(functionType)
     }
   }
@@ -6831,6 +6831,7 @@ function emitRuntimeCallbackCalleeReference(callee: AnyNode, context: CFunctionC
   if (
     objectField !== null &&
     typeof objectField !== 'undefined' &&
+    !isPlainFunctionPointerType(objectField.field.functionType) &&
     isRuntimeFunctionType(objectField.field.functionType)
   ) {
     return objectField.name

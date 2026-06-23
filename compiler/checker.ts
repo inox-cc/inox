@@ -516,6 +516,14 @@ function nullableNarrowingKey(expression: AnyNode | null | undefined): string | 
   return joinStrings(path, '.')
 }
 
+function isOptionalChainProtectedExpression(expression: AnyNode | null | undefined): boolean {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  return expression.optionalChainProtected === true
+}
+
 function resolvedObjectShapeMetadata(
   value: ObjectShapeInfo | null | undefined,
   fallback: ObjectShapeInfo | null | undefined
@@ -2982,7 +2990,11 @@ class Checker {
 
     const objectType = this.checkExpression(expression.object)
 
-    this.reportNullableRuntimeAccess(expression.object, expression.loc)
+    const optionalChainReceiver = isOptionalChainProtectedExpression(expression.object)
+
+    if (!optionalChainReceiver) {
+      this.reportNullableRuntimeAccess(expression.object, expression.loc)
+    }
 
     if (objectType === 'bytes' && expression.property === 'length') {
       expression.valueType = 'number'
@@ -3025,7 +3037,10 @@ class Checker {
     const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
-    expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
+    const fieldNullable = resolvedFieldNullableMetadata(field, fieldType)
+
+    expression.nullable = optionalChainReceiver || fieldNullable
+    expression.optionalChainProtected = optionalChainReceiver && !fieldNullable
 
     const narrowedKey = nullableNarrowingKey(expression)
 
@@ -3126,8 +3141,10 @@ class Checker {
 
     const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+    const fieldNullable = resolvedFieldNullableMetadata(field, fieldType)
 
     expression.nullable = true
+    expression.optionalChainProtected = !fieldNullable
     expression.valueType = valueType
     expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.arrayElementDeclaredType = resolvedStringMetadata(
@@ -3329,7 +3346,11 @@ class Checker {
     const objectType = this.checkExpression(expression.object)
     const indexType = this.checkExpression(expression.index)
 
-    this.reportNullableRuntimeAccess(expression.object, expression.loc)
+    const optionalChainReceiver = isOptionalChainProtectedExpression(expression.object)
+
+    if (!optionalChainReceiver) {
+      this.reportNullableRuntimeAccess(expression.object, expression.loc)
+    }
 
     if (objectType === 'map') {
       const mapType = this.resolveExpressionMapType(expression.object) ?? {
@@ -3360,12 +3381,16 @@ class Checker {
     if (expression.index.type !== 'StringLiteral') {
       if (objectType === 'string') {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
+        expression.nullable = optionalChainReceiver
+        expression.optionalChainProtected = optionalChainReceiver
         expression.valueType = 'string'
         return 'string'
       }
 
       if (objectType === 'bytes') {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
+        expression.nullable = optionalChainReceiver
+        expression.optionalChainProtected = optionalChainReceiver
         expression.valueType = 'number'
         return 'number'
       }
@@ -3374,6 +3399,8 @@ class Checker {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
         const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
+        expression.nullable = optionalChainReceiver
+        expression.optionalChainProtected = optionalChainReceiver
         expression.valueType = valueType
         expression.arrayElementDeclaredType = declaredType
         expression.shape = this.resolveArrayElementObjectShape(valueType, declaredType, expression.loc)
@@ -3399,7 +3426,10 @@ class Checker {
             const fieldType = this.resolveFieldDeclaredType(field)
             const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
-            expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
+            const fieldNullable = resolvedFieldNullableMetadata(field, fieldType)
+
+            expression.nullable = optionalChainReceiver || fieldNullable
+            expression.optionalChainProtected = optionalChainReceiver && !fieldNullable
             expression.valueType = valueType
             expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
             expression.arrayElementDeclaredType = resolvedStringMetadata(
@@ -3442,7 +3472,10 @@ class Checker {
     const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
 
-    expression.nullable = resolvedFieldNullableMetadata(field, fieldType)
+    const fieldNullable = resolvedFieldNullableMetadata(field, fieldType)
+
+    expression.nullable = optionalChainReceiver || fieldNullable
+    expression.optionalChainProtected = optionalChainReceiver && !fieldNullable
     expression.valueType = valueType
     expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.arrayElementDeclaredType = resolvedStringMetadata(
@@ -3475,6 +3508,7 @@ class Checker {
         const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
 
         expression.nullable = true
+        expression.optionalChainProtected = true
         expression.valueType = valueType
         expression.arrayElementDeclaredType = declaredType
         expression.shape = this.resolveArrayElementObjectShape(valueType, declaredType, expression.loc)
@@ -3507,8 +3541,10 @@ class Checker {
 
     const fieldType = this.resolveFieldDeclaredType(field)
     const valueType = resolvedConcreteValueTypeMetadata(field.valueType, fieldType.valueType)
+    const fieldNullable = resolvedFieldNullableMetadata(field, fieldType)
 
     expression.nullable = true
+    expression.optionalChainProtected = !fieldNullable
     expression.valueType = valueType
     expression.arrayElementType = resolvedValueTypeMetadata(field.arrayElementType, fieldType.arrayElementType)
     expression.arrayElementDeclaredType = resolvedStringMetadata(
