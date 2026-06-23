@@ -1,0 +1,22 @@
+// @targets c
+// @expect pass
+// @stdout Ada
+// @skip-node node: inox weak field syntax
+
+class Parent {
+  name: string
+  constructor(name: string) {
+    this.name = name
+  }
+}
+
+class Child {
+  weak parent: Parent | null
+  constructor(parent: Parent | null) {
+    this.parent = parent
+  }
+}
+
+const parent = new Parent('Ada')
+const child = new Child(parent)
+console.log(child.parent?.name ?? 'none')

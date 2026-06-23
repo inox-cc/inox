@@ -1176,7 +1176,18 @@ function anyNodeLikeStringFields(): string[] {
 }
 
 function anyNodeLikeBooleanFields(): string[] {
-  return ['async', 'exported', 'expressionBody', 'nullable', 'optional', 'readonly', 'returnNullable', 'typeOnly']
+  return [
+    'async',
+    'exported',
+    'expressionBody',
+    'nullable',
+    'optional',
+    'optionalChainProtected',
+    'readonly',
+    'returnNullable',
+    'typeOnly',
+    'weakTypeValidated'
+  ]
 }
 
 function anyNodeLikeArrayFields(): string[] {

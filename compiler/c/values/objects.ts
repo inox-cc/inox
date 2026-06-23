@@ -207,9 +207,11 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'fsRecursive',
     'nullable',
     'optional',
+    'optionalChainProtected',
     'readonly',
     'returnNullable',
-    'typeOnly'
+    'typeOnly',
+    'weakTypeValidated'
   ]
   const arrayFields = ['args', 'cases', 'elements', 'fields', 'methods', 'params', 'path', 'properties', 'specifiers']
   const objectFields = [
