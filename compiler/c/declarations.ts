@@ -34,7 +34,9 @@ import {
   emitRuntimeTypeCheck,
   emitStatusResultDeclarations,
   emitThrowingFunctionErrorTransfer,
+  nextCName,
   registerBoxedValue,
+  registerOwnedValue,
   shouldEmitCleanupLabel
 } from './context.ts'
 import { emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
@@ -291,6 +293,8 @@ function registerFunctionParamsInContext(
 ): void {
   for (let index = 0; index < params.length; index = index + 1) {
     const param = params[index]
+
+    context.localValueNames.add(param.name)
 
     if (param.nullable === true && isRuntimeNullableType(param.valueType)) {
       context.nullableVariables.add(param.name)
@@ -844,6 +848,8 @@ export function emitMainWrapper(
   const bodyLines: string[] = []
   const lines: string[] = []
 
+  context.moduleValueDeclarationScope = true
+
   if (context.processRuntime) {
     lines.push('int main(int argc, char** argv) {')
   } else {
@@ -918,6 +924,8 @@ function emitRuntimeParamPreludeForParam(
   context: CFunctionContext
 ): string[] {
   const lines: string[] = []
+
+  pushDeclarationLines(lines, emitDefaultRuntimeParamPreludeForParam(param, context))
 
   if (isNullableScalarParam(param)) {
     const paramName = emitCScalarParamName(param.name)
@@ -995,6 +1003,30 @@ function emitRuntimeParamPreludeForParam(
   }
 
   return lines
+}
+
+function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: CFunctionContext): string[] {
+  const value = param.defaultValue
+
+  if (
+    param.valueType === 'array' &&
+    value !== null &&
+    typeof value !== 'undefined' &&
+    value.type === 'ArrayLiteral' &&
+    value.elements.length === 0
+  ) {
+    const temp = nextCName(context, `${param.name}_default`)
+    registerOwnedValue(context, temp)
+
+    return [
+      `if (${param.name}.tag == INOX_TAG_UNDEFINED) {`,
+      `  if (inox_array_new(&inox_default_allocator, 0, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
+      `  ${param.name} = ${temp};`,
+      '}'
+    ]
+  }
+
+  return []
 }
 
 function emitThrowingFunctionPrelude(context: CFunctionContext): string[] {

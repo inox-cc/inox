@@ -709,6 +709,20 @@ export function resolveRuntimeArrayElementType(
     const functionReturn = resolveFunctionReturnNameFromCall(expression)
 
     if (expression.valueType !== 'array') {
+      if (functionReturn !== null && typeof functionReturn !== 'undefined') {
+        const functionReturnType = context.functionReturnTypes.get(functionReturn)
+
+        if (functionReturnType === 'array') {
+          const functionElementType = resolveFunctionReturnArrayElementType(context, functionReturn)
+
+          if (functionElementType !== null && typeof functionElementType !== 'undefined') {
+            return functionElementType
+          }
+
+          return 'unknown'
+        }
+      }
+
       return null
     }
 
@@ -1147,6 +1161,10 @@ function isAnyNodeLikeArrayFieldReceiver(
     return false
   }
 
+  if (isAnyNodeLikeBlockBodyArrayReceiver(expression, context)) {
+    return true
+  }
+
   const fieldName = anyNodeLikeArrayFieldReceiverName(expression)
 
   if (fieldName === null || typeof fieldName === 'undefined' || !isAnyNodeLikeArrayFieldName(fieldName)) {
@@ -1173,6 +1191,40 @@ function isAnyNodeLikeArrayFieldReceiver(
 
   if (knownField !== null && typeof knownField !== 'undefined') {
     return knownField.valueType === 'array'
+  }
+
+  return context.variables.get(rootName) === 'object'
+}
+
+function isAnyNodeLikeBlockBodyArrayReceiver(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'MemberExpression') {
+    return false
+  }
+
+  if (expression.property !== 'body') {
+    return false
+  }
+
+  const outerBody = expression.object
+
+  if (outerBody.type !== 'MemberExpression' || outerBody.property !== 'body') {
+    return false
+  }
+
+  const rootName = anyNodeLikeArrayFieldReceiverRootName(expression)
+
+  if (rootName === null || typeof rootName === 'undefined') {
+    return false
+  }
+
+  const declaredType = context.objectDeclaredTypes.get(rootName)
+
+  if (
+    declaredType !== null &&
+    typeof declaredType !== 'undefined' &&
+    isAnyNodeLikeDeclaredType(declaredType)
+  ) {
+    return true
   }
 
   return context.variables.get(rootName) === 'object'
@@ -1337,6 +1389,10 @@ export function resolveRuntimeForOfArray(
 }
 
 function emitArrayReferenceName(name: string, context: ArrayFunctionContext): string {
+  if (context.localValueNames.has(name)) {
+    return name
+  }
+
   return context.moduleValueNames.get(name) ?? name
 }
 

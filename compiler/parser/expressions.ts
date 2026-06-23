@@ -163,6 +163,9 @@ export function createNewExpression(start: Token, callee: AnyNode, args: AnyNode
     type: 'NewExpression',
     callee,
     args,
+    mapKeyType: 'unknown',
+    mapValueType: 'unknown',
+    setElementType: 'unknown',
     loc: locFromToken(start)
   }
 }

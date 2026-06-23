@@ -57,11 +57,18 @@ export type CObjectShapeField = CShapeValueMetadata & {
   readonlyField?: boolean
   shapeOwnership?: 'weak'
   shape?: CObjectShape | null
+  [key: string]: any
 }
 
 export function isReadonlyCObjectShapeField(field: AnyNode): boolean {
-  if (field.readonlyField === true) {
+  const readonlyField = field.readonlyField
+
+  if (readonlyField === true) {
     return true
+  }
+
+  if (readonlyField !== null && typeof readonlyField !== 'undefined') {
+    return false
   }
 
   return field.readonly === true

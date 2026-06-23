@@ -42,6 +42,7 @@ type ObjectShapeContext = {
 
 type ObjectNameContext = {
   boxedVariables: Set<string>
+  localValueNames?: Set<string>
   moduleValueNames?: Map<string, string>
   variables: Map<string, string>
 }
@@ -147,7 +148,12 @@ function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): nu
 export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeField[]): void {
   const stringFields = [
     'type',
+    'builtin',
+    'imported',
+    'kind',
+    'local',
     'name',
+    'ownership',
     'property',
     'operator',
     'declaredType',
@@ -196,7 +202,9 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'returnSetElementType',
     'className',
     'collectionKind',
-    'param'
+    'param',
+    'functionTypeOwnership',
+    'shapeOwnership'
   ]
   const booleanFields = [
     'async',
@@ -209,7 +217,9 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'optional',
     'optionalChainProtected',
     'readonly',
+    'readonlyField',
     'returnNullable',
+    'static',
     'typeOnly',
     'weakTypeValidated'
   ]
@@ -220,7 +230,9 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'callee',
     'condition',
     'consequent',
+    'discriminant',
     'defaultValue',
+    'dynamicField',
     'alternate',
     'expression',
     'finalizer',
@@ -228,14 +240,19 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'handler',
     'index',
     'init',
+    'iterable',
     'left',
+    'mapValueShape',
     'loc',
     'object',
     'paramLoc',
     'returnShape',
     'right',
     'shape',
-    'target'
+    'staticLoc',
+    'target',
+    'test',
+    'update'
   ]
   const unknownFields = ['body', 'raw', 'source', 'value']
 
@@ -246,6 +263,13 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     builtin: 'compiler.AnyNode'
   })
   appendCompilerAnyNodeFallbackShapeFieldGroup(fields, unknownFields, 'unknown')
+}
+
+export function appendCompilerObjectShapeInfoFallbackShapeFields(fields: CObjectShapeField[]): void {
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, ['builtin'], 'string')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, ['dynamicField'], 'object', 'AnyNode', {
+    builtin: 'compiler.AnyNode'
+  })
 }
 
 function appendCompilerAnyNodeFallbackShapeFieldGroup(
@@ -402,6 +426,7 @@ function normalizedObjectShapeField(field: CObjectShapeField): CObjectShapeField
     name: field.name,
     optional: field.optional,
     ownership: objectShapeFieldOwnership(field),
+    readonly: field.readonly,
     readonlyField: isReadonlyCObjectShapeField(field),
     nullable: field.nullable,
     loc: field.loc,
@@ -542,7 +567,13 @@ export function emitObjectValueReference(name: string, context: ObjectFunctionCo
   const moduleValueNames = context.moduleValueNames
   let moduleValueName: string | null = null
 
-  if (moduleValueNames !== null && typeof moduleValueNames !== 'undefined') {
+  if (
+    moduleValueNames !== null &&
+    typeof moduleValueNames !== 'undefined' &&
+    (context.localValueNames === null ||
+      typeof context.localValueNames === 'undefined' ||
+      !context.localValueNames.has(name))
+  ) {
     const value = moduleValueNames.get(name)
 
     if (value !== null && typeof value !== 'undefined') {
@@ -1023,7 +1054,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
   appendObjectFieldReadLines(
     lines,
-    `inox_object_get_known(${object.expression}, ${field.index}, &${temp})`,
+    `inox_object_get(${object.expression}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
     temp,
     context,
     field.optional === true
@@ -1836,6 +1867,7 @@ function objectShapeFieldWithPropertyMetadata(
     name: field.name,
     optional: field.optional,
     ownership: field.ownership,
+    readonly: field.readonly,
     readonlyField: field.readonlyField,
     declaredType: field.declaredType,
     nullable: field.nullable,
@@ -1894,6 +1926,7 @@ function objectShapeFieldFromProperty(
 ): CObjectShapeField {
   return {
     name: property.key,
+    readonly: property.value.readonly,
     readonlyField: false,
     declaredType: objectPropertyDeclaredType(property.value),
     valueType,
@@ -1917,6 +1950,8 @@ function objectVariableShapeFields(
     isCompilerAnyNodeShape(statement.shape) ||
     isEmptyObjectShape(statement.shape) ||
     isCompilerAnyNodeLikeObjectLiteral(statement.init)
+  const shouldAppendObjectShapeInfoFallback = isCompilerObjectShapeInfoShape(statement.shape)
+  const shouldAppendObjectFieldInfoFallback = isCompilerObjectFieldInfoShape(statement.shape)
 
   if (
     statement.shape !== null &&
@@ -1924,10 +1959,12 @@ function objectVariableShapeFields(
     statement.shape.fields !== null &&
     typeof statement.shape.fields !== 'undefined'
   ) {
-    const shapeFields: CObjectShapeField[] = statement.shape.fields
+    const shapeFields = statement.shape.fields
 
     for (const field of shapeFields) {
-      const property = findObjectProperty(initProperties, field.name)
+      const fieldNode: AnyNode = field
+
+      const property = findObjectProperty(initProperties, fieldNode.name)
 
       if (property !== null && typeof property !== 'undefined') {
         fields.push(objectShapeFieldWithPropertyMetadata(field, property, context, dependencies))
@@ -1938,6 +1975,10 @@ function objectVariableShapeFields(
 
     if (statement.shape.dynamic !== true) {
       if (shouldAppendAnyNodeFallback) {
+        appendCompilerAnyNodeFallbackShapeFields(fields)
+      } else if (shouldAppendObjectShapeInfoFallback) {
+        appendCompilerObjectShapeInfoFallbackShapeFields(fields)
+      } else if (shouldAppendObjectFieldInfoFallback) {
         appendCompilerAnyNodeFallbackShapeFields(fields)
       }
 
@@ -1980,6 +2021,10 @@ function objectVariableShapeFields(
 
   if (shouldAppendAnyNodeFallback) {
     appendCompilerAnyNodeFallbackShapeFields(fields)
+  } else if (shouldAppendObjectShapeInfoFallback) {
+    appendCompilerObjectShapeInfoFallbackShapeFields(fields)
+  } else if (shouldAppendObjectFieldInfoFallback) {
+    appendCompilerAnyNodeFallbackShapeFields(fields)
   }
 
   return fields
@@ -1992,7 +2037,6 @@ function isCompilerAnyNodeLikeObjectLiteral(expression: AnyNode | null | undefin
 
   const properties = objectNodeProperties(expression)
   let hasName = false
-  let hasLoc = false
   let hasValueType = false
 
   for (const property of properties) {
@@ -2002,14 +2046,42 @@ function isCompilerAnyNodeLikeObjectLiteral(expression: AnyNode | null | undefin
 
     if (property.key === 'name') {
       hasName = true
-    } else if (property.key === 'loc') {
-      hasLoc = true
     } else if (property.key === 'valueType') {
       hasValueType = true
     }
   }
 
-  return hasName && hasLoc && hasValueType
+  return hasName && hasValueType
+}
+
+export function isCompilerObjectShapeInfoShape(shape: CObjectShape | null | undefined): boolean {
+  if (
+    shape === null ||
+    typeof shape === 'undefined' ||
+    shape.fields === null ||
+    typeof shape.fields === 'undefined'
+  ) {
+    return false
+  }
+
+  return (
+    findObjectShapeFieldIndex(shape.fields, 'kind') !== -1 &&
+    findObjectShapeFieldIndex(shape.fields, 'fields') !== -1 &&
+    findObjectShapeFieldIndex(shape.fields, 'builtin') === -1
+  )
+}
+
+function isCompilerObjectFieldInfoShape(shape: CObjectShape | null | undefined): boolean {
+  if (
+    shape === null ||
+    typeof shape === 'undefined' ||
+    shape.fields === null ||
+    typeof shape.fields === 'undefined'
+  ) {
+    return false
+  }
+
+  return findObjectShapeFieldIndex(shape.fields, 'name') !== -1 && findObjectShapeFieldIndex(shape.fields, 'valueType') !== -1
 }
 
 function objectNodeProperties(node: ObjectFieldNode): ObjectPropertyNode[] {

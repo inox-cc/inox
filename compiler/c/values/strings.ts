@@ -492,9 +492,18 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     const variables = context.variables
     const runtimeStrings = context.runtimeStrings
     const name = expression.path[0]
+    let valueType = nodeValueType(expression)
+
+    if (variables !== null && typeof variables !== 'undefined') {
+      const variableType = variables.get(name)
+
+      if (variableType !== null && typeof variableType !== 'undefined') {
+        valueType = variableType
+      }
+    }
 
     if (
-      (variables !== null && typeof variables !== 'undefined' && variables.get(name) === 'string') ||
+      valueType === 'string' ||
       (runtimeStrings !== null && typeof runtimeStrings !== 'undefined' && runtimeStrings.has(name))
     ) {
       return true
@@ -514,6 +523,10 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
   }
 
   if (isDynamicRuntimeStringFieldExpression(expression, context)) {
+    return true
+  }
+
+  if (isStringIndexExpression(expression, context)) {
     return true
   }
 
@@ -768,6 +781,18 @@ function isNodeCandidate(value: any): boolean {
   return value !== null && typeof value !== 'undefined'
 }
 
+function nodeValueType(value: AnyNode | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  if (typeof value.valueType === 'string') {
+    return value.valueType
+  }
+
+  return null
+}
+
 export function emitPreparedStringBytesOperand(
   expression: AnyNode | null | undefined,
   context: StringCContext,
@@ -819,6 +844,15 @@ export function emitPreparedStringBytesOperand(
   ) {
     const name = expression.path[0]
     const variables = context.variables
+    let valueType = nodeValueType(expression)
+
+    if (variables !== null && typeof variables !== 'undefined') {
+      const variableType = variables.get(name)
+
+      if (variableType !== null && typeof variableType !== 'undefined') {
+        valueType = variableType
+      }
+    }
 
     if (isNullableRuntimeStringReference(name, context)) {
       const string = nextCName(context, tempPrefix)
@@ -833,7 +867,7 @@ export function emitPreparedStringBytesOperand(
       }
     }
 
-    if (variables !== null && typeof variables !== 'undefined' && variables.get(name) === 'string') {
+    if (valueType === 'string') {
       if (stringDeps(context).isBoxedRuntimeStringName(name, context)) {
         const string = nextCName(context, tempPrefix)
 
@@ -921,6 +955,23 @@ export function emitPreparedStringBytesOperand(
 
   if (runtimeArrayString !== null && typeof runtimeArrayString !== 'undefined') {
     return runtimeArrayString
+  }
+
+  const stringIndex = emitCStringIndexValueExpression(expression as StringIndexNode, context)
+
+  if (stringIndex !== null && typeof stringIndex !== 'undefined') {
+    const string = nextCName(context, tempPrefix)
+    const lines: string[] = []
+
+    pushAllLines(lines, stringIndex.lines)
+    lines.push(emitRuntimeTypeCheck(`${stringIndex.expression}.tag != INOX_TAG_STRING || ${stringIndex.expression}.as.ref == 0`, context))
+    lines.push(`inox_string* ${string} = (inox_string*)${stringIndex.expression}.as.ref;`)
+
+    return {
+      lines,
+      bytes: `${string}->bytes`,
+      length: `${string}->len`
+    }
   }
 
   if (
@@ -2020,6 +2071,13 @@ export function isRuntimeProducedStringExpression(
   }
 
   if (
+    expression.type === 'ConditionalExpression' &&
+    stringDeps(context).inferExpressionType(expression, context) === 'string'
+  ) {
+    return true
+  }
+
+  if (
     isCoalesceExpression(expression) &&
     stringDeps(context).canLowerCNullishCoalescingExpression(expression, context)
   ) {
@@ -2495,7 +2553,8 @@ function parseTemplateLiteralParts(
         return parts
       }
 
-      const placeholder = trimTemplatePlaceholder(raw.slice(placeholderStart, index), placeholderLoc)
+      const placeholderRaw = raw.slice(placeholderStart, index)
+      const placeholder = trimTemplatePlaceholder(placeholderRaw, placeholderLoc)
 
       parts.push({
         kind: 'placeholder',
@@ -2555,6 +2614,14 @@ function templateEscapeValue(unit: string): string {
     return '\r'
   }
 
+  if (unit === 'f') {
+    return '\f'
+  }
+
+  if (unit === 'v') {
+    return '\v'
+  }
+
   return unit
 }
 
@@ -2588,8 +2655,11 @@ function trimTemplatePlaceholder(value: string, loc: SourceLocation): TrimmedTem
     index = index + 1
   }
 
+  const leadingTrimmed = value.slice(index)
+  const trimmed = trimTemplateTrailingWhitespace(leadingTrimmed)
+
   return {
-    value: trimTemplateTrailingWhitespace(value.slice(index)),
+    value: trimmed,
     loc: sourceLocationWithFile(loc, line, column)
   }
 }

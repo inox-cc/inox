@@ -232,6 +232,10 @@ export function knownValueType(valueType: string | null | undefined): string | n
     return null
   }
 
+  if (valueType.startsWith('union<')) {
+    return null
+  }
+
   if (valueType === 'array') {
     return 'array'
   }

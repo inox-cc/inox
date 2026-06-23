@@ -1433,6 +1433,7 @@ function emitCModuleInitFunction(
   const ir = plan.ir
   const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
+  context.moduleValueDeclarationScope = true
   const bodyLines = deps.emitStatementList(body, context)
   const lines: string[] = []
 
@@ -1476,6 +1477,7 @@ function emitCModuleMainFunction(
   const ir = plan.ir
   const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
+  context.moduleValueDeclarationScope = true
   const bodyLines = deps.emitStatementList(body, context)
   const lines: string[] = []
 

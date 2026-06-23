@@ -157,6 +157,7 @@ type ResolvedTypeInfo = {
   arrayElementDeclaredType: string | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
+  mapValueShape?: ObjectShapeInfo | null
   promiseValueType?: ValueType | null
   setElementType: ValueType | null
 }
@@ -209,6 +210,7 @@ type FunctionTypeParamMetadata = {
   arrayElementDeclaredType?: string | null
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null
+  mapValueShape?: ObjectShapeInfo | null
   promiseValueType?: ValueType | null
   setElementType?: ValueType | null
   functionType?: FunctionTypeMetadata | null
@@ -238,6 +240,7 @@ type FunctionTypeMetadata = {
 type CheckerMapType = {
   key: ValueType | null
   value: ValueType | null
+  valueShape?: ObjectShapeInfo | null
 }
 
 type JsonParseLiteralTypeInfo = {
@@ -671,6 +674,24 @@ function commonResolvedMapValueType(infos: ResolvedTypeInfo[]): ValueType | null
   return commonResolvedOptionalValueType(infos, resolvedMapValueTypeKind)
 }
 
+function commonResolvedMapValueShape(infos: ResolvedTypeInfo[]): ObjectShapeInfo | null {
+  let shape: ObjectShapeInfo | null = null
+
+  for (let index = 0; index < infos.length; index = index + 1) {
+    const info = resolvedTypeInfoAt(infos, index)
+
+    if (info.mapValueShape === null || typeof info.mapValueShape === 'undefined') {
+      return null
+    }
+
+    if (shape === null || typeof shape === 'undefined') {
+      shape = info.mapValueShape
+    }
+  }
+
+  return shape
+}
+
 function commonResolvedPromiseValueType(infos: ResolvedTypeInfo[]): ValueType | null {
   return commonResolvedOptionalValueType(infos, resolvedPromiseValueTypeKind)
 }
@@ -784,6 +805,7 @@ function commonResolvedObjectShapeField(name: string, infos: ResolvedTypeInfo[])
     arrayElementDeclaredType: commonResolvedObjectShapeFieldArrayElementDeclaredType(fields),
     mapKeyType: commonResolvedObjectShapeFieldMapKeyType(fields),
     mapValueType: commonResolvedObjectShapeFieldMapValueType(fields),
+    mapValueShape: commonResolvedObjectShapeFieldMapValueShape(fields),
     promiseValueType: commonResolvedObjectShapeFieldPromiseValueType(fields),
     setElementType: commonResolvedObjectShapeFieldSetElementType(fields),
     functionType: commonResolvedObjectShapeFieldFunctionType(fields),
@@ -933,6 +955,24 @@ function commonResolvedObjectShapeFieldMapValueType(fields: AnyNode[]): ValueTyp
   }
 
   return commonValueType(values)
+}
+
+function commonResolvedObjectShapeFieldMapValueShape(fields: AnyNode[]): ObjectShapeInfo | null {
+  let shape: ObjectShapeInfo | null = null
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const value = fields[index].mapValueShape
+
+    if (value === null || typeof value === 'undefined') {
+      return null
+    }
+
+    if (shape === null || typeof shape === 'undefined') {
+      shape = value
+    }
+  }
+
+  return shape
 }
 
 function commonResolvedObjectShapeFieldPromiseValueType(fields: AnyNode[]): ValueType | null {
@@ -1319,6 +1359,7 @@ class Checker {
       arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
       mapKeyType: paramInfo.mapKeyType,
       mapValueType: paramInfo.mapValueType,
+      mapValueShape: paramInfo.mapValueShape,
       promiseValueType,
       setElementType: paramInfo.setElementType,
       functionType: paramInfo.functionType,
@@ -1619,6 +1660,7 @@ class Checker {
               arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
               mapKeyType: paramInfo.mapKeyType,
               mapValueType: paramInfo.mapValueType,
+              mapValueShape: paramInfo.mapValueShape,
               promiseValueType: paramInfo.promiseValueType ?? null,
               setElementType: paramInfo.setElementType,
               functionType: paramInfo.functionType,
@@ -1931,10 +1973,27 @@ class Checker {
 
       let mapKeyType: ValueType | null = null
       let mapValueType: ValueType | null = null
+      let mapValueShape: ObjectShapeInfo | null = null
 
       if (mapType !== null && typeof mapType !== 'undefined') {
         mapKeyType = mapType.key
         mapValueType = mapType.value
+      }
+
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        declared.mapValueShape !== null &&
+        typeof declared.mapValueShape !== 'undefined'
+      ) {
+        mapValueShape = declared.mapValueShape
+      } else if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.mapValueShape !== null &&
+        typeof statement.init.mapValueShape !== 'undefined'
+      ) {
+        mapValueShape = statement.init.mapValueShape
       }
 
       let functionType: AnyNode | null = null
@@ -1946,6 +2005,19 @@ class Checker {
         typeof declared.functionType !== 'undefined'
       ) {
         functionType = declared.functionType
+      } else if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.functionType !== null &&
+        typeof statement.init.functionType !== 'undefined'
+      ) {
+        functionType = statement.init.functionType
+      } else if (
+        statement.init !== null &&
+        typeof statement.init !== 'undefined' &&
+        statement.init.type === 'ArrowFunctionExpression'
+      ) {
+        functionType = this.inferArrowFunctionTypeMetadata(statement.init)
       }
 
       let shape: ObjectShapeInfo | null = null
@@ -1990,6 +2062,7 @@ class Checker {
       statement.arrayElementDeclaredType = statementArrayElementDeclaredType
       statement.mapKeyType = mapKeyType
       statement.mapValueType = mapValueType
+      statement.mapValueShape = mapValueShape
       statement.promiseValueType = promiseValueType
       statement.setElementType = setElementType
       statement.functionType = functionType
@@ -2021,6 +2094,7 @@ class Checker {
           arrayElementDeclaredType,
           mapKeyType,
           mapValueType,
+          mapValueShape,
           promiseValueType,
           setElementType,
           functionType,
@@ -2353,6 +2427,7 @@ class Checker {
       expression.arrayElementDeclaredType = null
       expression.mapKeyType = null
       expression.mapValueType = null
+      expression.mapValueShape = null
       expression.promiseValueType = null
       expression.setElementType = null
       expression.functionType = null
@@ -2379,6 +2454,10 @@ class Checker {
 
         if (symbol.mapValueType !== null && typeof symbol.mapValueType !== 'undefined') {
           expression.mapValueType = symbol.mapValueType
+        }
+
+        if (symbol.mapValueShape !== null && typeof symbol.mapValueShape !== 'undefined') {
+          expression.mapValueShape = symbol.mapValueShape
         }
 
         if (symbol.promiseValueType !== null && typeof symbol.promiseValueType !== 'undefined') {
@@ -3374,6 +3453,7 @@ class Checker {
       expression.valueType = mapValueType
       expression.mapKeyType = mapKeyType
       expression.mapValueType = mapValueMetadata
+      expression.shape = mapType.valueShape ?? null
 
       return mapValueType
     }
@@ -9087,6 +9167,7 @@ class Checker {
         if (mapMethod === 'get') {
           expression.valueType = mapValueType
           expression.nullable = true
+          expression.shape = mapType?.valueShape ?? null
           return mapValueType
         }
 
@@ -9200,7 +9281,7 @@ class Checker {
       return null
     }
 
-    expression.timerRuntimeMethod = method
+    expression.timerRuntimeMethod = method.slice(0)
 
     if (timerClearMethodName(method)) {
       if (expression.args.length !== 1) {
@@ -11189,6 +11270,7 @@ class Checker {
           let expectedValueType = expected.valueType
           let mapKeyType: ValueType | null = null
           let mapValueType: ValueType | null = null
+          let mapValueShape: ObjectShapeInfo | null = null
           let promiseValueType: ValueType | null = null
           let setElementType: ValueType | null = null
           let expectedFunctionType: FunctionTypeMetadata | null = null
@@ -11214,6 +11296,10 @@ class Checker {
             mapValueType = expected.mapValueType
           }
 
+          if (expected.mapValueShape !== null && typeof expected.mapValueShape !== 'undefined') {
+            mapValueShape = expected.mapValueShape
+          }
+
           if (expected.promiseValueType !== null && typeof expected.promiseValueType !== 'undefined') {
             promiseValueType = expected.promiseValueType
           }
@@ -11237,6 +11323,7 @@ class Checker {
             arrayElementDeclaredType,
             mapKeyType,
             mapValueType,
+            mapValueShape,
             promiseValueType,
             setElementType,
             functionType: expectedFunctionType,
@@ -11280,6 +11367,7 @@ class Checker {
         param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
         param.mapKeyType = paramInfo.mapKeyType
         param.mapValueType = paramInfo.mapValueType
+        param.mapValueShape = paramInfo.mapValueShape
         param.promiseValueType = null
 
         if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
@@ -11301,6 +11389,7 @@ class Checker {
             arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
             mapKeyType: paramInfo.mapKeyType,
             mapValueType: paramInfo.mapValueType,
+            mapValueShape: paramInfo.mapValueShape,
             promiseValueType: paramInfo.promiseValueType ?? null,
             setElementType: paramInfo.setElementType,
             functionType: paramInfo.functionType,
@@ -11363,42 +11452,42 @@ class Checker {
             this.functionDepth = previousFunctionDepth
           }
 
-          return
-        }
+          actualReturnType = 'void'
+        } else {
+          const previousReturnType = this.currentReturnType
+          const previousReturnNullable = this.currentReturnNullable
+          const previousReturnPromiseValueType = this.currentReturnPromiseValueType
+          const previousReturnAsync = this.currentReturnAsync
+          const previousFunctionDepth = this.functionDepth
 
-        const previousReturnType = this.currentReturnType
-        const previousReturnNullable = this.currentReturnNullable
-        const previousReturnPromiseValueType = this.currentReturnPromiseValueType
-        const previousReturnAsync = this.currentReturnAsync
-        const previousFunctionDepth = this.functionDepth
+          try {
+            let expectedReturnType: ValueType = 'unknown'
 
-        try {
-          let expectedReturnType: ValueType = 'unknown'
+            if (functionType.returnType !== null && typeof functionType.returnType !== 'undefined') {
+              expectedReturnType = functionType.returnType
+            }
 
-          if (functionType.returnType !== null && typeof functionType.returnType !== 'undefined') {
-            expectedReturnType = functionType.returnType
+            this.currentReturnType = expectedReturnType
+            this.currentReturnNullable = functionType.returnNullable === true
+            this.currentReturnPromiseValueType = null
+
+            if (
+              functionType.returnPromiseValueType !== null &&
+              typeof functionType.returnPromiseValueType !== 'undefined'
+            ) {
+              this.currentReturnPromiseValueType = functionType.returnPromiseValueType
+            }
+
+            this.currentReturnAsync = false
+            this.functionDepth = this.functionDepth + 1
+            this.checkStatements(expression.body)
+          } finally {
+            this.currentReturnType = previousReturnType
+            this.currentReturnNullable = previousReturnNullable
+            this.currentReturnPromiseValueType = previousReturnPromiseValueType
+            this.currentReturnAsync = previousReturnAsync
+            this.functionDepth = previousFunctionDepth
           }
-
-          this.currentReturnType = expectedReturnType
-          this.currentReturnNullable = functionType.returnNullable === true
-          this.currentReturnPromiseValueType = null
-
-          if (
-            functionType.returnPromiseValueType !== null &&
-            typeof functionType.returnPromiseValueType !== 'undefined'
-          ) {
-            this.currentReturnPromiseValueType = functionType.returnPromiseValueType
-          }
-
-          this.currentReturnAsync = false
-          this.functionDepth = this.functionDepth + 1
-          this.checkStatements(expression.body)
-        } finally {
-          this.currentReturnType = previousReturnType
-          this.currentReturnNullable = previousReturnNullable
-          this.currentReturnPromiseValueType = previousReturnPromiseValueType
-          this.currentReturnAsync = previousReturnAsync
-          this.functionDepth = previousFunctionDepth
         }
       }
     } finally {
@@ -11529,6 +11618,39 @@ class Checker {
     ) {
       expression.returnSetElementType = expression.body.setElementType
     }
+
+    if (expression.functionType === null || typeof expression.functionType === 'undefined') {
+      expression.functionType = this.inferArrowFunctionTypeMetadata(expression)
+    }
+  }
+
+  inferArrowFunctionTypeMetadata(expression: AnyNode): FunctionTypeMetadata {
+    let returnShape: ObjectShapeInfo | null = null
+
+    if (
+      expression.body !== null &&
+      typeof expression.body !== 'undefined' &&
+      expression.body.shape !== null &&
+      typeof expression.body.shape !== 'undefined'
+    ) {
+      returnShape = expression.body.shape
+    }
+
+    return {
+      kind: 'function',
+      resolved: true,
+      params: this.resolveParams(expression.params),
+      returnType: expression.returnType,
+      declaredReturnType: expression.declaredReturnType,
+      returnNullable: expression.returnNullable === true,
+      returnArrayElementType: expression.returnArrayElementType ?? null,
+      returnArrayElementDeclaredType: expression.returnArrayElementDeclaredType ?? null,
+      returnMapKeyType: expression.returnMapKeyType ?? null,
+      returnMapValueType: expression.returnMapValueType ?? null,
+      returnPromiseValueType: expression.returnPromiseValueType ?? null,
+      returnSetElementType: expression.returnSetElementType ?? null,
+      returnShape
+    }
   }
 
   checkClassDeclaration(statement: AnyNode): void {
@@ -11644,6 +11766,7 @@ class Checker {
               arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
               mapKeyType: paramInfo.mapKeyType,
               mapValueType: paramInfo.mapValueType,
+              mapValueShape: paramInfo.mapValueShape,
               promiseValueType: paramInfo.promiseValueType,
               setElementType: paramInfo.setElementType,
               functionType: paramInfo.functionType,
@@ -12998,6 +13121,7 @@ class Checker {
         arrayElementDeclaredType: inner.arrayElementDeclaredType,
         mapKeyType: inner.mapKeyType,
         mapValueType: inner.mapValueType,
+        mapValueShape: inner.mapValueShape,
         promiseValueType: inner.promiseValueType,
         setElementType: inner.setElementType
       }
@@ -13047,12 +13171,14 @@ class Checker {
     if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined')) {
       let mapKeyType: ValueType = 'unknown'
       let mapValueType: ValueType = 'unknown'
+      let mapValueShape: ObjectShapeInfo | null = null
 
       if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
         const keyInfo = this.resolveDeclaredType(mapTypeNames.key, loc)
         const valueInfo = this.resolveDeclaredType(mapTypeNames.value, loc)
         mapKeyType = keyInfo.valueType
         mapValueType = valueInfo.valueType
+        mapValueShape = valueInfo.shape
       }
 
       return {
@@ -13064,6 +13190,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType,
         mapValueType,
+        mapValueShape,
         promiseValueType: null,
         setElementType: null
       }
@@ -13426,6 +13553,7 @@ class Checker {
     } else if (valueType === 'map') {
       result.mapKeyType = commonResolvedMapKeyType(infos)
       result.mapValueType = commonResolvedMapValueType(infos)
+      result.mapValueShape = commonResolvedMapValueShape(infos)
     } else if (valueType === 'promise') {
       result.promiseValueType = commonResolvedPromiseValueType(infos)
     } else if (valueType === 'set') {
@@ -13527,6 +13655,7 @@ class Checker {
       arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
       mapKeyType: fieldInfo.mapKeyType,
       mapValueType: fieldInfo.mapValueType,
+      mapValueShape: fieldInfo.mapValueShape,
       promiseValueType,
       setElementType: fieldInfo.setElementType,
       functionType,
@@ -13592,6 +13721,7 @@ class Checker {
         arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
         mapKeyType: paramInfo.mapKeyType,
         mapValueType: paramInfo.mapValueType,
+        mapValueShape: paramInfo.mapValueShape,
         promiseValueType: paramPromiseValueType,
         setElementType: paramInfo.setElementType,
         functionType: paramInfo.functionType,
@@ -13986,6 +14116,7 @@ class Checker {
       arrayElementDeclaredType: info.arrayElementDeclaredType,
       mapKeyType: info.mapKeyType,
       mapValueType: info.mapValueType,
+      mapValueShape: info.mapValueShape,
       promiseValueType: info.promiseValueType,
       setElementType: info.setElementType
     }
@@ -14001,6 +14132,7 @@ class Checker {
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      mapValueShape: null,
       promiseValueType: null,
       setElementType: null
     }
@@ -14218,6 +14350,7 @@ class Checker {
       if (expression.valueType === 'map') {
         let key: ValueType | null = null
         let value: ValueType | null = null
+        let valueShape: ObjectShapeInfo | null = null
 
         if (expression.mapKeyType !== null && typeof expression.mapKeyType !== 'undefined') {
           key = expression.mapKeyType
@@ -14227,9 +14360,14 @@ class Checker {
           value = expression.mapValueType
         }
 
+        if (expression.mapValueShape !== null && typeof expression.mapValueShape !== 'undefined') {
+          valueShape = expression.mapValueShape
+        }
+
         return {
           key,
-          value
+          value,
+          valueShape
         }
       }
 
@@ -14243,6 +14381,7 @@ class Checker {
       if (symbol !== null && typeof symbol !== 'undefined' && symbol.valueType === 'map') {
         let key: ValueType | null = null
         let value: ValueType | null = null
+        let valueShape: ObjectShapeInfo | null = null
 
         if (symbol.mapKeyType !== null && typeof symbol.mapKeyType !== 'undefined') {
           key = symbol.mapKeyType
@@ -14252,9 +14391,14 @@ class Checker {
           value = symbol.mapValueType
         }
 
+        if (symbol.mapValueShape !== null && typeof symbol.mapValueShape !== 'undefined') {
+          valueShape = symbol.mapValueShape
+        }
+
         return {
           key,
-          value
+          value,
+          valueShape
         }
       }
 
@@ -14272,6 +14416,7 @@ class Checker {
       if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
         let key: ValueType | null = null
         let value: ValueType | null = null
+        let valueShape: ObjectShapeInfo | null = null
 
         if (field.mapKeyType !== null && typeof field.mapKeyType !== 'undefined') {
           key = field.mapKeyType
@@ -14281,9 +14426,14 @@ class Checker {
           value = field.mapValueType
         }
 
+        if (field.mapValueShape !== null && typeof field.mapValueShape !== 'undefined') {
+          valueShape = field.mapValueShape
+        }
+
         return {
           key,
-          value
+          value,
+          valueShape
         }
       }
 
@@ -14301,6 +14451,7 @@ class Checker {
       if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
         let key: ValueType | null = null
         let value: ValueType | null = null
+        let valueShape: ObjectShapeInfo | null = null
 
         if (field.mapKeyType !== null && typeof field.mapKeyType !== 'undefined') {
           key = field.mapKeyType
@@ -14310,9 +14461,14 @@ class Checker {
           value = field.mapValueType
         }
 
+        if (field.mapValueShape !== null && typeof field.mapValueShape !== 'undefined') {
+          valueShape = field.mapValueShape
+        }
+
         return {
           key,
-          value
+          value,
+          valueShape
         }
       }
 

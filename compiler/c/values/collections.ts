@@ -447,10 +447,12 @@ export function emitPreparedCollectionConstructorValueExpression(
   if (collectionConstructor === 'Map') {
     reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
     lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${temp})`, context))
-    pushAllLines(
-      lines,
-      emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
-    )
+    if (expression.args.length > 0) {
+      pushAllLines(
+        lines,
+        emitMapConstructorValueEntries(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
+      )
+    }
 
     return {
       lines,
@@ -460,10 +462,12 @@ export function emitPreparedCollectionConstructorValueExpression(
 
   reportCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
   lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${temp})`, context))
-  pushAllLines(
-    lines,
-    emitSetConstructorValueElements(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
-  )
+  if (expression.args.length > 0) {
+    pushAllLines(
+      lines,
+      emitSetConstructorValueElements(temp, collectionNodeAt(expression.args, 0), context, expression.loc)
+    )
+  }
 
   return {
     lines,

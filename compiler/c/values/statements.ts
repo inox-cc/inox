@@ -82,6 +82,16 @@ type CStringMap = Map<string, string>
 type CStringSet = Set<string>
 type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 
+type CVariableTypeNarrowing = {
+  name: string
+  valueType: string
+}
+
+type CTypeofConditionNarrowing = {
+  trueTypes: CVariableTypeNarrowing[]
+  falseTypes: CVariableTypeNarrowing[]
+}
+
 type CFunctionContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   arrayLengths: Map<string, number>
@@ -143,8 +153,10 @@ type CFunctionContext = {
   httpHandlers: Map<string, CHttpHandler>
   httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
+  localValueNames: CStringSet
   mapTypes: Map<string, CFunctionReturnMapType>
   moduleObjectShapes: Map<string, CObjectShapeField[]>
+  moduleValueDeclarationScope: boolean
   moduleValueNames: CStringMap
   moduleValueTypes: CStringMap
   netConnectNames: CStringSet
@@ -564,6 +576,98 @@ function stringOrUnknown(value: string | null | undefined): string {
   return 'unknown'
 }
 
+function stringOrNull(value: string | null | undefined): string | null {
+  if (value !== null && typeof value !== 'undefined') {
+    return value
+  }
+
+  return null
+}
+
+function functionTypeFromArrowFunctionExpression(expression: StatementNode | null | undefined): CFunctionType | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'ArrowFunctionExpression'
+  ) {
+    return null
+  }
+
+  const params: CFunctionParam[] = []
+  let returnShape: CObjectShape | null = null
+  let returnType = stringOrNull(expression.returnType)
+
+  if (expression.returnShape !== null && typeof expression.returnShape !== 'undefined') {
+    returnShape = expression.returnShape
+  } else if (
+    expression.body !== null &&
+    typeof expression.body !== 'undefined' &&
+    expression.body.shape !== null &&
+    typeof expression.body.shape !== 'undefined'
+  ) {
+    returnShape = expression.body.shape
+  }
+
+  if (
+    (returnType === null || typeof returnType === 'undefined') &&
+    expression.expressionBody === true &&
+    expression.body !== null &&
+    typeof expression.body !== 'undefined'
+  ) {
+    returnType = stringOrNull(expression.body.valueType)
+
+    if (returnType === null || typeof returnType === 'undefined') {
+      if (expression.body.type === 'NumberLiteral') {
+        returnType = 'number'
+      } else if (expression.body.type === 'BooleanLiteral') {
+        returnType = 'boolean'
+      } else if (expression.body.type === 'StringLiteral' || expression.body.type === 'TemplateLiteral') {
+        returnType = 'string'
+      }
+    }
+  }
+
+  if ((returnType === null || typeof returnType === 'undefined') && expression.expressionBody !== true) {
+    returnType = 'void'
+  }
+
+  if (expression.params !== null && typeof expression.params !== 'undefined') {
+    for (const param of expression.params as CFunctionParam[]) {
+      params.push(param)
+    }
+  }
+
+  return {
+    kind: 'function',
+    params,
+    returnArrayElementType: stringOrNull(expression.returnArrayElementType),
+    returnMapKeyType: stringOrNull(expression.returnMapKeyType),
+    returnMapValueType: stringOrNull(expression.returnMapValueType),
+    returnNullable: expression.returnNullable === true,
+    returnPromiseValueType: stringOrNull(expression.returnPromiseValueType),
+    returnSetElementType: stringOrNull(expression.returnSetElementType),
+    returnShape,
+    returnType: stringOrUnknown(returnType)
+  }
+}
+
+function scalarDeclarationFunctionType(statement: StatementNode): CFunctionType | null {
+  if (statement.functionType !== null && typeof statement.functionType !== 'undefined') {
+    return statement.functionType
+  }
+
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.functionType !== null &&
+    typeof statement.init.functionType !== 'undefined'
+  ) {
+    return statement.init.functionType
+  }
+
+  return functionTypeFromArrowFunctionExpression(statement.init)
+}
+
 function isUnsignedIntegerLiteral(value: string): boolean {
   if (value.length === 0) {
     return false
@@ -866,15 +970,100 @@ function nullRuntimeValueExpression(): PreparedExpression {
   }
 }
 
+function applyVariableTypeNarrowings(context: CFunctionContext, narrowings: CVariableTypeNarrowing[]): void {
+  for (let index = 0; index < narrowings.length; index = index + 1) {
+    const narrowing = narrowings[index]
+
+    context.variables.set(narrowing.name, narrowing.valueType)
+  }
+}
+
+function emptyTypeofConditionNarrowing(): CTypeofConditionNarrowing {
+  return {
+    trueTypes: [],
+    falseTypes: []
+  }
+}
+
+function resolveTypeofConditionNarrowing(expression: StatementNode | null | undefined): CTypeofConditionNarrowing {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'BinaryExpression' ||
+    (expression.operator !== '===' && expression.operator !== '!==')
+  ) {
+    return emptyTypeofConditionNarrowing()
+  }
+
+  const direct = resolveTypeofComparisonNarrowing(expression.left, expression.right)
+  const narrowing = direct ?? resolveTypeofComparisonNarrowing(expression.right, expression.left)
+
+  if (narrowing === null || typeof narrowing === 'undefined') {
+    return emptyTypeofConditionNarrowing()
+  }
+
+  if (expression.operator === '!==') {
+    return {
+      trueTypes: [],
+      falseTypes: [narrowing]
+    }
+  }
+
+  return {
+    trueTypes: [narrowing],
+    falseTypes: []
+  }
+}
+
+function resolveTypeofComparisonNarrowing(
+  typeofExpression: StatementNode | null | undefined,
+  literal: StatementNode | null | undefined
+): CVariableTypeNarrowing | null {
+  if (
+    typeofExpression === null ||
+    typeof typeofExpression === 'undefined' ||
+    literal === null ||
+    typeof literal === 'undefined' ||
+    typeofExpression.type !== 'UnaryExpression' ||
+    typeofExpression.operator !== 'typeof' ||
+    literal.type !== 'StringLiteral'
+  ) {
+    return null
+  }
+
+  const argument = typeofExpression.argument
+
+  if (
+    argument === null ||
+    typeof argument === 'undefined' ||
+    argument.type !== 'Reference' ||
+    argument.path.length !== 1 ||
+    !isSupportedTypeofNarrowingType(literal.value)
+  ) {
+    return null
+  }
+
+  return {
+    name: argument.path[0],
+    valueType: literal.value
+  }
+}
+
+function isSupportedTypeofNarrowingType(valueType: string): boolean {
+  return valueType === 'number' || valueType === 'string' || valueType === 'boolean' || valueType === 'function'
+}
+
 function emitScopedStatementBody(
   statement: StatementNode,
   context: CFunctionContext,
   narrowedNames: string[],
   runtimeArrayNames: string[],
-  runtimeObjectNames: string[]
+  runtimeObjectNames: string[],
+  variableTypeNarrowings: CVariableTypeNarrowing[]
 ): string[] {
   const variableScope = pushVariableScope(context)
   const nullableScope = pushNullableScalarNarrowing(context, narrowedNames)
+  applyVariableTypeNarrowings(context, variableTypeNarrowings)
   narrowRuntimeArrays(context, runtimeArrayNames)
   narrowRuntimeObjects(context, runtimeObjectNames)
   const lines = emitStatementBody(statement, context)
@@ -899,6 +1088,7 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.condition)
   const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.condition)
+  const typeNarrowing = resolveTypeofConditionNarrowing(statement.condition)
   const lines: string[] = []
   pushAllLines(lines, condition.lines)
   lines.push(`if ${emitCConditionClause(condition.expression)} {`)
@@ -909,7 +1099,8 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
       context,
       narrowing.trueNames,
       arrayNarrowing.trueNames,
-      objectNarrowing.trueNames
+      objectNarrowing.trueNames,
+      typeNarrowing.trueTypes
     ),
     '  '
   )
@@ -927,7 +1118,8 @@ export function emitIfStatement(statement: StatementNode, context: CFunctionCont
       context,
       narrowing.falseNames,
       arrayNarrowing.falseNames,
-      objectNarrowing.falseNames
+      objectNarrowing.falseNames,
+      typeNarrowing.falseTypes
     ),
     '  '
   )
@@ -941,6 +1133,7 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.condition, context)
   const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.condition)
   const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.condition)
+  const typeNarrowing = resolveTypeofConditionNarrowing(statement.condition)
   const breakLabel = nextCName(context, 'inox_break')
   const continueLabel = nextCName(context, 'inox_continue')
   pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
@@ -950,7 +1143,8 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
     context,
     narrowing.trueNames,
     arrayNarrowing.trueNames,
-    objectNarrowing.trueNames
+    objectNarrowing.trueNames,
+    typeNarrowing.trueTypes
   )
   popFlowTarget(context.continueTargets)
   popFlowTarget(context.breakTargets)
@@ -988,6 +1182,7 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     const narrowing = statementDeps(context).resolveNullableScalarConditionNarrowing(statement.test, context)
     const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.test)
     const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.test)
+    const typeNarrowing = resolveTypeofConditionNarrowing(statement.test)
     const breakLabel = nextCName(context, 'inox_break')
     const continueLabel = nextCName(context, 'inox_continue')
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
@@ -997,7 +1192,8 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
       context,
       narrowing.trueNames,
       arrayNarrowing.trueNames,
-      objectNarrowing.trueNames
+      objectNarrowing.trueNames,
+      typeNarrowing.trueTypes
     )
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
@@ -1129,23 +1325,29 @@ export function emitFunctionScalarVariableDeclaration(
 
   const deps = statementDeps(context)
   let runtimeFunctionType: CFunctionType | null = null
+  const functionType = scalarDeclarationFunctionType(statement)
   const callbackWrapper = context.callbackArrowWrappers.get(statement.init)
 
+  if (functionType !== null && typeof functionType !== 'undefined') {
+    statement.functionType = functionType
+
+    if (statement.init !== null && typeof statement.init !== 'undefined') {
+      statement.init.functionType = functionType
+    }
+  }
+
   if (callbackWrapper !== null && typeof callbackWrapper !== 'undefined' && callbackWrapper.kind === 'arrow') {
-    runtimeFunctionType = normalizeFunctionType(statement.functionType)
+    runtimeFunctionType = normalizeFunctionType(functionType)
   }
 
   context.variables.set(statement.name, 'function')
   if (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined') {
     context.functionTypes.set(statement.name, runtimeFunctionType)
   } else {
-    context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
+    context.functionTypes.set(statement.name, normalizeFunctionType(functionType))
   }
 
-  if (
-    isRuntimeFunctionType(statement.functionType) ||
-    (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')
-  ) {
+  if (isRuntimeFunctionType(functionType) || (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')) {
     return deps.emitRuntimeCallbackVariableDeclaration(statement, context)
   }
 
@@ -1155,7 +1357,7 @@ export function emitFunctionScalarVariableDeclaration(
       statement.init,
       context,
       statement.kind === 'const',
-      statement.functionType,
+      functionType,
       statement.loc
     )};`
   ]
@@ -1166,6 +1368,14 @@ export function emitNumberBooleanScalarVariableDeclaration(
   context: CFunctionContext,
   inferred: string
 ): string[] {
+  if (inferred === 'function') {
+    const functionDeclaration = emitFunctionScalarVariableDeclaration(statement, context, inferred)
+
+    if (functionDeclaration !== null && typeof functionDeclaration !== 'undefined') {
+      return functionDeclaration
+    }
+  }
+
   if ((inferred === 'number' || inferred === 'boolean') && context.boxedMutableCaptureDeclarations.has(statement)) {
     return emitBoxedScalarVariableDeclaration(statement, context)
   }
@@ -2355,7 +2565,54 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
   }
 
   const inferred = deps.inferExpressionType(statement.init, context)
-  context.variables.set(statement.name, inferred)
+  const variableType =
+    statement.valueType === 'function' || statement.init.type === 'ArrowFunctionExpression' ? 'function' : inferred
+
+  context.variables.set(statement.name, variableType)
+
+  if (variableType === 'function') {
+    let runtimeFunctionType: CFunctionType | null = null
+    const functionType = scalarDeclarationFunctionType(statement)
+    const callbackWrapper = context.callbackArrowWrappers.get(statement.init)
+
+    if (functionType !== null && typeof functionType !== 'undefined') {
+      statement.functionType = functionType
+
+      if (statement.init !== null && typeof statement.init !== 'undefined') {
+        statement.init.functionType = functionType
+      }
+    }
+
+    if (callbackWrapper !== null && typeof callbackWrapper !== 'undefined' && callbackWrapper.kind === 'arrow') {
+      runtimeFunctionType = normalizeFunctionType(functionType)
+    }
+
+    context.variables.set(statement.name, 'function')
+    if (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined') {
+      context.functionTypes.set(statement.name, runtimeFunctionType)
+    } else {
+      context.functionTypes.set(statement.name, normalizeFunctionType(functionType))
+    }
+
+    if (isRuntimeFunctionType(functionType) || (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')) {
+      return {
+        lines: deps.emitRuntimeCallbackVariableDeclaration(statement, context),
+        expression: ''
+      }
+    }
+
+    return {
+      lines: [],
+      expression: deps.emitFunctionPointerVariable(
+        statement.name,
+        statement.init,
+        context,
+        statement.kind === 'const',
+        functionType,
+        statement.loc
+      )
+    }
+  }
 
   if (inferred === 'string') {
     if (context.boxedMutableCaptureDeclarations.has(statement)) {
@@ -2397,30 +2654,6 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     return {
       lines: [],
       expression: `${constPrefix}char* ${statement.name} = ${deps.emitStringExpression(statement.init, context)}`
-    }
-  }
-
-  if (inferred === 'function') {
-    context.variables.set(statement.name, 'function')
-    context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
-
-    if (isRuntimeFunctionType(statement.functionType)) {
-      return {
-        lines: deps.emitRuntimeCallbackVariableDeclaration(statement, context),
-        expression: ''
-      }
-    }
-
-    return {
-      lines: [],
-      expression: deps.emitFunctionPointerVariable(
-        statement.name,
-        statement.init,
-        context,
-        statement.kind === 'const',
-        statement.functionType,
-        statement.loc
-      )
     }
   }
 
@@ -2656,7 +2889,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     registerForOfElementMetadata(context, statement.name, elementType, statement)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-    const body = emitScopedStatementBody(statement.body, context, [], [], [])
+    const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
@@ -2736,7 +2969,7 @@ function emitRuntimeMapForOfStatement(
     context.arrayLengths.set(statement.name, fields.length)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-    const body = emitScopedStatementBody(statement.body, context, [], [], [])
+    const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const createEntryStatus = emitStatusCheck(`inox_array_new(&inox_default_allocator, 2, &${statement.name})`, context)
@@ -2857,7 +3090,7 @@ function emitRuntimeCollectionValueForOfStatement(
     registerForOfElementMetadata(context, statement.name, elementType, statement)
     pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
     pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
-    const body = emitScopedStatementBody(statement.body, context, [], [], [])
+    const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
     const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
@@ -3005,7 +3238,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     pushFlowTarget(context.continueTargets, { label: finallyLabel, throughFinally: true })
   }
 
-  const tryBody = emitScopedStatementBody(statement.block, context, [], [], [])
+  const tryBody = emitScopedStatementBody(statement.block, context, [], [], [], [])
 
   if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
     popFlowTarget(context.continueTargets)
@@ -3127,7 +3360,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       })
     }
 
-    const finalizerBody = emitScopedStatementBody(statement.finalizer, context, [], [], [])
+    const finalizerBody = emitScopedStatementBody(statement.finalizer, context, [], [], [], [])
 
     if (outerContinueLabel !== null && typeof outerContinueLabel !== 'undefined') {
       popFlowTarget(context.continueTargets)
@@ -3327,9 +3560,11 @@ export function emitReturnStatement(statement: StatementNode, context: CFunction
 export function emitVariableDeclarationStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const deps = statementDeps(context)
 
-  if (context.moduleValueNames.has(statement.name)) {
+  if (context.moduleValueDeclarationScope && context.moduleValueNames.has(statement.name)) {
     return deps.emitModuleValueVariableAssignment(statement, context)
   }
+
+  context.localValueNames.add(statement.name)
 
   if (statement.init !== null && typeof statement.init !== 'undefined') {
     const arrayReduceCall = deps.emitPreparedArrayReduceCallExpression(statement.init, context)
@@ -4185,7 +4420,7 @@ function emitModuleValueAssignmentExpression(
 
   const name = joinStrings(expression.target.path, '_')
 
-  if (!context.moduleValueNames.has(name)) {
+  if (context.localValueNames.has(name) || !context.moduleValueNames.has(name)) {
     return null
   }
 

@@ -293,7 +293,7 @@ inox_status inox_map_get(inox_value map, inox_value key, inox_value* out) {
   }
 
   if (!found) {
-    *out = inox_null_value();
+    *out = inox_undefined_value();
     return INOX_OK;
   }
 

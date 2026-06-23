@@ -405,6 +405,14 @@ function readEscapeValue(state: LexerState): string {
     return '\r'
   }
 
+  if (unit === 'f') {
+    return '\f'
+  }
+
+  if (unit === 'v') {
+    return '\v'
+  }
+
   return unit
 }
 

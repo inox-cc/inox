@@ -345,6 +345,7 @@ import {
 import type { ObjectExpressionFieldDependencies, ObjectVariableDeclarationDependencies } from './values/objects.ts'
 import {
   appendCompilerAnyNodeFallbackShapeFields,
+  appendCompilerObjectShapeInfoFallbackShapeFields,
   emitDynamicObjectFieldAssignment,
   emitObjectValueReference,
   emitObjectVariableDeclaration,
@@ -357,6 +358,7 @@ import {
   emitPreparedObjectExpressionScalarIndexValueExpression,
   emitPreparedObjectExpressionScalarMemberValueExpression,
   isIndexAccessExpression,
+  isCompilerObjectShapeInfoShape,
   isMemberAccessExpression,
   registerObjectShape,
   resolveCObjectExpressionName,
@@ -427,7 +429,10 @@ import {
   isStringTrimCall,
   resolveRuntimeStringReference
 } from './values/strings.ts'
-import { inferExpressionType as inferExpressionTypeWithDependencies } from './values/types.ts'
+import {
+  inferExpressionType as inferExpressionTypeWithDependencies,
+  isAnyNodeLikeDeclaredType
+} from './values/types.ts'
 export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
@@ -3136,19 +3141,19 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
 
   const inferred = inferScalarDeclarationValueType(statement, context)
   const declared = knownValueType(statement.valueType)
-  const variableType = declared ?? inferred
+  const variableType = inferred === 'function' ? 'function' : declared ?? inferred
   context.variables.set(statement.name, variableType)
+
+  const functionScalarDeclaration = emitFunctionScalarVariableDeclaration(statement, context, variableType)
+
+  if (functionScalarDeclaration !== null && typeof functionScalarDeclaration !== 'undefined') {
+    return functionScalarDeclaration
+  }
 
   const stringScalarDeclaration = emitStringScalarVariableDeclaration(statement, context, inferred)
 
   if (stringScalarDeclaration !== null && typeof stringScalarDeclaration !== 'undefined') {
     return stringScalarDeclaration
-  }
-
-  const functionScalarDeclaration = emitFunctionScalarVariableDeclaration(statement, context, inferred)
-
-  if (functionScalarDeclaration !== null && typeof functionScalarDeclaration !== 'undefined') {
-    return functionScalarDeclaration
   }
 
   if (
@@ -3184,6 +3189,14 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
 }
 
 function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, context: CFunctionContext): string {
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.type === 'ArrowFunctionExpression'
+  ) {
+    return 'function'
+  }
+
   const inferred = inferExpressionType(statement.init, context)
   const declared = knownValueType(statement.valueType)
 
@@ -3306,7 +3319,6 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
       context.variables.set(statement.name, 'unknown')
       context.moduleValueTypes.set(statement.name, 'unknown')
-      registerOwnedValue(context, statement.name)
       pushAll(lines, value.lines)
       lines.push(`${name} = ${value.expression};`)
       lines.push(`inox_retain(${name});`)
@@ -3317,10 +3329,33 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return [`${name} = ${emitStringExpression(statement.init, context)};`]
   }
 
+  if (inferred === 'promise') {
+    const promise = emitPreparedPromiseExpression(statement.init, context, promiseLoweringDependencies, {
+      out: name
+    })
+
+    if (promise !== null && typeof promise !== 'undefined') {
+      registerModulePromiseAssignmentMetadata(statement, promise, context)
+
+      if (promise.expression === name) {
+        return promise.lines
+      }
+
+      const lines: string[] = []
+      pushAll(lines, promise.lines)
+      lines.push(`${name} = ${promise.expression};`)
+      if (promise.expression !== '0') {
+        lines.push(`inox_promise_retain(${name});`)
+      }
+      return lines
+    }
+  }
+
   const value = emitCValueExpression(statement.init, context)
   const lines: string[] = []
 
   context.moduleValueTypes.set(statement.name, inferred)
+  registerModuleRuntimeValueMetadata(statement, inferred, context)
   pushAll(lines, value.lines)
   pushAll(lines, emitModuleObjectFunctionFieldAssignments(statement.name, statement.init, context))
   lines.push(`${name} = ${value.expression};`)
@@ -3330,6 +3365,78 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   }
 
   return lines
+}
+
+function registerModuleRuntimeValueMetadata(statement: AnyNode, valueType: string, context: CFunctionContext): void {
+  if (valueType !== 'object') {
+    return
+  }
+
+  const declaredType = moduleRuntimeObjectDeclaredType(statement)
+
+  if (declaredType === null || typeof declaredType === 'undefined' || !isAnyNodeLikeDeclaredType(declaredType)) {
+    return
+  }
+
+  registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
+}
+
+function moduleRuntimeObjectDeclaredType(statement: AnyNode): string | null {
+  const statementType = knownModuleDeclaredType(statement.declaredType)
+
+  if (statementType !== null && typeof statementType !== 'undefined') {
+    return statementType
+  }
+
+  if (statement.init !== null && typeof statement.init !== 'undefined') {
+    return knownModuleDeclaredType(statement.init.declaredType)
+  }
+
+  return null
+}
+
+function knownModuleDeclaredType(value: string | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined' || value === '' || value === 'unknown') {
+    return null
+  }
+
+  return value
+}
+
+function registerModulePromiseAssignmentMetadata(
+  statement: AnyNode,
+  prepared: PreparedExpression,
+  context: CFunctionContext
+): void {
+  context.variables.set(statement.name, 'promise')
+  context.moduleValueTypes.set(statement.name, 'promise')
+
+  if (prepared.valueType !== null && typeof prepared.valueType !== 'undefined' && prepared.valueType !== 'unknown') {
+    context.promiseValueTypes.set(statement.name, prepared.valueType)
+  } else if (
+    statement.promiseValueType !== null &&
+    typeof statement.promiseValueType !== 'undefined' &&
+    statement.promiseValueType !== 'unknown'
+  ) {
+    context.promiseValueTypes.set(statement.name, statement.promiseValueType)
+  } else if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.promiseValueType !== null &&
+    typeof statement.init.promiseValueType !== 'undefined' &&
+    statement.init.promiseValueType !== 'unknown'
+  ) {
+    context.promiseValueTypes.set(statement.name, statement.init.promiseValueType)
+  }
+
+  if (
+    prepared.rejectionValueType !== null &&
+    typeof prepared.rejectionValueType !== 'undefined' &&
+    prepared.rejectionValueType !== '' &&
+    prepared.rejectionValueType !== 'unknown'
+  ) {
+    context.promiseRejectionValueTypes.set(statement.name, prepared.rejectionValueType)
+  }
 }
 
 function emitModuleObjectFunctionFieldAssignments(
@@ -4969,6 +5076,7 @@ function objectLiteralValueShapeFields(
   const fields: CObjectShapeField[] = []
   const shouldAppendAnyNodeFallback =
     isCompilerAnyNodeObjectShape(shape) || isEmptyObjectShape(shape) || isCompilerAnyNodeLikeObjectLiteral(expression)
+  const shouldAppendObjectShapeInfoFallback = isCompilerObjectShapeInfoShape(shape)
 
   if (
     shape !== null &&
@@ -4987,6 +5095,10 @@ function objectLiteralValueShapeFields(
         appendCompilerAnyNodeFallbackShapeFields(fields)
       }
 
+      if (shouldAppendObjectShapeInfoFallback) {
+        appendCompilerObjectShapeInfoFallbackShapeFields(fields)
+      }
+
       return fields
     }
   }
@@ -5001,6 +5113,10 @@ function objectLiteralValueShapeFields(
 
   if (shouldAppendAnyNodeFallback) {
     appendCompilerAnyNodeFallbackShapeFields(fields)
+  }
+
+  if (shouldAppendObjectShapeInfoFallback) {
+    appendCompilerObjectShapeInfoFallbackShapeFields(fields)
   }
 
   return fields
@@ -5018,14 +5134,11 @@ function isCompilerAnyNodeLikeObjectLiteral(expression: AnyNode | null | undefin
   }
 
   const nameValue = findObjectLiteralPropertyValue(expression, 'name')
-  const locValue = findObjectLiteralPropertyValue(expression, 'loc')
   const valueTypeValue = findObjectLiteralPropertyValue(expression, 'valueType')
 
   return (
     nameValue !== null &&
     typeof nameValue !== 'undefined' &&
-    locValue !== null &&
-    typeof locValue !== 'undefined' &&
     valueTypeValue !== null &&
     typeof valueTypeValue !== 'undefined'
   )
@@ -5565,7 +5678,17 @@ function isRuntimeLogValueType(valueType: string): boolean {
 }
 
 function isOwnedRuntimeValueName(name: string, context: CFunctionContext): boolean {
-  return context.ownedValues.includes(name)
+  if (context.ownedValues.includes(name)) {
+    return true
+  }
+
+  const moduleValueName = context.moduleValueNames.get(name)
+
+  if (moduleValueName !== null && typeof moduleValueName !== 'undefined') {
+    return context.ownedValues.includes(moduleValueName)
+  }
+
+  return false
 }
 
 function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionContext): boolean {
@@ -5580,7 +5703,15 @@ function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionCon
 
   const name = expression.path[0]
 
-  return context.variables.get(name) === 'unknown' && isOwnedRuntimeValueName(name, context)
+  if (context.variables.get(name) !== 'unknown') {
+    return false
+  }
+
+  if (isOwnedRuntimeValueName(name, context)) {
+    return true
+  }
+
+  return context.moduleValueNames.has(name) && context.moduleValueTypes.get(name) === 'unknown'
 }
 
 function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
@@ -6020,11 +6151,20 @@ function emitPreparedUpdateExpression(expression: AnyNode, context: CFunctionCon
 function emitReference(expression: AnyNode, context: CFunctionContext): string {
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
+    const localName = expression.path.length === 1 && context.localValueNames.has(name)
 
     if (context.variables.has(name)) {
-      const moduleValueName = context.moduleValueNames.get(name)
+      let moduleValueName = ''
 
-      if (moduleValueName !== null && typeof moduleValueName !== 'undefined') {
+      if (!localName) {
+        const resolvedModuleValueName = context.moduleValueNames.get(name)
+
+        if (resolvedModuleValueName !== null && typeof resolvedModuleValueName !== 'undefined') {
+          moduleValueName = resolvedModuleValueName
+        }
+      }
+
+      if (moduleValueName !== '') {
         return moduleValueName
       }
 

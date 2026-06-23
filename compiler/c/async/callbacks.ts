@@ -83,6 +83,118 @@ type RuntimeFunctionArgumentContext = {
   runtimeFunctionParams: CallbackFunctionTypeMap
 }
 
+function callbackStringOrNull(value: string | null | undefined): string | null {
+  if (value !== null && typeof value !== 'undefined') {
+    return value
+  }
+
+  return null
+}
+
+function callbackStringOrUnknown(value: string | null | undefined): string {
+  if (value !== null && typeof value !== 'undefined') {
+    return value
+  }
+
+  return 'unknown'
+}
+
+function callbackArrowFunctionType(expression: AnyNode | null | undefined): CFunctionType | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'ArrowFunctionExpression'
+  ) {
+    return null
+  }
+
+  const params: CFunctionParam[] = []
+  let returnShape: CObjectShape | null = null
+  let returnType = callbackStringOrNull(expression.returnType)
+
+  if (expression.returnShape !== null && typeof expression.returnShape !== 'undefined') {
+    returnShape = expression.returnShape
+  } else if (
+    expression.body !== null &&
+    typeof expression.body !== 'undefined' &&
+    expression.body.shape !== null &&
+    typeof expression.body.shape !== 'undefined'
+  ) {
+    returnShape = expression.body.shape
+  }
+
+  if (
+    (returnType === null || typeof returnType === 'undefined') &&
+    expression.expressionBody === true &&
+    expression.body !== null &&
+    typeof expression.body !== 'undefined'
+  ) {
+    returnType = callbackStringOrNull(expression.body.valueType)
+
+    if (returnType === null || typeof returnType === 'undefined') {
+      if (expression.body.type === 'NumberLiteral') {
+        returnType = 'number'
+      } else if (expression.body.type === 'BooleanLiteral') {
+        returnType = 'boolean'
+      } else if (expression.body.type === 'StringLiteral' || expression.body.type === 'TemplateLiteral') {
+        returnType = 'string'
+      }
+    }
+  }
+
+  if ((returnType === null || typeof returnType === 'undefined') && expression.expressionBody !== true) {
+    returnType = 'void'
+  }
+
+  if (expression.params !== null && typeof expression.params !== 'undefined') {
+    for (const param of expression.params as CFunctionParam[]) {
+      params.push(param)
+    }
+  }
+
+  return {
+    kind: 'function',
+    params,
+    returnArrayElementType: callbackStringOrNull(expression.returnArrayElementType),
+    returnMapKeyType: callbackStringOrNull(expression.returnMapKeyType),
+    returnMapValueType: callbackStringOrNull(expression.returnMapValueType),
+    returnNullable: expression.returnNullable === true,
+    returnPromiseValueType: callbackStringOrNull(expression.returnPromiseValueType),
+    returnSetElementType: callbackStringOrNull(expression.returnSetElementType),
+    returnShape,
+    returnType: callbackStringOrUnknown(returnType)
+  }
+}
+
+function callbackVariableFunctionType(statement: AnyNode): CFunctionType | null {
+  if (statement.functionType !== null && typeof statement.functionType !== 'undefined') {
+    return statement.functionType
+  }
+
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.functionType !== null &&
+    typeof statement.init.functionType !== 'undefined'
+  ) {
+    return statement.init.functionType
+  }
+
+  return callbackArrowFunctionType(statement.init)
+}
+
+function syncCallbackVariableFunctionType(statement: AnyNode, functionType: CFunctionType | null): void {
+  if (functionType === null || typeof functionType === 'undefined') {
+    return
+  }
+
+  statement.functionType = functionType
+
+  if (statement.init !== null && typeof statement.init !== 'undefined') {
+    statement.init.functionType = functionType
+  }
+}
+
 function callbackBooleanValueIsTrue(value: boolean | null | undefined): boolean {
   if (value === null || typeof value === 'undefined') {
     return false
@@ -162,6 +274,20 @@ type CallbackTopLevelNodeEntry = {
 
 function callbackNodeAt(values: CallbackNode[], index: number): CallbackNode {
   return values[index]
+}
+
+function callbackArrowParams(expression: AnyNode | null | undefined): CallbackNode[] {
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.params !== null &&
+    typeof expression.params !== 'undefined' &&
+    Array.isArray(expression.params)
+  ) {
+    return expression.params
+  }
+
+  return []
 }
 
 function callbackParamAt(values: CFunctionParam[], index: number): CFunctionParam {
@@ -861,7 +987,135 @@ export function collectCallbackWrappers(
     }
   }
 
+  collectPlainFunctionValueWrappers(irPrograms, wrappers, context, deps)
+
   return wrappers
+}
+
+function collectPlainFunctionValueWrappers(
+  irPrograms: IrProgram[],
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
+  deps: CallbackLoweringDependencies
+): void {
+  for (let irIndex = 0; irIndex < irPrograms.length; irIndex = irIndex + 1) {
+    const ir = callbackProgramAt(irPrograms, irIndex)
+    const topLevelScope: CallbackScope = new Map()
+
+    scanPlainFunctionValueStatements(ir.body, [topLevelScope], wrappers, context, deps)
+  }
+}
+
+function scanPlainFunctionValueStatements(
+  statements: CallbackNode[],
+  scopes: CallbackScope[],
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
+  deps: CallbackLoweringDependencies
+): void {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const statement = callbackNodeAt(statements, index)
+
+    scanPlainFunctionValueStatement(statement, scopes, wrappers, context, deps)
+  }
+}
+
+function scanPlainFunctionValueStatement(
+  statement: CallbackNode | null | undefined,
+  scopes: CallbackScope[],
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
+  deps: CallbackLoweringDependencies
+): void {
+  if (statement === null || typeof statement === 'undefined') {
+    return
+  }
+
+  if (statement.type === 'VariableDeclaration') {
+    registerPlainFunctionValueVariable(statement, scopes, wrappers, context, deps)
+    return
+  }
+
+  if (statement.type === 'BlockStatement') {
+    scanPlainFunctionValueStatements(statement.body, appendCallbackScope(scopes, new Map()), wrappers, context, deps)
+    return
+  }
+
+  if (statement.type === 'FunctionDeclaration') {
+    const scope: CallbackScope = new Map()
+    declareCallbackParams(scope, statement.params)
+    scanPlainFunctionValueStatements(statement.body, appendCallbackScope(scopes, scope), wrappers, context, deps)
+  }
+}
+
+function registerPlainFunctionValueVariable(
+  statement: CallbackNode,
+  scopes: CallbackScope[],
+  wrappers: CallbackWrapperMap,
+  context: CallbackEmitContext,
+  deps: CallbackLoweringDependencies
+): void {
+  if (
+    statement.init === null ||
+    typeof statement.init === 'undefined' ||
+    statement.init.type !== 'ArrowFunctionExpression' ||
+    functionUsesExternalEventLoop(statement.init, context.externalEventLoopFunctions) ||
+    callbackNodeMayContainReference(statement.init.body)
+  ) {
+    return
+  }
+
+  const functionType = callbackVariableFunctionType(statement)
+
+  syncCallbackVariableFunctionType(statement, functionType)
+  registerPlainArrowCallbackWrapper(statement.init, normalizeFunctionType(functionType), scopes, wrappers, context, deps)
+}
+
+function callbackNodeMayContainReference(value: CallbackNode | CallbackNode[] | null | undefined): boolean {
+  if (value === null || typeof value === 'undefined') {
+    return false
+  }
+
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index = index + 1) {
+      if (callbackNodeMayContainReference(callbackNodeAt(value, index))) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if (value.type === 'Reference') {
+    return true
+  }
+
+  if (
+    value.type === 'NumberLiteral' ||
+    value.type === 'BooleanLiteral' ||
+    value.type === 'StringLiteral' ||
+    value.type === 'TemplateLiteral'
+  ) {
+    return false
+  }
+
+  if (value.type === 'BlockStatement') {
+    return callbackNodeMayContainReference(value.body)
+  }
+
+  if (value.type === 'ExpressionStatement') {
+    return callbackNodeMayContainReference(value.expression)
+  }
+
+  if (value.type === 'ReturnStatement' || value.type === 'ThrowStatement') {
+    return callbackNodeMayContainReference(value.argument)
+  }
+
+  if (value.type === 'ArrowFunctionExpression') {
+    return callbackNodeMayContainReference(value.body)
+  }
+
+  return true
 }
 
 function appendCallbackScope(scopes: CallbackScope[], scope: CallbackScope): CallbackScope[] {
@@ -1511,6 +1765,9 @@ function declareCallbackVariable(
   deps: CallbackLoweringDependencies
 ): void {
   let valueType = statement.valueType
+  const functionType = callbackVariableFunctionType(statement)
+
+  syncCallbackVariableFunctionType(statement, functionType)
 
   if (valueType === 'unknown') {
     valueType = inferCapturedExpressionValueType(statement.init, scopes)
@@ -1519,7 +1776,7 @@ function declareCallbackVariable(
   declareCallbackBinding(scope, statement.name, {
     name: statement.name,
     valueType: valueType,
-    functionType: statement.functionType,
+    functionType,
     declaration: statement,
     nullable: statement.nullable === true,
     shape: statement.shape,
@@ -1687,14 +1944,18 @@ function visitCallbackStatement(
   }
 
   if (statement.type === 'VariableDeclaration') {
+    const functionType = callbackVariableFunctionType(statement)
+
+    syncCallbackVariableFunctionType(statement, functionType)
+
     if (isNullableFunctionType(statement.valueType, statement.nullable)) {
-      registerRuntimeCallbackExpression(statement.init, statement.functionType, scopes, wrappers, context, deps)
-    } else if (isRuntimeFunctionType(statement.functionType)) {
-      registerRuntimeCallbackExpression(statement.init, statement.functionType, scopes, wrappers, context, deps)
-    } else if (shouldPromotePlainFunctionExpression(statement.init, statement.functionType, scopes, context, deps)) {
-      registerRuntimeCallbackExpression(statement.init, statement.functionType, scopes, wrappers, context, deps)
+      registerRuntimeCallbackExpression(statement.init, functionType, scopes, wrappers, context, deps)
+    } else if (isRuntimeFunctionType(functionType)) {
+      registerRuntimeCallbackExpression(statement.init, functionType, scopes, wrappers, context, deps)
+    } else if (shouldPromotePlainFunctionExpression(statement.init, functionType, scopes, context, deps)) {
+      registerRuntimeCallbackExpression(statement.init, functionType, scopes, wrappers, context, deps)
     } else {
-      registerCallbackExpression(statement.init, statement.functionType, scopes, wrappers, context, deps)
+      registerCallbackExpression(statement.init, functionType, scopes, wrappers, context, deps)
     }
 
     let objectShape = statement.shape
@@ -2189,9 +2450,10 @@ function visitPromiseConstructorCallbackExpression(
   }
 
   const scope: CallbackScope = new Map()
+  const params = callbackArrowParams(executor)
 
-  for (let index = 0; index < executor.params.length; index = index + 1) {
-    const param = callbackNodeAt(executor.params, index)
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = callbackNodeAt(params, index)
     declareCallbackBinding(scope, param.name, {
       name: param.name,
       valueType: 'promise-settlement',
@@ -2233,9 +2495,10 @@ function visitNestedCallbackArrowExpression(
   deps: CallbackLoweringDependencies
 ): void {
   const scope: CallbackScope = new Map()
+  const params = callbackArrowParams(expression)
 
-  for (let index = 0; index < expression.params.length; index = index + 1) {
-    const param = callbackNodeAt(expression.params, index)
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = callbackNodeAt(params, index)
 
     declareCallbackBinding(scope, param.name, {
       name: param.name,
@@ -2272,9 +2535,10 @@ export function collectArrowCaptures(
 ): CRuntimeArrowCapture[] {
   const captures: RuntimeArrowCaptureMap = new Map()
   const localScope: CallbackScope = new Map()
+  const params = callbackArrowParams(expression)
 
-  for (let index = 0; index < expression.params.length; index = index + 1) {
-    const param = callbackNodeAt(expression.params, index)
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = callbackNodeAt(params, index)
 
     declareCallbackBinding(localScope, param.name, {
       name: param.name,
@@ -2803,7 +3067,8 @@ function callbackBlockStatements(body: AnyNode | AnyNode[]): AnyNode[] {
 }
 
 function plainArrowCallbackParamName(wrapper: CPlainArrowCallbackWrapper, index: number): string {
-  const param = wrapper.expression.params[index] ?? null
+  const params = callbackArrowParams(wrapper.expression)
+  const param = params[index] ?? null
 
   if (param !== null && typeof param !== 'undefined') {
     return param.name
@@ -3401,7 +3666,8 @@ function emitRuntimeArrowCallbackParamPrelude(
 }
 
 function runtimeArrowCallbackParamName(wrapper: CRuntimeArrowCallbackWrapper, index: number): string {
-  const param = wrapper.expression.params[index] ?? null
+  const params = callbackArrowParams(wrapper.expression)
+  const param = params[index] ?? null
 
   if (param !== null && typeof param !== 'undefined') {
     return param.name

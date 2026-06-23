@@ -74,7 +74,9 @@ export function isTimerStartCallExpression(expression: AnyNode | null | undefine
     return false
   }
 
-  return !!cTimerStartCallName(expression.callee) || timerRuntimeMethodStartsWithSet(expression)
+  const method = timerRuntimeMethodForExpression(expression)
+
+  return method !== null && typeof method !== 'undefined' && method.startsWith('set')
 }
 
 function timerStartCallNameFor(method: string | null): string | null {
@@ -110,19 +112,20 @@ function timerRuntimeMethodForExpression(expression: AnyNode | null | undefined)
     return expression.timerRuntimeMethod
   }
 
-  return cTimerRuntimeCallName(expression.callee)
-}
+  const callee = expression.callee
+  const runtimeMethod = cTimerRuntimeCallName(callee)
 
-function timerRuntimeMethodStartsWithSet(expression: AnyNode | null | undefined): boolean {
-  if (expression === null || typeof expression === 'undefined') {
-    return false
+  if (runtimeMethod !== null && typeof runtimeMethod !== 'undefined') {
+    return runtimeMethod
   }
 
-  if (expression.timerRuntimeMethod === null || typeof expression.timerRuntimeMethod === 'undefined') {
-    return false
+  const startMethod = cTimerStartCallName(callee)
+
+  if (startMethod !== null && typeof startMethod !== 'undefined') {
+    return startMethod
   }
 
-  return expression.timerRuntimeMethod.startsWith('set')
+  return null
 }
 
 function appendTimerLines(target: string[], lines: string[]): void {
@@ -263,7 +266,17 @@ export function emitPreparedTimerCallExpression(
     }
   }
 
-  const callName = timerStartCallNameFor(method)
+  let startMethod = method
+  let callName = timerStartCallNameFor(startMethod)
+
+  if (callName === null || typeof callName === 'undefined') {
+    const calleeStartMethod = cTimerStartCallName(expression.callee)
+
+    if (calleeStartMethod !== null && typeof calleeStartMethod !== 'undefined') {
+      startMethod = calleeStartMethod
+      callName = timerStartCallNameFor(startMethod)
+    }
+  }
 
   if (callName === null || typeof callName === 'undefined') {
     return null
@@ -285,7 +298,7 @@ export function emitPreparedTimerCallExpression(
   }
 
   if (
-    timerStartCallRequiresHandle(method) &&
+    timerStartCallRequiresHandle(startMethod) &&
     (options.out === null || typeof options.out === 'undefined') &&
     options.asValue !== true
   ) {
@@ -321,7 +334,7 @@ export function emitPreparedTimerCallExpression(
   lines.push(`inox_retain(*${callbackContext});`)
   const outArgument = timerOutArgument(out)
 
-  if (!timerStartCallHasDelay(method)) {
+  if (!timerStartCallHasDelay(startMethod)) {
     lines.push(
       `if (${callName}(${emitEventLoopReference(context)}, inox_timer_callback_run, ${callbackContext}, inox_timer_callback_finalize, ${outArgument}) != INOX_OK) {`
     )
@@ -373,7 +386,7 @@ export function emitPreparedTimerHandleExpression(
     expression !== null &&
     typeof expression !== 'undefined' &&
     expression.type === 'CallExpression' &&
-    (!!cTimerStartCallName(expression.callee) || timerRuntimeMethodStartsWithSet(expression))
+    isTimerStartCallExpression(expression)
   ) {
     const call = emitPreparedTimerCallExpression(expression, context, dependencies, {
       asValue: true

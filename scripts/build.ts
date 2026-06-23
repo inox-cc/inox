@@ -261,7 +261,7 @@ try {
       output = process.argv[2]
     }
 
-    const result = compileFileSync(input, { target: 'c', loopBackend: 'libuv', tlsBackend: 'openssl' })
+    const result = compileFileSync(input, { target: 'c' })
 
     fs.writeFileSync(output, result.code + '\\n')
     console.log(output)

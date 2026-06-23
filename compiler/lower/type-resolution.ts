@@ -32,6 +32,7 @@ export type LowerResolvedType = {
   arrayElementDeclaredType: string | null
   mapKeyType: string | null
   mapValueType: string | null
+  mapValueShape?: LowerTypeNode | null
   promiseValueType?: string | null
   setElementType: string | null
   returnShape?: LowerTypeNode | null
@@ -990,6 +991,9 @@ function mapResolvedType(keyType: LowerResolvedType | null, valueType: LowerReso
   const resolved = namedResolvedType('map')
   resolved.mapKeyType = resolvedValueType(keyType, 'unknown')
   resolved.mapValueType = resolvedValueType(valueType, 'unknown')
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    resolved.mapValueShape = nullableNode(valueType.shape)
+  }
 
   return resolved
 }
@@ -1019,6 +1023,7 @@ function cloneResolvedType(source: LowerResolvedType): LowerResolvedType {
     arrayElementDeclaredType: source.arrayElementDeclaredType,
     mapKeyType: source.mapKeyType,
     mapValueType: source.mapValueType,
+    mapValueShape: nullableNode(source.mapValueShape),
     promiseValueType: nullableString(source.promiseValueType),
     setElementType: source.setElementType,
     shape: nullableNode(source.shape),
@@ -1040,6 +1045,7 @@ function unresolvedType(): LowerResolvedType {
     arrayElementDeclaredType: null,
     mapKeyType: null,
     mapValueType: null,
+    mapValueShape: null,
     promiseValueType: null,
     setElementType: null,
     shape: null,

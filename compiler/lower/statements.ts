@@ -448,6 +448,7 @@ function lowerVariableDeclaration(
   const arrayElementDeclaredType = variableDeclarationArrayElementDeclaredType(declared, statement, init)
   const mapKeyType = variableDeclarationMapKeyType(declared, inferredMapType)
   const mapValueType = variableDeclarationMapValueType(declared, inferredMapType)
+  const mapValueShape = variableDeclarationMapValueShape(declared, init)
   const promiseValueType = variableDeclarationPromiseValueType(declared, statement, init)
   const setElementType = variableDeclarationSetElementType(declared, statement, init)
   const valueType = variableDeclarationValueType(declared, statement, init)
@@ -461,6 +462,7 @@ function lowerVariableDeclaration(
     arrayElementDeclaredType,
     mapKeyType,
     mapValueType,
+    mapValueShape,
     promiseValueType,
     setElementType,
     valueType
@@ -547,6 +549,7 @@ function createLoweredVariableDeclaration(
   arrayElementDeclaredType: string | null,
   mapKeyType: string | null,
   mapValueType: string | null,
+  mapValueShape: LowerNode | null,
   promiseValueType: string | null,
   setElementType: string | null,
   valueType: string
@@ -565,6 +568,7 @@ function createLoweredVariableDeclaration(
     arrayElementDeclaredType,
     mapKeyType,
     mapValueType,
+    mapValueShape,
     promiseValueType,
     setElementType,
     valueType,
@@ -713,6 +717,18 @@ function variableDeclarationMapValueType(
   return null
 }
 
+function variableDeclarationMapValueShape(declared: LowerResolvedType, init: LowerNode | null): LowerNode | null {
+  if (declared.mapValueShape !== null && typeof declared.mapValueShape !== 'undefined') {
+    return declared.mapValueShape
+  }
+
+  if (init !== null && typeof init !== 'undefined' && init.mapValueShape !== null && typeof init.mapValueShape !== 'undefined') {
+    return init.mapValueShape
+  }
+
+  return null
+}
+
 function variableDeclarationPromiseValueType(
   declared: LowerResolvedType,
   statement: LowerNode,
@@ -766,7 +782,7 @@ function variableDeclarationValueType(
 
   const statementValueType = nullableString(statement.valueType)
 
-  if (statementValueType !== null && typeof statementValueType !== 'undefined') {
+  if (statementValueType !== null && typeof statementValueType !== 'undefined' && statementValueType !== 'unknown') {
     return statementValueType
   }
 
@@ -777,6 +793,10 @@ function variableDeclarationValueType(
   }
 
   if (init !== null && typeof init !== 'undefined') {
+    if (init.type === 'ArrowFunctionExpression') {
+      return 'function'
+    }
+
     const initValueType = nullableString(init.valueType)
 
     if (initValueType !== null && typeof initValueType !== 'undefined') {
@@ -802,6 +822,7 @@ function cloneVariableDeclarationWithInit(statement: LowerNode, init: LowerNode)
     arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
     mapKeyType: nullableString(statement.mapKeyType),
     mapValueType: nullableString(statement.mapValueType),
+    mapValueShape: nullableNode(statement.mapValueShape),
     promiseValueType: nullableString(statement.promiseValueType),
     setElementType: nullableString(statement.setElementType),
     valueType: fallbackString(statement.valueType, 'unknown'),
@@ -822,6 +843,7 @@ function declareLowerVariable(context: LowerContext, statement: LowerNode): void
     arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
     mapKeyType: nullableString(statement.mapKeyType),
     mapValueType: nullableString(statement.mapValueType),
+    mapValueShape: nullableNode(statement.mapValueShape),
     promiseValueType: nullableString(statement.promiseValueType),
     setElementType: nullableString(statement.setElementType),
     functionType: nullableNode(statement.functionType),

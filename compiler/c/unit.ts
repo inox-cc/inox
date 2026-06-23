@@ -24,12 +24,17 @@ import type { CallbackLoweringDependencies } from './async/callbacks.ts'
 import {
   callbackContextWrapperFinalizerName,
   collectCallbackWrappers,
+  collectFunctionPointerParamNames,
+  emitFunctionPointerNamedParams,
+  emitFunctionPointerReturnType,
   emitPlainArrowCallbackWrapperDeclaration,
   emitPlainArrowCallbackWrapperHead,
   emitRuntimeArrowCallbackContextType,
   emitRuntimeCallbackWrapperDeclaration,
   emitRuntimeCallbackWrapperHead,
+  isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
+  isRuntimeFunctionType,
   isRuntimeArrowCallbackWrapperWithContext,
   isRuntimeCallbackWrapper
 } from './async/callbacks.ts'
@@ -56,6 +61,7 @@ import type {
   CPromiseChainWrapperMap
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
+import { emitCIdentifier } from './identifiers.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
   collectHttpRuntimeCreateServerNames,
@@ -74,7 +80,16 @@ import type { HttpLoweringDependencies } from './stdlib/http.ts'
 import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
 import type { NetLoweringDependencies } from './stdlib/net.ts'
 import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
-import type { CClassInfo, CEmitOptions, CPromiseChainWrapper, CRuntimeArrowCallbackWrapper } from './types.ts'
+import type {
+  CClassInfo,
+  CEmitOptions,
+  CFunctionPointerAdapter,
+  CFunctionParam,
+  CObjectShapeField,
+  CPromiseChainWrapper,
+  CRuntimeArrowCallbackWrapper
+} from './types.ts'
+import { isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
@@ -82,6 +97,7 @@ import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
+import { emitCType } from './value-types.ts'
 
 export type CUnitDependencies = {
   arrayLoweringDependencies: ArrayLoweringDependencies
@@ -115,10 +131,36 @@ type CUnitFunctionNodeEntry = {
   node: AnyNode
 }
 
+type CUnitValueDeclaration = {
+  name: string
+  symbolName: string
+  valueType: string
+}
+
 function pushUnitLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
   }
+}
+
+function pushIndentedUnitLines(target: string[], lines: string[], indent: string): void {
+  for (const line of lines) {
+    target.push(`${indent}${line}`)
+  }
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
 }
 
 function cUnitFunctionEntryAt(values: CUnitFunctionNodeEntry[], index: number): CUnitFunctionNodeEntry {
@@ -181,6 +223,471 @@ function unitNodeAt(values: AnyNode[], index: number): AnyNode {
 
 function unitStringAt(values: string[], index: number): string {
   return values[index]
+}
+
+function unitFunctionParamAt(values: CFunctionParam[], index: number): CFunctionParam {
+  return values[index]
+}
+
+function unitValueDeclarationAt(values: CUnitValueDeclaration[], index: number): CUnitValueDeclaration {
+  return values[index]
+}
+
+function unitObjectShapeFieldAt(values: CObjectShapeField[], index: number): CObjectShapeField {
+  return values[index]
+}
+
+function collectCUnitValueDeclarations(programs: IrProgram[]): CUnitValueDeclaration[] {
+  const values: CUnitValueDeclaration[] = []
+  const statements = collectIrTopLevelNodesFromPrograms(programs, 'statement')
+
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const item = unitNodeAt(statements, index)
+
+    if (item.type !== 'VariableDeclaration') {
+      continue
+    }
+
+    values.push({
+      name: item.name,
+      symbolName: emitCIdentifier(item.name),
+      valueType: cUnitValueType(item)
+    })
+  }
+
+  return values
+}
+
+function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValueDeclaration[]): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = unitValueDeclarationAt(values, index)
+
+    context.moduleValueNames.set(item.name, item.symbolName)
+    context.moduleValueTypes.set(item.name, item.valueType)
+  }
+}
+
+function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaration[]): void {
+  if (values.length === 0) {
+    return
+  }
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = unitValueDeclarationAt(values, index)
+    const cType = cUnitValueCType(item.valueType)
+    const initializer = cUnitValueGlobalInitializer(item.valueType)
+
+    if (initializer === '') {
+      lines.push(`static ${cType} ${item.symbolName};`)
+    } else {
+      lines.push(`static ${cType} ${item.symbolName} = ${initializer};`)
+    }
+  }
+
+  lines.push('')
+}
+
+function cUnitValueType(node: AnyNode): string {
+  const valueType = node.valueType
+
+  if (valueType === null || typeof valueType === 'undefined' || valueType === '') {
+    return 'unknown'
+  }
+
+  if (
+    valueType === 'string' &&
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.type === 'AwaitExpression'
+  ) {
+    return 'unknown'
+  }
+
+  return valueType
+}
+
+function cUnitValueCType(valueType: string): string {
+  if (valueType === 'string') {
+    return 'char*'
+  }
+
+  if (valueType === 'unknown') {
+    return 'inox_value'
+  }
+
+  return emitCType(valueType)
+}
+
+function cUnitValueGlobalInitializer(valueType: string): string {
+  if (valueType === 'string') {
+    return '""'
+  }
+
+  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
+    return ''
+  }
+
+  return '0'
+}
+
+function collectCUnitContextRuntimeTypes(context: CEmitContext): Set<string> {
+  const types: Set<string> = new Set()
+
+  for (const valueType of context.functionReturnTypes.values()) {
+    addCUnitRuntimeType(types, valueType)
+  }
+
+  for (const params of context.functionParams.values()) {
+    for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
+      const param = unitFunctionParamAt(params, paramIndex)
+
+      collectCUnitFunctionParamRuntimeTypes(types, param, new Set())
+    }
+  }
+
+  return types
+}
+
+function addCUnitRuntimeType(types: Set<string>, valueType: string): void {
+  if (isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType) || valueType === 'promise') {
+    types.add(valueType)
+  }
+}
+
+function collectCUnitFunctionParamRuntimeTypes(
+  types: Set<string>,
+  param: CFunctionParam,
+  seen: Set<CObjectShapeField[]>
+): void {
+  addCUnitRuntimeType(types, param.valueType)
+
+  if (
+    param.valueType === 'function' &&
+    !isPlainFunctionPointerType(param.functionType) &&
+    isRuntimeFunctionType(param.functionType)
+  ) {
+    types.add('function')
+  }
+
+  if (
+    param.valueType === 'object' &&
+    param.shape !== null &&
+    typeof param.shape !== 'undefined' &&
+    param.shape.fields !== null &&
+    typeof param.shape.fields !== 'undefined'
+  ) {
+    collectCUnitObjectShapeRuntimeTypes(types, param.shape.fields, seen)
+  }
+}
+
+function collectCUnitObjectShapeRuntimeTypes(
+  types: Set<string>,
+  fields: CObjectShapeField[],
+  seen: Set<CObjectShapeField[]>
+): void {
+  if (seen.has(fields)) {
+    return
+  }
+
+  seen.add(fields)
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = unitObjectShapeFieldAt(fields, index)
+
+    addCUnitRuntimeType(types, field.valueType)
+
+    if (
+      field.valueType === 'function' &&
+      !isPlainFunctionPointerType(field.functionType) &&
+      isRuntimeFunctionType(field.functionType)
+    ) {
+      types.add('function')
+    }
+
+    if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined' &&
+      field.shape.fields !== null &&
+      typeof field.shape.fields !== 'undefined'
+    ) {
+      collectCUnitObjectShapeRuntimeTypes(types, field.shape.fields, seen)
+    }
+  }
+
+  seen.delete(fields)
+}
+
+function emitCUnitFunctionPointerAdapterDefinitions(lines: string[], context: CEmitContext): void {
+  if (context.functionPointerAdapters.length === 0) {
+    return
+  }
+
+  for (const adapter of context.functionPointerAdapters) {
+    pushUnitLines(lines, emitCUnitFunctionPointerAdapterDefinition(adapter, context))
+    lines.push('')
+  }
+}
+
+function emitCUnitFunctionPointerAdapterDefinition(
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext
+): string[] {
+  const lines = [`${emitCUnitFunctionPointerAdapterHead(adapter)} {`]
+  const defaultLines: string[] = []
+  const cleanupLines: string[] = []
+  const expectedNames = collectFunctionPointerParamNames(adapter.functionType, adapter.seenTypes)
+  const targetNames = collectFunctionPointerParamNames(adapter.targetFunctionType, adapter.targetSeenTypes)
+  const expectedNameSet = stringSetFromArray(expectedNames)
+  const targetNameSet = stringSetFromArray(targetNames)
+  const targetArgs = emitCUnitFunctionPointerAdapterTargetArgs(
+    adapter,
+    expectedNameSet,
+    targetNames,
+    emitFunctionPointerReturnType(adapter.functionType),
+    defaultLines,
+    cleanupLines
+  )
+
+  for (const name of expectedNames) {
+    if (!targetNameSet.has(name)) {
+      lines.push(`  (void)${name};`)
+    }
+  }
+
+  pushUnitLines(lines, defaultLines)
+
+  if (isThrowingCUnitFunctionPointerAdapterTarget(adapter, context)) {
+    pushUnitLines(lines, emitCUnitThrowingFunctionPointerAdapterTargetCall(adapter, targetArgs, cleanupLines))
+    lines.push('}')
+
+    return lines
+  }
+
+  const call = `${adapter.target}(${joinStrings(targetArgs, ', ')})`
+  const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
+
+  if (adapterReturnType === 'void') {
+    lines.push(`  ${call};`)
+    pushUnitLines(lines, cleanupLines)
+  } else {
+    lines.push(`  ${adapterReturnType} inox_adapter_result = ${call};`)
+    pushUnitLines(lines, cleanupLines)
+    lines.push('  return inox_adapter_result;')
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function emitCUnitFunctionPointerAdapterTargetArgs(
+  adapter: CFunctionPointerAdapter,
+  expectedNameSet: Set<string>,
+  targetNames: string[],
+  adapterReturnType: string,
+  defaultLines: string[],
+  cleanupLines: string[]
+): string[] {
+  const args: string[] = []
+
+  for (const name of targetNames) {
+    if (expectedNameSet.has(name)) {
+      args.push(name)
+      continue
+    }
+
+    const defaultArg = emitCUnitFunctionPointerAdapterDefaultTargetArg(
+      name,
+      adapter,
+      adapterReturnType,
+      defaultLines,
+      cleanupLines
+    )
+
+    if (defaultArg !== null && typeof defaultArg !== 'undefined') {
+      args.push(defaultArg)
+      continue
+    }
+
+    args.push(name)
+  }
+
+  return args
+}
+
+function emitCUnitFunctionPointerAdapterDefaultTargetArg(
+  name: string,
+  adapter: CFunctionPointerAdapter,
+  adapterReturnType: string,
+  defaultLines: string[],
+  cleanupLines: string[]
+): string | null {
+  for (
+    let index = adapter.functionType.params.length;
+    index < adapter.targetFunctionType.params.length;
+    index = index + 1
+  ) {
+    if (name !== `inox_arg_${index}`) {
+      continue
+    }
+
+    const param = unitFunctionParamAt(adapter.targetFunctionType.params, index)
+
+    if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
+      return null
+    }
+
+    return emitCUnitFunctionPointerAdapterDefaultParamValue(param, adapterReturnType, defaultLines, cleanupLines)
+  }
+
+  return null
+}
+
+function emitCUnitFunctionPointerAdapterDefaultParamValue(
+  param: CFunctionParam,
+  adapterReturnType: string,
+  defaultLines: string[],
+  cleanupLines: string[]
+): string {
+  const value = param.defaultValue
+
+  if (value !== null && typeof value !== 'undefined') {
+    if (value.type === 'ArrayLiteral' && value.elements.length === 0 && param.valueType === 'array') {
+      const name = `inox_adapter_default_${defaultLines.length}`
+
+      defaultLines.push(`  inox_value ${name} = inox_undefined_value();`)
+      defaultLines.push(`  if (inox_array_new(&inox_default_allocator, 0, &${name}) != INOX_OK) {`)
+      defaultLines.push(`    return ${cUnitFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`)
+      defaultLines.push('  }')
+      cleanupLines.push(`  inox_release(${name});`)
+
+      return name
+    }
+
+    if (value.type === 'NullLiteral') {
+      return 'inox_null_value()'
+    }
+
+    if (value.type === 'BooleanLiteral') {
+      if (value.value === true) {
+        return '1'
+      }
+
+      return '0'
+    }
+
+    if (value.type === 'NumberLiteral') {
+      return `${value.value}`
+    }
+  }
+
+  if (
+    param.nullable === true ||
+    param.valueType === 'unknown' ||
+    isManagedRuntimeReturnType(param.valueType) ||
+    isOpaqueRuntimeValueType(param.valueType)
+  ) {
+    return 'inox_undefined_value()'
+  }
+
+  return '0'
+}
+
+function isThrowingCUnitFunctionPointerAdapterTarget(
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext
+): boolean {
+  const sourceName = cUnitFunctionPointerAdapterTargetSourceName(adapter, context)
+
+  return sourceName !== null && typeof sourceName !== 'undefined' && context.throwingFunctions.has(sourceName)
+}
+
+function cUnitFunctionPointerAdapterTargetSourceName(
+  adapter: CFunctionPointerAdapter,
+  context: CEmitContext
+): string | null {
+  for (const name of context.functionNames.keys()) {
+    const target = context.functionNames.get(name)
+
+    if (target === adapter.target) {
+      return name
+    }
+  }
+
+  return null
+}
+
+function emitCUnitThrowingFunctionPointerAdapterTargetCall(
+  adapter: CFunctionPointerAdapter,
+  targetArgs: string[],
+  cleanupLines: string[]
+): string[] {
+  const lines: string[] = []
+  const callArgs: string[] = []
+  const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
+  const returnType = emitFunctionPointerReturnType(adapter.targetFunctionType)
+
+  for (const arg of targetArgs) {
+    callArgs.push(arg)
+  }
+
+  if (returnType !== 'void') {
+    lines.push(`  ${returnType} inox_adapter_result = ${cUnitFunctionPointerAdapterDefaultReturnValue(returnType)};`)
+    callArgs.push('&inox_adapter_result')
+  }
+
+  lines.push('  inox_value inox_adapter_error = inox_undefined_value();')
+  callArgs.push('&inox_adapter_error')
+  lines.push(`  inox_status inox_adapter_status = ${adapter.target}(${joinStrings(callArgs, ', ')});`)
+  lines.push('  if (inox_adapter_status != INOX_OK) {')
+  lines.push('    inox_release(inox_adapter_error);')
+  pushIndentedUnitLines(lines, cleanupLines, '  ')
+
+  if (adapterReturnType === 'void') {
+    lines.push('    return;')
+  } else {
+    lines.push(
+      `    return ${cUnitThrowingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`
+    )
+  }
+
+  lines.push('  }')
+  lines.push('  inox_release(inox_adapter_error);')
+  pushUnitLines(lines, cleanupLines)
+
+  if (adapterReturnType !== 'void') {
+    lines.push(`  return ${cUnitThrowingFunctionPointerAdapterReturnExpression(adapterReturnType, returnType)};`)
+  }
+
+  return lines
+}
+
+function cUnitThrowingFunctionPointerAdapterReturnExpression(adapterReturnType: string, targetReturnType: string): string {
+  if (targetReturnType !== 'void') {
+    return 'inox_adapter_result'
+  }
+
+  return cUnitFunctionPointerAdapterDefaultReturnValue(adapterReturnType)
+}
+
+function cUnitFunctionPointerAdapterDefaultReturnValue(returnType: string): string {
+  if (returnType === 'inox_value') {
+    return 'inox_undefined_value()'
+  }
+
+  if (returnType.includes('*')) {
+    return '0'
+  }
+
+  return '0'
+}
+
+function emitCUnitFunctionPointerAdapterHead(adapter: CFunctionPointerAdapter): string {
+  return `static ${emitFunctionPointerReturnType(adapter.functionType)} ${adapter.name}(${emitFunctionPointerNamedParams(
+    adapter.functionType,
+    adapter.seenTypes
+  )})`
 }
 
 function pushCUnitClassMethodFunctionDeclarations(target: IrFunctionDeclaration[], classes: AnyNode[]): void {
@@ -269,6 +776,7 @@ export function emitCUnit(
   const functionEffects = mergeIrFunctionEffects(inferredFunctionEffects, storedFunctionEffects)
   const topLevelNodes = collectCUnitTopLevelNodes(irPrograms)
   const jsGlobalRoots = stringSetFromArray(globalRoots)
+  const valueDeclarations = collectCUnitValueDeclarations(irPrograms)
   const baseContext = deps.createBaseContext(
     diagnostics,
     functionDeclarations,
@@ -276,6 +784,7 @@ export function emitCUnit(
     jsGlobalRoots,
     topLevelNodes
   )
+  registerCUnitValueDeclarations(baseContext, valueDeclarations)
   baseContext.dgramImportNames = collectRuntimeImportNames(
     irPrograms,
     new Set(['dgram', 'node:dgram']),
@@ -325,6 +834,7 @@ export function emitCUnit(
   baseContext.httpHandlers = collectHttpHandlers(irPrograms, baseContext)
   baseContext.netHandlers = collectNetHandlers(irPrograms, baseContext)
   const classMethods = collectClassMethods(baseContext)
+  const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)
   const preludeRequirements = resolveCRuntimePreludeRequirements({
     classInfoCount: baseContext.classInfos.size,
     cryptoContext: baseContext,
@@ -332,6 +842,7 @@ export function emitCUnit(
     hasRuntimeCallbackWrapper: hasCUnitRuntimeCallbackWrapper(baseContext),
     irPrograms,
     runtimeRequirements,
+    signatureRuntimeTypes,
     throwingFunctionCount: baseContext.throwingFunctions.size
   })
   const needsRuntime: boolean = preludeRequirements.needsRuntime
@@ -393,6 +904,7 @@ export function emitCUnit(
     needsNetRuntime,
     options
   )
+  emitCUnitValueDefinitions(lines, valueDeclarations)
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
   const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers
@@ -577,7 +1089,10 @@ export function emitCUnit(
     lines.push('')
   }
 
-  pushUnitLines(lines, deps.emitMainWrapper(entryIrPrograms, baseContext))
+  const mainLines = deps.emitMainWrapper(entryIrPrograms, baseContext)
+
+  emitCUnitFunctionPointerAdapterDefinitions(lines, baseContext)
+  pushUnitLines(lines, mainLines)
 
   throwDiagnostics(diagnostics)
 

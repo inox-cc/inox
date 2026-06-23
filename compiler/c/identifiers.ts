@@ -1,5 +1,5 @@
 export function cStringLiteral(value: string): string {
-  return JSON.stringify(value)
+  return `"${escapeCString(value)}"`
 }
 
 export function emitCIdentifier(value: string): string {

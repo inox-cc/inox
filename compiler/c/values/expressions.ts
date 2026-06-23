@@ -165,9 +165,11 @@ type CFunctionContext = CEmitContext & {
   functionReturnTypes: CStringMap
   functionTypes: CFunctionTypeMap
   jsGlobalRoots: CStringSet
+  localValueNames: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
   moduleObjectShapes: CObjectShapeFieldMap
   moduleValueNames: CStringMap
+  moduleValueTypes: CStringMap
   narrowedNullableScalars: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
@@ -4165,17 +4167,21 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
 
   registerOwnedValue(context, value)
   appendLines(lines, object.lines)
-  lines.push(
-    emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)
-  )
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(
-    `inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
-  )
-  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`if (${object.expression}.tag == INOX_TAG_ARRAY) {`)
   lines.push(`  ${value} = inox_undefined_value();`)
+  lines.push('} else {')
+  lines.push(
+    `  ${emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)}`
+  )
+  lines.push(
+    `  inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
+  )
+  lines.push(`  if (${status} == INOX_ERR_FIELD) {`)
+  lines.push(`    ${value} = inox_undefined_value();`)
+  lines.push('  }')
+  lines.push(`  if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
   lines.push('}')
-  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
 
   return {
     lines,
@@ -5101,13 +5107,42 @@ export function emitCValueExpression(
   if (expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
     let valueType = context.variables.get(name) ?? ''
-    const moduleValueName = context.moduleValueNames.get(name)
+    let moduleValueName = ''
+
+    if (!(expression.path.length === 1 && context.localValueNames.has(name))) {
+      const resolvedModuleValueName = context.moduleValueNames.get(name)
+
+      if (resolvedModuleValueName !== null && typeof resolvedModuleValueName !== 'undefined') {
+        moduleValueName = resolvedModuleValueName
+      }
+    }
 
     if (valueType === '' && (context.runtimeArrayElementTypes.has(name) || context.arrayShapes.has(name))) {
       valueType = 'array'
     }
 
-    if (moduleValueName !== null && typeof moduleValueName !== 'undefined') {
+    if (moduleValueName !== '') {
+      const moduleValueType = context.moduleValueTypes.get(name)
+
+      if (moduleValueType === 'string') {
+        const temp = nextCName(context, 'inox_value')
+        const lines: string[] = []
+
+        registerOwnedValue(context, temp)
+        appendLines(lines, emitPrepareOwnedValueWrite(temp))
+        lines.push(
+          emitStatusCheck(
+            `inox_string_from_literal(&inox_default_allocator, ${moduleValueName}, strlen(${moduleValueName}), &${temp})`,
+            context
+          )
+        )
+
+        return {
+          lines,
+          expression: temp
+        }
+      }
+
       return {
         lines: [],
         expression: moduleValueName

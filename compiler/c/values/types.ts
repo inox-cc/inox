@@ -320,6 +320,7 @@ function cReferenceExpressionType(
 ): string {
   const variableType = context.variables.get(cDottedPath(expression.path))
   const name = cStringAt(expression.path, 0)
+  const localName = expression.path.length === 1 && context.localValueNames.has(name)
   let metadataType: string | null = null
 
   if (
@@ -332,7 +333,7 @@ function cReferenceExpressionType(
 
   const moduleValueType = context.moduleValueTypes.get(name)
 
-  if (moduleValueType !== null && typeof moduleValueType !== 'undefined') {
+  if (!localName && moduleValueType !== null && typeof moduleValueType !== 'undefined') {
     return moduleValueType
   }
 
@@ -382,11 +383,28 @@ function shouldPreferReferenceMetadataType(
     return true
   }
 
+  if (isUnionMetadataType(metadataType) && isConcreteContextValueType(variableType)) {
+    return false
+  }
+
   if (variableType === 'number' && metadataType !== 'number') {
     return true
   }
 
   return isOpaqueRuntimeValueType(variableType)
+}
+
+function isUnionMetadataType(valueType: string | null | undefined): boolean {
+  return valueType !== null && typeof valueType !== 'undefined' && valueType.startsWith('union<')
+}
+
+function isConcreteContextValueType(valueType: string | null | undefined): boolean {
+  return (
+    valueType !== null &&
+    typeof valueType !== 'undefined' &&
+    valueType !== 'unknown' &&
+    !isUnionMetadataType(valueType)
+  )
 }
 
 export function inferExpressionType(
@@ -1080,6 +1098,12 @@ function objectAccessRootName(expression: AnyNode): string | null {
 }
 
 export function isAnyNodeLikeDeclaredType(value: string): boolean {
+  const nullableType = nullableTypeNameFromTypeName(value)
+
+  if (nullableType !== null && typeof nullableType !== 'undefined') {
+    return isAnyNodeLikeDeclaredType(nullableType)
+  }
+
   return value === 'AnyNode' || value.endsWith('Node') || value.endsWith('AstNode')
 }
 
@@ -1125,18 +1149,31 @@ export function isAnyNodeLikeArrayFieldName(fieldName: string): boolean {
 export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | null {
   if (
     fieldName === 'argument' ||
+    fieldName === 'block' ||
     fieldName === 'callee' ||
     fieldName === 'condition' ||
     fieldName === 'consequent' ||
+    fieldName === 'defaultValue' ||
+    fieldName === 'discriminant' ||
+    fieldName === 'dynamicField' ||
     fieldName === 'alternate' ||
     fieldName === 'expression' ||
+    fieldName === 'finalizer' ||
     fieldName === 'handler' ||
     fieldName === 'index' ||
     fieldName === 'init' ||
+    fieldName === 'iterable' ||
     fieldName === 'left' ||
+    fieldName === 'mapValueShape' ||
     fieldName === 'object' ||
+    fieldName === 'paramLoc' ||
+    fieldName === 'returnShape' ||
     fieldName === 'right' ||
-    fieldName === 'target'
+    fieldName === 'shape' ||
+    fieldName === 'staticLoc' ||
+    fieldName === 'target' ||
+    fieldName === 'test' ||
+    fieldName === 'update'
   ) {
     return 'AnyNode'
   }
@@ -1151,7 +1188,12 @@ export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | 
 function anyNodeLikeStringFields(): string[] {
   return [
     'type',
+    'builtin',
+    'imported',
+    'kind',
+    'local',
     'name',
+    'ownership',
     'property',
     'operator',
     'declaredType',
@@ -1161,56 +1203,115 @@ function anyNodeLikeStringFields(): string[] {
     'mapKeyType',
     'mapValueType',
     'promiseValueType',
+    'promiseRejectionValueType',
     'setElementType',
     'propertyValueType',
+    'pathRuntimeMethod',
+    'pathRuntimeConstant',
+    'processRuntimeMethod',
+    'processRuntimeProperty',
+    'processRuntimeEnvName',
+    'dgramMessageHandlerName',
+    'urlRuntimeMethod',
+    'urlRuntimeField',
+    'httpHandlerName',
+    'binaryRuntimeMethod',
+    'bufferRuntimeConstant',
+    'childProcessRuntimeMethod',
+    'cryptoHashDigestEncoding',
+    'cryptoRuntimeMethod',
+    'debugRuntimeMethod',
+    'fetchRuntimeMethod',
+    'fsRuntimeConstant',
+    'fsRuntimeMethod',
+    'jsonRuntimeMethod',
+    'mathRuntimeMethod',
+    'osRuntimeConstant',
+    'osRuntimeMethod',
+    'objectRuntimeMethod',
+    'stringRuntimeMethod',
+    'timerRuntimeMethod',
+    'numericCast',
     'returnType',
     'declaredReturnType',
     'returnArrayElementType',
+    'returnArrayElementDeclaredType',
     'returnMapKeyType',
     'returnMapValueType',
     'returnPromiseValueType',
     'returnSetElementType',
     'className',
-    'collectionKind'
+    'collectionKind',
+    'param',
+    'functionTypeOwnership',
+    'shapeOwnership'
   ]
 }
 
 function anyNodeLikeBooleanFields(): string[] {
   return [
     'async',
+    'default',
     'exported',
     'expressionBody',
+    'fsForce',
+    'fsRecursive',
     'nullable',
     'optional',
     'optionalChainProtected',
     'readonly',
+    'readonlyField',
     'returnNullable',
+    'static',
     'typeOnly',
     'weakTypeValidated'
   ]
 }
 
 function anyNodeLikeArrayFields(): string[] {
-  return ['args', 'cases', 'elements', 'fields', 'methods', 'params', 'path', 'properties', 'specifiers']
+  return [
+    'args',
+    'cases',
+    'elements',
+    'expressions',
+    'fields',
+    'methods',
+    'params',
+    'path',
+    'properties',
+    'specifiers'
+  ]
 }
 
 function anyNodeLikeObjectFields(): string[] {
   return [
     'argument',
+    'block',
     'callee',
     'condition',
     'consequent',
+    'discriminant',
     'alternate',
+    'defaultValue',
+    'dynamicField',
     'expression',
+    'finalizer',
     'functionType',
     'handler',
     'index',
     'init',
+    'iterable',
     'left',
+    'mapValueShape',
     'loc',
     'object',
+    'paramLoc',
+    'returnShape',
     'right',
     'shape',
-    'target'
+    'staticLoc',
+    'target',
+    'test',
+    'update'
   ]
 }

@@ -228,7 +228,9 @@ type CVariableScopeContext = {
   classInstanceTypes: CStringMap
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
+  localValueNames: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
+  moduleValueDeclarationScope: boolean
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
   objectAliases: CStringMap
@@ -271,7 +273,9 @@ export type CFunctionContext = CEmitContext & {
   functionErrorOut: string | null
   functionReturnOut: string | null
   functionTypes: CFunctionTypeMap
+  localValueNames: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
+  moduleValueDeclarationScope: boolean
   narrowedNullableScalars: CStringSet
   netReadingSockets: CStringSet
   nullableVariables: CStringSet
@@ -314,6 +318,7 @@ export type CVariableScopeSnapshot = {
   classInstanceTypes: CStringMap
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
+  localValueNames: CStringSet
   mapTypes: CFunctionReturnMapTypeMap
   narrowedNullableScalars: CStringSet
   nullableVariables: CStringSet
@@ -416,9 +421,11 @@ export function createFunctionContext(
     functionErrorOut: null,
     functionReturnOut: null,
     functionTypes: new Map(),
+    localValueNames: new Set(),
     eventLoopUsed: false,
     externalEventLoop: false,
     mapTypes: new Map(),
+    moduleValueDeclarationScope: false,
     netReadingSockets: new Set(),
     narrowedNullableScalars: new Set(),
     nullableVariables: new Set(),
@@ -967,6 +974,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousClassInstanceTypes = context.classInstanceTypes
   const previousErrorObjectNames = context.errorObjectNames
   const previousFunctionTypes = context.functionTypes
+  const previousLocalValueNames = context.localValueNames
   const previousMapTypes = context.mapTypes
   const previousNarrowedNullableScalars = context.narrowedNullableScalars
   const previousNullableVariables = context.nullableVariables
@@ -990,6 +998,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
   context.functionTypes = cloneCFunctionTypeMap(previousFunctionTypes)
+  context.localValueNames = cloneCStringSet(previousLocalValueNames)
   context.mapTypes = cloneCFunctionReturnMapTypeMap(previousMapTypes)
   context.narrowedNullableScalars = cloneCStringSet(previousNarrowedNullableScalars)
   context.nullableVariables = cloneCStringSet(previousNullableVariables)
@@ -1013,6 +1022,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     classInstanceTypes: previousClassInstanceTypes,
     errorObjectNames: previousErrorObjectNames,
     functionTypes: previousFunctionTypes,
+    localValueNames: previousLocalValueNames,
     mapTypes: previousMapTypes,
     narrowedNullableScalars: previousNarrowedNullableScalars,
     nullableVariables: previousNullableVariables,
@@ -1042,6 +1052,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.errorObjectNames = snapshot.errorObjectNames
   context.functionTypes = snapshot.functionTypes
+  context.localValueNames = snapshot.localValueNames
   context.mapTypes = snapshot.mapTypes
   context.narrowedNullableScalars = snapshot.narrowedNullableScalars
   context.nullableVariables = snapshot.nullableVariables
