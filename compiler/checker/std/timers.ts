@@ -17,11 +17,15 @@ export function timerClearMethodName(method: string): string | null {
   return null
 }
 
+const timerCallbackType: AnyNode = {
+  kind: 'function',
+  resolved: true,
+  params: [],
+  declaredReturnType: 'void',
+  returnType: 'void',
+  returnNullable: false
+}
+
 export function timerCallbackFunctionType(): AnyNode {
-  return {
-    kind: 'function',
-    params: [],
-    returnType: 'void',
-    returnNullable: false
-  }
+  return timerCallbackType
 }

@@ -258,7 +258,7 @@ import {
   isOpaqueRuntimeValueType,
   isRuntimeNullableType
 } from './value-types.ts'
-import type { ArrayLoweringDependencies } from './values/arrays.ts'
+import type { ArrayLoweringDependencies, PreparedArrayExpression } from './values/arrays.ts'
 import {
   emitArrayFilterVariableDeclaration,
   emitArrayMapVariableDeclaration,
@@ -429,10 +429,7 @@ import {
   isStringTrimCall,
   resolveRuntimeStringReference
 } from './values/strings.ts'
-import {
-  inferExpressionType as inferExpressionTypeWithDependencies,
-  isAnyNodeLikeDeclaredType
-} from './values/types.ts'
+import { inferExpressionType as inferExpressionTypeWithDependencies } from './values/types.ts'
 export type { CModuleOutputFile } from './types.ts'
 
 type CSourceLocation = SourceLocation | null | undefined
@@ -3212,6 +3209,10 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
 }
 
 function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
+  if (isUnionValueTypeName(statement.valueType)) {
+    return 'unknown'
+  }
+
   const declared = knownValueType(statement.valueType)
 
   if (declared !== null && typeof declared !== 'undefined') {
@@ -3223,6 +3224,10 @@ function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionCo
   }
 
   return inferExpressionType(statement.init, context)
+}
+
+function isUnionValueTypeName(valueType: string | null | undefined): boolean {
+  return valueType !== null && typeof valueType !== 'undefined' && valueType.startsWith('union<')
 }
 
 function isDynamicObjectFieldInitializer(expression: CDynamicObjectFieldNode, context: CFunctionContext): boolean {
@@ -3299,6 +3304,10 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
   context.variables.set(statement.name, inferred)
 
+  if (statement.nullable === true && isRuntimeNullableType(inferred)) {
+    return emitModuleNullableRuntimeValueAssignment(statement, name, inferred, context)
+  }
+
   if (statement.init === null || typeof statement.init === 'undefined') {
     return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
   }
@@ -3313,11 +3322,11 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   }
 
   if (inferred === 'string') {
-    if (moduleValueType === 'unknown' && statement.init.type === 'AwaitExpression') {
+    if (moduleValueType === 'unknown' && isRuntimeProducedStringExpression(statement.init, context)) {
       const value = emitCValueExpression(statement.init, context)
       const lines: string[] = []
 
-      context.variables.set(statement.name, 'unknown')
+      context.variables.set(statement.name, 'string')
       context.moduleValueTypes.set(statement.name, 'unknown')
       pushAll(lines, value.lines)
       lines.push(`${name} = ${value.expression};`)
@@ -3351,6 +3360,42 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     }
   }
 
+  if (inferred === 'timer') {
+    const timer = emitPreparedTimerCallExpression(statement.init, context, timerLoweringDependencies, {
+      out: name
+    })
+
+    if (timer !== null && typeof timer !== 'undefined') {
+      context.variables.set(statement.name, 'timer')
+      context.moduleValueTypes.set(statement.name, 'timer')
+      return timer.lines
+    }
+  }
+
+  if (inferred === 'function') {
+    return emitModuleFunctionValueAssignment(statement, name, context)
+  }
+
+  if (inferred === 'array') {
+    const array = emitPreparedModuleArrayValueExpression(statement.init, context)
+
+    if (array !== null && typeof array !== 'undefined') {
+      return emitModuleArrayValueAssignment(statement, name, array, context)
+    }
+
+    if (statement.init.type === 'ArrayLiteral') {
+      return emitModuleArrayLiteralAssignment(statement, name, context)
+    }
+  }
+
+  if (inferred === 'map' || inferred === 'set') {
+    const collection = emitPreparedCollectionConstructorValueExpression(statement.init, context)
+
+    if (collection !== null && typeof collection !== 'undefined') {
+      return emitModuleCollectionValueAssignment(statement, name, inferred, collection, context)
+    }
+  }
+
   const value = emitCValueExpression(statement.init, context)
   const lines: string[] = []
 
@@ -3367,40 +3412,254 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   return lines
 }
 
-function registerModuleRuntimeValueMetadata(statement: AnyNode, valueType: string, context: CFunctionContext): void {
-  if (valueType !== 'object') {
-    return
+function emitModuleFunctionValueAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {
+  const functionType = moduleFunctionValueType(statement)
+
+  context.variables.set(statement.name, 'function')
+  context.functionTypes.set(statement.name, functionType)
+
+  if (moduleFunctionValueUsesRuntimeCallback(statement, context)) {
+    context.moduleValueTypes.set(statement.name, 'unknown')
+    context.runtimeCallbacks.add(statement.name)
+    return emitRuntimeCallbackValueInto(statement.init, functionType, name, context)
   }
 
-  const declaredType = moduleRuntimeObjectDeclaredType(statement)
+  context.moduleValueTypes.set(statement.name, 'function')
 
-  if (declaredType === null || typeof declaredType === 'undefined' || !isAnyNodeLikeDeclaredType(declaredType)) {
+  const target = emitFunctionValueExpression(statement.init, context)
+  const targetFunctionType = resolveFunctionValueType(statement.init, context)
+  const expression = emitAdaptedModuleFunctionPointerExpression(target, targetFunctionType, functionType, context, [], [])
+
+  return [`${name} = ${expression};`]
+}
+
+function moduleFunctionValueType(statement: AnyNode): CFunctionType {
+  if (statement.functionType !== null && typeof statement.functionType !== 'undefined') {
+    return normalizeFunctionType(statement.functionType)
+  }
+
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.functionType !== null &&
+    typeof statement.init.functionType !== 'undefined'
+  ) {
+    return normalizeFunctionType(statement.init.functionType)
+  }
+
+  return normalizeFunctionType(null)
+}
+
+function moduleFunctionValueUsesRuntimeCallback(statement: AnyNode, context: CFunctionContext): boolean {
+  if (moduleValueIsGenericFunctionDeclaration(statement)) {
+    return true
+  }
+
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.type === 'ArrowFunctionExpression'
+  ) {
+    const wrapper = context.callbackArrowWrappers.get(statement.init)
+
+    return wrapper !== null && typeof wrapper !== 'undefined' && wrapper.kind === 'arrow'
+  }
+
+  return isNullableFunctionType(statement.valueType, statement.nullable) || isRuntimeFunctionType(statement.functionType)
+}
+
+function moduleValueIsGenericFunctionDeclaration(statement: AnyNode): boolean {
+  return (
+    statement.declaredType === 'Function' ||
+    statement.declaredType === 'function' ||
+    statement.inferredDeclaredType === 'Function' ||
+    statement.inferredDeclaredType === 'function'
+  )
+}
+
+function emitModuleCollectionValueAssignment(
+  statement: AnyNode,
+  name: string,
+  valueType: string,
+  collection: PreparedExpression,
+  context: CFunctionContext
+): string[] {
+  context.variables.set(statement.name, valueType)
+  context.moduleValueTypes.set(statement.name, valueType)
+
+  if (valueType === 'map') {
+    context.mapTypes.set(statement.name, {
+      key: stringOrUnknown(statement.mapKeyType),
+      value: stringOrUnknown(statement.mapValueType)
+    })
+  } else {
+    context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
+  }
+
+  const lines: string[] = []
+  pushAll(lines, collection.lines)
+  lines.push(`${name} = ${collection.expression};`)
+  lines.push(`inox_retain(${name});`)
+
+  return lines
+}
+
+function stringOrUnknown(value: string | null | undefined): string {
+  if (value === null || typeof value === 'undefined') {
+    return 'unknown'
+  }
+
+  return value
+}
+
+function emitModuleNullableRuntimeValueAssignment(
+  statement: AnyNode,
+  name: string,
+  valueType: string,
+  context: CFunctionContext
+): string[] {
+  context.moduleValueTypes.set(statement.name, 'unknown')
+  context.nullableVariables.add(statement.name)
+  registerModuleNullableRuntimeValueMetadata(statement, valueType, context)
+
+  if (statement.init === null || typeof statement.init === 'undefined') {
+    return [`${name} = inox_null_value();`]
+  }
+
+  let value = emitCValueExpression(statement.init, context)
+
+  if (isNullableScalarType(valueType)) {
+    value = emitNullableScalarValueExpression(statement.init, context)
+  }
+
+  const lines: string[] = []
+  pushAll(lines, value.lines)
+  lines.push(`${name} = ${value.expression};`)
+  lines.push(`inox_retain(${name});`)
+
+  return lines
+}
+
+function registerModuleNullableRuntimeValueMetadata(statement: AnyNode, valueType: string, context: CFunctionContext): void {
+  if (valueType === 'object') {
+    registerObjectShape(context, statement.name, statement.shape)
+  } else if (valueType === 'array') {
+    context.runtimeArrayElementTypes.set(statement.name, stringOrUnknown(statement.arrayElementType))
+  } else if (valueType === 'map') {
+    context.mapTypes.set(statement.name, {
+      key: stringOrUnknown(statement.mapKeyType),
+      value: stringOrUnknown(statement.mapValueType)
+    })
+  } else if (valueType === 'set') {
+    context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
+  } else if (valueType === 'function') {
+    context.functionTypes.set(statement.name, normalizeFunctionType(statement.functionType))
+    context.runtimeCallbacks.add(statement.name)
+  }
+}
+
+function emitPreparedModuleArrayValueExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedArrayExpression | null {
+  const arrayFromCall = emitPreparedArrayFromCallExpression(expression, context)
+
+  if (arrayFromCall !== null && typeof arrayFromCall !== 'undefined') {
+    return arrayFromCall
+  }
+
+  const arrayMapCall = emitPreparedArrayMapCallExpression(expression, context)
+
+  if (arrayMapCall !== null && typeof arrayMapCall !== 'undefined') {
+    return arrayMapCall
+  }
+
+  const arrayFilterCall = emitPreparedArrayFilterCallExpression(expression, context)
+
+  if (arrayFilterCall !== null && typeof arrayFilterCall !== 'undefined') {
+    return arrayFilterCall
+  }
+
+  const arraySliceCall = emitPreparedArraySliceCallExpression(expression, context)
+
+  if (arraySliceCall !== null && typeof arraySliceCall !== 'undefined') {
+    return arraySliceCall
+  }
+
+  return emitPreparedArraySortCallExpression(expression, context)
+}
+
+function emitModuleArrayValueAssignment(
+  statement: AnyNode,
+  name: string,
+  array: PreparedArrayExpression,
+  context: CFunctionContext
+): string[] {
+  let elementType = array.elementType
+
+  if (statement.arrayElementType !== null && typeof statement.arrayElementType !== 'undefined') {
+    elementType = statement.arrayElementType
+  }
+
+  context.variables.set(statement.name, 'array')
+  context.moduleValueTypes.set(statement.name, 'array')
+  context.runtimeArrayElementTypes.set(statement.name, elementType)
+
+  const lines: string[] = []
+  pushAll(lines, array.lines)
+  lines.push(`${name} = ${array.expression};`)
+  lines.push(`inox_retain(${name});`)
+
+  return lines
+}
+
+function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {
+  const lines: string[] = []
+  const shapes: CArrayElementInfo[] = []
+  const elements: AnyNode[] = statement.init.elements
+
+  context.variables.set(statement.name, 'array')
+  context.moduleValueTypes.set(statement.name, 'array')
+
+  for (let index = 0; index < elements.length; index = index + 1) {
+    const element = elements[index] as AnyNode
+
+    shapes.push({
+      valueType: inferExpressionType(element, context)
+    })
+  }
+
+  if (
+    elements.length === 0 &&
+    statement.arrayElementType !== null &&
+    typeof statement.arrayElementType !== 'undefined' &&
+    statement.arrayElementType !== 'unknown'
+  ) {
+    context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType)
+  }
+
+  context.arrayLengths.set(statement.name, elements.length)
+  context.arrayShapes.set(statement.name, shapes)
+  pushAll(lines, emitPrepareOwnedValueWrite(name))
+  lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, ${elements.length}, &${name})`, context))
+
+  for (let index = 0; index < elements.length; index = index + 1) {
+    const element = elements[index] as AnyNode
+    const value = emitCValueExpression(element, context)
+
+    pushAll(lines, value.lines)
+    lines.push(emitStatusCheck(`inox_array_set(${name}, ${index}, ${value.expression})`, context))
+  }
+
+  return lines
+}
+
+function registerModuleRuntimeValueMetadata(statement: AnyNode, valueType: string, context: CFunctionContext): void {
+  if (!isManagedRuntimeReturnType(valueType) && !isOpaqueRuntimeValueType(valueType)) {
     return
   }
 
   registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
-}
-
-function moduleRuntimeObjectDeclaredType(statement: AnyNode): string | null {
-  const statementType = knownModuleDeclaredType(statement.declaredType)
-
-  if (statementType !== null && typeof statementType !== 'undefined') {
-    return statementType
-  }
-
-  if (statement.init !== null && typeof statement.init !== 'undefined') {
-    return knownModuleDeclaredType(statement.init.declaredType)
-  }
-
-  return null
-}
-
-function knownModuleDeclaredType(value: string | null | undefined): string | null {
-  if (value === null || typeof value === 'undefined' || value === '' || value === 'unknown') {
-    return null
-  }
-
-  return value
 }
 
 function registerModulePromiseAssignmentMetadata(
@@ -3448,7 +3707,8 @@ function emitModuleObjectFunctionFieldAssignments(
     return []
   }
 
-  const fields = context.objectShapes.get(objectName)
+  const moduleFields = context.moduleObjectShapes.get(objectName)
+  const fields = moduleFields ?? context.objectShapes.get(objectName)
 
   if (fields === null || typeof fields === 'undefined') {
     return []
@@ -5025,7 +5285,8 @@ function emitCObjectLiteralValueExpression(
   const temp = nextCName(context, 'inox_object')
   const shapeName = nextCName(context, 'inox_shape_value')
   const fieldsName = `${shapeName}_fields`
-  const fields = objectLiteralValueShapeFields(expression, context, shape)
+  const resolvedShape = shape ?? objectLiteralExpressionRuntimeShape(expression)
+  const fields = objectLiteralValueShapeFields(expression, context, resolvedShape)
   const lines = [`static const inox_field_info ${fieldsName}[] = {`]
 
   for (const field of fields) {
@@ -5066,6 +5327,26 @@ function emitCObjectLiteralValueExpression(
     lines,
     expression: temp
   }
+}
+
+function objectLiteralExpressionRuntimeShape(expression: AnyNode): CObjectShape | null {
+  const shape = expression.shape
+
+  if (shape === null || typeof shape === 'undefined') {
+    return null
+  }
+
+  if (
+    shape.dynamic === true ||
+    isCompilerAnyNodeObjectShape(shape) ||
+    isEmptyObjectShape(shape) ||
+    isCompilerObjectShapeInfoShape(shape) ||
+    isCompilerAnyNodeLikeObjectLiteral(expression)
+  ) {
+    return shape
+  }
+
+  return null
 }
 
 function objectLiteralValueShapeFields(
@@ -5753,6 +6034,12 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       }
     }
 
+    const moduleRuntimeString = emitModuleRuntimeStringLogValue(expression, context)
+
+    if (moduleRuntimeString !== null && typeof moduleRuntimeString !== 'undefined') {
+      return moduleRuntimeString
+    }
+
     const reference = emitReference(expression, context)
 
     if (
@@ -5906,7 +6193,53 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 }
 
+function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return null
+  }
+
+  const name = expression.path[0]
+
+  const narrowedType = context.variables.get(name)
+
+  if (
+    context.localValueNames.has(name) ||
+    context.moduleValueTypes.get(name) !== 'unknown' ||
+    (expression.valueType !== 'string' && narrowedType !== 'string')
+  ) {
+    return null
+  }
+
+  const storage = context.moduleValueNames.get(name)
+
+  if (storage === null || typeof storage === 'undefined') {
+    return null
+  }
+
+  const string = nextCName(context, 'inox_log_string')
+
+  return {
+    lines: [
+      emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context),
+      `inox_string* ${string} = (inox_string*)${storage}.as.ref;`
+    ],
+    format: '%.*s',
+    values: [`(int)${string}->len`, `${string}->bytes`]
+  }
+}
+
 function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+  const moduleRuntimeScalar = emitModuleRuntimeScalarLogValue(expression, context)
+
+  if (moduleRuntimeScalar !== null && typeof moduleRuntimeScalar !== 'undefined') {
+    return moduleRuntimeScalar
+  }
+
   if (isMemberAccessExpression(expression)) {
     const stringLength = emitPreparedStringLengthExpression(expression, context)
 
@@ -5980,6 +6313,49 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     lines: value.lines,
     format: '%g',
     values: [`((double)${value.expression})`]
+  }
+}
+
+function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return null
+  }
+
+  const name = expression.path[0]
+
+  if (context.localValueNames.has(name) || context.moduleValueTypes.get(name) !== 'unknown') {
+    return null
+  }
+
+  const valueType = context.variables.get(name)
+
+  if (valueType !== 'number' && valueType !== 'boolean') {
+    return null
+  }
+
+  const storage = context.moduleValueNames.get(name)
+
+  if (storage === null || typeof storage === 'undefined') {
+    return null
+  }
+
+  let tag = 'INOX_TAG_NUMBER'
+  let formattedValue = `${storage}.as.number`
+
+  if (valueType === 'boolean') {
+    tag = 'INOX_TAG_BOOL'
+    formattedValue = `((double)(${storage}.as.boolean ? 1 : 0))`
+  }
+
+  return {
+    lines: [emitRuntimeValueCheck(storage, tag, context)],
+    format: '%g',
+    values: [formattedValue]
   }
 }
 

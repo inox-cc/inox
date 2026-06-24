@@ -15,6 +15,10 @@ export function emitCIdentifier(value: string): string {
     }
   }
 
+  if (result === '' || isDigitCode(result.charCodeAt(0)) || isReservedCIdentifier(result)) {
+    return `inox_${result}`
+  }
+
   return result
 }
 
@@ -22,12 +26,56 @@ function isCIdentifierCode(code: number): boolean {
   return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 95
 }
 
+function isDigitCode(code: number): boolean {
+  return code >= 48 && code <= 57
+}
+
+function isReservedCIdentifier(value: string): boolean {
+  return (
+    value === 'auto' ||
+    value === 'break' ||
+    value === 'case' ||
+    value === 'char' ||
+    value === 'const' ||
+    value === 'continue' ||
+    value === 'default' ||
+    value === 'do' ||
+    value === 'double' ||
+    value === 'else' ||
+    value === 'enum' ||
+    value === 'extern' ||
+    value === 'float' ||
+    value === 'for' ||
+    value === 'goto' ||
+    value === 'if' ||
+    value === 'index' ||
+    value === 'inline' ||
+    value === 'int' ||
+    value === 'long' ||
+    value === 'register' ||
+    value === 'restrict' ||
+    value === 'return' ||
+    value === 'short' ||
+    value === 'signed' ||
+    value === 'sizeof' ||
+    value === 'static' ||
+    value === 'struct' ||
+    value === 'switch' ||
+    value === 'typedef' ||
+    value === 'union' ||
+    value === 'unsigned' ||
+    value === 'void' ||
+    value === 'volatile' ||
+    value === 'while'
+  )
+}
+
 export function emitCFunctionName(name: string): string {
   if (name === 'main') {
     return 'inox_main'
   }
 
-  return name
+  return emitCIdentifier(name)
 }
 
 export function emitCObjectFunctionFieldName(objectName: string, fieldName: string): string {

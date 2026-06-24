@@ -4430,6 +4430,16 @@ function emitModuleValueAssignmentExpression(
       kind: 'let',
       name,
       init: expression.value,
+      valueType: expression.target.valueType,
+      nullable: expression.target.nullable,
+      shape: expression.target.shape,
+      functionType: expression.target.functionType,
+      arrayElementType: expression.target.arrayElementType,
+      arrayElementDeclaredType: expression.target.arrayElementDeclaredType,
+      mapKeyType: expression.target.mapKeyType,
+      mapValueType: expression.target.mapValueType,
+      promiseValueType: expression.target.promiseValueType,
+      setElementType: expression.target.setElementType,
       loc: expression.loc
     },
     context

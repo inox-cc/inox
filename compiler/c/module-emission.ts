@@ -32,6 +32,7 @@ import {
   emitRuntimeArrowCallbackContextType,
   emitRuntimeCallbackWrapperDeclaration,
   emitRuntimeCallbackWrapperHead,
+  isNullableFunctionType,
   isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
   isRuntimeArrowCallbackWrapperWithContext,
@@ -105,7 +106,7 @@ import type {
   CPromiseChainWrapper,
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
-import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from './value-types.ts'
+import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType, isRuntimeNullableType } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
@@ -116,6 +117,7 @@ import type { StringLoweringDependencies } from './values/strings.ts'
 
 type CModuleValueDeclaration = {
   exported: boolean
+  functionType?: CFunctionType | null
   name: string
   symbolName: string
   valueType: string
@@ -140,6 +142,7 @@ type CModuleRuntimeCallbackWrapperContext = {
 type CModuleRuntimeTypeContext = {
   functionParams: Map<string, CFunctionParam[]>
   functionReturnTypes: Map<string, string>
+  moduleValueTypes: Map<string, string>
 }
 
 type CModuleValueFunctionFieldContext = {
@@ -340,7 +343,7 @@ export function emitCModuleSource(
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
-  const moduleValues = collectCModuleValueDeclarations(plan)
+  const moduleValues = collectCModuleValueDeclarations(plan, context)
   const prelude = resolveCRuntimePreludeRequirements({
     classInfoCount: context.classInfos.size,
     cryptoContext: context,
@@ -1109,6 +1112,10 @@ function collectCModuleContextRuntimeTypes(context: CModuleRuntimeTypeContext): 
     addCModuleRuntimeType(types, valueType)
   }
 
+  for (const valueType of context.moduleValueTypes.values()) {
+    addCModuleRuntimeType(types, valueType)
+  }
+
   for (const params of context.functionParams.values()) {
     for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
       const param = cModuleFunctionParamAt(params, paramIndex)
@@ -1121,7 +1128,12 @@ function collectCModuleContextRuntimeTypes(context: CModuleRuntimeTypeContext): 
 }
 
 function addCModuleRuntimeType(types: Set<string>, valueType: string): void {
-  if (isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType) || valueType === 'promise') {
+  if (
+    valueType === 'unknown' ||
+    isManagedRuntimeReturnType(valueType) ||
+    isOpaqueRuntimeValueType(valueType) ||
+    valueType === 'promise'
+  ) {
     types.add(valueType)
   }
 }
@@ -1191,7 +1203,7 @@ function collectCModuleObjectShapeRuntimeTypes(
 }
 
 function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
-  const values = collectCModuleValueDeclarations(plan)
+  const values = collectCModuleValueDeclarations(plan, context)
 
   for (let index = 0; index < values.length; index = index + 1) {
     const item = cModuleValueDeclarationAt(values, index)
@@ -1242,7 +1254,7 @@ function collectCModuleExportedValueDeclarations(plan: CModulePlan): CModuleValu
   return exported
 }
 
-function collectCModuleValueDeclarations(plan: CModulePlan): CModuleValueDeclaration[] {
+function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitContext): CModuleValueDeclaration[] {
   const values: CModuleValueDeclaration[] = []
   const ir = plan.ir
   const statements = collectIrTopLevelNodes(ir, 'statement')
@@ -1256,9 +1268,10 @@ function collectCModuleValueDeclarations(plan: CModulePlan): CModuleValueDeclara
 
     values.push({
       exported: item.exported === true,
+      functionType: cModuleValueFunctionType(item),
       name: item.name,
       symbolName: emitCModuleValueName(plan, item.name),
-      valueType: cModuleValueType(item)
+      valueType: cModuleValueType(item, context)
     })
   }
 
@@ -1272,6 +1285,13 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
 
   for (let index = 0; index < values.length; index = index + 1) {
     const item = cModuleValueDeclarationAt(values, index)
+    const functionPointerDefinition = cModuleFunctionPointerDefinition(item)
+
+    if (functionPointerDefinition !== null && typeof functionPointerDefinition !== 'undefined') {
+      lines.push(functionPointerDefinition)
+      continue
+    }
+
     const cType = cModuleValueCType(item.valueType)
     const initializer = cModuleValueGlobalInitializer(item.valueType)
     let prefix = ''
@@ -1288,6 +1308,25 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
   }
 
   lines.push('')
+}
+
+function cModuleFunctionPointerDefinition(item: CModuleValueDeclaration): string | null {
+  if (item.valueType !== 'function') {
+    return null
+  }
+
+  const functionType = item.functionType
+  let prefix = ''
+
+  if (item.exported !== true) {
+    prefix = 'static '
+  }
+
+  return `${prefix}${emitFunctionPointerReturnType(functionType)} (*${item.symbolName})(${emitFunctionPointerParams(
+    functionType,
+    [],
+    []
+  )}) = 0;`
 }
 
 function emitCModuleValueFunctionFieldDefinitions(
@@ -1381,23 +1420,107 @@ function emitCModuleObjectFunctionFieldDefinitions(
   return emitted
 }
 
-function cModuleValueType(node: AnyNode): string {
+function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   const valueType = node.valueType
 
   if (valueType === null || typeof valueType === 'undefined' || valueType === '') {
     return 'unknown'
   }
 
-  if (
-    valueType === 'string' &&
-    node.init !== null &&
-    typeof node.init !== 'undefined' &&
-    node.init.type === 'AwaitExpression'
-  ) {
+  if (valueType === 'function' && cModuleFunctionValueUsesRuntimeCallback(node, context)) {
+    return 'unknown'
+  }
+
+  if (isUnionValueTypeName(valueType)) {
+    return 'unknown'
+  }
+
+  if (node.nullable === true && isRuntimeNullableType(valueType)) {
+    return 'unknown'
+  }
+
+  if (valueType === 'string' && isCModuleRuntimeStringInitializer(node.init)) {
     return 'unknown'
   }
 
   return valueType
+}
+
+function cModuleValueFunctionType(node: AnyNode): CFunctionType | null {
+  if (node.functionType !== null && typeof node.functionType !== 'undefined') {
+    return node.functionType
+  }
+
+  if (
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.functionType !== null &&
+    typeof node.init.functionType !== 'undefined'
+  ) {
+    return node.init.functionType
+  }
+
+  return null
+}
+
+function cModuleFunctionValueUsesRuntimeCallback(node: AnyNode, context?: CEmitContext): boolean {
+  if (cModuleValueIsGenericFunctionDeclaration(node)) {
+    return true
+  }
+
+  if (
+    context !== null &&
+    typeof context !== 'undefined' &&
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.type === 'ArrowFunctionExpression'
+  ) {
+    const wrapper = context.callbackArrowWrappers.get(node.init)
+
+    return wrapper !== null && typeof wrapper !== 'undefined' && wrapper.kind === 'arrow'
+  }
+
+  return isNullableFunctionType(node.valueType, node.nullable) || isRuntimeFunctionType(node.functionType)
+}
+
+function cModuleValueIsGenericFunctionDeclaration(node: AnyNode): boolean {
+  return (
+    node.declaredType === 'Function' ||
+    node.declaredType === 'function' ||
+    node.inferredDeclaredType === 'Function' ||
+    node.inferredDeclaredType === 'function'
+  )
+}
+
+function isCModuleRuntimeStringInitializer(expression: AnyNode | null | undefined): boolean {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  if (expression.type === 'AwaitExpression') {
+    return true
+  }
+
+  if (
+    expression.type === 'CallExpression' &&
+    expression.fsRuntimeMethod !== null &&
+    typeof expression.fsRuntimeMethod !== 'undefined'
+  ) {
+    return true
+  }
+
+  if (
+    (expression.type === 'ConditionalExpression' || expression.type === 'BinaryExpression') &&
+    expression.valueType === 'string'
+  ) {
+    return true
+  }
+
+  return expression.type === 'TemplateLiteral' && expression.raw.includes('${')
+}
+
+function isUnionValueTypeName(valueType: string): boolean {
+  return valueType.startsWith('union<')
 }
 
 function cModuleValueCType(valueType: string): string {

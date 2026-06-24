@@ -334,6 +334,21 @@ function cReferenceExpressionType(
   const moduleValueType = context.moduleValueTypes.get(name)
 
   if (!localName && moduleValueType !== null && typeof moduleValueType !== 'undefined') {
+    if (moduleValueType === 'unknown') {
+      if (
+        variableType === 'number' ||
+        variableType === 'string' ||
+        variableType === 'boolean' ||
+        variableType === 'function'
+      ) {
+        return variableType
+      }
+
+      if (metadataType === 'string') {
+        return 'string'
+      }
+    }
+
     return moduleValueType
   }
 
@@ -1104,7 +1119,14 @@ export function isAnyNodeLikeDeclaredType(value: string): boolean {
     return isAnyNodeLikeDeclaredType(nullableType)
   }
 
-  return value === 'AnyNode' || value.endsWith('Node') || value.endsWith('AstNode')
+  return (
+    value === 'AnyNode' ||
+    value === 'CompilerAnyNode' ||
+    value === 'CompilerFieldMetadata' ||
+    value === 'CompilerObjectShapeInfo' ||
+    value.endsWith('Node') ||
+    value.endsWith('AstNode')
+  )
 }
 
 function objectAccessFieldName(expression: AnyNode): string | null {

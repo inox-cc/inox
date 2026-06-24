@@ -25,6 +25,7 @@ import {
   callbackContextWrapperFinalizerName,
   collectCallbackWrappers,
   collectFunctionPointerParamNames,
+  emitFunctionPointerParams,
   emitFunctionPointerNamedParams,
   emitFunctionPointerReturnType,
   emitPlainArrowCallbackWrapperDeclaration,
@@ -32,6 +33,7 @@ import {
   emitRuntimeArrowCallbackContextType,
   emitRuntimeCallbackWrapperDeclaration,
   emitRuntimeCallbackWrapperHead,
+  isNullableFunctionType,
   isPlainFunctionPointerType,
   isPromiseChainCallbackWrapperWithContext,
   isRuntimeFunctionType,
@@ -61,7 +63,7 @@ import type {
   CPromiseChainWrapperMap
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
-import { emitCIdentifier } from './identifiers.ts'
+import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
   collectHttpRuntimeCreateServerNames,
@@ -89,7 +91,7 @@ import type {
   CPromiseChainWrapper,
   CRuntimeArrowCallbackWrapper
 } from './types.ts'
-import { isManagedRuntimeReturnType, isOpaqueRuntimeValueType } from './value-types.ts'
+import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType, isRuntimeNullableType } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import { collectClassMethods, createClassInfos } from './values/classes.ts'
@@ -97,7 +99,6 @@ import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
-import { emitCType } from './value-types.ts'
 
 export type CUnitDependencies = {
   arrayLoweringDependencies: ArrayLoweringDependencies
@@ -132,6 +133,7 @@ type CUnitFunctionNodeEntry = {
 }
 
 type CUnitValueDeclaration = {
+  functionType?: CFunctionType | null
   name: string
   symbolName: string
   valueType: string
@@ -237,7 +239,7 @@ function unitObjectShapeFieldAt(values: CObjectShapeField[], index: number): COb
   return values[index]
 }
 
-function collectCUnitValueDeclarations(programs: IrProgram[]): CUnitValueDeclaration[] {
+function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitContext): CUnitValueDeclaration[] {
   const values: CUnitValueDeclaration[] = []
   const statements = collectIrTopLevelNodesFromPrograms(programs, 'statement')
 
@@ -249,9 +251,10 @@ function collectCUnitValueDeclarations(programs: IrProgram[]): CUnitValueDeclara
     }
 
     values.push({
+      functionType: cUnitValueFunctionType(item),
       name: item.name,
       symbolName: emitCIdentifier(item.name),
-      valueType: cUnitValueType(item)
+      valueType: cUnitValueType(item, context)
     })
   }
 
@@ -274,6 +277,13 @@ function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaratio
 
   for (let index = 0; index < values.length; index = index + 1) {
     const item = unitValueDeclarationAt(values, index)
+    const functionPointerDefinition = cUnitFunctionPointerDefinition(item)
+
+    if (functionPointerDefinition !== null && typeof functionPointerDefinition !== 'undefined') {
+      lines.push(functionPointerDefinition)
+      continue
+    }
+
     const cType = cUnitValueCType(item.valueType)
     const initializer = cUnitValueGlobalInitializer(item.valueType)
 
@@ -287,23 +297,206 @@ function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaratio
   lines.push('')
 }
 
-function cUnitValueType(node: AnyNode): string {
+function cUnitFunctionPointerDefinition(item: CUnitValueDeclaration): string | null {
+  if (item.valueType !== 'function') {
+    return null
+  }
+
+  const functionType = item.functionType
+
+  return `static ${emitFunctionPointerReturnType(functionType)} (*${item.symbolName})(${emitFunctionPointerParams(
+    functionType,
+    [],
+    []
+  )}) = 0;`
+}
+
+function emitCUnitValueFunctionFieldDefinitions(
+  lines: string[],
+  values: CUnitValueDeclaration[],
+  context: CEmitContext
+): void {
+  let emitted = false
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = unitValueDeclarationAt(values, index)
+    const fields = context.moduleObjectShapes.get(item.name)
+
+    if (fields === null || typeof fields === 'undefined') {
+      continue
+    }
+
+    if (emitCUnitObjectFunctionFieldDefinitions(lines, item.name, fields, cUnitObjectFunctionFieldSeenTypes())) {
+      emitted = true
+    }
+  }
+
+  if (emitted) {
+    lines.push('')
+  }
+}
+
+function cUnitObjectFunctionFieldSeenTypes(): string[] {
+  return ['CFunctionContext']
+}
+
+function emitCUnitObjectFunctionFieldDefinitions(
+  lines: string[],
+  objectName: string,
+  fields: CObjectShapeField[],
+  seenTypes: string[]
+): boolean {
+  let emitted = false
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = unitObjectShapeFieldAt(fields, index)
+
+    if (field.valueType === 'function') {
+      const name = emitCObjectFunctionFieldName(objectName, field.name)
+
+      if (isPlainFunctionPointerType(field.functionType)) {
+        lines.push(
+          `static ${emitFunctionPointerReturnType(field.functionType)} (*${name})(${emitFunctionPointerParams(
+            field.functionType,
+            [],
+            seenTypes
+          )}) = 0;`
+        )
+        emitted = true
+      } else if (isRuntimeFunctionType(field.functionType)) {
+        lines.push(`static inox_value ${name};`)
+        emitted = true
+      }
+    } else if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined' &&
+      field.shape.fields !== null &&
+      typeof field.shape.fields !== 'undefined'
+    ) {
+      if (
+        field.declaredType !== null &&
+        typeof field.declaredType !== 'undefined' &&
+        seenTypes.includes(field.declaredType)
+      ) {
+        continue
+      }
+
+      let pushedType = false
+
+      if (field.declaredType !== null && typeof field.declaredType !== 'undefined') {
+        seenTypes.push(field.declaredType)
+        pushedType = true
+      }
+
+      if (emitCUnitObjectFunctionFieldDefinitions(lines, `${objectName}_${field.name}`, field.shape.fields, seenTypes)) {
+        emitted = true
+      }
+
+      if (pushedType) {
+        seenTypes.pop()
+      }
+    }
+  }
+
+  return emitted
+}
+
+function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   const valueType = node.valueType
 
   if (valueType === null || typeof valueType === 'undefined' || valueType === '') {
     return 'unknown'
   }
 
-  if (
-    valueType === 'string' &&
-    node.init !== null &&
-    typeof node.init !== 'undefined' &&
-    node.init.type === 'AwaitExpression'
-  ) {
+  if (valueType === 'function' && cUnitFunctionValueUsesRuntimeCallback(node, context)) {
+    return 'unknown'
+  }
+
+  if (isUnionValueTypeName(valueType)) {
+    return 'unknown'
+  }
+
+  if (node.nullable === true && isRuntimeNullableType(valueType)) {
+    return 'unknown'
+  }
+
+  if (valueType === 'string' && isCUnitRuntimeStringInitializer(node.init)) {
     return 'unknown'
   }
 
   return valueType
+}
+
+function cUnitValueFunctionType(node: AnyNode): CFunctionType | null {
+  if (node.functionType !== null && typeof node.functionType !== 'undefined') {
+    return node.functionType
+  }
+
+  if (
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.functionType !== null &&
+    typeof node.init.functionType !== 'undefined'
+  ) {
+    return node.init.functionType
+  }
+
+  return null
+}
+
+function cUnitFunctionValueUsesRuntimeCallback(node: AnyNode, context: CEmitContext): boolean {
+  if (cUnitValueIsGenericFunctionDeclaration(node)) {
+    return true
+  }
+
+  if (node.init !== null && typeof node.init !== 'undefined' && node.init.type === 'ArrowFunctionExpression') {
+    const wrapper = context.callbackArrowWrappers.get(node.init)
+
+    return wrapper !== null && typeof wrapper !== 'undefined' && wrapper.kind === 'arrow'
+  }
+
+  return isNullableFunctionType(node.valueType, node.nullable) || isRuntimeFunctionType(node.functionType)
+}
+
+function cUnitValueIsGenericFunctionDeclaration(node: AnyNode): boolean {
+  return (
+    node.declaredType === 'Function' ||
+    node.declaredType === 'function' ||
+    node.inferredDeclaredType === 'Function' ||
+    node.inferredDeclaredType === 'function'
+  )
+}
+
+function isCUnitRuntimeStringInitializer(expression: AnyNode | null | undefined): boolean {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  if (expression.type === 'AwaitExpression') {
+    return true
+  }
+
+  if (
+    expression.type === 'CallExpression' &&
+    expression.fsRuntimeMethod !== null &&
+    typeof expression.fsRuntimeMethod !== 'undefined'
+  ) {
+    return true
+  }
+
+  if (
+    (expression.type === 'ConditionalExpression' || expression.type === 'BinaryExpression') &&
+    expression.valueType === 'string'
+  ) {
+    return true
+  }
+
+  return expression.type === 'TemplateLiteral' && expression.raw.includes('${')
+}
+
+function isUnionValueTypeName(valueType: string): boolean {
+  return valueType.startsWith('union<')
 }
 
 function cUnitValueCType(valueType: string): string {
@@ -337,6 +530,10 @@ function collectCUnitContextRuntimeTypes(context: CEmitContext): Set<string> {
     addCUnitRuntimeType(types, valueType)
   }
 
+  for (const valueType of context.moduleValueTypes.values()) {
+    addCUnitRuntimeType(types, valueType)
+  }
+
   for (const params of context.functionParams.values()) {
     for (let paramIndex = 0; paramIndex < params.length; paramIndex = paramIndex + 1) {
       const param = unitFunctionParamAt(params, paramIndex)
@@ -349,7 +546,12 @@ function collectCUnitContextRuntimeTypes(context: CEmitContext): Set<string> {
 }
 
 function addCUnitRuntimeType(types: Set<string>, valueType: string): void {
-  if (isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType) || valueType === 'promise') {
+  if (
+    valueType === 'unknown' ||
+    isManagedRuntimeReturnType(valueType) ||
+    isOpaqueRuntimeValueType(valueType) ||
+    valueType === 'promise'
+  ) {
     types.add(valueType)
   }
 }
@@ -776,7 +978,6 @@ export function emitCUnit(
   const functionEffects = mergeIrFunctionEffects(inferredFunctionEffects, storedFunctionEffects)
   const topLevelNodes = collectCUnitTopLevelNodes(irPrograms)
   const jsGlobalRoots = stringSetFromArray(globalRoots)
-  const valueDeclarations = collectCUnitValueDeclarations(irPrograms)
   const baseContext = deps.createBaseContext(
     diagnostics,
     functionDeclarations,
@@ -784,6 +985,7 @@ export function emitCUnit(
     jsGlobalRoots,
     topLevelNodes
   )
+  const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
   baseContext.dgramImportNames = collectRuntimeImportNames(
     irPrograms,
@@ -905,6 +1107,7 @@ export function emitCUnit(
     options
   )
   emitCUnitValueDefinitions(lines, valueDeclarations)
+  emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
   const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers

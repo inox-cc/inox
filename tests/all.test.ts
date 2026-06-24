@@ -51,11 +51,21 @@ if (process.argv[2] === workerArg) {
   await assertFeatureCompilerAvailable(options.compiler)
 
   const files = await collectFeatureTestFiles(options.paths)
-  const parallelism = availableParallelism() * 4
+  const parallelism = featureTestParallelism(options.compiler)
 
   assert.notEqual(files.length, 0, 'feature tests: no .test.ts files found')
 
   await runFeatureTests(files, parallelism, options.compiler)
+}
+
+function featureTestParallelism(compiler: FeatureTestCompiler): number {
+  const cpuCount = availableParallelism()
+
+  if (compiler.kind === 'binary') {
+    return Math.max(1, cpuCount)
+  }
+
+  return cpuCount * 4
 }
 
 type RunnerOptions = {

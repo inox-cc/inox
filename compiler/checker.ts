@@ -9281,7 +9281,7 @@ class Checker {
       return null
     }
 
-    expression.timerRuntimeMethod = method.slice(0)
+    expression.timerRuntimeMethod = method
 
     if (timerClearMethodName(method)) {
       if (expression.args.length !== 1) {

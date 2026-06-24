@@ -21,8 +21,8 @@ import {
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cOsRuntimeConstantName } from '../stdlib/os.ts'
-import { cPathRuntimeConstantName } from '../stdlib/path.ts'
+import { cOsRuntimeConstantName, cOsRuntimeConstantValue } from '../stdlib/os.ts'
+import { cPathRuntimeConstantName, cPathRuntimeConstantValue } from '../stdlib/path.ts'
 import {
   cProcessRuntimeEnvName,
   cProcessRuntimePropertyName,
@@ -49,6 +49,9 @@ type StringCContext = {
   failureStatementUsed?: boolean
   functionNames?: Map<string, string>
   jsGlobalRoots?: Set<string>
+  localValueNames?: Set<string>
+  moduleValueNames?: Map<string, string>
+  moduleValueTypes?: Map<string, string>
   nullableVariables?: Set<string>
   narrowedNullableScalars?: Set<string>
   nextId: number
@@ -281,6 +284,12 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     return JSON.stringify(cookTemplateLiteralText(expression.raw.slice(1, -1)))
   }
 
+  const runtimeConstant = runtimeStringConstantValue(expression)
+
+  if (runtimeConstant !== null && typeof runtimeConstant !== 'undefined') {
+    return JSON.stringify(runtimeConstant)
+  }
+
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
     return stringDeps(context).emitReference(expression, context)
   }
@@ -350,6 +359,22 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     )
   )
   return '""'
+}
+
+function runtimeStringConstantValue(expression: AnyNode | null | undefined): string | null {
+  const osConstant = cOsRuntimeConstantName(expression)
+
+  if (osConstant !== null && typeof osConstant !== 'undefined') {
+    return cOsRuntimeConstantValue(osConstant)
+  }
+
+  const pathConstant = cPathRuntimeConstantName(expression)
+
+  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
+    return cPathRuntimeConstantValue(pathConstant)
+  }
+
+  return null
 }
 
 export function emitPreparedStringLengthExpression(
@@ -488,7 +513,15 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     return true
   }
 
+  if (runtimeStringConstantValue(expression) !== null) {
+    return true
+  }
+
   if (expression.type === 'Reference' && expression.path.length === 1) {
+    if (isModuleRuntimeStringReference(expression, context)) {
+      return true
+    }
+
     const variables = context.variables
     const runtimeStrings = context.runtimeStrings
     const name = expression.path[0]
@@ -821,6 +854,16 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
+  const runtimeConstant = runtimeStringConstantValue(expression)
+
+  if (runtimeConstant !== null && typeof runtimeConstant !== 'undefined') {
+    return {
+      lines: [],
+      bytes: cStringLiteral(runtimeConstant),
+      length: `${utf8ByteLength(runtimeConstant)}`
+    }
+  }
+
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'TemplateLiteral') {
     const value = emitCTemplateLiteralValueExpression(expression, context)
     const string = nextCName(context, tempPrefix)
@@ -843,6 +886,12 @@ export function emitPreparedStringBytesOperand(
     expression.path.length === 1
   ) {
     const name = expression.path[0]
+    const moduleRuntimeString = emitPreparedModuleRuntimeStringBytesOperand(expression, context, tempPrefix)
+
+    if (moduleRuntimeString !== null && typeof moduleRuntimeString !== 'undefined') {
+      return moduleRuntimeString
+    }
+
     const variables = context.variables
     let valueType = nodeValueType(expression)
 
@@ -1020,6 +1069,87 @@ function isNullableRuntimeStringReference(name: string, context: StringCContext)
     typeof nullableVariables !== 'undefined' &&
     nullableVariables.has(name)
   )
+}
+
+function isModuleRuntimeStringReference(expression: AnyNode, context: StringCContext): boolean {
+  return moduleRuntimeStringStorageName(expression, context) !== null
+}
+
+function emitPreparedModuleRuntimeStringBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  const storage = moduleRuntimeStringStorageName(expression, context)
+
+  if (storage === null || typeof storage === 'undefined') {
+    return null
+  }
+
+  const string = nextCName(context, tempPrefix)
+
+  return {
+    lines: [
+      emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context),
+      `inox_string* ${string} = (inox_string*)${storage}.as.ref;`
+    ],
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function moduleRuntimeStringStorageName(expression: AnyNode, context: StringCContext): string | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+  let valueType = nodeValueType(expression)
+
+  if (valueType !== 'string') {
+    const variables = context.variables
+
+    if (variables !== null && typeof variables !== 'undefined') {
+      const variableType = variables.get(name)
+
+      if (variableType !== null && typeof variableType !== 'undefined') {
+        valueType = variableType
+      }
+    }
+  }
+
+  if (valueType !== 'string') {
+    return null
+  }
+
+  const localValueNames = context.localValueNames
+
+  if (localValueNames !== null && typeof localValueNames !== 'undefined' && localValueNames.has(name)) {
+    return null
+  }
+
+  const moduleValueNames = context.moduleValueNames
+  const moduleValueTypes = context.moduleValueTypes
+
+  if (moduleValueNames === null || typeof moduleValueNames === 'undefined') {
+    return null
+  }
+
+  if (moduleValueTypes === null || typeof moduleValueTypes === 'undefined') {
+    return null
+  }
+
+  if (moduleValueTypes.get(name) !== 'unknown') {
+    return null
+  }
+
+  const storage = moduleValueNames.get(name)
+
+  if (storage === null || typeof storage === 'undefined') {
+    return null
+  }
+
+  return storage
 }
 
 function emitPreparedRuntimeArrayStringBytesOperand(
