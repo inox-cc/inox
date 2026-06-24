@@ -60,5 +60,13 @@ inox_status inox_http_response_write_head(
 inox_status inox_http_response_write(inox_http_response* response, const char* bytes, size_t len);
 inox_status inox_http_response_end(inox_http_response* response, const char* bytes, size_t len);
 inox_status inox_http_response_text(inox_http_response* response, int status, const char* body, size_t len);
+int inox_http_response_send_local_file(
+  inox_http_response* response,
+  const inox_http_request* request,
+  const char* url_prefix,
+  size_t url_prefix_len,
+  const char* root,
+  size_t root_len
+);
 
 #endif

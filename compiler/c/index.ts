@@ -901,6 +901,7 @@ dgramLoweringDependencies = {
 }
 
 httpLoweringDependencies = {
+  emitConsoleLogStatement,
   emitPreparedNumberExpression,
   emitStatementList
 }

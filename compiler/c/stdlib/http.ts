@@ -12,7 +12,9 @@ import {
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import type { CHttpHandler, CPreparedExpression as PreparedExpression } from '../types.ts'
 import { cookTemplateLiteralText } from '../values/strings.ts'
+import { isConsoleLog } from './console.ts'
 import { cJsonRuntimeCallName } from './json.ts'
+import { cTimeRuntimeCallName } from './time.ts'
 
 type HttpAstNode = AnyNode
 
@@ -26,6 +28,11 @@ type HttpHeaderArray = {
   lines: string[]
   name: string
   count: string
+}
+
+type HttpLogOperand = {
+  format: string
+  args: string[]
 }
 
 type HttpHandlerContext = {
@@ -52,6 +59,7 @@ type HttpTopLevelNodeEntry = {
 }
 
 export type HttpLoweringDependencies = {
+  emitConsoleLogStatement: (method: string, args: HttpAstNode[], context: CFunctionContext) => string[]
   emitPreparedNumberExpression: (expression: HttpAstNode, context: CFunctionContext) => PreparedExpression
   emitStatementList: (body: HttpAstNode[], context: CFunctionContext) => string[]
 }
@@ -221,6 +229,12 @@ function emitHttpHandlerStatement(
       typeof statement.expression !== 'undefined' &&
       statement.expression.type === 'CallExpression'
     ) {
+      const logStatement = emitHttpHandlerConsoleLogStatement(statement.expression, httpContext, context, deps)
+
+      if (logStatement !== null && typeof logStatement !== 'undefined') {
+        return logStatement
+      }
+
       const responseCall = emitHttpResponseCallStatement(statement.expression, httpContext, context)
 
       if (responseCall !== null && typeof responseCall !== 'undefined') {
@@ -279,6 +293,99 @@ function emitHttpHandlerStatement(
     )
   )
   return []
+}
+
+function emitHttpHandlerConsoleLogStatement(
+  expression: AnyNode,
+  httpContext: HttpHandlerContext,
+  context: CFunctionContext,
+  deps: HttpLoweringDependencies
+): string[] | null {
+  if (!isConsoleLog(expression)) {
+    return null
+  }
+
+  const callee = expression.callee
+
+  if (
+    callee === null ||
+    typeof callee === 'undefined' ||
+    callee.type !== 'MemberExpression' ||
+    callee.property === null ||
+    typeof callee.property === 'undefined'
+  ) {
+    return null
+  }
+
+  const operands: HttpLogOperand[] = []
+
+  for (const arg of expression.args) {
+    const operand = emitHttpLogOperand(arg, httpContext, context)
+
+    if (operand === null || typeof operand === 'undefined') {
+      return deps.emitConsoleLogStatement(callee.property, expression.args, context)
+    }
+
+    operands.push(operand)
+  }
+
+  const formatParts: string[] = []
+  const args: string[] = []
+
+  for (let index = 0; index < operands.length; index = index + 1) {
+    const operand = operands[index]
+
+    if (index > 0) {
+      formatParts.push(' ')
+    }
+
+    formatParts.push(operand.format)
+    pushHttpLines(args, operand.args)
+  }
+
+  formatParts.push('\n')
+
+  const format = cStringLiteral(joinStrings(formatParts, ''))
+  const callArgs = args.length > 0 ? `, ${joinStrings(args, ', ')}` : ''
+
+  if (callee.property === 'warn' || callee.property === 'error') {
+    return [`if (inox_console_printf(INOX_CONSOLE_STDERR, ${format}${callArgs}) < 0) return INOX_ERR_TYPE;`]
+  }
+
+  return [`printf(${format}${callArgs});`, 'fflush(stdout);']
+}
+
+function emitHttpLogOperand(
+  expression: AnyNode,
+  httpContext: HttpHandlerContext,
+  context: CFunctionContext
+): HttpLogOperand | null {
+  const staticValue = emitHttpStaticStringValue(expression, httpContext, context)
+
+  if (staticValue !== null && typeof staticValue !== 'undefined') {
+    return {
+      format: '%s',
+      args: [cStringLiteral(staticValue)]
+    }
+  }
+
+  const requestMember = resolveHttpRequestStringMember(expression, httpContext)
+
+  if (requestMember === 'method') {
+    return {
+      format: '%.*s',
+      args: [`(int)${httpContext.requestName}->method_len`, `${httpContext.requestName}->method`]
+    }
+  }
+
+  if (requestMember === 'url') {
+    return {
+      format: '%.*s',
+      args: [`(int)${httpContext.requestName}->url_len`, `${httpContext.requestName}->url`]
+    }
+  }
+
+  return null
 }
 
 function emitHttpResponseStatusAssignment(
@@ -450,7 +557,7 @@ function emitHttpConditionExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_HANDLER',
-        'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
+        'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons and response.sendLocalFile(req, prefix, root)',
         null
       )
     )
@@ -469,6 +576,14 @@ function emitHttpConditionExpression(
     return `!(${emitHttpConditionExpression(expression.argument, httpContext, context)})`
   }
 
+  if (expression.type === 'CallExpression') {
+    const localFile = emitHttpLocalFileConditionExpression(expression, httpContext, context)
+
+    if (localFile !== null && typeof localFile !== 'undefined') {
+      return localFile
+    }
+  }
+
   if (expression.type === 'BinaryExpression') {
     if (expression.operator === '&&' || expression.operator === '||') {
       return `(${emitHttpConditionExpression(expression.left, httpContext, context)} ${expression.operator} ${emitHttpConditionExpression(expression.right, httpContext, context)})`
@@ -484,7 +599,7 @@ function emitHttpConditionExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_HANDLER',
-      'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
+      'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons and response.sendLocalFile(req, prefix, root)',
       expression.loc
     )
   )
@@ -537,6 +652,45 @@ function emitHttpRequestStringCompareExpression(
   return runtime
 }
 
+function emitHttpLocalFileConditionExpression(
+  expression: AnyNode,
+  httpContext: HttpHandlerContext,
+  context: CFunctionContext
+): string | null {
+  if (
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'sendLocalFile' ||
+    !isHttpResponseReference(expression.callee.object, httpContext)
+  ) {
+    return null
+  }
+
+  if (expression.args.length !== 3 || !isHttpRequestReference(expression.args[0], httpContext)) {
+    context.diagnostics.push(
+      diagnostic(
+        'INOX_HTTP_HANDLER',
+        'HTTP local file helper must be called as response.sendLocalFile(req, prefix, root)',
+        expression.loc
+      )
+    )
+    return '0'
+  }
+
+  const prefix = emitHttpStaticStringValue(expression.args[1], httpContext, context)
+  const root = emitHttpStaticStringValue(expression.args[2], httpContext, context)
+
+  if (prefix === null || typeof prefix === 'undefined' || root === null || typeof root === 'undefined') {
+    context.diagnostics.push(
+      diagnostic('INOX_HTTP_HANDLER', 'HTTP local file helper prefix and root must be static strings', expression.loc)
+    )
+    return '0'
+  }
+
+  return `inox_http_response_send_local_file(${httpContext.responseName}, ${httpContext.requestName}, ${cStringLiteral(prefix)}, ${utf8ByteLength(prefix)}, ${cStringLiteral(root)}, ${utf8ByteLength(root)})`
+}
+
 function emitHttpStringBytesOperand(
   expression: AnyNode | null | undefined,
   httpContext: HttpHandlerContext,
@@ -560,6 +714,12 @@ function emitHttpStringBytesOperand(
     }
   }
 
+  const dateNow = emitHttpDateNowStringBytesOperand(expression, context)
+
+  if (dateNow !== null && typeof dateNow !== 'undefined') {
+    return dateNow
+  }
+
   const requestMember = resolveHttpRequestStringMember(expression, httpContext)
 
   if (requestMember === 'method') {
@@ -581,7 +741,7 @@ function emitHttpStringBytesOperand(
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_HANDLER',
-      'HTTP response body expressions in the C backend currently support static strings, JSON.stringify(object literals), req.method and req.url',
+      'HTTP response body expressions in the C backend currently support static strings, JSON.stringify(object literals), req.method, req.url and String(Date.now())',
       expression.loc
     )
   )
@@ -591,6 +751,54 @@ function emitHttpStringBytesOperand(
     bytes: '""',
     length: '0'
   }
+}
+
+function emitHttpDateNowStringBytesOperand(
+  expression: AnyNode | null | undefined,
+  context: CFunctionContext
+): HttpStringBytesOperand | null {
+  if (!isHttpDateNowStringCall(expression)) {
+    return null
+  }
+
+  const buffer = nextCName(context, 'inox_http_date_now')
+  const length = nextCName(context, 'inox_http_date_now_len')
+
+  return {
+    lines: [
+      `char ${buffer}[32];`,
+      `int ${length} = snprintf(${buffer}, sizeof(${buffer}), "%.0f", (double)inox_date_now());`,
+      `if (${length} < 0) return INOX_ERR_TYPE;`,
+      `if ((size_t)${length} >= sizeof(${buffer})) ${length} = (int)(sizeof(${buffer}) - 1);`
+    ],
+    bytes: buffer,
+    length: `(size_t)${length}`
+  }
+}
+
+function isHttpDateNowStringCall(expression: AnyNode | null | undefined): boolean {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.callee === null ||
+    typeof expression.callee === 'undefined' ||
+    expression.callee.type !== 'Reference' ||
+    expression.callee.path.length !== 1 ||
+    expression.callee.path[0] !== 'String' ||
+    expression.args.length !== 1
+  ) {
+    return false
+  }
+
+  const value = expression.args[0]
+
+  return (
+    value !== null &&
+    typeof value !== 'undefined' &&
+    value.type === 'CallExpression' &&
+    cTimeRuntimeCallName(value.callee) === 'inox_date_now'
+  )
 }
 
 function emitHttpStaticStringValue(
@@ -764,13 +972,41 @@ function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerCo
     return false
   }
 
-  if (expression.type !== 'Reference') {
+  const unwrapped = unwrapHttpTypeAssertionExpression(expression)
+
+  if (unwrapped.type !== 'Reference') {
     return false
   }
 
-  const path: string[] = expression.path
+  const path: string[] = unwrapped.path
 
   return path.length === 1 && path[0] === responseName
+}
+
+function isHttpRequestReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
+  const requestName = httpContext.requestName
+
+  if (requestName === null || typeof requestName === 'undefined') {
+    return false
+  }
+
+  const unwrapped = unwrapHttpTypeAssertionExpression(expression)
+
+  if (unwrapped.type !== 'Reference') {
+    return false
+  }
+
+  return unwrapped.path.length === 1 && unwrapped.path[0] === requestName
+}
+
+function unwrapHttpTypeAssertionExpression(expression: AnyNode): AnyNode {
+  let current = expression
+
+  while (current.type === 'TypeAssertionExpression') {
+    current = current.expression
+  }
+
+  return current
 }
 
 function resolveHttpRequestStringMember(expression: AnyNode, httpContext: HttpHandlerContext): string | null {

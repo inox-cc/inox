@@ -20,7 +20,9 @@ int inox_http_request_url_equals(const inox_http_request* request, const char* u
 #include "inox/net.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #define INOX_HTTP_MAX_HEADERS 32
 #define INOX_HTTP_MAX_RESPONSE_HEADERS 16
@@ -68,6 +70,8 @@ static inox_status inox_http_try_handle(inox_http_connection* connection);
 static inox_status inox_http_response_init(inox_http_response* response, inox_http_connection* connection);
 static int inox_http_header_name_equals(const char* left, size_t left_len, const char* right, size_t right_len);
 static int inox_http_has_response_header(inox_http_response* response, const char* name, size_t len);
+static const char* inox_http_local_file_content_type(const char* path, size_t path_len, size_t* out_len);
+static int inox_http_local_file_path_is_safe(const char* path, size_t len);
 static inox_status inox_http_parse_headers(
   const char* start,
   const char* header_end,
@@ -372,6 +376,163 @@ inox_status inox_http_response_text(inox_http_response* response, int status, co
   return inox_http_response_end(response, body, len);
 }
 
+int inox_http_response_send_local_file(
+  inox_http_response* response,
+  const inox_http_request* request,
+  const char* url_prefix,
+  size_t url_prefix_len,
+  const char* root,
+  size_t root_len
+) {
+  if (
+    response == 0 ||
+    response->connection == 0 ||
+    request == 0 ||
+    url_prefix == 0 ||
+    root == 0 ||
+    url_prefix_len == 0 ||
+    root_len == 0
+  ) {
+    return 0;
+  }
+
+  if (!inox_http_request_method_equals(request, "GET", 3)) {
+    return 0;
+  }
+
+  if (request->url_len < url_prefix_len || memcmp(request->url, url_prefix, url_prefix_len) != 0) {
+    return 0;
+  }
+
+  const char* relative_path = request->url + url_prefix_len;
+  size_t relative_path_len = request->url_len - url_prefix_len;
+
+  for (size_t index = 0; index < relative_path_len; index += 1) {
+    if (relative_path[index] == '?' || relative_path[index] == '#') {
+      relative_path_len = index;
+      break;
+    }
+  }
+
+  if (relative_path_len == 0) {
+    relative_path = "index.html";
+    relative_path_len = 10;
+  }
+
+  if (!inox_http_local_file_path_is_safe(relative_path, relative_path_len)) {
+    return 0;
+  }
+
+  char path[4096];
+  size_t path_len = root_len;
+
+  if (path_len >= sizeof(path)) {
+    return 0;
+  }
+
+  memcpy(path, root, root_len);
+
+  if (path_len > 0 && path[path_len - 1] != '/') {
+    if (path_len + 1 >= sizeof(path)) {
+      return 0;
+    }
+
+    path[path_len] = '/';
+    path_len += 1;
+  }
+
+  if (relative_path_len >= sizeof(path) - path_len) {
+    return 0;
+  }
+
+  memcpy(path + path_len, relative_path, relative_path_len);
+  path_len += relative_path_len;
+  path[path_len] = '\0';
+
+  struct stat info;
+
+  if (stat(path, &info) != 0 || !S_ISREG(info.st_mode) || info.st_size < 0) {
+    return 0;
+  }
+
+  if ((uintmax_t)info.st_size > (uintmax_t)INOX_HTTP_MAX_RESPONSE_BODY) {
+    return inox_http_response_text(response, 413, "payload too large", 17) == INOX_OK ? 1 : 0;
+  }
+
+  size_t file_len = (size_t)info.st_size;
+  char* bytes = 0;
+
+  if (file_len > 0) {
+    bytes = response->connection->server->allocator->alloc(
+      response->connection->server->allocator->user,
+      file_len,
+      _Alignof(char)
+    );
+
+    if (bytes == 0) {
+      return inox_http_response_text(response, 500, "internal server error", 21) == INOX_OK ? 1 : 0;
+    }
+  }
+
+  FILE* file = fopen(path, "rb");
+
+  if (file == 0) {
+    if (bytes != 0) {
+      response->connection->server->allocator->free(
+        response->connection->server->allocator->user,
+        bytes,
+        file_len,
+        _Alignof(char)
+      );
+    }
+
+    return 0;
+  }
+
+  size_t read_len = file_len == 0 ? 0 : fread(bytes, 1, file_len, file);
+  int read_failed = ferror(file) != 0 || read_len != file_len;
+  fclose(file);
+
+  if (read_failed) {
+    if (bytes != 0) {
+      response->connection->server->allocator->free(
+        response->connection->server->allocator->user,
+        bytes,
+        file_len,
+        _Alignof(char)
+      );
+    }
+
+    return inox_http_response_text(response, 500, "internal server error", 21) == INOX_OK ? 1 : 0;
+  }
+
+  size_t content_type_len = 0;
+  const char* content_type = inox_http_local_file_content_type(path, path_len, &content_type_len);
+  inox_status result = inox_http_response_write_head(
+    response,
+    200,
+    (const inox_http_header[]){
+      { "Content-Type", 12, content_type, content_type_len }
+    },
+    1
+  );
+
+  if (result == INOX_OK) {
+    result = inox_http_response_end(response, bytes, file_len);
+  }
+
+  if (bytes != 0) {
+    response->connection->server->allocator->free(
+      response->connection->server->allocator->user,
+      bytes,
+      file_len,
+      _Alignof(char)
+    );
+  }
+
+  return result == INOX_OK ? 1 : 0;
+}
+
 static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket) {
   (void)server;
   inox_http_server* http_server = (inox_http_server*)user;
@@ -650,6 +811,72 @@ static const char* inox_http_find_header_end(const char* bytes, size_t len) {
   return 0;
 }
 
+static const char* inox_http_local_file_content_type(const char* path, size_t path_len, size_t* out_len) {
+  if (path_len >= 5 && memcmp(path + path_len - 5, ".html", 5) == 0) {
+    *out_len = 24;
+    return "text/html; charset=utf-8";
+  }
+
+  if (path_len >= 4 && memcmp(path + path_len - 4, ".css", 4) == 0) {
+    *out_len = 23;
+    return "text/css; charset=utf-8";
+  }
+
+  if (path_len >= 3 && memcmp(path + path_len - 3, ".js", 3) == 0) {
+    *out_len = 37;
+    return "application/javascript; charset=utf-8";
+  }
+
+  if (path_len >= 5 && memcmp(path + path_len - 5, ".json", 5) == 0) {
+    *out_len = 16;
+    return "application/json";
+  }
+
+  if (path_len >= 4 && memcmp(path + path_len - 4, ".txt", 4) == 0) {
+    *out_len = 25;
+    return "text/plain; charset=utf-8";
+  }
+
+  *out_len = 24;
+  return "application/octet-stream";
+}
+
+static int inox_http_local_file_path_is_safe(const char* path, size_t len) {
+  if (path == 0 || len == 0 || path[0] == '/' || path[0] == '\\') {
+    return 0;
+  }
+
+  size_t segment_start = 0;
+
+  for (size_t index = 0; index <= len; index += 1) {
+    if (index < len && path[index] != '/' && path[index] != '\\' && path[index] != '\0') {
+      continue;
+    }
+
+    if (index < len && path[index] == '\0') {
+      return 0;
+    }
+
+    size_t segment_len = index - segment_start;
+
+    if (segment_len == 0) {
+      return 0;
+    }
+
+    if (segment_len == 1 && path[segment_start] == '.') {
+      return 0;
+    }
+
+    if (segment_len == 2 && path[segment_start] == '.' && path[segment_start + 1] == '.') {
+      return 0;
+    }
+
+    segment_start = index + 1;
+  }
+
+  return 1;
+}
+
 static const char* inox_http_status_text(int status) {
   switch (status) {
     case 200:
@@ -783,6 +1010,23 @@ inox_status inox_http_response_text(inox_http_response* response, int status, co
   (void)body;
   (void)len;
   return INOX_ERR_UNSUPPORTED;
+}
+
+int inox_http_response_send_local_file(
+  inox_http_response* response,
+  const inox_http_request* request,
+  const char* url_prefix,
+  size_t url_prefix_len,
+  const char* root,
+  size_t root_len
+) {
+  (void)response;
+  (void)request;
+  (void)url_prefix;
+  (void)url_prefix_len;
+  (void)root;
+  (void)root_len;
+  return 0;
 }
 
 #endif
