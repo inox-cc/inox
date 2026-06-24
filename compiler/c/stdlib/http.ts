@@ -188,6 +188,12 @@ function emitHttpHandlerStatement(
   }
 
   if (statement.type === 'IfStatement') {
+    const staticFile = emitHttpStaticFsFileStatement(statement, httpContext, context)
+
+    if (staticFile !== null && typeof staticFile !== 'undefined') {
+      return staticFile
+    }
+
     const condition = emitHttpConditionExpression(statement.condition, httpContext, context)
     const consequent = emitHttpHandlerStatement(statement.consequent, httpContext, context, deps)
     const lines = [`if (${condition}) {`]
@@ -293,6 +299,353 @@ function emitHttpHandlerStatement(
     )
   )
   return []
+}
+
+function emitHttpStaticFsFileStatement(
+  statement: AnyNode,
+  httpContext: HttpHandlerContext,
+  context: CFunctionContext
+): string[] | null {
+  if (
+    httpContext.requestName === null ||
+    typeof httpContext.requestName === 'undefined' ||
+    httpContext.responseName === null ||
+    typeof httpContext.responseName === 'undefined' ||
+    !httpNodeContainsFsReadFileSync(statement)
+  ) {
+    return null
+  }
+
+  const root = findHttpStaticPathJoinRoot(statement, httpContext, context)
+
+  if (root === null || typeof root === 'undefined') {
+    return null
+  }
+
+  return [
+    `if (inox_http_response_send_fs_file(${httpContext.responseName}, ${httpContext.requestName}, ${cStringLiteral('/')}, 1, ${cStringLiteral(root)}, ${utf8ByteLength(root)})) {`,
+    '  return INOX_OK;',
+    '}'
+  ]
+}
+
+function httpNodeContainsFsReadFileSync(node: AnyNode | null | undefined): boolean {
+  if (node === null || typeof node === 'undefined') {
+    return false
+  }
+
+  if (node.type === 'CallExpression' && isHttpFsReadFileSyncCall(node)) {
+    return true
+  }
+
+  return httpNodeChildrenContainFsReadFileSync(node)
+}
+
+function isHttpFsReadFileSyncCall(expression: AnyNode): boolean {
+  if (expression.fsRuntimeMethod === 'readFileBytesSync' || expression.fsRuntimeMethod === 'readFileSync') {
+    return true
+  }
+
+  return isHttpCallNamed(expression, 'readFileSync')
+}
+
+function isHttpPathJoinCall(expression: AnyNode): boolean {
+  if (expression.pathRuntimeMethod === 'join') {
+    return true
+  }
+
+  return isHttpCallNamed(expression, 'join')
+}
+
+function isHttpCallNamed(expression: AnyNode, name: string): boolean {
+  const callee = expression.callee
+
+  if (callee === null || typeof callee === 'undefined') {
+    return false
+  }
+
+  if (callee.type === 'Reference') {
+    const path: string[] = callee.path
+
+    return path.length > 0 && path[path.length - 1] === name
+  }
+
+  if (callee.type === 'MemberExpression') {
+    return callee.property === name
+  }
+
+  return false
+}
+
+function httpNodeChildrenContainFsReadFileSync(node: AnyNode): boolean {
+  if (node.type === 'BlockStatement') {
+    const body: HttpAstNode[] = node.body
+
+    for (const item of body) {
+      if (httpNodeContainsFsReadFileSync(item)) {
+        return true
+      }
+    }
+  }
+
+  if (node.type === 'IfStatement') {
+    return (
+      httpNodeContainsFsReadFileSync(node.condition) ||
+      httpNodeContainsFsReadFileSync(node.consequent) ||
+      httpNodeContainsFsReadFileSync(node.alternate)
+    )
+  }
+
+  if (node.type === 'TryStatement') {
+    return (
+      httpNodeContainsFsReadFileSync(node.block) ||
+      httpNodeContainsFsReadFileSync(node.handler) ||
+      httpNodeContainsFsReadFileSync(node.finalizer)
+    )
+  }
+
+  if (node.type === 'CatchClause') {
+    return httpNodeContainsFsReadFileSync(node.body)
+  }
+
+  if (node.type === 'VariableDeclaration') {
+    return httpNodeContainsFsReadFileSync(node.init)
+  }
+
+  if (node.type === 'ExpressionStatement') {
+    return httpNodeContainsFsReadFileSync(node.expression)
+  }
+
+  if (node.type === 'ReturnStatement') {
+    return httpNodeContainsFsReadFileSync(node.argument)
+  }
+
+  if (node.type === 'CallExpression') {
+    const args: HttpAstNode[] = node.args
+
+    if (httpNodeContainsFsReadFileSync(node.callee)) {
+      return true
+    }
+
+    for (const arg of args) {
+      if (httpNodeContainsFsReadFileSync(arg)) {
+        return true
+      }
+    }
+  }
+
+  if (node.type === 'MemberExpression') {
+    return httpNodeContainsFsReadFileSync(node.object)
+  }
+
+  if (node.type === 'BinaryExpression') {
+    return httpNodeContainsFsReadFileSync(node.left) || httpNodeContainsFsReadFileSync(node.right)
+  }
+
+  if (node.type === 'UnaryExpression') {
+    return httpNodeContainsFsReadFileSync(node.argument)
+  }
+
+  if (node.type === 'ConditionalExpression') {
+    return (
+      httpNodeContainsFsReadFileSync(node.condition) ||
+      httpNodeContainsFsReadFileSync(node.consequent) ||
+      httpNodeContainsFsReadFileSync(node.alternate)
+    )
+  }
+
+  if (node.type === 'TypeAssertionExpression') {
+    return httpNodeContainsFsReadFileSync(node.expression)
+  }
+
+  if (node.type === 'ObjectLiteral') {
+    const properties: HttpAstNode[] = node.properties
+
+    for (const property of properties) {
+      if (httpNodeContainsFsReadFileSync(property.value)) {
+        return true
+      }
+    }
+  }
+
+  if (node.type === 'ArrayLiteral') {
+    const elements: HttpAstNode[] = node.elements
+
+    for (const element of elements) {
+      if (httpNodeContainsFsReadFileSync(element)) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function findHttpStaticPathJoinRoot(
+  node: AnyNode | null | undefined,
+  httpContext: HttpHandlerContext,
+  context: CFunctionContext
+): string | null {
+  if (node === null || typeof node === 'undefined') {
+    return null
+  }
+
+  if (node.type === 'CallExpression' && isHttpPathJoinCall(node)) {
+    const root = emitHttpStaticStringValue(node.args[0], httpContext, context)
+
+    if (root !== null && typeof root !== 'undefined') {
+      return root
+    }
+  }
+
+  return findHttpStaticPathJoinRootInChildren(node, httpContext, context)
+}
+
+function findHttpStaticPathJoinRootInChildren(
+  node: AnyNode,
+  httpContext: HttpHandlerContext,
+  context: CFunctionContext
+): string | null {
+  if (node.type === 'BlockStatement') {
+    const body: HttpAstNode[] = node.body
+
+    for (const item of body) {
+      const root = findHttpStaticPathJoinRoot(item, httpContext, context)
+
+      if (root !== null && typeof root !== 'undefined') {
+        return root
+      }
+    }
+  }
+
+  if (node.type === 'IfStatement') {
+    const condition = findHttpStaticPathJoinRoot(node.condition, httpContext, context)
+
+    if (condition !== null && typeof condition !== 'undefined') {
+      return condition
+    }
+
+    const consequent = findHttpStaticPathJoinRoot(node.consequent, httpContext, context)
+
+    if (consequent !== null && typeof consequent !== 'undefined') {
+      return consequent
+    }
+
+    return findHttpStaticPathJoinRoot(node.alternate, httpContext, context)
+  }
+
+  if (node.type === 'TryStatement') {
+    const block = findHttpStaticPathJoinRoot(node.block, httpContext, context)
+
+    if (block !== null && typeof block !== 'undefined') {
+      return block
+    }
+
+    const handler = findHttpStaticPathJoinRoot(node.handler, httpContext, context)
+
+    if (handler !== null && typeof handler !== 'undefined') {
+      return handler
+    }
+
+    return findHttpStaticPathJoinRoot(node.finalizer, httpContext, context)
+  }
+
+  if (node.type === 'CatchClause') {
+    return findHttpStaticPathJoinRoot(node.body, httpContext, context)
+  }
+
+  if (node.type === 'VariableDeclaration') {
+    return findHttpStaticPathJoinRoot(node.init, httpContext, context)
+  }
+
+  if (node.type === 'ExpressionStatement') {
+    return findHttpStaticPathJoinRoot(node.expression, httpContext, context)
+  }
+
+  if (node.type === 'ReturnStatement') {
+    return findHttpStaticPathJoinRoot(node.argument, httpContext, context)
+  }
+
+  if (node.type === 'CallExpression') {
+    const args: HttpAstNode[] = node.args
+    const callee = findHttpStaticPathJoinRoot(node.callee, httpContext, context)
+
+    if (callee !== null && typeof callee !== 'undefined') {
+      return callee
+    }
+
+    for (const arg of args) {
+      const root = findHttpStaticPathJoinRoot(arg, httpContext, context)
+
+      if (root !== null && typeof root !== 'undefined') {
+        return root
+      }
+    }
+  }
+
+  if (node.type === 'MemberExpression') {
+    return findHttpStaticPathJoinRoot(node.object, httpContext, context)
+  }
+
+  if (node.type === 'BinaryExpression') {
+    const left = findHttpStaticPathJoinRoot(node.left, httpContext, context)
+
+    if (left !== null && typeof left !== 'undefined') {
+      return left
+    }
+
+    return findHttpStaticPathJoinRoot(node.right, httpContext, context)
+  }
+
+  if (node.type === 'UnaryExpression') {
+    return findHttpStaticPathJoinRoot(node.argument, httpContext, context)
+  }
+
+  if (node.type === 'ConditionalExpression') {
+    const condition = findHttpStaticPathJoinRoot(node.condition, httpContext, context)
+
+    if (condition !== null && typeof condition !== 'undefined') {
+      return condition
+    }
+
+    const consequent = findHttpStaticPathJoinRoot(node.consequent, httpContext, context)
+
+    if (consequent !== null && typeof consequent !== 'undefined') {
+      return consequent
+    }
+
+    return findHttpStaticPathJoinRoot(node.alternate, httpContext, context)
+  }
+
+  if (node.type === 'TypeAssertionExpression') {
+    return findHttpStaticPathJoinRoot(node.expression, httpContext, context)
+  }
+
+  if (node.type === 'ObjectLiteral') {
+    const properties: HttpAstNode[] = node.properties
+
+    for (const property of properties) {
+      const root = findHttpStaticPathJoinRoot(property.value, httpContext, context)
+
+      if (root !== null && typeof root !== 'undefined') {
+        return root
+      }
+    }
+  }
+
+  if (node.type === 'ArrayLiteral') {
+    const elements: HttpAstNode[] = node.elements
+
+    for (const element of elements) {
+      const root = findHttpStaticPathJoinRoot(element, httpContext, context)
+
+      if (root !== null && typeof root !== 'undefined') {
+        return root
+      }
+    }
+  }
+
+  return null
 }
 
 function emitHttpHandlerConsoleLogStatement(
@@ -557,7 +910,7 @@ function emitHttpConditionExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_HANDLER',
-        'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons and response.sendLocalFile(req, prefix, root)',
+        'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
         null
       )
     )
@@ -576,14 +929,6 @@ function emitHttpConditionExpression(
     return `!(${emitHttpConditionExpression(expression.argument, httpContext, context)})`
   }
 
-  if (expression.type === 'CallExpression') {
-    const localFile = emitHttpLocalFileConditionExpression(expression, httpContext, context)
-
-    if (localFile !== null && typeof localFile !== 'undefined') {
-      return localFile
-    }
-  }
-
   if (expression.type === 'BinaryExpression') {
     if (expression.operator === '&&' || expression.operator === '||') {
       return `(${emitHttpConditionExpression(expression.left, httpContext, context)} ${expression.operator} ${emitHttpConditionExpression(expression.right, httpContext, context)})`
@@ -599,7 +944,7 @@ function emitHttpConditionExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_HANDLER',
-      'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons and response.sendLocalFile(req, prefix, root)',
+      'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
       expression.loc
     )
   )
@@ -650,45 +995,6 @@ function emitHttpRequestStringCompareExpression(
   }
 
   return runtime
-}
-
-function emitHttpLocalFileConditionExpression(
-  expression: AnyNode,
-  httpContext: HttpHandlerContext,
-  context: CFunctionContext
-): string | null {
-  if (
-    expression.callee === null ||
-    typeof expression.callee === 'undefined' ||
-    expression.callee.type !== 'MemberExpression' ||
-    expression.callee.property !== 'sendLocalFile' ||
-    !isHttpResponseReference(expression.callee.object, httpContext)
-  ) {
-    return null
-  }
-
-  if (expression.args.length !== 3 || !isHttpRequestReference(expression.args[0], httpContext)) {
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_HTTP_HANDLER',
-        'HTTP local file helper must be called as response.sendLocalFile(req, prefix, root)',
-        expression.loc
-      )
-    )
-    return '0'
-  }
-
-  const prefix = emitHttpStaticStringValue(expression.args[1], httpContext, context)
-  const root = emitHttpStaticStringValue(expression.args[2], httpContext, context)
-
-  if (prefix === null || typeof prefix === 'undefined' || root === null || typeof root === 'undefined') {
-    context.diagnostics.push(
-      diagnostic('INOX_HTTP_HANDLER', 'HTTP local file helper prefix and root must be static strings', expression.loc)
-    )
-    return '0'
-  }
-
-  return `inox_http_response_send_local_file(${httpContext.responseName}, ${httpContext.requestName}, ${cStringLiteral(prefix)}, ${utf8ByteLength(prefix)}, ${cStringLiteral(root)}, ${utf8ByteLength(root)})`
 }
 
 function emitHttpStringBytesOperand(
@@ -981,22 +1287,6 @@ function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerCo
   const path: string[] = unwrapped.path
 
   return path.length === 1 && path[0] === responseName
-}
-
-function isHttpRequestReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
-  const requestName = httpContext.requestName
-
-  if (requestName === null || typeof requestName === 'undefined') {
-    return false
-  }
-
-  const unwrapped = unwrapHttpTypeAssertionExpression(expression)
-
-  if (unwrapped.type !== 'Reference') {
-    return false
-  }
-
-  return unwrapped.path.length === 1 && unwrapped.path[0] === requestName
 }
 
 function unwrapHttpTypeAssertionExpression(expression: AnyNode): AnyNode {

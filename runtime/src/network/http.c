@@ -17,12 +17,12 @@ int inox_http_request_url_equals(const inox_http_request* request, const char* u
 }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
+#include "inox/binary.h"
+#include "inox/fs.h"
 #include "inox/net.h"
 
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
-#include <sys/stat.h>
 
 #define INOX_HTTP_MAX_HEADERS 32
 #define INOX_HTTP_MAX_RESPONSE_HEADERS 16
@@ -376,7 +376,7 @@ inox_status inox_http_response_text(inox_http_response* response, int status, co
   return inox_http_response_end(response, body, len);
 }
 
-int inox_http_response_send_local_file(
+int inox_http_response_send_fs_file(
   inox_http_response* response,
   const inox_http_request* request,
   const char* url_prefix,
@@ -449,61 +449,26 @@ int inox_http_response_send_local_file(
   path_len += relative_path_len;
   path[path_len] = '\0';
 
-  struct stat info;
+  inox_value file = inox_undefined_value();
+  inox_status read_status =
+    inox_fs_read_file_bytes_sync(response->connection->server->allocator, path, path_len, &file);
 
-  if (stat(path, &info) != 0 || !S_ISREG(info.st_mode) || info.st_size < 0) {
+  if (read_status != INOX_OK) {
     return 0;
   }
 
-  if ((uintmax_t)info.st_size > (uintmax_t)INOX_HTTP_MAX_RESPONSE_BODY) {
-    return inox_http_response_text(response, 413, "payload too large", 17) == INOX_OK ? 1 : 0;
-  }
-
-  size_t file_len = (size_t)info.st_size;
-  char* bytes = 0;
-
-  if (file_len > 0) {
-    bytes = response->connection->server->allocator->alloc(
-      response->connection->server->allocator->user,
-      file_len,
-      _Alignof(char)
-    );
-
-    if (bytes == 0) {
-      return inox_http_response_text(response, 500, "internal server error", 21) == INOX_OK ? 1 : 0;
-    }
-  }
-
-  FILE* file = fopen(path, "rb");
-
-  if (file == 0) {
-    if (bytes != 0) {
-      response->connection->server->allocator->free(
-        response->connection->server->allocator->user,
-        bytes,
-        file_len,
-        _Alignof(char)
-      );
-    }
-
-    return 0;
-  }
-
-  size_t read_len = file_len == 0 ? 0 : fread(bytes, 1, file_len, file);
-  int read_failed = ferror(file) != 0 || read_len != file_len;
-  fclose(file);
-
-  if (read_failed) {
-    if (bytes != 0) {
-      response->connection->server->allocator->free(
-        response->connection->server->allocator->user,
-        bytes,
-        file_len,
-        _Alignof(char)
-      );
-    }
+  if (file.tag != INOX_TAG_BYTES) {
+    inox_release(file);
 
     return inox_http_response_text(response, 500, "internal server error", 21) == INOX_OK ? 1 : 0;
+  }
+
+  inox_bytes* bytes = (inox_bytes*)file.as.ref;
+
+  if (bytes->len > INOX_HTTP_MAX_RESPONSE_BODY) {
+    inox_release(file);
+
+    return inox_http_response_text(response, 413, "payload too large", 17) == INOX_OK ? 1 : 0;
   }
 
   size_t content_type_len = 0;
@@ -518,17 +483,10 @@ int inox_http_response_send_local_file(
   );
 
   if (result == INOX_OK) {
-    result = inox_http_response_end(response, bytes, file_len);
+    result = inox_http_response_end(response, (const char*)bytes->bytes, bytes->len);
   }
 
-  if (bytes != 0) {
-    response->connection->server->allocator->free(
-      response->connection->server->allocator->user,
-      bytes,
-      file_len,
-      _Alignof(char)
-    );
-  }
+  inox_release(file);
 
   return result == INOX_OK ? 1 : 0;
 }
@@ -1012,7 +970,7 @@ inox_status inox_http_response_text(inox_http_response* response, int status, co
   return INOX_ERR_UNSUPPORTED;
 }
 
-int inox_http_response_send_local_file(
+int inox_http_response_send_fs_file(
   inox_http_response* response,
   const inox_http_request* request,
   const char* url_prefix,

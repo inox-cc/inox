@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { join, normalize } from 'node:path'
 
 function main(): void {
   const server = createServer((request, response) => {
@@ -16,8 +18,18 @@ function main(): void {
       return
     }
 
-    if (request.method === 'GET' && (response as any).sendLocalFile(request, '/', 'dist/http-server/out/static')) {
-      return
+    if (request.method === 'GET' && request.url && !request.url.includes('..')) {
+      const requestPath = request.url === '/' ? '/index.html' : request.url
+      const filePath = join('dist/http-server/out/static', normalize(requestPath))
+
+      try {
+        const file = readFileSync(filePath)
+        response.writeHead(200, { 'Content-Type': 'application/octet-stream' })
+        response.end(file)
+        return
+      } catch {
+        // Missing or unreadable files fall through to the shared 404 response.
+      }
     }
 
     response.statusCode = 404
