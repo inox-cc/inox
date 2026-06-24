@@ -69,7 +69,7 @@ function featureTestParallelism(compiler: FeatureTestCompiler): number {
     return Math.max(1, cpuCount)
   }
 
-  return cpuCount * 4
+  return cpuCount
 }
 
 function shouldRunIntegrationTests(options: RunnerOptions): boolean {
