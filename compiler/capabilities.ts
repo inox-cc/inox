@@ -20,6 +20,7 @@ type CapabilityNode = AnyNode & {
   loc?: SourceLocation
   osRuntimeConstant?: string | null
   osRuntimeMethod?: string | null
+  timeRuntimeMethod?: string | null
   timerRuntimeMethod?: string | null
   type?: string | null
   valueType?: string | null
@@ -217,11 +218,31 @@ function recordNodeCapabilityUsages(expression: CapabilityNode, usages: Capabili
     pushCapability(usages, 'timers', 'timers', timerMethod, loc)
   }
 
+  const timeMethod = expression.timeRuntimeMethod
+
+  if (timeMethod === 'dateConstructor' && capabilityArgCount(expression) === 0) {
+    pushCapability(usages, 'wallClock', 'wall-clock', 'Date', loc)
+  } else if (timeMethod === 'dateNow') {
+    pushCapability(usages, 'wallClock', 'wall-clock', 'Date.now', loc)
+  } else if (timeMethod === 'performanceNow') {
+    pushCapability(usages, 'monotonicClock', 'monotonic-clock', 'performance.now', loc)
+  }
+
   const arrayMethod = arrayProducingMethodName(expression)
 
   if (arrayMethod !== null && typeof arrayMethod !== 'undefined') {
     pushCapability(usages, 'heap', 'heap', `Array.${arrayMethod}`, loc)
   }
+}
+
+function capabilityArgCount(expression: CapabilityNode): number {
+  const args = expression.args
+
+  if (Array.isArray(args)) {
+    return args.length
+  }
+
+  return 0
 }
 
 function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapability | null {

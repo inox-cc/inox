@@ -1252,6 +1252,7 @@ function anyNodeLikeStringFields(): string[] {
     'osRuntimeMethod',
     'objectRuntimeMethod',
     'stringRuntimeMethod',
+    'timeRuntimeMethod',
     'timerRuntimeMethod',
     'numericCast',
     'returnType',

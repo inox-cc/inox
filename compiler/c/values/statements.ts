@@ -1381,6 +1381,17 @@ export function emitNumberBooleanScalarVariableDeclaration(
     return emitBoxedScalarVariableDeclaration(statement, context)
   }
 
+  if (inferred === 'date') {
+    const value = statementDeps(context).emitPreparedNumberExpression(statement.init, context)
+    const lines: string[] = []
+
+    context.variables.set(statement.name, 'date')
+    pushAllLines(lines, value.lines)
+    lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)
+
+    return lines
+  }
+
   if (!isNullableScalarType(inferred)) {
     pushDiagnostic(
       context,

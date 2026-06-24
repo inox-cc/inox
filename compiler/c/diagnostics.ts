@@ -6,7 +6,7 @@ import { isDebugRuntimeMethodPath } from '../stdlib/descriptors/debug.ts'
 import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
 import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
-import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
+import { dateConstructorRuntimeMethodNameFromPath, timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 type CGlobalNameSet = Set<string>
@@ -46,6 +46,7 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
 
   return (
     !!timeRuntimeMethodNameFromPath(usage.path) ||
+    !!dateConstructorRuntimeMethodNameFromPath(usage.path) ||
     path === 'Error' ||
     path === 'Promise' ||
     path === 'Promise.resolve' ||

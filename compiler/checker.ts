@@ -112,7 +112,12 @@ import {
   isUnsupportedStreamRuntimeExport,
   unsupportedStreamRuntimeExportReason
 } from './stdlib/descriptors/stream.ts'
-import { timeRuntimeMethodNameFromPath } from './stdlib/descriptors/time.ts'
+import {
+  dateConstructorRuntimeMethodNameFromPath,
+  dateInstanceRuntimeMethodName,
+  dateInstanceRuntimeMethodReturnType,
+  timeRuntimeMethodNameFromPath
+} from './stdlib/descriptors/time.ts'
 import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
 import {
   isNodeUrlImportSource,
@@ -6811,6 +6816,12 @@ class Checker {
   }
 
   checkTimeCall(expression: AnyNode): ValueType | null {
+    const dateInstanceType = this.checkDateInstanceMethodCall(expression)
+
+    if (dateInstanceType !== null && typeof dateInstanceType !== 'undefined') {
+      return dateInstanceType
+    }
+
     const path = memberExpressionPath(expression.callee)
     const method = timeRuntimeMethodNameFromPath(path)
 
@@ -6826,6 +6837,48 @@ class Checker {
 
     expression.valueType = 'number'
 
+    if (method === 'dateParse') {
+      if (expression.args.length !== 1) {
+        this.report(
+          'INOX_ARG_COUNT',
+          `function ${root}.${path[1]} expects 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        this.checkAssignableType(
+          this.checkExpression(expression.args[0]),
+          'string',
+          expression.args[0].loc,
+          false,
+          this.expressionCanBeNull(expression.args[0])
+        )
+      }
+
+      expression.timeRuntimeMethod = method
+      return 'number'
+    }
+
+    if (method === 'dateUTC') {
+      if (expression.args.length < 2 || expression.args.length > 7) {
+        this.report(
+          'INOX_ARG_COUNT',
+          `function ${root}.${path[1]} expects 2 to 7 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
+        this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
+      }
+
+      expression.timeRuntimeMethod = method
+      return 'number'
+    }
+
     if (expression.args.length !== 0) {
       this.report(
         'INOX_ARG_COUNT',
@@ -6838,7 +6891,84 @@ class Checker {
       this.checkExpression(checkerNodeAt(expression.args, index))
     }
 
+    expression.timeRuntimeMethod = method
     return 'number'
+  }
+
+  checkDateInstanceMethodCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression') {
+      return null
+    }
+
+    const method = dateInstanceRuntimeMethodName(expression.callee.property)
+
+    if (method === null || typeof method === 'undefined') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType !== 'date') {
+      return null
+    }
+
+    if (expression.args.length !== 0) {
+      this.report(
+        'INOX_ARG_COUNT',
+        `function Date.${method} expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      this.checkExpression(checkerNodeAt(expression.args, index))
+    }
+
+    const returnType = dateInstanceRuntimeMethodReturnType(method) ?? 'number'
+
+    expression.timeRuntimeMethod = method
+    expression.valueType = returnType
+
+    return returnType
+  }
+
+  checkDateConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {
+    if (
+      expression.callee.type !== 'Reference' ||
+      dateConstructorRuntimeMethodNameFromPath(expression.callee.path) === null ||
+      this.scope.resolve('Date')
+    ) {
+      return null
+    }
+
+    if (expression.args.length > 7) {
+      this.report(
+        'INOX_ARG_COUNT',
+        `Date constructor expects 0 to 7 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    if (expression.args.length === 1) {
+      const argType = argTypes[0]
+
+      if (argType !== 'number' && argType !== 'string' && argType !== 'date') {
+        this.report(
+          'INOX_TYPE_MISMATCH',
+          `Date constructor expects number, string or Date, got ${argType}`,
+          expression.args[0].loc
+        )
+      }
+    } else if (expression.args.length > 1) {
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        this.checkAssignableType(argTypes[index], 'number', expression.args[index].loc, false, false)
+      }
+    }
+
+    expression.timeRuntimeMethod = 'dateConstructor'
+    expression.valueType = 'date'
+
+    return 'date'
   }
 
   checkArrayIsArrayCall(expression: AnyNode): ValueType | null {
@@ -10678,6 +10808,12 @@ class Checker {
 
     if (eventStreamConstructorType !== null && typeof eventStreamConstructorType !== 'undefined') {
       return eventStreamConstructorType
+    }
+
+    const dateConstructorType = this.checkDateConstructorExpression(expression, argTypes)
+
+    if (dateConstructorType !== null && typeof dateConstructorType !== 'undefined') {
+      return dateConstructorType
     }
 
     const urlType = this.checkUrlConstructorExpression(expression, argTypes)

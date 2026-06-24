@@ -10,7 +10,7 @@ import {
 import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
 import { fsRuntimeMethodForPath } from '../stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
-import { timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
+import { dateInstanceRuntimeMethodReturnType, timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
@@ -754,10 +754,19 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
 
 function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): void {
   const callee = expression.callee
-  const timeCall = callee !== null && typeof callee !== 'undefined' ? timeRuntimeCallName(callee) : null
+  let timeCall = expression.timeRuntimeMethod
+
+  if ((timeCall === null || typeof timeCall === 'undefined') && callee !== null && typeof callee !== 'undefined') {
+    timeCall = timeRuntimeCallName(callee)
+  }
 
   if (timeCall !== null && typeof timeCall !== 'undefined') {
     features.add('clocks')
+
+    if (dateInstanceRuntimeMethodReturnType(timeCall) === 'string') {
+      features.add('runtime-values')
+      features.add('string-bytes')
+    }
 
     if (timeCall === 'sleep') {
       features.add('runtime-values')

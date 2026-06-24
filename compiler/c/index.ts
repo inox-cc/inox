@@ -5,6 +5,7 @@ import type { IrModuleRecord } from '../ir/top-level.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { DebugMemoryStatsField } from '../stdlib/descriptors/debug.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import { dateInstanceRuntimeMethodReturnType } from '../stdlib/descriptors/time.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -214,7 +215,13 @@ import {
   emitProcessExitCodeAssignment,
   emitProcessExitStatement
 } from './stdlib/process.ts'
-import { cTimeRuntimeCallName } from './stdlib/time.ts'
+import type { TimeLoweringDependencies } from './stdlib/time.ts'
+import {
+  cTimeRuntimeCallName,
+  emitPreparedDateNumberExpression,
+  emitPreparedDateStringExpression,
+  isDateStringExpression
+} from './stdlib/time.ts'
 import type { TimerLoweringDependencies } from './stdlib/timers.ts'
 import { emitPreparedTimerCallExpression, emitTimerVariableDeclaration } from './stdlib/timers.ts'
 import type { UrlLoweringDependencies } from './stdlib/url.ts'
@@ -518,6 +525,7 @@ let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
   inferExpressionType
 }
 let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
+let timeLoweringDependencies = {} as TimeLoweringDependencies
 let timerLoweringDependencies = {} as TimerLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let fsLoweringDependencies = {} as FsLoweringDependencies
@@ -774,6 +782,12 @@ jsonDeclarationDependencies = {
   emitPreparedStringBytesOperand,
   inferExpressionType,
   registerObjectShape
+}
+
+timeLoweringDependencies = {
+  emitPreparedNumberExpression,
+  emitPreparedStringBytesOperand,
+  inferExpressionType
 }
 
 timerLoweringDependencies = {
@@ -3315,10 +3329,11 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
   }
 
-  if (inferred === 'number' || inferred === 'boolean') {
+  if (inferred === 'number' || inferred === 'boolean' || inferred === 'date') {
     const value = emitPreparedNumberExpression(statement.init, context)
     const lines: string[] = []
 
+    context.moduleValueTypes.set(statement.name, inferred)
     pushAll(lines, value.lines)
     lines.push(`${name} = ${value.expression};`)
     return lines
@@ -4925,6 +4940,21 @@ function emitObjectFieldInitializerValue(
 }
 
 function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+  const dateString = emitPreparedDateStringExpression(expression, context, timeLoweringDependencies)
+
+  if (dateString !== null && typeof dateString !== 'undefined') {
+    return dateString
+  }
+
+  const dateNumber = emitPreparedDateNumberExpression(expression, context, timeLoweringDependencies)
+
+  if (dateNumber !== null && typeof dateNumber !== 'undefined') {
+    return {
+      lines: dateNumber.lines,
+      expression: `inox_number_value(${dateNumber.expression})`
+    }
+  }
+
   return emitCValueExpressionWithDependencies(expression, context, cValueExpressionDependencies)
 }
 
@@ -6097,6 +6127,23 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     }
   }
 
+  if (isDateStringExpression(expression, context)) {
+    const value = emitPreparedDateStringExpression(expression, context, timeLoweringDependencies)
+    const string = nextCName(context, 'inox_log_string')
+    const lines: string[] = []
+
+    if (value !== null && typeof value !== 'undefined') {
+      pushAll(lines, value.lines)
+      lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+      return {
+        lines,
+        format: '%.*s',
+        values: [`(int)${string}->len`, `${string}->bytes`]
+      }
+    }
+  }
+
   if (isMemberAccessExpression(expression)) {
     const netAddressMember = resolveNetAddressStringMember(expression, context) ?? ''
 
@@ -6542,6 +6589,12 @@ function emitErrorLogObjectExpression(expression: AnyNode, context: CFunctionCon
 }
 
 function emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+  const dateNumber = emitPreparedDateNumberExpression(expression, context, timeLoweringDependencies)
+
+  if (dateNumber !== null && typeof dateNumber !== 'undefined') {
+    return dateNumber
+  }
+
   return emitPreparedNumberExpressionWithDependencies(expression, context, cScalarExpressionDependencies)
 }
 
@@ -6605,6 +6658,18 @@ function emitCallExpression(expression: AnyNode, context: CFunctionContext): str
 }
 
 function emitPreparedCallExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+  const dateString = emitPreparedDateStringExpression(expression, context, timeLoweringDependencies)
+
+  if (dateString !== null && typeof dateString !== 'undefined') {
+    return dateString
+  }
+
+  const dateNumber = emitPreparedDateNumberExpression(expression, context, timeLoweringDependencies)
+
+  if (dateNumber !== null && typeof dateNumber !== 'undefined') {
+    return dateNumber
+  }
+
   return emitPreparedCallExpressionWithDependencies(expression, context, cCallExpressionDependencies)
 }
 
@@ -7995,7 +8060,33 @@ function resolveFunctionParams(callee: CAccessorNode, context: FunctionParamCont
 }
 
 function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
+  const timeValueType = timeRuntimeExpressionValueType(expression)
+
+  if (timeValueType !== null && typeof timeValueType !== 'undefined') {
+    return timeValueType
+  }
+
   return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
+}
+
+function timeRuntimeExpressionValueType(expression: AnyNode): string | null {
+  const method = expression.timeRuntimeMethod
+
+  if (method === null || typeof method === 'undefined') {
+    return null
+  }
+
+  if (method === 'dateConstructor') {
+    return 'date'
+  }
+
+  const dateReturnType = dateInstanceRuntimeMethodReturnType(method)
+
+  if (dateReturnType !== null && typeof dateReturnType !== 'undefined') {
+    return dateReturnType
+  }
+
+  return 'number'
 }
 
 function isErrorConstructorExpression(expression: AnyNode): boolean {

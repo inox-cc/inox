@@ -47,6 +47,7 @@ export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
     valueType !== 'void' &&
     valueType !== 'function' &&
     valueType !== 'promise' &&
+    valueType !== 'date' &&
     valueType !== 'timer' &&
     valueType !== 'crypto-hash' &&
     valueType !== 'crypto-hmac' &&
@@ -82,6 +83,10 @@ export function emitCType(valueType: CValueTypeInput): string {
 
   if (valueType === 'promise') {
     return 'inox_promise*'
+  }
+
+  if (valueType === 'date') {
+    return 'double'
   }
 
   if (valueType === 'timer') {
