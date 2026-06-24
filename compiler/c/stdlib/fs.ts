@@ -61,13 +61,11 @@ type FsSyncStatementDescriptor = {
 }
 
 const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
-  appendFileBytesSync: { kind: 'bytes-value', callName: 'inox_fs_append_file_bytes_sync' },
   appendFileSync: { kind: 'string-bytes', callName: 'inox_fs_append_file_sync' },
   copyFileSync: { kind: 'path-arg', callName: 'inox_fs_copy_file_sync', tempPrefix: 'inox_fs_dest_path' },
   renameSync: { kind: 'path-arg', callName: 'inox_fs_rename_sync', tempPrefix: 'inox_fs_new_path' },
   symlinkSync: { kind: 'path-arg', callName: 'inox_fs_symlink_sync', tempPrefix: 'inox_fs_link_path' },
   unlinkSync: { kind: 'path', callName: 'inox_fs_unlink_sync' },
-  writeFileBytesSync: { kind: 'bytes-value', callName: 'inox_fs_write_file_bytes_sync' },
   writeFileSync: { kind: 'string-bytes', callName: 'inox_fs_write_file_sync' }
 }
 
@@ -75,15 +73,13 @@ function fsPromiseResultTypeForMethod(method: string | null): string | null {
   if (
     method === 'access' ||
     method === 'appendFile' ||
-    method === 'appendFileBytes' ||
     method === 'copyFile' ||
     method === 'mkdir' ||
     method === 'rename' ||
     method === 'rm' ||
     method === 'symlink' ||
     method === 'unlink' ||
-    method === 'writeFile' ||
-    method === 'writeFileBytes'
+    method === 'writeFile'
   ) {
     return 'void'
   }
@@ -92,7 +88,7 @@ function fsPromiseResultTypeForMethod(method: string | null): string | null {
     return 'object'
   }
 
-  if (method === 'readDir' || method === 'readDirDirents') {
+  if (method === 'readdir') {
     return 'array'
   }
 
@@ -100,20 +96,16 @@ function fsPromiseResultTypeForMethod(method: string | null): string | null {
     return 'string'
   }
 
-  if (method === 'readFileBytes') {
-    return 'bytes'
-  }
-
   return null
 }
 
-function fsAsyncCallDescriptorForMethod(method: string | null): FsAsyncCallDescriptor | null {
+function fsAsyncCallDescriptorForExpression(expression: AnyNode, method: string | null): FsAsyncCallDescriptor | null {
   if (method === 'appendFile') {
-    return { kind: 'string-bytes-out', callName: 'inox_fs_append_file' }
-  }
+    if (fsUsesBytes(expression)) {
+      return { kind: 'bytes-value-out', callName: 'inox_fs_append_file_bytes' }
+    }
 
-  if (method === 'appendFileBytes') {
-    return { kind: 'bytes-value-out', callName: 'inox_fs_append_file_bytes' }
+    return { kind: 'string-bytes-out', callName: 'inox_fs_append_file' }
   }
 
   if (method === 'copyFile') {
@@ -124,20 +116,20 @@ function fsAsyncCallDescriptorForMethod(method: string | null): FsAsyncCallDescr
     return { kind: 'path-out', callName: 'inox_fs_lstat' }
   }
 
-  if (method === 'readDir') {
-    return { kind: 'path-out', callName: 'inox_fs_read_dir' }
-  }
-
-  if (method === 'readDirDirents') {
-    return { kind: 'path-out', callName: 'inox_fs_read_dir_dirents' }
-  }
-
   if (method === 'readFile') {
+    if (fsUsesBytes(expression)) {
+      return { kind: 'path-out', callName: 'inox_fs_read_file_bytes' }
+    }
+
     return { kind: 'path-out', callName: 'inox_fs_read_file' }
   }
 
-  if (method === 'readFileBytes') {
-    return { kind: 'path-out', callName: 'inox_fs_read_file_bytes' }
+  if (method === 'readdir') {
+    if (fsUsesDirents(expression)) {
+      return { kind: 'path-out', callName: 'inox_fs_read_dir_dirents' }
+    }
+
+    return { kind: 'path-out', callName: 'inox_fs_read_dir' }
   }
 
   if (method === 'readlink') {
@@ -165,35 +157,35 @@ function fsAsyncCallDescriptorForMethod(method: string | null): FsAsyncCallDescr
   }
 
   if (method === 'writeFile') {
-    return { kind: 'string-bytes-out', callName: 'inox_fs_write_file' }
-  }
+    if (fsUsesBytes(expression)) {
+      return { kind: 'bytes-value-out', callName: 'inox_fs_write_file_bytes' }
+    }
 
-  if (method === 'writeFileBytes') {
-    return { kind: 'bytes-value-out', callName: 'inox_fs_write_file_bytes' }
+    return { kind: 'string-bytes-out', callName: 'inox_fs_write_file' }
   }
 
   return null
 }
 
-function fsSyncValueCallNameForMethod(method: string | null): string | null {
+function fsSyncValueCallNameForExpression(expression: AnyNode, method: string | null): string | null {
   if (method === 'lstatSync') {
     return 'inox_fs_lstat_sync'
   }
 
-  if (method === 'readDirDirentsSync') {
-    return 'inox_fs_read_dir_dirents_sync'
-  }
-
-  if (method === 'readDirSync') {
-    return 'inox_fs_read_dir_sync'
-  }
-
-  if (method === 'readFileBytesSync') {
-    return 'inox_fs_read_file_bytes_sync'
-  }
-
   if (method === 'readFileSync') {
+    if (fsUsesBytes(expression)) {
+      return 'inox_fs_read_file_bytes_sync'
+    }
+
     return 'inox_fs_read_file_sync'
+  }
+
+  if (method === 'readdirSync') {
+    if (fsUsesDirents(expression)) {
+      return 'inox_fs_read_dir_dirents_sync'
+    }
+
+    return 'inox_fs_read_dir_sync'
   }
 
   if (method === 'readlinkSync') {
@@ -211,9 +203,20 @@ function fsSyncValueCallNameForMethod(method: string | null): string | null {
   return null
 }
 
-function fsSyncStatementDescriptorForMethod(method: string | null): FsSyncStatementDescriptor | null {
+function fsSyncStatementDescriptorForExpression(
+  expression: AnyNode,
+  method: string | null
+): FsSyncStatementDescriptor | null {
   if (method === null || typeof method === 'undefined') {
     return null
+  }
+
+  if (method === 'appendFileSync' && fsUsesBytes(expression)) {
+    return { kind: 'bytes-value', callName: 'inox_fs_append_file_bytes_sync' }
+  }
+
+  if (method === 'writeFileSync' && fsUsesBytes(expression)) {
+    return { kind: 'bytes-value', callName: 'inox_fs_write_file_bytes_sync' }
   }
 
   return fsSyncStatementDescriptors[method] ?? null
@@ -315,7 +318,7 @@ export function emitPreparedFsCallExpression(
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
   const lines: string[] = []
   appendLines(lines, path.lines)
-  const descriptor = fsAsyncCallDescriptorForMethod(method)
+  const descriptor = fsAsyncCallDescriptorForExpression(expression, method)
 
   if (descriptor !== null && typeof descriptor !== 'undefined') {
     return emitPreparedFsAsyncDescriptorExpression(expression, context, dependencies, path, lines, out, descriptor)
@@ -438,7 +441,7 @@ export function emitPreparedFsSyncValueExpression(
   dependencies: FsLoweringDependencies
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
-  const callName = fsSyncValueCallNameForMethod(method)
+  const callName = fsSyncValueCallNameForExpression(expression, method)
 
   if (callName === null || typeof callName === 'undefined') {
     return null
@@ -473,7 +476,7 @@ export function emitPreparedFsSyncStatementExpression(
   dependencies: FsLoweringDependencies
 ): PreparedStatement | null {
   const method = cFsRuntimeExpressionMethod(expression)
-  const descriptor = fsSyncStatementDescriptorForMethod(method)
+  const descriptor = fsSyncStatementDescriptorForExpression(expression, method)
   const specialMethod = method === 'accessSync' || method === 'mkdirSync' || method === 'rmSync'
 
   if (
@@ -614,6 +617,14 @@ export function emitFsBooleanFlag(expression: AnyNode, field: string): string {
   }
 
   return 'false'
+}
+
+function fsUsesBytes(expression: AnyNode): boolean {
+  return expression.fsBytes === true
+}
+
+function fsUsesDirents(expression: AnyNode): boolean {
+  return expression.fsDirents === true
 }
 
 export function emitPreparedFsStatsMethodExpression(

@@ -342,7 +342,7 @@ function httpNodeContainsFsReadFileSync(node: AnyNode | null | undefined): boole
 }
 
 function isHttpFsReadFileSyncCall(expression: AnyNode): boolean {
-  if (expression.fsRuntimeMethod === 'readFileBytesSync' || expression.fsRuntimeMethod === 'readFileSync') {
+  if (expression.fsRuntimeMethod === 'readFileSync') {
     return true
   }
 

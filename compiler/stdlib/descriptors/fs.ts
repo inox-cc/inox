@@ -7,12 +7,6 @@ export type FsRuntimeCallInfo = {
   mode: string
 }
 
-export type RemovedFsRuntimeMethodInfo = {
-  path: string[]
-  root: string
-  message: string
-}
-
 export function fsRuntimeCallInfoFromPath(path: string[] | null | undefined): FsRuntimeCallInfo | null {
   if (path === null || typeof path === 'undefined' || path.length < 2) {
     return null
@@ -141,14 +135,11 @@ export function isFsPromiseRuntimeMethod(method: string): boolean {
   return (
     method === 'access' ||
     method === 'appendFile' ||
-    method === 'appendFileBytes' ||
     method === 'copyFile' ||
     method === 'lstat' ||
     method === 'mkdir' ||
     method === 'readFile' ||
-    method === 'readFileBytes' ||
-    method === 'readDir' ||
-    method === 'readDirDirents' ||
+    method === 'readdir' ||
     method === 'readlink' ||
     method === 'realpath' ||
     method === 'rename' ||
@@ -156,8 +147,7 @@ export function isFsPromiseRuntimeMethod(method: string): boolean {
     method === 'stat' ||
     method === 'symlink' ||
     method === 'unlink' ||
-    method === 'writeFile' ||
-    method === 'writeFileBytes'
+    method === 'writeFile'
   )
 }
 
@@ -165,14 +155,11 @@ export function isFsSyncRuntimeMethod(method: string): boolean {
   return (
     method === 'accessSync' ||
     method === 'appendFileSync' ||
-    method === 'appendFileBytesSync' ||
     method === 'copyFileSync' ||
     method === 'lstatSync' ||
     method === 'mkdirSync' ||
     method === 'readFileSync' ||
-    method === 'readFileBytesSync' ||
-    method === 'readDirSync' ||
-    method === 'readDirDirentsSync' ||
+    method === 'readdirSync' ||
     method === 'readlinkSync' ||
     method === 'realpathSync' ||
     method === 'renameSync' ||
@@ -180,8 +167,7 @@ export function isFsSyncRuntimeMethod(method: string): boolean {
     method === 'statSync' ||
     method === 'symlinkSync' ||
     method === 'unlinkSync' ||
-    method === 'writeFileSync' ||
-    method === 'writeFileBytesSync'
+    method === 'writeFileSync'
   )
 }
 
@@ -189,38 +175,9 @@ export function isAsyncFsRuntimeMethod(method: string): boolean {
   return isFsPromiseRuntimeMethod(method)
 }
 
-export function removedFsRuntimeMethodInfoFromPath(
-  path: string[] | null | undefined
-): RemovedFsRuntimeMethodInfo | null {
-  if (path === null || typeof path === 'undefined' || path.length !== 2) {
-    return null
-  }
-
-  const nodeName = path[1]
-  const replacement = removedFsRuntimeMethodReplacement(nodeName)
-
-  if (replacement === null || typeof replacement === 'undefined') {
-    return null
-  }
-
-  return {
-    path,
-    root: path[0],
-    message: `function ${joinStrings(path, '.')} is not part of Node fs; ${replacement}`
-  }
-}
-
 export function unsupportedFsRuntimeMethodMessage(info: FsRuntimeCallInfo, promisesApi: boolean): string | null {
-  if (info.method === 'readDir') {
-    if (promisesApi) {
-      return null
-    }
-
-    return 'Node fs.readdir callback API is not supported yet; use fs.promises.readdir'
-  }
-
   if (info.mode === 'callback' && !promisesApi) {
-    return `Node ${joinStrings(info.path, '.')} callback API is not supported yet; use fs.promises.${info.method}`
+    return `Node ${joinStrings(info.path, '.')} callback API is not supported yet; use fs.promises.${info.nodeName}`
   }
 
   return null
@@ -241,16 +198,13 @@ function joinStrings(values: readonly string[], separator: string): string {
 }
 
 function promiseFsRuntimeMethodForNodeName(nodeName: string): string | null {
-  if (nodeName === 'readdir') {
-    return 'readDir'
-  }
-
   if (
     nodeName === 'access' ||
     nodeName === 'appendFile' ||
     nodeName === 'copyFile' ||
     nodeName === 'lstat' ||
     nodeName === 'mkdir' ||
+    nodeName === 'readdir' ||
     nodeName === 'readFile' ||
     nodeName === 'readlink' ||
     nodeName === 'realpath' ||
@@ -268,16 +222,13 @@ function promiseFsRuntimeMethodForNodeName(nodeName: string): string | null {
 }
 
 function syncFsRuntimeMethodForNodeName(nodeName: string): string | null {
-  if (nodeName === 'readdirSync') {
-    return 'readDirSync'
-  }
-
   if (
     nodeName === 'accessSync' ||
     nodeName === 'appendFileSync' ||
     nodeName === 'copyFileSync' ||
     nodeName === 'lstatSync' ||
     nodeName === 'mkdirSync' ||
+    nodeName === 'readdirSync' ||
     nodeName === 'readFileSync' ||
     nodeName === 'readlinkSync' ||
     nodeName === 'realpathSync' ||
@@ -299,28 +250,13 @@ function callbackFsRuntimeMethodForNodeName(nodeName: string): string | null {
 }
 
 function promiseFsNodePathForRuntimeMethod(method: string): string[] | null {
-  if (method === 'appendFileBytes') {
-    return ['fs', 'promises', 'appendFile']
-  }
-
-  if (method === 'readFileBytes') {
-    return ['fs', 'promises', 'readFile']
-  }
-
-  if (method === 'readDir' || method === 'readDirDirents') {
-    return ['fs', 'promises', 'readdir']
-  }
-
-  if (method === 'writeFileBytes') {
-    return ['fs', 'promises', 'writeFile']
-  }
-
   if (
     method === 'access' ||
     method === 'appendFile' ||
     method === 'copyFile' ||
     method === 'lstat' ||
     method === 'mkdir' ||
+    method === 'readdir' ||
     method === 'readFile' ||
     method === 'readlink' ||
     method === 'realpath' ||
@@ -338,28 +274,13 @@ function promiseFsNodePathForRuntimeMethod(method: string): string[] | null {
 }
 
 function syncFsNodePathForRuntimeMethod(method: string): string[] | null {
-  if (method === 'appendFileBytesSync') {
-    return ['fs', 'appendFileSync']
-  }
-
-  if (method === 'readFileBytesSync') {
-    return ['fs', 'readFileSync']
-  }
-
-  if (method === 'readDirSync' || method === 'readDirDirentsSync') {
-    return ['fs', 'readdirSync']
-  }
-
-  if (method === 'writeFileBytesSync') {
-    return ['fs', 'writeFileSync']
-  }
-
   if (
     method === 'accessSync' ||
     method === 'appendFileSync' ||
     method === 'copyFileSync' ||
     method === 'lstatSync' ||
     method === 'mkdirSync' ||
+    method === 'readdirSync' ||
     method === 'readFileSync' ||
     method === 'readlinkSync' ||
     method === 'realpathSync' ||
@@ -371,42 +292,6 @@ function syncFsNodePathForRuntimeMethod(method: string): string[] | null {
     method === 'writeFileSync'
   ) {
     return ['fs', method]
-  }
-
-  return null
-}
-
-function removedFsRuntimeMethodReplacement(nodeName: string): string | null {
-  if (nodeName === 'appendFileBytes') {
-    return 'use fs.promises.appendFile or fs.appendFileSync'
-  }
-
-  if (nodeName === 'appendFileBytesSync') {
-    return 'use fs.appendFileSync'
-  }
-
-  if (nodeName === 'readDir') {
-    return 'use fs.promises.readdir or fs.readdirSync'
-  }
-
-  if (nodeName === 'readDirSync') {
-    return 'use fs.readdirSync'
-  }
-
-  if (nodeName === 'readFileBytes') {
-    return 'use fs.promises.readFile or fs.readFileSync'
-  }
-
-  if (nodeName === 'readFileBytesSync') {
-    return 'use fs.readFileSync'
-  }
-
-  if (nodeName === 'writeFileBytes') {
-    return 'use fs.promises.writeFile or fs.writeFileSync'
-  }
-
-  if (nodeName === 'writeFileBytesSync') {
-    return 'use fs.writeFileSync'
   }
 
   return null

@@ -211,6 +211,8 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'default',
     'exported',
     'expressionBody',
+    'fsBytes',
+    'fsDirents',
     'fsForce',
     'fsRecursive',
     'nullable',

@@ -1861,7 +1861,7 @@ function resolveRuntimeArrayMetadataElementType(
   }
 
   if (expression !== null && typeof expression !== 'undefined') {
-    if (expression.fsRuntimeMethod === 'readDirDirents' || expression.fsRuntimeMethod === 'readDirDirentsSync') {
+    if (expression.fsDirents === true) {
       return 'object'
     }
   }

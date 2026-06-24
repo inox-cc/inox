@@ -27,8 +27,7 @@ import {
 import {
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
-  isFsRuntimeImportSymbol,
-  removedFsRuntimeMethodInfo
+  isFsRuntimeImportSymbol
 } from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
@@ -7695,15 +7694,6 @@ class Checker {
   }
 
   checkFsCall(expression: AnyNode): ValueType | null {
-    const removedInfo = removedFsRuntimeMethodInfo(expression.callee)
-
-    if (removedInfo !== null && typeof removedInfo !== 'undefined' && this.isFsRuntimeRootName(removedInfo.root)) {
-      this.report('INOX_FS_UNSUPPORTED', removedInfo.message, expression.loc)
-      expression.valueType = 'unknown'
-
-      return 'unknown'
-    }
-
     let info = fsRuntimeCallInfo(expression.callee)
 
     if (info !== null && typeof info !== 'undefined') {
@@ -7852,7 +7842,8 @@ class Checker {
       this.checkFsStringArg(expression, 0)
 
       if (expression.args[1] === null || typeof expression.args[1] === 'undefined') {
-        expression.fsRuntimeMethod = 'readFileBytesSync'
+        expression.fsRuntimeMethod = 'readFileSync'
+        expression.fsBytes = true
         expression.valueType = 'bytes'
 
         return 'bytes'
@@ -7865,7 +7856,7 @@ class Checker {
       return 'string'
     }
 
-    if (method === 'readDirSync') {
+    if (method === 'readdirSync') {
       let maxArgs = 1
       let expectedArgsLabel = '1'
 
@@ -7885,13 +7876,13 @@ class Checker {
       this.checkFsStringArg(expression, 0)
       const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
 
-      expression.fsRuntimeMethod = 'readDirSync'
+      expression.fsRuntimeMethod = 'readdirSync'
       expression.valueType = 'array'
       expression.arrayElementType = 'string'
       expression.arrayElementDeclaredType = 'string'
 
       if (withFileTypes) {
-        expression.fsRuntimeMethod = 'readDirDirentsSync'
+        expression.fsDirents = true
         expression.arrayElementType = 'object'
         expression.arrayElementDeclaredType = 'fs.Dirent'
       }
@@ -7909,7 +7900,8 @@ class Checker {
       }
 
       this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'writeFileSync')
+      expression.fsRuntimeMethod = 'writeFileSync'
+      expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
       this.checkUtf8EncodingArg(expression, 2, label)
 
       expression.valueType = 'void'
@@ -7927,7 +7919,8 @@ class Checker {
       }
 
       this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'appendFileSync')
+      expression.fsRuntimeMethod = 'appendFileSync'
+      expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
       this.checkUtf8EncodingArg(expression, 2, label)
 
       expression.valueType = 'void'
@@ -7997,7 +7990,8 @@ class Checker {
       this.checkFsStringArg(expression, 0)
 
       if (promisesApi && (expression.args[1] === null || typeof expression.args[1] === 'undefined')) {
-        expression.fsRuntimeMethod = 'readFileBytes'
+        expression.fsRuntimeMethod = 'readFile'
+        expression.fsBytes = true
         expression.valueType = 'promise'
         expression.promiseValueType = 'bytes'
 
@@ -8151,7 +8145,7 @@ class Checker {
       return 'promise'
     }
 
-    if (method === 'readDir') {
+    if (method === 'readdir') {
       let maxArgs = 1
       let expectedArgsLabel = '1'
 
@@ -8171,14 +8165,14 @@ class Checker {
       this.checkFsStringArg(expression, 0)
       const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
 
-      expression.fsRuntimeMethod = 'readDir'
+      expression.fsRuntimeMethod = 'readdir'
       expression.valueType = 'promise'
       expression.promiseValueType = 'array'
       expression.arrayElementType = 'string'
       expression.arrayElementDeclaredType = 'string'
 
       if (withFileTypes) {
-        expression.fsRuntimeMethod = 'readDirDirents'
+        expression.fsDirents = true
         expression.arrayElementType = 'object'
         expression.arrayElementDeclaredType = 'fs.Dirent'
       }
@@ -8204,7 +8198,8 @@ class Checker {
       }
 
       this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'appendFile')
+      expression.fsRuntimeMethod = 'appendFile'
+      expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
       this.checkUtf8EncodingArg(expression, 2, label)
 
       expression.valueType = 'promise'
@@ -8283,7 +8278,8 @@ class Checker {
     }
 
     this.checkFsStringArg(expression, 0)
-    expression.fsRuntimeMethod = this.checkFsWriteDataArg(expression, 1, `${label} data`, 'writeFile')
+    expression.fsRuntimeMethod = 'writeFile'
+    expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
     this.checkUtf8EncodingArg(expression, 2, label)
 
     expression.valueType = 'promise'
@@ -8324,34 +8320,22 @@ class Checker {
     return false
   }
 
-  checkFsWriteDataArg(expression: AnyNode, index: number, _label: string, textMethod: string): string {
+  checkFsWriteDataArg(expression: AnyNode, index: number, _label: string): boolean {
     const arg = expression.args[index]
 
     if (arg === null || typeof arg === 'undefined') {
-      return textMethod
+      return false
     }
 
     const argType = this.checkExpression(arg)
 
     if (argType === 'bytes') {
-      if (textMethod === 'writeFileSync') {
-        return 'writeFileBytesSync'
-      }
-
-      if (textMethod === 'appendFileSync') {
-        return 'appendFileBytesSync'
-      }
-
-      if (textMethod === 'appendFile') {
-        return 'appendFileBytes'
-      }
-
-      return 'writeFileBytes'
+      return true
     }
 
     this.checkAssignableType(argType, 'string', arg.loc, false, this.expressionCanBeNull(arg))
 
-    return textMethod
+    return false
   }
 
   checkFsStringArg(expression: AnyNode, index: number): void {

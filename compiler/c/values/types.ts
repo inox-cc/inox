@@ -1277,6 +1277,8 @@ function anyNodeLikeBooleanFields(): string[] {
     'default',
     'exported',
     'expressionBody',
+    'fsBytes',
+    'fsDirents',
     'fsForce',
     'fsRecursive',
     'nullable',

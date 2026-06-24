@@ -1,6 +1,6 @@
 import { memberExpressionPath } from '../../member-paths.ts'
-import type { FsRuntimeCallInfo, RemovedFsRuntimeMethodInfo } from '../../stdlib/descriptors/fs.ts'
-import { fsRuntimeCallInfoFromPath, removedFsRuntimeMethodInfoFromPath } from '../../stdlib/descriptors/fs.ts'
+import type { FsRuntimeCallInfo } from '../../stdlib/descriptors/fs.ts'
+import { fsRuntimeCallInfoFromPath } from '../../stdlib/descriptors/fs.ts'
 import type { AnyNode, SymbolInfo } from '../../types.ts'
 
 export function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
@@ -50,10 +50,6 @@ export function fsRuntimeCallInfoFromImportSymbol(
     viaPromises: info.viaPromises,
     mode: info.mode
   }
-}
-
-export function removedFsRuntimeMethodInfo(callee: AnyNode): RemovedFsRuntimeMethodInfo | null {
-  return removedFsRuntimeMethodInfoFromPath(memberExpressionPath(callee))
 }
 
 export function isFsRuntimeImportSymbol(symbol: SymbolInfo): boolean {

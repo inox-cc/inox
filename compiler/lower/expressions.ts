@@ -515,6 +515,14 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.fsForce = true
   }
 
+  if (source.fsBytes === true) {
+    target.fsBytes = true
+  }
+
+  if (source.fsDirents === true) {
+    target.fsDirents = true
+  }
+
   return target
 }
 

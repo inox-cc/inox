@@ -3286,13 +3286,17 @@ function emitPreparedAsyncTaskFsSourceExpression(
   appendAsyncTaskLines(lines, path.lines)
 
   if (method === 'readFile') {
-    lines.push(`status = inox_fs_read_file(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'readFileBytes') {
-    lines.push(`status = inox_fs_read_file_bytes(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'readDir') {
-    lines.push(`status = inox_fs_read_dir(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'readDirDirents') {
-    lines.push(`status = inox_fs_read_dir_dirents(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    if (expression.fsBytes === true) {
+      lines.push(`status = inox_fs_read_file_bytes(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    } else {
+      lines.push(`status = inox_fs_read_file(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    }
+  } else if (method === 'readdir') {
+    if (expression.fsDirents === true) {
+      lines.push(`status = inox_fs_read_dir_dirents(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    } else {
+      lines.push(`status = inox_fs_read_dir(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
+    }
   } else if (method === 'stat') {
     lines.push(`status = inox_fs_stat(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
   } else if (method === 'lstat') {
@@ -3308,21 +3312,23 @@ function emitPreparedAsyncTaskFsSourceExpression(
     lines.push(
       `status = inox_fs_access(inox_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
     )
-  } else if (method === 'appendFileBytes') {
-    const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
-
-    appendAsyncTaskLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-    lines.push(
-      `status = inox_fs_append_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
-    )
   } else if (method === 'appendFile') {
-    const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
+    if (expression.fsBytes === true) {
+      const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
 
-    appendAsyncTaskLines(lines, bytes.lines)
-    lines.push(
-      `status = inox_fs_append_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
-    )
+      appendAsyncTaskLines(lines, bytes.lines)
+      lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
+      lines.push(
+        `status = inox_fs_append_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
+      )
+    } else {
+      const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
+
+      appendAsyncTaskLines(lines, bytes.lines)
+      lines.push(
+        `status = inox_fs_append_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
+      )
+    }
   } else if (method === 'copyFile') {
     const destPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(
       expression.args[1],
@@ -3369,21 +3375,23 @@ function emitPreparedAsyncTaskFsSourceExpression(
     lines.push(
       `status = inox_fs_rename(inox_loop, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &frame->awaited);`
     )
-  } else if (method === 'writeFileBytes') {
-    const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
-
-    appendAsyncTaskLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-    lines.push(
-      `status = inox_fs_write_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
-    )
   } else {
-    const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
+    if (expression.fsBytes === true) {
+      const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
 
-    appendAsyncTaskLines(lines, bytes.lines)
-    lines.push(
-      `status = inox_fs_write_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
-    )
+      appendAsyncTaskLines(lines, bytes.lines)
+      lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
+      lines.push(
+        `status = inox_fs_write_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
+      )
+    } else {
+      const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
+
+      appendAsyncTaskLines(lines, bytes.lines)
+      lines.push(
+        `status = inox_fs_write_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
+      )
+    }
   }
 
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
