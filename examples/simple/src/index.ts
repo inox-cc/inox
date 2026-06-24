@@ -1,4 +1,5 @@
 console.log('hello world')
+console.log(Date.now())
 
 // try {
 //   const res = await fetch('https://example.com/')
