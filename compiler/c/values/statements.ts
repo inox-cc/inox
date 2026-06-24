@@ -3279,6 +3279,8 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
     try {
       if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
+        context.localValueNames.add(statement.handler.param)
+
         if (catchValueType === 'object') {
           context.variables.set(statement.handler.param, 'object')
           statementDeps(context).registerErrorObjectShape(context, statement.handler.param)

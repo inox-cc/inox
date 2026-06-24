@@ -150,6 +150,7 @@ export function runCommand(
     })
     let stdout = ''
     let stderr = ''
+    let spawnError: Error | null = null
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk
@@ -160,17 +161,13 @@ export function runCommand(
     })
 
     child.on('error', (error) => {
-      resolve({
-        code: 127,
-        stdout,
-        stderr: error.message
-      })
+      spawnError = error
     })
-    child.on('exit', (code) => {
+    child.on('close', (code) => {
       resolve({
-        code: code ?? 1,
+        code: spawnError ? 127 : (code ?? 1),
         stdout,
-        stderr
+        stderr: spawnError ? `${stderr}${spawnError.message}` : stderr
       })
     })
   })

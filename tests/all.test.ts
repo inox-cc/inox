@@ -56,6 +56,10 @@ if (process.argv[2] === workerArg) {
   assert.notEqual(files.length, 0, 'feature tests: no .test.ts files found')
 
   await runFeatureTests(files, parallelism, options.compiler)
+
+  if (shouldRunIntegrationTests(options)) {
+    await runIntegrationTests()
+  }
 }
 
 function featureTestParallelism(compiler: FeatureTestCompiler): number {
@@ -66,6 +70,20 @@ function featureTestParallelism(compiler: FeatureTestCompiler): number {
   }
 
   return cpuCount * 4
+}
+
+function shouldRunIntegrationTests(options: RunnerOptions): boolean {
+  return options.compiler.kind === 'hosted' && options.paths.length === 0
+}
+
+async function runIntegrationTests(): Promise<void> {
+  const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
+
+  await test('compiler integration checks', async (t) => {
+    await t.test('cli-entry-module-main', async () => {
+      await assertCliEntryModuleMain()
+    })
+  })
 }
 
 type RunnerOptions = {

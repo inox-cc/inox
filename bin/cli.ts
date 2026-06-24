@@ -149,7 +149,7 @@ async function writeCompiledSource(plan: CliPlan): Promise<void> {
   if (plan.outDir && plan.entryMode) {
     const result = await compileFileToCModules(entry, {
       target: 'c',
-      callMain: false,
+      callMain: true,
       sourceRoot: process.cwd(),
       ...cCompileOptions(config, {
         loopBackend: plan.loopBackend ?? undefined,

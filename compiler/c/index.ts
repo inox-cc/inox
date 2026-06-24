@@ -5835,7 +5835,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return emitRuntimeValueLogValue(expression, context)
   }
 
-  if (valueType === 'unknown' && isOwnedRuntimeValueReference(expression, context)) {
+  if (valueType === 'unknown' && isRuntimeValueLogReference(expression, context)) {
     return emitRuntimeValueLogValue(expression, context)
   }
 
@@ -5972,7 +5972,7 @@ function isOwnedRuntimeValueName(name: string, context: CFunctionContext): boole
   return false
 }
 
-function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionContext): boolean {
+function isRuntimeValueLogReference(expression: AnyNode, context: CFunctionContext): boolean {
   if (
     expression === null ||
     typeof expression === 'undefined' ||
@@ -5983,9 +5983,14 @@ function isOwnedRuntimeValueReference(expression: AnyNode, context: CFunctionCon
   }
 
   const name = expression.path[0]
+  const valueType = context.variables.get(name)
 
-  if (context.variables.get(name) !== 'unknown') {
+  if (valueType !== 'unknown' && !isOpaqueRuntimeValueType(valueType)) {
     return false
+  }
+
+  if (context.localValueNames.has(name)) {
+    return true
   }
 
   if (isOwnedRuntimeValueName(name, context)) {
