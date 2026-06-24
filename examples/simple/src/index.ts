@@ -1,5 +1,6 @@
 console.log('hello world')
-console.log(Date.now())
+console.log('date', Date.now())
+console.log('performance', performance.now())
 
 // try {
 //   const res = await fetch('https://example.com/')

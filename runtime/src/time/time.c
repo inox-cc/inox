@@ -9,6 +9,7 @@
 
 static inox_number inox_default_monotonic_now_ms(void* user);
 static inox_number inox_default_wall_now_ms(void* user);
+static inox_number inox_floor_ms(inox_number value);
 static inox_number inox_timespec_ms(const struct timespec* value);
 static void inox_time_ensure_initialized(void);
 
@@ -53,8 +54,10 @@ inox_number inox_performance_now(void) {
 inox_number inox_date_now(void) {
   inox_time_ensure_initialized();
 
-  return inox_wall_base_ms +
-         (inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_wall_base_monotonic_ms);
+  return inox_floor_ms(
+    inox_wall_base_ms +
+    (inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_wall_base_monotonic_ms)
+  );
 }
 
 void inox_time_sleep_ms(inox_number delay_ms) {
@@ -135,6 +138,16 @@ static inox_number inox_default_wall_now_ms(void* user) {
 #endif
 
   return inox_default_monotonic_now_ms(user);
+}
+
+static inox_number inox_floor_ms(inox_number value) {
+  if (value != value) {
+    return value;
+  }
+
+  long long truncated = (long long)value;
+
+  return (inox_number)truncated > value ? (inox_number)(truncated - 1) : (inox_number)truncated;
 }
 
 static inox_number inox_timespec_ms(const struct timespec* value) {

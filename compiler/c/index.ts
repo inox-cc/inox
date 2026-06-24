@@ -5756,6 +5756,8 @@ type ConsoleLogValue = {
   values: string[]
 }
 
+const consoleLogNumberFormat = '%.17g'
+
 function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
   let stream = 'INOX_CONSOLE_STDOUT'
 
@@ -5852,7 +5854,7 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
 
   return {
     lines: [],
-    format: '%g',
+    format: consoleLogNumberFormat,
     values: ['0']
   }
 }
@@ -5910,7 +5912,7 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
       pushAll(lines, emitPrepareOwnedValueWrite(value))
       lines.push(emitStatusCheck(`inox_array_get(${name}, ${index}, &${value})`, context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_NUMBER', context))
-      parts.push('%g')
+      parts.push(consoleLogNumberFormat)
       values.push(`${value}.as.number`)
     } else if (field.valueType === 'boolean') {
       const value = nextCName(context, 'inox_log_value')
@@ -6272,7 +6274,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (stringLength !== null && typeof stringLength !== 'undefined') {
       return {
         lines: stringLength.lines,
-        format: '%g',
+        format: consoleLogNumberFormat,
         values: [`((double)${stringLength.expression})`]
       }
     }
@@ -6286,7 +6288,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (length !== null && typeof length !== 'undefined') {
       return {
         lines: length.lines,
-        format: '%g',
+        format: consoleLogNumberFormat,
         values: [`((double)${length.expression})`]
       }
     }
@@ -6327,7 +6329,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
 
       return {
         lines: value.lines,
-        format: '%g',
+        format: consoleLogNumberFormat,
         values: [formattedValue]
       }
     }
@@ -6337,7 +6339,7 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
 
   return {
     lines: value.lines,
-    format: '%g',
+    format: consoleLogNumberFormat,
     values: [`((double)${value.expression})`]
   }
 }
@@ -6380,7 +6382,7 @@ function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunction
 
   return {
     lines: [emitRuntimeValueCheck(storage, tag, context)],
-    format: '%g',
+    format: consoleLogNumberFormat,
     values: [formattedValue]
   }
 }
@@ -6424,7 +6426,7 @@ function emitRuntimeNumberLogValue(
 
   return {
     lines,
-    format: '%g',
+    format: consoleLogNumberFormat,
     values: [formattedValue]
   }
 }
@@ -6452,7 +6454,7 @@ function emitKnownArrayScalarLogValue(
 
   return {
     lines,
-    format: '%g',
+    format: consoleLogNumberFormat,
     values: [formattedValue]
   }
 }

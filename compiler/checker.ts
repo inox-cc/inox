@@ -112,6 +112,7 @@ import {
   isUnsupportedStreamRuntimeExport,
   unsupportedStreamRuntimeExportReason
 } from './stdlib/descriptors/stream.ts'
+import { timeRuntimeMethodNameFromPath } from './stdlib/descriptors/time.ts'
 import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
 import {
   isNodeUrlImportSource,
@@ -4136,6 +4137,12 @@ class Checker {
       return timerType
     }
 
+    const timeType = this.checkTimeCall(expression)
+
+    if (timeType !== null && typeof timeType !== 'undefined') {
+      return timeType
+    }
+
     const promiseStaticType = this.checkPromiseStaticCall(expression)
 
     if (promiseStaticType !== null && typeof promiseStaticType !== 'undefined') {
@@ -6798,6 +6805,37 @@ class Checker {
       const arg = checkerNodeAt(expression.args, index)
 
       this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
+    }
+
+    return 'number'
+  }
+
+  checkTimeCall(expression: AnyNode): ValueType | null {
+    const path = memberExpressionPath(expression.callee)
+    const method = timeRuntimeMethodNameFromPath(path)
+
+    if (path === null || typeof path === 'undefined' || method === null || typeof method === 'undefined') {
+      return null
+    }
+
+    const root = path[0]
+
+    if (this.scope.resolve(root)) {
+      return null
+    }
+
+    expression.valueType = 'number'
+
+    if (expression.args.length !== 0) {
+      this.report(
+        'INOX_ARG_COUNT',
+        `function ${root}.${path[1]} expects 0 argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      this.checkExpression(checkerNodeAt(expression.args, index))
     }
 
     return 'number'
