@@ -11,19 +11,20 @@ if(INOX_TLS_BACKEND STREQUAL "boringssl")
   enable_language(CXX)
 endif()
 
-set(INOX_CLI "../bin/cli.ts")
+set(INOX_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+set(INOX_CLI "${INOX_REPO_ROOT}/bin/cli.ts")
 set(INOX_ENTRY "src/index.ts")
 set(INOX_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../runtime" "${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
+add_subdirectory("${INOX_REPO_ROOT}/runtime" "${CMAKE_CURRENT_BINARY_DIR}/inox_runtime")
 
 file(GLOB_RECURSE INOX_TS_SOURCES CONFIGURE_DEPENDS
   "src/*.ts"
 )
 
 file(GLOB_RECURSE INOX_COMPILER_SOURCES CONFIGURE_DEPENDS
-  "../bin/*.ts"
-  "../compiler/*.ts"
+  "${INOX_REPO_ROOT}/bin/*.ts"
+  "${INOX_REPO_ROOT}/compiler/*.ts"
 )
 
 set(INOX_GENERATED_SOURCES)

@@ -13,5 +13,5 @@
     "types": ["node"],
     "useUnknownInCatchVariables": false
   },
-  "exclude": ["dist/**", "example/build*/**", "tests/features/**", "tests/smoke/**", "tests/fixtures/**"]
+  "exclude": ["dist/**", "tests/features/**", "tests/smoke/**", "tests/fixtures/**"]
 }

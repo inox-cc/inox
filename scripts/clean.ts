@@ -8,14 +8,7 @@ type CleanOptions = {
   repoOnly: boolean
 }
 
-const repoOutputPaths = [
-  'coverage',
-  'dist',
-  'tmp',
-  'example/build',
-  'example/build-libuv',
-  'example/build-libuv-boringssl'
-]
+const repoOutputPaths = ['coverage', 'dist', 'tmp']
 const repoSkipDirs = new Set(['.git', 'node_modules', '.pnpm-store'])
 const repoTempFileNames = new Set(['.DS_Store'])
 const repoTempFileSuffixes = ['.tmp', '.log']

@@ -40,9 +40,9 @@ export const exampleInoxRuntimeSources: string[] = [
 export function exampleInoxPaths(): ExampleInoxPaths {
   return {
     compiler: join(rootDir, 'dist/inox'),
-    source: join(rootDir, 'example/src/index.ts'),
-    generatedC: join(rootDir, 'example/build-inox/index.c'),
-    output: join(rootDir, 'example/build-inox/inox_example')
+    source: join(rootDir, 'examples/simple/src/index.ts'),
+    generatedC: join(rootDir, 'dist/examples/simple/build-inox/index.c'),
+    output: join(rootDir, 'dist/examples/simple/build-inox/inox_example')
   }
 }
 
@@ -56,7 +56,7 @@ async function runExampleInox(): Promise<number> {
     return 1
   }
 
-  await mkdir(join(rootDir, 'example/build-inox'), {
+  await mkdir(join(rootDir, 'dist/examples/simple/build-inox'), {
     recursive: true
   })
 
