@@ -1,6 +1,6 @@
 // @targets c
 // @expect pass
-// @stdout [ 'Ada', 7 ]
+// @stdout [Ada, 7]
 // @stdout Ada
 // @stdout 7
 

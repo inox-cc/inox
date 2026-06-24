@@ -117,6 +117,77 @@ static inox_status inox_console_format_append_number(inox_console_format_buffer*
   return inox_console_format_append(buffer, bytes, (size_t)len);
 }
 
+static bool inox_console_object_get_string_field(
+  inox_value object_value,
+  inox_object* object,
+  const char* name,
+  inox_value* out
+) {
+  if (object == 0 || object->shape == 0 || name == 0 || out == 0) {
+    return false;
+  }
+
+  for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
+    const char* field_name = object->shape->fields[index].name;
+
+    if (field_name == 0 || strcmp(field_name, name) != 0) {
+      continue;
+    }
+
+    inox_status status = inox_object_get_known(object_value, index, out);
+
+    if (status != INOX_OK) {
+      return false;
+    }
+
+    if (out->tag == INOX_TAG_STRING && out->as.ref != 0) {
+      return true;
+    }
+
+    inox_release(*out);
+    *out = inox_undefined_value();
+    return false;
+  }
+
+  return false;
+}
+
+static inox_status inox_console_format_error_object(
+  inox_console_format_buffer* buffer,
+  inox_value object_value,
+  inox_object* object
+) {
+  inox_value name_value = inox_undefined_value();
+  inox_value message_value = inox_undefined_value();
+
+  if (
+    !inox_console_object_get_string_field(object_value, object, "name", &name_value) ||
+    !inox_console_object_get_string_field(object_value, object, "message", &message_value)
+  ) {
+    inox_release(name_value);
+    inox_release(message_value);
+    return INOX_ERR_FIELD;
+  }
+
+  inox_string* name = (inox_string*)name_value.as.ref;
+  inox_string* message = (inox_string*)message_value.as.ref;
+
+  inox_status status = inox_console_format_append(buffer, name->bytes, name->len);
+
+  if (status == INOX_OK) {
+    status = inox_console_format_append_literal(buffer, ": ");
+  }
+
+  if (status == INOX_OK) {
+    status = inox_console_format_append(buffer, message->bytes, message->len);
+  }
+
+  inox_release(name_value);
+  inox_release(message_value);
+
+  return status;
+}
+
 static inox_status inox_console_format_array(inox_console_format_buffer* buffer, inox_value value, unsigned int depth) {
   if (value.as.ref == 0) {
     return INOX_ERR_TYPE;
@@ -154,6 +225,16 @@ static inox_status inox_console_format_object(inox_console_format_buffer* buffer
   }
 
   inox_object* object = (inox_object*)value.as.ref;
+
+  inox_status error_status = inox_console_format_error_object(buffer, value, object);
+
+  if (error_status == INOX_OK) {
+    return INOX_OK;
+  }
+
+  if (error_status != INOX_ERR_FIELD) {
+    return error_status;
+  }
 
   if (object->shape->field_count == 0) {
     return inox_console_format_append_literal(buffer, "{}");

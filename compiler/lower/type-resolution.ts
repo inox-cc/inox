@@ -274,7 +274,7 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     name: param.name,
     optional: param.optional === true,
     declaredType,
-    valueType: resolvedValueType(declared, param.valueType),
+    valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(param)),
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
@@ -330,7 +330,7 @@ function resolveObjectShapeField(field: LowerTypeNode, fields: LowerTypeNode[], 
     weakLoc: nullableNode(field.weakLoc),
     loc: field.loc,
     declaredType: fieldDeclaredType(field),
-    valueType: resolvedValueType(declared, field.valueType),
+    valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(field)),
     nullable: declared.nullable || weakField || field.optional === true,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
@@ -348,7 +348,7 @@ function hasWeakOwnershipMarker(fields: LowerTypeNode[], fieldName: string): boo
 
   for (const field of fields) {
     const name: string = field.name
-    const valueType: string = field.valueType
+    const valueType = lowerNodeValueTypeOrUnknown(field)
 
     if (name === markerName && field.optional === true && valueType === 'string') {
       return true
@@ -524,7 +524,7 @@ function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     name: param.name,
     optional: param.optional === true,
     declaredType: fieldDeclaredType(param),
-    valueType: param.valueType,
+    valueType: lowerNodeValueTypeOrUnknown(param),
     nullable: param.nullable,
     arrayElementType: param.arrayElementType,
     arrayElementDeclaredType: param.arrayElementDeclaredType,
@@ -543,26 +543,22 @@ function resolveFieldDeclaredType(field: LowerTypeNode, context: LowerContext): 
     return resolveWeakFieldDeclaredType(field, context)
   }
 
-  let valueType: string = field.valueType
-  const declaredType = field.declaredType
-
-  if (declaredType !== null && typeof declaredType !== 'undefined') {
-    valueType = declaredType
-  }
-
-  return resolveDeclaredType(valueType, context)
+  return resolveDeclaredType(fieldDeclaredType(field), context)
 }
 
 function resolveWeakFieldDeclaredType(field: LowerTypeNode, context: LowerContext): LowerResolvedType {
-  let targetName: string = field.valueType
-  const declaredType = field.declaredType
+  let targetName = fieldDeclaredType(field)
 
-  if (declaredType !== null && typeof declaredType !== 'undefined') {
-    targetName = declaredType
+  if (targetName === null || typeof targetName === 'undefined') {
+    return unresolvedType()
   }
 
   if (isNullableTypeName(targetName)) {
-    targetName = nullableTypeNameFromKnownTypeName(targetName)
+    const nullableName = nullableTypeNameFromKnownTypeName(targetName)
+
+    if (nullableName !== null && typeof nullableName !== 'undefined') {
+      targetName = nullableName
+    }
   }
 
   const typeInfo = context.types.get(targetName)
@@ -617,7 +613,7 @@ function resolveWeakTargetObjectShapeField(field: LowerTypeNode, context: LowerC
     weakLoc: nullableNode(field.weakLoc),
     loc: field.loc,
     declaredType: fieldDeclaredType(field),
-    valueType: resolvedValueType(declared, field.valueType),
+    valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(field)),
     nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
@@ -721,14 +717,20 @@ function collectTypes(ast: ProgramNode): Map<string, LowerTypeNode> {
   const types = new Map()
 
   for (const item of ast.body) {
-    if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'object') {
-      types.set(item.name, collectObjectType(item.valueType))
-    } else if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'function') {
-      types.set(item.name, collectFunctionType(item.valueType))
-    } else if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'alias') {
+    if (item.type !== 'TypeAliasDeclaration') {
+      continue
+    }
+
+    const valueType = item.valueType as LowerTypeNode
+
+    if (valueType.kind === 'object') {
+      types.set(item.name, collectObjectType(valueType))
+    } else if (valueType.kind === 'function') {
+      types.set(item.name, collectFunctionType(valueType))
+    } else if (valueType.kind === 'alias') {
       types.set(item.name, {
         kind: 'alias',
-        valueType: item.valueType.valueType
+        valueType: valueType.valueType
       })
     }
   }
@@ -755,7 +757,7 @@ function collectObjectTypeFields(fields: LowerTypeNode[] | null | undefined): Lo
   for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
     const field = fields[fieldIndex]
     const declaredType = fieldDeclaredType(field)
-    let valueType = field.valueType
+    let valueType = lowerNodeValueTypeOrUnknown(field)
 
     if (declaredType !== null && typeof declaredType !== 'undefined') {
       valueType = declaredType
@@ -799,7 +801,7 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
       name: param.name,
       optional: param.optional === true,
       declaredType,
-      valueType: param.valueType,
+      valueType: lowerNodeValueTypeOrUnknown(param),
       nullable: param.nullable,
       arrayElementType: param.arrayElementType,
       arrayElementDeclaredType: param.arrayElementDeclaredType,
@@ -1092,6 +1094,14 @@ function fieldDeclaredType(field: LowerTypeNode): string | null {
   }
 
   return null
+}
+
+function lowerNodeValueTypeOrUnknown(node: LowerTypeNode): string {
+  if (node.valueType !== null && typeof node.valueType !== 'undefined') {
+    return node.valueType
+  }
+
+  return 'unknown'
 }
 
 function ownershipOrStrong(value: string | null | undefined): string {

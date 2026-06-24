@@ -11,6 +11,7 @@
   "scripts": {
     "build": "node scripts/build.ts",
     "example": "pnpm run example:prepare && cmake --build example/build && ./example/build/inox_cmake_example",
+    "example:inox": "node scripts/example-inox.ts",
     "example:libuv": "pnpm run example:prepare-libuv && cmake --build example/build-libuv && ./example/build-libuv/inox_cmake_example",
     "example:libuv-boringssl": "pnpm run example:prepare-libuv-boringssl && cmake --build example/build-libuv-boringssl && ./example/build-libuv-boringssl/inox_cmake_example",
     "example:prepare": "cmake -S example -B example/build",

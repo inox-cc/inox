@@ -27,6 +27,11 @@ type InferredMapType = {
   value: string | null
 }
 
+type LowerVariableScopeState = {
+  hadPrevious: boolean
+  previous: LowerNode | null
+}
+
 export function lowerStatement(statement: LowerNode, context: LowerContext): LowerNode {
   return lowerStatementBody(statement, context)
 }
@@ -93,6 +98,15 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
   }
 
   if (statement.type === 'ForOfStatement') {
+    const variableState = pushLowerVariable(context, statement.name, forOfLowerVariable(statement))
+    let body = statement.body
+
+    try {
+      body = lowerStatementBody(statement.body, context)
+    } finally {
+      restoreLowerVariable(context, statement.name, variableState)
+    }
+
     return [
       {
         type: 'ForOfStatement',
@@ -113,7 +127,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
         loc: statement.loc,
         nameLoc: statement.nameLoc,
         iterable: lowerStatementExpression(statement.iterable, context),
-        body: lowerStatementBody(statement.body, context)
+        body
       }
     ]
   }
@@ -305,7 +319,7 @@ function lowerNameDiffers(left: string, right: string): boolean {
 }
 
 export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
-  let declaredType: string = param.valueType
+  let declaredType = fallbackString(param.valueType, 'unknown')
   const paramDeclaredType = param.declaredType
 
   if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
@@ -320,7 +334,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     loc: param.loc,
     declaredType,
     optional: param.optional === true,
-    valueType: fallbackString(declared.valueType, param.valueType),
+    valueType: fallbackString(declared.valueType, fallbackString(param.valueType, 'unknown')),
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
@@ -419,6 +433,42 @@ function lowerCatchClause(handler: LowerNode | null | undefined, context: LowerC
     paramLoc: nullableNode(handler.paramLoc),
     loc: handler.loc,
     body
+  }
+}
+
+function pushLowerVariable(context: LowerContext, name: string, variable: LowerNode): LowerVariableScopeState {
+  const previous = context.variables.get(name)
+  const hadPrevious = previous !== null && typeof previous !== 'undefined'
+
+  context.variables.set(name, variable)
+
+  return {
+    hadPrevious,
+    previous: hadPrevious ? previous : null
+  }
+}
+
+function restoreLowerVariable(context: LowerContext, name: string, state: LowerVariableScopeState): void {
+  if (state.hadPrevious && state.previous !== null && typeof state.previous !== 'undefined') {
+    context.variables.set(name, state.previous)
+    return
+  }
+
+  context.variables.delete(name)
+}
+
+function forOfLowerVariable(statement: LowerNode): LowerNode {
+  return {
+    valueType: fallbackString(statement.valueType, 'unknown'),
+    nullable: statement.nullable === true,
+    arrayElementType: nullableString(statement.arrayElementType),
+    arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+    mapKeyType: nullableString(statement.mapKeyType),
+    mapValueType: nullableString(statement.mapValueType),
+    promiseValueType: nullableString(statement.promiseValueType),
+    setElementType: nullableString(statement.setElementType),
+    functionType: nullableNode(statement.functionType),
+    shape: nullableNode(statement.shape)
   }
 }
 

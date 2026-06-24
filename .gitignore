@@ -8,5 +8,6 @@ tmp/
 *.log
 *.tmp
 example/build/
+example/build-inox/
 example/build-libuv/
 example/build-libuv-boringssl/

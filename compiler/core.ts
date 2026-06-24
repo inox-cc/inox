@@ -153,12 +153,13 @@ function emitFileCompileResult(compiled: GraphIrCompileResult, options: CompileO
   }
 
   runCStaticChecks(irModules, options)
+  const code = emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, options)
 
   return {
     target: compiled.target,
     graph: compiled.graph,
     irRuntimeRequirements: collectIrRuntimeRequirements(irModules),
-    code: emitCBundleFromIrModules(compiled.irModules, compiled.graph.entry, options)
+    code
   }
 }
 
@@ -238,11 +239,12 @@ export function compileGraphToIrModulesWithHostSync(
 ): GraphIrCompileResult {
   const target = resolveCompileTarget(options)
   const graph = buildModuleGraphWithHostSync(entry, compileOptionsWithHostAndTarget(options, host, target), host)
+  const irModules = collectIrModuleRecords(graph)
 
   return {
     target,
     graph,
-    irModules: collectIrModuleRecords(graph)
+    irModules
   }
 }
 

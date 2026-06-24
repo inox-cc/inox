@@ -1,4 +1,5 @@
 import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
+import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
 import {
@@ -707,6 +708,23 @@ export function resolveRuntimeArrayElementType(
 
   if (expression.type === 'CallExpression') {
     const functionReturn = resolveFunctionReturnNameFromCall(expression)
+    const objectRuntimeCall = objectRuntimeArrayCallName(expression)
+
+    if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
+      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
+        return expression.arrayElementType
+      }
+
+      if (objectRuntimeCall === 'entries') {
+        return 'array'
+      }
+
+      if (objectRuntimeCall === 'keys') {
+        return 'string'
+      }
+
+      return 'unknown'
+    }
 
     if (expression.valueType !== 'array') {
       if (functionReturn !== null && typeof functionReturn !== 'undefined') {
@@ -801,6 +819,39 @@ export function resolveRuntimeArrayElementType(
     }
 
     return null
+  }
+
+  return null
+}
+
+function objectRuntimeArrayCallName(expression: ArrayMaybeNode): string | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'CallExpression' ||
+    expression.args.length !== 1
+  ) {
+    return null
+  }
+
+  if (
+    expression.objectRuntimeMethod === 'values' ||
+    expression.objectRuntimeMethod === 'entries' ||
+    expression.objectRuntimeMethod === 'keys'
+  ) {
+    return expression.objectRuntimeMethod
+  }
+
+  const path = memberExpressionPath(expression.callee)
+
+  if (
+    path !== null &&
+    typeof path !== 'undefined' &&
+    path.length === 2 &&
+    path[0] === 'Object' &&
+    (path[1] === 'values' || path[1] === 'entries' || path[1] === 'keys')
+  ) {
+    return path[1]
   }
 
   return null

@@ -2,6 +2,7 @@ import { diagnostic } from '../diagnostics.ts'
 import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
+import { memberExpressionPath } from '../member-paths.ts'
 import type { DebugMemoryStatsField } from '../stdlib/descriptors/debug.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 import type {
@@ -698,6 +699,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   isCollectionConstructorExpression,
   isErrorConstructorExpression,
   isErrorValueExpression,
+  isObjectRuntimeCallExpression,
   isIndexAccessExpression,
   isDynamicRuntimeValueExpression: isStatementDynamicRuntimeValueExpression,
   isMemberAccessExpression,
@@ -5811,6 +5813,10 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
 function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   const valueType = inferExpressionType(expression, context)
 
+  if (isRuntimeValueLogExpression(expression, context)) {
+    return emitRuntimeValueLogValue(expression, context)
+  }
+
   if (valueType === 'string') {
     return emitStringLogValue(expression, context)
   }
@@ -5832,10 +5838,6 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
   }
 
   if (isRuntimeLogValueType(valueType)) {
-    return emitRuntimeValueLogValue(expression, context)
-  }
-
-  if (valueType === 'unknown' && isRuntimeValueLogReference(expression, context)) {
     return emitRuntimeValueLogValue(expression, context)
   }
 
@@ -5985,6 +5987,15 @@ function isRuntimeValueLogReference(expression: AnyNode, context: CFunctionConte
   const name = expression.path[0]
   const valueType = context.variables.get(name)
 
+  if (
+    valueType !== null &&
+    typeof valueType !== 'undefined' &&
+    isManagedRuntimeReturnType(valueType) &&
+    context.variables.has(name)
+  ) {
+    return true
+  }
+
   if (valueType !== 'unknown' && !isOpaqueRuntimeValueType(valueType)) {
     return false
   }
@@ -5998,6 +6009,16 @@ function isRuntimeValueLogReference(expression: AnyNode, context: CFunctionConte
   }
 
   return context.moduleValueNames.has(name) && context.moduleValueTypes.get(name) === 'unknown'
+}
+
+function isRuntimeValueLogExpression(expression: AnyNode, context: CFunctionContext): boolean {
+  if (isRuntimeValueLogReference(expression, context)) {
+    return true
+  }
+
+  const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+  return runtimeElement !== null && typeof runtimeElement !== 'undefined' && runtimeElement.valueType === 'unknown'
 }
 
 function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
@@ -8058,7 +8079,23 @@ function cObjectRuntimeCallName(expression: AnyNode): string | null {
     return 'keys'
   }
 
+  const path = memberExpressionPath(expression.callee)
+
+  if (
+    path !== null &&
+    typeof path !== 'undefined' &&
+    path.length === 2 &&
+    path[0] === 'Object' &&
+    (path[1] === 'values' || path[1] === 'entries' || path[1] === 'keys')
+  ) {
+    return path[1]
+  }
+
   return null
+}
+
+function isObjectRuntimeCallExpression(expression: AnyNode): boolean {
+  return cObjectRuntimeCallName(expression) !== null
 }
 
 function emitPreparedObjectValuesCallExpression(

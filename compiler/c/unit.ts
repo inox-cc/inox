@@ -84,7 +84,9 @@ import type { NetLoweringDependencies } from './stdlib/net.ts'
 import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
 import type {
   CClassInfo,
+  CClassMethod,
   CEmitOptions,
+  CFunctionType,
   CFunctionPointerAdapter,
   CFunctionParam,
   CObjectShapeField,

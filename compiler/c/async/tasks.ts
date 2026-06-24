@@ -89,6 +89,16 @@ type AsyncTaskEmitContext = {
   throwingFunctions: AsyncTaskStringSet
 }
 
+function asyncTaskStatementValueType(statement: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string {
+  const valueType = statement.valueType
+
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    return valueType
+  }
+
+  return asyncTaskDeps(context).inferExpressionType(statement.init, context)
+}
+
 type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   arrayLengths: AsyncTaskNumberMap
   arrayShapes: AsyncTaskArrayShapeMap
@@ -1562,11 +1572,7 @@ function resolveAsyncTaskPrefixLocals(
       continue
     }
 
-    let valueType = statement.valueType
-
-    if (valueType === null || typeof valueType === 'undefined') {
-      valueType = asyncTaskDeps(context).inferExpressionType(statement.init, context)
-    }
+    const valueType = asyncTaskStatementValueType(statement, context)
 
     if (!isSupportedAsyncTaskPrefixLocalType(valueType)) {
       asyncTaskDeps(context).restoreVariableScope(context, scope)
@@ -1707,11 +1713,7 @@ function registerAsyncTaskStatementListLocals(context: AsyncTaskPlannerContext, 
       continue
     }
 
-    let valueType = statement.valueType
-
-    if (valueType === null || typeof valueType === 'undefined') {
-      valueType = asyncTaskDeps(context).inferExpressionType(statement.init, context)
-    }
+    const valueType = asyncTaskStatementValueType(statement, context)
 
     asyncTaskDeps(context).registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
 

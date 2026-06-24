@@ -29,6 +29,7 @@ export function runCommand(
     })
     let stdout = ''
     let stderr = ''
+    let spawnError: Error | null = null
 
     child.stdout.on('data', (chunk) => {
       stdout += chunk
@@ -38,8 +39,15 @@ export function runCommand(
       stderr += chunk
       options.stderr?.write(chunk)
     })
-    child.on('error', reject)
-    child.on('exit', (code) => {
+    child.on('error', (error) => {
+      spawnError = error
+    })
+    child.on('close', (code) => {
+      if (spawnError !== null) {
+        reject(spawnError)
+        return
+      }
+
       resolve({
         code: code ?? 1,
         stdout,

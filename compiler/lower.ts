@@ -131,7 +131,7 @@ function lowerClassField(field: AnyNode): AnyNode {
     ownership: nullableString(field.ownership),
     weakLoc: nullableNode(field.weakLoc),
     loc: field.loc,
-    declaredType: resolvedValueType(field.declaredType, field.valueType),
+    declaredType: resolvedValueType(field.declaredType, resolvedValueType(field.valueType, 'unknown')),
     optional: field.optional === true,
     valueType: resolvedValueType(field.valueType, 'unknown'),
     nullable: field.nullable === true,

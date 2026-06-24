@@ -157,8 +157,8 @@ type ResolvedTypeInfo = {
   arrayElementDeclaredType: string | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
-  mapValueShape?: ObjectShapeInfo | null
-  promiseValueType?: ValueType | null
+  mapValueShape: ObjectShapeInfo | null
+  promiseValueType: ValueType | null
   setElementType: ValueType | null
 }
 
@@ -332,6 +332,7 @@ function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
     arrayElementDeclaredType: null,
     mapKeyType: null,
     mapValueType: null,
+    mapValueShape: null,
     promiseValueType: null,
     setElementType: null
   }
@@ -392,7 +393,7 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('property', 'string', null, false, loc),
       anyNodeField('operator', 'string', null, false, loc),
       anyNodeField('declaredType', 'string', null, true, loc),
-      anyNodeField('valueType', 'string', null, false, loc),
+      anyNodeField('valueType', 'string', null, true, loc),
       anyNodeField('arrayElementType', 'string', null, true, loc),
       anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
       anyNodeField('mapKeyType', 'string', null, true, loc),
@@ -579,6 +580,26 @@ function checkerNodeAt(values: CheckerNode[], index: number): CheckerNode {
 
 function nodeNameEquals(node: AnyNode, name: string): boolean {
   return node.name === name
+}
+
+function nodeValueTypeOrUnknown(node: AnyNode): ValueType {
+  const valueType = node.valueType
+
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    return valueType
+  }
+
+  return 'unknown'
+}
+
+function nodeDeclaredTypeOrValueType(node: AnyNode): string {
+  const declaredType = node.declaredType
+
+  if (declaredType !== null && typeof declaredType !== 'undefined') {
+    return declaredType
+  }
+
+  return nodeValueTypeOrUnknown(node)
 }
 
 function optionalParamAt(values: OptionalParamInfo[], index: number): OptionalParamInfo {
@@ -768,7 +789,7 @@ function commonResolvedObjectShapeField(name: string, infos: ResolvedTypeInfo[])
     }
 
     fields.push(field)
-    valueTypes.push(field.valueType)
+    valueTypes.push(nodeValueTypeOrUnknown(field))
 
     if (field.nullable === true) {
       nullable = true
@@ -1334,12 +1355,7 @@ class Checker {
   }
 
   resolveParam(param: AnyNode): AnyNode {
-    let declaredType: string = param.valueType
-    const paramDeclaredType = param.declaredType
-
-    if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
-      declaredType = paramDeclaredType
-    }
+    const declaredType = nodeDeclaredTypeOrValueType(param)
 
     const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
     let promiseValueType: ValueType | null = null
@@ -1449,7 +1465,7 @@ class Checker {
 
   resolveClassField(field: AnyNode): AnyNode {
     const fieldInfo = this.resolveFieldDeclaredType(field)
-    const declaredType: string = field.valueType
+    const declaredType = nodeDeclaredTypeOrValueType(field)
 
     return {
       type: field.type,
@@ -1562,7 +1578,7 @@ class Checker {
       const param = this.findParamByName(constructorParams, path[0])
 
       if (param !== null && typeof param !== 'undefined') {
-        return param.valueType
+        return nodeValueTypeOrUnknown(param)
       }
     }
 
@@ -2245,6 +2261,38 @@ class Checker {
         )
       }
     }
+
+    if (this.isStatementExpressionNode(statement)) {
+      this.checkExpression(statement)
+    }
+  }
+
+  isStatementExpressionNode(statement: AnyNode): boolean {
+    return (
+      statement.type === 'ArrayLiteral' ||
+      statement.type === 'AssignmentExpression' ||
+      statement.type === 'AwaitExpression' ||
+      statement.type === 'BinaryExpression' ||
+      statement.type === 'BooleanLiteral' ||
+      statement.type === 'CallExpression' ||
+      statement.type === 'ConditionalExpression' ||
+      statement.type === 'IndexExpression' ||
+      statement.type === 'MemberExpression' ||
+      statement.type === 'NewExpression' ||
+      statement.type === 'NullLiteral' ||
+      statement.type === 'NumberLiteral' ||
+      statement.type === 'ObjectLiteral' ||
+      statement.type === 'OptionalCallExpression' ||
+      statement.type === 'OptionalIndexExpression' ||
+      statement.type === 'OptionalMemberExpression' ||
+      statement.type === 'Reference' ||
+      statement.type === 'StringLiteral' ||
+      statement.type === 'TemplateLiteral' ||
+      statement.type === 'ThisExpression' ||
+      statement.type === 'TypeAssertionExpression' ||
+      statement.type === 'UnaryExpression' ||
+      statement.type === 'UpdateExpression'
+    )
   }
 
   checkTryStatement(statement: AnyNode): void {
@@ -2304,12 +2352,7 @@ class Checker {
     if (expression.type === 'TypeAssertionExpression') {
       const sourceValueType = this.checkExpression(expression.expression)
       const asserted = expression.expression
-      let declaredType: string = expression.valueType
-      const expressionDeclaredType = expression.declaredType
-
-      if (expressionDeclaredType !== null && typeof expressionDeclaredType !== 'undefined') {
-        declaredType = expressionDeclaredType
-      }
+      const declaredType = nodeDeclaredTypeOrValueType(expression)
 
       if (declaredType === 'const') {
         expression.declaredType = declaredType
@@ -8306,7 +8349,10 @@ class Checker {
       } else if (literalType !== null && typeof literalType !== 'undefined') {
         expression.arrayElementType = literalType.arrayElementType
         expression.arrayElementDeclaredType = literalType.arrayElementDeclaredType
-        expression.shape = literalType.shape
+
+        if (valueType === 'object') {
+          expression.shape = literalType.shape
+        }
       }
 
       return valueType
@@ -8416,12 +8462,12 @@ class Checker {
   }
 
   parseJsonArrayLiteralType(source: string, index: number): JsonParseLiteralResult | null {
-    const elementTypes: ValueType[] = []
+    const elements: JsonParseLiteralTypeInfo[] = []
     let nextIndex = this.skipJsonWhitespace(source, index)
 
     if (source[nextIndex] === ']') {
       return {
-        info: this.jsonArrayLiteralTypeInfo(elementTypes),
+        info: this.jsonArrayLiteralTypeInfo(elements),
         index: nextIndex + 1
       }
     }
@@ -8433,12 +8479,12 @@ class Checker {
         return null
       }
 
-      elementTypes.push(element.info.valueType)
+      elements.push(element.info)
       nextIndex = this.skipJsonWhitespace(source, element.index)
 
       if (source[nextIndex] === ']') {
         return {
-          info: this.jsonArrayLiteralTypeInfo(elementTypes),
+          info: this.jsonArrayLiteralTypeInfo(elements),
           index: nextIndex + 1
         }
       }
@@ -8722,20 +8768,55 @@ class Checker {
     return true
   }
 
-  jsonArrayLiteralTypeInfo(elementTypes: ValueType[]): JsonParseLiteralTypeInfo {
+  jsonArrayLiteralTypeInfo(elements: JsonParseLiteralTypeInfo[]): JsonParseLiteralTypeInfo {
+    const elementTypes: ValueType[] = []
+
+    for (let index = 0; index < elements.length; index = index + 1) {
+      elementTypes.push(elements[index].valueType)
+    }
+
     const arrayElementType = commonArrayElementType(elementTypes)
     let arrayElementDeclaredType: string | null = null
+    let shape: ObjectShapeInfo | null = null
 
     if (arrayElementType !== 'unknown') {
       arrayElementDeclaredType = arrayElementType
     }
 
+    if (arrayElementType === 'object') {
+      shape = this.commonJsonArrayElementShape(elements)
+    }
+
     return {
       valueType: 'array',
-      shape: null,
+      shape,
       arrayElementType,
       arrayElementDeclaredType
     }
+  }
+
+  commonJsonArrayElementShape(elements: JsonParseLiteralTypeInfo[]): ObjectShapeInfo | null {
+    const infos: ResolvedTypeInfo[] = []
+
+    for (let index = 0; index < elements.length; index = index + 1) {
+      const element = elements[index]
+
+      infos.push({
+        valueType: element.valueType,
+        nullable: false,
+        functionType: null,
+        shape: element.shape,
+        arrayElementType: element.arrayElementType,
+        arrayElementDeclaredType: element.arrayElementDeclaredType,
+        mapKeyType: null,
+        mapValueType: null,
+        mapValueShape: null,
+        promiseValueType: null,
+        setElementType: null
+      })
+    }
+
+    return commonResolvedObjectShape(infos)
   }
 
   jsonObjectLiteralTypeInfo(fields: CheckerNode[]): JsonParseLiteralTypeInfo {
@@ -11256,18 +11337,19 @@ class Checker {
 
       for (let index = 0; index < expression.params.length; index++) {
         const param = expression.params[index]
+        const paramValueType = nodeValueTypeOrUnknown(param)
         let expected: AnyNode | null = null
 
         if (functionType !== null && typeof functionType !== 'undefined' && index < functionType.params.length) {
           expected = functionType.params[index]
         }
 
-        let paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
+        let paramInfo = this.resolveDeclaredType(paramValueType, param.loc)
 
-        if (param.valueType === 'unknown' && expected !== null && typeof expected !== 'undefined') {
+        if (paramValueType === 'unknown' && expected !== null && typeof expected !== 'undefined') {
           let arrayElementType: ValueType | null = null
           let arrayElementDeclaredType: string | null = null
-          let expectedValueType = expected.valueType
+          let expectedValueType = nodeValueTypeOrUnknown(expected)
           let mapKeyType: ValueType | null = null
           let mapValueType: ValueType | null = null
           let mapValueShape: ObjectShapeInfo | null = null
@@ -11334,21 +11416,24 @@ class Checker {
         if (
           expected !== null &&
           typeof expected !== 'undefined' &&
-          param.valueType !== 'unknown' &&
-          isBuiltinValueType(expected.valueType)
+          paramValueType !== 'unknown'
         ) {
-          this.checkAssignableType(
-            expected.valueType,
-            paramInfo.valueType,
-            param.loc,
-            expected.nullable === true,
-            false
-          )
+          const expectedValueType = nodeValueTypeOrUnknown(expected)
+
+          if (isBuiltinValueType(expectedValueType)) {
+            this.checkAssignableType(
+              expectedValueType,
+              paramInfo.valueType,
+              param.loc,
+              expected.nullable === true,
+              false
+            )
+          }
         }
 
-        param.declaredType = param.valueType
+        param.declaredType = paramValueType
 
-        if (param.valueType === 'unknown') {
+        if (paramValueType === 'unknown') {
           param.declaredType = paramInfo.valueType
 
           if (
@@ -11973,6 +12058,65 @@ class Checker {
     return null
   }
 
+  resolveArrayIterableElementShape(expression: AnyNode): ObjectShapeInfo | null {
+    if (expression.shape !== null && typeof expression.shape !== 'undefined') {
+      return expression.shape
+    }
+
+    const elementType = this.resolveExpressionArrayElementType(expression)
+    const elementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression)
+
+    if (elementType === 'object' && elementDeclaredType !== null && typeof elementDeclaredType !== 'undefined') {
+      const elementShape = this.resolveArrayElementObjectShape(elementType, elementDeclaredType, expression.loc)
+
+      if (elementShape !== null && typeof elementShape !== 'undefined') {
+        return elementShape
+      }
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const shape = this.resolveExpressionShape(expression.object)
+
+      if (shape === null || typeof shape === 'undefined') {
+        return null
+      }
+
+      const field = this.findShapeField(shape, expression.property)
+
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.shape !== null &&
+        typeof field.shape !== 'undefined'
+      ) {
+        return field.shape
+      }
+
+      return null
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const shape = this.resolveExpressionShape(expression.object)
+
+      if (shape === null || typeof shape === 'undefined') {
+        return null
+      }
+
+      const field = this.findShapeField(shape, expression.index.value)
+
+      if (
+        field !== null &&
+        typeof field !== 'undefined' &&
+        field.shape !== null &&
+        typeof field.shape !== 'undefined'
+      ) {
+        return field.shape
+      }
+    }
+
+    return null
+  }
+
   resolveArrayElementObjectShape(
     valueType: ValueType,
     declaredType: string | null | undefined,
@@ -12257,6 +12401,14 @@ class Checker {
 
     let shape = mapEntryShape
 
+    if (iterableType === 'array' && elementType === 'object') {
+      const iterableShape = this.resolveArrayIterableElementShape(statement.iterable)
+
+      if (iterableShape !== null && typeof iterableShape !== 'undefined') {
+        shape = iterableShape
+      }
+    }
+
     if (
       declared !== null &&
       typeof declared !== 'undefined' &&
@@ -12314,63 +12466,62 @@ class Checker {
     }
 
     const scopeState = this.pushScope()
+    let declaredNullable = false
+    let declaredArrayElementType: ValueType | null = null
+    let declaredArrayElementDeclaredType: string | null = null
+    let declaredMapKeyType: ValueType | null = null
+    let declaredMapValueType: ValueType | null = null
+    let declaredSetElementType: ValueType | null = null
+    let declaredFunctionType: AnyNode | null = null
 
-    try {
-      let declaredNullable = false
-      let declaredArrayElementType: ValueType | null = null
-      let declaredArrayElementDeclaredType: string | null = null
-      let declaredMapKeyType: ValueType | null = null
-      let declaredMapValueType: ValueType | null = null
-      let declaredSetElementType: ValueType | null = null
-      let declaredFunctionType: AnyNode | null = null
+    if (declared !== null && typeof declared !== 'undefined') {
+      declaredNullable = declared.nullable === true
 
-      if (declared !== null && typeof declared !== 'undefined') {
-        declaredNullable = declared.nullable === true
-
-        if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
-          declaredArrayElementType = declared.arrayElementType
-        }
-
-        if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
-          declaredArrayElementDeclaredType = declared.arrayElementDeclaredType
-        }
-
-        if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
-          declaredMapKeyType = declared.mapKeyType
-        }
-
-        if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
-          declaredMapValueType = declared.mapValueType
-        }
-
-        if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
-          declaredSetElementType = declared.setElementType
-        }
-
-        if (declared.functionType !== null && typeof declared.functionType !== 'undefined') {
-          declaredFunctionType = declared.functionType
-        }
+      if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
+        declaredArrayElementType = declared.arrayElementType
       }
 
-      this.declare(
-        statement.name,
-        {
-          kind: statement.kind,
-          mutable: statement.kind === 'let',
-          valueType,
-          nullable: declaredNullable,
-          arrayElementType: declaredArrayElementType,
-          arrayElementDeclaredType: declaredArrayElementDeclaredType,
-          mapKeyType: declaredMapKeyType,
-          mapValueType: declaredMapValueType,
-          setElementType: declaredSetElementType,
-          functionType: declaredFunctionType,
-          shape,
-          loc: statement.nameLoc
-        },
-        statement.nameLoc
-      )
+      if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
+        declaredArrayElementDeclaredType = declared.arrayElementDeclaredType
+      }
 
+      if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
+        declaredMapKeyType = declared.mapKeyType
+      }
+
+      if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
+        declaredMapValueType = declared.mapValueType
+      }
+
+      if (declared.setElementType !== null && typeof declared.setElementType !== 'undefined') {
+        declaredSetElementType = declared.setElementType
+      }
+
+      if (declared.functionType !== null && typeof declared.functionType !== 'undefined') {
+        declaredFunctionType = declared.functionType
+      }
+    }
+
+    this.declare(
+      statement.name,
+      {
+        kind: statement.kind,
+        mutable: statement.kind === 'let',
+        valueType,
+        nullable: declaredNullable,
+        arrayElementType: declaredArrayElementType,
+        arrayElementDeclaredType: declaredArrayElementDeclaredType,
+        mapKeyType: declaredMapKeyType,
+        mapValueType: declaredMapValueType,
+        setElementType: declaredSetElementType,
+        functionType: declaredFunctionType,
+        shape,
+        loc: statement.nameLoc
+      },
+      statement.nameLoc
+    )
+
+    try {
       const loopState = this.pushLoop()
 
       try {
@@ -12941,8 +13092,12 @@ class Checker {
     }
 
     for (const item of this.program.body) {
-      if (item.type === 'TypeAliasDeclaration' && item.valueType.kind === 'object') {
-        this.addOwnershipFieldEdges(graph, nodeNames, item.name, item.valueType.fields)
+      if (item.type === 'TypeAliasDeclaration') {
+        const typeInfo = item.valueType as TypeAliasInfo
+
+        if (typeInfo.kind === 'object') {
+          this.addOwnershipFieldEdges(graph, nodeNames, item.name, typeInfo.fields)
+        }
       } else if (item.type === 'ClassDeclaration') {
         let fields: AnyNode[] = []
 
@@ -13084,6 +13239,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13103,6 +13259,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13143,6 +13300,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13161,6 +13319,7 @@ class Checker {
         arrayElementDeclaredType: arrayElementTypeName,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13220,6 +13379,7 @@ class Checker {
             arrayElementDeclaredType: valueInfo.arrayElementDeclaredType,
             mapKeyType: valueInfo.mapKeyType,
             mapValueType: valueInfo.mapValueType,
+            mapValueShape: valueInfo.mapValueShape,
             promiseValueType: valueInfo.promiseValueType,
             setElementType: valueInfo.setElementType,
             functionType: valueInfo.functionType,
@@ -13232,6 +13392,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13247,6 +13408,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: 'unknown'
       }
@@ -13265,6 +13427,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: elementInfo.valueType
       }
@@ -13280,6 +13443,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: 'unknown',
         setElementType: null
       }
@@ -13298,6 +13462,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: valueInfo.valueType,
         setElementType: null
       }
@@ -13313,6 +13478,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13328,6 +13494,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13368,6 +13535,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13420,12 +13588,7 @@ class Checker {
           }
 
           for (const param of shape.params) {
-            let declaredType: string = param.valueType
-            const paramDeclaredType = param.declaredType
-
-            if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
-              declaredType = paramDeclaredType
-            }
+            const declaredType = nodeDeclaredTypeOrValueType(param)
 
             const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
             let paramPromiseValueType: ValueType | null = null
@@ -13477,6 +13640,7 @@ class Checker {
             arrayElementDeclaredType: null,
             mapKeyType: null,
             mapValueType: null,
+            mapValueShape: null,
             promiseValueType: null,
             setElementType: null
           }
@@ -13501,6 +13665,7 @@ class Checker {
           arrayElementDeclaredType: null,
           mapKeyType: null,
           mapValueType: null,
+          mapValueShape: null,
           promiseValueType: null,
           setElementType: null
         }
@@ -13523,6 +13688,7 @@ class Checker {
       arrayElementDeclaredType: null,
       mapKeyType: null,
       mapValueType: null,
+      mapValueShape: null,
       promiseValueType: null,
       setElementType: null
     }
@@ -13607,12 +13773,7 @@ class Checker {
 
   resolveObjectShapeField(field: AnyNode, fields: AnyNode[]): AnyNode {
     const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
-    let declaredType: string = field.valueType
-    const fieldDeclaredType = field.declaredType
-
-    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
-      declaredType = fieldDeclaredType
-    }
+    const declaredType = nodeDeclaredTypeOrValueType(field)
 
     let fieldInfo = this.resolveFieldDeclaredType(field)
 
@@ -13696,12 +13857,7 @@ class Checker {
     }
 
     for (const param of functionType.params) {
-      let declaredType: string = param.valueType
-      const paramDeclaredType = param.declaredType
-
-      if (paramDeclaredType !== null && typeof paramDeclaredType !== 'undefined') {
-        declaredType = paramDeclaredType
-      }
+      const declaredType = nodeDeclaredTypeOrValueType(param)
 
       const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
       let paramPromiseValueType: ValueType | null = null
@@ -13785,28 +13941,22 @@ class Checker {
       return this.resolveWeakFieldDeclaredType(field)
     }
 
-    let declaredType: string = field.valueType
-    const fieldDeclaredType = field.declaredType
-
-    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
-      declaredType = fieldDeclaredType
-    }
+    const declaredType = nodeDeclaredTypeOrValueType(field)
 
     return this.resolveDeclaredType(declaredType, field.loc)
   }
 
   resolveWeakFieldDeclaredType(field: AnyNode): ResolvedTypeInfo {
-    let declaredName: string = field.valueType
-    const fieldDeclaredType = field.declaredType
-
-    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
-      declaredName = fieldDeclaredType
-    }
+    const declaredName = nodeDeclaredTypeOrValueType(field)
 
     let targetName = declaredName
 
     if (isNullableTypeName(declaredName)) {
-      targetName = nullableTypeNameFromKnownTypeName(declaredName)
+      const nullableName = nullableTypeNameFromKnownTypeName(declaredName)
+
+      if (nullableName !== null && typeof nullableName !== 'undefined') {
+        targetName = nullableName
+      }
     }
 
     const fieldInfo = this.resolveWeakTargetDeclaredType(targetName, field.loc)
@@ -13843,6 +13993,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13858,6 +14009,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13875,6 +14027,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13906,6 +14059,7 @@ class Checker {
         arrayElementDeclaredType: null,
         mapKeyType: null,
         mapValueType: null,
+        mapValueShape: null,
         promiseValueType: null,
         setElementType: null
       }
@@ -13924,7 +14078,7 @@ class Checker {
 
     for (const field of fields) {
       const declared = this.resolveWeakTargetShapeFieldType(field)
-      let declaredType: string = field.valueType
+      let declaredType = nodeDeclaredTypeOrValueType(field)
       const fieldDeclaredType = field.declaredType
       let promiseValueType: ValueType | null = null
       const functionType = resolvedFunctionTypeMetadata(declared.functionType, field.functionType)
@@ -13979,12 +14133,7 @@ class Checker {
   }
 
   resolveWeakTargetShapeFieldType(field: AnyNode): ResolvedTypeInfo {
-    let declaredType: string = field.valueType
-    const fieldDeclaredType = field.declaredType
-
-    if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
-      declaredType = fieldDeclaredType
-    }
+    const declaredType = nodeDeclaredTypeOrValueType(field)
 
     return this.resolveWeakTargetShapeTypeName(declaredType, field.loc)
   }
@@ -14007,6 +14156,7 @@ class Checker {
         arrayElementDeclaredType: inner.arrayElementDeclaredType,
         mapKeyType: inner.mapKeyType,
         mapValueType: inner.mapValueType,
+        mapValueShape: inner.mapValueShape,
         promiseValueType: inner.promiseValueType,
         setElementType: inner.setElementType
       }

@@ -201,7 +201,7 @@ function lowerTypeAssertionExpression(
   context: LowerExpressionContext
 ): LowerExpressionNode {
   const lowered = lowerExpressionWithContext(expression.expression, context)
-  let declaredType: string = expression.valueType
+  let declaredType = fallbackString(expression.valueType, 'unknown')
   const expressionDeclaredType = expression.declaredType
 
   if (expressionDeclaredType !== null && typeof expressionDeclaredType !== 'undefined') {

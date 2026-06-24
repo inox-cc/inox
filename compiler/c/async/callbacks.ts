@@ -1764,7 +1764,7 @@ function declareCallbackVariable(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  let valueType = statement.valueType
+  let valueType = callbackStringOrUnknown(statement.valueType)
   const functionType = callbackVariableFunctionType(statement)
 
   syncCallbackVariableFunctionType(statement, functionType)
@@ -2499,15 +2499,16 @@ function visitNestedCallbackArrowExpression(
 
   for (let index = 0; index < params.length; index = index + 1) {
     const param = callbackNodeAt(params, index)
+    const valueType = callbackStringOrUnknown(param.valueType)
 
     declareCallbackBinding(scope, param.name, {
       name: param.name,
-      valueType: param.valueType,
+      valueType,
       declaration: param,
       functionType: param.functionType,
       nullable: param.nullable === true,
       shape: param.shape,
-      runtimeManaged: isManagedRuntimeCallbackParamValueType(param.valueType),
+      runtimeManaged: isManagedRuntimeCallbackParamValueType(valueType),
       mutable: false
     })
   }

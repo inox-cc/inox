@@ -2,6 +2,7 @@ import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
+import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
 
@@ -166,14 +167,14 @@ async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number
 
   const configure = await runCommand(
     'cmake',
-    [
+    quietCMakeConfigureArgs([
       '-S',
       cmakeSourceDir,
       '-B',
       cmakeBuildDir,
       `-DINOX_LOOP_BACKEND=${buildLoopBackend}`,
       `-DINOX_TLS_BACKEND=${buildTlsBackend}`
-    ],
+    ]),
     {
       stderr: process.stderr,
       stdout: process.stdout

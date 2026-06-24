@@ -88,6 +88,16 @@ function promiseBooleanValueIsTrue(value: boolean | null | undefined): boolean {
   return false
 }
 
+function promiseNodeValueType(node: PromiseNode): string {
+  const valueType = node.valueType
+
+  if (valueType !== null && typeof valueType !== 'undefined') {
+    return valueType
+  }
+
+  return 'unknown'
+}
+
 export function cPromiseRuntimeCallName(callee: AnyNode | null | undefined): string | null {
   if (callee === null || typeof callee === 'undefined') {
     return null
@@ -1810,14 +1820,15 @@ function declarePromiseCallbackBinding(scope: CallbackScope, name: string, info:
 function declarePromiseCallbackParams(scope: CallbackScope, params: AnyNode[]): void {
   for (let index = 0; index < params.length; index = index + 1) {
     const param = promiseNodeAt(params, index)
+    const valueType = promiseNodeValueType(param)
 
     declarePromiseCallbackBinding(scope, param.name, {
       name: param.name,
-      valueType: param.valueType,
+      valueType,
       functionType: param.functionType,
       nullable: param.nullable === true,
       shape: param.shape,
-      runtimeManaged: isPromiseRuntimeManagedValueType(param.valueType),
+      runtimeManaged: isPromiseRuntimeManagedValueType(valueType),
       mutable: false
     })
   }
@@ -1888,7 +1899,8 @@ function isRuntimeManagedCaptureBinding(statement: AnyNode, scopes: CallbackScop
 
 function declarePromiseCallbackVariable(scope: CallbackScope, statement: AnyNode, scopes: CallbackScope[]): void {
   const mutable = statement.kind === 'let'
-  const runtimeManaged = isRuntimeManagedCaptureBinding(statement, scopes, statement.valueType)
+  const valueType = promiseNodeValueType(statement)
+  const runtimeManaged = isRuntimeManagedCaptureBinding(statement, scopes, valueType)
   let declaration: AnyNode | null = null
 
   if (mutable) {
@@ -1897,7 +1909,7 @@ function declarePromiseCallbackVariable(scope: CallbackScope, statement: AnyNode
 
   declarePromiseCallbackBinding(scope, statement.name, {
     name: statement.name,
-    valueType: statement.valueType,
+    valueType,
     declaration: declaration,
     functionType: statement.functionType,
     nullable: statement.nullable === true,

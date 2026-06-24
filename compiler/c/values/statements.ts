@@ -505,6 +505,7 @@ export type StatementLoweringDependencies = {
   isCollectionConstructorExpression(expression: StatementNode): boolean
   isErrorConstructorExpression(expression: StatementNode): boolean
   isErrorValueExpression(expression: StatementNode, context: CFunctionContext): boolean
+  isObjectRuntimeCallExpression(expression: StatementNode): boolean
   isIndexAccessExpression(expression: StatementNode): boolean
   isDynamicRuntimeValueExpression(expression: StatementNode, context: CFunctionContext): boolean
   isMemberAccessExpression(expression: StatementNode): boolean
@@ -1485,9 +1486,15 @@ export function emitRuntimeValueVariableDeclaration(
   valueTypeOverride?: string | null
 ): string[] {
   let valueType = valueTypeOverride ?? statementDeps(context).inferExpressionType(expression, context)
+  const statementValueType = statement.valueType
 
-  if (valueType === 'unknown' && isRuntimeValueDeclarationValueType(statement.valueType)) {
-    valueType = statement.valueType
+  if (
+    valueType === 'unknown' &&
+    statementValueType !== null &&
+    typeof statementValueType !== 'undefined' &&
+    isRuntimeValueDeclarationValueType(statementValueType)
+  ) {
+    valueType = statementValueType
   }
 
   const expectedTag = cRuntimeValueTag(valueType)
@@ -2032,6 +2039,8 @@ function registerForOfElementMetadata(
 
   if (elementType === 'string') {
     context.runtimeStrings.add(name)
+  } else if (elementType === 'unknown') {
+    context.localValueNames.add(name)
   } else if (elementType === 'object') {
     registerObjectShape(context, name, statement.shape)
     registerForOfObjectElementDeclaredType(context, name, statement)
@@ -2481,9 +2490,16 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     }
   }
 
-  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+  const statementValueType = statement.valueType
+
+  if (
+    statement.nullable === true &&
+    statementValueType !== null &&
+    typeof statementValueType !== 'undefined' &&
+    isRuntimeNullableType(statementValueType)
+  ) {
     const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
-    registerRuntimeValueMetadata(statement.name, statement.valueType, statement, statement.init, context)
+    registerRuntimeValueMetadata(statement.name, statementValueType, statement, statement.init, context)
 
     return {
       lines,
@@ -3807,10 +3823,17 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return fetchHeadersCall.lines
   }
 
-  if (statement.nullable === true && isRuntimeNullableType(statement.valueType)) {
+  const statementValueType = statement.valueType
+
+  if (
+    statement.nullable === true &&
+    statementValueType !== null &&
+    typeof statementValueType !== 'undefined' &&
+    isRuntimeNullableType(statementValueType)
+  ) {
     const lines = emitNullableRuntimeValueVariableDeclaration(statement, context)
 
-    registerRuntimeValueMetadata(statement.name, statement.valueType, statement, statement.init, context)
+    registerRuntimeValueMetadata(statement.name, statementValueType, statement, statement.init, context)
 
     return lines
   }
@@ -3897,8 +3920,8 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (
     statement.init.type === 'CallExpression' &&
-    statement.init.objectRuntimeMethod !== null &&
-    typeof statement.init.objectRuntimeMethod !== 'undefined'
+    ((statement.init.objectRuntimeMethod !== null && typeof statement.init.objectRuntimeMethod !== 'undefined') ||
+      deps.isObjectRuntimeCallExpression(statement.init))
   ) {
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'array')
   }
