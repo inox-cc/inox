@@ -80,6 +80,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertExampleInoxScriptRuns } = await import('./integration/example-inox-script.test.ts')
+  const { assertNativeInoxHelp } = await import('./integration/native-inox-help.test.ts')
 
   await test('compiler integration checks', async (t) => {
     await t.test('build-cmake-log-level', () => {
@@ -92,6 +93,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('example-inox-script', async () => {
       await assertExampleInoxScriptRuns()
+    })
+
+    await t.test('native-inox-help', async () => {
+      await assertNativeInoxHelp()
     })
   })
 }

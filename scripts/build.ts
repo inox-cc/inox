@@ -250,10 +250,20 @@ function defaultOutputPath(input: string): string {
   return input + '.c'
 }
 
+function usage(): string {
+  return 'Usage:\\n  inox --help\\n  inox input.ts [output.c]\\n\\nCompiles a TypeScript entry file to C source.\\nIf output.c is omitted, inox writes input.ts.c.'
+}
+
+function isHelpArgument(value: string): boolean {
+  return value === '--help' || value === '-h'
+}
+
 try {
   if (process.argv.length < 2) {
-    console.error('Usage: inox input.ts [output.c]')
+    console.error(usage())
     process.exitCode = 1
+  } else if (isHelpArgument(process.argv[1])) {
+    console.log(usage())
   } else {
     const input = process.argv[1]
     let output = defaultOutputPath(input)
