@@ -1045,6 +1045,10 @@ function emitPreparedObjectExpressionFieldValueExpression(
     return null
   }
 
+  if (field.key === null || typeof field.key === 'undefined') {
+    return null
+  }
+
   const object = dependencies.emitCValueExpression(objectExpression, context)
   const temp = nextCName(context, 'inox_value')
   const tag = cRuntimeValueTag(field.valueType)

@@ -5,7 +5,12 @@ import type { IrModuleRecord } from '../ir/top-level.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import type { DebugMemoryStatsField } from '../stdlib/descriptors/debug.ts'
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
-import { dateInstanceRuntimeMethodReturnType } from '../stdlib/descriptors/time.ts'
+import {
+  dateConstructorRuntimeMethodNameFromPath,
+  dateInstanceRuntimeMethodName,
+  dateInstanceRuntimeMethodReturnType,
+  timeRuntimeMethodNameFromPath
+} from '../stdlib/descriptors/time.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -980,7 +985,7 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   isMemberAccessExpression,
   isRuntimeProducedStringExpression,
   isThrowingFunctionCallee: (callee, context) => isThrowingFunctionCallee(callee, context as CFunctionContext),
-  pushVariableScope,
+  pushVariableScope: (context) => pushVariableScope(context as CFunctionContext) as any,
   registerObjectShape,
   registerRuntimeValueMetadata: (name, valueType, declaration, expression, context) =>
     registerRuntimeValueMetadata(name, valueType, declaration, expression, context as CFunctionContext),
@@ -993,7 +998,7 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   resolveRuntimeMapType,
   resolveRuntimeSetElementType,
   resolveRuntimeStringReference,
-  restoreVariableScope
+  restoreVariableScope: (context, snapshot) => restoreVariableScope(context as CFunctionContext, snapshot as any)
 }
 
 const declarationEmissionDependencies = {
@@ -3228,6 +3233,23 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
 function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
   if (isUnionValueTypeName(statement.valueType)) {
     return 'unknown'
+  }
+
+  if (statement.init !== null && typeof statement.init !== 'undefined') {
+    const timeValueType = timeRuntimeExpressionValueType(statement.init, context)
+
+    if (
+      timeValueType !== null &&
+      typeof timeValueType !== 'undefined' &&
+      (statement.valueType === null ||
+        typeof statement.valueType === 'undefined' ||
+        statement.valueType === '' ||
+        statement.valueType === 'unknown' ||
+        statement.valueType === 'object' ||
+        statement.valueType === timeValueType)
+    ) {
+      return timeValueType
+    }
   }
 
   const declared = knownValueType(statement.valueType)
@@ -8060,7 +8082,7 @@ function resolveFunctionParams(callee: CAccessorNode, context: FunctionParamCont
 }
 
 function inferExpressionType(expression: AnyNode, context: CFunctionContext): string {
-  const timeValueType = timeRuntimeExpressionValueType(expression)
+  const timeValueType = timeRuntimeExpressionValueType(expression, context)
 
   if (timeValueType !== null && typeof timeValueType !== 'undefined') {
     return timeValueType
@@ -8069,8 +8091,8 @@ function inferExpressionType(expression: AnyNode, context: CFunctionContext): st
   return inferExpressionTypeWithDependencies(expression, context, expressionTypeDependencies)
 }
 
-function timeRuntimeExpressionValueType(expression: AnyNode): string | null {
-  const method = expression.timeRuntimeMethod
+function timeRuntimeExpressionValueType(expression: AnyNode, context?: CFunctionContext | null): string | null {
+  const method = timeRuntimeExpressionMethod(expression, context)
 
   if (method === null || typeof method === 'undefined') {
     return null
@@ -8087,6 +8109,64 @@ function timeRuntimeExpressionValueType(expression: AnyNode): string | null {
   }
 
   return 'number'
+}
+
+function timeRuntimeExpressionMethod(expression: AnyNode, context?: CFunctionContext | null): string | null {
+  const method = nullableString(expression.timeRuntimeMethod)
+
+  if (method !== null && typeof method !== 'undefined') {
+    return method
+  }
+
+  if (expression.type === 'NewExpression') {
+    return dateConstructorRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+  }
+
+  if (expression.type === 'CallExpression') {
+    const path = memberExpressionPath(expression.callee)
+    const callMethod = timeRuntimeMethodNameFromPath(path)
+
+    if (callMethod !== null && typeof callMethod !== 'undefined') {
+      return callMethod
+    }
+
+    const constructorMethod = dateConstructorRuntimeMethodNameFromPath(path)
+
+    if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
+      return constructorMethod
+    }
+
+    if (
+      context !== null &&
+      typeof context !== 'undefined' &&
+      expression.callee.type === 'MemberExpression' &&
+      inferDateReceiverExpression(expression.callee.object, context)
+    ) {
+      return dateInstanceRuntimeMethodName(expression.callee.property)
+    }
+  }
+
+  return null
+}
+
+function inferDateReceiverExpression(expression: AnyNode, context: CFunctionContext): boolean {
+  if (expression.valueType === 'date') {
+    return true
+  }
+
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return false
+  }
+
+  return context.variables.get(expression.path[0]) === 'date'
+}
+
+function nullableString(value: string | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value
 }
 
 function isErrorConstructorExpression(expression: AnyNode): boolean {

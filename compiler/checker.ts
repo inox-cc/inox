@@ -1348,8 +1348,8 @@ class Checker {
     }
   }
 
-  resolveParams(params: AnyNode[]): AnyNode[] {
-    const resolved: AnyNode[] = []
+  resolveParams(params: AnyNode[]): FunctionTypeParamMetadata[] {
+    const resolved: FunctionTypeParamMetadata[] = []
 
     for (let index = 0; index < params.length; index = index + 1) {
       const param = params[index]
@@ -1359,7 +1359,7 @@ class Checker {
     return resolved
   }
 
-  resolveParam(param: AnyNode): AnyNode {
+  resolveParam(param: AnyNode): FunctionTypeParamMetadata {
     const declaredType = nodeDeclaredTypeOrValueType(param)
 
     const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
@@ -1369,7 +1369,7 @@ class Checker {
       promiseValueType = paramInfo.promiseValueType
     }
 
-    const resolvedParam: AnyNode = {
+    const resolvedParam: FunctionTypeParamMetadata = {
       name: param.name,
       loc: param.loc,
       declaredType,
@@ -3919,6 +3919,12 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    const timeType = this.checkTimeCall(expression)
+
+    if (timeType !== null && typeof timeType !== 'undefined') {
+      return timeType
+    }
+
     const binaryType = this.checkBinaryCall(expression)
 
     if (binaryType !== null && typeof binaryType !== 'undefined') {
@@ -4139,12 +4145,6 @@ class Checker {
 
     if (timerType !== null && typeof timerType !== 'undefined') {
       return timerType
-    }
-
-    const timeType = this.checkTimeCall(expression)
-
-    if (timeType !== null && typeof timeType !== 'undefined') {
-      return timeType
     }
 
     const promiseStaticType = this.checkPromiseStaticCall(expression)
@@ -6923,7 +6923,8 @@ class Checker {
       this.checkExpression(checkerNodeAt(expression.args, index))
     }
 
-    const returnType = dateInstanceRuntimeMethodReturnType(method) ?? 'number'
+    const dateReturnType = dateInstanceRuntimeMethodReturnType(method)
+    const returnType = dateReturnType !== null && typeof dateReturnType !== 'undefined' ? dateReturnType : 'number'
 
     expression.timeRuntimeMethod = method
     expression.valueType = returnType
@@ -6932,11 +6933,7 @@ class Checker {
   }
 
   checkDateConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {
-    if (
-      expression.callee.type !== 'Reference' ||
-      dateConstructorRuntimeMethodNameFromPath(expression.callee.path) === null ||
-      this.scope.resolve('Date')
-    ) {
+    if (!this.isDateConstructorExpression(expression)) {
       return null
     }
 
@@ -6951,7 +6948,7 @@ class Checker {
     if (expression.args.length === 1) {
       const argType = argTypes[0]
 
-      if (argType !== 'number' && argType !== 'string' && argType !== 'date') {
+      if (argType !== 'unknown' && argType !== 'number' && argType !== 'string' && argType !== 'date') {
         this.report(
           'INOX_TYPE_MISMATCH',
           `Date constructor expects number, string or Date, got ${argType}`,
@@ -6968,6 +6965,16 @@ class Checker {
     expression.valueType = 'date'
 
     return 'date'
+  }
+
+  isDateConstructorExpression(expression: AnyNode): boolean {
+    if (this.scope.resolve('Date')) {
+      return false
+    }
+
+    const method = dateConstructorRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+
+    return method !== null && typeof method !== 'undefined'
   }
 
   checkArrayIsArrayCall(expression: AnyNode): ValueType | null {
@@ -10774,6 +10781,22 @@ class Checker {
   }
 
   checkNewExpression(expression: AnyNode): ValueType {
+    if (this.isDateConstructorExpression(expression)) {
+      const dateArgTypes: ValueType[] = []
+
+      for (let index = 0; index < expression.args.length; index = index + 1) {
+        const arg = checkerNodeAt(expression.args, index)
+
+        dateArgTypes.push(this.checkExpression(arg))
+      }
+
+      const dateConstructorType = this.checkDateConstructorExpression(expression, dateArgTypes)
+
+      if (dateConstructorType !== null && typeof dateConstructorType !== 'undefined') {
+        return dateConstructorType
+      }
+    }
+
     const promiseType = this.checkPromiseConstructorExpression(expression)
 
     if (promiseType !== null && typeof promiseType !== 'undefined') {
@@ -10792,12 +10815,6 @@ class Checker {
 
     if (eventStreamConstructorType !== null && typeof eventStreamConstructorType !== 'undefined') {
       return eventStreamConstructorType
-    }
-
-    const dateConstructorType = this.checkDateConstructorExpression(expression, argTypes)
-
-    if (dateConstructorType !== null && typeof dateConstructorType !== 'undefined') {
-      return dateConstructorType
     }
 
     const urlType = this.checkUrlConstructorExpression(expression, argTypes)

@@ -10,7 +10,12 @@ import {
 import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
 import { fsRuntimeMethodForPath } from '../stdlib/descriptors/fs.ts'
 import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
-import { dateInstanceRuntimeMethodReturnType, timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
+import {
+  dateConstructorRuntimeMethodNameFromPath,
+  dateInstanceRuntimeMethodName,
+  dateInstanceRuntimeMethodReturnType,
+  timeRuntimeMethodNameFromPath
+} from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
@@ -754,10 +759,14 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
 
 function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): void {
   const callee = expression.callee
-  let timeCall = expression.timeRuntimeMethod
+  let timeCall = nullableString(expression.timeRuntimeMethod)
 
   if ((timeCall === null || typeof timeCall === 'undefined') && callee !== null && typeof callee !== 'undefined') {
     timeCall = timeRuntimeCallName(callee)
+  }
+
+  if ((timeCall === null || typeof timeCall === 'undefined') && callee !== null && typeof callee !== 'undefined') {
+    timeCall = dateReceiverRuntimeMethodName(callee)
   }
 
   if (timeCall !== null && typeof timeCall !== 'undefined') {
@@ -885,6 +894,14 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
       features.add('collections')
     }
   }
+}
+
+function nullableString(value: string | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value
 }
 
 function plainFunctionCallHasStringArgument(expression: FeatureNode): boolean {
@@ -1237,7 +1254,28 @@ function stringRuntimeMethodName(expression: FeatureNode): string | null {
 }
 
 function timeRuntimeCallName(callee: AnyNode): string | null {
-  return timeRuntimeMethodNameFromPath(memberExpressionPath(callee))
+  const path = memberExpressionPath(callee)
+  const method = timeRuntimeMethodNameFromPath(path)
+
+  if (method !== null && typeof method !== 'undefined') {
+    return method
+  }
+
+  return dateConstructorRuntimeMethodNameFromPath(path)
+}
+
+function dateReceiverRuntimeMethodName(callee: AnyNode): string | null {
+  if (callee.type !== 'MemberExpression') {
+    return null
+  }
+
+  const receiver = callee.object
+
+  if (receiver === null || typeof receiver === 'undefined' || receiver.valueType !== 'date') {
+    return null
+  }
+
+  return dateInstanceRuntimeMethodName(callee.property)
 }
 
 function jsonRuntimeCallName(callee: AnyNode): string | null {

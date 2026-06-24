@@ -11,7 +11,13 @@ import {
   irClassMethodEffectName,
   mergeIrFunctionEffects
 } from '../ir.ts'
+import { memberExpressionPath } from '../member-paths.ts'
 import { reexportImportAliasName } from '../modules/synthetic-imports.ts'
+import {
+  dateConstructorRuntimeMethodNameFromPath,
+  dateInstanceRuntimeMethodReturnType,
+  timeRuntimeMethodNameFromPath
+} from '../stdlib/descriptors/time.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -81,7 +87,7 @@ import {
   collectRuntimeImportNames,
   collectRuntimeNamedImportNames
 } from './runtime-imports.ts'
-import { resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
+import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
   collectDgramMessageHandlers,
@@ -344,6 +350,7 @@ export function emitCModuleSource(
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
   const moduleValues = collectCModuleValueDeclarations(plan, context)
+  addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, context)
   const prelude = resolveCRuntimePreludeRequirements({
     classInfoCount: context.classInfos.size,
     cryptoContext: context,
@@ -1422,6 +1429,20 @@ function emitCModuleObjectFunctionFieldDefinitions(
 
 function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   const valueType = node.valueType
+  const timeValueType = cModuleTimeExpressionValueType(node.init)
+
+  if (
+    timeValueType !== null &&
+    typeof timeValueType !== 'undefined' &&
+    (valueType === null ||
+      typeof valueType === 'undefined' ||
+      valueType === '' ||
+      valueType === 'unknown' ||
+      valueType === 'object' ||
+      valueType === timeValueType)
+  ) {
+    return timeValueType
+  }
 
   if (valueType === null || typeof valueType === 'undefined' || valueType === '') {
     return 'unknown'
@@ -1444,6 +1465,63 @@ function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   }
 
   return valueType
+}
+
+function cModuleTimeExpressionValueType(expression: AnyNode | null | undefined): string | null {
+  const method = cModuleTimeExpressionMethod(expression)
+
+  if (method === null || typeof method === 'undefined') {
+    return null
+  }
+
+  if (method === 'dateConstructor') {
+    return 'date'
+  }
+
+  const dateReturnType = dateInstanceRuntimeMethodReturnType(method)
+
+  if (dateReturnType !== null && typeof dateReturnType !== 'undefined') {
+    return dateReturnType
+  }
+
+  return 'number'
+}
+
+function cModuleTimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  const method = nullableString(expression.timeRuntimeMethod)
+
+  if (method !== null && typeof method !== 'undefined') {
+    return method
+  }
+
+  if (expression.type === 'NewExpression') {
+    return dateConstructorRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+  }
+
+  if (expression.type === 'CallExpression') {
+    const path = memberExpressionPath(expression.callee)
+    const callMethod = timeRuntimeMethodNameFromPath(path)
+
+    if (callMethod !== null && typeof callMethod !== 'undefined') {
+      return callMethod
+    }
+
+    return dateConstructorRuntimeMethodNameFromPath(path)
+  }
+
+  return null
+}
+
+function nullableString(value: string | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value
 }
 
 function cModuleValueFunctionType(node: AnyNode): CFunctionType | null {

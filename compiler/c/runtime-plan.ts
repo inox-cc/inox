@@ -1,4 +1,8 @@
-import type { IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
+import {
+  dateInstanceRuntimeMethodName,
+  dateInstanceRuntimeMethodReturnType
+} from '../stdlib/descriptors/time.ts'
+import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import type { CGlobalUsageSupportContext } from './diagnostics.ts'
 import {
   isSupportedCCryptoGlobalUsage,
@@ -44,6 +48,23 @@ export type CRuntimePreludeRequirementInput = {
   runtimeRequirements: Set<IrRuntimeRequirement>
   signatureRuntimeTypes?: Set<string>
   throwingFunctionCount: number
+}
+
+type CDateStringRuntimeContext = {
+  moduleValueTypes: Map<string, string>
+}
+
+export function addDateStringRuntimeRequirements(
+  requirements: Set<IrRuntimeRequirement>,
+  programs: IrProgram[],
+  context: CDateStringRuntimeContext
+): void {
+  if (!irProgramsUseDateStringRuntime(programs, context)) {
+    return
+  }
+
+  requirements.add('managed-values')
+  requirements.add('string-bytes')
 }
 
 export function resolveCRuntimePreludeRequirements(
@@ -197,4 +218,101 @@ function runtimePlanHasSupportedCryptoGlobalUsage(
   }
 
   return false
+}
+
+function irProgramsUseDateStringRuntime(programs: IrProgram[], context: CDateStringRuntimeContext): boolean {
+  for (let index = 0; index < programs.length; index = index + 1) {
+    const program = programs[index] as IrProgram
+
+    if (nodeUsesDateStringRuntime(program.body, context)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function nodeUsesDateStringRuntime(value: any, context: CDateStringRuntimeContext): boolean {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
+    return false
+  }
+
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index = index + 1) {
+      if (nodeUsesDateStringRuntime(value[index], context)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  const node = value as AnyNode
+
+  if (dateStringRuntimeCall(node, context)) {
+    return true
+  }
+
+  return nodeChildrenUseDateStringRuntime(node, context)
+}
+
+function nodeChildrenUseDateStringRuntime(node: AnyNode, context: CDateStringRuntimeContext): boolean {
+  return (
+    nodeUsesDateStringRuntime(node.body, context) ||
+    nodeUsesDateStringRuntime(node.params, context) ||
+    nodeUsesDateStringRuntime(node.fields, context) ||
+    nodeUsesDateStringRuntime(node.methods, context) ||
+    nodeUsesDateStringRuntime(node.init, context) ||
+    nodeUsesDateStringRuntime(node.condition, context) ||
+    nodeUsesDateStringRuntime(node.consequent, context) ||
+    nodeUsesDateStringRuntime(node.alternate, context) ||
+    nodeUsesDateStringRuntime(node.test, context) ||
+    nodeUsesDateStringRuntime(node.update, context) ||
+    nodeUsesDateStringRuntime(node.iterable, context) ||
+    nodeUsesDateStringRuntime(node.discriminant, context) ||
+    nodeUsesDateStringRuntime(node.cases, context) ||
+    nodeUsesDateStringRuntime(node.block, context) ||
+    nodeUsesDateStringRuntime(node.handler, context) ||
+    nodeUsesDateStringRuntime(node.finalizer, context) ||
+    nodeUsesDateStringRuntime(node.argument, context) ||
+    nodeUsesDateStringRuntime(node.args, context) ||
+    nodeUsesDateStringRuntime(node.callee, context) ||
+    nodeUsesDateStringRuntime(node.object, context) ||
+    nodeUsesDateStringRuntime(node.index, context) ||
+    nodeUsesDateStringRuntime(node.target, context) ||
+    nodeUsesDateStringRuntime(node.value, context) ||
+    nodeUsesDateStringRuntime(node.functionType, context) ||
+    nodeUsesDateStringRuntime(node.returnShape, context) ||
+    nodeUsesDateStringRuntime(node.left, context) ||
+    nodeUsesDateStringRuntime(node.right, context) ||
+    nodeUsesDateStringRuntime(node.elements, context) ||
+    nodeUsesDateStringRuntime(node.properties, context) ||
+    nodeUsesDateStringRuntime(node.expression, context)
+  )
+}
+
+function dateStringRuntimeCall(node: AnyNode, context: CDateStringRuntimeContext): boolean {
+  if (node.type !== 'CallExpression' || node.callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  if (!isDateRuntimeReceiver(node.callee.object, context)) {
+    return false
+  }
+
+  const method = dateInstanceRuntimeMethodName(node.callee.property)
+
+  return dateInstanceRuntimeMethodReturnType(method) === 'string'
+}
+
+function isDateRuntimeReceiver(expression: AnyNode, context: CDateStringRuntimeContext): boolean {
+  if (expression.valueType === 'date') {
+    return true
+  }
+
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return false
+  }
+
+  return context.moduleValueTypes.get(expression.path[0]) === 'date'
 }

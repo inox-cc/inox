@@ -1,6 +1,7 @@
 import { memberExpressionPath } from '../../member-paths.ts'
 import {
   dateConstructorRuntimeMethodNameFromPath,
+  dateInstanceRuntimeMethodName,
   dateInstanceRuntimeMethodReturnType,
   timeRuntimeCFunctionNameFromPath,
   timeRuntimeMethodNameFromPath
@@ -29,12 +30,20 @@ type DatePartInfo = {
   utc: boolean
 }
 
-function timeRuntimeMethodForExpression(expression: AnyNode | null | undefined): string | null {
+type DatePartsExpression = {
+  args: string[]
+  lines: string[]
+}
+
+function timeRuntimeMethodForExpression(
+  expression: AnyNode | null | undefined,
+  context?: CFunctionContext | null
+): string | null {
   if (expression === null || typeof expression === 'undefined') {
     return null
   }
 
-  const explicitMethod = expression.timeRuntimeMethod
+  const explicitMethod = nullableString(expression.timeRuntimeMethod)
 
   if (explicitMethod !== null && typeof explicitMethod !== 'undefined') {
     return explicitMethod
@@ -45,7 +54,27 @@ function timeRuntimeMethodForExpression(expression: AnyNode | null | undefined):
   }
 
   if (expression.type === 'CallExpression') {
-    return timeRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
+    const path = memberExpressionPath(expression.callee)
+    const method = timeRuntimeMethodNameFromPath(path)
+
+    if (method !== null && typeof method !== 'undefined') {
+      return method
+    }
+
+    const constructorMethod = dateConstructorRuntimeMethodNameFromPath(path)
+
+    if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
+      return constructorMethod
+    }
+
+    if (
+      context !== null &&
+      typeof context !== 'undefined' &&
+      expression.callee.type === 'MemberExpression' &&
+      depsInferDateReceiver(expression.callee.object, context)
+    ) {
+      return dateInstanceRuntimeMethodName(expression.callee.property)
+    }
   }
 
   return null
@@ -56,7 +85,7 @@ export function emitPreparedDateNumberExpression(
   context: CFunctionContext,
   deps: TimeLoweringDependencies
 ): CPreparedExpression | null {
-  const method = timeRuntimeMethodForExpression(expression)
+  const method = timeRuntimeMethodForExpression(expression, context)
 
   if (method === null || typeof method === 'undefined') {
     return null
@@ -114,7 +143,7 @@ export function emitPreparedDateStringExpression(
   context: CFunctionContext,
   deps: TimeLoweringDependencies
 ): CPreparedExpression | null {
-  const method = timeRuntimeMethodForExpression(expression)
+  const method = timeRuntimeMethodForExpression(expression, context)
   const returnType = dateInstanceRuntimeMethodReturnType(method)
 
   if (returnType !== 'string') {
@@ -123,7 +152,7 @@ export function emitPreparedDateStringExpression(
 
   const receiver = emitPreparedDateReceiverExpression(expression, context, deps)
   const out = nextCName(context, 'inox_date_string')
-  const kind = dateStringKind(method ?? '')
+  const kind = dateStringKind(method !== null && typeof method !== 'undefined' ? method : '')
   const lines: string[] = []
 
   registerOwnedValue(context, out)
@@ -139,7 +168,7 @@ export function emitPreparedDateStringExpression(
 }
 
 export function isDateStringExpression(expression: AnyNode, context: CFunctionContext): boolean {
-  const method = timeRuntimeMethodForExpression(expression)
+  const method = timeRuntimeMethodForExpression(expression, context)
 
   if (dateInstanceRuntimeMethodReturnType(method) !== 'string') {
     return false
@@ -247,7 +276,7 @@ function emitPreparedDateParts(
   expression: AnyNode,
   context: CFunctionContext,
   deps: TimeLoweringDependencies
-): { lines: string[]; args: string[] } {
+): DatePartsExpression {
   const defaults = ['0', '0', '1', '0', '0', '0', '0']
   const args: string[] = []
   const lines: string[] = []
@@ -344,4 +373,12 @@ function joinTimeStrings(values: string[], separator: string): string {
   }
 
   return result
+}
+
+function nullableString(value: string | null | undefined): string | null {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  return value
 }

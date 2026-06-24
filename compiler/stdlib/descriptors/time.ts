@@ -175,7 +175,7 @@ export function dateInstanceRuntimeMethodName(method: string | null | undefined)
   return null
 }
 
-export function dateInstanceRuntimeMethodReturnType(method: string | null | undefined): 'number' | 'string' | null {
+export function dateInstanceRuntimeMethodReturnType(method: string | null | undefined): string | null {
   if (method === null || typeof method === 'undefined') {
     return null
   }
