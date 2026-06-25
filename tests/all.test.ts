@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { prepareRuntimeArchives } from './helpers/runtime-c.ts'
 import {
   assertCcAvailable,
   assertFeatureCompilerAvailable,
@@ -54,6 +55,11 @@ if (process.argv[2] === workerArg) {
   const parallelism = featureTestParallelism(options.compiler)
 
   assert.notEqual(files.length, 0, 'feature tests: no .test.ts files found')
+
+  if (options.compiler.kind !== 'node') {
+    console.log('precompiling C runtime for feature tests')
+    await prepareRuntimeArchives()
+  }
 
   await runFeatureTests(files, parallelism, options.compiler)
 

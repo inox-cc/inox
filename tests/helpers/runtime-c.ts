@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createServer } from 'node:tls'
 import { fileURLToPath } from 'node:url'
@@ -16,6 +17,38 @@ export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
 export { assert, compileSource, join, mkdir, readFile, rm, writeFile }
 
+type RuntimeArchiveVariant = 'default' | 'weak'
+
+const runtimeArchiveVersion = '1'
+const defaultRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE'
+const weakRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE_WEAK'
+const runtimeArchiveRoot = join(repoRoot, 'dist/test-runtime')
+const runtimeSources = [
+  'runtime/src/core/value.c',
+  'runtime/src/core/allocator.c',
+  'runtime/src/core/callback.c',
+  'runtime/src/core/debug.c',
+  'runtime/src/binary/binary.c',
+  'runtime/src/crypto/crypto.c',
+  'runtime/src/core/weak.c',
+  'runtime/src/async/loop.c',
+  'runtime/src/async/promise.c',
+  'runtime/src/strings/string.c',
+  'runtime/src/child_process/child_process.c',
+  'runtime/src/objects/object.c',
+  'runtime/src/arrays/array.c',
+  'runtime/src/collections/map.c',
+  'runtime/src/collections/set.c',
+  'runtime/src/console/console.c',
+  'runtime/src/fs/fs.c',
+  'runtime/src/json/json.c',
+  'runtime/src/os/os.c',
+  'runtime/src/path/path.c',
+  'runtime/src/process/process.c',
+  'runtime/src/time/time.c',
+  'runtime/src/url/url.c'
+]
+
 export async function createTestTempDir(prefix: string): Promise<string> {
   const root = join(repoRoot, 'dist/test-tmp')
 
@@ -26,41 +59,209 @@ export async function createTestTempDir(prefix: string): Promise<string> {
   return await mkdtemp(join(root, prefix))
 }
 
+export async function prepareRuntimeArchives(): Promise<void> {
+  const [defaultArchive, weakArchive] = await Promise.all([
+    prepareRuntimeArchive('default'),
+    prepareRuntimeArchive('weak')
+  ])
+
+  process.env[defaultRuntimeArchiveEnv] = defaultArchive
+  process.env[weakRuntimeArchiveEnv] = weakArchive
+}
+
 export function compileRuntimeProgram(
   source: string,
   output: string,
   extraArgs: string[] = []
 ): Promise<CommandResult> {
+  const archive = preparedRuntimeArchiveForArgs(extraArgs)
+
+  if (archive) {
+    return runCommand('cc', ['-Iruntime/include', ...extraArgs, source, archive, '-o', output])
+  }
+
   return runCommand('cc', [
     '-Iruntime/include',
     ...extraArgs,
     source,
-    'runtime/src/core/value.c',
-    'runtime/src/core/allocator.c',
-    'runtime/src/core/callback.c',
-    'runtime/src/core/debug.c',
-    'runtime/src/binary/binary.c',
-    'runtime/src/crypto/crypto.c',
-    'runtime/src/core/weak.c',
-    'runtime/src/async/loop.c',
-    'runtime/src/async/promise.c',
-    'runtime/src/strings/string.c',
-    'runtime/src/child_process/child_process.c',
-    'runtime/src/objects/object.c',
-    'runtime/src/arrays/array.c',
-    'runtime/src/collections/map.c',
-    'runtime/src/collections/set.c',
-    'runtime/src/console/console.c',
-    'runtime/src/fs/fs.c',
-    'runtime/src/json/json.c',
-    'runtime/src/os/os.c',
-    'runtime/src/path/path.c',
-    'runtime/src/process/process.c',
-    'runtime/src/time/time.c',
-    'runtime/src/url/url.c',
+    ...runtimeSources,
     '-o',
     output
   ])
+}
+
+async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<string> {
+  const compileArgs = runtimeArchiveCompileArgs(variant)
+  const fingerprint = await runtimeArchiveFingerprint(variant, compileArgs)
+  const dir = join(runtimeArchiveRoot, `${variant}-${fingerprint}`)
+  const archive = join(dir, 'libinox_runtime.a')
+  const readyPath = join(dir, '.ready')
+
+  if (await fileExists(readyPath)) {
+    await rm(join(dir, 'objects'), { recursive: true, force: true })
+    return archive
+  }
+
+  const buildDir = join(runtimeArchiveRoot, `.build-${process.pid}-${variant}-${fingerprint}`)
+  const objectDir = join(buildDir, 'objects')
+
+  await rm(buildDir, { recursive: true, force: true })
+  await mkdir(objectDir, { recursive: true })
+
+  const objects: string[] = []
+
+  for (const source of runtimeSources) {
+    const object = join(objectDir, runtimeObjectName(source))
+    const compile = await runCommand('cc', ['-Iruntime/include', ...compileArgs, '-c', source, '-o', object])
+
+    assert.equal(
+      compile.code,
+      0,
+      `runtime ${variant}: object compile failed\nsource: ${source}\nstdout: ${compile.stdout}\nstderr: ${compile.stderr}`
+    )
+
+    objects.push(object)
+  }
+
+  const builtArchive = join(buildDir, 'libinox_runtime.a')
+  const archiveResult = await runCommand('ar', ['rcs', builtArchive, ...objects])
+
+  assert.equal(
+    archiveResult.code,
+    0,
+    `runtime ${variant}: archive build failed\nstdout: ${archiveResult.stdout}\nstderr: ${archiveResult.stderr}`
+  )
+
+  await rm(objectDir, { recursive: true, force: true })
+  await writeFile(join(buildDir, '.ready'), `${new Date().toISOString()}\n`)
+  await installRuntimeArchive(buildDir, dir, readyPath)
+
+  return archive
+}
+
+async function installRuntimeArchive(buildDir: string, dir: string, readyPath: string): Promise<void> {
+  try {
+    await rename(buildDir, dir)
+    return
+  } catch (error) {
+    if (!isPathAlreadyExistsError(error)) {
+      throw error
+    }
+  }
+
+  if (await fileExists(readyPath)) {
+    await rm(buildDir, { recursive: true, force: true })
+    return
+  }
+
+  await rm(dir, { recursive: true, force: true })
+  await rename(buildDir, dir)
+}
+
+function preparedRuntimeArchiveForArgs(extraArgs: string[]): string | undefined {
+  const variant = runtimeArchiveVariantForArgs(extraArgs)
+
+  if (!variant) {
+    return undefined
+  }
+
+  if (variant === 'weak') {
+    return process.env[weakRuntimeArchiveEnv]
+  }
+
+  return process.env[defaultRuntimeArchiveEnv]
+}
+
+function runtimeArchiveVariantForArgs(extraArgs: string[]): RuntimeArchiveVariant | undefined {
+  if (extraArgs.length === 0) {
+    return 'default'
+  }
+
+  if (extraArgs.length === 1 && extraArgs[0] === '-DINOX_ENABLE_WEAK=1') {
+    return 'weak'
+  }
+
+  return undefined
+}
+
+function runtimeArchiveCompileArgs(variant: RuntimeArchiveVariant): string[] {
+  if (variant === 'weak') {
+    return ['-DINOX_ENABLE_WEAK=1']
+  }
+
+  return []
+}
+
+async function runtimeArchiveFingerprint(variant: RuntimeArchiveVariant, compileArgs: string[]): Promise<string> {
+  const hash = createHash('sha256')
+  const dependencies = [
+    ...runtimeSources,
+    ...(await collectRuntimeFiles('runtime/include')),
+    ...(await collectRuntimeFiles('runtime/src', '.h'))
+  ].sort()
+
+  hash.update(`version:${runtimeArchiveVersion}\n`)
+  hash.update(`variant:${variant}\n`)
+  hash.update(`args:${compileArgs.join('\0')}\n`)
+
+  for (const dependency of dependencies) {
+    const content = await readFile(join(repoRoot, dependency))
+
+    hash.update(`file:${dependency}\n`)
+    hash.update(content)
+    hash.update('\n')
+  }
+
+  return hash.digest('hex').slice(0, 16)
+}
+
+async function collectRuntimeFiles(directory: string, extension?: string): Promise<string[]> {
+  const entries = await readdir(join(repoRoot, directory), {
+    withFileTypes: true
+  })
+  const files: string[] = []
+
+  for (const entry of entries) {
+    const path = `${directory}/${entry.name}`
+
+    if (entry.isDirectory()) {
+      files.push(...(await collectRuntimeFiles(path, extension)))
+    } else if (entry.isFile() && (extension === undefined || path.endsWith(extension))) {
+      files.push(path)
+    }
+  }
+
+  return files
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return false
+    }
+
+    throw error
+  }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
+}
+
+function isPathAlreadyExistsError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error.code === 'EEXIST' || error.code === 'ENOTEMPTY')
+  )
+}
+
+function runtimeObjectName(source: string): string {
+  return `${source.replace(/[^a-zA-Z0-9]/g, '_')}.o`
 }
 
 export async function generateLocalhostCertificate(keyPath: string, certPath: string): Promise<void> {
