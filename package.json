@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
-  "packageManager": "pnpm@11.5.1",
   "bin": {
     "inox": "./bin/cli.ts"
   },
@@ -30,6 +29,13 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": ">=11.5.1",
+      "onFail": "error"
+    }
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

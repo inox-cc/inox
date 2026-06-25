@@ -247,11 +247,20 @@ import process from 'node:process'
 import { compileFileSync } from './index.ts'
 import { formatDiagnostics } from './diagnostics.ts'
 function defaultOutputPath(input: string): string {
+  const slash = input.lastIndexOf('/')
+  const backslash = input.lastIndexOf('\\\\')
+  const separator = slash > backslash ? slash : backslash
+  const dot = input.lastIndexOf('.')
+
+  if (dot > separator) {
+    return input.slice(0, dot) + '.c'
+  }
+
   return input + '.c'
 }
 
 function usage(): string {
-  return 'Usage:\\n  inox --help\\n  inox input.ts [output.c]\\n\\nCompiles a TypeScript entry file to C source.\\nIf output.c is omitted, inox writes input.ts.c.'
+  return 'Usage:\\n  inox --help\\n  inox input.ts [output.c]\\n\\nCompiles a TypeScript entry file to C source.\\nIf output.c is omitted, inox writes input.c.'
 }
 
 function isHelpArgument(value: string): boolean {
