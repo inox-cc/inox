@@ -6830,7 +6830,7 @@ class Checker {
 
     const root = path[0]
 
-    if (this.scope.resolve(root)) {
+    if (this.runtimeGlobalIsShadowed(root)) {
       return null
     }
 
@@ -6968,7 +6968,7 @@ class Checker {
   }
 
   isDateConstructorExpression(expression: AnyNode): boolean {
-    if (this.scope.resolve('Date')) {
+    if (this.runtimeGlobalIsShadowed('Date')) {
       return false
     }
 
@@ -6990,7 +6990,7 @@ class Checker {
       return null
     }
 
-    if (this.scope.resolve('Array')) {
+    if (this.runtimeGlobalIsShadowed('Array')) {
       return null
     }
 
@@ -7024,7 +7024,7 @@ class Checker {
       return null
     }
 
-    if (this.scope.resolve('Object')) {
+    if (this.runtimeGlobalIsShadowed('Object')) {
       return null
     }
 
@@ -10280,7 +10280,7 @@ class Checker {
       return null
     }
 
-    if (this.scope.resolve('Array')) {
+    if (this.runtimeGlobalIsShadowed('Array')) {
       return null
     }
 
@@ -13157,6 +13157,12 @@ class Checker {
     }
 
     return symbol
+  }
+
+  runtimeGlobalIsShadowed(name: string): boolean {
+    const symbol = this.scope.resolve(name)
+
+    return symbol !== null && typeof symbol !== 'undefined' && symbol.kind !== 'global'
   }
 
   declareTypeAlias(item: TypeAliasDeclarationNode): void {

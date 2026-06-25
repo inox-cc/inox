@@ -43,6 +43,11 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
       continue
     }
 
+    if (state.index === 0 && unit === '#' && lexerNextChar(state) === '!') {
+      skipLineComment(state)
+      continue
+    }
+
     if (unit === '/' && lexerNextChar(state) === '/') {
       skipLineComment(state)
       continue

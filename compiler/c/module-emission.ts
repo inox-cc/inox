@@ -1230,7 +1230,19 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
       continue
     }
 
-    const specifiers = item.declaration.specifiers
+    const importDeclaration = item.declaration
+
+    if (importDeclaration === null || typeof importDeclaration === 'undefined') {
+      continue
+    }
+
+    const specifiersValue = importDeclaration.specifiers
+
+    if (specifiersValue === null || typeof specifiersValue === 'undefined') {
+      continue
+    }
+
+    const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
@@ -1240,7 +1252,7 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
         continue
       }
 
-      const localName = cModuleImportedBindingName(item.declaration, specifier)
+      const localName = cModuleImportedBindingName(importDeclaration, specifier)
       context.moduleValueNames.set(localName, emitCModuleValueName(importedModule, specifier.imported))
       context.moduleValueTypes.set(localName, cModuleValueType(exported))
     }
@@ -1760,12 +1772,23 @@ function isCModuleImportFunctionWrapper(plan: CModulePlan, node: AnyNode): boole
 
   for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
     const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const importDeclaration = item.declaration
 
-    const specifiers = item.declaration.specifiers
+    if (importDeclaration === null || typeof importDeclaration === 'undefined') {
+      continue
+    }
+
+    const specifiersValue = importDeclaration.specifiers
+
+    if (specifiersValue === null || typeof specifiersValue === 'undefined') {
+      continue
+    }
+
+    const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
-      const localName = cModuleImportedBindingName(item.declaration, specifier)
+      const localName = cModuleImportedBindingName(importDeclaration, specifier)
 
       if (node.name === localName && isCModuleImportFunctionWrapperBody(node, specifier.imported)) {
         return true
@@ -1853,7 +1876,19 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
       continue
     }
 
-    const specifiers = item.declaration.specifiers
+    const importDeclaration = item.declaration
+
+    if (importDeclaration === null || typeof importDeclaration === 'undefined') {
+      continue
+    }
+
+    const specifiersValue = importDeclaration.specifiers
+
+    if (specifiersValue === null || typeof specifiersValue === 'undefined') {
+      continue
+    }
+
+    const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
@@ -1863,7 +1898,7 @@ function collectCModuleImportedFunctionDeclarations(plan: CModulePlan): IrFuncti
       )
 
       if (declaration !== null && typeof declaration !== 'undefined') {
-        const localName = cModuleImportedBindingName(item.declaration, specifier)
+        const localName = cModuleImportedBindingName(importDeclaration, specifier)
         declarations.push(cloneImportedCModuleFunctionDeclaration(declaration, localName))
       }
     }
@@ -1930,7 +1965,19 @@ function collectImportedCModuleFunctionEffectsWithVisited(
       continue
     }
 
-    const specifiers = item.declaration.specifiers
+    const importDeclaration = item.declaration
+
+    if (importDeclaration === null || typeof importDeclaration === 'undefined') {
+      continue
+    }
+
+    const specifiersValue = importDeclaration.specifiers
+
+    if (specifiersValue === null || typeof specifiersValue === 'undefined') {
+      continue
+    }
+
+    const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
@@ -1942,7 +1989,7 @@ function collectImportedCModuleFunctionEffectsWithVisited(
         const importedName: string = specifier.imported
 
         if (effectName === importedName) {
-          const localName = cModuleImportedBindingName(item.declaration, specifier)
+          const localName = cModuleImportedBindingName(importDeclaration, specifier)
           effects.push(cloneImportedCModuleFunctionEffect(effect, localName))
         }
       }
@@ -2029,18 +2076,30 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
       continue
     }
 
-    const specifiers = item.declaration.specifiers
+    const importDeclaration = item.declaration
+
+    if (importDeclaration === null || typeof importDeclaration === 'undefined') {
+      continue
+    }
+
+    const specifiersValue = importDeclaration.specifiers
+
+    if (specifiersValue === null || typeof specifiersValue === 'undefined') {
+      continue
+    }
+
+    const specifiers: CModuleNode[] = specifiersValue
 
     for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = cModuleNodeAt(specifiers, specifierIndex)
-      const importedBindingName = cModuleImportedBindingName(item.declaration, specifier)
+      const importedBindingName = cModuleImportedBindingName(importDeclaration, specifier)
       const importedFunctionName = emitCModuleFunctionName(importedModule, specifier.imported)
 
       if (!localNames.has(importedBindingName)) {
         names.set(importedBindingName, importedFunctionName)
       }
 
-      if (item.declaration.type !== 'ExportDeclaration') {
+      if (importDeclaration.type !== 'ExportDeclaration') {
         if (!localNames.has(specifier.imported)) {
           names.set(specifier.imported, importedFunctionName)
         }

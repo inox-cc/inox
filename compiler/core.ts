@@ -1,5 +1,5 @@
 import { checkCCompileBudgets } from './budgets.ts'
-import type { CEmitOptions, CModuleEmitOptions, CModuleOutputFile } from './c/types.ts'
+import type { CEmitOptions, CModuleEmitOptions } from './c/types.ts'
 import { checkCProfileCapabilities } from './capabilities.ts'
 import { checkProgram } from './checker.ts'
 import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
@@ -69,7 +69,12 @@ export type MemoryCModuleCompileOptions = {
 export type CModuleCompileResult = {
   target: 'c'
   graph: ModuleGraph
-  files: CModuleOutputFile[]
+  files: any[]
+}
+
+type CModuleTextFile = {
+  path: string
+  code: string
 }
 
 export type SourceIrCompileResult = {
@@ -167,12 +172,23 @@ export async function compileFileToCModules(
   entry: string,
   options: CModuleCompileOptions = {}
 ): Promise<CModuleCompileResult> {
+  return compileFileToCModulesSync(entry, options)
+}
+
+export function compileFileToCModulesSync(entry: string, options: CModuleCompileOptions = {}): CModuleCompileResult {
   if (options.host === null || typeof options.host === 'undefined') {
     throw new Error('compileFileToCModules requires a compiler host')
   }
 
-  const host = options.host
-  const compiled = await compileGraphToIrModules(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'))
+  return compileFileToCModulesWithHostSync(entry, options, options.host)
+}
+
+export function compileFileToCModulesWithHostSync(
+  entry: string,
+  options: CModuleCompileOptions,
+  host: CompilerHost
+): CModuleCompileResult {
+  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'), host)
   const irModules: IrProgram[] = []
 
   for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
@@ -185,7 +201,7 @@ export async function compileFileToCModules(
 
   const emitOptions: CModuleEmitOptions = {
     callMain: options.callMain,
-    host: options.host,
+    host,
     random: options.random,
     sourceRoot: options.sourceRoot
   }
@@ -195,6 +211,54 @@ export async function compileFileToCModules(
     graph: compiled.graph,
     files: emitCModuleFilesFromGraph(compiled.graph, emitOptions)
   }
+}
+
+export function compileFileToCModuleTextsSync(
+  entry: string,
+  options: CModuleCompileOptions = {}
+): any[] {
+  if (options.host === null || typeof options.host === 'undefined') {
+    throw new Error('compileFileToCModuleTexts requires a compiler host')
+  }
+
+  return compileFileToCModuleTextsWithHostSync(entry, options, options.host)
+}
+
+export function compileFileToCModuleTextsWithHostSync(
+  entry: string,
+  options: CModuleCompileOptions,
+  host: CompilerHost
+): any[] {
+  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'), host)
+  const irModules: IrProgram[] = []
+
+  for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
+    const module = compiled.irModules[moduleIndex]
+
+    irModules.push(module.ir)
+  }
+
+  runCStaticChecks(irModules, options)
+
+  const emitOptions: CModuleEmitOptions = {
+    callMain: options.callMain,
+    host,
+    random: options.random,
+    sourceRoot: options.sourceRoot
+  }
+  const files: CModuleTextFile[] = emitCModuleFilesFromGraph(compiled.graph, emitOptions)
+  const texts: CModuleTextFile[] = []
+
+  for (let fileIndex = 0; fileIndex < files.length; fileIndex = fileIndex + 1) {
+    const file = files[fileIndex]
+
+    texts.push({
+      path: file.path,
+      code: file.code
+    })
+  }
+
+  return texts
 }
 
 export async function compileMemoryPackageToIrModules(

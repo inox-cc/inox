@@ -1,6 +1,9 @@
 console.log('hello world')
 console.log('date', Date.now())
 console.log('performance', performance.now())
+// console.log('process.version', process.version)
+// console.log('process.versions', process.versions)
+// console.log('process', process)
 
 // try {
 //   const res = await fetch('https://example.com/')

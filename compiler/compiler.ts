@@ -3,7 +3,11 @@ import {
   compileFile as compileFileCore,
   compileFileSync as compileFileSyncCore,
   compileFileWithHostSync as compileFileWithHostSyncCore,
+  compileFileToCModuleTextsSync as compileFileToCModuleTextsSyncCore,
+  compileFileToCModuleTextsWithHostSync as compileFileToCModuleTextsWithHostSyncCore,
   compileFileToCModules as compileFileToCModulesCore,
+  compileFileToCModulesSync as compileFileToCModulesSyncCore,
+  compileFileToCModulesWithHostSync as compileFileToCModulesWithHostSyncCore,
   compileGraphToIrModules as compileGraphToIrModulesCore,
   compileGraphToIrModulesSync as compileGraphToIrModulesSyncCore,
   compileGraphToIrModulesWithHostSync as compileGraphToIrModulesWithHostSyncCore
@@ -84,6 +88,66 @@ export async function compileFileToCModules(
   return compileFileToCModulesCore(entry, cModuleOptionsWithNodeHost(options))
 }
 
+export function compileFileToCModulesSync(
+  entry: string,
+  options: CModuleCompileOptions = {}
+): CModuleCompileResult {
+  if (options.host !== null && typeof options.host !== 'undefined') {
+    return compileFileToCModulesSyncCore(entry, options)
+  }
+
+  return compileFileToCModulesWithHostSyncCore(entry, options, {
+    pathSeparator: '/',
+    posixPath: {
+      basename: basenameNodePosixPath,
+      dirname: dirnameNodePosixPath,
+      extname: extnameNodePosixPath,
+      relative: relativeNodePosixPath
+    },
+    dirname: dirnameNodeCompilerHost,
+    extname: extnameNodeCompilerHost,
+    isAbsolutePath: isAbsoluteNodeCompilerHost,
+    joinPath: joinNodeCompilerHost,
+    normalizePath: normalizeNodeCompilerHost,
+    pathToFileUrl: pathToFileUrlNodeCompilerHost,
+    readFile: readFileNodeCompilerHost,
+    readFileSync: readFileSyncNodeCompilerHost,
+    relativePath: relativeNodeCompilerHost,
+    resolvePath: resolveNodeCompilerHost,
+    shortHash: shortHashNodeCompilerHost
+  })
+}
+
+export function compileFileToCModuleTextsSync(
+  entry: string,
+  options: CModuleCompileOptions = {}
+): any[] {
+  if (options.host !== null && typeof options.host !== 'undefined') {
+    return compileFileToCModuleTextsSyncCore(entry, options)
+  }
+
+  return compileFileToCModuleTextsWithHostSyncCore(entry, options, {
+    pathSeparator: '/',
+    posixPath: {
+      basename: basenameNodePosixPath,
+      dirname: dirnameNodePosixPath,
+      extname: extnameNodePosixPath,
+      relative: relativeNodePosixPath
+    },
+    dirname: dirnameNodeCompilerHost,
+    extname: extnameNodeCompilerHost,
+    isAbsolutePath: isAbsoluteNodeCompilerHost,
+    joinPath: joinNodeCompilerHost,
+    normalizePath: normalizeNodeCompilerHost,
+    pathToFileUrl: pathToFileUrlNodeCompilerHost,
+    readFile: readFileNodeCompilerHost,
+    readFileSync: readFileSyncNodeCompilerHost,
+    relativePath: relativeNodeCompilerHost,
+    resolvePath: resolveNodeCompilerHost,
+    shortHash: shortHashNodeCompilerHost
+  })
+}
+
 export async function compileGraphToIrModules(
   entry: string,
   options: CompileOptions = {}
@@ -135,14 +199,46 @@ function compileOptionsWithNodeHost(options: CompileOptions): CompileOptions {
 }
 
 function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleCompileOptions {
-  const host = options.host ?? createNodeCompilerHost()
+  if (options.host !== null && typeof options.host !== 'undefined') {
+    return {
+      target: options.target,
+      callMain: options.callMain,
+      budgets: options.budgets,
+      capabilities: options.capabilities,
+      host: options.host,
+      loopBackend: options.loopBackend,
+      profile: options.profile,
+      random: options.random,
+      tlsBackend: options.tlsBackend,
+      sourceRoot: options.sourceRoot
+    }
+  }
 
   return {
     target: options.target,
     callMain: options.callMain,
     budgets: options.budgets,
     capabilities: options.capabilities,
-    host,
+    host: {
+      pathSeparator: '/',
+      posixPath: {
+        basename: basenameNodePosixPath,
+        dirname: dirnameNodePosixPath,
+        extname: extnameNodePosixPath,
+        relative: relativeNodePosixPath
+      },
+      dirname: dirnameNodeCompilerHost,
+      extname: extnameNodeCompilerHost,
+      isAbsolutePath: isAbsoluteNodeCompilerHost,
+      joinPath: joinNodeCompilerHost,
+      normalizePath: normalizeNodeCompilerHost,
+      pathToFileUrl: pathToFileUrlNodeCompilerHost,
+      readFile: readFileNodeCompilerHost,
+      readFileSync: readFileSyncNodeCompilerHost,
+      relativePath: relativeNodeCompilerHost,
+      resolvePath: resolveNodeCompilerHost,
+      shortHash: shortHashNodeCompilerHost
+    },
     loopBackend: options.loopBackend,
     profile: options.profile,
     random: options.random,

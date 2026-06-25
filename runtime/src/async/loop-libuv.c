@@ -275,7 +275,7 @@ int inox_loop_has_work(const inox_loop* loop) {
 
   return loop != 0 &&
          (loop->microtask_count > 0 || loop->immediate_count > 0 || loop->timer_count > 0 ||
-          (backend != 0 && backend->request_count > 0));
+          (backend != 0 && (backend->request_count > 0 || uv_loop_alive(&backend->uv_loop))));
 }
 
 size_t inox_loop_pending_microtasks(const inox_loop* loop) {

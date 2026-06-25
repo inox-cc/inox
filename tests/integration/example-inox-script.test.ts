@@ -13,7 +13,10 @@ export function assertExampleInoxScriptConfigured(): void {
   const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as PackageJson
   const paths = exampleInoxPaths()
 
+  assert.match(packageJson.scripts?.['example:simple'] ?? '', /INOX_COMPILER_MODE=node/)
   assert.equal(packageJson.scripts?.['example:simple:inox'], 'node scripts/example-inox.ts')
+  assert.match(packageJson.scripts?.['example:http-server'] ?? '', /INOX_COMPILER_MODE=node/)
+  assert.match(packageJson.scripts?.['example:http-server:inox'] ?? '', /INOX_COMPILER_MODE=native/)
   assert.ok(paths.compiler.endsWith('/dist/inox'))
   assert.ok(paths.source.endsWith('/examples/simple/src/index.ts'))
   assert.ok(paths.generatedC.endsWith('/dist/examples/simple/build-inox/index.c'))

@@ -262,6 +262,7 @@ export function emitFunctionDeclaration(
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
   pushDeclarationLines(lines, bodyLines)
+  pushIndentedDeclarationLines(lines, emitEventLoopDrain(context))
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('inox_cleanup:')
@@ -972,7 +973,7 @@ function emitRuntimeParamPreludeForParam(
   }
 
   if (param.valueType === 'object') {
-    if (param.nullable === true) {
+    if (param.nullable === true || param.optional === true) {
       return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_OBJECT', context)
     }
 
@@ -983,7 +984,7 @@ function emitRuntimeParamPreludeForParam(
   if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
     const tag = cRuntimeValueTag(param.valueType)
 
-    if (param.nullable === true) {
+    if (param.nullable === true || param.optional === true) {
       return emitRuntimeNullableValueCheck(param.name, tag, context)
     }
 
@@ -992,7 +993,7 @@ function emitRuntimeParamPreludeForParam(
   }
 
   if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context)) {
-    if (param.nullable === true) {
+    if (param.nullable === true || param.optional === true) {
       return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context)
     }
 

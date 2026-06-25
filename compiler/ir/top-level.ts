@@ -137,21 +137,28 @@ export function collectIrFunctionNodeEntries(programs: IrFunctionNodeProgram[]):
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
     const program = programs[programIndex]
     const declarationsByName = collectFunctionDeclarationsByName(program.functionDeclarations)
-    const topLevelEntries = collectIrTopLevelNodeEntries(program)
 
-    for (let entryIndex = 0; entryIndex < topLevelEntries.length; entryIndex = entryIndex + 1) {
-      const item = topLevelEntries[entryIndex]
+    for (let itemIndex = 0; itemIndex < program.topLevelItems.length; itemIndex = itemIndex + 1) {
+      const item = program.topLevelItems[itemIndex]
 
-      if (item.kind === 'function') {
-        const name = nodeNameForTopLevelLookup(item.node)
-        const declaration = functionDeclarationForName(declarationsByName, name)
+      if (item.kind !== 'function') {
+        continue
+      }
 
-        if (declaration !== null && typeof declaration !== 'undefined') {
-          entries.push({
-            declaration,
-            node: item.node
-          })
-        }
+      const node = nodeAt(program.body, item.index)
+
+      if (node === null || typeof node === 'undefined') {
+        continue
+      }
+
+      const name = nodeNameForTopLevelLookup(node)
+      const declaration = functionDeclarationForName(declarationsByName, name)
+
+      if (declaration !== null && typeof declaration !== 'undefined') {
+        entries.push({
+          declaration,
+          node
+        })
       }
     }
   }
@@ -197,13 +204,18 @@ export function collectIrTopLevelNodeEntries(program: IrTopLevelProgram): IrTopL
 
 export function collectIrTopLevelNodes(program: IrTopLevelProgram, kind: IrTopLevelItemKind): NodeList {
   const nodes: NodeList = []
-  const entries = collectIrTopLevelNodeEntries(program)
 
-  for (let index = 0; index < entries.length; index = index + 1) {
-    const item = entries[index]
+  for (let index = 0; index < program.topLevelItems.length; index = index + 1) {
+    const item = program.topLevelItems[index]
 
-    if (item.kind === kind) {
-      nodes.push(item.node)
+    if (item.kind !== kind) {
+      continue
+    }
+
+    const node = nodeAt(program.body, item.index)
+
+    if (node !== null && typeof node !== 'undefined') {
+      nodes.push(node)
     }
   }
 

@@ -28,19 +28,25 @@ export async function assertCliEntryModuleMain(): Promise<void> {
     await mkdir(sourceDir, {
       recursive: true
     })
-    await writeFile(join(workspace, entry), "console.log('ok')\n")
+    await mkdir(join(sourceDir, 'lib'), {
+      recursive: true
+    })
+    await writeFile(join(workspace, entry), "import { value } from './lib/value.ts'\nconsole.log(value)\n")
+    await writeFile(join(sourceDir, 'lib/value.ts'), "export const value = 'ok'\n")
 
     const result = await runCommand(
-      'node',
-      [join(repoRoot, 'bin/cli.ts'), entry, '--emit', 'c', '--out-dir', outDir, '--entry'],
+      join(repoRoot, 'dist/inox'),
+      [entry, '--emit', 'c', '--out-dir', outDir, '--entry'],
       workspace
     )
 
-    assert.equal(result.code, 0, `CLI emit failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
+    assert.equal(result.code, 0, `driver module emit failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
 
     const generated = await readFile(join(outDir, 'src/index.c'), 'utf8')
+    const generatedDependency = await readFile(join(outDir, 'src/lib/value.c'), 'utf8')
 
     assert.match(generated, /int main\(void\)/)
+    assert.match(generatedDependency, /inox_mod_src_lib_value_ts_.*_init/)
   } finally {
     await rm(workspace, {
       recursive: true,

@@ -190,6 +190,7 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'osRuntimeMethod',
     'objectRuntimeMethod',
     'stringRuntimeMethod',
+    'timeRuntimeMethod',
     'timerRuntimeMethod',
     'numericCast',
     'returnType',

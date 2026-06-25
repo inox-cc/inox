@@ -18,6 +18,7 @@ export async function assertNativeInoxHelp(): Promise<void> {
   assert.match(result.stdout, /Usage:/)
   assert.match(result.stdout, /inox --help/)
   assert.match(result.stdout, /inox input\.ts \[output\.c\]/)
+  assert.match(result.stdout, /--out-dir generated --entry/)
   assert.match(result.stdout, /input\.c/)
   assert.doesNotMatch(result.stdout, /input\.ts\.c/)
 }
