@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:tls'
 import { fileURLToPath } from 'node:url'
@@ -15,7 +14,17 @@ export type CommandResult = {
 
 export const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 
-export { assert, compileSource, join, mkdir, mkdtemp, readFile, rm, tmpdir, writeFile }
+export { assert, compileSource, join, mkdir, readFile, rm, writeFile }
+
+export async function createTestTempDir(prefix: string): Promise<string> {
+  const root = join(repoRoot, 'dist/test-tmp')
+
+  await mkdir(root, {
+    recursive: true
+  })
+
+  return await mkdtemp(join(root, prefix))
+}
 
 export function compileRuntimeProgram(
   source: string,

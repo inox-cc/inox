@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,7 +13,13 @@ type CommandResult = {
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
 
 export async function assertCliEntryModuleMain(): Promise<void> {
-  const workspace = await mkdtemp(join(tmpdir(), 'inox-cli-entry-module-'))
+  const tempRoot = join(repoRoot, 'dist/test-tmp')
+
+  await mkdir(tempRoot, {
+    recursive: true
+  })
+
+  const workspace = await mkdtemp(join(tempRoot, 'inox-cli-entry-module-'))
   const sourceDir = join(workspace, 'src')
   const entry = 'src/index.ts'
   const outDir = join(workspace, 'generated')

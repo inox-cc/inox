@@ -9,11 +9,10 @@ import { compileFile } from '../../compiler/index.ts'
 import {
   compileRuntimeProgram,
   compileSource,
-  mkdtemp,
+  createTestTempDir,
   readFile,
   rm,
   runCommand,
-  tmpdir,
   writeFile
 } from './runtime-c.ts'
 
@@ -328,7 +327,7 @@ function parseExpectation(value: string): FeatureExpectation {
 }
 
 async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'inox-feature-'))
+  const dir = await createTestTempDir('inox-feature-')
   const emittedCPath = join(dir, `${sanitizePath(featureFile.name)}.c`)
   const exePath = join(dir, sanitizePath(featureFile.name))
   let keepArtifacts = false
@@ -525,7 +524,7 @@ async function compileFeatureTestWithBinary(
   featureFile: FeatureTestFile,
   compiler: Extract<FeatureTestCompiler, { kind: 'binary' }>
 ): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'inox-feature-compiler-'))
+  const dir = await createTestTempDir('inox-feature-compiler-')
   const outputPath = join(dir, `${sanitizePath(featureFile.name)}.c`)
 
   try {

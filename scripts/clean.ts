@@ -1,18 +1,15 @@
 import { lstat, readdir, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import { rootDir } from './lib/repo-root.ts'
 
 type CleanOptions = {
   dryRun: boolean
-  repoOnly: boolean
 }
 
 const repoOutputPaths = ['coverage', 'dist', 'tmp']
 const repoSkipDirs = new Set(['.git', 'node_modules', '.pnpm-store'])
 const repoTempFileNames = new Set(['.DS_Store'])
 const repoTempFileSuffixes = ['.tmp', '.log']
-const systemTempRoots = uniquePaths([tmpdir(), '/private/tmp'])
 
 const parsed = parseArgs(process.argv.slice(2))
 
@@ -44,14 +41,6 @@ async function clean(options: CleanOptions): Promise<number> {
 
   for (const file of await collectRepoTempFiles(rootDir)) {
     targets.set(file, relative(rootDir, file))
-  }
-
-  if (!options.repoOnly) {
-    for (const tempRoot of systemTempRoots) {
-      for (const path of await collectSystemTempPaths(tempRoot)) {
-        targets.set(path, path)
-      }
-    }
   }
 
   let count = 0
@@ -105,20 +94,6 @@ async function collectRepoTempFiles(dir: string): Promise<string[]> {
   return files
 }
 
-async function collectSystemTempPaths(root: string): Promise<string[]> {
-  let entries
-
-  try {
-    entries = await readdir(root, {
-      withFileTypes: true
-    })
-  } catch {
-    return []
-  }
-
-  return entries.filter((entry) => entry.name.startsWith('inox-')).map((entry) => join(root, entry.name))
-}
-
 function isRepoTempFile(name: string): boolean {
   return repoTempFileNames.has(name) || repoTempFileSuffixes.some((suffix) => name.endsWith(suffix))
 }
@@ -154,7 +129,6 @@ function parseArgs(args: string[]):
       error: string
     } {
   let dryRun = false
-  let repoOnly = false
 
   for (const arg of args) {
     if (arg === '--') {
@@ -166,8 +140,7 @@ function parseArgs(args: string[]):
         ok: true,
         help: true,
         options: {
-          dryRun,
-          repoOnly
+          dryRun
         }
       }
     }
@@ -175,7 +148,7 @@ function parseArgs(args: string[]):
     if (arg === '--dry-run' || arg === '-n') {
       dryRun = true
     } else if (arg === '--repo-only') {
-      repoOnly = true
+      continue
     } else {
       return {
         ok: false,
@@ -188,8 +161,7 @@ function parseArgs(args: string[]):
     ok: true,
     help: false,
     options: {
-      dryRun,
-      repoOnly
+      dryRun
     }
   }
 }
@@ -198,15 +170,9 @@ function usage(): string {
   return `Usage:
   pnpm run clean
   pnpm run clean -- --dry-run
-  pnpm run clean -- --repo-only
 
 Removes known inox build outputs and temporary files:
 - repo outputs: ${repoOutputPaths.join(', ')}
 - repo temp files: ${[...repoTempFileNames, ...repoTempFileSuffixes.map((suffix) => `*${suffix}`)].join(', ')}
-- system temp entries named inox-* under ${systemTempRoots.join(', ')}
 `
-}
-
-function uniquePaths(paths: string[]): string[] {
-  return [...new Set(paths.map((path) => resolve(path)))]
 }

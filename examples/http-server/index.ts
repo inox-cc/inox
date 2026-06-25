@@ -38,12 +38,7 @@ function main(): void {
   })
 
   server.listen(8080, '127.0.0.1', () => {
-    console.log('http server listening on http://127.0.0.1:8080')
-    console.log('try: curl http://127.0.0.1:8080/')
-    console.log('try: curl http://127.0.0.1:8080/health')
-    console.log('try: curl http://127.0.0.1:8080/time')
-    console.log('try: curl http://127.0.0.1:8080/index.html')
-    console.log('try: curl http://127.0.0.1:8080/hello.txt')
+    console.log('http://127.0.0.1:8080/')
     console.log('files are served from dist/http-server/out/static; parent paths return 404')
   })
 }

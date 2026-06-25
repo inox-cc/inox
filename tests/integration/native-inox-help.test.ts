@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -24,12 +23,19 @@ export async function assertNativeInoxHelp(): Promise<void> {
 }
 
 export async function assertNativeInoxDefaultOutput(): Promise<void> {
-  const workspace = await mkdtemp(join(tmpdir(), 'inox-native-default-output-'))
+  const workspace = join(rootDir, 'dist/test-tmp/native-inox-default-output')
   const input = join(workspace, 'input.ts')
   const output = join(workspace, 'input.c')
   const oldOutput = join(workspace, 'input.ts.c')
 
   try {
+    await rm(workspace, {
+      recursive: true,
+      force: true
+    })
+    await mkdir(workspace, {
+      recursive: true
+    })
     await writeFile(input, "console.log('ok')\n")
 
     const result = await runCommand(join(rootDir, 'dist/inox'), [input], workspace)

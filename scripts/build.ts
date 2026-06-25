@@ -1,5 +1,4 @@
 import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { compileMemoryPackageToCModules } from '../compiler/index.ts'
 import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
@@ -18,12 +17,13 @@ type SourceFile = {
 
 type GeneratedFileMap = Map<string, string>
 
-const defaultGeneratedDir = join(rootDir, 'dist/compiler')
+const compilerDistDir = join(rootDir, 'dist/compiler')
+const defaultGeneratedDir = join(compilerDistDir, 'source')
 const defaultOut = join(rootDir, 'dist/inox')
-const cmakeRootDir = join(tmpdir(), 'inox-build-cmake')
-const cmakeSourceDir = join(cmakeRootDir, 'source')
-const cmakeBuildDir = join(cmakeRootDir, 'build')
-const cmakeBinDir = join(cmakeRootDir, 'bin')
+const legacyCmakeRootDir = join(rootDir, 'dist/build-cmake')
+const cmakeSourceDir = compilerDistDir
+const cmakeBuildDir = join(compilerDistDir, 'build')
+const cmakeBinDir = join(compilerDistDir, 'bin')
 const compilerSourceRoot = '/project/compiler'
 const buildLoopBackend = 'libuv'
 const buildTlsBackend = 'openssl'
@@ -45,6 +45,15 @@ if (parsed.help) {
 await buildSelfHostedCompiler(parsed.options)
 
 async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
+  await rm(compilerDistDir, {
+    recursive: true,
+    force: true
+  })
+  await rm(legacyCmakeRootDir, {
+    recursive: true,
+    force: true
+  })
+
   const compilerFiles = await readCompilerSources()
   const driverPath = `${compilerSourceRoot}/selfhost-build-driver.ts`
 
@@ -148,16 +157,15 @@ function missingCompilerModuleEntries(compilerFiles: SourceFile[], generatedFile
 }
 
 async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number }> {
-  await rm(cmakeSourceDir, {
-    recursive: true,
-    force: true
-  })
   await rm(cmakeBuildDir, {
     recursive: true,
     force: true
   })
   await rm(cmakeBinDir, {
     recursive: true,
+    force: true
+  })
+  await rm(join(cmakeSourceDir, 'CMakeLists.txt'), {
     force: true
   })
   await mkdir(cmakeSourceDir, {
@@ -374,7 +382,7 @@ function usage(): string {
   return `Usage:
   pnpm run build
   pnpm run build -- --out dist/inox
-  pnpm run build -- --generated-dir dist/compiler
+  pnpm run build -- --generated-dir dist/compiler/source
 
 Builds a self-hosted compiler binary:
 - emits generated C modules to ${relative(rootDir, defaultGeneratedDir)}
