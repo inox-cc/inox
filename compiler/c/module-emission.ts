@@ -78,7 +78,7 @@ import {
   shouldEmitCleanupLabel
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
-import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
+import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
@@ -1061,6 +1061,7 @@ function createCModuleBaseContext(
   }
 
   const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots, ir.body)
+  context.processEntryPath = plan.record.path
 
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
@@ -1689,7 +1690,7 @@ function emitCModuleMainFunction(
   }
 
   if (context.processRuntime) {
-    lines.push('  inox_process_init(argc, argv);')
+    lines.push(`  inox_process_init_with_entry(argc, argv, ${cStringLiteral(plan.record.path)});`)
   }
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnValueDeclarations(context))

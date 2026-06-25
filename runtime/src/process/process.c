@@ -7,6 +7,7 @@
 
 static int inox_process_argc = 0;
 static char** inox_process_argv_values = 0;
+static const char* inox_process_entry_path = 0;
 static int inox_process_exit_code = 0;
 
 static inox_status inox_process_string(inox_allocator* allocator, const char* value, inox_value* out) {
@@ -16,6 +17,43 @@ static inox_status inox_process_string(inox_allocator* allocator, const char* va
 void inox_process_init(int argc, char** argv) {
   inox_process_argc = argc;
   inox_process_argv_values = argv;
+  inox_process_entry_path = 0;
+}
+
+void inox_process_init_with_entry(int argc, char** argv, const char* entry_path) {
+  inox_process_argc = argc;
+  inox_process_argv_values = argv;
+  inox_process_entry_path = entry_path;
+}
+
+static int inox_process_argv_native_index(int index) {
+  if (inox_process_entry_path != 0 && index > 1) {
+    return index - 1;
+  }
+
+  return index;
+}
+
+static const char* inox_process_argv_value_at(int index) {
+  if (index < 0) {
+    return 0;
+  }
+
+  if (inox_process_entry_path != 0 && index == 1) {
+    return inox_process_entry_path;
+  }
+
+  if (inox_process_argv_values == 0) {
+    return 0;
+  }
+
+  int native_index = inox_process_argv_native_index(index);
+
+  if (native_index < 0 || native_index >= inox_process_argc || inox_process_argv_values[native_index] == 0) {
+    return 0;
+  }
+
+  return inox_process_argv_values[native_index];
 }
 
 inox_status inox_process_arch(inox_allocator* allocator, inox_value* out) {
@@ -43,16 +81,20 @@ inox_status inox_process_argv(inox_allocator* allocator, int index, inox_value* 
     return INOX_ERR_TYPE;
   }
 
-  if (index < 0 || index >= inox_process_argc || inox_process_argv_values == 0 || inox_process_argv_values[index] == 0) {
+  const char* value = inox_process_argv_value_at(index);
+
+  if (value == 0) {
     return inox_string_from_literal(allocator, "", 0, out);
   }
-
-  const char* value = inox_process_argv_values[index];
 
   return inox_string_from_literal(allocator, value, strlen(value), out);
 }
 
 int inox_process_argv_length(void) {
+  if (inox_process_entry_path != 0) {
+    return inox_process_argc + 1;
+  }
+
   return inox_process_argc;
 }
 

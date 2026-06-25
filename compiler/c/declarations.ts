@@ -39,7 +39,7 @@ import {
   registerOwnedValue,
   shouldEmitCleanupLabel
 } from './context.ts'
-import { emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
+import { cStringLiteral, emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitRuntimeNullableValueCheck } from './runtime-values.ts'
 import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
 import {
@@ -859,7 +859,11 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
   if (context.processRuntime) {
-    lines.push('  inox_process_init(argc, argv);')
+    if (baseContext.processEntryPath !== null) {
+      lines.push(`  inox_process_init_with_entry(argc, argv, ${cStringLiteral(baseContext.processEntryPath)});`)
+    } else {
+      lines.push('  inox_process_init(argc, argv);')
+    }
   }
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))

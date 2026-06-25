@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CompileError, formatDiagnostics } from '../compiler/diagnostics.ts'
-import { compileFile, compileFileToCModules } from '../compiler/index.ts'
+import { compileFile, compileFileToCModules } from '../compiler/compiler.ts'
 import type {
   CompileOptions,
   IrRuntimeRequirement,

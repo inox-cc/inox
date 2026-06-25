@@ -1039,6 +1039,7 @@ export function emitCUnit(
   irPrograms: IrProgram[],
   options: CEmitOptions,
   entryIrPrograms: IrProgram[],
+  entryPath: string | null,
   deps: CUnitDependencies
 ): string {
   const diagnostics: Diagnostic[] = []
@@ -1064,6 +1065,7 @@ export function emitCUnit(
     jsGlobalRoots,
     topLevelNodes
   )
+  baseContext.processEntryPath = entryPath
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
   baseContext.dgramImportNames = collectRuntimeImportNames(

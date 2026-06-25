@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createServer } from 'node:tls'
 import { fileURLToPath } from 'node:url'
-import { compileSource } from '../../compiler/index.ts'
+import { compileSource } from '../../compiler/compiler.ts'
 
 export type CommandResult = {
   code: number

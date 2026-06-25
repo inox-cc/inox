@@ -176,6 +176,7 @@ type CFunctionContext = {
   ownedCryptoHmacs: string[]
   ownedPromises: string[]
   ownedValues: string[]
+  processEntryPath: string | null
   processRuntime: boolean
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: Map<string, CPromiseChainWrapper>

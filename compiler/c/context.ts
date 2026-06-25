@@ -170,6 +170,7 @@ export type CEmitContext = {
   netImportNames: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
+  processEntryPath: string | null
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: CPromiseChainWrapperMap
   processRuntime: boolean
@@ -392,6 +393,7 @@ export function createFunctionContext(
     netImportNames: baseContext.netImportNames,
     nextId: baseContext.nextId,
     nullableLoweringDependencies: baseContext.nullableLoweringDependencies,
+    processEntryPath: baseContext.processEntryPath,
     processRuntime: baseContext.processRuntime,
     promiseChainArrowWrappers: baseContext.promiseChainArrowWrappers,
     promiseChainWrappers: baseContext.promiseChainWrappers,

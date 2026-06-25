@@ -5,7 +5,7 @@ import path, { basename, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { CompileError, formatDiagnostics } from '../../compiler/diagnostics.ts'
-import { compileFile } from '../../compiler/index.ts'
+import { compileFile } from '../../compiler/compiler.ts'
 import {
   compileRuntimeProgram,
   compileSource,

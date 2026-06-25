@@ -6,6 +6,7 @@
 #include "inox/value.h"
 
 void inox_process_init(int argc, char** argv);
+void inox_process_init_with_entry(int argc, char** argv, const char* entry_path);
 inox_status inox_process_arch(inox_allocator* allocator, inox_value* out);
 inox_status inox_process_argv(inox_allocator* allocator, int index, inox_value* out);
 int inox_process_argv_length(void);

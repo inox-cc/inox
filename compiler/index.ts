@@ -1,152 +1,74 @@
-import type { CModuleCompileOptions, CModuleCompileResult, GraphIrCompileResult } from './core.ts'
-import {
-  compileFile as compileFileCore,
-  compileFileSync as compileFileSyncCore,
-  compileFileWithHostSync as compileFileWithHostSyncCore,
-  compileFileToCModules as compileFileToCModulesCore,
-  compileGraphToIrModules as compileGraphToIrModulesCore,
-  compileGraphToIrModulesSync as compileGraphToIrModulesSyncCore,
-  compileGraphToIrModulesWithHostSync as compileGraphToIrModulesWithHostSyncCore
-} from './core.ts'
-import {
-  basenameNodePosixPath,
-  createNodeCompilerHost,
-  dirnameNodeCompilerHost,
-  dirnameNodePosixPath,
-  extnameNodeCompilerHost,
-  extnameNodePosixPath,
-  isAbsoluteNodeCompilerHost,
-  joinNodeCompilerHost,
-  normalizeNodeCompilerHost,
-  pathToFileUrlNodeCompilerHost,
-  readFileNodeCompilerHost,
-  readFileSyncNodeCompilerHost,
-  relativeNodeCompilerHost,
-  relativeNodePosixPath,
-  resolveNodeCompilerHost,
-  shortHashNodeCompilerHost
-} from './node-host.ts'
-import type { CompileOptions, FileCompileResult } from './types.ts'
+import fs from 'node:fs'
+import process from 'node:process'
+import { compileFileSync } from './compiler.ts'
+import { formatDiagnostics } from './diagnostics.ts'
+import type { Diagnostic } from './types.ts'
 
-export {
-  compileMemoryPackageToCModules,
-  compileMemoryPackageToIrModules,
-  compileSource,
-  compileSourceToIr,
-  emitTargetFromIr,
-  runCStaticChecks
-} from './core.ts'
-
-export type {
-  CModuleCompileOptions,
-  CModuleCompileResult,
-  GraphIrCompileResult,
-  MemoryCModuleCompileOptions,
-  MemoryCompileOptions,
-  SourceIrCompileResult
-} from './core.ts'
-
-export async function compileFile(entry: string, options: CompileOptions = {}): Promise<FileCompileResult> {
-  return compileFileCore(entry, compileOptionsWithNodeHost(options))
+type DiagnosticError = {
+  diagnostics: Diagnostic[]
 }
 
-export function compileFileSync(entry: string, options: CompileOptions = {}): FileCompileResult {
-  if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileFileSyncCore(entry, options)
+function defaultOutputPath(input: string): string {
+  const slash = input.lastIndexOf('/')
+  const backslash = input.lastIndexOf('\\')
+  const separator = slash > backslash ? slash : backslash
+  const dot = input.lastIndexOf('.')
+
+  if (dot > separator) {
+    return input.slice(0, dot) + '.c'
   }
 
-  return compileFileWithHostSyncCore(entry, options, {
-    pathSeparator: '/',
-    posixPath: {
-      basename: basenameNodePosixPath,
-      dirname: dirnameNodePosixPath,
-      extname: extnameNodePosixPath,
-      relative: relativeNodePosixPath
-    },
-    dirname: dirnameNodeCompilerHost,
-    extname: extnameNodeCompilerHost,
-    isAbsolutePath: isAbsoluteNodeCompilerHost,
-    joinPath: joinNodeCompilerHost,
-    normalizePath: normalizeNodeCompilerHost,
-    pathToFileUrl: pathToFileUrlNodeCompilerHost,
-    readFile: readFileNodeCompilerHost,
-    readFileSync: readFileSyncNodeCompilerHost,
-    relativePath: relativeNodeCompilerHost,
-    resolvePath: resolveNodeCompilerHost,
-    shortHash: shortHashNodeCompilerHost
-  })
+  return input + '.c'
 }
 
-export async function compileFileToCModules(
-  entry: string,
-  options: CModuleCompileOptions = {}
-): Promise<CModuleCompileResult> {
-  return compileFileToCModulesCore(entry, cModuleOptionsWithNodeHost(options))
+function usage(): string {
+  return 'Usage:\n  inox --help\n  inox input.ts [output.c]\n\nCompiles a TypeScript entry file to C source.\nIf output.c is omitted, inox writes input.c.'
 }
 
-export async function compileGraphToIrModules(
-  entry: string,
-  options: CompileOptions = {}
-): Promise<GraphIrCompileResult> {
-  return compileGraphToIrModulesCore(entry, compileOptionsWithNodeHost(options))
+function isHelpArgument(value: string): boolean {
+  return value === '--help' || value === '-h'
 }
 
-export function compileGraphToIrModulesSync(entry: string, options: CompileOptions = {}): GraphIrCompileResult {
-  if (options.host !== null && typeof options.host !== 'undefined') {
-    return compileGraphToIrModulesSyncCore(entry, options)
+function errorDiagnostics(error: unknown): Diagnostic[] | null {
+  if (error === null || typeof error === 'undefined' || typeof error !== 'object') {
+    return null
   }
 
-  return compileGraphToIrModulesWithHostSyncCore(entry, options, {
-    pathSeparator: '/',
-    posixPath: {
-      basename: basenameNodePosixPath,
-      dirname: dirnameNodePosixPath,
-      extname: extnameNodePosixPath,
-      relative: relativeNodePosixPath
-    },
-    dirname: dirnameNodeCompilerHost,
-    extname: extnameNodeCompilerHost,
-    isAbsolutePath: isAbsoluteNodeCompilerHost,
-    joinPath: joinNodeCompilerHost,
-    normalizePath: normalizeNodeCompilerHost,
-    pathToFileUrl: pathToFileUrlNodeCompilerHost,
-    readFile: readFileNodeCompilerHost,
-    readFileSync: readFileSyncNodeCompilerHost,
-    relativePath: relativeNodeCompilerHost,
-    resolvePath: resolveNodeCompilerHost,
-    shortHash: shortHashNodeCompilerHost
-  })
+  const diagnostics = (error as DiagnosticError).diagnostics
+
+  if (Array.isArray(diagnostics)) {
+    return diagnostics
+  }
+
+  return null
 }
 
-function compileOptionsWithNodeHost(options: CompileOptions): CompileOptions {
-  const host = options.host ?? createNodeCompilerHost()
+try {
+  if (process.argv.length < 3) {
+    console.error(usage())
+    process.exitCode = 1
+  } else if (isHelpArgument(process.argv[2])) {
+    console.log(usage())
+  } else {
+    const input = process.argv[2]
+    let output = defaultOutputPath(input)
 
-  return {
-    target: options.target,
-    callMain: options.callMain,
-    budgets: options.budgets,
-    capabilities: options.capabilities,
-    host,
-    loopBackend: options.loopBackend,
-    profile: options.profile,
-    random: options.random,
-    tlsBackend: options.tlsBackend
+    if (process.argv.length > 3) {
+      output = process.argv[3]
+    }
+
+    const result = compileFileSync(input, { target: 'c' })
+
+    fs.writeFileSync(output, `${result.code}\n`)
+    console.log(output)
   }
-}
+} catch (error) {
+  const diagnostics = errorDiagnostics(error)
 
-function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleCompileOptions {
-  const host = options.host ?? createNodeCompilerHost()
-
-  return {
-    target: options.target,
-    callMain: options.callMain,
-    budgets: options.budgets,
-    capabilities: options.capabilities,
-    host,
-    loopBackend: options.loopBackend,
-    profile: options.profile,
-    random: options.random,
-    tlsBackend: options.tlsBackend,
-    sourceRoot: options.sourceRoot
+  if (diagnostics !== null && typeof diagnostics !== 'undefined') {
+    console.error(formatDiagnostics(diagnostics))
+  } else {
+    console.error('INOX BUILD ERROR')
   }
+  process.exitCode = 1
 }

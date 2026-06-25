@@ -1,6 +1,6 @@
 import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
-import { compileMemoryPackageToCModules } from '../compiler/index.ts'
+import { compileMemoryPackageToCModules } from '../compiler/compiler.ts'
 import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
@@ -55,12 +55,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   })
 
   const compilerFiles = await readCompilerSources()
-  const driverPath = `${compilerSourceRoot}/selfhost-build-driver.ts`
-
-  compilerFiles.push({
-    path: driverPath,
-    source: selfHostedDriverSource()
-  })
+  const driverPath = `${compilerSourceRoot}/index.ts`
 
   console.log('emitting self-hosted compiler C modules')
   const modules = await compileMemoryPackageToCModules(driverPath, compilerFiles, {
@@ -247,62 +242,6 @@ async function readCompilerSourcePaths(dir: string): Promise<string[]> {
   }
 
   return paths
-}
-
-function selfHostedDriverSource(): string {
-  return `import fs from 'node:fs'
-import process from 'node:process'
-import { compileFileSync } from './index.ts'
-import { formatDiagnostics } from './diagnostics.ts'
-function defaultOutputPath(input: string): string {
-  const slash = input.lastIndexOf('/')
-  const backslash = input.lastIndexOf('\\\\')
-  const separator = slash > backslash ? slash : backslash
-  const dot = input.lastIndexOf('.')
-
-  if (dot > separator) {
-    return input.slice(0, dot) + '.c'
-  }
-
-  return input + '.c'
-}
-
-function usage(): string {
-  return 'Usage:\\n  inox --help\\n  inox input.ts [output.c]\\n\\nCompiles a TypeScript entry file to C source.\\nIf output.c is omitted, inox writes input.c.'
-}
-
-function isHelpArgument(value: string): boolean {
-  return value === '--help' || value === '-h'
-}
-
-try {
-  if (process.argv.length < 2) {
-    console.error(usage())
-    process.exitCode = 1
-  } else if (isHelpArgument(process.argv[1])) {
-    console.log(usage())
-  } else {
-    const input = process.argv[1]
-    let output = defaultOutputPath(input)
-
-    if (process.argv.length > 2) {
-      output = process.argv[2]
-    }
-
-    const result = compileFileSync(input, { target: 'c' })
-
-    fs.writeFileSync(output, result.code + '\\n')
-    console.log(output)
-  }
-} catch (error) {
-  if (error !== null && typeof error !== 'undefined' && error.diagnostics !== null && typeof error.diagnostics !== 'undefined') {
-    console.error(formatDiagnostics(error.diagnostics))
-  } else {
-    console.error('INOX BUILD ERROR')
-  }
-  process.exitCode = 1
-}
-`
 }
 
 function parseArgs(args: string[]):

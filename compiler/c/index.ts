@@ -1365,7 +1365,7 @@ const cModuleEmissionDependencies = {
 export function emitCFromIr(ir: IrProgram, options: CEmitOptions = {}): string {
   const irPrograms = [ir]
   const entryIrPrograms = [ir]
-  const unit = emitCUnit(irPrograms, options, entryIrPrograms)
+  const unit = emitCUnit(irPrograms, options, entryIrPrograms, null)
 
   return formatGeneratedC(unit, 'inox.generated.c')
 }
@@ -1400,7 +1400,7 @@ export function emitCBundleFromIrModules(
 
   const entryIrPrograms = collectIrPrograms(entryModules)
 
-  const unit = emitCUnit(irPrograms, options, entryIrPrograms)
+  const unit = emitCUnit(irPrograms, options, entryIrPrograms, entry)
   const code = formatGeneratedC(unit, 'inox.bundle.c')
 
   return code
@@ -1428,8 +1428,13 @@ function emitCModuleSourceForGraph(
   return emitCModuleSourceWithDependencies(plan, plans, emitOptions, diagnostics, cModuleEmissionDependencies)
 }
 
-function emitCUnit(irPrograms: IrProgram[], options: CEmitOptions, entryIrPrograms: IrProgram[]): string {
-  return emitCUnitWithDependencies(irPrograms, options, entryIrPrograms, cUnitDependencies)
+function emitCUnit(
+  irPrograms: IrProgram[],
+  options: CEmitOptions,
+  entryIrPrograms: IrProgram[],
+  entryPath: string | null
+): string {
+  return emitCUnitWithDependencies(irPrograms, options, entryIrPrograms, entryPath, cUnitDependencies)
 }
 
 function createThrowingFunctionInfo(
@@ -1631,6 +1636,7 @@ function createBaseContext(
     netHandlers: new Map(),
     netImportNames: new Set(),
     runtimeFunctionParams: new Map(),
+    processEntryPath: null,
     externalEventLoopFunctions: new Set(),
     throwingFunctions: throwing.throwingFunctions,
     unhandledRejectionFlag,
