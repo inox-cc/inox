@@ -22,9 +22,9 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:features",
     "test:node": "pnpm run test:features --compiler node",
-    "test:inox": "pnpm run test:features --compiler dist/inox",
-    "test:features": "node tests/all.test.ts",
-    "test:smoke": "node tests/all.test.ts tests/smoke",
+    "test:inox": "node scripts/test-log.ts dist/test-inox.log -- node tests/all.test.ts --compiler dist/inox",
+    "test:features": "node scripts/test-log.ts dist/test.log -- node tests/all.test.ts",
+    "test:smoke": "node scripts/test-log.ts dist/test.log -- node tests/all.test.ts tests/smoke",
     "check": "pnpm run typecheck && pnpm run test:features"
   },
   "engines": {
