@@ -63,13 +63,33 @@ if (process.argv[2] === workerArg) {
 }
 
 function featureTestParallelism(compiler: FeatureTestCompiler): number {
+  const configured = configuredFeatureTestParallelism()
+
+  if (configured !== null) {
+    return configured
+  }
+
   const cpuCount = availableParallelism()
 
   if (compiler.kind === 'binary') {
-    return Math.max(1, cpuCount)
+    return Math.max(1, Math.ceil(cpuCount / 2))
   }
 
   return cpuCount
+}
+
+function configuredFeatureTestParallelism(): number | null {
+  const raw = process.env.INOX_TEST_JOBS
+
+  if (raw === null || typeof raw === 'undefined' || raw === '') {
+    return null
+  }
+
+  const value = Number(raw)
+
+  assert.ok(Number.isInteger(value) && value > 0, 'INOX_TEST_JOBS must be a positive integer')
+
+  return value
 }
 
 function shouldRunIntegrationTests(options: RunnerOptions): boolean {
