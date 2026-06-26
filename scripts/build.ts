@@ -1,13 +1,17 @@
 import { chmod, copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, resolve } from 'node:path'
-import { compileMemoryPackageToCModules } from '../compiler/compiler.ts'
+import { compileMemoryPackageToCModules, compileMemoryPackageToIrModules } from '../compiler/compiler.ts'
 import {
   collectIrFunctionEffectsWithExternalEffects,
   collectIrStoredFunctionEffects,
   mergeIrFunctionEffects
 } from '../compiler/ir.ts'
+import { tokenize } from '../compiler/lexer.ts'
+import { createModuleDeclarationProgram, emitModuleDeclarationContract } from '../compiler/modules/declarations.ts'
+import { emitModuleFunctionEffectsContract } from '../compiler/modules/function-effects.ts'
+import { parse } from '../compiler/parser.ts'
 import { isRuntimeBuiltinImportSource } from '../compiler/runtime-builtins.ts'
-import type { AnyNode, IrFunctionEffect, IrProgram, ModuleDeclarationImport } from '../compiler/types.ts'
+import type { AnyNode, IrFunctionEffect, IrProgram, ModuleDeclarationImport, ProgramNode } from '../compiler/types.ts'
 import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
@@ -25,6 +29,7 @@ type SourceFile = {
 type DeclarationContract = {
   sourcePath: string
   declarationPath: string
+  functionEffectsPath: string
   source: string
   functionEffects: IrFunctionEffect[]
 }
@@ -40,9 +45,16 @@ type GeneratedFileMap = Map<string, string>
 type FunctionEffectMap = Map<string, IrFunctionEffect[]>
 type DeclarationEffectModule = {
   path: string
+  declarationProgram?: ProgramNode | null
   ir: IrProgram | null
   imports: AnyNode[]
   reexports: AnyNode[]
+  externalFunctionEffects?: IrFunctionEffect[]
+}
+type CompilerSourceModule = {
+  file: SourceFile
+  ast: ProgramNode
+  dependencies: string[]
 }
 
 const compilerDistDir = join(rootDir, 'dist/compiler')
@@ -91,6 +103,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
 
   console.log('emitting self-hosted compiler C modules')
   await emitCompilerModules(compilerFiles, driverPath, declarationContracts, generatedFiles)
+  addFunctionEffectSidecarFiles(generatedFiles, declarationContracts)
 
   await rm(options.generatedDir, {
     recursive: true,
@@ -144,37 +157,11 @@ async function emitCompilerDeclarationContracts(
   driverPath: string,
   compilerFiles: SourceFile[]
 ): Promise<DeclarationContract[]> {
-  const generatedFiles: GeneratedFileMap = new Map()
-  const functionEffects: FunctionEffectMap = new Map()
-  const modules = await compileMemoryPackageToCModules(driverPath, compilerFiles, {
-    loopBackend: buildLoopBackend,
-    sourceRoot: compilerSourceRoot,
-    target: 'c',
-    tlsBackend: buildTlsBackend
-  })
+  const modules = compilerSourceModules(compilerFiles)
+  const contracts = seedCompilerDeclarationContracts(modules)
+  const orderedFiles = orderCompilerFilesByDependencies(driverPath, modules)
 
-  addGeneratedFiles(generatedFiles, modules.files)
-  addDeclarationFunctionEffects(functionEffects, modules.graph.modules)
-
-  const missingEntries = missingCompilerModuleEntries(compilerFiles, generatedFiles)
-
-  for (const entry of missingEntries) {
-    console.log(`emitting compiler declaration ${entry.slice('/project/'.length)}`)
-    const extraModules = await compileMemoryPackageToCModules(entry, compilerFiles, {
-      callMain: false,
-      loopBackend: buildLoopBackend,
-      sourceRoot: compilerSourceRoot,
-      target: 'c',
-      tlsBackend: buildTlsBackend
-    })
-
-    addGeneratedFiles(generatedFiles, extraModules.files)
-    addDeclarationFunctionEffects(functionEffects, extraModules.graph.modules)
-  }
-
-  const contracts = declarationContractsFromGeneratedFiles(compilerFiles, generatedFiles, functionEffects)
-
-  return await refineCompilerDeclarationContracts(compilerFiles, contracts)
+  return await refineCompilerDeclarationContracts(orderedFiles, contracts)
 }
 
 async function refineCompilerDeclarationContracts(
@@ -182,19 +169,28 @@ async function refineCompilerDeclarationContracts(
   contracts: DeclarationContract[]
 ): Promise<DeclarationContract[]> {
   const refined = copyDeclarationContracts(contracts)
+  const compiledModules: DeclarationEffectModule[] = []
 
   for (const file of compilerFiles) {
     console.log(`refining compiler declaration ${file.path.slice('/project/'.length)}`)
-    const modules = await compileCompilerModule(file, false, refined)
-    const declarationPath = generatedPathForSourcePath(file.path, '.d.ts')
-    const source = generatedFileSource(modules.files, declarationPath)
+    const modules = await compileCompilerModuleIr(file, refined)
+    const module = compiledDeclarationModule(modules.graph.modules, file.path)
+    const declarationProgram = module.declarationProgram
 
-    if (source === null) {
-      throw new Error(`missing refined declaration contract ${declarationPath}`)
+    if (declarationProgram === null || typeof declarationProgram === 'undefined') {
+      throw new Error(`missing refined declaration program ${file.path}`)
     }
 
+    const source = emitModuleDeclarationContract(declarationProgram)
+
     replaceDeclarationContractSource(refined, file.path, source)
+    compiledModules.push(module)
   }
+
+  const functionEffects: FunctionEffectMap = new Map()
+
+  addDeclarationFunctionEffects(functionEffects, compiledModules)
+  replaceDeclarationContractFunctionEffects(refined, functionEffects)
 
   return refined
 }
@@ -233,30 +229,199 @@ async function compileCompilerModule(
   })
 }
 
-function declarationContractsFromGeneratedFiles(
-  compilerFiles: SourceFile[],
-  generatedFiles: GeneratedFileMap,
-  functionEffects: FunctionEffectMap
-): DeclarationContract[] {
+async function compileCompilerModuleIr(
+  file: SourceFile,
+  declarationContracts: DeclarationContract[]
+): Promise<{
+  graph: {
+    modules: DeclarationEffectModule[]
+  }
+}> {
+  const contractFiles = declarationContractSourceFiles(declarationContracts, file.path)
+  const declarationImports = declarationImportOptions(declarationContracts, file.path)
+
+  return await compileMemoryPackageToIrModules(file.path, [file, ...contractFiles], {
+    declarationImports,
+    loopBackend: buildLoopBackend,
+    target: 'c',
+    tlsBackend: buildTlsBackend
+  })
+}
+
+function seedCompilerDeclarationContracts(modules: CompilerSourceModule[]): DeclarationContract[] {
   const contracts: DeclarationContract[] = []
 
-  for (const file of compilerFiles) {
-    const generatedPath = generatedPathForSourcePath(file.path, '.d.ts')
-    const source = generatedFiles.get(generatedPath)
-
-    if (typeof source === 'undefined') {
-      throw new Error(`missing declaration contract ${generatedPath}`)
-    }
+  for (const module of modules) {
+    const program = seedCompilerDeclarationProgram(module.ast)
 
     contracts.push({
-      sourcePath: file.path,
-      declarationPath: declarationPathForSourcePath(file.path),
-      source,
-      functionEffects: copyFunctionEffects(functionEffects.get(file.path) ?? [])
+      sourcePath: module.file.path,
+      declarationPath: declarationPathForSourcePath(module.file.path),
+      functionEffectsPath: functionEffectsPathForSourcePath(module.file.path),
+      source: emitModuleDeclarationContract(program),
+      functionEffects: []
     })
   }
 
   return contracts
+}
+
+function seedCompilerDeclarationProgram(ast: ProgramNode): ProgramNode {
+  const declaration = createModuleDeclarationProgram(ast)
+  const body: AnyNode[] = []
+
+  for (const item of ast.body) {
+    if (item.type === 'ImportDeclaration' && item.typeOnly === true) {
+      body.push(item)
+    }
+  }
+
+  for (const item of declaration.body) {
+    body.push(item)
+  }
+
+  return {
+    type: 'Program',
+    body
+  }
+}
+
+function compilerSourceModules(compilerFiles: SourceFile[]): CompilerSourceModule[] {
+  const sourcePaths = new Set<string>()
+
+  for (const file of compilerFiles) {
+    sourcePaths.add(file.path)
+  }
+
+  const modules: CompilerSourceModule[] = []
+
+  for (const file of compilerFiles) {
+    const ast = parse(
+      tokenize(file.source, {
+        file: file.path
+      })
+    )
+
+    modules.push({
+      file,
+      ast,
+      dependencies: compilerSourceModuleDependencies(file.path, ast, sourcePaths)
+    })
+  }
+
+  return modules
+}
+
+function compilerSourceModuleDependencies(path: string, ast: ProgramNode, sourcePaths: Set<string>): string[] {
+  const dependencies: Set<string> = new Set()
+
+  for (const item of ast.body) {
+    if (item.type !== 'ImportDeclaration' && item.type !== 'ExportDeclaration') {
+      continue
+    }
+
+    if (isRuntimeBuiltinImportSource(item.source)) {
+      continue
+    }
+
+    if (!item.source.startsWith('.')) {
+      continue
+    }
+
+    const dependency = resolveCompilerSourceImport(path, item.source, sourcePaths)
+
+    if (dependency !== null) {
+      dependencies.add(dependency)
+    }
+  }
+
+  const ordered = Array.from(dependencies)
+
+  ordered.sort()
+
+  return ordered
+}
+
+function resolveCompilerSourceImport(fromPath: string, specifier: string, sourcePaths: Set<string>): string | null {
+  const basePath = posix.normalize(posix.join(posix.dirname(fromPath), specifier))
+  const candidates: string[] = []
+
+  if (posix.extname(basePath) === '') {
+    candidates.push(basePath)
+    candidates.push(`${basePath}.ts`)
+    candidates.push(`${basePath}.js`)
+
+    for (const extension of ['', '.ts', '.js']) {
+      candidates.push(posix.join(basePath, `index${extension}`))
+    }
+  } else {
+    candidates.push(basePath)
+  }
+
+  for (const candidate of candidates) {
+    if (sourcePaths.has(candidate)) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function orderCompilerFilesByDependencies(driverPath: string, modules: CompilerSourceModule[]): SourceFile[] {
+  const byPath = compilerSourceModulesByPath(modules)
+  const visited: Set<string> = new Set()
+  const visiting: Set<string> = new Set()
+  const ordered: SourceFile[] = []
+
+  visitCompilerSourceModule(driverPath, byPath, visited, visiting, ordered)
+
+  for (const module of modules) {
+    visitCompilerSourceModule(module.file.path, byPath, visited, visiting, ordered)
+  }
+
+  return ordered
+}
+
+function compilerSourceModulesByPath(modules: CompilerSourceModule[]): Map<string, CompilerSourceModule> {
+  const byPath: Map<string, CompilerSourceModule> = new Map()
+
+  for (const module of modules) {
+    byPath.set(module.file.path, module)
+  }
+
+  return byPath
+}
+
+function visitCompilerSourceModule(
+  path: string,
+  byPath: Map<string, CompilerSourceModule>,
+  visited: Set<string>,
+  visiting: Set<string>,
+  ordered: SourceFile[]
+): void {
+  if (visited.has(path)) {
+    return
+  }
+
+  if (visiting.has(path)) {
+    return
+  }
+
+  const module = byPath.get(path)
+
+  if (module === null || typeof module === 'undefined') {
+    return
+  }
+
+  visiting.add(path)
+
+  for (const dependency of module.dependencies) {
+    visitCompilerSourceModule(dependency, byPath, visited, visiting, ordered)
+  }
+
+  visiting.delete(path)
+  visited.add(path)
+  ordered.push(module.file)
 }
 
 function copyDeclarationContracts(contracts: DeclarationContract[]): DeclarationContract[] {
@@ -266,6 +431,7 @@ function copyDeclarationContracts(contracts: DeclarationContract[]): Declaration
     copied.push({
       sourcePath: contract.sourcePath,
       declarationPath: contract.declarationPath,
+      functionEffectsPath: contract.functionEffectsPath,
       source: contract.source,
       functionEffects: copyFunctionEffects(contract.functionEffects)
     })
@@ -274,11 +440,7 @@ function copyDeclarationContracts(contracts: DeclarationContract[]): Declaration
   return copied
 }
 
-function replaceDeclarationContractSource(
-  contracts: DeclarationContract[],
-  sourcePath: string,
-  source: string
-): void {
+function replaceDeclarationContractSource(contracts: DeclarationContract[], sourcePath: string, source: string): void {
   for (const contract of contracts) {
     if (contract.sourcePath === sourcePath) {
       contract.source = source
@@ -287,16 +449,6 @@ function replaceDeclarationContractSource(
   }
 
   throw new Error(`missing declaration contract for ${sourcePath}`)
-}
-
-function generatedFileSource(files: GeneratedFile[], path: string): string | null {
-  for (const file of files) {
-    if (file.path === path) {
-      return file.code
-    }
-  }
-
-  return null
 }
 
 function addDeclarationFunctionEffects(functionEffects: FunctionEffectMap, modules: DeclarationEffectModule[]): void {
@@ -335,6 +487,34 @@ function addDeclarationFunctionEffects(functionEffects: FunctionEffectMap, modul
   }
 }
 
+function addFunctionEffectSidecarFiles(files: GeneratedFileMap, contracts: DeclarationContract[]): void {
+  for (const contract of contracts) {
+    files.set(
+      generatedPathForSourcePath(contract.sourcePath, '.effects.json'),
+      emitModuleFunctionEffectsContract(contract.functionEffects)
+    )
+  }
+}
+
+function replaceDeclarationContractFunctionEffects(
+  contracts: DeclarationContract[],
+  functionEffects: FunctionEffectMap
+): void {
+  for (const contract of contracts) {
+    contract.functionEffects = copyFunctionEffects(functionEffects.get(contract.sourcePath) ?? [])
+  }
+}
+
+function compiledDeclarationModule(modules: DeclarationEffectModule[], path: string): DeclarationEffectModule {
+  for (const module of modules) {
+    if (module.path === path) {
+      return module
+    }
+  }
+
+  throw new Error(`missing compiled declaration module ${path}`)
+}
+
 function declarationModulesByPath(modules: DeclarationEffectModule[]): Map<string, DeclarationEffectModule> {
   const modulesByPath: Map<string, DeclarationEffectModule> = new Map()
 
@@ -365,6 +545,12 @@ function collectDeclarationModuleFunctionEffects(
   const ir = module.ir
 
   if (ir === null || typeof ir === 'undefined') {
+    const externalFunctionEffects = module.externalFunctionEffects
+
+    if (externalFunctionEffects !== null && typeof externalFunctionEffects !== 'undefined') {
+      return copyFunctionEffects(externalFunctionEffects)
+    }
+
     return []
   }
 
@@ -462,11 +648,7 @@ function declarationImportDeclarations(module: DeclarationEffectModule): AnyNode
   return declarations
 }
 
-function resolveDeclarationModuleImport(
-  fromPath: string,
-  specifier: string,
-  modulePaths: Set<string>
-): string | null {
+function resolveDeclarationModuleImport(fromPath: string, specifier: string, modulePaths: Set<string>): string | null {
   const basePath = posix.normalize(posix.join(posix.dirname(fromPath), specifier))
   const candidates: string[] = []
 
@@ -553,34 +735,6 @@ function copyImportedFunctionEffect(effect: IrFunctionEffect, name: string): IrF
   }
 }
 
-function missingCompilerModuleEntries(compilerFiles: SourceFile[], generatedFiles: GeneratedFileMap): string[] {
-  const missing: string[] = []
-
-  for (const file of compilerFiles) {
-    if (!file.path.startsWith(`${compilerSourceRoot}/`) || !file.path.endsWith('.ts')) {
-      continue
-    }
-
-    const modulePath = generatedPathForSourcePath(file.path, '.c')
-
-    if (!generatedFiles.has(modulePath)) {
-      missing.push(file.path)
-    }
-  }
-
-  missing.sort()
-
-  return missing
-}
-
-function generatedPathForSourcePath(sourcePath: string, extension: string): string {
-  if (!sourcePath.startsWith(`${compilerSourceRoot}/`) || !sourcePath.endsWith('.ts')) {
-    throw new Error(`unsupported compiler source path ${sourcePath}`)
-  }
-
-  return `${sourcePath.slice(`${compilerSourceRoot}/`.length, -'.ts'.length)}${extension}`
-}
-
 function declarationImportOptions(
   contracts: DeclarationContract[],
   currentSourcePath: string
@@ -595,17 +749,14 @@ function declarationImportOptions(
     imports.push({
       sourcePath: contract.sourcePath,
       declarationPath: contract.declarationPath,
-      functionEffects: copyFunctionEffects(contract.functionEffects)
+      functionEffectsPath: contract.functionEffectsPath
     })
   }
 
   return imports
 }
 
-function declarationContractSourceFiles(
-  contracts: DeclarationContract[],
-  currentSourcePath: string
-): SourceFile[] {
+function declarationContractSourceFiles(contracts: DeclarationContract[], currentSourcePath: string): SourceFile[] {
   const files: SourceFile[] = []
 
   for (const contract of contracts) {
@@ -616,6 +767,10 @@ function declarationContractSourceFiles(
     files.push({
       path: contract.declarationPath,
       source: contract.source
+    })
+    files.push({
+      path: contract.functionEffectsPath,
+      source: emitModuleFunctionEffectsContract(contract.functionEffects)
     })
   }
 
@@ -628,6 +783,22 @@ function declarationPathForSourcePath(sourcePath: string): string {
   }
 
   return `${sourcePath.slice(0, -'.ts'.length)}.d.ts`
+}
+
+function functionEffectsPathForSourcePath(sourcePath: string): string {
+  if (!sourcePath.endsWith('.ts')) {
+    return `${sourcePath}.effects.json`
+  }
+
+  return `${sourcePath.slice(0, -'.ts'.length)}.effects.json`
+}
+
+function generatedPathForSourcePath(sourcePath: string, extension: string): string {
+  if (!sourcePath.startsWith(`${compilerSourceRoot}/`) || !sourcePath.endsWith('.ts')) {
+    throw new Error(`unsupported compiler source path ${sourcePath}`)
+  }
+
+  return `${sourcePath.slice(`${compilerSourceRoot}/`.length, -'.ts'.length)}${extension}`
 }
 
 async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number }> {

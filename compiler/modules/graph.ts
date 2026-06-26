@@ -19,6 +19,7 @@ import type {
 } from '../types.ts'
 import { createModuleDeclarationProgram, parseModuleDeclarationContractResult } from './declarations.ts'
 import { collectExports } from './exports.ts'
+import { parseModuleFunctionEffectsContractResult } from './function-effects.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
 import {
   createExportAliasDeclaration,
@@ -44,6 +45,7 @@ type ModuleGraphDeclarationImport = {
   declarationPath: string | null
   declarationSource: string | null
   functionEffects: IrFunctionEffect[]
+  functionEffectsPath: string | null
   program: ProgramNode | null
 }
 
@@ -466,7 +468,7 @@ function visitModuleGraphDeclarationImport(
     ast: program,
     declarationProgram: null,
     external: true,
-    externalFunctionEffects: declarationImport.functionEffects,
+    externalFunctionEffects: moduleGraphDeclarationImportFunctionEffects(context, declarationImport),
     hir: null,
     ir: null,
     imports,
@@ -477,7 +479,10 @@ function visitModuleGraphDeclarationImport(
 
   context.modules.set(path, module)
   prepareModuleTypeImportDeclarations(context, module)
-  const checked = checkProgram(insertImportSyntheticDeclarations(program, module.typeImportDeclarations), context.options)
+  const checked = checkProgram(
+    insertImportSyntheticDeclarations(program, module.typeImportDeclarations),
+    context.options
+  )
   module.hir = lowerProgram(checked.ast)
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
   context.visiting.delete(path)
@@ -555,6 +560,42 @@ function moduleGraphDeclarationImportSource(
   }
 
   return source
+}
+
+function moduleGraphDeclarationImportFunctionEffects(
+  context: ModuleGraphContext,
+  declarationImport: ModuleGraphDeclarationImport
+): IrFunctionEffect[] {
+  const functionEffectsPath = declarationImport.functionEffectsPath
+
+  if (functionEffectsPath === null || typeof functionEffectsPath === 'undefined') {
+    return declarationImport.functionEffects
+  }
+
+  const source = context.host.readFileSync(functionEffectsPath)
+
+  if (source === null || typeof source === 'undefined') {
+    context.diagnostics.push(
+      diagnostic('INOX_FUNCTION_EFFECTS_CONTRACT', `cannot read function effects contract ${functionEffectsPath}`, {
+        file: functionEffectsPath,
+        line: 1,
+        column: 1
+      })
+    )
+    return []
+  }
+
+  const result = parseModuleFunctionEffectsContractResult(source, functionEffectsPath)
+
+  for (const item of result.diagnostics) {
+    context.diagnostics.push(item)
+  }
+
+  if (result.diagnostics.length > 0) {
+    return []
+  }
+
+  return result.functionEffects
 }
 
 function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module: ModuleRecord): void {
@@ -840,9 +881,14 @@ function prepareModuleGraphDeclarationImports(
     const item = declarationImports[index]
     const sourcePath = resolveModuleGraphOptionPath(item.sourcePath, host)
     let declarationPath: string | null = null
+    let functionEffectsPath: string | null = null
 
     if (item.declarationPath !== null && typeof item.declarationPath !== 'undefined') {
       declarationPath = resolveModuleGraphOptionPath(item.declarationPath, host)
+    }
+
+    if (item.functionEffectsPath !== null && typeof item.functionEffectsPath !== 'undefined') {
+      functionEffectsPath = resolveModuleGraphOptionPath(item.functionEffectsPath, host)
     }
 
     imports.set(sourcePath, {
@@ -850,6 +896,7 @@ function prepareModuleGraphDeclarationImports(
       declarationPath,
       declarationSource: item.declarationSource ?? null,
       functionEffects: item.functionEffects ?? [],
+      functionEffectsPath,
       program: item.program ?? null
     })
   }

@@ -263,6 +263,7 @@ export type ModuleDeclarationImport = {
   declarationPath?: string
   declarationSource?: string
   functionEffects?: IrFunctionEffect[]
+  functionEffectsPath?: string
   program?: ProgramNode
 }
 

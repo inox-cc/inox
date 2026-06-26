@@ -1,10 +1,10 @@
-export const urlRuntimeMethods = ['fileURLToPath', 'pathToFileURL']
+export const urlRuntimeMethods: string[] = ['fileURLToPath', 'pathToFileURL']
 
-export const urlRuntimeConstructors = ['URL', 'URLSearchParams']
+export const urlRuntimeConstructors: string[] = ['URL', 'URLSearchParams']
 
-export const urlSearchParamsRuntimeMethods = ['append', 'delete', 'get', 'has', 'set', 'toString']
+export const urlSearchParamsRuntimeMethods: string[] = ['append', 'delete', 'get', 'has', 'set', 'toString']
 
-export const unsupportedUrlRuntimeMethods = [
+export const unsupportedUrlRuntimeMethods: string[] = [
   'domainToASCII',
   'domainToUnicode',
   'format',
@@ -13,9 +13,9 @@ export const unsupportedUrlRuntimeMethods = [
   'urlToHttpOptions'
 ]
 
-export const urlObjectFields = ['href', 'protocol', 'hostname', 'port', 'pathname', 'search', 'hash']
-export const urlMutableObjectFields = ['pathname', 'search', 'hash']
-export const urlSearchParamsObjectFields = ['query']
+export const urlObjectFields: string[] = ['href', 'protocol', 'hostname', 'port', 'pathname', 'search', 'hash']
+export const urlMutableObjectFields: string[] = ['pathname', 'search', 'hash']
+export const urlSearchParamsObjectFields: string[] = ['query']
 
 export type UrlRuntimeMethod = string
 export type UrlRuntimeConstructor = string

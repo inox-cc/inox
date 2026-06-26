@@ -218,7 +218,7 @@ export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
   fields: readonlyDebugMemoryStatsFields(debugMemoryStatsFields)
 }
 
-export const fsConstantValues = new Map([
+export const fsConstantValues: Map<string, number> = new Map([
   ['F_OK', 0],
   ['X_OK', 1],
   ['W_OK', 2],
@@ -229,7 +229,7 @@ export function isFsConstantValue(name: string): boolean {
   return name === 'F_OK' || name === 'X_OK' || name === 'W_OK' || name === 'R_OK'
 }
 
-export const libuvOnlyRuntimeImports = new Map([
+export const libuvOnlyRuntimeImports: Map<string, string> = new Map([
   ['dgram', 'node:dgram'],
   ['http', 'node:http'],
   ['net', 'node:net'],
@@ -568,7 +568,7 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
   return null
 }
 
-export const numericCastNames = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
+export const numericCastNames: Set<string> = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
 
 export function isNumericCastName(name: string): boolean {
   return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'

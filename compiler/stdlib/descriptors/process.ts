@@ -47,7 +47,7 @@ export const processRuntimeStringProperties: ProcessRuntimeStringProperty[] = [
 export const processRuntimeNumberProperties: ProcessRuntimeNumberProperty[] = ['argv.length', 'exitCode', 'pid']
 export const processRuntimeObjectProperties: ProcessRuntimeObjectProperty[] = ['argv', 'env', 'versions']
 
-export const unsupportedProcessRuntimeMethods = [
+export const unsupportedProcessRuntimeMethods: string[] = [
   'abort',
   'addListener',
   'chdir',

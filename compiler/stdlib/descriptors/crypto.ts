@@ -1,6 +1,6 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const cryptoRuntimeMethods = [
+export const cryptoRuntimeMethods: string[] = [
   'createHash',
   'createHmac',
   'getHashes',
@@ -15,7 +15,7 @@ export const cryptoRuntimeMethods = [
 
 export type CryptoRuntimeMethod = string
 
-export const unsupportedNodeCryptoMethods = [
+export const unsupportedNodeCryptoMethods: string[] = [
   'argon2',
   'argon2Sync',
   'checkPrime',

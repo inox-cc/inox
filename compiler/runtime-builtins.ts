@@ -1,4 +1,4 @@
-export const runtimeBuiltinImportSources = createRuntimeBuiltinImportSources()
+export const runtimeBuiltinImportSources: Set<string> = createRuntimeBuiltinImportSources()
 
 function createRuntimeBuiltinImportSources(): Set<string> {
   const sources: Set<string> = new Set()

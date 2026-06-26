@@ -14,6 +14,11 @@ type GeneratedFile = {
 export function assertModuleDeclarationImports(): void {
   assertModuleDeclarationImportSkipsExternalEmission()
   assertModuleDeclarationImportChecksFunctionParamShape()
+  assertModuleDeclarationTypeOnlyImport()
+  assertModuleDeclarationImportedObjectShape()
+  assertModuleDeclarationTransitiveImport()
+  assertModuleDeclarationFunctionEffectsPath()
+  assertModuleDeclarationUnsupportedReexportDiagnostic()
   assertModuleDeclarationTypeReexport()
 }
 
@@ -104,12 +109,239 @@ export function useContext(context: Context): string;
   assert.equal(contextParam?.shape?.fields[0]?.valueType, 'function')
 }
 
+function assertModuleDeclarationTypeOnlyImport(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+import type { User } from './types.ts'
+
+const user: User = {
+  name: 'Ada'
+}
+
+console.log(user.name)
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+    callMain: true,
+    declarationImports: [
+      {
+        sourcePath: '/pkg/src/types.ts',
+        declarationSource: `
+export type User = {
+  name: string;
+}
+`
+      }
+    ],
+    host,
+    sourceRoot: '/pkg'
+  })
+  const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/types.ts')
+
+  assert.equal(externalModule?.external, true)
+  assert.equal(externalModule?.ir, null)
+}
+
+function assertModuleDeclarationImportedObjectShape(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+import { formatUser } from './lib.ts'
+
+console.log(formatUser({
+  profile: {
+    name: 'Ada'
+  }
+}))
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+    callMain: true,
+    declarationImports: [
+      {
+        sourcePath: '/pkg/src/lib.ts',
+        declarationSource: `
+type Profile = {
+  name: string;
+}
+
+export type User = {
+  profile: Profile;
+}
+
+export function formatUser(user: User): string;
+`
+      }
+    ],
+    host,
+    sourceRoot: '/pkg'
+  })
+  const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
+  const formatUser = externalModule?.declarationProgram?.body.find((item) => item.name === 'formatUser')
+  const userParam = formatUser?.params[0]
+
+  assert.equal(userParam?.shape?.fields[0]?.name, 'profile')
+  assert.equal(userParam?.shape?.fields[0]?.shape?.fields[0]?.name, 'name')
+}
+
+function assertModuleDeclarationTransitiveImport(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+import { createUser } from './factory.ts'
+
+const user = createUser('Ada')
+
+console.log(user.name)
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+    callMain: true,
+    declarationImports: [
+      {
+        sourcePath: '/pkg/src/factory.ts',
+        declarationSource: `
+import type { User } from './types.ts'
+
+export function createUser(name: string): User;
+`
+      },
+      {
+        sourcePath: '/pkg/src/types.ts',
+        declarationSource: `
+export type User = {
+  name: string;
+}
+`
+      }
+    ],
+    host,
+    sourceRoot: '/pkg'
+  })
+  const files = result.files as GeneratedFile[]
+  const paths = files.map((file) => file.path).sort()
+  const factoryModule = result.graph.modules.find((module) => module.path === '/pkg/src/factory.ts')
+  const typesModule = result.graph.modules.find((module) => module.path === '/pkg/src/types.ts')
+
+  assert.deepEqual(paths, ['src/index.c', 'src/index.d.ts', 'src/index.h'])
+  assert.equal(factoryModule?.external, true)
+  assert.equal(typesModule?.external, true)
+}
+
+function assertModuleDeclarationFunctionEffectsPath(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: "import { fail } from './lib.ts'\nconsole.log('ok')\n"
+      },
+      {
+        path: '/pkg/src/lib.effects.json',
+        source: `{
+  "version": 1,
+  "functions": [
+    {
+      "name": "fail",
+      "throws": true,
+      "throwValueTypes": ["error"]
+    }
+  ]
+}
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+    callMain: true,
+    declarationImports: [
+      {
+        sourcePath: '/pkg/src/lib.ts',
+        declarationSource: 'export function fail(): string;\n',
+        functionEffectsPath: '/pkg/src/lib.effects.json'
+      }
+    ],
+    host,
+    sourceRoot: '/pkg'
+  })
+  const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
+  const effect = externalModule?.externalFunctionEffects?.[0]
+
+  assert.equal(effect?.name, 'fail')
+  assert.equal(effect?.throws, true)
+  assert.deepEqual(effect?.throwValueTypes, ['error'])
+}
+
+function assertModuleDeclarationUnsupportedReexportDiagnostic(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: "import { value } from './facade.ts'\nconsole.log(value)\n"
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  assert.throws(
+    () =>
+      compileFileToCModulesSync('/pkg/src/index.ts', {
+        callMain: true,
+        declarationImports: [
+          {
+            sourcePath: '/pkg/src/facade.ts',
+            declarationSource: "export { value } from './value.ts';\n"
+          }
+        ],
+        host,
+        sourceRoot: '/pkg'
+      }),
+    (error) =>
+      error !== null &&
+      typeof error === 'object' &&
+      'diagnostics' in error &&
+      Array.isArray(error.diagnostics) &&
+      error.diagnostics[0]?.code === 'INOX_DECLARATION_UNSUPPORTED_REEXPORT'
+  )
+}
+
 function assertModuleDeclarationTypeReexport(): void {
   const host = createMemoryCompilerHost(
     [
       {
         path: '/pkg/src/facade.ts',
-        source: "import type { Internal } from './types.ts'\nexport type { Internal, Internal as Public } from './types.ts'\n"
+        source:
+          "import type { Internal } from './types.ts'\nexport type { Internal, Internal as Public } from './types.ts'\n"
       },
       {
         path: '/pkg/src/types.ts',
