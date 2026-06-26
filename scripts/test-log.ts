@@ -40,6 +40,7 @@ async function runWithLog(options: ParsedArgs): Promise<void> {
     flags: 'w'
   })
   const started = new Date()
+  const startedAt = performance.now()
 
   log.write(`# inox test log\n`)
   log.write(`# started: ${started.toISOString()}\n`)
@@ -85,8 +86,10 @@ async function runWithLog(options: ParsedArgs): Promise<void> {
   process.removeListener('SIGTERM', forwardSignal)
 
   pendingLogText = flushPlainLogText(log, pendingLogText)
-  log.write(`\n# finished: ${new Date().toISOString()}\n`)
-  log.write(`# exit code: ${code}\n`)
+  const footer = formatFooter(startedAt, code)
+
+  process.stdout.write(footer)
+  log.write(footer)
 
   await new Promise<void>((resolveEnd) => {
     log.end(resolveEnd)
@@ -117,6 +120,22 @@ function flushPlainLogText(log: NodeJS.WritableStream, pending: string): string 
   }
 
   return ''
+}
+
+function formatFooter(startedAt: number, code: number): string {
+  return `\n# finished: ${new Date().toISOString()}\n# duration: ${formatDuration(performance.now() - startedAt)}\n# exit code: ${code}\n`
+}
+
+function formatDuration(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+
+  return `${formatTwoDigits(minutes)} min ${formatTwoDigits(seconds)} sec`
+}
+
+function formatTwoDigits(value: number): string {
+  return String(value).padStart(2, '0')
 }
 
 function stripAnsi(value: string): string {
