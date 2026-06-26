@@ -19,7 +19,7 @@ export function createModuleDeclarationProgram(program: ProgramNode): ProgramNod
 
 function createModuleDeclarationNode(item: AnyNode): AnyNode | null {
   if (item.type === 'TypeAliasDeclaration') {
-    return cloneTypeAliasDeclaration(item)
+    return item
   }
 
   if (item.type === 'FunctionDeclaration' && item.exported === true) {
@@ -35,19 +35,6 @@ function createModuleDeclarationNode(item: AnyNode): AnyNode | null {
   }
 
   return null
-}
-
-function cloneTypeAliasDeclaration(item: AnyNode): AnyNode {
-  return {
-    type: 'TypeAliasDeclaration',
-    exported: item.exported === true,
-    name: item.name,
-    loc: nullableMetadata(item.loc),
-    syntheticTypeImport: item.syntheticTypeImport === true,
-    syntheticTypeImportDirect: item.syntheticTypeImportDirect === true,
-    importedName: nullableMetadata(item.importedName),
-    valueType: nullableMetadata(item.valueType)
-  }
 }
 
 function cloneFunctionDeclaration(item: AnyNode): AnyNode {
