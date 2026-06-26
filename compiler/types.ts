@@ -215,6 +215,7 @@ export type ModuleRecord = {
   path: string
   source: string
   ast: ProgramNode
+  declarationProgram: ProgramNode | null
   hir: ProgramNode | null
   ir: IrProgram | null
   imports: AnyNode[]

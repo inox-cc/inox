@@ -15,6 +15,7 @@ import type {
   ProgramNode,
   SourceLocation
 } from '../types.ts'
+import { createModuleDeclarationProgram } from './declarations.ts'
 import { collectExports } from './exports.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
 import {
@@ -121,6 +122,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     path,
     source,
     ast,
+    declarationProgram: null,
     hir: null,
     ir: null,
     imports,
@@ -232,14 +234,12 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
         continue
       }
 
-      applyImportedFunctionMetadata(specifier, importedModule.hir)
+      const importedProgram = moduleProgramForImports(importedModule)
 
-      if (
-        specifier.local !== specifier.imported &&
-        importedModule.hir !== null &&
-        typeof importedModule.hir !== 'undefined'
-      ) {
-        const alias = createImportAliasDeclaration(specifier, importedModule.hir)
+      applyImportedFunctionMetadata(specifier, importedProgram)
+
+      if (specifier.local !== specifier.imported && importedProgram !== null) {
+        const alias = createImportAliasDeclaration(specifier, importedProgram)
 
         if (alias !== null && typeof alias !== 'undefined') {
           aliases.push(alias)
@@ -304,8 +304,10 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
       module.exports.set(specifier.local, exported)
 
-      if (!item.typeOnly && importedModule.hir !== null && typeof importedModule.hir !== 'undefined') {
-        const alias = createExportAliasDeclaration(specifier, importedModule.hir)
+      const importedProgram = moduleProgramForImports(importedModule)
+
+      if (!item.typeOnly && importedProgram !== null) {
+        const alias = createExportAliasDeclaration(specifier, importedProgram)
 
         if (alias !== null && typeof alias !== 'undefined') {
           reexportAliasDeclarations.push(alias)
@@ -319,6 +321,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     insertImportSyntheticDeclarations(lowerProgram(checked.ast), importAliasDeclarations),
     reexportAliasDeclarations
   )
+  module.declarationProgram = createModuleDeclarationProgram(module.hir)
   module.ir = lowerHirToIr(module.hir)
   context.visiting.delete(path)
   context.order.push(module)
@@ -478,6 +481,10 @@ function requireModuleGraphRecord(context: ModuleGraphContext, path: string): Mo
 }
 
 function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
+  if (module.declarationProgram !== null && typeof module.declarationProgram !== 'undefined') {
+    return module.declarationProgram
+  }
+
   const hir = module.hir
 
   if (hir !== null && typeof hir !== 'undefined') {
@@ -489,6 +496,20 @@ function moduleProgramForTypeImports(module: ModuleRecord): ProgramNode {
   }
 
   return module.ast
+}
+
+function moduleProgramForImports(module: ModuleRecord): ProgramNode | null {
+  if (module.declarationProgram !== null && typeof module.declarationProgram !== 'undefined') {
+    return module.declarationProgram
+  }
+
+  const hir = module.hir
+
+  if (hir !== null && typeof hir !== 'undefined') {
+    return hir
+  }
+
+  return null
 }
 
 function resolveModuleGraphImport(
