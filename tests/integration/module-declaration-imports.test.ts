@@ -12,6 +12,12 @@ type GeneratedFile = {
 }
 
 export function assertModuleDeclarationImports(): void {
+  assertModuleDeclarationImportSkipsExternalEmission()
+  assertModuleDeclarationImportChecksFunctionParamShape()
+  assertModuleDeclarationTypeReexport()
+}
+
+function assertModuleDeclarationImportSkipsExternalEmission(): void {
   const host = createMemoryCompilerHost(
     [
       {
@@ -46,6 +52,86 @@ export function assertModuleDeclarationImports(): void {
   assert.doesNotMatch(paths.join('\n'), /src\/lib\.(c|h|d\.ts)/)
   assert.match(source.code, /#include "lib\.h"/)
   assert.match(source.code, /inox_mod_src_lib_ts_[0-9a-f]+_greet/)
+}
+
+function assertModuleDeclarationImportChecksFunctionParamShape(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+type Context = {
+  run: () => string
+}
+
+import { useContext } from './lib.ts'
+
+const context: Context = {
+  run: () => 'ok'
+}
+
+console.log(useContext(context))
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  const result = compileFileToCModulesSync('/pkg/src/index.ts', {
+    callMain: true,
+    declarationImports: [
+      {
+        sourcePath: '/pkg/src/lib.ts',
+        declarationSource: `
+type Context = {
+  run: () => string;
+}
+
+export function useContext(context: Context): string;
+`
+      }
+    ],
+    host,
+    sourceRoot: '/pkg'
+  })
+  const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
+  const useContext = externalModule?.declarationProgram?.body.find((item) => item.name === 'useContext')
+  const contextParam = useContext?.params[0]
+
+  assert.equal(contextParam?.shape?.fields[0]?.name, 'run')
+  assert.equal(contextParam?.shape?.fields[0]?.valueType, 'function')
+}
+
+function assertModuleDeclarationTypeReexport(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/facade.ts',
+        source: "import type { Internal } from './types.ts'\nexport type { Internal, Internal as Public } from './types.ts'\n"
+      },
+      {
+        path: '/pkg/src/types.ts',
+        source: 'export type Internal = { ok: boolean }\n'
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  const result = compileFileToCModulesSync('/pkg/src/facade.ts', {
+    callMain: false,
+    host,
+    sourceRoot: '/pkg'
+  })
+  const files = result.files as GeneratedFile[]
+  const source = generatedFile(files, 'src/facade.d.ts')
+
+  assert.match(source.code, /export type Internal = \{/)
+  assert.match(source.code, /export type Public = \{/)
+  assert.match(source.code, /ok: boolean;/)
 }
 
 function generatedFile(files: GeneratedFile[], path: string): GeneratedFile {

@@ -187,6 +187,25 @@ export function createTypeImportDeclarations(specifier: AnyNode, importedProgram
   return declarations
 }
 
+export function createValueImportTypeDeclarations(specifier: AnyNode, importedProgram: ProgramNode): AnyNode[] {
+  const exported = findExportedDeclaration(importedProgram, specifier.imported)
+
+  if (exported === null || typeof exported === 'undefined') {
+    return []
+  }
+
+  const aliases = collectTypeAliasDeclarationMap(importedProgram)
+  const declarations: AnyNode[] = []
+  const added: Set<string> = new Set()
+  const visiting: Set<string> = new Set()
+
+  for (const name of declarationTypeDependencyNames(exported)) {
+    addTypeImportDependency(name, '', aliases, added, visiting, declarations)
+  }
+
+  return declarations
+}
+
 function findExportedDeclaration(program: ProgramNode, name: string): SyntheticImportNode | null {
   const declarations = collectExportedDeclarationMap(program)
   const declaration = declarations.get(name)
@@ -206,6 +225,18 @@ function findExportedTypeAliasDeclaration(program: ProgramNode, name: string): T
   }
 
   return declaration as TypeAliasDeclarationNode
+}
+
+function collectTypeAliasDeclarationMap(program: ProgramNode): Map<string, TypeAliasDeclarationNode> {
+  const aliases: Map<string, TypeAliasDeclarationNode> = new Map()
+
+  for (const item of program.body) {
+    if (item.type === 'TypeAliasDeclaration') {
+      aliases.set(item.name, item as TypeAliasDeclarationNode)
+    }
+  }
+
+  return aliases
 }
 
 function collectExportedDeclarationMap(program: ProgramNode): ExportedDeclarationMap {
@@ -258,6 +289,67 @@ function addTypeImportDependency(
 
   declarations.push(cloneTypeAliasDeclaration(dependency, dependency.name, dependency.loc, dependency.name))
   added.add(name)
+}
+
+function declarationTypeDependencyNames(declaration: SyntheticImportNode): string[] {
+  const names: string[] = []
+
+  if (declaration.type === 'FunctionDeclaration') {
+    collectFunctionDeclarationTypeDependencyNames(declaration, names)
+  } else if (declaration.type === 'VariableDeclaration') {
+    collectValueDeclarationTypeDependencyNames(declaration, names)
+  } else if (declaration.type === 'ClassDeclaration') {
+    collectClassDeclarationTypeDependencyNames(declaration, names)
+  }
+
+  return uniqueTypeNames(names)
+}
+
+function collectFunctionDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
+  const params: AnyNode[] = declaration.params ?? []
+
+  for (const param of params) {
+    collectValueDeclarationTypeDependencyNames(param, names)
+  }
+
+  collectTypeNameDependencyNames(declaration.declaredReturnType, names)
+  collectTypeNameDependencyNames(declaration.returnType, names)
+  collectTypeNameDependencyNames(declaration.returnArrayElementDeclaredType, names)
+  collectTypeNameDependencyNames(declaration.returnArrayElementType, names)
+  collectTypeNameDependencyNames(declaration.returnMapKeyType, names)
+  collectTypeNameDependencyNames(declaration.returnMapValueType, names)
+  collectTypeNameDependencyNames(declaration.returnPromiseValueType, names)
+  collectTypeNameDependencyNames(declaration.returnSetElementType, names)
+}
+
+function collectValueDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
+  collectTypeNameDependencyNames(declaration.declaredType, names)
+  collectTypeNameDependencyNames(declaration.valueType, names)
+  collectTypeNameDependencyNames(declaration.arrayElementDeclaredType, names)
+  collectTypeNameDependencyNames(declaration.arrayElementType, names)
+  collectTypeNameDependencyNames(declaration.mapKeyType, names)
+  collectTypeNameDependencyNames(declaration.mapValueType, names)
+  collectTypeNameDependencyNames(declaration.promiseValueType, names)
+  collectTypeNameDependencyNames(declaration.setElementType, names)
+
+  if (declaration.functionType !== null && typeof declaration.functionType !== 'undefined') {
+    collectTypeAliasDependencyNames(declaration.functionType, names)
+  }
+}
+
+function collectClassDeclarationTypeDependencyNames(declaration: SyntheticImportNode, names: string[]): void {
+  const fields: AnyNode[] = declaration.fields ?? []
+  const methods: AnyNode[] = declaration.methods ?? []
+
+  collectTypeNameDependencyNames(declaration.extendsName, names)
+
+  for (const field of fields) {
+    collectValueDeclarationTypeDependencyNames(field, names)
+  }
+
+  for (const method of methods) {
+    collectFunctionDeclarationTypeDependencyNames(method, names)
+  }
 }
 
 function cloneTypeAliasDeclaration(

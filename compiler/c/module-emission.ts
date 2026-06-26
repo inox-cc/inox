@@ -777,7 +777,8 @@ function emitCModuleFunctionPointerAdapterDefinition(
     adapter,
     expectedNames,
     targetNames,
-    moduleObjectFunctionFields
+    moduleObjectFunctionFields,
+    targetFunctionType
   )
 
   for (const name of expectedNames) {
@@ -787,7 +788,7 @@ function emitCModuleFunctionPointerAdapterDefinition(
   }
 
   if (isThrowingFunctionPointerAdapterTarget(adapter, context)) {
-    pushCModuleLines(lines, emitThrowingFunctionPointerAdapterTargetCall(adapter, targetArgs))
+    pushCModuleLines(lines, emitThrowingFunctionPointerAdapterTargetCall(adapter, targetArgs, targetFunctionType))
     lines.push('}')
 
     return lines
@@ -811,6 +812,10 @@ function functionPointerAdapterTargetSeenTypes(adapter: CFunctionPointerAdapter,
     return []
   }
 
+  if (adapter.target.startsWith('inox_mod_')) {
+    return []
+  }
+
   return adapter.targetSeenTypes
 }
 
@@ -824,7 +829,46 @@ function functionPointerAdapterTargetFunctionType(
     }
   }
 
+  for (const sourceName of cFunctionPointerAdapterTargetSourceNames(adapter, context)) {
+    const functionType = functionPointerAdapterContextFunctionType(sourceName, context)
+
+    if (functionType !== null) {
+      return functionType
+    }
+  }
+
   return adapter.targetFunctionType
+}
+
+function functionPointerAdapterContextFunctionType(name: string, context: CEmitContext): CFunctionType | null {
+  const params = context.functionParams.get(name)
+  const returnType = context.functionReturnTypes.get(name)
+
+  if (params === null || typeof params === 'undefined' || returnType === null || typeof returnType === 'undefined') {
+    return null
+  }
+
+  const returnMapType = context.functionReturnMapTypes.get(name)
+  let returnMapKeyType: string | null = null
+  let returnMapValueType: string | null = null
+
+  if (returnMapType !== null && typeof returnMapType !== 'undefined') {
+    returnMapKeyType = returnMapType.key
+    returnMapValueType = returnMapType.value
+  }
+
+  return {
+    kind: 'function',
+    params,
+    returnArrayElementType: context.functionReturnArrayElementTypes.get(name) ?? null,
+    returnMapKeyType,
+    returnMapValueType,
+    returnNullable: context.functionReturnNullables.get(name) === true,
+    returnPromiseValueType: context.functionReturnPromiseValueTypes.get(name) ?? null,
+    returnSetElementType: context.functionReturnSetElementTypes.get(name) ?? null,
+    returnShape: context.functionReturnShapes.get(name) ?? null,
+    returnType
+  }
 }
 
 function isPlainArrowFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapter, context: CEmitContext): boolean {
@@ -842,34 +886,41 @@ function isPlainArrowFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapt
 }
 
 function isThrowingFunctionPointerAdapterTarget(adapter: CFunctionPointerAdapter, context: CEmitContext): boolean {
-  const sourceName = cFunctionPointerAdapterTargetSourceName(adapter, context)
+  for (const sourceName of cFunctionPointerAdapterTargetSourceNames(adapter, context)) {
+    if (context.throwingFunctions.has(sourceName)) {
+      return true
+    }
+  }
 
-  return sourceName !== null && typeof sourceName !== 'undefined' && context.throwingFunctions.has(sourceName)
+  return false
 }
 
-function cFunctionPointerAdapterTargetSourceName(
+function cFunctionPointerAdapterTargetSourceNames(
   adapter: CFunctionPointerAdapter,
   context: CEmitContext
-): string | null {
+): string[] {
+  const names: string[] = []
+
   for (const name of context.functionNames.keys()) {
     const target = context.functionNames.get(name)
 
     if (target === adapter.target) {
-      return name
+      names.push(name)
     }
   }
 
-  return null
+  return names
 }
 
 function emitThrowingFunctionPointerAdapterTargetCall(
   adapter: CFunctionPointerAdapter,
-  targetArgs: string[]
+  targetArgs: string[],
+  targetFunctionType: CFunctionType | null | undefined
 ): string[] {
   const lines: string[] = []
   const callArgs: string[] = []
   const adapterReturnType = emitFunctionPointerReturnType(adapter.functionType)
-  const returnType = emitFunctionPointerReturnType(adapter.targetFunctionType)
+  const returnType = emitFunctionPointerReturnType(targetFunctionType)
 
   for (const arg of targetArgs) {
     callArgs.push(arg)
@@ -926,7 +977,8 @@ function emitFunctionPointerAdapterTargetArgs(
   adapter: CFunctionPointerAdapter,
   expectedNames: string[],
   targetNames: string[],
-  moduleObjectFunctionFields: Set<string>
+  moduleObjectFunctionFields: Set<string>,
+  targetFunctionType: CFunctionType | null | undefined
 ): string[] {
   const expectedNameSet = stringSetFromArray(expectedNames)
   const args: string[] = []
@@ -944,7 +996,7 @@ function emitFunctionPointerAdapterTargetArgs(
       continue
     }
 
-    const defaultArg = emitFunctionPointerAdapterDefaultTargetArg(name, adapter)
+    const defaultArg = emitFunctionPointerAdapterDefaultTargetArg(name, adapter, targetFunctionType)
 
     if (defaultArg !== null && typeof defaultArg !== 'undefined') {
       args.push(defaultArg)
@@ -1020,17 +1072,25 @@ function emitFunctionPointerAdapterModuleObjectFieldArg(
   return null
 }
 
-function emitFunctionPointerAdapterDefaultTargetArg(name: string, adapter: CFunctionPointerAdapter): string | null {
+function emitFunctionPointerAdapterDefaultTargetArg(
+  name: string,
+  adapter: CFunctionPointerAdapter,
+  targetFunctionType: CFunctionType | null | undefined
+): string | null {
+  if (targetFunctionType === null || typeof targetFunctionType === 'undefined') {
+    return null
+  }
+
   for (
     let index = adapter.functionType.params.length;
-    index < adapter.targetFunctionType.params.length;
+    index < targetFunctionType.params.length;
     index = index + 1
   ) {
     if (name !== `inox_arg_${index}`) {
       continue
     }
 
-    const param = adapter.targetFunctionType.params[index]
+    const param = targetFunctionType.params[index]
 
     if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
       return null

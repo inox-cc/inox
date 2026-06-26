@@ -81,6 +81,16 @@ export let current: Result;
   assert.equal(load.async, true)
   assert.equal(load.declarationOnly, true)
   assert.equal(load.returnType, 'promise<Result>')
+
+  const functionField = parseModuleDeclarationContract(
+    'export type PathOps = { relative: (from: string, to: string) => string; }',
+    'function-field.d.ts'
+  )
+  const pathOps = findNode(functionField, 'TypeAliasDeclaration', 'PathOps')
+  const relative = pathOps.valueType.fields[0]
+
+  assert.equal(relative.functionType.params[0].name, 'from')
+  assert.equal(relative.functionType.params[1].name, 'to')
 }
 
 function assertModuleDeclarationContractDiagnostics(): void {

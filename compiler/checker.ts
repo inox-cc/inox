@@ -1919,7 +1919,11 @@ class Checker {
     }
 
     if (statement.type === 'VariableDeclaration') {
-      if (statement.kind === 'const' && (statement.init === null || typeof statement.init === 'undefined')) {
+      if (
+        statement.kind === 'const' &&
+        statement.declarationOnly !== true &&
+        (statement.init === null || typeof statement.init === 'undefined')
+      ) {
         this.report('INOX_CONST_INIT', 'const declarations must have an initializer', statement.loc)
       }
 

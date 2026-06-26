@@ -217,6 +217,7 @@ export type ModuleRecord = {
   ast: ProgramNode
   declarationProgram: ProgramNode | null
   external?: boolean
+  externalFunctionEffects?: IrFunctionEffect[]
   hir: ProgramNode | null
   ir: IrProgram | null
   imports: AnyNode[]
@@ -261,6 +262,7 @@ export type ModuleDeclarationImport = {
   sourcePath: string
   declarationPath?: string
   declarationSource?: string
+  functionEffects?: IrFunctionEffect[]
   program?: ProgramNode
 }
 

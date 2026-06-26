@@ -444,7 +444,7 @@ class Parser {
     this.expectValue('(', 'INOX_EXPECTED_TYPE', 'expected ( in function type')
 
     while (!this.isValue(')') && !this.is('eof')) {
-      const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected function type parameter name')
+      const name = this.expectTypeParameterName('expected function type parameter name')
       const optional = this.matchValue('?')
       this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after function type parameter name')
       const valueType = this.parseTypeAnnotation([',', ')'], null)
@@ -632,12 +632,12 @@ class Parser {
     return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected object type field name')
   }
 
-  expectTypeParameterName(): Token {
+  expectTypeParameterName(message: string = 'expected method type parameter name'): Token {
     if (this.is('identifier') || this.is('keyword')) {
       return this.advance()
     }
 
-    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected method type parameter name')
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', message)
   }
 
   parseClassDeclaration(exported: boolean): AnyNode {

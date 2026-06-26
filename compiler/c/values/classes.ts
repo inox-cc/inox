@@ -900,11 +900,7 @@ function emitKnownPreparedClassMethodCallExpression(
 
   if (method.returnType === 'promise') {
     let out = callExpression
-    let promiseValueType = method.returnPromiseValueType
-
-    if (promiseValueType === null || typeof promiseValueType === 'undefined') {
-      promiseValueType = 'unknown'
-    }
+    const promiseValueType = method.returnPromiseValueType ?? 'unknown'
 
     if (options.out !== null && typeof options.out !== 'undefined') {
       out = options.out

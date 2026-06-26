@@ -178,7 +178,25 @@ function cModulePlanIr(record: ModuleRecord): IrProgram | null {
   }
 
   if (record.external === true && record.declarationProgram !== null && typeof record.declarationProgram !== 'undefined') {
-    return lowerHirToIr(record.declarationProgram)
+    const ir = lowerHirToIr(record.declarationProgram)
+    const externalFunctionEffects = record.externalFunctionEffects
+
+    if (externalFunctionEffects !== null && typeof externalFunctionEffects !== 'undefined') {
+      return {
+        type: ir.type,
+        version: ir.version,
+        features: ir.features,
+        runtimeRequirements: ir.runtimeRequirements,
+        topLevelItems: ir.topLevelItems,
+        functionDeclarations: ir.functionDeclarations,
+        functionEffects: externalFunctionEffects,
+        syntaxFeatures: ir.syntaxFeatures,
+        globalUsages: ir.globalUsages,
+        body: ir.body
+      }
+    }
+
+    return ir
   }
 
   return null

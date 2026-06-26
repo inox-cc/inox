@@ -10,6 +10,7 @@ import type {
   AnyNode,
   CompileOptions,
   Diagnostic,
+  IrFunctionEffect,
   ModuleDeclarationImport,
   ModuleGraph,
   ModuleRecord,
@@ -23,6 +24,7 @@ import {
   createExportAliasDeclaration,
   createImportAliasDeclaration,
   createTypeImportDeclarations,
+  createValueImportTypeDeclarations,
   insertImportSyntheticDeclarations
 } from './synthetic-imports.ts'
 
@@ -41,6 +43,7 @@ type ModuleGraphDeclarationImport = {
   sourcePath: string
   declarationPath: string | null
   declarationSource: string | null
+  functionEffects: IrFunctionEffect[]
   program: ProgramNode | null
 }
 
@@ -157,6 +160,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   const importAliasDeclarations: Map<number, AnyNode[]> = new Map()
   const importTypeDeclarations = module.typeImportDeclarations
   const reexportAliasDeclarations: AnyNode[] = []
+  const reexportTypeNames: Set<string> = new Set()
 
   prepareModuleTypeImportDeclarations(context, module)
 
@@ -259,6 +263,23 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
       applyImportedFunctionMetadata(specifier, importedProgram)
 
+      if (importedProgram !== null) {
+        const declarations = createValueImportTypeDeclarations(specifier, importedProgram)
+
+        for (
+          let declarationIndex = 0;
+          declarationIndex < declarations.length;
+          declarationIndex = declarationIndex + 1
+        ) {
+          const declaration = declarations[declarationIndex]
+
+          if (!typeNames.has(declaration.name)) {
+            typeNames.add(declaration.name)
+            types.push(declaration)
+          }
+        }
+      }
+
       if (specifier.local !== specifier.imported && importedProgram !== null) {
         const alias = createImportAliasDeclaration(specifier, importedProgram)
 
@@ -327,7 +348,55 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
       const importedProgram = moduleProgramForImports(importedModule)
 
+      if (item.typeOnly) {
+        const typeDeclarations = createTypeImportDeclarations(specifier, moduleProgramForTypeImports(importedModule))
+
+        for (
+          let declarationIndex = 0;
+          declarationIndex < typeDeclarations.length;
+          declarationIndex = declarationIndex + 1
+        ) {
+          const typeDeclaration = typeDeclarations[declarationIndex]
+
+          if (typeDeclaration.type === 'TypeAliasDeclaration') {
+            if (typeDeclaration.syntheticTypeImportDirect === true) {
+              typeDeclaration.exported = true
+            }
+
+            if (reexportTypeNames.has(typeDeclaration.name)) {
+              continue
+            }
+
+            reexportTypeNames.add(typeDeclaration.name)
+          }
+
+          reexportAliasDeclarations.push(typeDeclaration)
+        }
+
+        continue
+      }
+
       if (!item.typeOnly && importedProgram !== null) {
+        const typeDeclarations = createValueImportTypeDeclarations(specifier, importedProgram)
+
+        for (
+          let declarationIndex = 0;
+          declarationIndex < typeDeclarations.length;
+          declarationIndex = declarationIndex + 1
+        ) {
+          const typeDeclaration = typeDeclarations[declarationIndex]
+
+          if (typeDeclaration.type === 'TypeAliasDeclaration') {
+            if (reexportTypeNames.has(typeDeclaration.name)) {
+              continue
+            }
+
+            reexportTypeNames.add(typeDeclaration.name)
+          }
+
+          reexportAliasDeclarations.push(typeDeclaration)
+        }
+
         const alias = createExportAliasDeclaration(specifier, importedProgram)
 
         if (alias !== null && typeof alias !== 'undefined') {
@@ -365,10 +434,13 @@ function visitModuleGraphDeclarationImport(
   path: string,
   declarationImport: ModuleGraphDeclarationImport
 ): boolean {
+  context.visiting.add(path)
+
   const source = moduleGraphDeclarationImportSource(context, declarationImport)
   const program = moduleGraphDeclarationImportProgram(context, declarationImport, source)
 
   if (program === null || typeof program === 'undefined') {
+    context.visiting.delete(path)
     return false
   }
 
@@ -392,8 +464,9 @@ function visitModuleGraphDeclarationImport(
     path,
     source: source ?? '',
     ast: program,
-    declarationProgram: program,
+    declarationProgram: null,
     external: true,
+    externalFunctionEffects: declarationImport.functionEffects,
     hir: null,
     ir: null,
     imports,
@@ -403,6 +476,11 @@ function visitModuleGraphDeclarationImport(
   }
 
   context.modules.set(path, module)
+  prepareModuleTypeImportDeclarations(context, module)
+  const checked = checkProgram(insertImportSyntheticDeclarations(program, module.typeImportDeclarations), context.options)
+  module.hir = lowerProgram(checked.ast)
+  module.declarationProgram = createModuleDeclarationProgram(module.hir)
+  context.visiting.delete(path)
   context.order.push(module)
 
   return true
@@ -568,12 +646,31 @@ function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode
   }
 
   const body: AnyNode[] = []
+  const typeNames: Map<string, number> = new Map()
 
   for (const item of program.body) {
+    if (item.type === 'TypeAliasDeclaration') {
+      typeNames.set(item.name, body.length)
+    }
+
     body.push(item)
   }
 
   for (const declaration of declarations) {
+    if (declaration.type === 'TypeAliasDeclaration') {
+      const existingIndex = typeNames.get(declaration.name)
+
+      if (existingIndex !== null && typeof existingIndex !== 'undefined') {
+        if (declaration.exported === true && body[existingIndex].type === 'TypeAliasDeclaration') {
+          body[existingIndex].exported = true
+        }
+
+        continue
+      }
+
+      typeNames.set(declaration.name, body.length)
+    }
+
     body.push(declaration)
   }
 
@@ -752,6 +849,7 @@ function prepareModuleGraphDeclarationImports(
       sourcePath,
       declarationPath,
       declarationSource: item.declarationSource ?? null,
+      functionEffects: item.functionEffects ?? [],
       program: item.program ?? null
     })
   }
