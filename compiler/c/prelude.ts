@@ -61,6 +61,7 @@ export function emitCPrelude(
   needsUrlRuntime: boolean,
   needsProcessRuntime: boolean,
   needsJsonRuntime: boolean,
+  needsRegexpRuntime: boolean,
   needsTimerRuntime: boolean,
   needsConsoleRuntime: boolean,
   needsDgramRuntime: boolean,
@@ -76,6 +77,12 @@ export function emitCPrelude(
   if (needsConsoleRuntime) {
     lines.push('#include <stdlib.h>')
     lines.push('#include "inox/console.h"')
+  }
+
+  if (needsRegexpRuntime) {
+    lines.push('#include <regex.h>')
+    lines.push('#include <stdlib.h>')
+    lines.push('#include <string.h>')
   }
 
   if (needsDgramRuntime) {
@@ -182,6 +189,11 @@ export function emitCPrelude(
     lines.push('')
   }
 
+  if (needsRegexpRuntime) {
+    pushCPreludeLines(lines, emitRegExpHelpers())
+    lines.push('')
+  }
+
   if (needsRuntime) {
     lines.push('static void* inox_default_alloc(void* user, size_t size, size_t align) {')
     lines.push('  (void)user;')
@@ -254,6 +266,36 @@ export function emitCPrelude(
   }
 
   return lines
+}
+
+function emitRegExpHelpers(): string[] {
+  return [
+    'typedef struct inox_regexp_literal {',
+    '  const char* pattern;',
+    '  int flags;',
+    '} inox_regexp_literal;',
+    '',
+    'static int inox_regexp_test(const char* pattern, int flags, const char* value_bytes, size_t value_len) {',
+    '  regex_t regex;',
+    '  int status = regcomp(&regex, pattern, REG_EXTENDED | flags);',
+    '  if (status != 0) return 0;',
+    '  if (value_len == (size_t)-1) {',
+    '    regfree(&regex);',
+    '    return 0;',
+    '  }',
+    '  char* value = (char*)malloc(value_len + 1);',
+    '  if (value == 0) {',
+    '    regfree(&regex);',
+    '    return 0;',
+    '  }',
+    '  if (value_len > 0) memcpy(value, value_bytes, value_len);',
+    '  value[value_len] = 0;',
+    '  status = regexec(&regex, value, 0, 0, 0);',
+    '  free(value);',
+    '  regfree(&regex);',
+    '  return status == 0;',
+    '}'
+  ]
 }
 
 function emitMathHelpers(random: CPreludeRandomConfig): string[] {

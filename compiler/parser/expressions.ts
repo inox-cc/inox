@@ -5,6 +5,11 @@ type OptionalCallTargetNode = AnyNode & {
   callee: AnyNode
 }
 
+type RegExpLiteralParts = {
+  flags: string
+  pattern: string
+}
+
 export function createAssignmentExpression(target: AnyNode, value: AnyNode): AnyNode {
   return {
     type: 'AssignmentExpression',
@@ -178,6 +183,18 @@ export function createStringLiteral(token: Token): AnyNode {
   }
 }
 
+export function createRegExpLiteral(token: Token): AnyNode {
+  const parts = splitRegExpLiteral(token.value)
+
+  return {
+    type: 'RegExpLiteral',
+    raw: token.value,
+    pattern: parts.pattern,
+    flags: parts.flags,
+    loc: locFromToken(token)
+  }
+}
+
 export function createTemplateLiteral(token: Token): AnyNode {
   return {
     type: 'TemplateLiteral',
@@ -258,5 +275,40 @@ export function createObjectLiteral(start: Token, properties: AnyNode[]): AnyNod
     type: 'ObjectLiteral',
     properties,
     loc: locFromToken(start)
+  }
+}
+
+function splitRegExpLiteral(raw: string): RegExpLiteralParts {
+  let inClass = false
+
+  for (let index = 1; index < raw.length; index = index + 1) {
+    const unit = raw[index]
+
+    if (unit === '\\') {
+      index = index + 1
+      continue
+    }
+
+    if (unit === '[') {
+      inClass = true
+      continue
+    }
+
+    if (unit === ']') {
+      inClass = false
+      continue
+    }
+
+    if (unit === '/' && !inClass) {
+      return {
+        pattern: raw.slice(1, index),
+        flags: raw.slice(index + 1)
+      }
+    }
+  }
+
+  return {
+    pattern: raw.slice(1),
+    flags: ''
   }
 }

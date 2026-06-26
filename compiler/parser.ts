@@ -35,6 +35,7 @@ import {
   createOptionalCallTarget,
   createOptionalIndexExpression,
   createOptionalMemberExpression,
+  createRegExpLiteral,
   createReference,
   createReferenceFromName,
   createStringLiteral,
@@ -1550,6 +1551,12 @@ class Parser {
       const token = this.advance()
 
       return createStringLiteral(token)
+    }
+
+    if (this.is('regexp')) {
+      const token = this.advance()
+
+      return createRegExpLiteral(token)
     }
 
     if (this.is('template')) {

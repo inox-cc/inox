@@ -247,7 +247,8 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       feature === 'map-get-null' ||
       feature === 'map-index-set' ||
       feature === 'number-from-string-null' ||
-      feature === 'numeric-casts'
+      feature === 'numeric-casts' ||
+      feature === 'regexp'
     ) {
       continue
     } else {
@@ -328,6 +329,7 @@ function sortedIrFeatures(features: IrFeatureSet): IrFeature[] {
   pushIrFeatureIfPresent(features, result, 'os')
   pushIrFeatureIfPresent(features, result, 'path')
   pushIrFeatureIfPresent(features, result, 'process')
+  pushIrFeatureIfPresent(features, result, 'regexp')
   pushIrFeatureIfPresent(features, result, 'runtime-values')
   pushIrFeatureIfPresent(features, result, 'string-bytes')
   pushIrFeatureIfPresent(features, result, 'timers')
@@ -559,6 +561,10 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   if (node.valueType === 'bytes' || node.returnType === 'bytes') {
     features.add('binary')
     features.add('runtime-values')
+  }
+
+  if (node.type === 'RegExpLiteral' || node.valueType === 'regexp') {
+    features.add('regexp')
   }
 
   if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {
@@ -893,6 +899,11 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     if (stringMethod === 'split') {
       features.add('collections')
     }
+  }
+
+  if (expression.regexpRuntimeMethod === 'test') {
+    features.add('regexp')
+    features.add('string-bytes')
   }
 }
 

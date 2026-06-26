@@ -46,6 +46,7 @@ export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 export type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
 export type CPromiseChainWrapperMap = Map<string, CPromiseChainWrapper>
 export type CPromiseConstructorHandlerMap = Map<string, CPromiseConstructorHandler>
+export type CRegExpLiteralMap = Map<string, AnyNode>
 export type CStringMap = Map<string, string>
 export type CStringNullableMap = Map<string, string | null>
 export type CStringSet = Set<string>
@@ -124,6 +125,16 @@ export function cloneCPromiseConstructorHandlerMap(
   return new Map(values)
 }
 
+export function cloneCRegExpLiteralMap(values: CRegExpLiteralMap | null | undefined): CRegExpLiteralMap {
+  const result: CRegExpLiteralMap = new Map()
+
+  if (values === null || typeof values === 'undefined') {
+    return result
+  }
+
+  return new Map(values)
+}
+
 export type CEmitContext = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
@@ -174,6 +185,7 @@ export type CEmitContext = {
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: CPromiseChainWrapperMap
   processRuntime: boolean
+  regexpLiterals: CRegExpLiteralMap
   runtimeFunctionParams: CFunctionTypeMap
   statementLoweringDependencies: StatementLoweringDependencies
   stringLoweringDependencies: StringLoweringDependencies
@@ -240,6 +252,7 @@ type CVariableScopeContext = {
   promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
+  regexpLiterals: CRegExpLiteralMap
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
   runtimeStringValues: CStringMap
@@ -329,6 +342,7 @@ export type CVariableScopeSnapshot = {
   promiseConstructorHandlers: CPromiseConstructorHandlerMap
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
+  regexpLiterals: CRegExpLiteralMap
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
   runtimeStringValues: CStringMap
@@ -397,6 +411,7 @@ export function createFunctionContext(
     processRuntime: baseContext.processRuntime,
     promiseChainArrowWrappers: baseContext.promiseChainArrowWrappers,
     promiseChainWrappers: baseContext.promiseChainWrappers,
+    regexpLiterals: cloneCRegExpLiteralMap(baseContext.regexpLiterals),
     runtimeFunctionParams: baseContext.runtimeFunctionParams,
     statementLoweringDependencies: baseContext.statementLoweringDependencies,
     stringLoweringDependencies: baseContext.stringLoweringDependencies,
@@ -986,6 +1001,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousPromiseConstructorHandlers = context.promiseConstructorHandlers
   const previousPromiseRejectionValueTypes = context.promiseRejectionValueTypes
   const previousPromiseValueTypes = context.promiseValueTypes
+  const previousRegExpLiterals = context.regexpLiterals
   const previousRuntimeCallbacks = context.runtimeCallbacks
   const previousRuntimeArrayElementTypes = context.runtimeArrayElementTypes
   const previousRuntimeStringValues = context.runtimeStringValues
@@ -1010,6 +1026,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.promiseConstructorHandlers = cloneCPromiseConstructorHandlerMap(previousPromiseConstructorHandlers)
   context.promiseRejectionValueTypes = cloneCStringMap(previousPromiseRejectionValueTypes)
   context.promiseValueTypes = cloneCStringMap(previousPromiseValueTypes)
+  context.regexpLiterals = cloneCRegExpLiteralMap(previousRegExpLiterals)
   context.runtimeCallbacks = cloneCStringSet(previousRuntimeCallbacks)
   context.runtimeArrayElementTypes = cloneCStringMap(previousRuntimeArrayElementTypes)
   context.runtimeStringValues = cloneCStringMap(previousRuntimeStringValues)
@@ -1034,6 +1051,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     promiseConstructorHandlers: previousPromiseConstructorHandlers,
     promiseRejectionValueTypes: previousPromiseRejectionValueTypes,
     promiseValueTypes: previousPromiseValueTypes,
+    regexpLiterals: previousRegExpLiterals,
     runtimeArrayElementTypes: previousRuntimeArrayElementTypes,
     runtimeCallbacks: previousRuntimeCallbacks,
     runtimeStringValues: previousRuntimeStringValues,
@@ -1064,6 +1082,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.promiseConstructorHandlers = snapshot.promiseConstructorHandlers
   context.promiseRejectionValueTypes = snapshot.promiseRejectionValueTypes
   context.promiseValueTypes = snapshot.promiseValueTypes
+  context.regexpLiterals = snapshot.regexpLiterals
   context.runtimeCallbacks = snapshot.runtimeCallbacks
   context.runtimeArrayElementTypes = snapshot.runtimeArrayElementTypes
   context.runtimeStringValues = snapshot.runtimeStringValues

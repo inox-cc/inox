@@ -397,6 +397,9 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('expressionBody', 'boolean', null, false, loc),
       anyNodeField('property', 'string', null, false, loc),
       anyNodeField('operator', 'string', null, false, loc),
+      anyNodeField('raw', 'string', null, false, loc),
+      anyNodeField('pattern', 'string', null, false, loc),
+      anyNodeField('flags', 'string', null, false, loc),
       anyNodeField('declaredType', 'string', null, true, loc),
       anyNodeField('valueType', 'string', null, true, loc),
       anyNodeField('arrayElementType', 'string', null, true, loc),
@@ -425,6 +428,7 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('processRuntimeProperty', 'string', null, true, loc),
       anyNodeField('processRuntimeEnvName', 'string', null, true, loc),
       anyNodeField('dgramMessageHandlerName', 'string', null, true, loc),
+      anyNodeField('regexpRuntimeMethod', 'string', null, true, loc),
       anyNodeField('urlRuntimeMethod', 'string', null, true, loc),
       anyNodeField('urlRuntimeField', 'string', null, true, loc),
       anyNodeField('httpHandlerName', 'string', null, true, loc)
@@ -1591,6 +1595,10 @@ class Checker {
       return 'string'
     }
 
+    if (expression.type === 'RegExpLiteral') {
+      return this.checkRegExpLiteral(expression)
+    }
+
     if (expression.type === 'NumberLiteral') {
       return 'number'
     }
@@ -2291,6 +2299,7 @@ class Checker {
       statement.type === 'OptionalIndexExpression' ||
       statement.type === 'OptionalMemberExpression' ||
       statement.type === 'Reference' ||
+      statement.type === 'RegExpLiteral' ||
       statement.type === 'StringLiteral' ||
       statement.type === 'TemplateLiteral' ||
       statement.type === 'ThisExpression' ||
@@ -2340,6 +2349,10 @@ class Checker {
   checkExpression(expression: AnyNode): ValueType {
     if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
       return 'string'
+    }
+
+    if (expression.type === 'RegExpLiteral') {
+      return this.checkRegExpLiteral(expression)
     }
 
     if (expression.type === 'NumberLiteral') {
@@ -3919,6 +3932,12 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    const consoleType = this.checkConsoleCall(expression)
+
+    if (consoleType !== null && typeof consoleType !== 'undefined') {
+      return consoleType
+    }
+
     const timeType = this.checkTimeCall(expression)
 
     if (timeType !== null && typeof timeType !== 'undefined') {
@@ -3947,6 +3966,12 @@ class Checker {
 
     if (stringConversionType !== null && typeof stringConversionType !== 'undefined') {
       return stringConversionType
+    }
+
+    const regexpTestType = this.checkRegExpTestCall(expression)
+
+    if (regexpTestType !== null && typeof regexpTestType !== 'undefined') {
+      return regexpTestType
     }
 
     const numberConversionType = this.checkNumberConversionCall(expression)
@@ -4287,6 +4312,33 @@ class Checker {
     }
 
     return returnType
+  }
+
+  checkConsoleCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression') {
+      return null
+    }
+
+    const path = memberExpressionPath(expression.callee)
+
+    if (
+      path.length !== 2 ||
+      path[0] !== 'console' ||
+      !isConsoleMethod(path[1]) ||
+      this.runtimeGlobalIsShadowed('console')
+    ) {
+      return null
+    }
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      this.checkExpression(arg)
+    }
+
+    expression.valueType = 'void'
+
+    return 'void'
   }
 
   callExpressionArgumentLabel(expression: AnyNode): string {
@@ -10269,6 +10321,76 @@ class Checker {
     return 'string'
   }
 
+  checkRegExpLiteral(expression: AnyNode): ValueType {
+    expression.valueType = 'regexp'
+    this.checkRegExpFlags(expression)
+
+    return 'regexp'
+  }
+
+  checkRegExpFlags(expression: AnyNode): void {
+    const flags = regexpFlags(expression)
+    const seen: Set<string> = new Set()
+
+    for (let index = 0; index < flags.length; index = index + 1) {
+      const flag = flags[index]
+
+      if (seen.has(flag)) {
+        this.report('INOX_REGEXP_FLAG', `duplicate regular expression flag ${flag}`, expression.loc)
+        continue
+      }
+
+      seen.add(flag)
+
+      if (flag !== 'i') {
+        this.report(
+          'INOX_REGEXP_FLAG',
+          `regular expression flag ${flag} is not supported in the current C backend slice`,
+          expression.loc
+        )
+      }
+    }
+  }
+
+  checkRegExpTestCall(expression: AnyNode): ValueType | null {
+    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'test') {
+      return null
+    }
+
+    const objectType = this.checkExpression(expression.callee.object)
+
+    if (objectType !== 'regexp') {
+      return null
+    }
+
+    const argTypes: ValueType[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      argTypes.push(this.checkExpression(arg))
+    }
+
+    if (expression.args.length !== 1) {
+      this.report('INOX_ARG_COUNT', `regexp.test expects 1 argument(s), got ${expression.args.length}`, expression.loc)
+    }
+
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+      this.checkAssignableType(
+        argTypes[0],
+        'string',
+        expression.args[0].loc,
+        false,
+        this.expressionCanBeNull(expression.args[0])
+      )
+    }
+
+    expression.valueType = 'boolean'
+    expression.regexpRuntimeMethod = 'test'
+
+    return 'boolean'
+  }
+
   checkArrayFromCall(expression: AnyNode): ValueType | null {
     if (
       expression.callee.type !== 'MemberExpression' ||
@@ -15248,6 +15370,7 @@ function isConditionValueType(valueType: ValueType): boolean {
     valueType === 'boolean' ||
     valueType === 'number' ||
     valueType === 'unknown' ||
+    valueType === 'regexp' ||
     valueType === 'string' ||
     valueType === 'object' ||
     valueType === 'array' ||
@@ -15258,6 +15381,16 @@ function isConditionValueType(valueType: ValueType): boolean {
     valueType === 'function' ||
     valueType === 'timer'
   )
+}
+
+function regexpFlags(expression: AnyNode): string {
+  const flags = expression.flags
+
+  if (typeof flags === 'string') {
+    return flags
+  }
+
+  return ''
 }
 
 function isNonNullNarrowingLiteral(expression: AnyNode): boolean {
@@ -15282,6 +15415,10 @@ function stringPredicateArgCountMessage(method: string, actual: number): string 
   }
 
   return `string.${method} expects 1 argument(s), got ${actual}`
+}
+
+function isConsoleMethod(name: string): boolean {
+  return name === 'log' || name === 'info' || name === 'warn' || name === 'error'
 }
 
 function isPromiseMethod(name: string): boolean {

@@ -258,6 +258,10 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
       continue
     }
 
+    if (item.valueType === 'regexp' && item.init !== null && typeof item.init !== 'undefined') {
+      context.regexpLiterals.set(item.name, item.init)
+    }
+
     values.push({
       functionType: cUnitValueFunctionType(item),
       name: item.name,
@@ -593,6 +597,10 @@ function cUnitValueCType(valueType: string): string {
 function cUnitValueGlobalInitializer(valueType: string): string {
   if (valueType === 'string') {
     return '""'
+  }
+
+  if (valueType === 'regexp') {
+    return '{ 0, 0 }'
   }
 
   if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
@@ -1147,6 +1155,7 @@ export function emitCUnit(
   const needsUrlRuntime: boolean = preludeRequirements.needsUrlRuntime
   const needsProcessRuntime: boolean = preludeRequirements.needsProcessRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
+  const needsRegexpRuntime: boolean = preludeRequirements.needsRegexpRuntime
   const needsTimerRuntime: boolean = preludeRequirements.needsTimerRuntime
   const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
   const needsDgramRuntime: boolean = preludeRequirements.needsDgramRuntime
@@ -1180,6 +1189,7 @@ export function emitCUnit(
     needsUrlRuntime,
     needsProcessRuntime,
     needsJsonRuntime,
+    needsRegexpRuntime,
     needsTimerRuntime,
     needsConsoleRuntime,
     needsDgramRuntime,

@@ -24,6 +24,10 @@ function lowerExpressionWithContext(
     return cloneStringLiteral(expression)
   }
 
+  if (expression.type === 'RegExpLiteral') {
+    return cloneRegExpLiteral(expression)
+  }
+
   if (expression.type === 'TemplateLiteral') {
     return cloneTemplateLiteral(expression)
   }
@@ -428,6 +432,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.stringRuntimeMethod = stringRuntimeMethod
   }
 
+  const regexpRuntimeMethod = nullableString(source.regexpRuntimeMethod)
+  if (regexpRuntimeMethod !== null && typeof regexpRuntimeMethod !== 'undefined') {
+    target.regexpRuntimeMethod = regexpRuntimeMethod
+  }
+
   const timeRuntimeMethod = nullableString(source.timeRuntimeMethod)
   if (timeRuntimeMethod !== null && typeof timeRuntimeMethod !== 'undefined') {
     target.timeRuntimeMethod = timeRuntimeMethod
@@ -532,6 +541,20 @@ function cloneStringLiteral(expression: LowerExpressionNode): LowerExpressionNod
       type: 'StringLiteral',
       value: expression.value,
       valueType: 'string',
+      loc: expression.loc
+    },
+    expression
+  )
+}
+
+function cloneRegExpLiteral(expression: LowerExpressionNode): LowerExpressionNode {
+  return copyRuntimeMetadata(
+    {
+      type: 'RegExpLiteral',
+      raw: expression.raw,
+      pattern: expression.pattern,
+      flags: expression.flags,
+      valueType: 'regexp',
       loc: expression.loc
     },
     expression

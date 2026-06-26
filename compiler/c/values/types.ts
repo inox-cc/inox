@@ -14,6 +14,7 @@ import type {
   CRuntimeArrayElement
 } from '../types.ts'
 import { isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
+import { isMemberAccessExpression, resolveKnownObjectMember, resolveObjectExpressionMember, isIndexAccessExpression, resolveKnownObjectIndex, resolveObjectExpressionIndex } from './objects.ts'
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
@@ -77,6 +78,34 @@ function cValueTypeOrUnknown(expression: AnyNode): string {
   }
 
   return 'unknown'
+}
+
+function isRegExpTestCall(expression: AnyNode, context: CFunctionContext): boolean {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'test'
+  ) {
+    return false
+  }
+
+  if (expression.regexpRuntimeMethod === 'test') {
+    return true
+  }
+
+  return isRegExpLiteralExpression(expression.callee.object, context)
+}
+
+function isRegExpLiteralExpression(expression: AnyNode, context: CFunctionContext): boolean {
+  if (expression.type === 'RegExpLiteral') {
+    return true
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return context.regexpLiterals.has(expression.path[0])
+  }
+
+  return false
 }
 
 function cStringAt(values: string[], index: number): string {
@@ -515,6 +544,10 @@ export function inferExpressionType(
 
   if (expression.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee)) {
     return 'number'
+  }
+
+  if (isRegExpTestCall(expression, context)) {
+    return 'boolean'
   }
 
   if (expression.type === 'CallExpression' && deps.cFsRuntimeExpressionMethod(expression)) {

@@ -1628,6 +1628,7 @@ function createBaseContext(
     promiseChainArrowWrappers: new Map(),
     promiseChainWrappers: new Map(),
     processRuntime: false,
+    regexpLiterals: new Map(),
     httpCreateServerNames: new Set(),
     httpHandlers: new Map(),
     httpImportNames: new Set(),
@@ -3169,6 +3170,12 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
   const variableType = inferred === 'function' ? 'function' : declared ?? inferred
   context.variables.set(statement.name, variableType)
 
+  const regexpDeclaration = emitRegExpLiteralVariableDeclaration(statement, context, variableType)
+
+  if (regexpDeclaration !== null && typeof regexpDeclaration !== 'undefined') {
+    return regexpDeclaration
+  }
+
   const functionScalarDeclaration = emitFunctionScalarVariableDeclaration(statement, context, variableType)
 
   if (functionScalarDeclaration !== null && typeof functionScalarDeclaration !== 'undefined') {
@@ -3234,6 +3241,41 @@ function inferScalarDeclarationValueType(statement: CDynamicObjectFieldNode, con
   }
 
   return inferred
+}
+
+function emitRegExpLiteralVariableDeclaration(
+  statement: AnyNode,
+  context: CFunctionContext,
+  variableType: string
+): string[] | null {
+  if (variableType !== 'regexp' || statement.init.type !== 'RegExpLiteral') {
+    return null
+  }
+
+  context.variables.set(statement.name, 'regexp')
+  context.regexpLiterals.set(statement.name, statement.init)
+
+  return [
+    `${regexpVariableConstPrefix(statement)}inox_regexp_literal ${statement.name} = { ${cStringLiteral(
+      statement.init.pattern
+    )}, ${cRegExpFlags(statement.init.flags)} };`
+  ]
+}
+
+function regexpVariableConstPrefix(statement: AnyNode): string {
+  if (statement.kind === 'const') {
+    return 'const '
+  }
+
+  return ''
+}
+
+function cRegExpFlags(flags: string | null | undefined): string {
+  if (flags !== null && typeof flags !== 'undefined' && flags.includes('i')) {
+    return 'REG_ICASE'
+  }
+
+  return '0'
 }
 
 function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
@@ -3355,6 +3397,12 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
   if (statement.init === null || typeof statement.init === 'undefined') {
     return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
+  }
+
+  if (inferred === 'regexp' && statement.init.type === 'RegExpLiteral') {
+    context.moduleValueTypes.set(statement.name, 'regexp')
+    context.regexpLiterals.set(statement.name, statement.init)
+    return [`${name} = (inox_regexp_literal){ ${cStringLiteral(statement.init.pattern)}, ${cRegExpFlags(statement.init.flags)} };`]
   }
 
   if (inferred === 'number' || inferred === 'boolean' || inferred === 'date') {

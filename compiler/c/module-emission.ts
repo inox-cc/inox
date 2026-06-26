@@ -419,6 +419,7 @@ export function emitCModuleSource(
       prelude.needsUrlRuntime,
       prelude.needsProcessRuntime,
       prelude.needsJsonRuntime,
+      prelude.needsRegexpRuntime,
       prelude.needsTimerRuntime,
       prelude.needsConsoleRuntime,
       prelude.needsDgramRuntime,
@@ -1286,6 +1287,16 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
       continue
     }
 
+    if (
+      context !== null &&
+      typeof context !== 'undefined' &&
+      item.valueType === 'regexp' &&
+      item.init !== null &&
+      typeof item.init !== 'undefined'
+    ) {
+      context.regexpLiterals.set(item.name, item.init)
+    }
+
     values.push({
       exported: item.exported === true,
       functionType: cModuleValueFunctionType(item),
@@ -1629,6 +1640,10 @@ function cModuleValueCType(valueType: string): string {
 function cModuleValueGlobalInitializer(valueType: string): string {
   if (valueType === 'string') {
     return '""'
+  }
+
+  if (valueType === 'regexp') {
+    return '{ 0, 0 }'
   }
 
   if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {

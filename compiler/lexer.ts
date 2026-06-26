@@ -58,6 +58,11 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
       continue
     }
 
+    if (unit === '/' && canStartRegexpLiteral(state)) {
+      state.tokens.push(readRegexpToken(state))
+      continue
+    }
+
     if (unit === "'" || unit === '"') {
       state.tokens.push(readStringToken(state, unit))
       continue
@@ -345,6 +350,71 @@ function readNumberToken(state: LexerState): Token {
   return makeToken('number', value, startLine, startColumn, startIndex, state.file)
 }
 
+function readRegexpToken(state: LexerState): Token {
+  const startLine = state.line
+  const startColumn = state.column
+  const startIndex = state.index
+  let value = '/'
+  let inClass = false
+
+  advanceLexer(state, '/')
+
+  while (state.index < state.source.length) {
+    const unit = lexerCurrentChar(state)
+
+    if (unit === '\n') {
+      state.diagnostics.push(
+        diagnostic(
+          'INOX_UNTERMINATED_REGEXP',
+          'unterminated regular expression literal',
+          lexerLocation(state, startLine, startColumn)
+        )
+      )
+      return makeToken('regexp', value, startLine, startColumn, startIndex, state.file)
+    }
+
+    value = value + unit
+    advanceLexer(state, unit)
+
+    if (unit === '\\' && state.index < state.source.length) {
+      const escaped = lexerCurrentChar(state)
+      value = value + escaped
+      advanceLexer(state, escaped)
+      continue
+    }
+
+    if (unit === '[') {
+      inClass = true
+      continue
+    }
+
+    if (unit === ']') {
+      inClass = false
+      continue
+    }
+
+    if (unit === '/' && !inClass) {
+      while (state.index < state.source.length && isIdentifierPart(lexerCurrentChar(state))) {
+        const flag = lexerCurrentChar(state)
+        value = value + flag
+        advanceLexer(state, flag)
+      }
+
+      return makeToken('regexp', value, startLine, startColumn, startIndex, state.file)
+    }
+  }
+
+  state.diagnostics.push(
+    diagnostic(
+      'INOX_UNTERMINATED_REGEXP',
+      'unterminated regular expression literal',
+      lexerLocation(state, startLine, startColumn)
+    )
+  )
+
+  return makeToken('regexp', value, startLine, startColumn, startIndex, state.file)
+}
+
 function readIdentifierToken(state: LexerState): Token {
   const startLine = state.line
   const startColumn = state.column
@@ -495,6 +565,76 @@ function makeToken(
   }
 
   return token
+}
+
+function canStartRegexpLiteral(state: LexerState): boolean {
+  const previous = previousToken(state)
+
+  if (previous === null || typeof previous === 'undefined') {
+    return true
+  }
+
+  if (previous.type === 'keyword') {
+    return isRegexpPrefixKeyword(previous.value)
+  }
+
+  if (previous.type !== 'punctuator') {
+    return false
+  }
+
+  return isRegexpPrefixPunctuator(previous.value)
+}
+
+function previousToken(state: LexerState): Token | null {
+  if (state.tokens.length === 0) {
+    return null
+  }
+
+  return state.tokens[state.tokens.length - 1]
+}
+
+function isRegexpPrefixKeyword(value: string): boolean {
+  return (
+    value === 'case' ||
+    value === 'delete' ||
+    value === 'else' ||
+    value === 'in' ||
+    value === 'instanceof' ||
+    value === 'new' ||
+    value === 'return' ||
+    value === 'throw' ||
+    value === 'typeof'
+  )
+}
+
+function isRegexpPrefixPunctuator(value: string): boolean {
+  return (
+    value === '(' ||
+    value === '{' ||
+    value === '[' ||
+    value === ',' ||
+    value === ';' ||
+    value === ':' ||
+    value === '=' ||
+    value === '==' ||
+    value === '===' ||
+    value === '!=' ||
+    value === '!==' ||
+    value === '!' ||
+    value === '&&' ||
+    value === '||' ||
+    value === '??' ||
+    value === '?' ||
+    value === '+' ||
+    value === '-' ||
+    value === '*' ||
+    value === '%' ||
+    value === '<' ||
+    value === '>' ||
+    value === '<=' ||
+    value === '>=' ||
+    value === '=>'
+  )
 }
 
 function isDigit(ch: string): boolean {

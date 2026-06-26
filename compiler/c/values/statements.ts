@@ -16,6 +16,7 @@ import {
   restoreNullableScalarNarrowing,
   restoreVariableScope
 } from '../context.ts'
+import { cStringLiteral } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import type {
@@ -183,6 +184,7 @@ type CFunctionContext = {
   promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
   promiseRejectionValueTypes: CStringMap
   promiseValueTypes: CStringMap
+  regexpLiterals: Map<string, StatementNode>
   returnFlowUsed: boolean
   returnNullable: boolean
   returnShape?: CObjectShape | null
@@ -2598,6 +2600,15 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
   context.variables.set(statement.name, variableType)
 
+  if (variableType === 'regexp' && statement.init.type === 'RegExpLiteral') {
+    context.regexpLiterals.set(statement.name, statement.init)
+
+    return {
+      lines: [],
+      expression: emitRegExpLiteralVariableInitializer(statement)
+    }
+  }
+
   if (variableType === 'function') {
     let runtimeFunctionType: CFunctionType | null = null
     const functionType = scalarDeclarationFunctionType(statement)
@@ -2712,6 +2723,31 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     lines: value.lines,
     expression: `${constPrefix}double ${statement.name} = ${value.expression}`
   }
+}
+
+function emitRegExpLiteralVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null {
+  if (statement.init.type !== 'RegExpLiteral') {
+    return null
+  }
+
+  context.variables.set(statement.name, 'regexp')
+  context.regexpLiterals.set(statement.name, statement.init)
+
+  return [`${emitRegExpLiteralVariableInitializer(statement)};`]
+}
+
+function emitRegExpLiteralVariableInitializer(statement: StatementNode): string {
+  return `${constPrefix(statement.kind === 'const')}inox_regexp_literal ${statement.name} = { ${cStringLiteral(
+    statement.init.pattern
+  )}, ${cRegExpFlags(statement.init.flags)} }`
+}
+
+function cRegExpFlags(flags: string | null | undefined): string {
+  if (flags !== null && typeof flags !== 'undefined' && flags.includes('i')) {
+    return 'REG_ICASE'
+  }
+
+  return '0'
 }
 
 function registerPromiseVariableMetadata(
@@ -3792,6 +3828,12 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (deps.isCollectionConstructorExpression(statement.init)) {
     return emitCollectionVariableDeclaration(statement, context)
+  }
+
+  const regexpDeclaration = emitRegExpLiteralVariableDeclaration(statement, context)
+
+  if (regexpDeclaration !== null && typeof regexpDeclaration !== 'undefined') {
+    return regexpDeclaration
   }
 
   const arrayFromCall = deps.emitPreparedArrayFromCallExpression(statement.init, context)

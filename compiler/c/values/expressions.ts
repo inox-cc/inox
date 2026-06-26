@@ -15,6 +15,7 @@ import {
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
+  pushDiagnostic,
   registerEventLoop,
   registerOwnedValue
 } from '../context.ts'
@@ -178,6 +179,7 @@ type CFunctionContext = CEmitContext & {
   objectDeclaredTypes: CStringNullableMap
   objectShapes: CObjectShapeFieldMap
   ownedValues: string[]
+  regexpLiterals: Map<string, CValueNode>
   returnType?: string
   runtimeFunctionParams: CFunctionTypeMap
   runtimeArrayElementTypes: CStringMap
@@ -2897,6 +2899,12 @@ export function emitPreparedNumberExpression(
       return numericCast
     }
 
+    const regexpTest = emitPreparedRegExpTestExpression(expression, context, deps)
+
+    if (regexpTest !== null && typeof regexpTest !== 'undefined') {
+      return regexpTest
+    }
+
     if (deps.isStringPredicateCall(expression, context)) {
       return deps.emitPreparedStringPredicateCall(expression, context)
     }
@@ -4604,6 +4612,75 @@ function isNumericCastCall(
   }
 
   return deps.inferExpressionType(expression.args[0], context) === 'number'
+}
+
+function emitPreparedRegExpTestExpression(
+  expression: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): PreparedExpression | null {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    expression.callee.property !== 'test' ||
+    expression.args.length !== 1
+  ) {
+    return null
+  }
+
+  const literal = resolveRegExpLiteralExpression(expression.callee.object, context)
+
+  if (literal === null || typeof literal === 'undefined') {
+    pushDiagnostic(
+      context,
+      diagnostic(
+        'INOX_C_REGEXP_EXPR',
+        'regular expression value is not supported by the current C backend slice',
+        expression.loc
+      )
+    )
+
+    return {
+      lines: [],
+      expression: '0'
+    }
+  }
+
+  const value = deps.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_regexp_value')
+  const lines: string[] = []
+
+  appendLines(lines, value.lines)
+
+  return {
+    lines,
+    expression: `inox_regexp_test(${cStringLiteral(literal.pattern)}, ${cRegExpFlags(
+      literal.flags
+    )}, ${value.bytes}, ${value.length})`
+  }
+}
+
+function resolveRegExpLiteralExpression(expression: CValueNode, context: CFunctionContext): CValueNode | null {
+  if (expression.type === 'RegExpLiteral') {
+    return expression
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const literal = context.regexpLiterals.get(expression.path[0])
+
+    if (literal !== null && typeof literal !== 'undefined') {
+      return literal
+    }
+  }
+
+  return null
+}
+
+function cRegExpFlags(flags: string | null | undefined): string {
+  if (flags !== null && typeof flags !== 'undefined' && flags.includes('i')) {
+    return 'REG_ICASE'
+  }
+
+  return '0'
 }
 
 function numericIntegerCastLimits(cast: string): NumericIntegerCastLimits | null {
