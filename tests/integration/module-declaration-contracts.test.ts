@@ -32,14 +32,18 @@ export function userName(user: User): string {
 }
 
 export const version: string = '1'
+export const inferred = 'ok'
 `)
   const code = emitModuleDeclarationContract(declarationProgram)
 
   assert.match(code, /export type User = \{/)
   assert.match(code, /name: string;/)
   assert.match(code, /age\?: number;/)
+  assert.match(code, /age\?: number;\n};/)
+  assert.doesNotMatch(code, /\}\n;/)
   assert.match(code, /export function userName\(user: User\): string;/)
   assert.match(code, /export const version: string;/)
+  assert.match(code, /export const inferred: string;/)
 
   const parsed = parseModuleDeclarationContract(code, 'contract.d.ts')
   const fn = findNode(parsed, 'FunctionDeclaration', 'userName')

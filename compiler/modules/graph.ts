@@ -184,7 +184,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
     for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = item.specifiers[specifierIndex]
-      const exported = importedModule.exports.get(specifier.imported)
+      const exported = moduleExportedDeclaration(importedModule, specifier.imported)
 
       if (exported === null || typeof exported === 'undefined') {
         context.diagnostics.push(
@@ -286,7 +286,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
     for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = item.specifiers[specifierIndex]
-      const exported = importedModule.exports.get(specifier.imported)
+      const exported = moduleExportedDeclaration(importedModule, specifier.imported)
 
       if (exported === null || typeof exported === 'undefined') {
         context.diagnostics.push(
@@ -378,10 +378,9 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
 
     const types: AnyNode[] = []
     const typeNames: Set<string> = new Set()
-    const importedExports: Map<string, AnyNode> = importedModule.exports
 
     for (const specifier of item.specifiers) {
-      const exported = importedExports.get(specifier.imported)
+      const exported = moduleExportedDeclaration(importedModule, specifier.imported)
 
       if (exported === null || typeof exported === 'undefined') {
         context.diagnostics.push(
@@ -463,6 +462,54 @@ function applyImportedFunctionMetadata(specifier: AnyNode, importedProgram: Prog
 function findExportedFunctionDeclaration(program: ProgramNode, name: string): AnyNode | null {
   for (const item of program.body) {
     if (item.type === 'FunctionDeclaration' && item.exported === true && item.name === name) {
+      return item
+    }
+  }
+
+  return null
+}
+
+function moduleExportedDeclaration(module: ModuleRecord, name: string): AnyNode | null {
+  const program = moduleProgramForExportLookup(module)
+  const declaration = findExportedDeclaration(program, name)
+
+  if (declaration !== null) {
+    return declaration
+  }
+
+  const fallback = module.exports.get(name)
+
+  if (fallback !== null && typeof fallback !== 'undefined') {
+    return fallback
+  }
+
+  return null
+}
+
+function moduleProgramForExportLookup(module: ModuleRecord): ProgramNode {
+  if (module.declarationProgram !== null && typeof module.declarationProgram !== 'undefined') {
+    return module.declarationProgram
+  }
+
+  const hir = module.hir
+
+  if (hir !== null && typeof hir !== 'undefined') {
+    return hir
+  }
+
+  return module.ast
+}
+
+function findExportedDeclaration(program: ProgramNode, name: string): AnyNode | null {
+  for (const item of program.body) {
+    if (
+      item.exported === true &&
+      item.name === name &&
+      (item.type === 'FunctionDeclaration' ||
+        item.type === 'ClassDeclaration' ||
+        item.type === 'VariableDeclaration' ||
+        item.type === 'TypeAliasDeclaration')
+    ) {
       return item
     }
   }

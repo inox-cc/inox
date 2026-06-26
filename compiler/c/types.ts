@@ -352,7 +352,7 @@ export type CPromiseConstructorHandler = {
 }
 
 export type CModuleOutputFile = {
-  kind: 'header' | 'source'
+  kind: 'declaration' | 'header' | 'source'
   path: string
   sourcePath: string
   code: string
@@ -371,6 +371,7 @@ export type CModulePlan = {
   relativeSourcePath: string
   sourcePath: string
   headerPath: string
+  declarationPath: string
   symbolPrefix: string
   headerGuard: string
   initName: string | null

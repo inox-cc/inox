@@ -44,9 +44,11 @@ export async function assertCliEntryModuleMain(): Promise<void> {
 
     const generated = await readFile(join(outDir, 'src/index.c'), 'utf8')
     const generatedDependency = await readFile(join(outDir, 'src/lib/value.c'), 'utf8')
+    const generatedDeclaration = await readFile(join(outDir, 'src/lib/value.d.ts'), 'utf8')
 
     assert.match(generated, /int main\(void\)/)
     assert.match(generatedDependency, /inox_mod_src_lib_value_ts_.*_init/)
+    assert.match(generatedDeclaration, /export const value: string;/)
   } finally {
     await rm(workspace, {
       recursive: true,

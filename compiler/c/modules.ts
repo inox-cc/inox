@@ -1,5 +1,6 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import type { CompilerHost } from '../host.ts'
+import { emitModuleDeclarationContractResult } from '../modules/declarations.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord } from '../types.ts'
 import { formatGeneratedC } from './format.ts'
@@ -75,6 +76,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     const relativeSourcePath = relativeCModuleSourcePath(sourceRoot, record.path, host)
     const sourcePath = replaceCModuleExtension(relativeSourcePath, '.c', host)
     const headerPath = replaceCModuleExtension(relativeSourcePath, '.h', host)
+    const declarationPath = replaceCModuleExtension(relativeSourcePath, '.d.ts', host)
     const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path, host)
     let initName: CModuleInitName = null
     const isEntry = record.path === graph.entry && options.callMain !== false
@@ -90,6 +92,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
       relativeSourcePath,
       sourcePath,
       headerPath,
+      declarationPath,
       symbolPrefix,
       headerGuard: `${symbolPrefix.toUpperCase()}_H`,
       initName,
@@ -188,8 +191,37 @@ function emitCModuleFiles(
     sourcePath: plan.record.path,
     code: formatGeneratedC(emitters.emitHeader(plan, plans, diagnostics), plan.headerPath)
   })
+  files.push({
+    kind: 'declaration',
+    path: plan.declarationPath,
+    sourcePath: plan.record.path,
+    code: emitCModuleDeclarationContract(plan, diagnostics)
+  })
 
   return files
+}
+
+function emitCModuleDeclarationContract(plan: CModulePlan, diagnostics: Diagnostic[]): string {
+  const program = plan.record.declarationProgram
+
+  if (program === null || typeof program === 'undefined') {
+    diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_CONTRACT',
+        `cannot emit declaration contract for ${plan.record.path}`,
+        plan.record.ast.loc
+      )
+    )
+    return ''
+  }
+
+  const result = emitModuleDeclarationContractResult(program)
+
+  for (const item of result.diagnostics) {
+    diagnostics.push(item)
+  }
+
+  return result.code
 }
 
 function reportUnsupportedCModuleImports(
@@ -200,7 +232,7 @@ function reportUnsupportedCModuleImports(
   const specifiers: CModuleNode[] = declaration.specifiers
 
   for (const specifier of specifiers) {
-    const exported = importedModule.record.exports.get(specifier.imported)
+    const exported = moduleExportedDeclaration(importedModule.record, specifier.imported)
 
     if (
       exported === null ||
@@ -219,6 +251,45 @@ function reportUnsupportedCModuleImports(
       )
     )
   }
+}
+
+function moduleExportedDeclaration(module: ModuleRecord, name: string): AnyNode | null {
+  const declarationProgram = module.declarationProgram
+
+  if (declarationProgram !== null && typeof declarationProgram !== 'undefined') {
+    const declaration = findExportedDeclaration(declarationProgram, name)
+
+    if (declaration !== null) {
+      return declaration
+    }
+  }
+
+  const fallback = module.exports.get(name)
+
+  if (fallback !== null && typeof fallback !== 'undefined') {
+    return fallback
+  }
+
+  return null
+}
+
+function findExportedDeclaration(program: AnyNode, name: string): AnyNode | null {
+  const body: AnyNode[] = program.body
+
+  for (const item of body) {
+    if (
+      item.exported === true &&
+      item.name === name &&
+      (item.type === 'FunctionDeclaration' ||
+        item.type === 'ClassDeclaration' ||
+        item.type === 'VariableDeclaration' ||
+        item.type === 'TypeAliasDeclaration')
+    ) {
+      return item
+    }
+  }
+
+  return null
 }
 
 export function uniqueCModuleImports(imports: CModuleImportPlan[]): CModuleImportPlan[] {

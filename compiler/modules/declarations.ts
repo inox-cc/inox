@@ -182,7 +182,7 @@ function appendModuleDeclarationFunction(lines: string[], item: AnyNode): void {
 }
 
 function appendModuleDeclarationVariable(lines: string[], item: AnyNode, diagnostics: Diagnostic[]): void {
-  const declaredType = declaredTypeName(item)
+  const declaredType = declarationValueTypeName(item)
 
   if (declaredType === null) {
     diagnostics.push(
@@ -633,7 +633,7 @@ function formatObjectTypeBody(info: AnyNode): string {
 
   lines.push('}')
 
-  return joinLines(lines)
+  return joinStrings(lines, '\n')
 }
 
 function formatObjectTypeField(field: AnyNode): string {
@@ -699,6 +699,22 @@ function declarationReturnType(item: AnyNode): string {
 
 function declaredTypeName(item: AnyNode): string | null {
   return nullableStringMetadata(item.declaredType)
+}
+
+function declarationValueTypeName(item: AnyNode): string | null {
+  const declared = declaredTypeName(item)
+
+  if (declared !== null) {
+    return declared
+  }
+
+  const valueType = nullableStringMetadata(item.valueType)
+
+  if (valueType === null) {
+    return null
+  }
+
+  return typeNameFromMetadata(item, 'unknown')
 }
 
 function typeNameFromMetadata(item: AnyNode, fallback: string): string {
