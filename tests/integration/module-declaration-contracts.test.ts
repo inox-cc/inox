@@ -16,6 +16,7 @@ import type { AnyNode, ProgramNode } from '../../compiler/types.ts'
 
 export function assertModuleDeclarationContracts(): void {
   assertModuleDeclarationContractRoundTrip()
+  assertModuleDeclarationProgramKeepsTypeImports()
   assertModuleDeclarationContractInterfaceImportRead()
   assertModuleDeclarationContractDiagnostics()
 }
@@ -53,6 +54,48 @@ export const inferred = 'ok'
   assert.deepEqual(fn.body, [])
   assert.equal(variable.declarationOnly, true)
   assert.equal(variable.init, null)
+}
+
+function assertModuleDeclarationProgramKeepsTypeImports(): void {
+  const parsed = parseModuleDeclarationContract(
+    `
+import type { ExternalUser } from './user.ts'
+
+export type User = ExternalUser;
+`,
+    'source.d.ts'
+  )
+  const code = emitModuleDeclarationContract(createModuleDeclarationProgram(parsed))
+
+  assert.match(code, /import type \{ ExternalUser \} from '\.\/user\.ts';/)
+  assert.match(code, /export type User = ExternalUser;/)
+
+  const withSynthetic = parseModuleDeclarationContract(
+    `
+import type { ExternalUser } from './user.ts'
+
+export type User = ExternalUser;
+`,
+    'source.d.ts'
+  )
+  withSynthetic.body.push({
+    type: 'TypeAliasDeclaration',
+    exported: false,
+    name: 'ExternalUser',
+    syntheticTypeImport: true,
+    syntheticTypeImportDirect: true,
+    importedName: 'ExternalUser',
+    valueType: {
+      kind: 'alias',
+      valueType: 'unknown'
+    }
+  })
+
+  const syntheticCode = emitModuleDeclarationContract(createModuleDeclarationProgram(withSynthetic))
+
+  assert.doesNotMatch(syntheticCode, /import type \{ ExternalUser \}/)
+  assert.match(syntheticCode, /type ExternalUser = unknown;/)
+  assert.match(syntheticCode, /export type User = ExternalUser;/)
 }
 
 function assertModuleDeclarationContractInterfaceImportRead(): void {

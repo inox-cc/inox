@@ -15,8 +15,23 @@ export type ModuleDeclarationContractParseResult = {
 
 export function createModuleDeclarationProgram(program: ProgramNode): ProgramNode {
   const body: AnyNode[] = []
+  const syntheticTypeImportNames = collectModuleDeclarationSyntheticTypeImportNames(program)
+  const importedTypeNames = collectModuleDeclarationImportedTypeNames(program, syntheticTypeImportNames)
 
   for (const item of program.body) {
+    if (item.type === 'ImportDeclaration' && item.typeOnly === true) {
+      const declaration = createModuleDeclarationImportNode(item, syntheticTypeImportNames)
+
+      if (declaration !== null) {
+        body.push(declaration)
+      }
+      continue
+    }
+
+    if (item.type === 'TypeAliasDeclaration' && item.syntheticTypeImport === true && importedTypeNames.has(item.name)) {
+      continue
+    }
+
     const declaration = createModuleDeclarationNode(item)
 
     if (declaration !== null) {
@@ -27,6 +42,61 @@ export function createModuleDeclarationProgram(program: ProgramNode): ProgramNod
   return {
     type: 'Program',
     body
+  }
+}
+
+function collectModuleDeclarationSyntheticTypeImportNames(program: ProgramNode): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const item of program.body) {
+    if (item.type === 'TypeAliasDeclaration' && item.syntheticTypeImport === true) {
+      names.add(item.name)
+    }
+  }
+
+  return names
+}
+
+function collectModuleDeclarationImportedTypeNames(
+  program: ProgramNode,
+  syntheticTypeImportNames: Set<string>
+): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (const item of program.body) {
+    if (item.type !== 'ImportDeclaration' || item.typeOnly !== true) {
+      continue
+    }
+
+    for (const specifier of item.specifiers) {
+      if (!syntheticTypeImportNames.has(specifier.local)) {
+        names.add(specifier.local)
+      }
+    }
+  }
+
+  return names
+}
+
+function createModuleDeclarationImportNode(item: AnyNode, syntheticTypeImportNames: Set<string>): AnyNode | null {
+  const specifiers: AnyNode[] = []
+
+  for (const specifier of item.specifiers) {
+    if (!syntheticTypeImportNames.has(specifier.local)) {
+      specifiers.push(specifier)
+    }
+  }
+
+  if (specifiers.length === 0) {
+    return null
+  }
+
+  return {
+    type: 'ImportDeclaration',
+    typeOnly: true,
+    specifiers,
+    source: item.source,
+    loc: item.loc
   }
 }
 

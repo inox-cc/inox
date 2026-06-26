@@ -130,6 +130,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   )
   const imports: AnyNode[] = []
   const reexports: AnyNode[] = []
+  const seedDeclarationProgram = createModuleDeclarationProgram(ast)
 
   for (let itemIndex = 0; itemIndex < ast.body.length; itemIndex = itemIndex + 1) {
     const item = ast.body[itemIndex]
@@ -148,12 +149,12 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     path,
     source,
     ast,
-    declarationProgram: null,
+    declarationProgram: seedDeclarationProgram,
     hir: null,
     ir: null,
     imports,
     reexports,
-    exports: collectExports(ast),
+    exports: collectExports(seedDeclarationProgram),
     typeImportDeclarations: new Map()
   }
 
@@ -346,8 +347,6 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
         continue
       }
 
-      module.exports.set(specifier.local, exported)
-
       const importedProgram = moduleProgramForImports(importedModule)
 
       if (item.typeOnly) {
@@ -414,6 +413,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     reexportAliasDeclarations
   )
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
+  module.exports = collectExports(module.declarationProgram)
   module.ir = lowerHirToIr(module.hir)
   context.visiting.delete(path)
   context.order.push(module)
@@ -466,7 +466,7 @@ function visitModuleGraphDeclarationImport(
     path,
     source: source ?? '',
     ast: program,
-    declarationProgram: null,
+    declarationProgram: program,
     external: true,
     externalFunctionEffects: moduleGraphDeclarationImportFunctionEffects(context, declarationImport),
     hir: null,
@@ -485,6 +485,7 @@ function visitModuleGraphDeclarationImport(
   )
   module.hir = lowerProgram(checked.ast)
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
+  module.exports = collectExports(module.declarationProgram)
   context.visiting.delete(path)
   context.order.push(module)
 
@@ -758,34 +759,27 @@ function findExportedFunctionDeclaration(program: ProgramNode, name: string): An
 }
 
 function moduleExportedDeclaration(module: ModuleRecord, name: string): AnyNode | null {
-  const program = moduleProgramForExportLookup(module)
+  const program = moduleExportLookupProgram(module)
+
+  if (program === null) {
+    return null
+  }
+
   const declaration = findExportedDeclaration(program, name)
 
   if (declaration !== null) {
     return declaration
   }
 
-  const fallback = module.exports.get(name)
-
-  if (fallback !== null && typeof fallback !== 'undefined') {
-    return fallback
-  }
-
   return null
 }
 
-function moduleProgramForExportLookup(module: ModuleRecord): ProgramNode {
+function moduleExportLookupProgram(module: ModuleRecord): ProgramNode | null {
   if (module.declarationProgram !== null && typeof module.declarationProgram !== 'undefined') {
     return module.declarationProgram
   }
 
-  const hir = module.hir
-
-  if (hir !== null && typeof hir !== 'undefined') {
-    return hir
-  }
-
-  return module.ast
+  return null
 }
 
 function findExportedDeclaration(program: ProgramNode, name: string): AnyNode | null {
@@ -838,12 +832,6 @@ function moduleProgramForImports(module: ModuleRecord): ProgramNode | null {
     return module.declarationProgram
   }
 
-  const hir = module.hir
-
-  if (hir !== null && typeof hir !== 'undefined') {
-    return hir
-  }
-
   return null
 }
 
@@ -853,15 +841,15 @@ function resolveModuleGraphImport(
   specifier: string,
   loc: SourceLocation
 ): string {
+  const declarationImportPath = resolveDeclarationImportSpecifier(context, fromPath, specifier)
+
+  if (declarationImportPath !== null) {
+    return declarationImportPath
+  }
+
   try {
     return resolveImportSpecifier(fromPath, specifier, context.host)
   } catch {
-    const declarationImportPath = resolveDeclarationImportSpecifier(context, fromPath, specifier)
-
-    if (declarationImportPath !== null) {
-      return declarationImportPath
-    }
-
     context.diagnostics.push(diagnostic('INOX_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
     return ''
   }

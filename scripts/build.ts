@@ -267,23 +267,7 @@ function seedCompilerDeclarationContracts(modules: CompilerSourceModule[]): Decl
 }
 
 function seedCompilerDeclarationProgram(ast: ProgramNode): ProgramNode {
-  const declaration = createModuleDeclarationProgram(ast)
-  const body: AnyNode[] = []
-
-  for (const item of ast.body) {
-    if (item.type === 'ImportDeclaration' && item.typeOnly === true) {
-      body.push(item)
-    }
-  }
-
-  for (const item of declaration.body) {
-    body.push(item)
-  }
-
-  return {
-    type: 'Program',
-    body
-  }
+  return createModuleDeclarationProgram(ast)
 }
 
 function compilerSourceModules(compilerFiles: SourceFile[]): CompilerSourceModule[] {

@@ -107,6 +107,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
   const { assertExampleInoxScriptRuns } = await import('./integration/example-inox-script.test.ts')
+  const { assertModuleDeclarationImportBoundary } =
+    await import('./integration/module-declaration-import-boundary.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp } = await import('./integration/native-inox-help.test.ts')
@@ -132,6 +134,10 @@ async function runIntegrationTests(): Promise<void> {
       assertModuleDeclarationContracts()
     })
 
+    await t.test('module-declaration-import-boundary', () => {
+      assertModuleDeclarationImportBoundary()
+    })
+
     await t.test('module-declaration-imports', () => {
       assertModuleDeclarationImports()
     })
@@ -151,11 +157,7 @@ type RunnerOptions = {
   paths: string[]
 }
 
-async function runFeatureTests(
-  files: string[],
-  parallelism: number,
-  compiler: FeatureTestCompiler
-): Promise<void> {
+async function runFeatureTests(files: string[], parallelism: number, compiler: FeatureTestCompiler): Promise<void> {
   await test('compiler feature matrix', { concurrency: parallelism }, async (t) => {
     await Promise.all(
       files.map((file) =>

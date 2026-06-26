@@ -177,7 +177,11 @@ function cModulePlanIr(record: ModuleRecord): IrProgram | null {
     return record.ir
   }
 
-  if (record.external === true && record.declarationProgram !== null && typeof record.declarationProgram !== 'undefined') {
+  if (
+    record.external === true &&
+    record.declarationProgram !== null &&
+    typeof record.declarationProgram !== 'undefined'
+  ) {
     const ir = lowerHirToIr(record.declarationProgram)
     const externalFunctionEffects = record.externalFunctionEffects
 
@@ -294,18 +298,14 @@ function reportUnsupportedCModuleImports(
 function moduleExportedDeclaration(module: ModuleRecord, name: string): AnyNode | null {
   const declarationProgram = module.declarationProgram
 
-  if (declarationProgram !== null && typeof declarationProgram !== 'undefined') {
-    const declaration = findExportedDeclaration(declarationProgram, name)
-
-    if (declaration !== null) {
-      return declaration
-    }
+  if (declarationProgram === null || typeof declarationProgram === 'undefined') {
+    return null
   }
 
-  const fallback = module.exports.get(name)
+  const declaration = findExportedDeclaration(declarationProgram, name)
 
-  if (fallback !== null && typeof fallback !== 'undefined') {
-    return fallback
+  if (declaration !== null) {
+    return declaration
   }
 
   return null
