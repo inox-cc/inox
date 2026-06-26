@@ -32,7 +32,19 @@ export async function assertCliEntryModuleMain(): Promise<void> {
       recursive: true
     })
     await writeFile(join(workspace, entry), "import { value } from './lib/value.ts'\nconsole.log(value)\n")
-    await writeFile(join(sourceDir, 'lib/value.ts'), "export const value = 'ok'\n")
+    await writeFile(
+      join(sourceDir, 'lib/value.ts'),
+      [
+        "export const value = 'ok'",
+        'function localValue(): string {',
+        '  return value',
+        '}',
+        'export function exportedValue(): string {',
+        '  return localValue()',
+        '}',
+        ''
+      ].join('\n')
+    )
 
     const result = await runCommand(
       join(repoRoot, 'dist/inox'),
@@ -44,10 +56,15 @@ export async function assertCliEntryModuleMain(): Promise<void> {
 
     const generated = await readFile(join(outDir, 'src/index.c'), 'utf8')
     const generatedDependency = await readFile(join(outDir, 'src/lib/value.c'), 'utf8')
+    const generatedDependencyHeader = await readFile(join(outDir, 'src/lib/value.h'), 'utf8')
     const generatedDeclaration = await readFile(join(outDir, 'src/lib/value.d.ts'), 'utf8')
 
     assert.match(generated, /int main\(void\)/)
     assert.match(generatedDependency, /inox_mod_src_lib_value_ts_.*_init/)
+    assert.match(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_localValue\(void\);/)
+    assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)
+    assert.doesNotMatch(generatedDependencyHeader, /localValue/)
+    assert.match(generatedDependencyHeader, /inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)
     assert.match(generatedDeclaration, /export const value: string;/)
   } finally {
     await rm(workspace, {

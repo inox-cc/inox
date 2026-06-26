@@ -481,7 +481,7 @@ export function emitCModuleSource(
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
 
-    pushCModuleLines(bodyLines, deps.emitFunctionDeclaration(item, context))
+    pushCModuleLines(bodyLines, emitCModuleFunctionDeclaration(plan, item, context, deps))
     bodyLines.push('')
   }
 
@@ -500,7 +500,7 @@ export function emitCModuleSource(
     pushCModuleLines(bodyLines, emitCModuleMainFunction(plan, context, deps))
   }
 
-  emitCModuleDeclarations(lines, functions, classMethods, context, deps)
+  emitCModuleDeclarations(lines, plan, functions, classMethods, context, deps)
   emitCModuleFunctionPointerAdapterDefinitions(lines, context)
   pushCModuleLines(lines, bodyLines)
 
@@ -578,6 +578,7 @@ function joinStrings(values: string[], separator: string): string {
 
 function emitCModuleDeclarations(
   lines: string[],
+  plan: CModulePlan,
   functions: AnyNode[],
   classMethods: CClassMethod[],
   context: CEmitContext,
@@ -625,7 +626,7 @@ function emitCModuleDeclarations(
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
 
-    lines.push(`${deps.emitFunctionHead(item, context)};`)
+    lines.push(emitCModuleFunctionPrototype(plan, item, context, deps))
   }
 
   for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
@@ -683,6 +684,69 @@ function emitCModuleDeclarations(
   ) {
     lines.push('')
   }
+}
+
+function emitCModuleFunctionPrototype(
+  plan: CModulePlan,
+  statement: AnyNode,
+  context: CEmitContext,
+  deps: CModuleEmissionDependencies
+): string {
+  const head = deps.emitFunctionHead(statement, context)
+
+  if (isCModuleExportedFunction(plan, statement.name)) {
+    return `${head};`
+  }
+
+  return `static ${head};`
+}
+
+function emitCModuleFunctionDeclaration(
+  plan: CModulePlan,
+  statement: AnyNode,
+  context: CEmitContext,
+  deps: CModuleEmissionDependencies
+): string[] {
+  const lines = deps.emitFunctionDeclaration(statement, context)
+
+  if (isCModuleExportedFunction(plan, statement.name)) {
+    return lines
+  }
+
+  return prefixCModuleFunctionDeclarationStatic(lines)
+}
+
+function prefixCModuleFunctionDeclarationStatic(lines: string[]): string[] {
+  const prefixed: string[] = []
+
+  for (let index = 0; index < lines.length; index = index + 1) {
+    const line = lines[index]
+
+    if (index === 0 && !line.startsWith('static ')) {
+      prefixed.push(`static ${line}`)
+      continue
+    }
+
+    prefixed.push(line)
+  }
+
+  return prefixed
+}
+
+function isCModuleExportedFunction(plan: CModulePlan, name: string): boolean {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = cModuleFunctionDeclarationAt(plan.ir.functionDeclarations, declarationIndex)
+
+    if (declaration.name === name) {
+      return declaration.exported
+    }
+  }
+
+  return false
 }
 
 function emitCModuleFunctionPointerAdapterDefinitions(lines: string[], context: CEmitContext): void {
