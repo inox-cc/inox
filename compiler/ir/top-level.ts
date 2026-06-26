@@ -77,6 +77,10 @@ export function collectIrModuleRecords(graph: ModuleGraph): IrModuleRecord[] {
   for (let index = 0; index < modules.length; index = index + 1) {
     const moduleRecord: ModuleRecord = modules[index]
 
+    if (moduleRecord.external === true) {
+      continue
+    }
+
     if (moduleRecord.ir !== null && typeof moduleRecord.ir !== 'undefined') {
       records.push({
         path: moduleRecord.path,

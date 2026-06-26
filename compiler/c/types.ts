@@ -367,6 +367,7 @@ export type CModuleEmitOptions = CEmitOptions & {
 export type CModulePlan = {
   record: ModuleRecord
   ir: IrProgram
+  external?: boolean
   isEntry: boolean
   relativeSourcePath: string
   sourcePath: string

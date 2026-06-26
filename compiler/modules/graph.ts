@@ -10,12 +10,13 @@ import type {
   AnyNode,
   CompileOptions,
   Diagnostic,
+  ModuleDeclarationImport,
   ModuleGraph,
   ModuleRecord,
   ProgramNode,
   SourceLocation
 } from '../types.ts'
-import { createModuleDeclarationProgram } from './declarations.ts'
+import { createModuleDeclarationProgram, parseModuleDeclarationContractResult } from './declarations.ts'
 import { collectExports } from './exports.ts'
 import { isRelativeSpecifier, resolveExistingSource, resolveImport as resolveImportSpecifier } from './resolve.ts'
 import {
@@ -26,12 +27,21 @@ import {
 } from './synthetic-imports.ts'
 
 type ModuleGraphContext = {
+  entry: string
   host: CompilerHost
   options: CompileOptions
+  declarationImports: Map<string, ModuleGraphDeclarationImport>
   modules: Map<string, ModuleRecord>
   order: ModuleRecord[]
   visiting: Set<string>
   diagnostics: Diagnostic[]
+}
+
+type ModuleGraphDeclarationImport = {
+  sourcePath: string
+  declarationPath: string | null
+  declarationSource: string | null
+  program: ProgramNode | null
 }
 
 export async function buildModuleGraph(entry: string, options: CompileOptions = {}): Promise<ModuleGraph> {
@@ -49,18 +59,21 @@ export function buildModuleGraphSync(entry: string, options: CompileOptions = {}
 export function buildModuleGraphWithHostSync(entry: string, options: CompileOptions, host: CompilerHost): ModuleGraph {
   const entryPath = resolveExistingSource(entry, host)
   const context: ModuleGraphContext = {
+    entry: entryPath,
     host,
     options: {
       target: options.target,
       callMain: options.callMain,
       budgets: options.budgets,
       capabilities: options.capabilities,
+      declarationImports: options.declarationImports,
       host,
       loopBackend: options.loopBackend,
       profile: options.profile,
       random: options.random,
       tlsBackend: options.tlsBackend
     },
+    declarationImports: prepareModuleGraphDeclarationImports(options.declarationImports, host),
     modules: new Map(),
     order: [],
     visiting: new Set(),
@@ -78,7 +91,7 @@ export function buildModuleGraphWithHostSync(entry: string, options: CompileOpti
 }
 
 function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolean {
-  const path = resolveExistingSource(file, context.host)
+  const path = resolveModuleGraphVisitPath(context, file)
 
   if (context.modules.has(path)) {
     return true
@@ -86,6 +99,14 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
   if (context.visiting.has(path)) {
     return false
+  }
+
+  if (path !== context.entry) {
+    const declarationImport = context.declarationImports.get(path)
+
+    if (declarationImport !== null && typeof declarationImport !== 'undefined') {
+      return visitModuleGraphDeclarationImport(context, path, declarationImport)
+    }
   }
 
   context.visiting.add(path)
@@ -329,6 +350,135 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   return true
 }
 
+function resolveModuleGraphVisitPath(context: ModuleGraphContext, file: string): string {
+  const normalized = resolveModuleGraphOptionPath(file, context.host)
+
+  if (normalized !== context.entry && context.declarationImports.has(normalized)) {
+    return normalized
+  }
+
+  return resolveExistingSource(file, context.host)
+}
+
+function visitModuleGraphDeclarationImport(
+  context: ModuleGraphContext,
+  path: string,
+  declarationImport: ModuleGraphDeclarationImport
+): boolean {
+  const source = moduleGraphDeclarationImportSource(context, declarationImport)
+  const program = moduleGraphDeclarationImportProgram(context, declarationImport, source)
+
+  if (program === null || typeof program === 'undefined') {
+    return false
+  }
+
+  const imports: AnyNode[] = []
+  const reexports: AnyNode[] = []
+
+  for (let itemIndex = 0; itemIndex < program.body.length; itemIndex = itemIndex + 1) {
+    const item = program.body[itemIndex]
+
+    if (item.type === 'ImportDeclaration') {
+      imports.push(item)
+      continue
+    }
+
+    if (item.type === 'ExportDeclaration') {
+      reexports.push(item)
+    }
+  }
+
+  const module: ModuleRecord = {
+    path,
+    source: source ?? '',
+    ast: program,
+    declarationProgram: program,
+    external: true,
+    hir: null,
+    ir: null,
+    imports,
+    reexports,
+    exports: collectExports(program),
+    typeImportDeclarations: new Map()
+  }
+
+  context.modules.set(path, module)
+  context.order.push(module)
+
+  return true
+}
+
+function moduleGraphDeclarationImportProgram(
+  context: ModuleGraphContext,
+  declarationImport: ModuleGraphDeclarationImport,
+  source: string | null
+): ProgramNode | null {
+  const program = declarationImport.program
+
+  if (program !== null && typeof program !== 'undefined') {
+    return program
+  }
+
+  if (source === null || typeof source === 'undefined') {
+    return null
+  }
+
+  const result = parseModuleDeclarationContractResult(source, declarationImport.declarationPath)
+
+  for (const item of result.diagnostics) {
+    context.diagnostics.push(item)
+  }
+
+  if (result.diagnostics.length > 0) {
+    return null
+  }
+
+  return result.program
+}
+
+function moduleGraphDeclarationImportSource(
+  context: ModuleGraphContext,
+  declarationImport: ModuleGraphDeclarationImport
+): string | null {
+  const declarationSource = declarationImport.declarationSource
+
+  if (declarationSource !== null && typeof declarationSource !== 'undefined') {
+    return declarationSource
+  }
+
+  if (declarationImport.program !== null && typeof declarationImport.program !== 'undefined') {
+    return null
+  }
+
+  const declarationPath = declarationImport.declarationPath
+
+  if (declarationPath === null || typeof declarationPath === 'undefined') {
+    context.diagnostics.push(
+      diagnostic(
+        'INOX_DECLARATION_IMPORT',
+        `declaration import for ${declarationImport.sourcePath} has no declaration source`,
+        { file: declarationImport.sourcePath, line: 1, column: 1 }
+      )
+    )
+    return null
+  }
+
+  const source = context.host.readFileSync(declarationPath)
+
+  if (source === null || typeof source === 'undefined') {
+    context.diagnostics.push(
+      diagnostic('INOX_DECLARATION_IMPORT', `cannot read declaration contract ${declarationPath}`, {
+        file: declarationPath,
+        line: 1,
+        column: 1
+      })
+    )
+    return null
+  }
+
+  return source
+}
+
 function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module: ModuleRecord): void {
   if (module.typeImportDeclarations.size > 0) {
     return
@@ -568,7 +718,84 @@ function resolveModuleGraphImport(
   try {
     return resolveImportSpecifier(fromPath, specifier, context.host)
   } catch {
+    const declarationImportPath = resolveDeclarationImportSpecifier(context, fromPath, specifier)
+
+    if (declarationImportPath !== null) {
+      return declarationImportPath
+    }
+
     context.diagnostics.push(diagnostic('INOX_MODULE_NOT_FOUND', `cannot resolve import ${specifier}`, loc))
     return ''
   }
+}
+
+function prepareModuleGraphDeclarationImports(
+  declarationImports: ModuleDeclarationImport[] | null | undefined,
+  host: CompilerHost
+): Map<string, ModuleGraphDeclarationImport> {
+  const imports: Map<string, ModuleGraphDeclarationImport> = new Map()
+
+  if (declarationImports === null || typeof declarationImports === 'undefined') {
+    return imports
+  }
+
+  for (let index = 0; index < declarationImports.length; index = index + 1) {
+    const item = declarationImports[index]
+    const sourcePath = resolveModuleGraphOptionPath(item.sourcePath, host)
+    let declarationPath: string | null = null
+
+    if (item.declarationPath !== null && typeof item.declarationPath !== 'undefined') {
+      declarationPath = resolveModuleGraphOptionPath(item.declarationPath, host)
+    }
+
+    imports.set(sourcePath, {
+      sourcePath,
+      declarationPath,
+      declarationSource: item.declarationSource ?? null,
+      program: item.program ?? null
+    })
+  }
+
+  return imports
+}
+
+function resolveModuleGraphOptionPath(path: string, host: CompilerHost): string {
+  if (host.isAbsolutePath(path)) {
+    return host.normalizePath(path)
+  }
+
+  return host.normalizePath(host.resolvePath(path))
+}
+
+function resolveDeclarationImportSpecifier(
+  context: ModuleGraphContext,
+  fromPath: string,
+  specifier: string
+): string | null {
+  const normalized = context.host.normalizePath(
+    context.host.resolvePath(context.host.joinPath(context.host.dirname(fromPath), specifier))
+  )
+  const candidates: string[] = []
+
+  if (context.host.extname(normalized) === '') {
+    candidates.push(normalized)
+    candidates.push(`${normalized}.ts`)
+    candidates.push(`${normalized}.js`)
+
+    for (const extension of ['', '.ts', '.js']) {
+      candidates.push(context.host.joinPath(normalized, `index${extension}`))
+    }
+  } else {
+    candidates.push(normalized)
+  }
+
+  for (let index = 0; index < candidates.length; index = index + 1) {
+    const candidate = candidates[index]
+
+    if (context.declarationImports.has(candidate)) {
+      return candidate
+    }
+  }
+
+  return null
 }

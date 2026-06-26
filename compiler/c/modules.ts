@@ -1,8 +1,9 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import type { CompilerHost } from '../host.ts'
+import { lowerHirToIr } from '../ir.ts'
 import { emitModuleDeclarationContractResult } from '../modules/declarations.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
-import type { AnyNode, Diagnostic, ModuleGraph, ModuleRecord } from '../types.ts'
+import type { AnyNode, Diagnostic, IrProgram, ModuleGraph, ModuleRecord } from '../types.ts'
 import { formatGeneratedC } from './format.ts'
 import { emitCIdentifier } from './identifiers.ts'
 import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
@@ -33,6 +34,11 @@ export function emitCModuleFilesFromGraph(
 
   for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
     const plan = plans[planIndex]
+
+    if (plan.external === true) {
+      continue
+    }
+
     pushCModuleOutputFiles(files, emitCModuleFiles(plan, plans, options, diagnostics, emitters))
   }
 
@@ -68,8 +74,9 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
 
   for (let moduleIndex = 0; moduleIndex < graphModules.length; moduleIndex = moduleIndex + 1) {
     const record = graphModules[moduleIndex]
+    const ir = cModulePlanIr(record)
 
-    if (record.ir === null || typeof record.ir === 'undefined') {
+    if (ir === null || typeof ir === 'undefined') {
       continue
     }
 
@@ -87,7 +94,8 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
 
     plans.push({
       record,
-      ir: record.ir,
+      ir,
+      external: record.external === true,
       isEntry,
       relativeSourcePath,
       sourcePath,
@@ -162,6 +170,18 @@ function collectCModuleImportDeclarations(record: ModuleRecord): CModuleNode[] {
   }
 
   return declarations
+}
+
+function cModulePlanIr(record: ModuleRecord): IrProgram | null {
+  if (record.ir !== null && typeof record.ir !== 'undefined') {
+    return record.ir
+  }
+
+  if (record.external === true && record.declarationProgram !== null && typeof record.declarationProgram !== 'undefined') {
+    return lowerHirToIr(record.declarationProgram)
+  }
+
+  return null
 }
 
 function pushCModuleOutputFiles(target: CModuleOutputFile[], source: CModuleOutputFile[]): void {

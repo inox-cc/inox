@@ -17,6 +17,7 @@ import type {
   CompileTarget,
   FileCompileResult,
   IrProgram,
+  ModuleDeclarationImport,
   ModuleGraph,
   ProgramNode,
   RandomOptions,
@@ -33,6 +34,7 @@ export type CModuleCompileOptions = {
   callMain?: boolean
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
+  declarationImports?: ModuleDeclarationImport[]
   host?: CompilerHost
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
@@ -46,6 +48,7 @@ export type MemoryCompileOptions = {
   callMain?: boolean
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
+  declarationImports?: ModuleDeclarationImport[]
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions
@@ -58,6 +61,7 @@ export type MemoryCModuleCompileOptions = {
   callMain?: boolean
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
+  declarationImports?: ModuleDeclarationImport[]
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions
@@ -333,6 +337,7 @@ function compileOptionsWithTarget(options: CompileOptions, target: CompileTarget
     callMain: options.callMain,
     budgets: options.budgets,
     capabilities: options.capabilities,
+    declarationImports: options.declarationImports,
     host: options.host,
     loopBackend: options.loopBackend,
     profile: options.profile,
@@ -351,6 +356,7 @@ function compileOptionsWithHostAndTarget(
     callMain: options.callMain,
     budgets: options.budgets,
     capabilities: options.capabilities,
+    declarationImports: options.declarationImports,
     host,
     loopBackend: options.loopBackend,
     profile: options.profile,
@@ -369,6 +375,7 @@ function cModuleOptionsWithHostAndTarget(
     callMain: options.callMain,
     budgets: options.budgets,
     capabilities: options.capabilities,
+    declarationImports: options.declarationImports,
     host,
     loopBackend: options.loopBackend,
     profile: options.profile,
@@ -383,6 +390,7 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: any): Compile
     callMain: options.callMain,
     budgets: options.budgets,
     capabilities: options.capabilities,
+    declarationImports: options.declarationImports,
     host,
     loopBackend: options.loopBackend,
     profile: options.profile,
@@ -399,6 +407,7 @@ function memoryCModuleCompileOptions(options: MemoryCModuleCompileOptions, host:
     callMain: base.callMain,
     budgets: base.budgets,
     capabilities: base.capabilities,
+    declarationImports: base.declarationImports,
     host: base.host,
     loopBackend: base.loopBackend,
     profile: base.profile,

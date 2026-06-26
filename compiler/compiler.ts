@@ -190,6 +190,7 @@ function compileOptionsWithNodeHost(options: CompileOptions): CompileOptions {
     callMain: options.callMain,
     budgets: options.budgets,
     capabilities: options.capabilities,
+    declarationImports: options.declarationImports,
     host,
     loopBackend: options.loopBackend,
     profile: options.profile,
@@ -205,6 +206,7 @@ function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleComp
       callMain: options.callMain,
       budgets: options.budgets,
       capabilities: options.capabilities,
+      declarationImports: options.declarationImports,
       host: options.host,
       loopBackend: options.loopBackend,
       profile: options.profile,
@@ -219,6 +221,7 @@ function cModuleOptionsWithNodeHost(options: CModuleCompileOptions): CModuleComp
     callMain: options.callMain,
     budgets: options.budgets,
     capabilities: options.capabilities,
+    declarationImports: options.declarationImports,
     host: {
       pathSeparator: '/',
       posixPath: {

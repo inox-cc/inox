@@ -108,6 +108,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
   const { assertExampleInoxScriptRuns } = await import('./integration/example-inox-script.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
+  const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp } = await import('./integration/native-inox-help.test.ts')
 
   await test('compiler integration checks', async (t) => {
@@ -129,6 +130,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-contracts', () => {
       assertModuleDeclarationContracts()
+    })
+
+    await t.test('module-declaration-imports', () => {
+      assertModuleDeclarationImports()
     })
 
     await t.test('native-inox-help', async () => {

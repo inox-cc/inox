@@ -216,6 +216,7 @@ export type ModuleRecord = {
   source: string
   ast: ProgramNode
   declarationProgram: ProgramNode | null
+  external?: boolean
   hir: ProgramNode | null
   ir: IrProgram | null
   imports: AnyNode[]
@@ -256,11 +257,19 @@ export type RuntimeBudgets = {
 
 export type TlsBackend = 'none' | 'boringssl' | 'openssl'
 
+export type ModuleDeclarationImport = {
+  sourcePath: string
+  declarationPath?: string
+  declarationSource?: string
+  program?: ProgramNode
+}
+
 export type CompileOptions = {
   target?: CompileTarget
   callMain?: boolean
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
+  declarationImports?: ModuleDeclarationImport[]
   host?: CompilerHost
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
