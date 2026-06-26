@@ -974,7 +974,8 @@ function emitRuntimeParamPreludeForParam(
 
   if (param.valueType === 'object') {
     if (param.nullable === true || param.optional === true) {
-      return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_OBJECT', context)
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_OBJECT', context))
+      return lines
     }
 
     lines.push(emitRuntimeTypeCheck(`${param.name}.tag != INOX_TAG_OBJECT || ${param.name}.as.ref == 0`, context))
@@ -985,7 +986,8 @@ function emitRuntimeParamPreludeForParam(
     const tag = cRuntimeValueTag(param.valueType)
 
     if (param.nullable === true || param.optional === true) {
-      return emitRuntimeNullableValueCheck(param.name, tag, context)
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(param.name, tag, context))
+      return lines
     }
 
     lines.push(emitRuntimeTypeCheck(`${param.name}.tag != ${tag} || ${param.name}.as.ref == 0`, context))
@@ -994,7 +996,8 @@ function emitRuntimeParamPreludeForParam(
 
   if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context)) {
     if (param.nullable === true || param.optional === true) {
-      return emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context)
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context))
+      return lines
     }
 
     lines.push(emitRuntimeTypeCheck(`${param.name}.tag != INOX_TAG_FUNCTION || ${param.name}.as.ref == 0`, context))
@@ -1012,6 +1015,36 @@ function emitRuntimeParamPreludeForParam(
 
 function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: CFunctionContext): string[] {
   const value = param.defaultValue
+
+  if (
+    param.valueType === 'object' &&
+    value !== null &&
+    typeof value !== 'undefined' &&
+    value.type === 'ObjectLiteral' &&
+    value.properties.length === 0
+  ) {
+    const temp = nextCName(context, `${param.name}_default`)
+    const shapeName = nextCName(context, `${param.name}_default_shape`)
+    const fieldsName = `${shapeName}_fields`
+    const lines: string[] = [
+      `static const inox_field_info ${fieldsName}[] = {`,
+      '};',
+      `static const inox_shape ${shapeName} = {`,
+      '  0,',
+      `  ${fieldsName}`,
+      '};',
+      `if (${param.name}.tag == INOX_TAG_UNDEFINED) {`
+    ]
+
+    registerOwnedValue(context, temp)
+    lines.push(
+      `  if (inox_object_new(&inox_default_allocator, &${shapeName}, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`
+    )
+    lines.push(`  ${param.name} = ${temp};`)
+    lines.push('}')
+
+    return lines
+  }
 
   if (
     param.valueType === 'array' &&
