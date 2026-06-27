@@ -1,6 +1,7 @@
 import { collectIrFunctionEffects } from './ir/effects.ts'
-import { collectIrFeatures, collectRuntimeRequirements, collectSyntaxFeatureUsages } from './ir/features.ts'
+import { collectIrFeatures, collectRuntimeRequirements } from './ir/features.ts'
 import { collectGlobalUsages } from './ir/globals.ts'
+import { collectSyntaxFeatureUsages } from './ir/syntax-features.ts'
 import { collectFunctionDeclarations, collectTopLevelItems } from './ir/top-level.ts'
 import type { IrProgram, ProgramNode } from './types.ts'
 
@@ -14,10 +15,10 @@ export {
 } from './ir/effects.ts'
 export {
   collectIrFeatureRequirements,
-  collectIrRuntimeRequirements,
-  collectIrSyntaxFeatureUsages
+  collectIrRuntimeRequirements
 } from './ir/features.ts'
 export { collectIrGlobalRoots, collectIrGlobalUsages } from './ir/globals.ts'
+export { collectIrSyntaxFeatureUsages } from './ir/syntax-features.ts'
 export {
   collectIrFunctionDeclarations,
   collectIrFunctionNodeEntries,
