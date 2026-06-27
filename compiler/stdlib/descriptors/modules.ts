@@ -194,6 +194,16 @@ export const stdlibModuleDescriptors: StdlibModuleDescriptor[] = [
 
 const stdlibModuleRuntimeImportDescriptors: StdlibModuleRuntimeImportDescriptor[] = [
   {
+    id: 'buffer',
+    kind: 'module-object',
+    importedNames: ['default', 'buffer']
+  },
+  {
+    id: 'child-process',
+    kind: 'module-object',
+    importedNames: ['default', 'childProcess']
+  },
+  {
     id: 'dgram',
     kind: 'module-object',
     importedNames: ['default', 'dgram']
@@ -207,6 +217,11 @@ const stdlibModuleRuntimeImportDescriptors: StdlibModuleRuntimeImportDescriptor[
     id: 'crypto',
     kind: 'module-object',
     importedNames: ['default', 'crypto']
+  },
+  {
+    id: 'events',
+    kind: 'module-object',
+    importedNames: ['default', 'events']
   },
   {
     id: 'http',
@@ -232,6 +247,36 @@ const stdlibModuleRuntimeImportDescriptors: StdlibModuleRuntimeImportDescriptor[
     id: 'net',
     kind: 'connect',
     importedNames: ['connect', 'createConnection']
+  },
+  {
+    id: 'os',
+    kind: 'module-object',
+    importedNames: ['default', 'os']
+  },
+  {
+    id: 'path',
+    kind: 'module-object',
+    importedNames: ['default', 'path']
+  },
+  {
+    id: 'process',
+    kind: 'module-object',
+    importedNames: ['default', 'process']
+  },
+  {
+    id: 'stream',
+    kind: 'module-object',
+    importedNames: ['default', 'stream']
+  },
+  {
+    id: 'timers',
+    kind: 'module-object',
+    importedNames: ['default', 'timers']
+  },
+  {
+    id: 'url',
+    kind: 'module-object',
+    importedNames: ['default', 'url']
   }
 ]
 
@@ -289,6 +334,41 @@ export function stdlibModuleRuntimeImportNameSet(
   }
 
   return result
+}
+
+export function isStdlibModuleRuntimeImportName(
+  id: StdlibModuleId,
+  kind: StdlibModuleRuntimeImportKind,
+  importedName: string | null | undefined
+): boolean {
+  if (importedName === null || typeof importedName === 'undefined') {
+    return false
+  }
+
+  for (let index = 0; index < stdlibModuleRuntimeImportDescriptors.length; index = index + 1) {
+    const descriptor = stdlibModuleRuntimeImportDescriptorAt(index)
+
+    if (descriptor.id !== id || descriptor.kind !== kind) {
+      continue
+    }
+
+    for (let nameIndex = 0; nameIndex < descriptor.importedNames.length; nameIndex = nameIndex + 1) {
+      if (descriptor.importedNames[nameIndex] === importedName) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+export function isStdlibModuleRuntimeImportBinding(
+  source: string | null | undefined,
+  id: StdlibModuleId,
+  kind: StdlibModuleRuntimeImportKind,
+  importedName: string | null | undefined
+): boolean {
+  return isStdlibModuleImportSourceForId(source, id) && isStdlibModuleRuntimeImportName(id, kind, importedName)
 }
 
 export function stdlibModuleImportSourceCount(): number {

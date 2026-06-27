@@ -82,6 +82,7 @@ import {
 import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import { knownMathRuntimeArgCount } from './stdlib/descriptors/math.ts'
+import { isStdlibModuleRuntimeImportBinding } from './stdlib/descriptors/modules.ts'
 import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
@@ -4602,8 +4603,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeBufferImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'buffer')
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'buffer', 'module-object', symbol.importedName)
       ) {
         if (isBinaryStaticMethod(path[2])) {
           return path[2]
@@ -4680,8 +4680,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeBufferImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'buffer') &&
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'buffer', 'module-object', symbol.importedName) &&
         isUnsupportedBufferRuntimeExport(path[1])
       ) {
         return path[1]
@@ -4789,8 +4788,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeEventsImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'events') &&
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'events', 'module-object', symbol.importedName) &&
         isUnsupportedEventsRuntimeExport(path[1])
       ) {
         return {
@@ -4804,8 +4802,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeStreamImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'stream', 'module-object', symbol.importedName) &&
         isUnsupportedStreamRuntimeExport(path[1])
       ) {
         return {
@@ -4825,8 +4822,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeStreamImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'stream') &&
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'stream', 'module-object', symbol.importedName) &&
         isUnsupportedStreamRuntimeExport(exportName)
       ) {
         return {
@@ -5545,8 +5541,12 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeChildProcessImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'childProcess')
+        isStdlibModuleRuntimeImportBinding(
+          symbol.importSource,
+          'child-process',
+          'module-object',
+          symbol.importedName
+        )
       ) {
         if (isChildProcessRuntimeMethod(path[1]) || isUnsupportedChildProcessRuntimeMethod(path[1])) {
           return path[1]
@@ -5774,8 +5774,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeOsImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'os')
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'os', 'module-object', symbol.importedName)
       ) {
         if (isOsRuntimeMethod(path[1]) || isUnsupportedOsRuntimeMethod(path[1])) {
           return path[1]
@@ -5841,8 +5840,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeOsImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'os') &&
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'os', 'module-object', symbol.importedName) &&
         isOsRuntimeConstant(path[1])
       ) {
         return path[1]
@@ -5972,8 +5970,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeProcessImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'process')
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'process', 'module-object', symbol.importedName)
       ) {
         if (isProcessRuntimeMethod(path[1]) || isUnsupportedProcessRuntimeMethod(path[1])) {
           return path[1]
@@ -6005,7 +6002,7 @@ class Checker {
       return null
     }
 
-    if (root.importedName === 'default' || root.importedName === 'process') {
+    if (isStdlibModuleRuntimeImportBinding(root.importSource, 'process', 'module-object', root.importedName)) {
       if (path.length === 2 && isUnsupportedProcessRuntimeProperty(path[1])) {
         this.report(
           'INOX_NOT_IMPLEMENTED',
@@ -6080,8 +6077,7 @@ class Checker {
       root === null ||
       typeof root === 'undefined' ||
       root.kind !== 'import' ||
-      !isNodeProcessImportSource(root.importSource) ||
-      (root.importedName !== 'default' && root.importedName !== 'process')
+      !isStdlibModuleRuntimeImportBinding(root.importSource, 'process', 'module-object', root.importedName)
     ) {
       return null
     }
@@ -6114,7 +6110,7 @@ class Checker {
     }
 
     const isArgv =
-      ((root.importedName === 'default' || root.importedName === 'process') &&
+      (isStdlibModuleRuntimeImportBinding(root.importSource, 'process', 'module-object', root.importedName) &&
         path.length === 2 &&
         path[1] === 'argv') ||
       (root.importedName === 'argv' && path.length === 1)
@@ -6329,8 +6325,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeUrlImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'url')
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'url', 'module-object', symbol.importedName)
       ) {
         if (isUrlRuntimeMethod(path[1]) || isUnsupportedUrlRuntimeMethod(path[1])) {
           return path[1]
@@ -6381,8 +6376,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodeCryptoImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'crypto')
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'crypto', 'module-object', symbol.importedName)
       ) {
         if (isCryptoRuntimeMethod(path[1]) || isUnsupportedNodeCryptoMethod(path[1])) {
           return path[1]
@@ -6647,7 +6641,8 @@ class Checker {
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix')
+        (isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName) ||
+          symbol.importedName === 'posix')
       ) {
         if (isPathRuntimeMethod(path[1]) || isUnsupportedPathRuntimeMethod(path[1])) {
           return path[1]
@@ -6665,8 +6660,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodePathImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'path')
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName)
       ) {
         if (isPathRuntimeMethod(path[2]) || isUnsupportedPathRuntimeMethod(path[2])) {
           return path[2]
@@ -6707,7 +6701,8 @@ class Checker {
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'path' || symbol.importedName === 'posix') &&
+        (isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName) ||
+          symbol.importedName === 'posix') &&
         isPathRuntimeConstant(path[1])
       ) {
         return path[1]
@@ -6722,8 +6717,7 @@ class Checker {
         symbol !== null &&
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
-        isNodePathImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'path') &&
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName) &&
         isPathRuntimeConstant(path[2])
       ) {
         return path[2]
@@ -6779,7 +6773,7 @@ class Checker {
 
         if (
           isNodeBufferImportSource(importSource) &&
-          (importedName === 'default' || importedName === 'buffer') &&
+          isStdlibModuleRuntimeImportBinding(importSource, 'buffer', 'module-object', importedName) &&
           isBufferRuntimeConstant(path[2])
         ) {
           return path[2]
@@ -7479,7 +7473,7 @@ class Checker {
         return 'function'
       }
 
-      if (importedName === 'default' || importedName === 'os') {
+      if (isStdlibModuleRuntimeImportBinding(source, 'os', 'module-object', importedName)) {
         return 'object'
       }
     }
@@ -7493,7 +7487,10 @@ class Checker {
         return 'function'
       }
 
-      if (importedName === 'default' || importedName === 'path' || importedName === 'posix') {
+      if (
+        isStdlibModuleRuntimeImportBinding(source, 'path', 'module-object', importedName) ||
+        importedName === 'posix'
+      ) {
         return 'object'
       }
     }
@@ -7507,7 +7504,7 @@ class Checker {
         return 'function'
       }
 
-      if (importedName === 'default' || importedName === 'url') {
+      if (isStdlibModuleRuntimeImportBinding(source, 'url', 'module-object', importedName)) {
         return 'object'
       }
     }
@@ -7523,7 +7520,7 @@ class Checker {
         return propertyType
       }
 
-      if (importedName === 'default' || importedName === 'process') {
+      if (isStdlibModuleRuntimeImportBinding(source, 'process', 'module-object', importedName)) {
         return 'object'
       }
     }
@@ -7533,13 +7530,16 @@ class Checker {
         return 'function'
       }
 
-      if (importedName === 'default' || importedName === 'childProcess') {
+      if (isStdlibModuleRuntimeImportBinding(source, 'child-process', 'module-object', importedName)) {
         return 'object'
       }
     }
 
     if (isNodeBufferImportSource(source)) {
-      if (importedName === 'Buffer' || importedName === 'default' || importedName === 'buffer') {
+      if (
+        importedName === 'Buffer' ||
+        isStdlibModuleRuntimeImportBinding(source, 'buffer', 'module-object', importedName)
+      ) {
         return 'object'
       }
 
@@ -7553,7 +7553,7 @@ class Checker {
     }
 
     if (isNodeEventsImportSource(source)) {
-      if (importedName === 'default' || importedName === 'events') {
+      if (isStdlibModuleRuntimeImportBinding(source, 'events', 'module-object', importedName)) {
         return 'object'
       }
 
@@ -7563,7 +7563,10 @@ class Checker {
     }
 
     if (isNodeStreamImportSource(source)) {
-      if (importedName === 'default' || importedName === 'stream' || importedName === 'promises') {
+      if (
+        isStdlibModuleRuntimeImportBinding(source, 'stream', 'module-object', importedName) ||
+        importedName === 'promises'
+      ) {
         return 'object'
       }
 
@@ -7577,7 +7580,7 @@ class Checker {
         return 'function'
       }
 
-      if (importedName === 'default' || importedName === 'timers') {
+      if (isStdlibModuleRuntimeImportBinding(source, 'timers', 'module-object', importedName)) {
         return 'object'
       }
     }
@@ -9761,8 +9764,7 @@ class Checker {
         symbol.kind === 'import' &&
         symbol.importSource !== null &&
         typeof symbol.importSource !== 'undefined' &&
-        isNodeTimerImportSource(symbol.importSource) &&
-        (symbol.importedName === 'default' || symbol.importedName === 'timers') &&
+        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'timers', 'module-object', symbol.importedName) &&
         isTimerRuntimeMethod(methodName)
       ) {
         return methodName
