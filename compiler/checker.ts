@@ -43,6 +43,13 @@ import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/js
 import { isMathRuntimeMethod } from './checker/std/math.ts'
 import { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from './checker/std/os.ts'
 import { isPathRuntimeConstantImport, pathRuntimeCallInfo, pathRuntimeConstantName } from './checker/std/path.ts'
+import {
+  processRuntimeAssignmentProperty,
+  processRuntimeCallInfo,
+  processRuntimeIndexProperty,
+  processRuntimeMemberInfo,
+  processRuntimePropertyImportInfo
+} from './checker/std/process.ts'
 import { runtimeImportValueType } from './checker/std/runtime-imports.ts'
 import {
   isTimerRuntimeImportSymbol,
@@ -85,14 +92,6 @@ import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
 } from './stdlib/descriptors/node-builtins.ts'
-import {
-  isNodeProcessImportSource,
-  isProcessRuntimeMethod,
-  isProcessRuntimeProperty,
-  isUnsupportedProcessRuntimeMethod,
-  isUnsupportedProcessRuntimeProperty,
-  processRuntimePropertyValueType
-} from './stdlib/descriptors/process.ts'
 import {
   dateConstructorRuntimeMethodNameFromPath,
   dateInstanceRuntimeMethodName,
@@ -2587,14 +2586,11 @@ class Checker {
           expression.osRuntimeConstant = importedName
         }
 
-        if (
-          importedName !== null &&
-          typeof importedName !== 'undefined' &&
-          isNodeProcessImportSource(importSource) &&
-          isProcessRuntimeProperty(importedName)
-        ) {
-          expression.processRuntimeProperty = importedName
-          expression.valueType = processRuntimePropertyValueType(importedName) ?? 'unknown'
+        const processImportInfo = processRuntimePropertyImportInfo(importSource, importedName)
+
+        if (processImportInfo !== null && typeof processImportInfo !== 'undefined') {
+          expression.processRuntimeProperty = processImportInfo.property
+          expression.valueType = processImportInfo.valueType
         }
 
         if (
@@ -5445,7 +5441,12 @@ class Checker {
   }
 
   checkProcessCall(expression: AnyNode): ValueType | null {
-    const call = this.resolveProcessRuntimeCall(expression)
+    const path = memberExpressionPath(expression.callee)
+    const call = processRuntimeCallInfo(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'process'),
+      this.resolveStdlibModuleObjectMemberName(path, 'process')
+    )
 
     if (call === null || typeof call === 'undefined') {
       return null
@@ -5500,153 +5501,46 @@ class Checker {
     return 'void'
   }
 
-  resolveProcessRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
-    const path = memberExpressionPath(expression.callee)
-    const method = this.resolveProcessRuntimeMethod(path)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    let label = method
-
-    if (path !== null && typeof path !== 'undefined') {
-      label = joinStrings(path, '.')
-    }
-
-    return {
-      method,
-      label,
-      unsupported: !isProcessRuntimeMethod(method)
-    }
-  }
-
-  resolveProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'process')
-
-    if (importedName !== null && typeof importedName !== 'undefined') {
-      if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
-        return importedName
-      }
-
-      return null
-    }
-
-    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'process')
-
-    if (memberName !== null && typeof memberName !== 'undefined') {
-      if (isProcessRuntimeMethod(memberName) || isUnsupportedProcessRuntimeMethod(memberName)) {
-        return memberName
-      }
-
-      return null
-    }
-
-    return null
-  }
-
   checkProcessMemberExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression)
+    const info = processRuntimeMemberInfo(path, this.resolveMemberPathRootSymbol(path))
 
-    if (path === null || typeof path === 'undefined' || path.length < 1) {
+    if (info === null || typeof info === 'undefined') {
       return null
     }
 
-    const rootName = firstPathSegment(path)
-    const root = this.scope.resolve(rootName)
-
-    if (
-      root === null ||
-      typeof root === 'undefined' ||
-      root.kind !== 'import' ||
-      !isNodeProcessImportSource(root.importSource)
-    ) {
-      return null
+    if (info.kind === 'unsupported-property') {
+      this.report(
+        'INOX_NOT_IMPLEMENTED',
+        `node:process ${info.property} is not implemented by the current C backend`,
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
     }
 
-    if (isStdlibModuleRuntimeImportBinding(root.importSource, 'process', 'module-object', root.importedName)) {
-      if (path.length === 2 && isUnsupportedProcessRuntimeProperty(path[1])) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          `node:process ${path[1]} is not implemented by the current C backend`,
-          expression.loc
-        )
-        expression.valueType = 'unknown'
-        return 'unknown'
-      }
-
-      if (path.length === 2 && isProcessRuntimeProperty(path[1])) {
-        expression.processRuntimeProperty = path[1]
-        const valueType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(path[1]), 'unknown')
-
-        expression.valueType = valueType
-        return expression.valueType
-      }
-
-      if (path.length === 3 && path[1] === 'env') {
-        expression.processRuntimeEnvName = path[2]
-        expression.valueType = 'string'
-        return 'string'
-      }
-
-      if (path.length === 3) {
-        const property = `${path[1]}.${path[2]}`
-
-        if (isProcessRuntimeProperty(property)) {
-          expression.processRuntimeProperty = property
-          const valueType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(property), 'unknown')
-
-          expression.valueType = valueType
-          return expression.valueType
-        }
-      }
-
-      return null
-    }
-
-    if (path.length === 2 && root.importedName === 'env') {
-      expression.processRuntimeEnvName = path[1]
+    if (info.kind === 'env-name') {
+      expression.processRuntimeEnvName = info.name
       expression.valueType = 'string'
       return 'string'
     }
 
-    if (path.length === 2 && root.importedName !== null && typeof root.importedName !== 'undefined') {
-      const property = `${root.importedName}.${path[1]}`
-
-      if (isProcessRuntimeProperty(property)) {
-        expression.processRuntimeProperty = property
-        const valueType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(property), 'unknown')
-
-        expression.valueType = valueType
-        return expression.valueType
-      }
-    }
-
-    return null
+    expression.processRuntimeProperty = info.property
+    expression.valueType = info.valueType
+    return expression.valueType
   }
 
   checkProcessMemberAssignment(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.target)
+    const property = processRuntimeAssignmentProperty(path, this.resolveMemberPathRootSymbol(path))
 
-    if (path === null || typeof path === 'undefined' || path.length !== 2 || path[1] !== 'exitCode') {
-      return null
-    }
-
-    const rootName = firstPathSegment(path)
-    const root = this.scope.resolve(rootName)
-
-    if (
-      root === null ||
-      typeof root === 'undefined' ||
-      root.kind !== 'import' ||
-      !isStdlibModuleRuntimeImportBinding(root.importSource, 'process', 'module-object', root.importedName)
-    ) {
+    if (property === null || typeof property === 'undefined') {
       return null
     }
 
     const valueType = this.checkExpression(expression.value)
     this.checkAssignableType(valueType, 'number', expression.value.loc, false, false)
-    expression.processRuntimeProperty = 'exitCode'
+    expression.processRuntimeProperty = property
     expression.valueType = 'number'
 
     return 'number'
@@ -5654,36 +5548,15 @@ class Checker {
 
   checkProcessIndexExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.object)
+    const property = processRuntimeIndexProperty(path, this.resolveMemberPathRootSymbol(path))
 
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    const rootName = firstPathSegment(path)
-    const root = this.scope.resolve(rootName)
-
-    if (
-      root === null ||
-      typeof root === 'undefined' ||
-      root.kind !== 'import' ||
-      !isNodeProcessImportSource(root.importSource)
-    ) {
-      return null
-    }
-
-    const isArgv =
-      (isStdlibModuleRuntimeImportBinding(root.importSource, 'process', 'module-object', root.importedName) &&
-        path.length === 2 &&
-        path[1] === 'argv') ||
-      (root.importedName === 'argv' && path.length === 1)
-
-    if (!isArgv) {
+    if (property === null || typeof property === 'undefined') {
       return null
     }
 
     const indexType = this.checkExpression(expression.index)
     this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
-    expression.processRuntimeProperty = 'argv'
+    expression.processRuntimeProperty = property
     expression.valueType = 'string'
 
     return 'string'
