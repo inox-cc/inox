@@ -71,10 +71,7 @@ import type {
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCPrelude } from './prelude.ts'
-import {
-  collectStdlibRuntimeImportNames,
-  collectStdlibRuntimeNamedImportNames
-} from './runtime-imports.ts'
+import { collectStdlibRuntimeImportNames } from './runtime-imports.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
@@ -1176,42 +1173,42 @@ export function emitCUnit(
   baseContext.dgramImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'dgram',
-    new Set(['default', 'dgram'])
+    'module-object'
   )
-  baseContext.dgramCreateSocketNames = collectStdlibRuntimeNamedImportNames(
+  baseContext.dgramCreateSocketNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'dgram',
-    'createSocket'
+    'create-socket'
   )
   baseContext.cryptoImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'crypto',
-    new Set(['default', 'crypto'])
+    'module-object'
   )
   baseContext.httpImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'http',
-    new Set(['default', 'http'])
+    'module-object'
   )
-  baseContext.httpCreateServerNames = collectStdlibRuntimeNamedImportNames(
+  baseContext.httpCreateServerNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'http',
-    'createServer'
+    'create-server'
   )
   baseContext.netImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'net',
-    new Set(['default', 'net'])
+    'module-object'
   )
-  baseContext.netCreateServerNames = collectStdlibRuntimeNamedImportNames(
+  baseContext.netCreateServerNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'net',
-    'createServer'
+    'create-server'
   )
   baseContext.netConnectNames = collectStdlibRuntimeImportNames(
     irPrograms,
     'net',
-    new Set(['connect', 'createConnection'])
+    'connect'
   )
   baseContext.classInfos = createClassInfos(classes, diagnostics)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
