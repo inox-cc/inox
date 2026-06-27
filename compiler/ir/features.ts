@@ -269,12 +269,7 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('callback-values')
       requirements.add('managed-values')
       requirements.add('timers')
-    } else if (
-      feature === 'map-get-null' ||
-      feature === 'map-index-set' ||
-      feature === 'number-from-string-null' ||
-      feature === 'numeric-casts'
-    ) {
+    } else if (feature === 'number-from-string-null' || feature === 'numeric-casts') {
       continue
     } else {
       const requirement = runtimeRequirementFeature(feature)
@@ -681,7 +676,6 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   if (node.type === 'IndexExpression' && node.collectionKind === 'map' && node.nullable === true) {
     features.add('collections')
     features.add('runtime-values')
-    features.add('map-get-null')
   }
 
   if (isStringIndexExpression(node)) {
@@ -700,7 +694,6 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     ) {
       features.add('collections')
       features.add('runtime-values')
-      features.add('map-index-set')
     }
   }
 
@@ -905,10 +898,6 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
   ) {
     features.add('collections')
     features.add('runtime-values')
-  }
-
-  if (collectionMethod === 'get' && expression.nullable === true) {
-    features.add('map-get-null')
   }
 
   if (isStringConversionCall(expression)) {

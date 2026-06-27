@@ -7,6 +7,18 @@ import {
   collectArrayPopNullIrFeatures
 } from './array-pop-null/index.ts'
 import {
+  collectMapGetNullIrFeatures,
+  collectMapIndexSetIrFeatures,
+  mapGetNullFeatureCPreludeHelpers,
+  mapGetNullFeatureCPreludeIncludes,
+  mapGetNullFeatureId,
+  mapGetNullFeatureRuntimeRequirements,
+  mapIndexSetFeatureCPreludeHelpers,
+  mapIndexSetFeatureCPreludeIncludes,
+  mapIndexSetFeatureId,
+  mapIndexSetFeatureRuntimeRequirements
+} from './map-access/index.ts'
+import {
   collectRegExpIrFeatures,
   regexpFeatureCPreludeHelpers,
   regexpFeatureCPreludeIncludes,
@@ -23,20 +35,32 @@ import {
 
 type CompilerFeatureHelperEmitter = () => string[]
 
-export const compilerFeatures: IrFeature[] = [arrayPopNullFeatureId, regexpFeatureId, weakReferencesFeatureId]
+export const compilerFeatures: IrFeature[] = [
+  arrayPopNullFeatureId,
+  mapGetNullFeatureId,
+  mapIndexSetFeatureId,
+  regexpFeatureId,
+  weakReferencesFeatureId
+]
 
 const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [
   arrayPopNullFeatureRuntimeRequirements,
+  mapGetNullFeatureRuntimeRequirements,
+  mapIndexSetFeatureRuntimeRequirements,
   regexpFeatureRuntimeRequirements,
   weakReferencesFeatureRuntimeRequirements
 ]
 const compilerFeatureCPreludeIncludeRows: string[][] = [
   arrayPopNullFeatureCPreludeIncludes,
+  mapGetNullFeatureCPreludeIncludes,
+  mapIndexSetFeatureCPreludeIncludes,
   regexpFeatureCPreludeIncludes,
   weakReferencesFeatureCPreludeIncludes
 ]
 const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [
   arrayPopNullFeatureCPreludeHelpers,
+  mapGetNullFeatureCPreludeHelpers,
+  mapIndexSetFeatureCPreludeHelpers,
   regexpFeatureCPreludeHelpers,
   weakReferencesFeatureCPreludeHelpers
 ]
@@ -141,6 +165,16 @@ function findCompilerFeatureIndex(featureName: IrFeature): number {
 function collectCompilerFeatureIrFeature(featureName: IrFeature, node: AnyNode, features: Set<IrFeature>): void {
   if (featureName === arrayPopNullFeatureId) {
     collectArrayPopNullIrFeatures(node, features)
+    return
+  }
+
+  if (featureName === mapGetNullFeatureId) {
+    collectMapGetNullIrFeatures(node, features)
+    return
+  }
+
+  if (featureName === mapIndexSetFeatureId) {
+    collectMapIndexSetIrFeatures(node, features)
     return
   }
 
