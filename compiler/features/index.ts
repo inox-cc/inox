@@ -46,7 +46,57 @@ const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
 
 const compilerFeatureDescriptors = createCompilerFeatureDescriptors()
 
-export const compilerFeatures: IrFeature[] = createCompilerFeatureIds()
+const compilerFeatureOrder: IrFeature[] = [
+  'array-pop-null',
+  'async-runtime',
+  'binary',
+  'callback-values',
+  'child-process',
+  'clocks',
+  'collections',
+  'crypto',
+  'debug-memory',
+  'fs',
+  'json',
+  'map-get-null',
+  'map-index-set',
+  'number-from-string-null',
+  'numeric-casts',
+  'objects',
+  'os',
+  'path',
+  'process',
+  'regexp',
+  'runtime-values',
+  'string-bytes',
+  'timers',
+  'url',
+  'weak-references'
+]
+
+const compilerRuntimeRequirementOrder: IrRuntimeRequirement[] = [
+  'async-runtime',
+  'binary',
+  'callback-values',
+  'child-process',
+  'clocks',
+  'collections',
+  'crypto',
+  'debug-memory',
+  'fs',
+  'json',
+  'managed-values',
+  'objects',
+  'os',
+  'path',
+  'process',
+  'string-bytes',
+  'timers',
+  'url',
+  'weak-references'
+]
+
+export const compilerFeatures: IrFeature[] = copyCompilerFeatureOrder()
 
 export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<IrFeature>): void {
   if (node === null || typeof node === 'undefined' || typeof node !== 'object') {
@@ -86,7 +136,6 @@ export function compilerFeatureChildNodes(node: unknown): AnyNode[] | null {
 
   return binaryFeatureChildNodes(featureNode)
 }
-
 
 export function compilerFeatureRuntimeRequirements(featureName: IrFeature): IrRuntimeRequirement[] | null {
   const descriptor = findCompilerFeatureDescriptor(featureName)
@@ -142,6 +191,34 @@ export function emitCompilerFeatureCPreludeHelpers(featureName: IrFeature): stri
   return lines
 }
 
+export function sortCompilerFeatures(features: Set<IrFeature>): IrFeature[] {
+  const result: IrFeature[] = []
+
+  for (let index = 0; index < compilerFeatureOrder.length; index = index + 1) {
+    const feature = compilerFeatureOrderAt(index)
+
+    if (features.has(feature)) {
+      result.push(feature)
+    }
+  }
+
+  return result
+}
+
+export function sortCompilerRuntimeRequirements(requirements: Set<IrRuntimeRequirement>): IrRuntimeRequirement[] {
+  const result: IrRuntimeRequirement[] = []
+
+  for (let index = 0; index < compilerRuntimeRequirementOrder.length; index = index + 1) {
+    const requirement = compilerRuntimeRequirementOrderAt(index)
+
+    if (requirements.has(requirement)) {
+      result.push(requirement)
+    }
+  }
+
+  return result
+}
+
 function createCompilerFeatureDescriptors(): CompilerFeatureDescriptor[] {
   const result: CompilerFeatureDescriptor[] = []
 
@@ -154,14 +231,22 @@ function createCompilerFeatureDescriptors(): CompilerFeatureDescriptor[] {
   return result
 }
 
-function createCompilerFeatureIds(): IrFeature[] {
+function copyCompilerFeatureOrder(): IrFeature[] {
   const result: IrFeature[] = []
 
-  for (let index = 0; index < compilerFeatureDescriptors.length; index = index + 1) {
-    result.push(compilerFeatureDescriptorAt(index).id)
+  for (let index = 0; index < compilerFeatureOrder.length; index = index + 1) {
+    result.push(compilerFeatureOrderAt(index))
   }
 
   return result
+}
+
+function compilerFeatureOrderAt(index: number): IrFeature {
+  return compilerFeatureOrder[index]
+}
+
+function compilerRuntimeRequirementOrderAt(index: number): IrRuntimeRequirement {
+  return compilerRuntimeRequirementOrder[index]
 }
 
 function compilerFeatureDescriptorRowAt(index: number): CompilerFeatureDescriptor[] {

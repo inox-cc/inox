@@ -1,7 +1,9 @@
 import {
   compilerFeatureChildNodes,
   collectCompilerFeatureIrFeatures,
-  compilerFeatureRuntimeRequirements
+  compilerFeatureRuntimeRequirements,
+  sortCompilerFeatures,
+  sortCompilerRuntimeRequirements
 } from '../features/index.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
@@ -27,7 +29,7 @@ export function collectIrFeatures(program: ProgramNode): IrFeature[] {
 
   visitNode(program, features)
 
-  const result = sortedIrFeatures(features)
+  const result = sortCompilerFeatures(features)
 
   return result
 }
@@ -73,7 +75,7 @@ export function collectIrFeatureRequirements(programs: FeatureProgram[]): IrFeat
     }
   }
 
-  const result = sortedIrFeatures(features)
+  const result = sortCompilerFeatures(features)
 
   return result
 }
@@ -90,7 +92,7 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
     }
   }
 
-  const result = sortedRuntimeRequirements(requirements)
+  const result = sortCompilerRuntimeRequirements(requirements)
 
   return result
 }
@@ -112,7 +114,7 @@ export function collectIrRuntimeRequirements(programs: RuntimeRequirementProgram
     }
   }
 
-  const result = sortedRuntimeRequirements(requirements)
+  const result = sortCompilerRuntimeRequirements(requirements)
 
   return result
 }
@@ -139,80 +141,6 @@ export function collectIrSyntaxFeatureUsages(programs: SyntaxFeatureProgram[]): 
   }
 
   return usages
-}
-
-function sortedIrFeatures(features: IrFeatureSet): IrFeature[] {
-  const result: IrFeature[] = []
-
-  pushIrFeatureIfPresent(features, result, 'array-pop-null')
-  pushIrFeatureIfPresent(features, result, 'async-runtime')
-  pushIrFeatureIfPresent(features, result, 'binary')
-  pushIrFeatureIfPresent(features, result, 'callback-values')
-  pushIrFeatureIfPresent(features, result, 'child-process')
-  pushIrFeatureIfPresent(features, result, 'clocks')
-  pushIrFeatureIfPresent(features, result, 'collections')
-  pushIrFeatureIfPresent(features, result, 'crypto')
-  pushIrFeatureIfPresent(features, result, 'debug-memory')
-  pushIrFeatureIfPresent(features, result, 'fs')
-  pushIrFeatureIfPresent(features, result, 'json')
-  pushIrFeatureIfPresent(features, result, 'map-get-null')
-  pushIrFeatureIfPresent(features, result, 'map-index-set')
-  pushIrFeatureIfPresent(features, result, 'number-from-string-null')
-  pushIrFeatureIfPresent(features, result, 'numeric-casts')
-  pushIrFeatureIfPresent(features, result, 'objects')
-  pushIrFeatureIfPresent(features, result, 'os')
-  pushIrFeatureIfPresent(features, result, 'path')
-  pushIrFeatureIfPresent(features, result, 'process')
-  pushIrFeatureIfPresent(features, result, 'regexp')
-  pushIrFeatureIfPresent(features, result, 'runtime-values')
-  pushIrFeatureIfPresent(features, result, 'string-bytes')
-  pushIrFeatureIfPresent(features, result, 'timers')
-  pushIrFeatureIfPresent(features, result, 'url')
-  pushIrFeatureIfPresent(features, result, 'weak-references')
-
-  return result
-}
-
-function sortedRuntimeRequirements(requirements: IrRuntimeRequirementSet): IrRuntimeRequirement[] {
-  const result: IrRuntimeRequirement[] = []
-
-  pushRuntimeRequirementIfPresent(requirements, result, 'async-runtime')
-  pushRuntimeRequirementIfPresent(requirements, result, 'binary')
-  pushRuntimeRequirementIfPresent(requirements, result, 'callback-values')
-  pushRuntimeRequirementIfPresent(requirements, result, 'child-process')
-  pushRuntimeRequirementIfPresent(requirements, result, 'clocks')
-  pushRuntimeRequirementIfPresent(requirements, result, 'collections')
-  pushRuntimeRequirementIfPresent(requirements, result, 'crypto')
-  pushRuntimeRequirementIfPresent(requirements, result, 'debug-memory')
-  pushRuntimeRequirementIfPresent(requirements, result, 'fs')
-  pushRuntimeRequirementIfPresent(requirements, result, 'json')
-  pushRuntimeRequirementIfPresent(requirements, result, 'managed-values')
-  pushRuntimeRequirementIfPresent(requirements, result, 'objects')
-  pushRuntimeRequirementIfPresent(requirements, result, 'os')
-  pushRuntimeRequirementIfPresent(requirements, result, 'path')
-  pushRuntimeRequirementIfPresent(requirements, result, 'process')
-  pushRuntimeRequirementIfPresent(requirements, result, 'string-bytes')
-  pushRuntimeRequirementIfPresent(requirements, result, 'timers')
-  pushRuntimeRequirementIfPresent(requirements, result, 'url')
-  pushRuntimeRequirementIfPresent(requirements, result, 'weak-references')
-
-  return result
-}
-
-function pushIrFeatureIfPresent(features: IrFeatureSet, result: IrFeature[], feature: IrFeature): void {
-  if (features.has(feature)) {
-    result.push(feature)
-  }
-}
-
-function pushRuntimeRequirementIfPresent(
-  requirements: IrRuntimeRequirementSet,
-  result: IrRuntimeRequirement[],
-  requirement: IrRuntimeRequirement
-): void {
-  if (requirements.has(requirement)) {
-    result.push(requirement)
-  }
 }
 
 function createFeatureSet(): IrFeatureSet {
