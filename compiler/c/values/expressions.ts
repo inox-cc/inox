@@ -1,4 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
+import { emitCRegExpFlags } from '../../features/regexp/index.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
@@ -4653,7 +4654,7 @@ function emitPreparedRegExpTestExpression(
 
   return {
     lines,
-    expression: `inox_regexp_test(${cStringLiteral(literal.pattern)}, ${cRegExpFlags(
+    expression: `inox_regexp_test(${cStringLiteral(literal.pattern)}, ${emitCRegExpFlags(
       literal.flags
     )}, ${value.bytes}, ${value.length})`
   }
@@ -4673,14 +4674,6 @@ function resolveRegExpLiteralExpression(expression: CValueNode, context: CFuncti
   }
 
   return null
-}
-
-function cRegExpFlags(flags: string | null | undefined): string {
-  if (flags !== null && typeof flags !== 'undefined' && flags.includes('i')) {
-    return 'REG_ICASE'
-  }
-
-  return '0'
 }
 
 function numericIntegerCastLimits(cast: string): NumericIntegerCastLimits | null {

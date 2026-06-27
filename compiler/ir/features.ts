@@ -1,3 +1,7 @@
+import {
+  collectCompilerFeatureIrFeatures,
+  compilerFeatureRuntimeRequirements
+} from '../features/index.ts'
 import { memberExpressionPath } from '../member-paths.ts'
 import { binaryConstructorNameFromPath } from '../stdlib/descriptors/binary.ts'
 import {
@@ -181,6 +185,12 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
 
   for (let index = 0; index < features.length; index = index + 1) {
     const feature = irFeatureAt(features, index)
+    const featureRequirements = compilerFeatureRuntimeRequirements(feature)
+
+    if (featureRequirements !== null && typeof featureRequirements !== 'undefined') {
+      addRuntimeRequirements(requirements, featureRequirements)
+      continue
+    }
 
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
@@ -247,12 +257,15 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       feature === 'map-get-null' ||
       feature === 'map-index-set' ||
       feature === 'number-from-string-null' ||
-      feature === 'numeric-casts' ||
-      feature === 'regexp'
+      feature === 'numeric-casts'
     ) {
       continue
     } else {
-      requirements.add(feature)
+      const requirement = runtimeRequirementFeature(feature)
+
+      if (requirement !== null && typeof requirement !== 'undefined') {
+        requirements.add(requirement)
+      }
     }
   }
 
@@ -544,6 +557,8 @@ function visitFeatureChildren(item: ChildNode, features: IrFeatureSet): void {
 }
 
 function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
+  collectCompilerFeatureIrFeatures(node, features)
+
   if (node.nullable === true) {
     features.add('runtime-values')
   }
@@ -561,10 +576,6 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   if (node.valueType === 'bytes' || node.returnType === 'bytes') {
     features.add('binary')
     features.add('runtime-values')
-  }
-
-  if (node.type === 'RegExpLiteral' || node.valueType === 'regexp') {
-    features.add('regexp')
   }
 
   if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {
@@ -900,11 +911,88 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
       features.add('collections')
     }
   }
+}
 
-  if (expression.regexpRuntimeMethod === 'test') {
-    features.add('regexp')
-    features.add('string-bytes')
+function addRuntimeRequirements(requirements: IrRuntimeRequirementSet, values: IrRuntimeRequirement[]): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    requirements.add(values[index])
   }
+}
+
+function runtimeRequirementFeature(feature: IrFeature): IrRuntimeRequirement | null {
+  if (feature === 'async-runtime') {
+    return 'async-runtime'
+  }
+
+  if (feature === 'binary') {
+    return 'binary'
+  }
+
+  if (feature === 'callback-values') {
+    return 'callback-values'
+  }
+
+  if (feature === 'child-process') {
+    return 'child-process'
+  }
+
+  if (feature === 'clocks') {
+    return 'clocks'
+  }
+
+  if (feature === 'collections') {
+    return 'collections'
+  }
+
+  if (feature === 'crypto') {
+    return 'crypto'
+  }
+
+  if (feature === 'debug-memory') {
+    return 'debug-memory'
+  }
+
+  if (feature === 'fs') {
+    return 'fs'
+  }
+
+  if (feature === 'json') {
+    return 'json'
+  }
+
+  if (feature === 'objects') {
+    return 'objects'
+  }
+
+  if (feature === 'os') {
+    return 'os'
+  }
+
+  if (feature === 'path') {
+    return 'path'
+  }
+
+  if (feature === 'process') {
+    return 'process'
+  }
+
+  if (feature === 'string-bytes') {
+    return 'string-bytes'
+  }
+
+  if (feature === 'timers') {
+    return 'timers'
+  }
+
+  if (feature === 'url') {
+    return 'url'
+  }
+
+  if (feature === 'weak-references') {
+    return 'weak-references'
+  }
+
+  return null
 }
 
 function nullableString(value: string | null | undefined): string | null {

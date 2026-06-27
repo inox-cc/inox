@@ -1,4 +1,5 @@
 import { quoteDiagnosticString } from '../diagnostics.ts'
+import { emitCompilerFeatureCPreludeHelpers, emitCompilerFeatureCPreludeIncludes } from '../features/index.ts'
 import type { RandomOptions } from '../types.ts'
 import type { CEmitOptions } from './types.ts'
 
@@ -80,9 +81,7 @@ export function emitCPrelude(
   }
 
   if (needsRegexpRuntime) {
-    lines.push('#include <regex.h>')
-    lines.push('#include <stdlib.h>')
-    lines.push('#include <string.h>')
+    pushCPreludeLines(lines, emitCompilerFeatureCPreludeIncludes('regexp'))
   }
 
   if (needsDgramRuntime) {
@@ -190,7 +189,7 @@ export function emitCPrelude(
   }
 
   if (needsRegexpRuntime) {
-    pushCPreludeLines(lines, emitRegExpHelpers())
+    pushCPreludeLines(lines, emitCompilerFeatureCPreludeHelpers('regexp'))
     lines.push('')
   }
 
@@ -266,36 +265,6 @@ export function emitCPrelude(
   }
 
   return lines
-}
-
-function emitRegExpHelpers(): string[] {
-  return [
-    'typedef struct inox_regexp_literal {',
-    '  const char* pattern;',
-    '  int flags;',
-    '} inox_regexp_literal;',
-    '',
-    'static int inox_regexp_test(const char* pattern, int flags, const char* value_bytes, size_t value_len) {',
-    '  regex_t regex;',
-    '  int status = regcomp(&regex, pattern, REG_EXTENDED | flags);',
-    '  if (status != 0) return 0;',
-    '  if (value_len == (size_t)-1) {',
-    '    regfree(&regex);',
-    '    return 0;',
-    '  }',
-    '  char* value = (char*)malloc(value_len + 1);',
-    '  if (value == 0) {',
-    '    regfree(&regex);',
-    '    return 0;',
-    '  }',
-    '  if (value_len > 0) memcpy(value, value_bytes, value_len);',
-    '  value[value_len] = 0;',
-    '  status = regexec(&regex, value, 0, 0, 0);',
-    '  free(value);',
-    '  regfree(&regex);',
-    '  return status == 0;',
-    '}'
-  ]
 }
 
 function emitMathHelpers(random: CPreludeRandomConfig): string[] {

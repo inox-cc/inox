@@ -1,4 +1,7 @@
 import {
+  irProgramsUseCPreludeFeature
+} from '../features/index.ts'
+import {
   dateInstanceRuntimeMethodName,
   dateInstanceRuntimeMethodReturnType
 } from '../stdlib/descriptors/time.ts'
@@ -83,7 +86,7 @@ export function resolveCRuntimePreludeRequirements(
   const needsUrlRuntime = input.runtimeRequirements.has('url')
   const needsProcessRuntime = input.runtimeRequirements.has('process')
   const needsJsonRuntime = input.runtimeRequirements.has('json')
-  const needsRegexpRuntime = irProgramsUseFeature(input.irPrograms, 'regexp')
+  const needsRegexpRuntime = irProgramsUseCPreludeFeature(input.irPrograms, 'regexp')
   const needsTimerRuntime = input.runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = input.runtimeRequirements.has('debug-memory')
   const needsFetchRuntime = runtimePlanHasSupportedFetchGlobalUsage(input.globalUsages)
@@ -182,20 +185,6 @@ export function resolveCRuntimePreludeRequirements(
     needsHttpRuntime,
     needsNetRuntime
   }
-}
-
-function irProgramsUseFeature(programs: IrProgram[], featureName: string): boolean {
-  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
-    const program = programs[programIndex]
-
-    for (let featureIndex = 0; featureIndex < program.features.length; featureIndex = featureIndex + 1) {
-      if (program.features[featureIndex] === featureName) {
-        return true
-      }
-    }
-  }
-
-  return false
 }
 
 function runtimePlanHasSupportedFetchGlobalUsage(globalUsages: IrGlobalUsage[]): boolean {

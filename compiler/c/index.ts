@@ -1,4 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
+import { emitCRegExpFlags } from '../features/regexp/index.ts'
 import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
@@ -3258,7 +3259,7 @@ function emitRegExpLiteralVariableDeclaration(
   return [
     `${regexpVariableConstPrefix(statement)}inox_regexp_literal ${statement.name} = { ${cStringLiteral(
       statement.init.pattern
-    )}, ${cRegExpFlags(statement.init.flags)} };`
+    )}, ${emitCRegExpFlags(statement.init.flags)} };`
   ]
 }
 
@@ -3268,14 +3269,6 @@ function regexpVariableConstPrefix(statement: AnyNode): string {
   }
 
   return ''
-}
-
-function cRegExpFlags(flags: string | null | undefined): string {
-  if (flags !== null && typeof flags !== 'undefined' && flags.includes('i')) {
-    return 'REG_ICASE'
-  }
-
-  return '0'
 }
 
 function inferModuleValueAssignmentType(statement: AnyNode, context: CFunctionContext): string {
@@ -3402,7 +3395,11 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   if (inferred === 'regexp' && statement.init.type === 'RegExpLiteral') {
     context.moduleValueTypes.set(statement.name, 'regexp')
     context.regexpLiterals.set(statement.name, statement.init)
-    return [`${name} = (inox_regexp_literal){ ${cStringLiteral(statement.init.pattern)}, ${cRegExpFlags(statement.init.flags)} };`]
+    return [
+      `${name} = (inox_regexp_literal){ ${cStringLiteral(statement.init.pattern)}, ${emitCRegExpFlags(
+        statement.init.flags
+      )} };`
+    ]
   }
 
   if (inferred === 'number' || inferred === 'boolean' || inferred === 'date') {

@@ -1,4 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
+import { emitCRegExpFlags } from '../../features/regexp/index.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
@@ -2739,15 +2740,7 @@ function emitRegExpLiteralVariableDeclaration(statement: StatementNode, context:
 function emitRegExpLiteralVariableInitializer(statement: StatementNode): string {
   return `${constPrefix(statement.kind === 'const')}inox_regexp_literal ${statement.name} = { ${cStringLiteral(
     statement.init.pattern
-  )}, ${cRegExpFlags(statement.init.flags)} }`
-}
-
-function cRegExpFlags(flags: string | null | undefined): string {
-  if (flags !== null && typeof flags !== 'undefined' && flags.includes('i')) {
-    return 'REG_ICASE'
-  }
-
-  return '0'
+  )}, ${emitCRegExpFlags(statement.init.flags)} }`
 }
 
 function registerPromiseVariableMetadata(
