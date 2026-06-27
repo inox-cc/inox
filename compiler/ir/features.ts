@@ -269,8 +269,6 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('callback-values')
       requirements.add('managed-values')
       requirements.add('timers')
-    } else if (feature === 'number-from-string-null' || feature === 'numeric-casts') {
-      continue
     } else {
       const requirement = runtimeRequirementFeature(feature)
 
@@ -906,13 +904,8 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
   }
 
   if (isNumberConversionCall(expression)) {
-    features.add('number-from-string-null')
     features.add('runtime-values')
     features.add('string-bytes')
-  }
-
-  if (isNumericCastCall(expression)) {
-    features.add('numeric-casts')
   }
 
   if (binaryRuntimeMethodName(expression)) {

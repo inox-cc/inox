@@ -19,6 +19,18 @@ import {
   mapIndexSetFeatureRuntimeRequirements
 } from './map-access/index.ts'
 import {
+  collectNumberFromStringNullIrFeatures,
+  collectNumericCastsIrFeatures,
+  numberFromStringNullFeatureCPreludeHelpers,
+  numberFromStringNullFeatureCPreludeIncludes,
+  numberFromStringNullFeatureId,
+  numberFromStringNullFeatureRuntimeRequirements,
+  numericCastsFeatureCPreludeHelpers,
+  numericCastsFeatureCPreludeIncludes,
+  numericCastsFeatureId,
+  numericCastsFeatureRuntimeRequirements
+} from './numeric-conversions/index.ts'
+import {
   collectRegExpIrFeatures,
   regexpFeatureCPreludeHelpers,
   regexpFeatureCPreludeIncludes,
@@ -39,6 +51,8 @@ export const compilerFeatures: IrFeature[] = [
   arrayPopNullFeatureId,
   mapGetNullFeatureId,
   mapIndexSetFeatureId,
+  numberFromStringNullFeatureId,
+  numericCastsFeatureId,
   regexpFeatureId,
   weakReferencesFeatureId
 ]
@@ -47,6 +61,8 @@ const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [
   arrayPopNullFeatureRuntimeRequirements,
   mapGetNullFeatureRuntimeRequirements,
   mapIndexSetFeatureRuntimeRequirements,
+  numberFromStringNullFeatureRuntimeRequirements,
+  numericCastsFeatureRuntimeRequirements,
   regexpFeatureRuntimeRequirements,
   weakReferencesFeatureRuntimeRequirements
 ]
@@ -54,6 +70,8 @@ const compilerFeatureCPreludeIncludeRows: string[][] = [
   arrayPopNullFeatureCPreludeIncludes,
   mapGetNullFeatureCPreludeIncludes,
   mapIndexSetFeatureCPreludeIncludes,
+  numberFromStringNullFeatureCPreludeIncludes,
+  numericCastsFeatureCPreludeIncludes,
   regexpFeatureCPreludeIncludes,
   weakReferencesFeatureCPreludeIncludes
 ]
@@ -61,6 +79,8 @@ const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [
   arrayPopNullFeatureCPreludeHelpers,
   mapGetNullFeatureCPreludeHelpers,
   mapIndexSetFeatureCPreludeHelpers,
+  numberFromStringNullFeatureCPreludeHelpers,
+  numericCastsFeatureCPreludeHelpers,
   regexpFeatureCPreludeHelpers,
   weakReferencesFeatureCPreludeHelpers
 ]
@@ -175,6 +195,16 @@ function collectCompilerFeatureIrFeature(featureName: IrFeature, node: AnyNode, 
 
   if (featureName === mapIndexSetFeatureId) {
     collectMapIndexSetIrFeatures(node, features)
+    return
+  }
+
+  if (featureName === numberFromStringNullFeatureId) {
+    collectNumberFromStringNullIrFeatures(node, features)
+    return
+  }
+
+  if (featureName === numericCastsFeatureId) {
+    collectNumericCastsIrFeatures(node, features)
     return
   }
 
