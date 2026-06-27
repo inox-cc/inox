@@ -25,6 +25,7 @@ import {
   urlSearchParamsObjectShape
 } from './checker/builtins.ts'
 import { childProcessRuntimeCallInfo } from './checker/std/child-process.ts'
+import { unsupportedEventStreamRuntimeExport } from './checker/std/events-stream.ts'
 import {
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
@@ -65,10 +66,6 @@ import {
 } from './stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
 import {
-  isUnsupportedEventsRuntimeExport,
-  unsupportedEventsRuntimeExportReason
-} from './stdlib/descriptors/events.ts'
-import {
   fetchHeadersRuntimeMethod,
   isFetchAbortControllerMethod,
   isFetchHeadersMethod,
@@ -97,10 +94,6 @@ import {
   isUnsupportedProcessRuntimeProperty,
   processRuntimePropertyValueType
 } from './stdlib/descriptors/process.ts'
-import {
-  isUnsupportedStreamRuntimeExport,
-  unsupportedStreamRuntimeExportReason
-} from './stdlib/descriptors/stream.ts'
 import {
   dateConstructorRuntimeMethodNameFromPath,
   dateInstanceRuntimeMethodName,
@@ -267,12 +260,6 @@ type ObjectShapeBases = {
 
 type CheckProgramResult = {
   ast: ProgramNode
-}
-
-type UnsupportedEventStreamRuntimeExport = {
-  source: string
-  name: string
-  reason: string
 }
 
 type RuntimeCallInfo = {
@@ -4657,7 +4644,13 @@ class Checker {
   }
 
   checkEventStreamUnsupportedCall(expression: AnyNode): ValueType | null {
-    const usage = this.resolveUnsupportedEventStreamRuntimeExport(memberExpressionPath(expression.callee))
+    const path = memberExpressionPath(expression.callee)
+    const usage = unsupportedEventStreamRuntimeExport(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'events'),
+      this.resolveStdlibRuntimeDirectImportName(path, 'stream'),
+      this.resolveMemberPathRootSymbol(path)
+    )
 
     if (usage === null || typeof usage === 'undefined') {
       return null
@@ -4684,7 +4677,13 @@ class Checker {
       return null
     }
 
-    const usage = this.resolveUnsupportedEventStreamRuntimeExport(expression.callee.path)
+    const path = expression.callee.path
+    const usage = unsupportedEventStreamRuntimeExport(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'events'),
+      this.resolveStdlibRuntimeDirectImportName(path, 'stream'),
+      this.resolveMemberPathRootSymbol(path)
+    )
 
     if (usage === null || typeof usage === 'undefined') {
       return null
@@ -4698,99 +4697,6 @@ class Checker {
     expression.valueType = 'unknown'
 
     return 'unknown'
-  }
-
-  resolveUnsupportedEventStreamRuntimeExport(
-    path: readonly string[] | null | undefined
-  ): UnsupportedEventStreamRuntimeExport | null {
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    if (path.length === 1) {
-      const eventsImportedName = this.resolveStdlibRuntimeDirectImportName(path, 'events')
-
-      if (
-        eventsImportedName !== null &&
-        typeof eventsImportedName !== 'undefined' &&
-        isUnsupportedEventsRuntimeExport(eventsImportedName)
-      ) {
-        return {
-          source: 'node:events',
-          name: eventsImportedName,
-          reason: unsupportedEventsRuntimeExportReason(eventsImportedName)
-        }
-      }
-
-      const streamImportedName = this.resolveStdlibRuntimeDirectImportName(path, 'stream')
-
-      if (
-        streamImportedName !== null &&
-        typeof streamImportedName !== 'undefined' &&
-        isUnsupportedStreamRuntimeExport(streamImportedName)
-      ) {
-        return {
-          source: 'node:stream',
-          name: streamImportedName,
-          reason: unsupportedStreamRuntimeExportReason(streamImportedName)
-        }
-      }
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'events', 'module-object', symbol.importedName) &&
-        isUnsupportedEventsRuntimeExport(path[1])
-      ) {
-        return {
-          source: 'node:events',
-          name: path[1],
-          reason: unsupportedEventsRuntimeExportReason(path[1])
-        }
-      }
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'stream', 'module-object', symbol.importedName) &&
-        isUnsupportedStreamRuntimeExport(path[1])
-      ) {
-        return {
-          source: 'node:stream',
-          name: path[1],
-          reason: unsupportedStreamRuntimeExportReason(path[1])
-        }
-      }
-    }
-
-    if (path.length === 3 && path[1] === 'promises') {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      const exportName = `promises.${path[2]}`
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'stream', 'module-object', symbol.importedName) &&
-        isUnsupportedStreamRuntimeExport(exportName)
-      ) {
-        return {
-          source: 'node:stream',
-          name: exportName,
-          reason: unsupportedStreamRuntimeExportReason(exportName)
-        }
-      }
-    }
-
-    return null
   }
 
   checkUtf8EncodingArg(expression: AnyNode, index: number, label: string): void {
