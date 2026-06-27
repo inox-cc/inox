@@ -32,6 +32,7 @@ import {
   urlSearchParamsObjectShape
 } from './checker/builtins.ts'
 import { childProcessRuntimeCallInfo } from './checker/std/child-process.ts'
+import { cryptoRuntimeCallInfo } from './checker/std/crypto.ts'
 import { unsupportedEventStreamRuntimeExport } from './checker/std/events-stream.ts'
 import {
   fsRuntimeCallInfo,
@@ -62,12 +63,6 @@ import {
   setRuntimeMethodName,
   stringRuntimeMethodName
 } from './stdlib/descriptors/collections.ts'
-import {
-  cryptoRuntimeMethodNameFromKnownPath,
-  isCryptoRuntimeMethod,
-  isCryptoRuntimeMethodPath,
-  isUnsupportedNodeCryptoMethod
-} from './stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
 import {
   fetchHeadersRuntimeMethod,
@@ -4642,7 +4637,12 @@ class Checker {
   }
 
   checkCryptoCall(expression: AnyNode): ValueType | null {
-    const call = this.resolveCryptoRuntimeCall(expression)
+    const path = memberExpressionPath(expression.callee)
+    const call = cryptoRuntimeCallInfo(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'crypto'),
+      this.resolveStdlibModuleObjectMemberName(path, 'crypto')
+    )
 
     if (call === null || typeof call === 'undefined') {
       return null
@@ -5826,61 +5826,6 @@ class Checker {
     expression.nullable = method === 'get'
 
     return 'string'
-  }
-
-  resolveCryptoRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
-    const path = memberExpressionPath(expression.callee)
-    const method = this.resolveCryptoRuntimeMethod(path)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    let label = method
-
-    if (path !== null && typeof path !== 'undefined') {
-      label = joinStrings(path, '.')
-    }
-
-    return {
-      method,
-      label,
-      unsupported: !isCryptoRuntimeMethod(method)
-    }
-  }
-
-  resolveCryptoRuntimeMethod(path: string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    if (path.length === 2) {
-      if (isCryptoRuntimeMethodPath(path)) {
-        return cryptoRuntimeMethodNameFromKnownPath(path)
-      }
-
-      const memberName = this.resolveStdlibModuleObjectMemberName(path, 'crypto')
-
-      if (memberName !== null && typeof memberName !== 'undefined') {
-        if (isCryptoRuntimeMethod(memberName) || isUnsupportedNodeCryptoMethod(memberName)) {
-          return memberName
-        }
-
-        return null
-      }
-    }
-
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'crypto')
-
-    if (importedName !== null && typeof importedName !== 'undefined') {
-      if (isCryptoRuntimeMethod(importedName) || isUnsupportedNodeCryptoMethod(importedName)) {
-        return importedName
-      }
-
-      return null
-    }
-
-    return null
   }
 
   checkPathCall(expression: AnyNode): ValueType | null {
