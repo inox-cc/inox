@@ -35,6 +35,17 @@ import { childProcessRuntimeCallInfo } from './checker/std/child-process.ts'
 import { cryptoRuntimeCallInfo } from './checker/std/crypto.ts'
 import { unsupportedEventStreamRuntimeExport } from './checker/std/events-stream.ts'
 import {
+  fetchAbortControllerConstructorName,
+  fetchAbortControllerRuntimeMethod,
+  fetchHeadersRuntimeMethodName,
+  fetchInitOptionName,
+  fetchResponseBodyMethodInfo,
+  fetchRuntimeCallName,
+  isFetchHttpsLiteral,
+  isFetchUnsupportedResponseBodyMember,
+  isSupportedFetchRedirectLiteral
+} from './checker/std/fetch.ts'
+import {
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
   isFsRuntimeImportSymbol
@@ -71,15 +82,6 @@ import {
   stringRuntimeMethodName
 } from './stdlib/descriptors/collections.ts'
 import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
-import {
-  fetchHeadersRuntimeMethod,
-  isFetchAbortControllerMethod,
-  isFetchHeadersMethod,
-  isFetchInitOption,
-  isFetchRedirectMode,
-  isFetchResponseBodyMethod,
-  isSupportedFetchResponseBodyMethod
-} from './stdlib/descriptors/fetch.ts'
 import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import { knownMathRuntimeArgCount } from './stdlib/descriptors/math.ts'
@@ -6404,23 +6406,14 @@ class Checker {
   }
 
   checkFetchCall(expression: AnyNode): ValueType | null {
-    let calleeName = ''
+    const method = fetchRuntimeCallName(expression.callee, this.scope.resolve('fetch'))
 
-    if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
-      calleeName = firstPathSegment(expression.callee.path)
-    }
-
-    if (
-      expression.callee.type !== 'Reference' ||
-      expression.callee.path.length !== 1 ||
-      calleeName !== 'fetch' ||
-      this.scope.resolve('fetch')
-    ) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     if (!this.requireLibuvBackend('fetch', expression.loc)) {
-      expression.fetchRuntimeMethod = 'fetch'
+      expression.fetchRuntimeMethod = method
       expression.valueType = 'promise'
       expression.promiseValueType = 'object'
       expression.shape = fetchResponseObjectShape
@@ -6445,7 +6438,7 @@ class Checker {
         this.expressionCanBeNull(expression.args[0])
       )
 
-      if (this.isFetchHttpsLiteral(expression.args[0]) && !this.supportsFetchHttps()) {
+      if (isFetchHttpsLiteral(expression.args[0]) && !this.supportsFetchHttps()) {
         this.report(
           'INOX_FETCH',
           'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice',
@@ -6458,7 +6451,7 @@ class Checker {
       this.checkFetchInitObject(expression.args[1])
     }
 
-    expression.fetchRuntimeMethod = 'fetch'
+    expression.fetchRuntimeMethod = method
     expression.valueType = 'promise'
     expression.promiseValueType = 'object'
     expression.shape = fetchResponseObjectShape
@@ -6478,7 +6471,9 @@ class Checker {
     }
 
     for (const property of expression.properties) {
-      if (!isFetchInitOption(property.key)) {
+      const optionName = fetchInitOptionName(property.key)
+
+      if (optionName === null || typeof optionName === 'undefined') {
         this.checkExpression(property.value)
         this.report(
           'INOX_FETCH',
@@ -6497,7 +6492,7 @@ class Checker {
           this.expressionCanBeNull(property.value)
         )
 
-        if (property.key === 'redirect' && !this.isSupportedFetchRedirectLiteral(property.value)) {
+        if (property.key === 'redirect' && !isSupportedFetchRedirectLiteral(property.value)) {
           this.report(
             'INOX_FETCH',
             "fetch init redirect must be 'follow', 'manual' or 'error' in the current C/libuv fetch slice",
@@ -6561,10 +6556,6 @@ class Checker {
         )
       }
     }
-  }
-
-  isFetchHttpsLiteral(expression: AnyNode): boolean {
-    return expression.type === 'StringLiteral' && startsWithHttpsScheme(expression.value)
   }
 
   supportsFetchHttps(): boolean {
@@ -6664,16 +6655,13 @@ class Checker {
     return false
   }
 
-  isSupportedFetchRedirectLiteral(expression: AnyNode): boolean {
-    if (expression.type !== 'StringLiteral') {
-      return true
-    }
-
-    return isFetchRedirectMode(expression.value)
-  }
-
   checkFetchAbortControllerMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || !isFetchAbortControllerMethod(expression.callee.property)) {
+    const method =
+      expression.callee.type === 'MemberExpression'
+        ? fetchAbortControllerRuntimeMethod(expression.callee.property)
+        : null
+
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
@@ -6697,14 +6685,19 @@ class Checker {
       )
     }
 
-    expression.fetchRuntimeMethod = 'abort'
+    expression.fetchRuntimeMethod = method
     expression.valueType = 'void'
 
     return 'void'
   }
 
   checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || !isFetchResponseBodyMethod(expression.callee.property)) {
+    const methodInfo =
+      expression.callee.type === 'MemberExpression'
+        ? fetchResponseBodyMethodInfo(expression.callee.property)
+        : null
+
+    if (methodInfo === null || typeof methodInfo === 'undefined') {
       return null
     }
 
@@ -6728,7 +6721,7 @@ class Checker {
       )
     }
 
-    if (!isSupportedFetchResponseBodyMethod(expression.callee.property)) {
+    if (!methodInfo.supported) {
       this.report(
         'INOX_FETCH',
         `Response.${expression.callee.property} is not supported by the current C/libuv fetch slice`,
@@ -6748,7 +6741,7 @@ class Checker {
   }
 
   checkFetchUnsupportedResponseBodyMember(expression: AnyNode): ValueType | null {
-    if (expression.property !== 'body') {
+    if (!isFetchUnsupportedResponseBodyMember(expression.property)) {
       return null
     }
 
@@ -6775,7 +6768,12 @@ class Checker {
   }
 
   checkFetchHeadersMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || !isFetchHeadersMethod(expression.callee.property)) {
+    const method =
+      expression.callee.type === 'MemberExpression'
+        ? fetchHeadersRuntimeMethodName(expression.callee.property)
+        : null
+
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
@@ -6809,11 +6807,11 @@ class Checker {
       )
     }
 
-    expression.fetchRuntimeMethod = fetchHeadersRuntimeMethod(expression.callee.property)
+    expression.fetchRuntimeMethod = method
     expression.valueType = 'boolean'
     expression.nullable = false
 
-    if (expression.callee.property === 'get') {
+    if (method === 'headersGet') {
       expression.valueType = 'string'
       expression.nullable = true
     }
@@ -10060,7 +10058,12 @@ class Checker {
       return 'set'
     }
 
-    if (constructorName === 'AbortController' && !this.scope.resolve('AbortController')) {
+    if (
+      fetchAbortControllerConstructorName(
+        expression.callee.path,
+        this.scope.resolve('AbortController')
+      ) === 'AbortController'
+    ) {
       this.requireLibuvBackend('AbortController', expression.loc)
 
       if (expression.args.length !== 0) {
@@ -14519,33 +14522,6 @@ function mergeShapeFields(target: AnyNode[], source: AnyNode[] | null | undefine
       target.push(field)
     }
   }
-}
-
-function startsWithHttpsScheme(value: string): boolean {
-  if (value.length < 8) {
-    return false
-  }
-
-  return (
-    asciiLowerCharCode(value, 0) === 104 &&
-    asciiLowerCharCode(value, 1) === 116 &&
-    asciiLowerCharCode(value, 2) === 116 &&
-    asciiLowerCharCode(value, 3) === 112 &&
-    asciiLowerCharCode(value, 4) === 115 &&
-    value.charCodeAt(5) === 58 &&
-    value.charCodeAt(6) === 47 &&
-    value.charCodeAt(7) === 47
-  )
-}
-
-function asciiLowerCharCode(value: string, index: number): number {
-  const code = value.charCodeAt(index)
-
-  if (code >= 65 && code <= 90) {
-    return code + 32
-  }
-
-  return code
 }
 
 function isConditionValueType(valueType: ValueType): boolean {
