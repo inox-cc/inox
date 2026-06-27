@@ -69,6 +69,11 @@ import {
   timerRuntimeImportMethodName,
   timerRuntimeMethodName
 } from './checker/std/timers.ts'
+import {
+  dateInstanceRuntimeMethodInfo,
+  isDateConstructorRuntimeExpression,
+  timeRuntimeCallInfo
+} from './checker/std/time.ts'
 import { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from './checker/std/url.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { memberExpressionPath } from './member-paths.ts'
@@ -94,12 +99,6 @@ import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
 } from './stdlib/descriptors/node-builtins.ts'
-import {
-  dateConstructorRuntimeMethodNameFromPath,
-  dateInstanceRuntimeMethodName,
-  dateInstanceRuntimeMethodReturnType,
-  timeRuntimeMethodNameFromPath
-} from './stdlib/descriptors/time.ts'
 import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
 import {
   isUrlMutableObjectField,
@@ -6052,25 +6051,20 @@ class Checker {
     }
 
     const path = memberExpressionPath(expression.callee)
-    const method = timeRuntimeMethodNameFromPath(path)
+    const call = timeRuntimeCallInfo(path, this.resolveMemberPathRootSymbol(path))
 
-    if (path === null || typeof path === 'undefined' || method === null || typeof method === 'undefined') {
+    if (call === null || typeof call === 'undefined') {
       return null
     }
 
-    const root = path[0]
-
-    if (this.runtimeGlobalIsShadowed(root)) {
-      return null
-    }
-
+    const method = call.method
     expression.valueType = 'number'
 
     if (method === 'dateParse') {
       if (expression.args.length !== 1) {
         this.report(
           'INOX_ARG_COUNT',
-          `function ${root}.${path[1]} expects 1 argument(s), got ${expression.args.length}`,
+          `function ${call.root}.${call.member} expects 1 argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
@@ -6093,7 +6087,7 @@ class Checker {
       if (expression.args.length < 2 || expression.args.length > 7) {
         this.report(
           'INOX_ARG_COUNT',
-          `function ${root}.${path[1]} expects 2 to 7 argument(s), got ${expression.args.length}`,
+          `function ${call.root}.${call.member} expects 2 to 7 argument(s), got ${expression.args.length}`,
           expression.loc
         )
       }
@@ -6111,7 +6105,7 @@ class Checker {
     if (expression.args.length !== 0) {
       this.report(
         'INOX_ARG_COUNT',
-        `function ${root}.${path[1]} expects 0 argument(s), got ${expression.args.length}`,
+        `function ${call.root}.${call.member} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
@@ -6129,9 +6123,9 @@ class Checker {
       return null
     }
 
-    const method = dateInstanceRuntimeMethodName(expression.callee.property)
+    const info = dateInstanceRuntimeMethodInfo(expression.callee.property)
 
-    if (method === null || typeof method === 'undefined') {
+    if (info === null || typeof info === 'undefined') {
       return null
     }
 
@@ -6144,7 +6138,7 @@ class Checker {
     if (expression.args.length !== 0) {
       this.report(
         'INOX_ARG_COUNT',
-        `function Date.${method} expects 0 argument(s), got ${expression.args.length}`,
+        `function Date.${info.method} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
@@ -6153,13 +6147,10 @@ class Checker {
       this.checkExpression(checkerNodeAt(expression.args, index))
     }
 
-    const dateReturnType = dateInstanceRuntimeMethodReturnType(method)
-    const returnType = dateReturnType !== null && typeof dateReturnType !== 'undefined' ? dateReturnType : 'number'
+    expression.timeRuntimeMethod = info.method
+    expression.valueType = info.returnType
 
-    expression.timeRuntimeMethod = method
-    expression.valueType = returnType
-
-    return returnType
+    return info.returnType
   }
 
   checkDateConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {
@@ -6198,13 +6189,7 @@ class Checker {
   }
 
   isDateConstructorExpression(expression: AnyNode): boolean {
-    if (this.runtimeGlobalIsShadowed('Date')) {
-      return false
-    }
-
-    const method = dateConstructorRuntimeMethodNameFromPath(memberExpressionPath(expression.callee))
-
-    return method !== null && typeof method !== 'undefined'
+    return isDateConstructorRuntimeExpression(memberExpressionPath(expression.callee), this.scope.resolve('Date'))
   }
 
   checkArrayIsArrayCall(expression: AnyNode): ValueType | null {
