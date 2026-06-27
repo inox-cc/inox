@@ -9,8 +9,7 @@ export const jsonFeature: CompilerFeatureDescriptor = {
   id: 'json',
   runtimeRequirements: ['collections', 'json', 'managed-values', 'objects', 'string-bytes'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectJsonIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectJsonIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

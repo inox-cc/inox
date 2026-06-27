@@ -8,8 +8,7 @@ export const timersFeature: CompilerFeatureDescriptor = {
   id: 'timers',
   runtimeRequirements: ['async-runtime', 'callback-values', 'managed-values', 'timers'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectTimersIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectTimersIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

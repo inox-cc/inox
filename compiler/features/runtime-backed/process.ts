@@ -7,8 +7,7 @@ export const processFeature: CompilerFeatureDescriptor = {
   id: 'process',
   runtimeRequirements: ['managed-values', 'process', 'string-bytes'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectProcessIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectProcessIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

@@ -14,13 +14,11 @@ export const weakReferencesFeatureRuntimeRequirements: IrRuntimeRequirement[] = 
   'weak-references'
 ]
 export const weakReferencesFeatureCPreludeIncludes: string[] = []
-export const weakReferencesFeatureCPreludeHelpers: (() => string[])[] = []
 export const weakReferencesFeature: CompilerFeatureDescriptor = {
   id: weakReferencesFeatureId,
   runtimeRequirements: weakReferencesFeatureRuntimeRequirements,
   cPreludeIncludes: weakReferencesFeatureCPreludeIncludes,
-  cPreludeHelpers: weakReferencesFeatureCPreludeHelpers,
-  collect: collectWeakReferencesIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectWeakReferencesIrFeatures(node: AnyNode, features: WeakReferencesFeatureSet): void {

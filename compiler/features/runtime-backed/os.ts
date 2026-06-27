@@ -7,8 +7,7 @@ export const osFeature: CompilerFeatureDescriptor = {
   id: 'os',
   runtimeRequirements: ['managed-values', 'os', 'string-bytes'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectOsIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectOsIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

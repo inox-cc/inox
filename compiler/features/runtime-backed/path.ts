@@ -7,8 +7,7 @@ export const pathFeature: CompilerFeatureDescriptor = {
   id: 'path',
   runtimeRequirements: ['managed-values', 'path', 'string-bytes'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectPathIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectPathIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

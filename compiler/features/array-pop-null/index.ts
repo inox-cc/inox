@@ -2,7 +2,6 @@ import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../types.ts'
 
 type ArrayPopNullFeatureSet = Set<IrFeature>
-type ArrayPopNullCPreludeHelper = () => string[]
 
 type ArrayPopNullReceiverNode = AnyNode & {
   valueType?: string | null
@@ -22,13 +21,11 @@ type ArrayPopNullFeatureNode = AnyNode & {
 export const arrayPopNullFeatureId: IrFeature = 'array-pop-null'
 export const arrayPopNullFeatureRuntimeRequirements: IrRuntimeRequirement[] = []
 export const arrayPopNullFeatureCPreludeIncludes: string[] = []
-export const arrayPopNullFeatureCPreludeHelpers: ArrayPopNullCPreludeHelper[] = []
 export const arrayPopNullFeature: CompilerFeatureDescriptor = {
   id: arrayPopNullFeatureId,
   runtimeRequirements: arrayPopNullFeatureRuntimeRequirements,
   cPreludeIncludes: arrayPopNullFeatureCPreludeIncludes,
-  cPreludeHelpers: arrayPopNullFeatureCPreludeHelpers,
-  collect: collectArrayPopNullIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectArrayPopNullIrFeatures(node: AnyNode, features: ArrayPopNullFeatureSet): void {

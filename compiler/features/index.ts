@@ -276,7 +276,7 @@ function compilerFeatureHasCPrelude(featureName: IrFeature): boolean {
     return false
   }
 
-  return descriptor.cPreludeIncludes.length > 0 || descriptor.cPreludeHelpers.length > 0
+  return descriptor.cPreludeIncludes.length > 0 || descriptor.hasCPreludeHelpers
 }
 
 function copyRuntimeRequirements(values: IrRuntimeRequirement[]): IrRuntimeRequirement[] {

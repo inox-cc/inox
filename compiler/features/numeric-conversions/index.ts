@@ -2,7 +2,6 @@ import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../types.ts'
 
 type NumericConversionFeatureSet = Set<IrFeature>
-type NumericConversionCPreludeHelper = () => string[]
 
 type NumericConversionCalleeNode = AnyNode & {
   path?: string[] | null
@@ -23,27 +22,20 @@ export const numericCastsFeatureRuntimeRequirements: IrRuntimeRequirement[] = []
 export const numberFromStringNullFeatureCPreludeIncludes: string[] = []
 export const numericCastsFeatureCPreludeIncludes: string[] = []
 
-export const numberFromStringNullFeatureCPreludeHelpers: NumericConversionCPreludeHelper[] = []
-export const numericCastsFeatureCPreludeHelpers: NumericConversionCPreludeHelper[] = []
 export const numberFromStringNullFeature: CompilerFeatureDescriptor = {
   id: numberFromStringNullFeatureId,
   runtimeRequirements: numberFromStringNullFeatureRuntimeRequirements,
   cPreludeIncludes: numberFromStringNullFeatureCPreludeIncludes,
-  cPreludeHelpers: numberFromStringNullFeatureCPreludeHelpers,
-  collect: collectNumberFromStringNullIrFeatures
+  hasCPreludeHelpers: false
 }
 export const numericCastsFeature: CompilerFeatureDescriptor = {
   id: numericCastsFeatureId,
   runtimeRequirements: numericCastsFeatureRuntimeRequirements,
   cPreludeIncludes: numericCastsFeatureCPreludeIncludes,
-  cPreludeHelpers: numericCastsFeatureCPreludeHelpers,
-  collect: collectNumericCastsIrFeatures
+  hasCPreludeHelpers: false
 }
 
-export function collectNumberFromStringNullIrFeatures(
-  node: AnyNode,
-  features: NumericConversionFeatureSet
-): void {
+export function collectNumberFromStringNullIrFeatures(node: AnyNode, features: NumericConversionFeatureSet): void {
   const item = node as NumericConversionFeatureNode
 
   if (!isNumberConversionCall(item)) {
@@ -92,11 +84,7 @@ function referenceCallName(node: NumericConversionFeatureNode): string | null {
 }
 
 function isCallLikeNode(node: NumericConversionFeatureNode): boolean {
-  return (
-    node.type === 'CallExpression' ||
-    node.type === 'OptionalCallExpression' ||
-    node.type === 'NewExpression'
-  )
+  return node.type === 'CallExpression' || node.type === 'OptionalCallExpression' || node.type === 'NewExpression'
 }
 
 function isNumericCastName(name: string | null): boolean {

@@ -7,8 +7,7 @@ export const cryptoFeature: CompilerFeatureDescriptor = {
   id: 'crypto',
   runtimeRequirements: ['binary', 'crypto', 'managed-values'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectCryptoIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectCryptoIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

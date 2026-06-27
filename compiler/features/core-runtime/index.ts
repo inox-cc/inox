@@ -67,43 +67,37 @@ export const asyncRuntimeFeature: CompilerFeatureDescriptor = {
   id: 'async-runtime',
   runtimeRequirements: ['async-runtime'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectNoCoreRuntimeIrFeatures
+  hasCPreludeHelpers: false
 }
 export const callbackValuesFeature: CompilerFeatureDescriptor = {
   id: 'callback-values',
   runtimeRequirements: ['callback-values'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectNoCoreRuntimeIrFeatures
+  hasCPreludeHelpers: false
 }
 export const collectionsFeature: CompilerFeatureDescriptor = {
   id: 'collections',
   runtimeRequirements: ['collections', 'managed-values'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectNoCoreRuntimeIrFeatures
+  hasCPreludeHelpers: false
 }
 export const objectsFeature: CompilerFeatureDescriptor = {
   id: 'objects',
   runtimeRequirements: ['managed-values', 'objects'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectNoCoreRuntimeIrFeatures
+  hasCPreludeHelpers: false
 }
 export const runtimeValuesFeature: CompilerFeatureDescriptor = {
   id: 'runtime-values',
   runtimeRequirements: ['managed-values'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectCoreRuntimeIrFeatures
+  hasCPreludeHelpers: false
 }
 export const stringBytesFeature: CompilerFeatureDescriptor = {
   id: 'string-bytes',
   runtimeRequirements: ['string-bytes'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectNoCoreRuntimeIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export const coreRuntimeFeatures: CompilerFeatureDescriptor[] = [
@@ -114,9 +108,6 @@ export const coreRuntimeFeatures: CompilerFeatureDescriptor[] = [
   runtimeValuesFeature,
   stringBytesFeature
 ]
-
-function collectNoCoreRuntimeIrFeatures(_node: AnyNode, _features: CoreRuntimeFeatureSet): void {
-}
 
 export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntimeFeatureSet): void {
   const item = node as CoreRuntimeNode

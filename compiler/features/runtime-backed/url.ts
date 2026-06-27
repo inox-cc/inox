@@ -7,8 +7,7 @@ export const urlFeature: CompilerFeatureDescriptor = {
   id: 'url',
   runtimeRequirements: ['managed-values', 'objects', 'string-bytes', 'url'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectUrlIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectUrlIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

@@ -2,7 +2,6 @@ import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../types.ts'
 
 type RegExpFeatureSet = Set<IrFeature>
-type RegExpCPreludeHelper = () => string[]
 
 type RegExpFeatureNode = AnyNode & {
   regexpRuntimeMethod?: string | null
@@ -17,13 +16,11 @@ export const regexpFeatureCPreludeIncludes: string[] = [
   '#include <stdlib.h>',
   '#include <string.h>'
 ]
-export const regexpFeatureCPreludeHelpers: RegExpCPreludeHelper[] = [emitCRegExpPreludeHelpers]
 export const regexpFeature: CompilerFeatureDescriptor = {
   id: regexpFeatureId,
   runtimeRequirements: regexpFeatureRuntimeRequirements,
   cPreludeIncludes: regexpFeatureCPreludeIncludes,
-  cPreludeHelpers: regexpFeatureCPreludeHelpers,
-  collect: collectRegExpIrFeatures
+  hasCPreludeHelpers: true
 }
 
 export function collectRegExpIrFeatures(node: AnyNode, features: RegExpFeatureSet): void {

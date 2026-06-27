@@ -9,8 +9,7 @@ export const debugMemoryFeature: CompilerFeatureDescriptor = {
   id: 'debug-memory',
   runtimeRequirements: ['debug-memory', 'managed-values', 'objects'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectDebugMemoryIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectDebugMemoryIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

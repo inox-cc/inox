@@ -9,8 +9,7 @@ export const fsFeature: CompilerFeatureDescriptor = {
   id: 'fs',
   runtimeRequirements: ['async-runtime', 'collections', 'fs', 'managed-values'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectFsIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectFsIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

@@ -14,8 +14,7 @@ export const clocksFeature: CompilerFeatureDescriptor = {
   id: 'clocks',
   runtimeRequirements: ['clocks'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectClocksIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectClocksIrFeatures(node: AnyNode, features: Set<IrFeature>): void {

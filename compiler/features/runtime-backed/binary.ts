@@ -8,8 +8,7 @@ export const binaryFeature: CompilerFeatureDescriptor = {
   id: 'binary',
   runtimeRequirements: ['binary', 'managed-values'],
   cPreludeIncludes: [],
-  cPreludeHelpers: [],
-  collect: collectBinaryIrFeatures
+  hasCPreludeHelpers: false
 }
 
 export function collectBinaryIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
