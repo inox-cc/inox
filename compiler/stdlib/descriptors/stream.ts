@@ -1,6 +1,6 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const unsupportedStreamRuntimeExports: string[] = [
+export const unsupportedStreamRuntimeExports = [
   'Readable',
   'Writable',
   'Duplex',

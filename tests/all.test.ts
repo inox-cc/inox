@@ -110,6 +110,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImportBoundary } =
     await import('./integration/module-declaration-import-boundary.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
+  const { assertModuleDeclarationInferredConsts } =
+    await import('./integration/module-declaration-inferred-consts.test.ts')
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp } = await import('./integration/native-inox-help.test.ts')
 
@@ -132,6 +134,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-contracts', () => {
       assertModuleDeclarationContracts()
+    })
+
+    await t.test('module-declaration-inferred-consts', () => {
+      assertModuleDeclarationInferredConsts()
     })
 
     await t.test('module-declaration-import-boundary', () => {

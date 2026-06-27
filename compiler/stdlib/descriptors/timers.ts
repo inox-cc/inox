@@ -1,8 +1,8 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const timerStartMethods: string[] = ['setImmediate', 'setInterval', 'setTimeout']
-export const timerClearMethods: string[] = ['clearImmediate', 'clearInterval', 'clearTimeout']
-export const timerRuntimeMethods: string[] = [
+export const timerStartMethods = ['setImmediate', 'setInterval', 'setTimeout']
+export const timerClearMethods = ['clearImmediate', 'clearInterval', 'clearTimeout']
+export const timerRuntimeMethods = [
   'setImmediate',
   'setInterval',
   'setTimeout',
@@ -10,7 +10,7 @@ export const timerRuntimeMethods: string[] = [
   'clearInterval',
   'clearTimeout'
 ]
-export const timerHandleMethods: string[] = ['ref', 'unref']
+export const timerHandleMethods = ['ref', 'unref']
 
 export function isNodeTimerImportSource(source: string): boolean {
   if (source !== 'node:timers') {

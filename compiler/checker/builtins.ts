@@ -568,7 +568,7 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
   return null
 }
 
-export const numericCastNames: Set<string> = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
+export const numericCastNames = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
 
 export function isNumericCastName(name: string): boolean {
   return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'

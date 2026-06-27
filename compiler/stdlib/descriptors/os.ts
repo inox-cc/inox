@@ -14,7 +14,7 @@ export const osRuntimeMethods: OsRuntimeMethod[] = [
 
 export const osRuntimeConstants: OsRuntimeConstant[] = ['EOL']
 
-export const unsupportedOsRuntimeMethods: string[] = [
+export const unsupportedOsRuntimeMethods = [
   'availableParallelism',
   'cpus',
   'freemem',

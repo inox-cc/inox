@@ -1,6 +1,6 @@
-export const mathNullaryMethods: string[] = ['random']
-export const mathUnaryMethods: string[] = ['abs', 'ceil', 'cos', 'floor', 'fround', 'round', 'sin', 'sqrt', 'trunc']
-export const mathBinaryMethods: string[] = ['max', 'min']
+export const mathNullaryMethods = ['random']
+export const mathUnaryMethods = ['abs', 'ceil', 'cos', 'floor', 'fround', 'round', 'sin', 'sqrt', 'trunc']
+export const mathBinaryMethods = ['max', 'min']
 
 export type MathRuntimeMethod = string
 

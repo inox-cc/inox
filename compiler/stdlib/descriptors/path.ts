@@ -26,9 +26,9 @@ export const pathRuntimeMethods: PathRuntimeMethod[] = [
 ]
 
 export const pathRuntimeConstants: PathRuntimeConstant[] = ['delimiter', 'sep']
-export const pathParseObjectFields: string[] = ['root', 'dir', 'base', 'ext', 'name']
+export const pathParseObjectFields = ['root', 'dir', 'base', 'ext', 'name']
 
-export const unsupportedPathRuntimeMethods: string[] = ['matchesGlob', 'toNamespacedPath']
+export const unsupportedPathRuntimeMethods = ['matchesGlob', 'toNamespacedPath']
 
 export function isNodePathImportSource(source: string | null | undefined): boolean {
   return source === 'node:path'

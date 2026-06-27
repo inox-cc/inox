@@ -1,7 +1,7 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import { tokenize } from '../lexer.ts'
 import { parse } from '../parser.ts'
-import type { AnyNode, Diagnostic, ProgramNode, Token } from '../types.ts'
+import type { AnyNode, Diagnostic, ProgramNode, Token, ValueType } from '../types.ts'
 
 export type ModuleDeclarationContractEmitResult = {
   code: string
@@ -11,6 +11,13 @@ export type ModuleDeclarationContractEmitResult = {
 export type ModuleDeclarationContractParseResult = {
   program: ProgramNode
   diagnostics: Diagnostic[]
+}
+
+type DeclarationValueMetadata = {
+  valueType: ValueType | null
+  arrayElementType: ValueType | null
+  arrayElementDeclaredType: string | null
+  setElementType: ValueType | null
 }
 
 export function createModuleDeclarationProgram(program: ProgramNode): ProgramNode {
@@ -978,6 +985,8 @@ function cloneFunctionDeclaration(item: AnyNode): AnyNode {
 }
 
 function cloneVariableDeclaration(item: AnyNode): AnyNode {
+  const inferred = inferVariableDeclarationMetadata(item)
+
   return {
     type: 'VariableDeclaration',
     kind: stringMetadata(item.kind, 'const'),
@@ -986,18 +995,159 @@ function cloneVariableDeclaration(item: AnyNode): AnyNode {
     name: item.name,
     loc: nullableMetadata(item.loc),
     declaredType: nullableMetadata(item.declaredType),
-    valueType: stringMetadata(item.valueType, 'unknown'),
+    valueType: knownStringMetadata(item.valueType) ?? inferred.valueType ?? stringMetadata(item.valueType, 'unknown'),
     nullable: item.nullable === true,
     shape: nullableMetadata(item.shape),
     functionType: nullableMetadata(item.functionType),
-    arrayElementType: nullableMetadata(item.arrayElementType),
-    arrayElementDeclaredType: nullableMetadata(item.arrayElementDeclaredType),
+    arrayElementType:
+      knownStringMetadata(item.arrayElementType) ??
+      inferred.arrayElementType ??
+      nullableMetadata(item.arrayElementType),
+    arrayElementDeclaredType:
+      knownStringMetadata(item.arrayElementDeclaredType) ??
+      inferred.arrayElementDeclaredType ??
+      nullableMetadata(item.arrayElementDeclaredType),
     mapKeyType: nullableMetadata(item.mapKeyType),
     mapValueType: nullableMetadata(item.mapValueType),
     mapValueShape: nullableMetadata(item.mapValueShape),
     promiseValueType: nullableMetadata(item.promiseValueType),
-    setElementType: nullableMetadata(item.setElementType),
+    setElementType:
+      knownStringMetadata(item.setElementType) ?? inferred.setElementType ?? nullableMetadata(item.setElementType),
     init: null
+  }
+}
+
+function inferVariableDeclarationMetadata(item: AnyNode): DeclarationValueMetadata {
+  return inferExpressionDeclarationMetadata(item.init)
+}
+
+function inferExpressionDeclarationMetadata(expression: AnyNode | null | undefined): DeclarationValueMetadata {
+  if (expression === null || typeof expression === 'undefined') {
+    return emptyDeclarationValueMetadata()
+  }
+
+  if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
+    return scalarDeclarationValueMetadata('string')
+  }
+
+  if (expression.type === 'NumberLiteral') {
+    return scalarDeclarationValueMetadata('number')
+  }
+
+  if (expression.type === 'BooleanLiteral') {
+    return scalarDeclarationValueMetadata('boolean')
+  }
+
+  if (expression.type === 'NullLiteral') {
+    return scalarDeclarationValueMetadata('null')
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    return arrayLiteralDeclarationValueMetadata(expression)
+  }
+
+  if (expression.type === 'NewExpression') {
+    return newExpressionDeclarationValueMetadata(expression)
+  }
+
+  return emptyDeclarationValueMetadata()
+}
+
+function scalarDeclarationValueMetadata(valueType: ValueType): DeclarationValueMetadata {
+  return {
+    valueType,
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    setElementType: null
+  }
+}
+
+function arrayLiteralDeclarationValueMetadata(expression: AnyNode): DeclarationValueMetadata {
+  const elementType = arrayLiteralElementType(expression)
+
+  return {
+    valueType: 'array',
+    arrayElementType: elementType,
+    arrayElementDeclaredType: elementType,
+    setElementType: null
+  }
+}
+
+function newExpressionDeclarationValueMetadata(expression: AnyNode): DeclarationValueMetadata {
+  const callee = expression.callee
+
+  if (
+    callee === null ||
+    typeof callee === 'undefined' ||
+    callee.type !== 'Reference' ||
+    callee.path.length !== 1 ||
+    callee.path[0] !== 'Set'
+  ) {
+    return emptyDeclarationValueMetadata()
+  }
+
+  return {
+    valueType: 'set',
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    setElementType: setConstructorElementType(expression)
+  }
+}
+
+function setConstructorElementType(expression: AnyNode): ValueType | null {
+  if (expression.args.length === 0) {
+    return null
+  }
+
+  const first = expression.args[0]
+
+  if (first.type === 'ArrayLiteral') {
+    return arrayLiteralElementType(first)
+  }
+
+  const metadata = inferExpressionDeclarationMetadata(first)
+
+  if (metadata.valueType === 'set') {
+    return metadata.setElementType
+  }
+
+  if (metadata.valueType === 'array') {
+    return metadata.arrayElementType
+  }
+
+  return null
+}
+
+function arrayLiteralElementType(expression: AnyNode): ValueType | null {
+  if (expression.elements.length === 0) {
+    return null
+  }
+
+  let elementType: ValueType | null = null
+
+  for (const element of expression.elements) {
+    const metadata = inferExpressionDeclarationMetadata(element)
+
+    if (metadata.valueType === null || metadata.valueType === 'unknown') {
+      return null
+    }
+
+    if (elementType === null) {
+      elementType = metadata.valueType
+    } else if (elementType !== metadata.valueType) {
+      return null
+    }
+  }
+
+  return elementType
+}
+
+function emptyDeclarationValueMetadata(): DeclarationValueMetadata {
+  return {
+    valueType: null,
+    arrayElementType: null,
+    arrayElementDeclaredType: null,
+    setElementType: null
   }
 }
 
@@ -1119,6 +1269,14 @@ function stringMetadata(value: string | null | undefined, fallback: string): str
   }
 
   return fallback
+}
+
+function knownStringMetadata(value: string | null | undefined): string | null {
+  if (value !== null && typeof value !== 'undefined' && value.length > 0 && value !== 'unknown') {
+    return value
+  }
+
+  return null
 }
 
 function nullableStringMetadata(value: string | null | undefined): string | null {

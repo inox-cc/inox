@@ -1,10 +1,10 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const binaryStaticMethods: string[] = ['alloc', 'from', 'isBuffer']
-export const binaryInstanceMethods: string[] = ['slice', 'toString']
-export const binaryConstructors: string[] = ['Uint8Array']
-export const bufferRuntimeConstants: string[] = ['MAX_LENGTH']
-export const unsupportedBufferRuntimeExports: string[] = [
+export const binaryStaticMethods = ['alloc', 'from', 'isBuffer']
+export const binaryInstanceMethods = ['slice', 'toString']
+export const binaryConstructors = ['Uint8Array']
+export const bufferRuntimeConstants = ['MAX_LENGTH']
+export const unsupportedBufferRuntimeExports = [
   'Blob',
   'File',
   'atob',

@@ -1,4 +1,4 @@
-export const implementedRuntimeBuiltinImportSources: string[] = [
+export const implementedRuntimeBuiltinImportSources = [
   'dgram',
   'fs',
   'http',
@@ -20,7 +20,7 @@ export const implementedRuntimeBuiltinImportSources: string[] = [
   'node:process'
 ]
 
-export const unsupportedRuntimeBuiltinImportSources: string[] = [
+export const unsupportedRuntimeBuiltinImportSources = [
   'node:dns',
   'node:https',
   'node:timers/promises',

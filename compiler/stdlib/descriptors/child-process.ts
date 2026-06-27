@@ -1,8 +1,8 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const childProcessRuntimeMethods: string[] = ['execFileSync', 'execSync', 'spawnSync']
+export const childProcessRuntimeMethods = ['execFileSync', 'execSync', 'spawnSync']
 
-export const unsupportedChildProcessRuntimeMethods: string[] = ['exec', 'execFile', 'fork', 'spawn']
+export const unsupportedChildProcessRuntimeMethods = ['exec', 'execFile', 'fork', 'spawn']
 
 export type ChildProcessRuntimeMethod = string
 

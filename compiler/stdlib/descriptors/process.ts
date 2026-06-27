@@ -47,7 +47,7 @@ export const processRuntimeStringProperties: ProcessRuntimeStringProperty[] = [
 export const processRuntimeNumberProperties: ProcessRuntimeNumberProperty[] = ['argv.length', 'exitCode', 'pid']
 export const processRuntimeObjectProperties: ProcessRuntimeObjectProperty[] = ['argv', 'env', 'versions']
 
-export const unsupportedProcessRuntimeMethods: string[] = [
+export const unsupportedProcessRuntimeMethods = [
   'abort',
   'addListener',
   'chdir',
@@ -65,7 +65,7 @@ export const unsupportedProcessRuntimeMethods: string[] = [
   'uptime'
 ]
 
-export const unsupportedProcessRuntimeProperties: string[] = ['stderr', 'stdin', 'stdout']
+export const unsupportedProcessRuntimeProperties = ['stderr', 'stdin', 'stdout']
 
 export function isNodeProcessImportSource(source: string | null | undefined): boolean {
   return source === 'node:process'

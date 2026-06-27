@@ -1,6 +1,6 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const arrayMethods: string[] = [
+export const arrayMethods = [
   'filter',
   'find',
   'includes',
@@ -13,10 +13,10 @@ export const arrayMethods: string[] = [
   'sort',
   'unshift'
 ]
-export const collectionConstructors: string[] = ['Map', 'Set']
-export const mapMethods: string[] = ['clear', 'delete', 'get', 'has', 'set']
-export const setMethods: string[] = ['add', 'clear', 'delete', 'has']
-export const stringTransformMethods: string[] = [
+export const collectionConstructors = ['Map', 'Set']
+export const mapMethods = ['clear', 'delete', 'get', 'has', 'set']
+export const setMethods = ['add', 'clear', 'delete', 'has']
+export const stringTransformMethods = [
   'padStart',
   'slice',
   'split',
@@ -27,9 +27,9 @@ export const stringTransformMethods: string[] = [
   'trimRight',
   'trimStart'
 ]
-export const stringIndexMethods: string[] = ['indexOf', 'lastIndexOf']
-export const stringPredicateMethods: string[] = ['endsWith', 'includes', 'startsWith']
-export const stringRuntimeMethods: string[] = [
+export const stringIndexMethods = ['indexOf', 'lastIndexOf']
+export const stringPredicateMethods = ['endsWith', 'includes', 'startsWith']
+export const stringRuntimeMethods = [
   'slice',
   'split',
   'padStart',

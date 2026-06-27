@@ -10983,8 +10983,14 @@ class Checker {
       expression.valueType = 'set'
       expression.setElementType = 'unknown'
 
-      if (argTypes.length > 0 && argTypes[0] === 'set') {
-        const elementType = this.resolveExpressionSetElementType(expression.args[0])
+      if (argTypes.length > 0) {
+        let elementType: ValueType | null = null
+
+        if (argTypes[0] === 'set') {
+          elementType = this.resolveExpressionSetElementType(expression.args[0])
+        } else if (argTypes[0] === 'array') {
+          elementType = this.resolveExpressionArrayElementType(expression.args[0])
+        }
 
         if (elementType !== null && typeof elementType !== 'undefined') {
           expression.setElementType = elementType

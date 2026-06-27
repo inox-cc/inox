@@ -74,7 +74,7 @@ export const timeRuntimeDescriptors: TimeRuntimeDescriptor[] = [
   performanceNowRuntimeDescriptor
 ]
 
-const dateInstanceNumberRuntimeMethods: string[] = [
+const dateInstanceNumberRuntimeMethods = [
   'getDate',
   'getDay',
   'getFullYear',
@@ -96,7 +96,7 @@ const dateInstanceNumberRuntimeMethods: string[] = [
   'valueOf'
 ]
 
-const dateInstanceStringRuntimeMethods: string[] = [
+const dateInstanceStringRuntimeMethods = [
   'toDateString',
   'toISOString',
   'toJSON',
@@ -168,7 +168,10 @@ export function dateInstanceRuntimeMethodName(method: string | null | undefined)
     return null
   }
 
-  if (timeStringListHas(dateInstanceNumberRuntimeMethods, method) || timeStringListHas(dateInstanceStringRuntimeMethods, method)) {
+  if (
+    timeStringListHas(dateInstanceNumberRuntimeMethods, method) ||
+    timeStringListHas(dateInstanceStringRuntimeMethods, method)
+  ) {
     return method as DateInstanceRuntimeMethod
   }
 
@@ -196,9 +199,7 @@ function isDateNowRuntimePath(path: string[] | null | undefined): boolean {
 }
 
 function isDateParseRuntimePath(path: string[] | null | undefined): boolean {
-  return (
-    path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Date' && path[1] === 'parse'
-  )
+  return path !== null && typeof path !== 'undefined' && path.length === 2 && path[0] === 'Date' && path[1] === 'parse'
 }
 
 function isDateUTCRuntimePath(path: string[] | null | undefined): boolean {

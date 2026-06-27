@@ -1,6 +1,6 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const unsupportedEventsRuntimeExports: string[] = [
+export const unsupportedEventsRuntimeExports = [
   'EventEmitter',
   'EventEmitterAsyncResource',
   'addAbortListener',

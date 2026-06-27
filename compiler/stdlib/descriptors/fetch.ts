@@ -3,9 +3,9 @@ export type FetchRuntimeMethod = 'abort' | 'abortControllerNew' | 'fetch' | 'hea
 export type FetchHeaderMethod = 'get' | 'has'
 export type FetchResponseBodyMethod = 'arrayBuffer' | 'blob' | 'bytes' | 'formData' | 'json' | 'text'
 
-export const fetchGlobalRoots: string[] = ['AbortController', 'fetch']
-export const fetchInitOptions: string[] = ['body', 'headers', 'method', 'redirect', 'signal']
-export const fetchRedirectModes: string[] = ['error', 'follow', 'manual']
+export const fetchGlobalRoots = ['AbortController', 'fetch']
+export const fetchInitOptions = ['body', 'headers', 'method', 'redirect', 'signal']
+export const fetchRedirectModes = ['error', 'follow', 'manual']
 export const fetchHeadersMethods: FetchHeaderMethod[] = ['get', 'has']
 export const fetchResponseBodyMethods: FetchResponseBodyMethod[] = [
   'arrayBuffer',
@@ -15,7 +15,7 @@ export const fetchResponseBodyMethods: FetchResponseBodyMethod[] = [
   'json',
   'text'
 ]
-export const fetchAbortControllerMethods: string[] = ['abort']
+export const fetchAbortControllerMethods = ['abort']
 export const asyncFetchRuntimeMethods: FetchRuntimeMethod[] = ['fetch', 'text']
 
 function stringListHas(values: string[], value: string): boolean {

@@ -1,6 +1,6 @@
 import { stringListIncludes } from './string-list.ts'
 
-export const jsonRuntimeMethods: string[] = ['parse', 'stringify']
+export const jsonRuntimeMethods = ['parse', 'stringify']
 
 export function jsonRuntimeMethodNameFromPath(path: string[]): string | null {
   if (path.length !== 2 || path[0] !== 'JSON') {
