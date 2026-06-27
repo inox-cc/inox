@@ -32,6 +32,7 @@ import {
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
 import { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from './checker/std/os.ts'
+import { isPathRuntimeConstantImport, pathRuntimeCallInfo, pathRuntimeConstantName } from './checker/std/path.ts'
 import { runtimeImportValueType } from './checker/std/runtime-imports.ts'
 import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
@@ -90,12 +91,6 @@ import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
 } from './stdlib/descriptors/node-builtins.ts'
-import {
-  isNodePathImportSource,
-  isPathRuntimeConstant,
-  isPathRuntimeMethod,
-  isUnsupportedPathRuntimeMethod
-} from './stdlib/descriptors/path.ts'
 import {
   isNodeProcessImportSource,
   isProcessRuntimeMethod,
@@ -2624,8 +2619,7 @@ class Checker {
         if (
           importedName !== null &&
           typeof importedName !== 'undefined' &&
-          isNodePathImportSource(importSource) &&
-          isPathRuntimeConstant(importedName)
+          isPathRuntimeConstantImport(importSource, importedName)
         ) {
           expression.pathRuntimeConstant = importedName
         }
@@ -6143,7 +6137,13 @@ class Checker {
   }
 
   checkPathCall(expression: AnyNode): ValueType | null {
-    const call = this.resolvePathRuntimeCall(expression)
+    const path = memberExpressionPath(expression.callee)
+    const call = pathRuntimeCallInfo(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'path'),
+      this.resolveStdlibModuleObjectMemberName(path, 'path'),
+      this.resolveMemberPathRootSymbol(path)
+    )
 
     if (call === null || typeof call === 'undefined') {
       return null
@@ -6299,95 +6299,13 @@ class Checker {
     return returnType
   }
 
-  resolvePathRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
-    const path = memberExpressionPath(expression.callee)
-    const method = this.resolvePathRuntimeMethod(path)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    let label = method
-
-    if (path !== null && typeof path !== 'undefined') {
-      label = joinStrings(path, '.')
-    }
-
-    return {
-      method,
-      label,
-      unsupported: !isPathRuntimeMethod(method)
-    }
-  }
-
-  resolvePathRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'path')
-
-    if (importedName !== null && typeof importedName !== 'undefined') {
-      if (isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName)) {
-        return importedName
-      }
-
-      return null
-    }
-
-    const moduleObjectMemberName = this.resolveStdlibModuleObjectMemberName(path, 'path')
-
-    if (moduleObjectMemberName !== null && typeof moduleObjectMemberName !== 'undefined') {
-      if (isPathRuntimeMethod(moduleObjectMemberName) || isUnsupportedPathRuntimeMethod(moduleObjectMemberName)) {
-        return moduleObjectMemberName
-      }
-
-      return null
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodePathImportSource(symbol.importSource) &&
-        symbol.importedName === 'posix'
-      ) {
-        if (isPathRuntimeMethod(path[1]) || isUnsupportedPathRuntimeMethod(path[1])) {
-          return path[1]
-        }
-
-        return null
-      }
-    }
-
-    if (path.length === 3 && path[1] === 'posix') {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName)
-      ) {
-        if (isPathRuntimeMethod(path[2]) || isUnsupportedPathRuntimeMethod(path[2])) {
-          return path[2]
-        }
-
-        return null
-      }
-    }
-
-    return null
-  }
-
   checkPathConstantMemberExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression)
-    const constant = this.resolvePathRuntimeConstant(path)
+    const constant = pathRuntimeConstantName(
+      path,
+      this.resolveStdlibModuleObjectMemberName(path, 'path'),
+      this.resolveMemberPathRootSymbol(path)
+    )
 
     if (constant === null || typeof constant === 'undefined') {
       return null
@@ -6397,55 +6315,6 @@ class Checker {
     expression.pathRuntimeConstant = constant
 
     return 'string'
-  }
-
-  resolvePathRuntimeConstant(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    const moduleObjectMemberName = this.resolveStdlibModuleObjectMemberName(path, 'path')
-
-    if (
-      moduleObjectMemberName !== null &&
-      typeof moduleObjectMemberName !== 'undefined' &&
-      isPathRuntimeConstant(moduleObjectMemberName)
-    ) {
-      return moduleObjectMemberName
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodePathImportSource(symbol.importSource) &&
-        symbol.importedName === 'posix' &&
-        isPathRuntimeConstant(path[1])
-      ) {
-        return path[1]
-      }
-    }
-
-    if (path.length === 3 && path[1] === 'posix') {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName) &&
-        isPathRuntimeConstant(path[2])
-      ) {
-        return path[2]
-      }
-    }
-
-    return null
   }
 
   checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -7182,6 +7051,14 @@ class Checker {
 
   supportsCryptoHash(): boolean {
     return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
+  }
+
+  resolveMemberPathRootSymbol(path: readonly string[] | null | undefined): SymbolInfo | null {
+    if (path === null || typeof path === 'undefined' || path.length === 0) {
+      return null
+    }
+
+    return this.scope.resolve(firstPathSegment(path))
   }
 
   resolveStdlibRuntimeDirectImportName(
