@@ -36,7 +36,13 @@ import { isMathRuntimeMethod } from './checker/std/math.ts'
 import { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from './checker/std/os.ts'
 import { isPathRuntimeConstantImport, pathRuntimeCallInfo, pathRuntimeConstantName } from './checker/std/path.ts'
 import { runtimeImportValueType } from './checker/std/runtime-imports.ts'
-import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
+import {
+  isTimerRuntimeImportSymbol,
+  timerCallbackFunctionType,
+  timerClearMethodName,
+  timerRuntimeImportMethodName,
+  timerRuntimeMethodName
+} from './checker/std/timers.ts'
 import { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from './checker/std/url.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { memberExpressionPath } from './member-paths.ts'
@@ -100,7 +106,7 @@ import {
   dateInstanceRuntimeMethodReturnType,
   timeRuntimeMethodNameFromPath
 } from './stdlib/descriptors/time.ts'
-import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
+import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
 import {
   isUrlMutableObjectField,
   isUrlSearchParamsRuntimeMethod
@@ -8977,13 +8983,7 @@ class Checker {
     if (
       shadow !== null &&
       typeof shadow !== 'undefined' &&
-      !(
-        shadow.kind === 'import' &&
-        shadow.importSource !== null &&
-        typeof shadow.importSource !== 'undefined' &&
-        isNodeTimerImportSource(shadow.importSource) &&
-        shadow.importedName === method
-      )
+      !isTimerRuntimeImportSymbol(shadow, method)
     ) {
       return null
     }
@@ -9063,23 +9063,10 @@ class Checker {
       return null
     }
 
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'timers')
-
-    if (
-      importedName !== null &&
-      typeof importedName !== 'undefined' &&
-      isTimerRuntimeMethod(importedName)
-    ) {
-      return importedName
-    }
-
-    const methodName = this.resolveStdlibModuleObjectMemberName(path, 'timers')
-
-    if (methodName !== null && typeof methodName !== 'undefined' && isTimerRuntimeMethod(methodName)) {
-      return methodName
-    }
-
-    return null
+    return timerRuntimeImportMethodName(
+      this.resolveStdlibRuntimeDirectImportName(path, 'timers'),
+      this.resolveStdlibModuleObjectMemberName(path, 'timers')
+    )
   }
 
   checkTimerCallbackArg(expression: AnyNode, index: number): void {
