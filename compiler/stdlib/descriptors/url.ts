@@ -1,3 +1,5 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
+
 export const urlRuntimeMethods = ['fileURLToPath', 'pathToFileURL']
 
 export const urlRuntimeConstructors = ['URL', 'URLSearchParams']
@@ -32,11 +34,7 @@ function urlStringListHas(list: string[], value: string): boolean {
 }
 
 export function isNodeUrlImportSource(source: string | null | undefined): boolean {
-  if (source !== 'node:url') {
-    return false
-  }
-
-  return true
+  return isStdlibModuleImportSourceForId(source, 'url')
 }
 
 export function isUrlRuntimeMethod(method: string): boolean {

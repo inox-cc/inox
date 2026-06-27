@@ -1,3 +1,4 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
 import { stringListIncludes } from './string-list.ts'
 
 export const timerStartMethods = ['setImmediate', 'setInterval', 'setTimeout']
@@ -13,11 +14,7 @@ export const timerRuntimeMethods = [
 export const timerHandleMethods = ['ref', 'unref']
 
 export function isNodeTimerImportSource(source: string): boolean {
-  if (source !== 'node:timers') {
-    return false
-  }
-
-  return true
+  return isStdlibModuleImportSourceForId(source, 'timers')
 }
 
 export function timerRuntimeMethodNameFromPath(path: string[]): string | null {

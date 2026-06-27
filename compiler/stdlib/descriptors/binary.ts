@@ -1,3 +1,4 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
 import { stringListIncludes } from './string-list.ts'
 
 export const binaryStaticMethods = ['alloc', 'from', 'isBuffer']
@@ -19,11 +20,7 @@ export const unsupportedBufferRuntimeExports = [
 ]
 
 export function isNodeBufferImportSource(source: string | null | undefined): boolean {
-  if (source !== 'node:buffer') {
-    return false
-  }
-
-  return true
+  return isStdlibModuleImportSourceForId(source, 'buffer')
 }
 
 export function binaryStaticRuntimeMethodNameFromPath(path: string[]): string | null {

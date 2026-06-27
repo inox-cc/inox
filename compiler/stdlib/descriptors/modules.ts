@@ -1,4 +1,27 @@
+export type StdlibModuleId =
+  | 'buffer'
+  | 'child-process'
+  | 'crypto'
+  | 'dgram'
+  | 'dns'
+  | 'events'
+  | 'fs'
+  | 'http'
+  | 'https'
+  | 'net'
+  | 'os'
+  | 'path'
+  | 'process'
+  | 'stream'
+  | 'timers'
+  | 'timers-promises'
+  | 'tls'
+  | 'url'
+  | 'worker-threads'
+  | 'zlib'
+
 export type StdlibModuleDescriptor = {
+  id: StdlibModuleId
   source: string
   implemented: boolean
   libuvRuntimeFeature: string | null
@@ -6,126 +29,151 @@ export type StdlibModuleDescriptor = {
 
 export const stdlibModuleDescriptors: StdlibModuleDescriptor[] = [
   {
+    id: 'dgram',
     source: 'dgram',
     implemented: true,
     libuvRuntimeFeature: 'node:dgram'
   },
   {
+    id: 'fs',
     source: 'fs',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'http',
     source: 'http',
     implemented: true,
     libuvRuntimeFeature: 'node:http'
   },
   {
+    id: 'net',
     source: 'net',
     implemented: true,
     libuvRuntimeFeature: 'node:net'
   },
   {
+    id: 'path',
     source: 'node:path',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'buffer',
     source: 'node:buffer',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'crypto',
     source: 'node:crypto',
     implemented: true,
     libuvRuntimeFeature: 'node:crypto'
   },
   {
+    id: 'child-process',
     source: 'node:child_process',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'dgram',
     source: 'node:dgram',
     implemented: true,
     libuvRuntimeFeature: 'node:dgram'
   },
   {
+    id: 'events',
     source: 'node:events',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'fs',
     source: 'node:fs',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'fs',
     source: 'node:fs/promises',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'http',
     source: 'node:http',
     implemented: true,
     libuvRuntimeFeature: 'node:http'
   },
   {
+    id: 'net',
     source: 'node:net',
     implemented: true,
     libuvRuntimeFeature: 'node:net'
   },
   {
+    id: 'os',
     source: 'node:os',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'stream',
     source: 'node:stream',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'timers',
     source: 'node:timers',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'url',
     source: 'node:url',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'process',
     source: 'node:process',
     implemented: true,
     libuvRuntimeFeature: null
   },
   {
+    id: 'dns',
     source: 'node:dns',
     implemented: false,
     libuvRuntimeFeature: null
   },
   {
+    id: 'https',
     source: 'node:https',
     implemented: false,
     libuvRuntimeFeature: null
   },
   {
+    id: 'timers-promises',
     source: 'node:timers/promises',
     implemented: false,
     libuvRuntimeFeature: null
   },
   {
+    id: 'tls',
     source: 'node:tls',
     implemented: false,
     libuvRuntimeFeature: null
   },
   {
+    id: 'worker-threads',
     source: 'node:worker_threads',
     implemented: false,
     libuvRuntimeFeature: null
   },
   {
+    id: 'zlib',
     source: 'node:zlib',
     implemented: false,
     libuvRuntimeFeature: null
@@ -138,6 +186,19 @@ export const stdlibUnsupportedModuleImportSources: string[] = collectImplemented
 
 export function isStdlibModuleImportSource(source: string): boolean {
   return findStdlibModuleDescriptor(source) !== null
+}
+
+export function isStdlibModuleImportSourceForId(
+  source: string | null | undefined,
+  id: StdlibModuleId
+): boolean {
+  if (source === null || typeof source === 'undefined') {
+    return false
+  }
+
+  const descriptor = findStdlibModuleDescriptor(source)
+
+  return descriptor !== null && descriptor.id === id
 }
 
 export function stdlibModuleImportSourceCount(): number {

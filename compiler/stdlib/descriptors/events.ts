@@ -1,3 +1,4 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
 import { stringListIncludes } from './string-list.ts'
 
 export const unsupportedEventsRuntimeExports = [
@@ -16,11 +17,7 @@ export const unsupportedEventsRuntimeExports = [
 ]
 
 export function isNodeEventsImportSource(source: string | null | undefined): boolean {
-  if (source !== 'node:events') {
-    return false
-  }
-
-  return true
+  return isStdlibModuleImportSourceForId(source, 'events')
 }
 
 export function isUnsupportedEventsRuntimeExport(name: string): boolean {

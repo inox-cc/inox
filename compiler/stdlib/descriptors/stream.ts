@@ -1,3 +1,4 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
 import { stringListIncludes } from './string-list.ts'
 
 export const unsupportedStreamRuntimeExports = [
@@ -14,11 +15,7 @@ export const unsupportedStreamRuntimeExports = [
 ]
 
 export function isNodeStreamImportSource(source: string | null | undefined): boolean {
-  if (source !== 'node:stream') {
-    return false
-  }
-
-  return true
+  return isStdlibModuleImportSourceForId(source, 'stream')
 }
 
 export function isUnsupportedStreamRuntimeExport(name: string): boolean {

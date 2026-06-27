@@ -1,6 +1,7 @@
 import { memberExpressionPath } from '../../member-paths.ts'
 import type { FsRuntimeCallInfo } from '../../stdlib/descriptors/fs.ts'
 import { fsRuntimeCallInfoFromPath } from '../../stdlib/descriptors/fs.ts'
+import { isStdlibModuleImportSourceForId } from '../../stdlib/descriptors/modules.ts'
 import type { AnyNode, SymbolInfo } from '../../types.ts'
 
 export function fsRuntimeCallInfo(callee: AnyNode): FsRuntimeCallInfo | null {
@@ -61,7 +62,7 @@ export function isFsRuntimeImportSymbol(symbol: SymbolInfo): boolean {
 }
 
 function isFsRuntimeImportSource(source: string | null | undefined): boolean {
-  return source === 'fs' || source === 'node:fs' || source === 'node:fs/promises'
+  return isStdlibModuleImportSourceForId(source, 'fs')
 }
 
 function isFsRuntimeImportedName(name: string | null | undefined): boolean {

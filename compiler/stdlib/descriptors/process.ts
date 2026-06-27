@@ -1,3 +1,5 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
+
 export type ProcessRuntimeMethod = 'cwd' | 'exit'
 
 export type ProcessRuntimeProperty =
@@ -68,7 +70,7 @@ export const unsupportedProcessRuntimeMethods = [
 export const unsupportedProcessRuntimeProperties = ['stderr', 'stdin', 'stdout']
 
 export function isNodeProcessImportSource(source: string | null | undefined): boolean {
-  return source === 'node:process'
+  return isStdlibModuleImportSourceForId(source, 'process')
 }
 
 export function isProcessRuntimeMethod(method: string): boolean {

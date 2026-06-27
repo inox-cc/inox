@@ -1,3 +1,5 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
+
 export type OsRuntimeMethod = 'arch' | 'homedir' | 'hostname' | 'platform' | 'release' | 'tmpdir' | 'type'
 
 export type OsRuntimeConstant = 'EOL'
@@ -30,7 +32,7 @@ export const unsupportedOsRuntimeMethods = [
 ]
 
 export function isNodeOsImportSource(source: string | null | undefined): boolean {
-  return source === 'node:os'
+  return isStdlibModuleImportSourceForId(source, 'os')
 }
 
 export function isOsRuntimeMethod(method: string): boolean {

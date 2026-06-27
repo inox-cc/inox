@@ -1,3 +1,4 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
 import { stringListIncludes } from './string-list.ts'
 
 export const cryptoRuntimeMethods = [
@@ -88,11 +89,7 @@ export function isCryptoRuntimeMethod(method: string): boolean {
 }
 
 export function isNodeCryptoImportSource(source: string | null | undefined): boolean {
-  if (source !== 'node:crypto') {
-    return false
-  }
-
-  return true
+  return isStdlibModuleImportSourceForId(source, 'crypto')
 }
 
 export function isUnsupportedNodeCryptoMethod(method: string): boolean {

@@ -1,4 +1,5 @@
 import { collectIrTopLevelNodes } from '../ir.ts'
+import { isStdlibModuleImportSourceForId } from '../stdlib/descriptors/modules.ts'
 import type { IrProgram } from '../types.ts'
 
 type RuntimeImportSourceSet = Set<string>
@@ -162,5 +163,5 @@ function runtimeImportSpecifierAt(specifiers: RuntimeImportSpecifier[], index: n
 }
 
 function isHttpRuntimeImportSource(source: string): boolean {
-  return source === 'http' || source === 'node:http'
+  return isStdlibModuleImportSourceForId(source, 'http')
 }

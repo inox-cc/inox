@@ -1,3 +1,5 @@
+import { isStdlibModuleImportSourceForId } from './modules.ts'
+
 export type PathRuntimeMethod =
   | 'basename'
   | 'dirname'
@@ -31,7 +33,7 @@ export const pathParseObjectFields = ['root', 'dir', 'base', 'ext', 'name']
 export const unsupportedPathRuntimeMethods = ['matchesGlob', 'toNamespacedPath']
 
 export function isNodePathImportSource(source: string | null | undefined): boolean {
-  return source === 'node:path'
+  return isStdlibModuleImportSourceForId(source, 'path')
 }
 
 export function isPathRuntimeMethod(method: string): boolean {
