@@ -1,4 +1,11 @@
 import {
+  binaryConstructorName,
+  binaryInstanceRuntimeMethodName,
+  binaryStaticRuntimeMethodName,
+  bufferRuntimeConstantName,
+  unsupportedBufferRuntimeExport
+} from './checker/std/binary.ts'
+import {
   commonArrayElementType,
   commonValueType,
   inferBinaryExpressionType,
@@ -46,15 +53,6 @@ import {
 import { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from './checker/std/url.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { memberExpressionPath } from './member-paths.ts'
-import {
-  binaryConstructorNameFromPath,
-  binaryInstanceRuntimeMethodName,
-  binaryStaticRuntimeMethodNameFromPath,
-  isBinaryStaticMethod,
-  isBufferRuntimeConstant,
-  isNodeBufferImportSource,
-  isUnsupportedBufferRuntimeExport
-} from './stdlib/descriptors/binary.ts'
 import {
   collectionConstructorNameFromPath,
   isArrayMethod,
@@ -4420,7 +4418,8 @@ class Checker {
       return null
     }
 
-    const staticMethod = this.resolveBinaryStaticRuntimeMethod(expression.callee)
+    const path = memberExpressionPath(expression.callee)
+    const staticMethod = binaryStaticRuntimeMethodName(path, this.resolveMemberPathRootSymbol(path))
 
     if (staticMethod !== null && typeof staticMethod !== 'undefined') {
       if (staticMethod === 'from') {
@@ -4542,59 +4541,13 @@ class Checker {
     return null
   }
 
-  resolveBinaryStaticRuntimeMethod(callee: AnyNode): string | null {
-    const path = memberExpressionPath(callee)
-
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    if (path.length === 2 && firstPathSegment(path) === 'Buffer') {
-      const symbol = this.scope.resolve('Buffer')
-
-      if (symbol === null || typeof symbol === 'undefined') {
-        return binaryStaticRuntimeMethodNameFromPath(path)
-      }
-
-      if (
-        symbol.kind === 'import' &&
-        isNodeBufferImportSource(symbol.importSource) &&
-        symbol.importedName === 'Buffer'
-      ) {
-        if (isBinaryStaticMethod(path[1])) {
-          return path[1]
-        }
-
-        return null
-      }
-
-      return null
-    }
-
-    if (path.length === 3 && path[1] === 'Buffer') {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'buffer', 'module-object', symbol.importedName)
-      ) {
-        if (isBinaryStaticMethod(path[2])) {
-          return path[2]
-        }
-
-        return null
-      }
-    }
-
-    return null
-  }
-
   checkBufferUnsupportedCall(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.callee)
-    const unsupported = this.resolveUnsupportedBufferRuntimeExport(path)
+    const unsupported = unsupportedBufferRuntimeExport(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'buffer'),
+      this.resolveMemberPathRootSymbol(path)
+    )
 
     if (unsupported === null || typeof unsupported === 'undefined') {
       return null
@@ -4614,39 +4567,6 @@ class Checker {
     expression.valueType = 'unknown'
 
     return 'unknown'
-  }
-
-  resolveUnsupportedBufferRuntimeExport(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'buffer')
-
-    if (
-      importedName !== null &&
-      typeof importedName !== 'undefined' &&
-      isUnsupportedBufferRuntimeExport(importedName)
-    ) {
-      return importedName
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'buffer', 'module-object', symbol.importedName) &&
-        isUnsupportedBufferRuntimeExport(path[1])
-      ) {
-        return path[1]
-      }
-    }
-
-    return null
   }
 
   checkEventStreamUnsupportedCall(expression: AnyNode): ValueType | null {
@@ -6145,7 +6065,8 @@ class Checker {
   }
 
   checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
-    const constant = this.resolveBufferRuntimeConstant(memberExpressionPath(expression))
+    const path = memberExpressionPath(expression)
+    const constant = bufferRuntimeConstantName(path, this.resolveMemberPathRootSymbol(path))
 
     if (constant === null || typeof constant === 'undefined') {
       return null
@@ -6155,50 +6076,6 @@ class Checker {
     expression.valueType = 'number'
 
     return 'number'
-  }
-
-  resolveBufferRuntimeConstant(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
-      return null
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'import') {
-        const importSource = symbol.importSource
-        const importedName = symbol.importedName
-
-        if (
-          isNodeBufferImportSource(importSource) &&
-          importedName === 'constants' &&
-          isBufferRuntimeConstant(path[1])
-        ) {
-          return path[1]
-        }
-      }
-    }
-
-    if (path.length === 3 && path[1] === 'constants') {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'import') {
-        const importSource = symbol.importSource
-        const importedName = symbol.importedName
-
-        if (
-          isNodeBufferImportSource(importSource) &&
-          isStdlibModuleRuntimeImportBinding(importSource, 'buffer', 'module-object', importedName) &&
-          isBufferRuntimeConstant(path[2])
-        ) {
-          return path[2]
-        }
-      }
-    }
-
-    return null
   }
 
   checkDebugMemoryCall(expression: AnyNode): ValueType | null {
@@ -10382,7 +10259,7 @@ class Checker {
       return 'object'
     }
 
-    if (binaryConstructorNameFromPath(expression.callee.path) === 'Uint8Array') {
+    if (binaryConstructorName(expression.callee.path) === 'Uint8Array') {
       if (expression.args.length !== 1) {
         this.report(
           'INOX_ARG_COUNT',
