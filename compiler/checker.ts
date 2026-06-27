@@ -24,6 +24,7 @@ import {
   urlObjectShape,
   urlSearchParamsObjectShape
 } from './checker/builtins.ts'
+import { childProcessRuntimeCallInfo } from './checker/std/child-process.ts'
 import {
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
@@ -46,10 +47,6 @@ import {
   isNodeBufferImportSource,
   isUnsupportedBufferRuntimeExport
 } from './stdlib/descriptors/binary.ts'
-import {
-  isChildProcessRuntimeMethod,
-  isUnsupportedChildProcessRuntimeMethod
-} from './stdlib/descriptors/child-process.ts'
 import {
   collectionConstructorNameFromPath,
   isArrayMethod,
@@ -5285,7 +5282,12 @@ class Checker {
   }
 
   checkChildProcessCall(expression: AnyNode): ValueType | null {
-    const call = this.resolveChildProcessRuntimeCall(expression)
+    const path = memberExpressionPath(expression.callee)
+    const call = childProcessRuntimeCallInfo(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'child-process'),
+      this.resolveStdlibModuleObjectMemberName(path, 'child-process')
+    )
 
     if (call === null || typeof call === 'undefined') {
       return null
@@ -5437,51 +5439,6 @@ class Checker {
     expression.shape = childProcessSpawnSyncResultShape
 
     return 'object'
-  }
-
-  resolveChildProcessRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
-    const path = memberExpressionPath(expression.callee)
-    const method = this.resolveChildProcessRuntimeMethod(path)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    let label = method
-
-    if (path !== null && typeof path !== 'undefined') {
-      label = joinStrings(path, '.')
-    }
-
-    return {
-      method,
-      label,
-      unsupported: !isChildProcessRuntimeMethod(method)
-    }
-  }
-
-  resolveChildProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'child-process')
-
-    if (importedName !== null && typeof importedName !== 'undefined') {
-      if (isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)) {
-        return importedName
-      }
-
-      return null
-    }
-
-    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'child-process')
-
-    if (memberName !== null && typeof memberName !== 'undefined') {
-      if (isChildProcessRuntimeMethod(memberName) || isUnsupportedChildProcessRuntimeMethod(memberName)) {
-        return memberName
-      }
-
-      return null
-    }
-
-    return null
   }
 
   checkChildProcessSyncOptions(
