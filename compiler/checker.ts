@@ -36,6 +36,7 @@ import { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } f
 import { isPathRuntimeConstantImport, pathRuntimeCallInfo, pathRuntimeConstantName } from './checker/std/path.ts'
 import { runtimeImportValueType } from './checker/std/runtime-imports.ts'
 import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
+import { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from './checker/std/url.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { memberExpressionPath } from './member-paths.ts'
 import {
@@ -108,10 +109,7 @@ import {
 } from './stdlib/descriptors/time.ts'
 import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
 import {
-  isUnsupportedUrlRuntimeMethod,
   isUrlMutableObjectField,
-  isUrlRuntimeConstructor,
-  isUrlRuntimeMethod,
   isUrlSearchParamsRuntimeMethod
 } from './stdlib/descriptors/url.ts'
 import {
@@ -5860,7 +5858,12 @@ class Checker {
   }
 
   checkUrlCall(expression: AnyNode): ValueType | null {
-    const call = this.resolveUrlRuntimeCall(expression)
+    const path = memberExpressionPath(expression.callee)
+    const call = urlRuntimeCallInfo(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'url'),
+      this.resolveStdlibModuleObjectMemberName(path, 'url')
+    )
 
     if (call === null || typeof call === 'undefined') {
       return null
@@ -5991,51 +5994,6 @@ class Checker {
     expression.nullable = method === 'get'
 
     return 'string'
-  }
-
-  resolveUrlRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
-    const path = memberExpressionPath(expression.callee)
-    const method = this.resolveUrlRuntimeMethod(path)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    let label = method
-
-    if (path !== null && typeof path !== 'undefined') {
-      label = joinStrings(path, '.')
-    }
-
-    return {
-      method,
-      label,
-      unsupported: !isUrlRuntimeMethod(method)
-    }
-  }
-
-  resolveUrlRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'url')
-
-    if (importedName !== null && typeof importedName !== 'undefined') {
-      if (isUrlRuntimeMethod(importedName) || isUnsupportedUrlRuntimeMethod(importedName)) {
-        return importedName
-      }
-
-      return null
-    }
-
-    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'url')
-
-    if (memberName !== null && typeof memberName !== 'undefined') {
-      if (isUrlRuntimeMethod(memberName) || isUnsupportedUrlRuntimeMethod(memberName)) {
-        return memberName
-      }
-
-      return null
-    }
-
-    return null
   }
 
   resolveCryptoRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
@@ -10697,26 +10655,25 @@ class Checker {
     }
 
     const importedName = this.resolveStdlibRuntimeDirectImportName(expression.callee.path, 'url')
+    const constructorImport = urlRuntimeConstructorImportInfo(importedName)
 
-    if (importedName === null || typeof importedName === 'undefined') {
+    if (constructorImport === null || typeof constructorImport === 'undefined') {
       return null
     }
 
-    if (isUnsupportedUrlRuntimeMethod(importedName)) {
+    if (constructorImport.unsupported) {
       this.report(
         'INOX_NOT_IMPLEMENTED',
-        `node:url ${importedName} is not implemented by the current C backend`,
+        `node:url ${constructorImport.name} is not implemented by the current C backend`,
         expression.loc
       )
       expression.valueType = 'unknown'
       return 'unknown'
     }
 
-    if (!isUrlRuntimeConstructor(importedName)) {
-      return null
-    }
+    const constructorName = constructorImport.name
 
-    if (importedName === 'URLSearchParams') {
+    if (constructorName === 'URLSearchParams') {
       if (expression.args.length > 1) {
         this.report(
           'INOX_ARG_COUNT',
