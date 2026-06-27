@@ -155,6 +155,10 @@ function isArrayTypeSuffixClose(parts: string[], value: string): boolean {
 }
 
 export function normalizeTypeName(name: string): string {
+  if (isFunctionTypeName(name)) {
+    return 'function'
+  }
+
   const unionArgs = splitUnionArgs(name)
 
   if (unionArgs.length > 1) {
@@ -381,6 +385,42 @@ function allStringsSame(values: string[]): boolean {
 
 function isAbsentTypeName(name: string): boolean {
   return name === 'null' || name === 'undefined'
+}
+
+function isFunctionTypeName(name: string): boolean {
+  if (!name.startsWith('(')) {
+    return false
+  }
+
+  const arrow = functionTypeArrowIndex(name)
+
+  return arrow > 0
+}
+
+function functionTypeArrowIndex(name: string): number {
+  let parenDepth = 0
+  let genericDepth = 0
+
+  for (let index = 0; index < name.length - 1; index = index + 1) {
+    const current = name[index]
+    const next = name[index + 1]
+
+    if (current === '<') {
+      genericDepth = genericDepth + 1
+    } else if (current === '>' && genericDepth > 0) {
+      genericDepth = genericDepth - 1
+    } else if (current === '(') {
+      parenDepth = parenDepth + 1
+    } else if (current === ')' && parenDepth > 0) {
+      parenDepth = parenDepth - 1
+    }
+
+    if (current === '=' && next === '>' && parenDepth === 0 && genericDepth === 0) {
+      return index
+    }
+  }
+
+  return -1
 }
 
 function genericTypeInner(name: string, wrapper: string): string | null {

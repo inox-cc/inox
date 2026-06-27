@@ -106,16 +106,21 @@ async function runIntegrationTests(): Promise<void> {
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
-  const { assertExampleInoxScriptRuns } = await import('./integration/example-inox-script.test.ts')
   const { assertModuleDeclarationImportBoundary } =
     await import('./integration/module-declaration-import-boundary.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
   const { assertModuleDeclarationInferredConsts } =
     await import('./integration/module-declaration-inferred-consts.test.ts')
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
-  const { assertNativeInoxDefaultOutput, assertNativeInoxHelp } = await import('./integration/native-inox-help.test.ts')
+  const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
+  const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
+    await import('./integration/native-inox-help.test.ts')
 
   await test('compiler integration checks', async (t) => {
+    await t.test('no-example-dependencies', async () => {
+      await assertTestsDoNotReferenceExamples()
+    })
+
     await t.test('build-cmake-log-level', () => {
       assertBuildCMakeConfigureIsQuiet()
     })
@@ -126,10 +131,6 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('compiler-index-node-help', async () => {
       await assertCompilerIndexNodeHelp()
-    })
-
-    await t.test('example-inox-script', async () => {
-      await assertExampleInoxScriptRuns()
     })
 
     await t.test('module-declaration-contracts', () => {
@@ -154,6 +155,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-inox-default-output', async () => {
       await assertNativeInoxDefaultOutput()
+    })
+
+    await t.test('native-inox-runtime-smoke', async () => {
+      await assertNativeInoxRuntimeSmoke()
     })
   })
 }

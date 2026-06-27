@@ -421,6 +421,7 @@ function cloneArrayShape(shape: CArrayElementInfo[]): CArrayElementInfo[] {
 
   for (const element of shape) {
     out.push({
+      functionType: element.functionType ?? null,
       valueType: element.valueType
     })
   }
@@ -582,6 +583,7 @@ export function resolveKnownArrayIndex(
     return {
       arrayName,
       index,
+      functionType: element.functionType ?? null,
       valueType: element.valueType
     }
   }
@@ -598,6 +600,7 @@ export function resolveRuntimeArrayIndex(
   }
 
   const valueType = resolveRuntimeArrayElementType(expression.object, context)
+  const functionType = resolveRuntimeArrayElementFunctionType(expression.object, context)
 
   if (valueType === null || typeof valueType === 'undefined') {
     return null
@@ -609,6 +612,7 @@ export function resolveRuntimeArrayIndex(
     }
 
     return {
+      functionType,
       index: 0,
       indexExpression: expression.index,
       valueType
@@ -622,6 +626,7 @@ export function resolveRuntimeArrayIndex(
   }
 
   return {
+    functionType,
     index,
     indexExpression: null,
     valueType
@@ -637,6 +642,7 @@ export function resolveOptionalRuntimeArrayIndex(
   }
 
   const valueType = resolveRuntimeArrayElementType(expression.object, context)
+  const functionType = resolveRuntimeArrayElementFunctionType(expression.object, context)
 
   if (valueType === null || typeof valueType === 'undefined') {
     return null
@@ -648,6 +654,7 @@ export function resolveOptionalRuntimeArrayIndex(
     }
 
     return {
+      functionType,
       index: 0,
       indexExpression: expression.index,
       valueType
@@ -661,10 +668,40 @@ export function resolveOptionalRuntimeArrayIndex(
   }
 
   return {
+    functionType,
     index,
     indexExpression: null,
     valueType
   }
+}
+
+function resolveRuntimeArrayElementFunctionType(
+  expression: ArrayMaybeNode,
+  context: ArrayFunctionContext
+): CFunctionType | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.arrayElementFunctionType !== null && typeof expression.arrayElementFunctionType !== 'undefined') {
+    return expression.arrayElementFunctionType
+  }
+
+  if (expression.type === 'Reference') {
+    const path: string[] = expression.path
+
+    if (path.length !== 1) {
+      return null
+    }
+
+    const shape = findArrayShape(context, path[0])
+
+    if (shape !== null && typeof shape !== 'undefined') {
+      return resolveForOfElementFunctionType(shape)
+    }
+  }
+
+  return null
 }
 
 export function resolveRuntimeArrayElementType(
@@ -1471,6 +1508,29 @@ export function resolveForOfElementType(elements: CArrayElementInfo[]): string {
   return firstValueType
 }
 
+function resolveForOfElementFunctionType(elements: CArrayElementInfo[]): CFunctionType | null {
+  if (elements.length === 0) {
+    return null
+  }
+
+  const first = arrayElementInfoAt(elements, 0)
+  const firstFunctionType = first.functionType
+
+  if (firstFunctionType === null || typeof firstFunctionType === 'undefined') {
+    return null
+  }
+
+  const sourceElements: CArrayElementInfo[] = elements
+
+  for (const element of sourceElements) {
+    if (element.functionType !== firstFunctionType) {
+      return null
+    }
+  }
+
+  return firstFunctionType
+}
+
 export function updateKnownArrayElementValueType(
   element: CKnownArrayElement,
   valueType: string,
@@ -1488,6 +1548,7 @@ export function updateKnownArrayElementValueType(
     }
 
     elements[element.index] = {
+      functionType: null,
       valueType
     }
   }
@@ -3008,6 +3069,7 @@ function updatePushedArrayMetadata(receiver: ArrayMaybeNode, valueType: string, 
   }
 
   nextElements.push({
+    functionType: null,
     valueType
   })
   const elementType = resolveForOfElementType(nextElements)
@@ -3057,6 +3119,7 @@ function updateUnshiftedArrayMetadata(
 
   const nextElements: CArrayElementInfo[] = [
     {
+      functionType: null,
       valueType
     }
   ]
@@ -3201,6 +3264,7 @@ function emitPreparedArrayReceiver(
 
     for (const element of sourceElements) {
       elements.push({
+        functionType: element.functionType ?? null,
         valueType: arrayDeps(context).inferExpressionType(element, context)
       })
     }
@@ -3316,6 +3380,7 @@ function resolveArrayJoinReceiverElementType(expression: ArrayMaybeNode, context
 
     for (const element of expression.elements) {
       elements.push({
+        functionType: element.functionType ?? null,
         valueType: arrayDeps(context).inferExpressionType(element, context)
       })
     }

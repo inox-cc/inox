@@ -462,6 +462,7 @@ type CKnownArrayIndexDeclaration = {
   loc?: SourceLocation
   shape?: CObjectShape | null
   arrayElementType?: string | null
+  functionType?: CFunctionType | null
   mapKeyType?: string | null
   mapValueType?: string | null
   setElementType?: string | null
@@ -3716,6 +3717,7 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
     const element = elements[index] as AnyNode
 
     shapes.push({
+      functionType: arrayDeclarationElementFunctionType(statement, element),
       valueType: inferExpressionType(element, context)
     })
   }
@@ -3736,7 +3738,15 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const element = elements[index] as AnyNode
-    const value = emitCValueExpression(element, context)
+    let value = emitCValueExpression(element, context)
+    const elementFunctionType = arrayDeclarationElementFunctionType(statement, element)
+
+    if (
+      (elementFunctionType !== null && typeof elementFunctionType !== 'undefined') ||
+      inferExpressionType(element, context) === 'function'
+    ) {
+      value = emitRuntimeCallbackValue(element, normalizeFunctionType(elementFunctionType), context)
+    }
 
     pushAll(lines, value.lines)
     lines.push(emitStatusCheck(`inox_array_set(${name}, ${index}, ${value.expression})`, context))
@@ -4760,6 +4770,10 @@ function emitKnownArrayIndexVariableDeclaration(
   element: CKnownArrayElement,
   context: CFunctionContext
 ): string[] {
+  if (element.valueType === 'function') {
+    return emitKnownArrayFunctionIndexVariableDeclaration(statement, element, context)
+  }
+
   if (element.valueType === 'string') {
     return emitKnownArrayStringIndexVariableDeclaration(statement, element, context)
   }
@@ -4799,6 +4813,28 @@ function emitKnownArrayIndexVariableDeclaration(
   lines.push(`${constPrefix}double ${statement.name} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, element.valueType)
+
+  return lines
+}
+
+function emitKnownArrayFunctionIndexVariableDeclaration(
+  statement: CKnownArrayIndexDeclaration,
+  element: CKnownArrayElement,
+  context: CFunctionContext
+): string[] {
+  const name = statement.name
+  const functionType = normalizeFunctionType(element.functionType ?? statement.functionType)
+  const lines: string[] = []
+
+  registerOwnedValue(context, name)
+  context.variables.set(name, 'function')
+  context.functionTypes.set(name, functionType)
+  context.runtimeCallbacks.add(name)
+
+  pushAll(lines, emitPrepareOwnedValueWrite(name))
+  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${name})`, context))
+  lines.push(emitRuntimeValueCheck(name, 'INOX_TAG_FUNCTION', context))
+  lines.push(`inox_retain(${name});`)
 
   return lines
 }
@@ -4927,6 +4963,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
 
   for (const element of elements) {
     shapes.push({
+      functionType: arrayDeclarationElementFunctionType(statement, element),
       valueType: inferExpressionType(element, context)
     })
   }
@@ -4943,7 +4980,15 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
 
   for (let index = 0; index < elements.length; index++) {
     const element: AnyNode = elements[index]
-    const value = emitCValueExpression(element, context)
+    let value = emitCValueExpression(element, context)
+    const elementFunctionType = arrayDeclarationElementFunctionType(statement, element)
+
+    if (
+      (elementFunctionType !== null && typeof elementFunctionType !== 'undefined') ||
+      inferExpressionType(element, context) === 'function'
+    ) {
+      value = emitRuntimeCallbackValue(element, normalizeFunctionType(elementFunctionType), context)
+    }
 
     pushAll(lines, value.lines)
     lines.push(emitStatusCheck(`inox_array_set(${statement.name}, ${index}, ${value.expression})`, context))
@@ -5371,7 +5416,15 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
 
   for (let index = 0; index < expression.elements.length; index++) {
     const element = expression.elements[index]
-    const value = emitCValueExpression(element, context)
+    let value = emitCValueExpression(element, context)
+    const elementFunctionType = arrayLiteralElementFunctionType(expression, element)
+
+    if (
+      (elementFunctionType !== null && typeof elementFunctionType !== 'undefined') ||
+      inferExpressionType(element, context) === 'function'
+    ) {
+      value = emitRuntimeCallbackValue(element, normalizeFunctionType(elementFunctionType), context)
+    }
 
     pushAll(lines, value.lines)
     lines.push(emitStatusCheck(`inox_array_set(${temp}, ${index}, ${value.expression})`, context))
@@ -5381,6 +5434,41 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
     lines,
     expression: temp
   }
+}
+
+function arrayLiteralElementFunctionType(arrayExpression: AnyNode, element: AnyNode): CFunctionType | null {
+  if (element.functionType !== null && typeof element.functionType !== 'undefined') {
+    return element.functionType
+  }
+
+  if (
+    arrayExpression.arrayElementFunctionType !== null &&
+    typeof arrayExpression.arrayElementFunctionType !== 'undefined'
+  ) {
+    return arrayExpression.arrayElementFunctionType
+  }
+
+  return null
+}
+
+function arrayDeclarationElementFunctionType(statement: AnyNode, element: AnyNode): CFunctionType | null {
+  if (
+    statement.init !== null &&
+    typeof statement.init !== 'undefined' &&
+    statement.init.type === 'ArrayLiteral'
+  ) {
+    const elementFunctionType = arrayLiteralElementFunctionType(statement.init, element)
+
+    if (elementFunctionType !== null && typeof elementFunctionType !== 'undefined') {
+      return elementFunctionType
+    }
+  }
+
+  if (statement.arrayElementFunctionType !== null && typeof statement.arrayElementFunctionType !== 'undefined') {
+    return statement.arrayElementFunctionType
+  }
+
+  return null
 }
 
 function emitCObjectLiteralValueExpression(

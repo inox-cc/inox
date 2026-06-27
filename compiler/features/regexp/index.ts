@@ -1,5 +1,7 @@
-import type { AnyNode } from '../../types.ts'
-import type { CompilerFeature, FeatureSet } from '../types.ts'
+import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
+
+type RegExpFeatureSet = Set<IrFeature>
+type RegExpCPreludeHelper = () => string[]
 
 type RegExpFeatureNode = AnyNode & {
   regexpRuntimeMethod?: string | null
@@ -7,17 +9,16 @@ type RegExpFeatureNode = AnyNode & {
   valueType?: string | null
 }
 
-export const regexpFeature: CompilerFeature = {
-  id: 'regexp',
-  runtimeRequirements: [],
-  collectIrFeatures: collectRegExpIrFeatures,
-  cPrelude: {
-    includes: ['#include <regex.h>', '#include <stdlib.h>', '#include <string.h>'],
-    helpers: [emitCRegExpPreludeHelpers]
-  }
-}
+export const regexpFeatureId: IrFeature = 'regexp'
+export const regexpFeatureRuntimeRequirements: IrRuntimeRequirement[] = []
+export const regexpFeatureCPreludeIncludes: string[] = [
+  '#include <regex.h>',
+  '#include <stdlib.h>',
+  '#include <string.h>'
+]
+export const regexpFeatureCPreludeHelpers: RegExpCPreludeHelper[] = [emitCRegExpPreludeHelpers]
 
-export function collectRegExpIrFeatures(node: AnyNode, features: FeatureSet): void {
+export function collectRegExpIrFeatures(node: AnyNode, features: RegExpFeatureSet): void {
   const item = node as RegExpFeatureNode
 
   if (item.type === 'RegExpLiteral' || item.valueType === 'regexp') {

@@ -118,6 +118,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
         nullable: statement.nullable === true,
         arrayElementType: nullableString(statement.arrayElementType),
         arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+        arrayElementFunctionType: nullableNode(statement.arrayElementFunctionType),
         mapKeyType: nullableString(statement.mapKeyType),
         mapValueType: nullableString(statement.mapValueType),
         promiseValueType: nullableString(statement.promiseValueType),
@@ -338,6 +339,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
+    arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
     promiseValueType,
@@ -463,6 +465,7 @@ function forOfLowerVariable(statement: LowerNode): LowerNode {
     nullable: statement.nullable === true,
     arrayElementType: nullableString(statement.arrayElementType),
     arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(statement.arrayElementFunctionType),
     mapKeyType: nullableString(statement.mapKeyType),
     mapValueType: nullableString(statement.mapValueType),
     promiseValueType: nullableString(statement.promiseValueType),
@@ -496,6 +499,7 @@ function lowerVariableDeclaration(
   const functionType = variableDeclarationFunctionType(declared, statement, init)
   const arrayElementType = variableDeclarationArrayElementType(declared, statement, init)
   const arrayElementDeclaredType = variableDeclarationArrayElementDeclaredType(declared, statement, init)
+  const arrayElementFunctionType = variableDeclarationArrayElementFunctionType(declared, statement, init)
   const mapKeyType = variableDeclarationMapKeyType(declared, inferredMapType)
   const mapValueType = variableDeclarationMapValueType(declared, inferredMapType)
   const mapValueShape = variableDeclarationMapValueShape(declared, init)
@@ -510,6 +514,7 @@ function lowerVariableDeclaration(
     functionType,
     arrayElementType,
     arrayElementDeclaredType,
+    arrayElementFunctionType,
     mapKeyType,
     mapValueType,
     mapValueShape,
@@ -586,6 +591,10 @@ function variableDeclarationInitWithDeclaredType(
     init.arrayElementDeclaredType = declaredArrayElementDeclaredType
   }
 
+  if (declared.arrayElementFunctionType !== null && typeof declared.arrayElementFunctionType !== 'undefined') {
+    init.arrayElementFunctionType = declared.arrayElementFunctionType
+  }
+
   return init
 }
 
@@ -597,6 +606,7 @@ function createLoweredVariableDeclaration(
   functionType: LowerNode | null,
   arrayElementType: string | null,
   arrayElementDeclaredType: string | null,
+  arrayElementFunctionType: LowerNode | null,
   mapKeyType: string | null,
   mapValueType: string | null,
   mapValueShape: LowerNode | null,
@@ -616,6 +626,7 @@ function createLoweredVariableDeclaration(
     functionType,
     arrayElementType,
     arrayElementDeclaredType,
+    arrayElementFunctionType,
     mapKeyType,
     mapValueType,
     mapValueShape,
@@ -723,6 +734,36 @@ function variableDeclarationArrayElementDeclaredType(
   }
 
   return inferArrayElementDeclaredType(init)
+}
+
+function variableDeclarationArrayElementFunctionType(
+  declared: LowerResolvedType,
+  statement: LowerNode,
+  init: LowerNode | null
+): LowerNode | null {
+  const declaredArrayElementFunctionType = nullableNode(declared.arrayElementFunctionType)
+
+  if (
+    declaredArrayElementFunctionType !== null &&
+    typeof declaredArrayElementFunctionType !== 'undefined'
+  ) {
+    return declaredArrayElementFunctionType
+  }
+
+  const statementArrayElementFunctionType = nullableNode(statement.arrayElementFunctionType)
+
+  if (
+    statementArrayElementFunctionType !== null &&
+    typeof statementArrayElementFunctionType !== 'undefined'
+  ) {
+    return statementArrayElementFunctionType
+  }
+
+  if (init !== null && typeof init !== 'undefined') {
+    return nullableNode(init.arrayElementFunctionType)
+  }
+
+  return null
 }
 
 function variableDeclarationMapKeyType(
@@ -870,6 +911,7 @@ function cloneVariableDeclarationWithInit(statement: LowerNode, init: LowerNode)
     functionType: nullableNode(statement.functionType),
     arrayElementType: nullableString(statement.arrayElementType),
     arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(statement.arrayElementFunctionType),
     mapKeyType: nullableString(statement.mapKeyType),
     mapValueType: nullableString(statement.mapValueType),
     mapValueShape: nullableNode(statement.mapValueShape),
@@ -891,6 +933,7 @@ function declareLowerVariable(context: LowerContext, statement: LowerNode): void
     nullable: statement.nullable === true,
     arrayElementType: nullableString(statement.arrayElementType),
     arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(statement.arrayElementFunctionType),
     mapKeyType: nullableString(statement.mapKeyType),
     mapValueType: nullableString(statement.mapValueType),
     mapValueShape: nullableNode(statement.mapValueShape),
@@ -933,6 +976,7 @@ function lowerArrayMethodVariableDeclaration(
     nullable: init.nullable === true,
     arrayElementType: nullableString(init.arrayElementType),
     arrayElementDeclaredType: nullableString(init.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(init.arrayElementFunctionType),
     mapKeyType: nullableString(init.mapKeyType),
     mapValueType: nullableString(init.mapValueType),
     promiseValueType: nullableString(init.promiseValueType),
@@ -968,6 +1012,7 @@ function replaceMemberObject(callee: LowerNode, object: LowerNode): LowerNode {
     nullable: callee.nullable === true,
     arrayElementType: nullableString(callee.arrayElementType),
     arrayElementDeclaredType: nullableString(callee.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(callee.arrayElementFunctionType),
     mapKeyType: nullableString(callee.mapKeyType),
     mapValueType: nullableString(callee.mapValueType),
     promiseValueType: nullableString(callee.promiseValueType),
@@ -1266,6 +1311,7 @@ function cloneCallExpressionWithCalleeAndArgs(expression: LowerNode, callee: Low
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1286,6 +1332,7 @@ function cloneAwaitExpressionWithArgument(expression: LowerNode, argument: Lower
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1307,6 +1354,7 @@ function cloneMemberExpressionWithObject(expression: LowerNode, object: LowerNod
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1328,6 +1376,7 @@ function cloneIndexExpressionWithParts(expression: LowerNode, object: LowerNode,
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1349,6 +1398,7 @@ function cloneAssignmentExpressionWithParts(expression: LowerNode, target: Lower
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1371,6 +1421,7 @@ function cloneUpdateExpressionWithArgument(expression: LowerNode, argument: Lowe
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1393,6 +1444,7 @@ function cloneBinaryExpressionWithParts(expression: LowerNode, left: LowerNode, 
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1422,6 +1474,7 @@ function cloneUnaryOrTypeAssertionExpressionWithOperand(expression: LowerNode, o
       nullable: expression.nullable === true,
       arrayElementType: nullableString(expression.arrayElementType),
       arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
       mapKeyType: nullableString(expression.mapKeyType),
       mapValueType: nullableString(expression.mapValueType),
       promiseValueType: nullableString(expression.promiseValueType),
@@ -1442,6 +1495,7 @@ function cloneUnaryOrTypeAssertionExpressionWithOperand(expression: LowerNode, o
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1462,6 +1516,7 @@ function cloneArrayLiteralWithElements(expression: LowerNode, elements: LowerNod
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),
@@ -1490,6 +1545,7 @@ function cloneObjectLiteralWithProperties(expression: LowerNode, properties: Low
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     promiseValueType: nullableString(expression.promiseValueType),

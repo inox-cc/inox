@@ -160,6 +160,7 @@ type ResolvedTypeInfo = {
   shape: ObjectShapeInfo | null
   arrayElementType: ValueType | null
   arrayElementDeclaredType: string | null
+  arrayElementFunctionType?: FunctionTypeMetadata | null
   mapKeyType: ValueType | null
   mapValueType: ValueType | null
   mapValueShape: ObjectShapeInfo | null
@@ -213,6 +214,8 @@ type FunctionTypeParamMetadata = {
   nullable?: boolean
   arrayElementType?: ValueType | null
   arrayElementDeclaredType?: string | null
+  arrayElementFunctionType?: FunctionTypeMetadata | null
+  arrayElementFunctionTypeOwnership?: 'weak'
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null
   mapValueShape?: ObjectShapeInfo | null
@@ -404,6 +407,7 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('valueType', 'string', null, true, loc),
       anyNodeField('arrayElementType', 'string', null, true, loc),
       anyNodeField('arrayElementDeclaredType', 'string', null, true, loc),
+      anyNodeField('arrayElementFunctionType', 'object', null, true, loc),
       anyNodeField('mapKeyType', 'string', null, true, loc),
       anyNodeField('mapValueType', 'string', null, true, loc),
       anyNodeField('promiseValueType', 'string', null, true, loc),
@@ -465,6 +469,7 @@ function anyNodeField(
     nullable,
     arrayElementType: options.arrayElementType ?? null,
     arrayElementDeclaredType: options.arrayElementDeclaredType ?? null,
+    arrayElementFunctionType: null,
     mapKeyType: null,
     mapValueType: null,
     promiseValueType: null,
@@ -1054,6 +1059,33 @@ function commonResolvedObjectShapeFieldFunctionType(fields: AnyNode[]): Function
     }
 
     if (current !== functionType) {
+      return null
+    }
+  }
+
+  return functionType
+}
+
+function commonExpressionFunctionType(values: AnyNode[]): FunctionTypeMetadata | null {
+  let functionType: FunctionTypeMetadata | null = null
+  let seen = false
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const value = values[index]
+    let current: FunctionTypeMetadata | null = null
+
+    if (value.functionType !== null && typeof value.functionType !== 'undefined') {
+      current = value.functionType
+    }
+
+    if (current === null || typeof current === 'undefined') {
+      return null
+    }
+
+    if (!seen) {
+      functionType = current
+      seen = true
+    } else if (current !== functionType) {
       return null
     }
   }
@@ -1967,6 +1999,17 @@ class Checker {
         arrayElementDeclaredType = declared.arrayElementDeclaredType
       }
 
+      let arrayElementFunctionType = this.resolveExpressionArrayElementFunctionType(statement.init)
+
+      if (
+        declared !== null &&
+        typeof declared !== 'undefined' &&
+        declared.arrayElementFunctionType !== null &&
+        typeof declared.arrayElementFunctionType !== 'undefined'
+      ) {
+        arrayElementFunctionType = declared.arrayElementFunctionType
+      }
+
       let mapType: CheckerMapType | null = this.resolveExpressionMapType(statement.init)
 
       if (declared !== null && typeof declared !== 'undefined' && declared.valueType === 'map') {
@@ -2093,6 +2136,7 @@ class Checker {
       statement.nullable = nullable
       statement.arrayElementType = arrayElementType
       statement.arrayElementDeclaredType = statementArrayElementDeclaredType
+      statement.arrayElementFunctionType = arrayElementFunctionType
       statement.mapKeyType = mapKeyType
       statement.mapValueType = mapValueType
       statement.mapValueShape = mapValueShape
@@ -2125,6 +2169,7 @@ class Checker {
           nullable,
           arrayElementType,
           arrayElementDeclaredType,
+          arrayElementFunctionType,
           mapKeyType,
           mapValueType,
           mapValueShape,
@@ -2382,6 +2427,7 @@ class Checker {
         expression.valueType = sourceValueType
         expression.arrayElementType = asserted.arrayElementType
         expression.arrayElementDeclaredType = asserted.arrayElementDeclaredType
+        expression.arrayElementFunctionType = asserted.arrayElementFunctionType
         expression.mapKeyType = asserted.mapKeyType
         expression.mapValueType = asserted.mapValueType
         expression.promiseValueType = asserted.promiseValueType
@@ -2396,6 +2442,7 @@ class Checker {
       const declared = this.resolveDeclaredType(declaredType, expression.loc as SourceLocation)
       let arrayElementType = asserted.arrayElementType
       let arrayElementDeclaredType = asserted.arrayElementDeclaredType
+      let arrayElementFunctionType = asserted.arrayElementFunctionType
       let mapKeyType = asserted.mapKeyType
       let mapValueType = asserted.mapValueType
       let promiseValueType = asserted.promiseValueType
@@ -2410,6 +2457,10 @@ class Checker {
 
       if (declared.arrayElementDeclaredType !== null && typeof declared.arrayElementDeclaredType !== 'undefined') {
         arrayElementDeclaredType = declared.arrayElementDeclaredType
+      }
+
+      if (declared.arrayElementFunctionType !== null && typeof declared.arrayElementFunctionType !== 'undefined') {
+        arrayElementFunctionType = declared.arrayElementFunctionType
       }
 
       if (declared.mapKeyType !== null && typeof declared.mapKeyType !== 'undefined') {
@@ -2441,6 +2492,7 @@ class Checker {
       expression.valueType = declared.valueType
       expression.arrayElementType = arrayElementType
       expression.arrayElementDeclaredType = arrayElementDeclaredType
+      expression.arrayElementFunctionType = arrayElementFunctionType
       expression.mapKeyType = mapKeyType
       expression.mapValueType = mapValueType
       expression.promiseValueType = promiseValueType
@@ -2490,6 +2542,7 @@ class Checker {
       expression.valueType = valueType
       expression.arrayElementType = null
       expression.arrayElementDeclaredType = null
+      expression.arrayElementFunctionType = null
       expression.mapKeyType = null
       expression.mapValueType = null
       expression.mapValueShape = null
@@ -2511,6 +2564,10 @@ class Checker {
 
         if (symbol.arrayElementDeclaredType !== null && typeof symbol.arrayElementDeclaredType !== 'undefined') {
           expression.arrayElementDeclaredType = symbol.arrayElementDeclaredType
+        }
+
+        if (symbol.arrayElementFunctionType !== null && typeof symbol.arrayElementFunctionType !== 'undefined') {
+          expression.arrayElementFunctionType = symbol.arrayElementFunctionType
         }
 
         if (symbol.mapKeyType !== null && typeof symbol.mapKeyType !== 'undefined') {
@@ -2785,6 +2842,11 @@ class Checker {
 
       expression.arrayElementType = commonArrayElementType(elementTypes)
       expression.arrayElementDeclaredType = expression.arrayElementType
+      expression.arrayElementFunctionType = null
+
+      if (expression.arrayElementType === 'function') {
+        expression.arrayElementFunctionType = commonExpressionFunctionType(expression.elements)
+      }
 
       return 'array'
     }
@@ -3544,10 +3606,12 @@ class Checker {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
         const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
+        const functionType = this.resolveExpressionArrayElementFunctionType(expression.object)
         expression.nullable = optionalChainReceiver
         expression.optionalChainProtected = optionalChainReceiver
         expression.valueType = valueType
         expression.arrayElementDeclaredType = declaredType
+        expression.functionType = functionType
         expression.shape = this.resolveArrayElementObjectShape(valueType, declaredType, expression.loc)
 
         return valueType
@@ -3651,11 +3715,13 @@ class Checker {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
         const valueType = this.resolveExpressionArrayElementType(expression.object) ?? 'unknown'
         const declaredType = this.resolveExpressionArrayElementDeclaredType(expression.object)
+        const functionType = this.resolveExpressionArrayElementFunctionType(expression.object)
 
         expression.nullable = true
         expression.optionalChainProtected = true
         expression.valueType = valueType
         expression.arrayElementDeclaredType = declaredType
+        expression.functionType = functionType
         expression.shape = this.resolveArrayElementObjectShape(valueType, declaredType, expression.loc)
 
         return valueType
@@ -13689,6 +13755,7 @@ class Checker {
         shape: null,
         arrayElementType: elementInfo.valueType,
         arrayElementDeclaredType: arrayElementTypeName,
+        arrayElementFunctionType: elementInfo.functionType,
         mapKeyType: null,
         mapValueType: null,
         mapValueShape: null,
@@ -14550,6 +14617,7 @@ class Checker {
       info.valueType = 'array'
       info.arrayElementType = elementInfo.valueType
       info.arrayElementDeclaredType = arrayElementTypeName
+      info.arrayElementFunctionType = elementInfo.functionType
 
       return info
     }
@@ -14636,6 +14704,7 @@ class Checker {
       shape: info.shape,
       arrayElementType: info.arrayElementType,
       arrayElementDeclaredType: info.arrayElementDeclaredType,
+      arrayElementFunctionType: info.arrayElementFunctionType ?? null,
       mapKeyType: info.mapKeyType,
       mapValueType: info.mapValueType,
       mapValueShape: info.mapValueShape,
@@ -14855,6 +14924,79 @@ class Checker {
         typeof field.arrayElementType !== 'undefined'
       ) {
         return field.arrayElementType
+      }
+
+      return null
+    }
+
+    return null
+  }
+
+  resolveExpressionArrayElementFunctionType(expression: AnyNode | null | undefined): FunctionTypeMetadata | null {
+    if (expression === null || typeof expression === 'undefined') {
+      return null
+    }
+
+    if (
+      expression.type === 'ArrayLiteral' ||
+      expression.type === 'CallExpression' ||
+      expression.type === 'AwaitExpression'
+    ) {
+      if (
+        expression.arrayElementFunctionType !== null &&
+        typeof expression.arrayElementFunctionType !== 'undefined'
+      ) {
+        return expression.arrayElementFunctionType
+      }
+
+      return null
+    }
+
+    if (expression.type === 'Reference' && expression.path.length === 1) {
+      const name = firstPathSegment(expression.path)
+      const symbol = this.scope.resolve(name)
+
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.arrayElementFunctionType !== null &&
+        typeof symbol.arrayElementFunctionType !== 'undefined'
+      ) {
+        return symbol.arrayElementFunctionType
+      }
+
+      return null
+    }
+
+    if (expression.type === 'MemberExpression') {
+      const shape = this.resolveExpressionShape(expression.object)
+      let field: AnyNode | null = null
+
+      if (shape !== null && typeof shape !== 'undefined') {
+        field = this.findShapeField(shape, expression.property)
+      }
+
+      if (field !== null && typeof field !== 'undefined') {
+        const fieldType = this.resolveFieldDeclaredType(field)
+
+        return resolvedFunctionTypeMetadata(field.arrayElementFunctionType, fieldType.arrayElementFunctionType)
+      }
+
+      return null
+    }
+
+    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+      const shape = this.resolveExpressionShape(expression.object)
+      let field: AnyNode | null = null
+
+      if (shape !== null && typeof shape !== 'undefined') {
+        field = this.findShapeField(shape, expression.index.value)
+      }
+
+      if (field !== null && typeof field !== 'undefined') {
+        const fieldType = this.resolveFieldDeclaredType(field)
+
+        return resolvedFunctionTypeMetadata(field.arrayElementFunctionType, fieldType.arrayElementFunctionType)
       }
 
       return null

@@ -35,6 +35,7 @@ type FeatureFunctionType = AnyNode & {
 }
 
 type FeatureChildNode = AnyNode & {
+  arrayElementFunctionType?: FeatureFunctionType | null
   collectionKind?: string | null
   elements?: FeatureRawNode[]
   path?: string[]
@@ -46,12 +47,14 @@ type FeatureChildNode = AnyNode & {
 
 type FeatureNode = AnyNode & {
   args?: FeatureChildNode[]
+  arrayElementFunctionType?: FeatureFunctionType | null
   binaryRuntimeMethod?: string | null
   callee?: FeatureChildNode | null
   childProcessRuntimeMethod?: string | null
   collectionKind?: string | null
   cryptoRuntimeMethod?: string | null
   debugRuntimeMethod?: string | null
+  elements?: FeatureRawNode[]
   fsRuntimeMethod?: string | null
   fsRuntimeConstant?: string | null
   functionType?: FeatureFunctionType | null
@@ -160,6 +163,24 @@ function featureNodeElementsOrEmpty(node: FeatureChildNode): FeatureRawNode[] {
   }
 
   return []
+}
+
+function arrayLiteralHasFunctionElement(node: FeatureNode): boolean {
+  const elements = node.elements
+
+  if (elements === null || typeof elements === 'undefined') {
+    return false
+  }
+
+  for (let index = 0; index < elements.length; index = index + 1) {
+    const element = featureNodeAt(elements, index)
+
+    if (element.valueType === 'function') {
+      return true
+    }
+  }
+
+  return false
 }
 
 export function collectIrFeatureRequirements(programs: FeatureProgram[]): IrFeature[] {
@@ -598,8 +619,7 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
 
   if (
     node.type === 'VariableDeclaration' &&
-    node.valueType === 'function' &&
-    (node.nullable === true || isRuntimeFunctionType(node.functionType))
+    node.valueType === 'function'
   ) {
     features.add('callback-values')
     features.add('runtime-values')
@@ -614,6 +634,16 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   }
 
   if (node.type === 'ObjectLiteral' || node.type === 'ArrayLiteral') {
+    features.add('runtime-values')
+  }
+
+  if (node.arrayElementFunctionType !== null && typeof node.arrayElementFunctionType !== 'undefined') {
+    features.add('callback-values')
+    features.add('runtime-values')
+  }
+
+  if (node.type === 'ArrayLiteral' && arrayLiteralHasFunctionElement(node)) {
+    features.add('callback-values')
     features.add('runtime-values')
   }
 
@@ -768,7 +798,12 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
       features.add('runtime-values')
     }
 
-    if (param.valueType === 'function' && (param.nullable === true || isRuntimeFunctionType(param.functionType))) {
+    if (
+      param.valueType === 'function' &&
+      (param.nullable === true ||
+        isRuntimeFunctionType(param.functionType) ||
+        isSupportedRuntimeCallbackType(param.functionType))
+    ) {
       features.add('callback-values')
     }
   }
@@ -784,6 +819,16 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
 
   if ((timeCall === null || typeof timeCall === 'undefined') && callee !== null && typeof callee !== 'undefined') {
     timeCall = dateReceiverRuntimeMethodName(callee)
+  }
+
+  if (
+    callee !== null &&
+    typeof callee !== 'undefined' &&
+    callee.valueType === 'function' &&
+    isSupportedRuntimeCallbackType(callee.functionType)
+  ) {
+    features.add('callback-values')
+    features.add('runtime-values')
   }
 
   if (timeCall !== null && typeof timeCall !== 'undefined') {
@@ -1439,6 +1484,50 @@ function isRuntimeFunctionType(functionType: FeatureFunctionType | null | undefi
   }
 
   return hasRuntimeParam
+}
+
+function isSupportedRuntimeCallbackType(functionType: FeatureFunctionType | null | undefined): boolean {
+  if (functionType === null || typeof functionType === 'undefined') {
+    return false
+  }
+
+  if (!isSupportedRuntimeCallbackReturnType(functionType.returnType)) {
+    return false
+  }
+
+  const params = functionType.params
+
+  if (params === null || typeof params === 'undefined') {
+    return true
+  }
+
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = featureNodeAt(params, index)
+
+    if (!isSupportedRuntimeFunctionParamValueType(param.valueType)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isSupportedRuntimeCallbackReturnType(returnType: string | null | undefined): boolean {
+  if (returnType === null || typeof returnType === 'undefined') {
+    return false
+  }
+
+  return (
+    returnType === 'void' ||
+    returnType === 'number' ||
+    returnType === 'boolean' ||
+    returnType === 'string' ||
+    returnType === 'bytes' ||
+    returnType === 'object' ||
+    returnType === 'array' ||
+    returnType === 'map' ||
+    returnType === 'set'
+  )
 }
 
 function isFeatureEqualityOperator(operator: string): boolean {

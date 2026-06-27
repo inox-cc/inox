@@ -1331,6 +1331,7 @@ export function emitFunctionScalarVariableDeclaration(
   const deps = statementDeps(context)
   let runtimeFunctionType: CFunctionType | null = null
   const functionType = scalarDeclarationFunctionType(statement)
+  const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
   const callbackWrapper = context.callbackArrowWrappers.get(statement.init)
 
   if (functionType !== null && typeof functionType !== 'undefined') {
@@ -1352,6 +1353,14 @@ export function emitFunctionScalarVariableDeclaration(
     context.functionTypes.set(statement.name, normalizeFunctionType(functionType))
   }
 
+  if (
+    runtimeElement !== null &&
+    typeof runtimeElement !== 'undefined' &&
+    runtimeElement.valueType === 'function'
+  ) {
+    return emitRuntimeArrayFunctionValueVariableDeclaration(statement, runtimeElement, context)
+  }
+
   if (isRuntimeFunctionType(functionType) || (runtimeFunctionType !== null && typeof runtimeFunctionType !== 'undefined')) {
     return deps.emitRuntimeCallbackVariableDeclaration(statement, context)
   }
@@ -1366,6 +1375,30 @@ export function emitFunctionScalarVariableDeclaration(
       statement.loc
     )};`
   ]
+}
+
+function emitRuntimeArrayFunctionValueVariableDeclaration(
+  statement: StatementNode,
+  element: CRuntimeArrayElement,
+  context: CFunctionContext
+): string[] {
+  const deps = statementDeps(context)
+  const functionType = normalizeFunctionType(element.functionType ?? statement.functionType)
+  const value = deps.emitCValueExpression(statement.init, context)
+  const lines: string[] = []
+
+  registerOwnedValue(context, statement.name)
+  context.variables.set(statement.name, 'function')
+  context.functionTypes.set(statement.name, functionType)
+  context.runtimeCallbacks.add(statement.name)
+
+  pushAllLines(lines, value.lines)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
+  lines.push(`${statement.name} = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck(statement.name, 'INOX_TAG_FUNCTION', context))
+  lines.push(`inox_retain(${statement.name});`)
+
+  return lines
 }
 
 export function emitNumberBooleanScalarVariableDeclaration(

@@ -2233,6 +2233,11 @@ function visitCallbackExpression(
   if (expression.type === 'ArrayLiteral') {
     for (let index = 0; index < expression.elements.length; index = index + 1) {
       const element = callbackNodeAt(expression.elements, index)
+      const elementFunctionType = callbackArrayLiteralElementFunctionType(expression, element)
+
+      if (elementFunctionType !== null && typeof elementFunctionType !== 'undefined') {
+        registerRuntimeCallbackExpression(element, elementFunctionType, scopes, wrappers, context, deps)
+      }
 
       visitCallbackExpression(element, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
     }
@@ -2255,6 +2260,21 @@ function visitCallbackExpression(
   if (expression.type === 'ArrowFunctionExpression') {
     visitNestedCallbackArrowExpression(expression, scopes, wrappers, pendingPlainFunctionArgs, context, deps)
   }
+}
+
+function callbackArrayLiteralElementFunctionType(arrayExpression: AnyNode, element: AnyNode): CFunctionType | null {
+  if (element.functionType !== null && typeof element.functionType !== 'undefined') {
+    return element.functionType
+  }
+
+  if (
+    arrayExpression.arrayElementFunctionType !== null &&
+    typeof arrayExpression.arrayElementFunctionType !== 'undefined'
+  ) {
+    return arrayExpression.arrayElementFunctionType
+  }
+
+  return null
 }
 
 function visitCallbackCallExpression(

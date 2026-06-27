@@ -1,32 +1,42 @@
-import type { IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import { regexpFeature } from './regexp/index.ts'
-import type { CompilerFeature, FeatureSet } from './types.ts'
+import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
+import {
+  collectRegExpIrFeatures,
+  regexpFeatureCPreludeHelpers,
+  regexpFeatureCPreludeIncludes,
+  regexpFeatureId,
+  regexpFeatureRuntimeRequirements
+} from './regexp/index.ts'
 
-export const compilerFeatures: CompilerFeature[] = [regexpFeature]
+type CompilerFeatureHelperEmitter = () => string[]
 
-export function collectCompilerFeatureIrFeatures(node: unknown, features: FeatureSet): void {
+export const compilerFeatures: IrFeature[] = [regexpFeatureId]
+
+const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [regexpFeatureRuntimeRequirements]
+const compilerFeatureCPreludeIncludeRows: string[][] = [regexpFeatureCPreludeIncludes]
+const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [regexpFeatureCPreludeHelpers]
+
+export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<IrFeature>): void {
   if (node === null || typeof node === 'undefined' || typeof node !== 'object') {
     return
   }
 
+  const featureNode = node as AnyNode
+
   for (let index = 0; index < compilerFeatures.length; index = index + 1) {
     const feature = compilerFeatureAt(index)
-    const collect = feature.collectIrFeatures
 
-    if (collect !== null && typeof collect !== 'undefined') {
-      collect(node, features)
-    }
+    collectCompilerFeatureIrFeature(feature, featureNode, features)
   }
 }
 
 export function compilerFeatureRuntimeRequirements(featureName: IrFeature): IrRuntimeRequirement[] | null {
-  const feature = findCompilerFeature(featureName)
+  const featureIndex = findCompilerFeatureIndex(featureName)
 
-  if (feature === null || typeof feature === 'undefined') {
+  if (featureIndex < 0) {
     return null
   }
 
-  return compilerFeatureRequirementsOrEmpty(feature)
+  return copyRuntimeRequirements(compilerFeatureRuntimeRequirementsAt(featureIndex))
 }
 
 export function irProgramsUseCPreludeFeature(programs: IrProgram[], featureName: IrFeature): boolean {
@@ -48,50 +58,27 @@ export function irProgramsUseCPreludeFeature(programs: IrProgram[], featureName:
 }
 
 export function emitCompilerFeatureCPreludeIncludes(featureName: IrFeature): string[] {
-  const feature = findCompilerFeature(featureName)
+  const featureIndex = findCompilerFeatureIndex(featureName)
 
-  if (feature === null || typeof feature === 'undefined') {
+  if (featureIndex < 0) {
     return []
   }
 
-  const cPrelude = feature.cPrelude
-
-  if (cPrelude === null || typeof cPrelude === 'undefined') {
-    return []
-  }
-
-  const includes = cPrelude.includes
-
-  if (includes === null || typeof includes === 'undefined') {
-    return []
-  }
-
-  return copyStrings(includes)
+  return copyStrings(compilerFeatureCPreludeIncludesAt(featureIndex))
 }
 
 export function emitCompilerFeatureCPreludeHelpers(featureName: IrFeature): string[] {
-  const feature = findCompilerFeature(featureName)
+  const featureIndex = findCompilerFeatureIndex(featureName)
 
-  if (feature === null || typeof feature === 'undefined') {
+  if (featureIndex < 0) {
     return []
   }
 
-  const cPrelude = feature.cPrelude
-
-  if (cPrelude === null || typeof cPrelude === 'undefined') {
-    return []
-  }
-
-  const helpers = cPrelude.helpers
-
-  if (helpers === null || typeof helpers === 'undefined') {
-    return []
-  }
-
+  const featureHelpers = compilerFeatureCPreludeHelpersAt(featureIndex)
   const lines: string[] = []
 
-  for (let index = 0; index < helpers.length; index = index + 1) {
-    const emit = helpers[index]
+  for (let index = 0; index < featureHelpers.length; index = index + 1) {
+    const emit = featureHelpers[index]
 
     pushAll(lines, emit())
   }
@@ -99,44 +86,53 @@ export function emitCompilerFeatureCPreludeHelpers(featureName: IrFeature): stri
   return lines
 }
 
-function compilerFeatureAt(index: number): CompilerFeature {
+function compilerFeatureAt(index: number): IrFeature {
   return compilerFeatures[index]
 }
 
-function findCompilerFeature(featureName: IrFeature): CompilerFeature | null {
-  for (let index = 0; index < compilerFeatures.length; index = index + 1) {
-    const feature = compilerFeatureAt(index)
+function compilerFeatureRuntimeRequirementsAt(index: number): IrRuntimeRequirement[] {
+  return compilerFeatureRuntimeRequirementRows[index]
+}
 
-    if (feature.id === featureName) {
-      return feature
+function compilerFeatureCPreludeIncludesAt(index: number): string[] {
+  return compilerFeatureCPreludeIncludeRows[index]
+}
+
+function compilerFeatureCPreludeHelpersAt(index: number): CompilerFeatureHelperEmitter[] {
+  return compilerFeatureCPreludeHelperRows[index]
+}
+
+function findCompilerFeatureIndex(featureName: IrFeature): number {
+  for (let index = 0; index < compilerFeatures.length; index = index + 1) {
+    if (compilerFeatureAt(index) === featureName) {
+      return index
     }
   }
 
-  return null
+  return -1
+}
+
+function collectCompilerFeatureIrFeature(featureName: IrFeature, node: AnyNode, features: Set<IrFeature>): void {
+  if (featureName === regexpFeatureId) {
+    collectRegExpIrFeatures(node, features)
+  }
 }
 
 function compilerFeatureHasCPrelude(featureName: IrFeature): boolean {
-  const feature = findCompilerFeature(featureName)
+  const featureIndex = findCompilerFeatureIndex(featureName)
 
-  return (
-    feature !== null &&
-    typeof feature !== 'undefined' &&
-    feature.cPrelude !== null &&
-    typeof feature.cPrelude !== 'undefined'
-  )
-}
-
-function compilerFeatureRequirementsOrEmpty(feature: CompilerFeature): IrRuntimeRequirement[] {
-  const requirements = feature.runtimeRequirements
-
-  if (requirements === null || typeof requirements === 'undefined') {
-    return []
+  if (featureIndex < 0) {
+    return false
   }
 
+  return compilerFeatureCPreludeIncludesAt(featureIndex).length > 0
+}
+
+function copyRuntimeRequirements(values: IrRuntimeRequirement[]): IrRuntimeRequirement[] {
   const result: IrRuntimeRequirement[] = []
 
-  for (let index = 0; index < requirements.length; index = index + 1) {
-    result.push(requirements[index])
+  for (let index = 0; index < values.length; index = index + 1) {
+    result.push(values[index])
   }
 
   return result

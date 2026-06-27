@@ -239,6 +239,7 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'alternate',
     'expression',
     'finalizer',
+    'arrayElementFunctionType',
     'functionType',
     'handler',
     'index',

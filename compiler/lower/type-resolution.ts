@@ -30,6 +30,7 @@ export type LowerResolvedType = {
   nullable: boolean
   arrayElementType: string | null
   arrayElementDeclaredType: string | null
+  arrayElementFunctionType?: LowerTypeNode | null
   mapKeyType: string | null
   mapValueType: string | null
   mapValueShape?: LowerTypeNode | null
@@ -278,6 +279,7 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     nullable: declared.nullable,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
+    arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
     promiseValueType: nullableString(declared.promiseValueType),
@@ -334,6 +336,7 @@ function resolveObjectShapeField(field: LowerTypeNode, fields: LowerTypeNode[], 
     nullable: declared.nullable || weakField || field.optional === true,
     arrayElementType: declared.arrayElementType,
     arrayElementDeclaredType: declared.arrayElementDeclaredType,
+    arrayElementFunctionType: nullableNode(declared.arrayElementFunctionType),
     mapKeyType: declared.mapKeyType,
     mapValueType: declared.mapValueType,
     promiseValueType: nullableString(declared.promiseValueType),
@@ -444,6 +447,7 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
         nullable: field.nullable,
         arrayElementType: field.arrayElementType,
         arrayElementDeclaredType: field.arrayElementDeclaredType,
+        arrayElementFunctionType: nullableNode(field.arrayElementFunctionType),
         mapKeyType: field.mapKeyType,
         mapValueType: field.mapValueType,
         promiseValueType: nullableString(field.promiseValueType),
@@ -467,6 +471,7 @@ function hydrateObjectShapeField(field: LowerTypeNode, context: LowerContext): L
       nullable: field.nullable,
       arrayElementType: field.arrayElementType,
       arrayElementDeclaredType: field.arrayElementDeclaredType,
+      arrayElementFunctionType: nullableNode(field.arrayElementFunctionType),
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
       promiseValueType: nullableString(field.promiseValueType),
@@ -528,6 +533,7 @@ function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
     nullable: param.nullable,
     arrayElementType: param.arrayElementType,
     arrayElementDeclaredType: param.arrayElementDeclaredType,
+    arrayElementFunctionType: nullableNode(param.arrayElementFunctionType),
     mapKeyType: param.mapKeyType,
     mapValueType: param.mapValueType,
     promiseValueType: nullableString(param.promiseValueType),
@@ -805,6 +811,7 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
       nullable: param.nullable,
       arrayElementType: param.arrayElementType,
       arrayElementDeclaredType: param.arrayElementDeclaredType,
+      arrayElementFunctionType: nullableNode(param.arrayElementFunctionType),
       mapKeyType: param.mapKeyType,
       mapValueType: param.mapValueType,
       promiseValueType: nullableString(param.promiseValueType),
@@ -886,6 +893,7 @@ function resolveUnionTypeNames(
   if (valueType === 'array') {
     resolved.arrayElementType = commonResolvedString(resolvedTypes, 'arrayElementType')
     resolved.arrayElementDeclaredType = commonResolvedString(resolvedTypes, 'arrayElementDeclaredType')
+    resolved.arrayElementFunctionType = commonResolvedFunctionType(resolvedTypes, 'arrayElementFunctionType')
   } else if (valueType === 'map') {
     resolved.mapKeyType = commonResolvedString(resolvedTypes, 'mapKeyType')
     resolved.mapValueType = commonResolvedString(resolvedTypes, 'mapValueType')
@@ -950,6 +958,35 @@ function commonResolvedString(values: LowerResolvedType[], key: LowerResolvedStr
   return first
 }
 
+function commonResolvedFunctionType(values: LowerResolvedType[], key: 'arrayElementFunctionType'): LowerTypeNode | null {
+  const first = lowerResolvedFunctionTypeValue(values[0], key)
+
+  if (first === null || typeof first === 'undefined') {
+    return null
+  }
+
+  for (let index = 1; index < values.length; index = index + 1) {
+    const value = lowerResolvedFunctionTypeValue(values[index], key)
+
+    if (value === null || typeof value === 'undefined' || value !== first) {
+      return null
+    }
+  }
+
+  return first
+}
+
+function lowerResolvedFunctionTypeValue(
+  value: LowerResolvedType,
+  key: 'arrayElementFunctionType'
+): LowerTypeNode | null {
+  if (key === 'arrayElementFunctionType') {
+    return nullableNode(value.arrayElementFunctionType)
+  }
+
+  return null
+}
+
 function lowerResolvedStringValue(value: LowerResolvedType, key: LowerResolvedStringKey): string | null {
   if (key === 'arrayElementType') {
     return value.arrayElementType
@@ -985,6 +1022,7 @@ function arrayResolvedType(
   const resolved = namedResolvedType('array')
   resolved.arrayElementType = resolvedValueType(elementType, 'unknown')
   resolved.arrayElementDeclaredType = nullableString(elementDeclaredType)
+  resolved.arrayElementFunctionType = nullableNode(elementType?.functionType)
 
   return resolved
 }
@@ -1023,6 +1061,7 @@ function cloneResolvedType(source: LowerResolvedType): LowerResolvedType {
     nullable: source.nullable,
     arrayElementType: source.arrayElementType,
     arrayElementDeclaredType: source.arrayElementDeclaredType,
+    arrayElementFunctionType: nullableNode(source.arrayElementFunctionType),
     mapKeyType: source.mapKeyType,
     mapValueType: source.mapValueType,
     mapValueShape: nullableNode(source.mapValueShape),
@@ -1045,6 +1084,7 @@ function unresolvedType(): LowerResolvedType {
     nullable: false,
     arrayElementType: null,
     arrayElementDeclaredType: null,
+    arrayElementFunctionType: null,
     mapKeyType: null,
     mapValueType: null,
     mapValueShape: null,

@@ -116,6 +116,7 @@ export type CKnownObjectMemberField = CKnownObjectField & {
 }
 
 export type CArrayElementInfo = {
+  functionType?: CFunctionType | null
   valueType: string
 }
 

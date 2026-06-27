@@ -228,6 +228,7 @@ function applyResolvedTypeAssertion(
 ): LowerExpressionNode {
   let arrayElementType = expression.arrayElementType
   let arrayElementDeclaredType = expression.arrayElementDeclaredType
+  let arrayElementFunctionType = expression.arrayElementFunctionType
   let mapKeyType = expression.mapKeyType
   let mapValueType = expression.mapValueType
   let mapValueShape = expression.mapValueShape
@@ -247,6 +248,10 @@ function applyResolvedTypeAssertion(
 
   if (declaredArrayElementDeclaredType !== null && typeof declaredArrayElementDeclaredType !== 'undefined') {
     arrayElementDeclaredType = declaredArrayElementDeclaredType
+  }
+
+  if (declared.arrayElementFunctionType !== null && typeof declared.arrayElementFunctionType !== 'undefined') {
+    arrayElementFunctionType = declared.arrayElementFunctionType
   }
 
   const declaredMapKeyType = nullableString(declared.mapKeyType)
@@ -295,6 +300,7 @@ function applyResolvedTypeAssertion(
   expression.nullable = declared.nullable
   expression.arrayElementType = arrayElementType
   expression.arrayElementDeclaredType = arrayElementDeclaredType
+  expression.arrayElementFunctionType = arrayElementFunctionType
   expression.mapKeyType = mapKeyType
   expression.mapValueType = mapValueType
   expression.mapValueShape = mapValueShape
@@ -649,6 +655,7 @@ function cloneReferenceExpression(
   const nullable = expression.nullable === true || referenceVariableNullable(variable)
   const arrayElementType = referenceArrayElementType(expression, variable)
   const arrayElementDeclaredType = referenceArrayElementDeclaredType(expression, variable)
+  const arrayElementFunctionType = referenceArrayElementFunctionType(expression, variable)
   const mapKeyType = referenceMapKeyType(expression, variable)
   const mapValueType = referenceMapValueType(expression, variable)
   const mapValueShape = referenceMapValueShape(expression, variable)
@@ -665,6 +672,7 @@ function cloneReferenceExpression(
     nullable,
     arrayElementType,
     arrayElementDeclaredType,
+    arrayElementFunctionType,
     mapKeyType,
     mapValueType,
     mapValueShape,
@@ -748,6 +756,27 @@ function referenceArrayElementDeclaredType(
 
     if (variableArrayElementDeclaredType !== null && typeof variableArrayElementDeclaredType !== 'undefined') {
       return variableArrayElementDeclaredType
+    }
+  }
+
+  return null
+}
+
+function referenceArrayElementFunctionType(
+  expression: LowerExpressionNode,
+  variable: LowerExpressionNode | null
+): LowerExpressionNode | null {
+  const expressionArrayElementFunctionType = nullableNode(expression.arrayElementFunctionType)
+
+  if (expressionArrayElementFunctionType !== null && typeof expressionArrayElementFunctionType !== 'undefined') {
+    return expressionArrayElementFunctionType
+  }
+
+  if (variable !== null && typeof variable !== 'undefined') {
+    const variableArrayElementFunctionType = nullableNode(variable.arrayElementFunctionType)
+
+    if (variableArrayElementFunctionType !== null && typeof variableArrayElementFunctionType !== 'undefined') {
+      return variableArrayElementFunctionType
     }
   }
 
@@ -930,6 +959,7 @@ function cloneMemberExpression(
   const isLengthProperty = expression.property === 'length'
   let arrayElementType: string | null = null
   let arrayElementDeclaredType: string | null = null
+  let arrayElementFunctionType: LowerExpressionNode | null = null
   let mapKeyType: string | null = null
   let mapValueType: string | null = null
   let mapValueShape: LowerExpressionNode | null = null
@@ -943,6 +973,7 @@ function cloneMemberExpression(
   if (!isLengthProperty) {
     arrayElementType = nullableString(expression.arrayElementType)
     arrayElementDeclaredType = nullableString(expression.arrayElementDeclaredType)
+    arrayElementFunctionType = nullableNode(expression.arrayElementFunctionType)
     mapKeyType = nullableString(expression.mapKeyType)
     mapValueType = nullableString(expression.mapValueType)
     mapValueShape = nullableNode(expression.mapValueShape)
@@ -962,6 +993,7 @@ function cloneMemberExpression(
     nullable: expression.nullable === true,
     arrayElementType,
     arrayElementDeclaredType,
+    arrayElementFunctionType,
     mapKeyType,
     mapValueType,
     mapValueShape,
@@ -993,6 +1025,7 @@ function cloneIndexExpression(
       collectionKind: nullableString(expression.collectionKind),
       arrayElementType: nullableString(expression.arrayElementType),
       arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
       mapKeyType: nullableString(expression.mapKeyType),
       mapValueType: nullableString(expression.mapValueType),
       mapValueShape: nullableNode(expression.mapValueShape),
@@ -1022,6 +1055,7 @@ function cloneCallExpression(
     nullable: expression.nullable === true,
     arrayElementType: nullableString(expression.arrayElementType),
     arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     mapKeyType: nullableString(expression.mapKeyType),
     mapValueType: nullableString(expression.mapValueType),
     mapValueShape: nullableNode(expression.mapValueShape),
@@ -1081,6 +1115,7 @@ function cloneAwaitExpression(
       nullable: expression.nullable === true,
       arrayElementType: nullableString(expression.arrayElementType),
       arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
       mapKeyType: nullableString(expression.mapKeyType),
       mapValueType: nullableString(expression.mapValueType),
       promiseValueType: nullableString(expression.promiseValueType),
@@ -1267,6 +1302,7 @@ function cloneAssignmentExpression(
       nullable: expression.nullable === true,
       arrayElementType: nullableString(expression.arrayElementType),
       arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
       mapKeyType: nullableString(expression.mapKeyType),
       mapValueType: nullableString(expression.mapValueType),
       promiseValueType: nullableString(expression.promiseValueType),
@@ -1311,6 +1347,7 @@ function cloneBinaryExpression(
       nullable: expression.nullable === true,
       arrayElementType: nullableString(expression.arrayElementType),
       arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
       mapKeyType: nullableString(expression.mapKeyType),
       mapValueType: nullableString(expression.mapValueType),
       promiseValueType: nullableString(expression.promiseValueType),
@@ -1344,6 +1381,10 @@ function cloneConditionalExpression(
         consequent.arrayElementDeclaredType,
         alternate.arrayElementDeclaredType
       ),
+      arrayElementFunctionType: commonNullableNode(
+        consequent.arrayElementFunctionType,
+        alternate.arrayElementFunctionType
+      ),
       mapKeyType: commonNullableString(consequent.mapKeyType, alternate.mapKeyType),
       mapValueType: commonNullableString(consequent.mapValueType, alternate.mapValueType),
       promiseValueType: commonNullableString(consequent.promiseValueType, alternate.promiseValueType),
@@ -1371,6 +1412,7 @@ function cloneUnaryExpression(
       nullable: expression.nullable === true,
       arrayElementType: nullableString(expression.arrayElementType),
       arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
       mapKeyType: nullableString(expression.mapKeyType),
       mapValueType: nullableString(expression.mapValueType),
       promiseValueType: nullableString(expression.promiseValueType),
@@ -1425,6 +1467,7 @@ function cloneArrayLiteralExpression(
     nullable: expression.nullable === true,
     arrayElementType,
     arrayElementDeclaredType,
+    arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
     loc: expression.loc
   }
 }
@@ -1483,6 +1526,7 @@ function cloneObjectLiteralExpression(
       nullable: expression.nullable === true,
       arrayElementType: nullableString(expression.arrayElementType),
       arrayElementDeclaredType: nullableString(expression.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(expression.arrayElementFunctionType),
       mapKeyType: nullableString(expression.mapKeyType),
       mapValueType: nullableString(expression.mapValueType),
       promiseValueType: nullableString(expression.promiseValueType),
@@ -1612,6 +1656,20 @@ function inferConditionalExpressionType(consequent: LowerExpressionNode, alterna
 function commonNullableString(left: string | null | undefined, right: string | null | undefined): string | null {
   const leftValue = nullableString(left)
   const rightValue = nullableString(right)
+
+  if (leftValue !== null && typeof leftValue !== 'undefined' && leftValue === rightValue) {
+    return leftValue
+  }
+
+  return null
+}
+
+function commonNullableNode(
+  left: LowerExpressionNode | null | undefined,
+  right: LowerExpressionNode | null | undefined
+): LowerExpressionNode | null {
+  const leftValue = nullableNode(left)
+  const rightValue = nullableNode(right)
 
   if (leftValue !== null && typeof leftValue !== 'undefined' && leftValue === rightValue) {
     return leftValue

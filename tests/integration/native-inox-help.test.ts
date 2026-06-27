@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { rootDir } from '../../scripts/lib/repo-root.ts'
 import { runCommand } from '../../scripts/lib/run-command.ts'
+import { compileRuntimeProgram } from '../helpers/runtime-c.ts'
 
 export async function assertNativeInoxHelp(): Promise<void> {
   const result = await runCommand('dist/inox', ['--help'])
@@ -61,7 +62,64 @@ export async function assertNativeInoxDefaultOutput(): Promise<void> {
   }
 }
 
+export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
+  const workspace = join(rootDir, 'dist/test-tmp/native-inox-runtime-smoke')
+  const input = join(workspace, 'index.ts')
+  const outputC = join(workspace, 'index.c')
+  const output = join(workspace, 'native-smoke')
+
+  try {
+    await rm(workspace, {
+      recursive: true,
+      force: true
+    })
+    await mkdir(workspace, {
+      recursive: true
+    })
+    await writeFile(
+      input,
+      [
+        "const value = 'native ok'",
+        'function message(): string {',
+        '  return value',
+        '}',
+        'console.log(message())',
+        ''
+      ].join('\n')
+    )
+
+    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputC])
+
+    assert.equal(
+      emit.code,
+      0,
+      `dist/inox runtime smoke emit failed\nstdout:\n${emit.stdout}\nstderr:\n${emit.stderr}`
+    )
+    assert.equal(emit.stderr, '')
+
+    const compile = await compileRuntimeProgram(outputC, output)
+
+    assert.equal(
+      compile.code,
+      0,
+      `native runtime smoke C compile failed\nstdout:\n${compile.stdout}\nstderr:\n${compile.stderr}`
+    )
+
+    const run = await runCommand(output, [])
+
+    assert.equal(run.code, 0, `native runtime smoke run failed\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`)
+    assert.equal(run.stderr, '')
+    assert.equal(run.stdout, 'native ok\n')
+  } finally {
+    await rm(workspace, {
+      recursive: true,
+      force: true
+    })
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await assertNativeInoxHelp()
   await assertNativeInoxDefaultOutput()
+  await assertNativeInoxRuntimeSmoke()
 }

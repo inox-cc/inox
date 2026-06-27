@@ -186,6 +186,7 @@ export type SymbolInfo = {
   nullable?: boolean
   arrayElementType?: ValueType | null
   arrayElementDeclaredType?: string | null
+  arrayElementFunctionType?: any
   mapKeyType?: ValueType | null
   mapValueType?: ValueType | null
   mapValueShape?: ObjectShapeInfo | null

@@ -373,8 +373,8 @@ function cReferenceExpressionType(
         return variableType
       }
 
-      if (metadataType === 'string') {
-        return 'string'
+      if (metadataType === 'string' || metadataType === 'function') {
+        return metadataType
       }
     }
 
