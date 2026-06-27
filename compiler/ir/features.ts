@@ -270,7 +270,6 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('managed-values')
       requirements.add('timers')
     } else if (
-      feature === 'array-pop-null' ||
       feature === 'map-get-null' ||
       feature === 'map-index-set' ||
       feature === 'number-from-string-null' ||
@@ -906,10 +905,6 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
   ) {
     features.add('collections')
     features.add('runtime-values')
-  }
-
-  if (arrayMethod === 'pop') {
-    features.add('array-pop-null')
   }
 
   if (collectionMethod === 'get' && expression.nullable === true) {

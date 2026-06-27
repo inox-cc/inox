@@ -1,5 +1,12 @@
 import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import {
+  arrayPopNullFeatureCPreludeHelpers,
+  arrayPopNullFeatureCPreludeIncludes,
+  arrayPopNullFeatureId,
+  arrayPopNullFeatureRuntimeRequirements,
+  collectArrayPopNullIrFeatures
+} from './array-pop-null/index.ts'
+import {
   collectRegExpIrFeatures,
   regexpFeatureCPreludeHelpers,
   regexpFeatureCPreludeIncludes,
@@ -16,17 +23,20 @@ import {
 
 type CompilerFeatureHelperEmitter = () => string[]
 
-export const compilerFeatures: IrFeature[] = [regexpFeatureId, weakReferencesFeatureId]
+export const compilerFeatures: IrFeature[] = [arrayPopNullFeatureId, regexpFeatureId, weakReferencesFeatureId]
 
 const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [
+  arrayPopNullFeatureRuntimeRequirements,
   regexpFeatureRuntimeRequirements,
   weakReferencesFeatureRuntimeRequirements
 ]
 const compilerFeatureCPreludeIncludeRows: string[][] = [
+  arrayPopNullFeatureCPreludeIncludes,
   regexpFeatureCPreludeIncludes,
   weakReferencesFeatureCPreludeIncludes
 ]
 const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [
+  arrayPopNullFeatureCPreludeHelpers,
   regexpFeatureCPreludeHelpers,
   weakReferencesFeatureCPreludeHelpers
 ]
@@ -129,6 +139,11 @@ function findCompilerFeatureIndex(featureName: IrFeature): number {
 }
 
 function collectCompilerFeatureIrFeature(featureName: IrFeature, node: AnyNode, features: Set<IrFeature>): void {
+  if (featureName === arrayPopNullFeatureId) {
+    collectArrayPopNullIrFeatures(node, features)
+    return
+  }
+
   if (featureName === regexpFeatureId) {
     collectRegExpIrFeatures(node, features)
     return
