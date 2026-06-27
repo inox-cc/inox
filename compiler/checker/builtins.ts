@@ -1,4 +1,5 @@
 import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
+import { stdlibModuleLibuvRuntimeFeature } from '../stdlib/descriptors/modules.ts'
 import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
 import { urlObjectFields } from '../stdlib/descriptors/url.ts'
 import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
@@ -229,34 +230,8 @@ export function isFsConstantValue(name: string): boolean {
   return name === 'F_OK' || name === 'X_OK' || name === 'W_OK' || name === 'R_OK'
 }
 
-export const libuvOnlyRuntimeImports = new Map([
-  ['dgram', 'node:dgram'],
-  ['http', 'node:http'],
-  ['net', 'node:net'],
-  ['node:crypto', 'node:crypto'],
-  ['node:dgram', 'node:dgram'],
-  ['node:http', 'node:http'],
-  ['node:net', 'node:net']
-])
-
 export function libuvOnlyRuntimeImportFeature(source: string): string | null {
-  if (source === 'dgram' || source === 'node:dgram') {
-    return 'node:dgram'
-  }
-
-  if (source === 'http' || source === 'node:http') {
-    return 'node:http'
-  }
-
-  if (source === 'net' || source === 'node:net') {
-    return 'node:net'
-  }
-
-  if (source === 'node:crypto') {
-    return 'node:crypto'
-  }
-
-  return null
+  return stdlibModuleLibuvRuntimeFeature(source)
 }
 
 export const globals: Map<string, SymbolInfo> = new Map([
