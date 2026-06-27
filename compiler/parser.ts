@@ -1429,6 +1429,8 @@ class Parser {
       callee = createMemberExpression(callee, property)
     }
 
+    this.skipTypeArgumentsBeforeCall()
+
     if (this.matchValue('(')) {
       while (!this.isValue(')') && !this.is('eof')) {
         args.push(this.parseExpression())
@@ -1682,6 +1684,56 @@ class Parser {
     }
 
     return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected property name')
+  }
+
+  skipTypeArgumentsBeforeCall(): void {
+    if (!this.isTypeArgumentsBeforeCall()) {
+      return
+    }
+
+    this.advance()
+    let depth = 1
+
+    while (!this.is('eof') && depth > 0) {
+      if (this.isValue('<')) {
+        depth = depth + 1
+      } else if (this.isValue('>')) {
+        depth = depth - 1
+      }
+
+      this.advance()
+    }
+  }
+
+  isTypeArgumentsBeforeCall(): boolean {
+    if (!this.isValue('<')) {
+      return false
+    }
+
+    let offset = 0
+    let depth = 0
+
+    while (this.peek(offset).type !== 'eof') {
+      const token = this.peek(offset)
+
+      if (token.value === '<') {
+        depth = depth + 1
+      } else if (token.value === '>') {
+        depth = depth - 1
+
+        if (depth === 0) {
+          return this.peek(offset + 1).value === '('
+        }
+      }
+
+      if (depth < 0) {
+        return false
+      }
+
+      offset = offset + 1
+    }
+
+    return false
   }
 
   skipTypeUntil(values: string[]): void {

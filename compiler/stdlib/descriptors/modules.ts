@@ -201,6 +201,20 @@ export function isStdlibModuleImportSourceForId(
   return descriptor !== null && descriptor.id === id
 }
 
+export function stdlibModuleImportSourceSetForId(id: StdlibModuleId): Set<string> {
+  const result = new Set<string>()
+
+  for (let index = 0; index < stdlibModuleDescriptors.length; index = index + 1) {
+    const descriptor = stdlibModuleDescriptorAt(index)
+
+    if (descriptor.id === id) {
+      result.add(descriptor.source)
+    }
+  }
+
+  return result
+}
+
 export function stdlibModuleImportSourceCount(): number {
   return stdlibModuleDescriptors.length
 }

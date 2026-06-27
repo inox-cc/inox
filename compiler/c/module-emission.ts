@@ -82,10 +82,8 @@ import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunction
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
-  collectHttpRuntimeCreateServerNames,
-  collectHttpRuntimeImportNames,
-  collectRuntimeImportNames,
-  collectRuntimeNamedImportNames
+  collectStdlibRuntimeImportNames,
+  collectStdlibRuntimeNamedImportNames
 } from './runtime-imports.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
@@ -1191,36 +1189,44 @@ function createCModuleBaseContext(
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
 
-  context.dgramImportNames = collectRuntimeImportNames(
+  context.dgramImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['dgram', 'node:dgram']),
+    'dgram',
     new Set(['default', 'dgram'])
   )
-  context.dgramCreateSocketNames = collectRuntimeNamedImportNames(
+  context.dgramCreateSocketNames = collectStdlibRuntimeNamedImportNames(
     irPrograms,
-    new Set(['dgram', 'node:dgram']),
+    'dgram',
     'createSocket'
   )
-  context.cryptoImportNames = collectRuntimeImportNames(
+  context.cryptoImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['node:crypto']),
+    'crypto',
     new Set(['default', 'crypto'])
   )
-  context.httpImportNames = collectHttpRuntimeImportNames(irPrograms)
-  context.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
-  context.netImportNames = collectRuntimeImportNames(
+  context.httpImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['net', 'node:net']),
-    new Set(['default', 'net'])
+    'http',
+    new Set(['default', 'http'])
   )
-  context.netCreateServerNames = collectRuntimeNamedImportNames(
+  context.httpCreateServerNames = collectStdlibRuntimeNamedImportNames(
     irPrograms,
-    new Set(['net', 'node:net']),
+    'http',
     'createServer'
   )
-  context.netConnectNames = collectRuntimeImportNames(
+  context.netImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['net', 'node:net']),
+    'net',
+    new Set(['default', 'net'])
+  )
+  context.netCreateServerNames = collectStdlibRuntimeNamedImportNames(
+    irPrograms,
+    'net',
+    'createServer'
+  )
+  context.netConnectNames = collectStdlibRuntimeImportNames(
+    irPrograms,
+    'net',
     new Set(['connect', 'createConnection'])
   )
   context.functionNames = createCModuleFunctionNames(plan)

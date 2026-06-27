@@ -12,7 +12,7 @@ import {
   isSupportedCFetchGlobalUsage,
   isSupportedCMathGlobalUsage
 } from './diagnostics.ts'
-import { irProgramsUseRuntimeImport } from './runtime-imports.ts'
+import { irProgramsUseStdlibRuntimeImport } from './runtime-imports.ts'
 import { irProgramsUseConsoleRuntime } from './stdlib/console.ts'
 
 export type CRuntimePreludeRequirements = {
@@ -103,7 +103,7 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('set')
   const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classInfoCount > 0
-  const needsDgramRuntime = irProgramsUseRuntimeImport(input.irPrograms, new Set(['dgram', 'node:dgram']))
+  const needsDgramRuntime = irProgramsUseStdlibRuntimeImport(input.irPrograms, 'dgram')
   const needsObjectRuntime =
     input.runtimeRequirements.has('objects') ||
     needsFsRuntime ||
@@ -112,8 +112,8 @@ export function resolveCRuntimePreludeRequirements(
     needsPathRuntime ||
     needsUrlRuntime ||
     signatureRuntimeTypes.has('object')
-  const needsHttpRuntime = irProgramsUseRuntimeImport(input.irPrograms, new Set(['http', 'node:http']))
-  const needsNetRuntime = irProgramsUseRuntimeImport(input.irPrograms, new Set(['net', 'node:net']))
+  const needsHttpRuntime = irProgramsUseStdlibRuntimeImport(input.irPrograms, 'http')
+  const needsNetRuntime = irProgramsUseStdlibRuntimeImport(input.irPrograms, 'net')
   const needsRuntime =
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||

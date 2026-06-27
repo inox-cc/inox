@@ -72,10 +72,8 @@ import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCPrelude } from './prelude.ts'
 import {
-  collectHttpRuntimeCreateServerNames,
-  collectHttpRuntimeImportNames,
-  collectRuntimeImportNames,
-  collectRuntimeNamedImportNames
+  collectStdlibRuntimeImportNames,
+  collectStdlibRuntimeNamedImportNames
 } from './runtime-imports.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
@@ -1175,36 +1173,44 @@ export function emitCUnit(
   baseContext.processEntryPath = entryPath
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
-  baseContext.dgramImportNames = collectRuntimeImportNames(
+  baseContext.dgramImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['dgram', 'node:dgram']),
+    'dgram',
     new Set(['default', 'dgram'])
   )
-  baseContext.dgramCreateSocketNames = collectRuntimeNamedImportNames(
+  baseContext.dgramCreateSocketNames = collectStdlibRuntimeNamedImportNames(
     irPrograms,
-    new Set(['dgram', 'node:dgram']),
+    'dgram',
     'createSocket'
   )
-  baseContext.cryptoImportNames = collectRuntimeImportNames(
+  baseContext.cryptoImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['node:crypto']),
+    'crypto',
     new Set(['default', 'crypto'])
   )
-  baseContext.httpImportNames = collectHttpRuntimeImportNames(irPrograms)
-  baseContext.httpCreateServerNames = collectHttpRuntimeCreateServerNames(irPrograms)
-  baseContext.netImportNames = collectRuntimeImportNames(
+  baseContext.httpImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['net', 'node:net']),
-    new Set(['default', 'net'])
+    'http',
+    new Set(['default', 'http'])
   )
-  baseContext.netCreateServerNames = collectRuntimeNamedImportNames(
+  baseContext.httpCreateServerNames = collectStdlibRuntimeNamedImportNames(
     irPrograms,
-    new Set(['net', 'node:net']),
+    'http',
     'createServer'
   )
-  baseContext.netConnectNames = collectRuntimeImportNames(
+  baseContext.netImportNames = collectStdlibRuntimeImportNames(
     irPrograms,
-    new Set(['net', 'node:net']),
+    'net',
+    new Set(['default', 'net'])
+  )
+  baseContext.netCreateServerNames = collectStdlibRuntimeNamedImportNames(
+    irPrograms,
+    'net',
+    'createServer'
+  )
+  baseContext.netConnectNames = collectStdlibRuntimeImportNames(
+    irPrograms,
+    'net',
     new Set(['connect', 'createConnection'])
   )
   baseContext.classInfos = createClassInfos(classes, diagnostics)

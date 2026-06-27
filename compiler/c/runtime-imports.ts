@@ -1,5 +1,6 @@
 import { collectIrTopLevelNodes } from '../ir.ts'
-import { isStdlibModuleImportSourceForId } from '../stdlib/descriptors/modules.ts'
+import type { StdlibModuleId } from '../stdlib/descriptors/modules.ts'
+import { stdlibModuleImportSourceSetForId } from '../stdlib/descriptors/modules.ts'
 import type { IrProgram } from '../types.ts'
 
 type RuntimeImportSourceSet = Set<string>
@@ -13,7 +14,7 @@ type RuntimeImportNode = {
   specifiers: RuntimeImportSpecifier[]
 }
 
-export function collectRuntimeImportNames(
+function collectRuntimeImportNames(
   irPrograms: IrProgram[],
   sources: RuntimeImportSourceSet,
   importedNames: RuntimeImportNameSet
@@ -44,7 +45,7 @@ export function collectRuntimeImportNames(
   return names
 }
 
-export function collectRuntimeNamedImportNames(
+function collectRuntimeNamedImportNames(
   irPrograms: IrProgram[],
   sources: RuntimeImportSourceSet,
   importedName: string
@@ -75,61 +76,23 @@ export function collectRuntimeNamedImportNames(
   return names
 }
 
-export function collectHttpRuntimeImportNames(irPrograms: IrProgram[]): RuntimeImportNameSet {
-  const names: RuntimeImportNameSet = new Set()
-
-  for (let programIndex = 0; programIndex < irPrograms.length; programIndex = programIndex + 1) {
-    const ir = irProgramAt(irPrograms, programIndex)
-    const items = collectRuntimeImportNodes(ir)
-
-    for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
-      const item = runtimeImportNodeAt(items, itemIndex)
-
-      if (isHttpRuntimeImportSource(item.source) === false) {
-        continue
-      }
-
-      for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
-        const specifier = runtimeImportSpecifierAt(item.specifiers, specifierIndex)
-
-        if (specifier.imported === 'default' || specifier.imported === 'http') {
-          names.add(specifier.local)
-        }
-      }
-    }
-  }
-
-  return names
+export function collectStdlibRuntimeImportNames(
+  irPrograms: IrProgram[],
+  moduleId: StdlibModuleId,
+  importedNames: RuntimeImportNameSet
+): RuntimeImportNameSet {
+  return collectRuntimeImportNames(irPrograms, stdlibModuleImportSourceSetForId(moduleId), importedNames)
 }
 
-export function collectHttpRuntimeCreateServerNames(irPrograms: IrProgram[]): RuntimeImportNameSet {
-  const names: RuntimeImportNameSet = new Set()
-
-  for (let programIndex = 0; programIndex < irPrograms.length; programIndex = programIndex + 1) {
-    const ir = irProgramAt(irPrograms, programIndex)
-    const items = collectRuntimeImportNodes(ir)
-
-    for (let itemIndex = 0; itemIndex < items.length; itemIndex = itemIndex + 1) {
-      const item = runtimeImportNodeAt(items, itemIndex)
-
-      if (isHttpRuntimeImportSource(item.source) === false) {
-        continue
-      }
-
-      for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
-        const specifier = runtimeImportSpecifierAt(item.specifiers, specifierIndex)
-
-        if (specifier.imported === 'createServer') {
-          names.add(specifier.local)
-        }
-      }
-    }
-  }
-
-  return names
+export function collectStdlibRuntimeNamedImportNames(
+  irPrograms: IrProgram[],
+  moduleId: StdlibModuleId,
+  importedName: string
+): RuntimeImportNameSet {
+  return collectRuntimeNamedImportNames(irPrograms, stdlibModuleImportSourceSetForId(moduleId), importedName)
 }
 
-export function irProgramsUseRuntimeImport(programs: IrProgram[], sources: RuntimeImportSourceSet): boolean {
+function irProgramsUseRuntimeImport(programs: IrProgram[], sources: RuntimeImportSourceSet): boolean {
   for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
     const program = irProgramAt(programs, programIndex)
     const items = collectRuntimeImportNodes(program)
@@ -146,6 +109,10 @@ export function irProgramsUseRuntimeImport(programs: IrProgram[], sources: Runti
   return false
 }
 
+export function irProgramsUseStdlibRuntimeImport(programs: IrProgram[], moduleId: StdlibModuleId): boolean {
+  return irProgramsUseRuntimeImport(programs, stdlibModuleImportSourceSetForId(moduleId))
+}
+
 function irProgramAt(programs: IrProgram[], index: number): IrProgram {
   return programs[index]
 }
@@ -160,8 +127,4 @@ function runtimeImportNodeAt(nodes: RuntimeImportNode[], index: number): Runtime
 
 function runtimeImportSpecifierAt(specifiers: RuntimeImportSpecifier[], index: number): RuntimeImportSpecifier {
   return specifiers[index]
-}
-
-function isHttpRuntimeImportSource(source: string): boolean {
-  return isStdlibModuleImportSourceForId(source, 'http')
 }
