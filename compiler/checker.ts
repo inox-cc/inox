@@ -24,7 +24,6 @@ import {
   fetchResponseObjectShape,
   fsDirentObjectShape,
   fsStatsObjectShape,
-  isFsConstantValue,
   isNumericCastName,
   libuvOnlyRuntimeImportFeature,
   pathParseObjectShape,
@@ -46,10 +45,15 @@ import {
   isSupportedFetchRedirectLiteral
 } from './checker/std/fetch.ts'
 import {
+  fsRuntimeCallPlan,
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
-  isFsRuntimeImportSymbol
+  fsRuntimeConstantName,
+  fsStatsRuntimeMethodInfo,
+  isFsPromisesImportSymbol,
+  isFsRuntimeRootSymbol
 } from './checker/std/fs.ts'
+import type { FsBooleanOptions, FsRuntimeArgumentCheck, FsRuntimeCallInfo, FsRuntimeCallPlan } from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
 import { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from './checker/std/os.ts'
@@ -87,8 +91,6 @@ import {
   stringRuntimeMethodName
 } from './stdlib/descriptors/collections.ts'
 import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
-import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
-import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import { knownMathRuntimeArgCount } from './stdlib/descriptors/math.ts'
 import type { StdlibModuleId } from './stdlib/descriptors/modules.ts'
 import {
@@ -286,12 +288,6 @@ function isAnyNodeChildFieldName(name: string): boolean {
     name === 'right' ||
     name === 'target'
   )
-}
-
-type FsBooleanOptions = {
-  recursive?: boolean
-  force?: boolean
-  withFileTypes?: boolean
 }
 
 function isUnsupportedEqualityOperator(operator: string): boolean {
@@ -6314,35 +6310,26 @@ class Checker {
 
   checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression)
+    let symbol: SymbolInfo | null = null
 
-    if (
-      path === null ||
-      typeof path === 'undefined' ||
-      path.length !== 3 ||
-      path[1] !== 'constants' ||
-      !isFsConstantValue(path[2])
-    ) {
+    if (path !== null && typeof path !== 'undefined') {
+      symbol = this.scope.resolve(firstPathSegment(path))
+    }
+
+    const constantName = fsRuntimeConstantName(path, symbol)
+
+    if (constantName === null || typeof constantName === 'undefined') {
       return null
     }
 
-    const rootName = firstPathSegment(path)
-    const symbol = this.scope.resolve(rootName)
-
-    if (symbol === null || typeof symbol === 'undefined' || !isFsRuntimeImportSymbol(symbol)) {
-      return null
-    }
-
-    expression.fsRuntimeConstant = path[2]
+    expression.fsRuntimeConstant = constantName
     expression.valueType = 'number'
 
     return 'number'
   }
 
   checkFsStatsMethodCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'MemberExpression' ||
-      (expression.callee.property !== 'isFile' && expression.callee.property !== 'isDirectory')
-    ) {
+    if (expression.callee.type !== 'MemberExpression') {
       return null
     }
 
@@ -6352,39 +6339,26 @@ class Checker {
     if (
       objectType !== 'object' ||
       shape === null ||
-      typeof shape === 'undefined' ||
-      (shape.builtin !== 'fs.Stats' && shape.builtin !== 'fs.Dirent')
+      typeof shape === 'undefined'
     ) {
       return null
     }
 
+    const info = fsStatsRuntimeMethodInfo(expression.callee.property, shape.builtin)
+
+    if (info === null || typeof info === 'undefined') {
+      return null
+    }
+
     if (expression.args.length !== 0) {
-      let receiverName = 'Stats'
-
-      if (shape.builtin === 'fs.Dirent') {
-        receiverName = 'Dirent'
-      }
-
       this.report(
         'INOX_ARG_COUNT',
-        `function ${receiverName}.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
+        `function ${info.receiverName}.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
 
-    if (shape.builtin === 'fs.Dirent') {
-      if (expression.callee.property === 'isFile') {
-        expression.fsRuntimeMethod = 'direntIsFile'
-      } else {
-        expression.fsRuntimeMethod = 'direntIsDirectory'
-      }
-    } else {
-      if (expression.callee.property === 'isFile') {
-        expression.fsRuntimeMethod = 'statsIsFile'
-      } else {
-        expression.fsRuntimeMethod = 'statsIsDirectory'
-      }
-    }
+    expression.fsRuntimeMethod = info.method
     expression.valueType = 'boolean'
 
     return 'boolean'
@@ -6852,630 +6826,128 @@ class Checker {
   }
 
   checkFsCall(expression: AnyNode): ValueType | null {
-    let info = fsRuntimeCallInfo(expression.callee)
+    const info = this.resolveFsRuntimeCallInfo(expression)
 
-    if (info !== null && typeof info !== 'undefined') {
-      if (!this.isFsRuntimeRoot(info)) {
-        return null
-      }
-    } else {
-      let symbol: SymbolInfo | null = null
-
-      if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
-        symbol = this.scope.resolve(expression.callee.path[0])
-      }
-
-      info = fsRuntimeCallInfoFromImportSymbol(expression.callee, symbol)
-
-      if (info === null || typeof info === 'undefined') {
-        return null
-      }
+    if (info === null || typeof info === 'undefined') {
+      return null
     }
 
-    const method = info.method
-    const promisesApi = info.viaPromises || this.isFsPromisesImportRoot(info.root)
-    const label = joinStrings(info.path, '.')
-    const unsupportedMessage = unsupportedFsRuntimeMethodMessage(info, promisesApi)
+    const promisesApi = info.viaPromises || isFsPromisesImportSymbol(this.scope.resolve(info.root))
+    const plan = fsRuntimeCallPlan(info, promisesApi, expression.args.length)
 
-    if (unsupportedMessage !== null && typeof unsupportedMessage !== 'undefined') {
-      this.report('INOX_FS_UNSUPPORTED', unsupportedMessage, expression.loc)
+    if (plan.unsupportedMessage !== null && typeof plan.unsupportedMessage !== 'undefined') {
+      this.report('INOX_FS_UNSUPPORTED', plan.unsupportedMessage, expression.loc)
       expression.valueType = 'unknown'
 
       return 'unknown'
     }
 
-    if (method === 'statSync' || method === 'lstatSync') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = method
-      expression.valueType = 'object'
-      expression.shape = fsStatsObjectShape
-
-      return 'object'
-    }
-
-    if (method === 'accessSync') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsNumberArg(expression, 1)
-      expression.fsRuntimeMethod = 'accessSync'
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'mkdirSync') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      const options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive'])
-      expression.fsRuntimeMethod = 'mkdirSync'
-      expression.fsRecursive = options.recursive === true
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'unlinkSync') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = 'unlinkSync'
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'rmSync') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      const options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive', 'force'])
-      expression.fsRuntimeMethod = 'rmSync'
-      expression.fsRecursive = options.recursive === true
-      expression.fsForce = options.force === true
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'renameSync') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
-      expression.fsRuntimeMethod = 'renameSync'
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'readFileSync') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-
-      if (expression.args[1] === null || typeof expression.args[1] === 'undefined') {
-        expression.fsRuntimeMethod = 'readFileSync'
-        expression.fsBytes = true
-        expression.valueType = 'bytes'
-
-        return 'bytes'
-      }
-
-      this.checkUtf8EncodingArg(expression, 1, label)
-      expression.fsRuntimeMethod = 'readFileSync'
-      expression.valueType = 'string'
-
-      return 'string'
-    }
-
-    if (method === 'readdirSync') {
-      let maxArgs = 1
-      let expectedArgsLabel = '1'
-
-      if (info.nodeName === 'readdirSync') {
-        maxArgs = 2
-        expectedArgsLabel = '1 or 2'
-      }
-
-      if (expression.args.length < 1 || expression.args.length > maxArgs) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
-
-      expression.fsRuntimeMethod = 'readdirSync'
-      expression.valueType = 'array'
-      expression.arrayElementType = 'string'
-      expression.arrayElementDeclaredType = 'string'
-
-      if (withFileTypes) {
-        expression.fsDirents = true
-        expression.arrayElementType = 'object'
-        expression.arrayElementDeclaredType = 'fs.Dirent'
-      }
-
-      return 'array'
-    }
-
-    if (method === 'writeFileSync') {
-      if (expression.args.length < 2 || expression.args.length > 3) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 or 3 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = 'writeFileSync'
-      expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
-      this.checkUtf8EncodingArg(expression, 2, label)
-
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'appendFileSync') {
-      if (expression.args.length < 2 || expression.args.length > 3) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 or 3 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = 'appendFileSync'
-      expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
-      this.checkUtf8EncodingArg(expression, 2, label)
-
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'copyFileSync') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
-      expression.fsRuntimeMethod = 'copyFileSync'
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'realpathSync' || method === 'readlinkSync') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = method
-      expression.valueType = 'string'
-
-      return 'string'
-    }
-
-    if (method === 'symlinkSync') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
-      expression.fsRuntimeMethod = 'symlinkSync'
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'readFile') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-
-      if (promisesApi && (expression.args[1] === null || typeof expression.args[1] === 'undefined')) {
-        expression.fsRuntimeMethod = 'readFile'
-        expression.fsBytes = true
-        expression.valueType = 'promise'
-        expression.promiseValueType = 'bytes'
-
-        return 'promise'
-      }
-
-      if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-        this.checkUtf8EncodingArg(expression, 1, label)
-      }
-
-      expression.fsRuntimeMethod = 'readFile'
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'string'
-
-      return 'promise'
-    }
-
-    if (method === 'stat' || method === 'lstat') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = method
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'object'
-      expression.shape = fsStatsObjectShape
-
-      return 'promise'
-    }
-
-    if (method === 'access') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsNumberArg(expression, 1)
-      expression.fsRuntimeMethod = 'access'
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (method === 'mkdir') {
-      let maxArgs = 1
-      let expectedArgsLabel = '1'
-
-      if (promisesApi) {
-        maxArgs = 2
-        expectedArgsLabel = '1 or 2'
-      }
-
-      if (expression.args.length < 1 || expression.args.length > maxArgs) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      let options: FsBooleanOptions = {}
-
-      if (promisesApi) {
-        options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive'])
-      }
-
-      expression.fsRuntimeMethod = 'mkdir'
-      expression.fsRecursive = options.recursive === true
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (method === 'unlink') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = 'unlink'
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (method === 'rm') {
-      let maxArgs = 1
-      let expectedArgsLabel = '1'
-
-      if (promisesApi) {
-        maxArgs = 2
-        expectedArgsLabel = '1 or 2'
-      }
-
-      if (expression.args.length < 1 || expression.args.length > maxArgs) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      let options: FsBooleanOptions = {}
-
-      if (promisesApi) {
-        options = this.checkFsBooleanOptionsArg(expression, 1, label, ['recursive', 'force'])
-      }
-
-      expression.fsRuntimeMethod = 'rm'
-      expression.fsRecursive = options.recursive === true
-      expression.fsForce = options.force === true
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (method === 'rename') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
-      expression.fsRuntimeMethod = 'rename'
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (method === 'readdir') {
-      let maxArgs = 1
-      let expectedArgsLabel = '1'
-
-      if (info.nodeName === 'readdir') {
-        maxArgs = 2
-        expectedArgsLabel = '1 or 2'
-      }
-
-      if (expression.args.length < 1 || expression.args.length > maxArgs) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      const withFileTypes = this.checkFsReaddirOptionsArg(expression, 1, label)
-
-      expression.fsRuntimeMethod = 'readdir'
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'array'
-      expression.arrayElementType = 'string'
-      expression.arrayElementDeclaredType = 'string'
-
-      if (withFileTypes) {
-        expression.fsDirents = true
-        expression.arrayElementType = 'object'
-        expression.arrayElementDeclaredType = 'fs.Dirent'
-      }
-
-      return 'promise'
-    }
-
-    if (method === 'appendFile') {
-      let maxArgs = 2
-      let expectedArgsLabel = '2'
-
-      if (promisesApi) {
-        maxArgs = 3
-        expectedArgsLabel = '2 or 3'
-      }
-
-      if (expression.args.length < 2 || expression.args.length > maxArgs) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = 'appendFile'
-      expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
-      this.checkUtf8EncodingArg(expression, 2, label)
-
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (method === 'copyFile') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
-      expression.fsRuntimeMethod = 'copyFile'
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    if (method === 'realpath' || method === 'readlink') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      expression.fsRuntimeMethod = method
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'string'
-
-      return 'promise'
-    }
-
-    if (method === 'symlink') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkFsStringArg(expression, 0)
-      this.checkFsStringArg(expression, 1)
-      expression.fsRuntimeMethod = 'symlink'
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'void'
-
-      return 'promise'
-    }
-
-    let maxArgs = 2
-    let expectedArgsLabel = '2'
-
-    if (promisesApi) {
-      maxArgs = 3
-      expectedArgsLabel = '2 or 3'
-    }
-
-    if (expression.args.length < 2 || expression.args.length > maxArgs) {
+    if (expression.args.length < plan.minArgs || expression.args.length > plan.maxArgs) {
       this.report(
         'INOX_ARG_COUNT',
-        `function ${label} expects ${expectedArgsLabel} argument(s), got ${expression.args.length}`,
+        `function ${plan.label} expects ${plan.expectedArgsLabel} argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
 
-    this.checkFsStringArg(expression, 0)
-    expression.fsRuntimeMethod = 'writeFile'
-    expression.fsBytes = this.checkFsWriteDataArg(expression, 1, `${label} data`)
-    this.checkUtf8EncodingArg(expression, 2, label)
+    const options = this.checkFsRuntimeArguments(expression, plan.argumentChecks)
 
-    expression.valueType = 'promise'
-    expression.promiseValueType = 'void'
+    this.applyFsRuntimeCallPlan(expression, plan, options)
 
-    return 'promise'
+    return plan.valueType
   }
 
-  isFsRuntimeRoot(info: FsRuntimeCallInfo): boolean {
-    return this.isFsRuntimeRootName(info.root)
+  resolveFsRuntimeCallInfo(expression: AnyNode): FsRuntimeCallInfo | null {
+    const info = fsRuntimeCallInfo(expression.callee)
+
+    if (info !== null && typeof info !== 'undefined') {
+      if (isFsRuntimeRootSymbol(this.scope.resolve(info.root))) {
+        return info
+      }
+
+      return null
+    }
+
+    let symbol: SymbolInfo | null = null
+
+    if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
+      symbol = this.scope.resolve(expression.callee.path[0])
+    }
+
+    return fsRuntimeCallInfoFromImportSymbol(expression.callee, symbol)
   }
 
-  isFsRuntimeRootName(root: string): boolean {
-    const symbol = this.scope.resolve(root)
+  checkFsRuntimeArguments(expression: AnyNode, checks: FsRuntimeArgumentCheck[]): FsBooleanOptions {
+    const options: FsBooleanOptions = {}
 
-    if (symbol === null || typeof symbol === 'undefined') {
-      return false
+    for (const check of checks) {
+      if (check.kind === 'string') {
+        this.checkFsStringArg(expression, check.index)
+      } else if (check.kind === 'number') {
+        this.checkFsNumberArg(expression, check.index)
+      } else if (check.kind === 'utf8-encoding') {
+        this.checkUtf8EncodingArg(expression, check.index, check.label)
+      } else if (check.kind === 'write-data') {
+        options.bytes = this.checkFsWriteDataArg(expression, check.index, check.label)
+      } else if (check.kind === 'readdir-options') {
+        options.withFileTypes = this.checkFsReaddirOptionsArg(expression, check.index, check.label)
+      } else if (
+        check.kind === 'boolean-options' &&
+        check.allowedOptions !== null &&
+        typeof check.allowedOptions !== 'undefined'
+      ) {
+        const booleanOptions = this.checkFsBooleanOptionsArg(expression, check.index, check.label, check.allowedOptions)
+
+        if (booleanOptions.recursive === true) {
+          options.recursive = true
+        }
+
+        if (booleanOptions.force === true) {
+          options.force = true
+        }
+
+        if (booleanOptions.withFileTypes === true) {
+          options.withFileTypes = true
+        }
+      }
     }
 
-    return isFsRuntimeImportSymbol(symbol)
+    return options
   }
 
-  isFsPromisesImportRoot(root: string): boolean {
-    const symbol = this.scope.resolve(root)
+  applyFsRuntimeCallPlan(expression: AnyNode, plan: FsRuntimeCallPlan, options: FsBooleanOptions): void {
+    expression.fsRuntimeMethod = plan.runtimeMethod
+    expression.valueType = plan.valueType
+    expression.promiseValueType = plan.promiseValueType
+    expression.shape = null
+    expression.arrayElementType = plan.arrayElementType
+    expression.arrayElementDeclaredType = plan.arrayElementDeclaredType
 
-    if (symbol === null || typeof symbol === 'undefined' || symbol.kind !== 'import') {
-      return false
+    if (plan.shape === 'stats') {
+      expression.shape = fsStatsObjectShape
     }
 
-    if (symbol.importSource === 'node:fs/promises') {
-      return true
+    if (plan.bytes !== null && typeof plan.bytes !== 'undefined') {
+      expression.fsBytes = plan.bytes
     }
 
-    if ((symbol.importSource === 'fs' || symbol.importSource === 'node:fs') && symbol.importedName === 'promises') {
-      return true
+    if (plan.bytesFromWriteData) {
+      expression.fsBytes = options.bytes === true
     }
 
-    return false
+    if (plan.direntsFromOptions && options.withFileTypes === true) {
+      expression.fsDirents = true
+      expression.arrayElementType = 'object'
+      expression.arrayElementDeclaredType = 'fs.Dirent'
+    }
+
+    if (plan.recursiveFromOptions) {
+      expression.fsRecursive = options.recursive === true
+    }
+
+    if (plan.forceFromOptions) {
+      expression.fsForce = options.force === true
+    }
   }
 
   checkFsWriteDataArg(expression: AnyNode, index: number, _label: string): boolean {
