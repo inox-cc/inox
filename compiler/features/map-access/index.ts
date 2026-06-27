@@ -1,4 +1,5 @@
 import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
+import type { CompilerFeatureDescriptor } from '../types.ts'
 
 type MapAccessFeatureSet = Set<IrFeature>
 type MapAccessCPreludeHelper = () => string[]
@@ -32,6 +33,20 @@ export const mapIndexSetFeatureCPreludeIncludes: string[] = []
 
 export const mapGetNullFeatureCPreludeHelpers: MapAccessCPreludeHelper[] = []
 export const mapIndexSetFeatureCPreludeHelpers: MapAccessCPreludeHelper[] = []
+export const mapGetNullFeature: CompilerFeatureDescriptor = {
+  id: mapGetNullFeatureId,
+  runtimeRequirements: mapGetNullFeatureRuntimeRequirements,
+  cPreludeIncludes: mapGetNullFeatureCPreludeIncludes,
+  cPreludeHelpers: mapGetNullFeatureCPreludeHelpers,
+  collect: collectMapGetNullIrFeatures
+}
+export const mapIndexSetFeature: CompilerFeatureDescriptor = {
+  id: mapIndexSetFeatureId,
+  runtimeRequirements: mapIndexSetFeatureRuntimeRequirements,
+  cPreludeIncludes: mapIndexSetFeatureCPreludeIncludes,
+  cPreludeHelpers: mapIndexSetFeatureCPreludeHelpers,
+  collect: collectMapIndexSetIrFeatures
+}
 
 export function collectMapGetNullIrFeatures(node: AnyNode, features: MapAccessFeatureSet): void {
   const item = node as MapAccessFeatureNode

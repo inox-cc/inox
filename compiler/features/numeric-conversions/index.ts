@@ -1,4 +1,5 @@
 import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
+import type { CompilerFeatureDescriptor } from '../types.ts'
 
 type NumericConversionFeatureSet = Set<IrFeature>
 type NumericConversionCPreludeHelper = () => string[]
@@ -24,6 +25,20 @@ export const numericCastsFeatureCPreludeIncludes: string[] = []
 
 export const numberFromStringNullFeatureCPreludeHelpers: NumericConversionCPreludeHelper[] = []
 export const numericCastsFeatureCPreludeHelpers: NumericConversionCPreludeHelper[] = []
+export const numberFromStringNullFeature: CompilerFeatureDescriptor = {
+  id: numberFromStringNullFeatureId,
+  runtimeRequirements: numberFromStringNullFeatureRuntimeRequirements,
+  cPreludeIncludes: numberFromStringNullFeatureCPreludeIncludes,
+  cPreludeHelpers: numberFromStringNullFeatureCPreludeHelpers,
+  collect: collectNumberFromStringNullIrFeatures
+}
+export const numericCastsFeature: CompilerFeatureDescriptor = {
+  id: numericCastsFeatureId,
+  runtimeRequirements: numericCastsFeatureRuntimeRequirements,
+  cPreludeIncludes: numericCastsFeatureCPreludeIncludes,
+  cPreludeHelpers: numericCastsFeatureCPreludeHelpers,
+  collect: collectNumericCastsIrFeatures
+}
 
 export function collectNumberFromStringNullIrFeatures(
   node: AnyNode,

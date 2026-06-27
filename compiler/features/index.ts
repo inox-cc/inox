@@ -1,188 +1,52 @@
 import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import {
-  arrayPopNullFeatureCPreludeHelpers,
-  arrayPopNullFeatureCPreludeIncludes,
-  arrayPopNullFeatureId,
-  arrayPopNullFeatureRuntimeRequirements,
-  collectArrayPopNullIrFeatures
-} from './array-pop-null/index.ts'
+import { arrayPopNullFeature, collectArrayPopNullIrFeatures } from './array-pop-null/index.ts'
+import { collectCoreRuntimeIrFeatures, coreRuntimeFeatures } from './core-runtime/index.ts'
 import {
   collectMapGetNullIrFeatures,
   collectMapIndexSetIrFeatures,
-  mapGetNullFeatureCPreludeHelpers,
-  mapGetNullFeatureCPreludeIncludes,
-  mapGetNullFeatureId,
-  mapGetNullFeatureRuntimeRequirements,
-  mapIndexSetFeatureCPreludeHelpers,
-  mapIndexSetFeatureCPreludeIncludes,
-  mapIndexSetFeatureId,
-  mapIndexSetFeatureRuntimeRequirements
+  mapGetNullFeature,
+  mapIndexSetFeature
 } from './map-access/index.ts'
 import {
   collectNumberFromStringNullIrFeatures,
   collectNumericCastsIrFeatures,
-  numberFromStringNullFeatureCPreludeHelpers,
-  numberFromStringNullFeatureCPreludeIncludes,
-  numberFromStringNullFeatureId,
-  numberFromStringNullFeatureRuntimeRequirements,
-  numericCastsFeatureCPreludeHelpers,
-  numericCastsFeatureCPreludeIncludes,
-  numericCastsFeatureId,
-  numericCastsFeatureRuntimeRequirements
+  numberFromStringNullFeature,
+  numericCastsFeature
 } from './numeric-conversions/index.ts'
-import {
-  collectRegExpIrFeatures,
-  regexpFeatureCPreludeHelpers,
-  regexpFeatureCPreludeIncludes,
-  regexpFeatureId,
-  regexpFeatureRuntimeRequirements
-} from './regexp/index.ts'
-import {
-  binaryFeatureCPreludeHelpers,
-  binaryFeatureCPreludeIncludes,
-  binaryFeatureId,
-  binaryFeatureRuntimeRequirements,
-  childProcessFeatureCPreludeHelpers,
-  childProcessFeatureCPreludeIncludes,
-  childProcessFeatureId,
-  childProcessFeatureRuntimeRequirements,
-  clocksFeatureCPreludeHelpers,
-  clocksFeatureCPreludeIncludes,
-  clocksFeatureId,
-  clocksFeatureRuntimeRequirements,
-  collectRuntimeBackedIrFeature,
-  cryptoFeatureCPreludeHelpers,
-  cryptoFeatureCPreludeIncludes,
-  cryptoFeatureId,
-  cryptoFeatureRuntimeRequirements,
-  debugMemoryFeatureCPreludeHelpers,
-  debugMemoryFeatureCPreludeIncludes,
-  debugMemoryFeatureId,
-  debugMemoryFeatureRuntimeRequirements,
-  fsFeatureCPreludeHelpers,
-  fsFeatureCPreludeIncludes,
-  fsFeatureId,
-  fsFeatureRuntimeRequirements,
-  jsonFeatureCPreludeHelpers,
-  jsonFeatureCPreludeIncludes,
-  jsonFeatureId,
-  jsonFeatureRuntimeRequirements,
-  osFeatureCPreludeHelpers,
-  osFeatureCPreludeIncludes,
-  osFeatureId,
-  osFeatureRuntimeRequirements,
-  pathFeatureCPreludeHelpers,
-  pathFeatureCPreludeIncludes,
-  pathFeatureId,
-  pathFeatureRuntimeRequirements,
-  processFeatureCPreludeHelpers,
-  processFeatureCPreludeIncludes,
-  processFeatureId,
-  processFeatureRuntimeRequirements,
-  timersFeatureCPreludeHelpers,
-  timersFeatureCPreludeIncludes,
-  timersFeatureId,
-  timersFeatureRuntimeRequirements,
-  urlFeatureCPreludeHelpers,
-  urlFeatureCPreludeIncludes,
-  urlFeatureId,
-  urlFeatureRuntimeRequirements
-} from './runtime-backed/index.ts'
-import {
-  collectWeakReferencesIrFeatures,
-  weakReferencesFeatureCPreludeHelpers,
-  weakReferencesFeatureCPreludeIncludes,
-  weakReferencesFeatureId,
-  weakReferencesFeatureRuntimeRequirements
-} from './weak-references/index.ts'
+import { collectRegExpIrFeatures, emitCRegExpPreludeHelpers, regexpFeature } from './regexp/index.ts'
+import { binaryFeatureChildNodes, collectBinaryIrFeatures } from './runtime-backed/binary.ts'
+import { collectChildProcessIrFeatures } from './runtime-backed/child-process.ts'
+import { collectClocksIrFeatures } from './runtime-backed/clocks.ts'
+import { collectCryptoIrFeatures } from './runtime-backed/crypto.ts'
+import { collectDebugMemoryIrFeatures } from './runtime-backed/debug-memory.ts'
+import { collectFsIrFeatures } from './runtime-backed/fs.ts'
+import { runtimeBackedFeatures } from './runtime-backed/index.ts'
+import { collectJsonIrFeatures } from './runtime-backed/json.ts'
+import { collectOsIrFeatures } from './runtime-backed/os.ts'
+import { collectPathIrFeatures } from './runtime-backed/path.ts'
+import { collectProcessIrFeatures } from './runtime-backed/process.ts'
+import { collectTimersIrFeatures } from './runtime-backed/timers.ts'
+import { collectUrlIrFeatures } from './runtime-backed/url.ts'
+import type { CompilerFeatureDescriptor } from './types.ts'
+import { collectWeakReferencesIrFeatures, weakReferencesFeature } from './weak-references/index.ts'
 
-type CompilerFeatureHelperEmitter = () => string[]
-
-export const compilerFeatures: IrFeature[] = [
-  arrayPopNullFeatureId,
-  binaryFeatureId,
-  childProcessFeatureId,
-  clocksFeatureId,
-  cryptoFeatureId,
-  debugMemoryFeatureId,
-  fsFeatureId,
-  jsonFeatureId,
-  mapGetNullFeatureId,
-  mapIndexSetFeatureId,
-  numberFromStringNullFeatureId,
-  numericCastsFeatureId,
-  osFeatureId,
-  pathFeatureId,
-  processFeatureId,
-  regexpFeatureId,
-  timersFeatureId,
-  urlFeatureId,
-  weakReferencesFeatureId
+const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
+  [arrayPopNullFeature],
+  coreRuntimeFeatures,
+  runtimeBackedFeatures,
+  [
+    mapGetNullFeature,
+    mapIndexSetFeature,
+    numberFromStringNullFeature,
+    numericCastsFeature,
+    regexpFeature,
+    weakReferencesFeature
+  ]
 ]
 
-const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [
-  arrayPopNullFeatureRuntimeRequirements,
-  binaryFeatureRuntimeRequirements,
-  childProcessFeatureRuntimeRequirements,
-  clocksFeatureRuntimeRequirements,
-  cryptoFeatureRuntimeRequirements,
-  debugMemoryFeatureRuntimeRequirements,
-  fsFeatureRuntimeRequirements,
-  jsonFeatureRuntimeRequirements,
-  mapGetNullFeatureRuntimeRequirements,
-  mapIndexSetFeatureRuntimeRequirements,
-  numberFromStringNullFeatureRuntimeRequirements,
-  numericCastsFeatureRuntimeRequirements,
-  osFeatureRuntimeRequirements,
-  pathFeatureRuntimeRequirements,
-  processFeatureRuntimeRequirements,
-  regexpFeatureRuntimeRequirements,
-  timersFeatureRuntimeRequirements,
-  urlFeatureRuntimeRequirements,
-  weakReferencesFeatureRuntimeRequirements
-]
-const compilerFeatureCPreludeIncludeRows: string[][] = [
-  arrayPopNullFeatureCPreludeIncludes,
-  binaryFeatureCPreludeIncludes,
-  childProcessFeatureCPreludeIncludes,
-  clocksFeatureCPreludeIncludes,
-  cryptoFeatureCPreludeIncludes,
-  debugMemoryFeatureCPreludeIncludes,
-  fsFeatureCPreludeIncludes,
-  jsonFeatureCPreludeIncludes,
-  mapGetNullFeatureCPreludeIncludes,
-  mapIndexSetFeatureCPreludeIncludes,
-  numberFromStringNullFeatureCPreludeIncludes,
-  numericCastsFeatureCPreludeIncludes,
-  osFeatureCPreludeIncludes,
-  pathFeatureCPreludeIncludes,
-  processFeatureCPreludeIncludes,
-  regexpFeatureCPreludeIncludes,
-  timersFeatureCPreludeIncludes,
-  urlFeatureCPreludeIncludes,
-  weakReferencesFeatureCPreludeIncludes
-]
-const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [
-  arrayPopNullFeatureCPreludeHelpers,
-  binaryFeatureCPreludeHelpers,
-  childProcessFeatureCPreludeHelpers,
-  clocksFeatureCPreludeHelpers,
-  cryptoFeatureCPreludeHelpers,
-  debugMemoryFeatureCPreludeHelpers,
-  fsFeatureCPreludeHelpers,
-  jsonFeatureCPreludeHelpers,
-  mapGetNullFeatureCPreludeHelpers,
-  mapIndexSetFeatureCPreludeHelpers,
-  numberFromStringNullFeatureCPreludeHelpers,
-  numericCastsFeatureCPreludeHelpers,
-  osFeatureCPreludeHelpers,
-  pathFeatureCPreludeHelpers,
-  processFeatureCPreludeHelpers,
-  regexpFeatureCPreludeHelpers,
-  timersFeatureCPreludeHelpers,
-  urlFeatureCPreludeHelpers,
-  weakReferencesFeatureCPreludeHelpers
-]
+const compilerFeatureDescriptors = createCompilerFeatureDescriptors()
+
+export const compilerFeatures: IrFeature[] = createCompilerFeatureIds()
 
 export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<IrFeature>): void {
   if (node === null || typeof node === 'undefined' || typeof node !== 'object') {
@@ -191,21 +55,47 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
 
   const featureNode = node as AnyNode
 
-  for (let index = 0; index < compilerFeatures.length; index = index + 1) {
-    const feature = compilerFeatureAt(index)
-
-    collectCompilerFeatureIrFeature(feature, featureNode, features)
-  }
+  collectArrayPopNullIrFeatures(featureNode, features)
+  collectCoreRuntimeIrFeatures(featureNode, features)
+  collectBinaryIrFeatures(featureNode, features)
+  collectChildProcessIrFeatures(featureNode, features)
+  collectClocksIrFeatures(featureNode, features)
+  collectCryptoIrFeatures(featureNode, features)
+  collectDebugMemoryIrFeatures(featureNode, features)
+  collectFsIrFeatures(featureNode, features)
+  collectJsonIrFeatures(featureNode, features)
+  collectOsIrFeatures(featureNode, features)
+  collectPathIrFeatures(featureNode, features)
+  collectProcessIrFeatures(featureNode, features)
+  collectTimersIrFeatures(featureNode, features)
+  collectUrlIrFeatures(featureNode, features)
+  collectMapGetNullIrFeatures(featureNode, features)
+  collectMapIndexSetIrFeatures(featureNode, features)
+  collectNumberFromStringNullIrFeatures(featureNode, features)
+  collectNumericCastsIrFeatures(featureNode, features)
+  collectRegExpIrFeatures(featureNode, features)
+  collectWeakReferencesIrFeatures(featureNode, features)
 }
 
-export function compilerFeatureRuntimeRequirements(featureName: IrFeature): IrRuntimeRequirement[] | null {
-  const featureIndex = findCompilerFeatureIndex(featureName)
-
-  if (featureIndex < 0) {
+export function compilerFeatureChildNodes(node: unknown): AnyNode[] | null {
+  if (node === null || typeof node === 'undefined' || typeof node !== 'object') {
     return null
   }
 
-  return copyRuntimeRequirements(compilerFeatureRuntimeRequirementsAt(featureIndex))
+  const featureNode = node as AnyNode
+
+  return binaryFeatureChildNodes(featureNode)
+}
+
+
+export function compilerFeatureRuntimeRequirements(featureName: IrFeature): IrRuntimeRequirement[] | null {
+  const descriptor = findCompilerFeatureDescriptor(featureName)
+
+  if (descriptor === null || typeof descriptor === 'undefined') {
+    return null
+  }
+
+  return copyRuntimeRequirements(descriptor.runtimeRequirements)
 }
 
 export function irProgramsUseCPreludeFeature(programs: IrProgram[], featureName: IrFeature): boolean {
@@ -227,108 +117,81 @@ export function irProgramsUseCPreludeFeature(programs: IrProgram[], featureName:
 }
 
 export function emitCompilerFeatureCPreludeIncludes(featureName: IrFeature): string[] {
-  const featureIndex = findCompilerFeatureIndex(featureName)
+  const descriptor = findCompilerFeatureDescriptor(featureName)
 
-  if (featureIndex < 0) {
+  if (descriptor === null || typeof descriptor === 'undefined') {
     return []
   }
 
-  return copyStrings(compilerFeatureCPreludeIncludesAt(featureIndex))
+  return copyStrings(descriptor.cPreludeIncludes)
 }
 
 export function emitCompilerFeatureCPreludeHelpers(featureName: IrFeature): string[] {
-  const featureIndex = findCompilerFeatureIndex(featureName)
+  const descriptor = findCompilerFeatureDescriptor(featureName)
 
-  if (featureIndex < 0) {
+  if (descriptor === null || typeof descriptor === 'undefined') {
     return []
   }
 
-  const featureHelpers = compilerFeatureCPreludeHelpersAt(featureIndex)
   const lines: string[] = []
 
-  for (let index = 0; index < featureHelpers.length; index = index + 1) {
-    const emit = featureHelpers[index]
-
-    pushAll(lines, emit())
+  if (descriptor.id === 'regexp') {
+    pushAll(lines, emitCRegExpPreludeHelpers())
   }
 
   return lines
 }
 
-function compilerFeatureAt(index: number): IrFeature {
-  return compilerFeatures[index]
+function createCompilerFeatureDescriptors(): CompilerFeatureDescriptor[] {
+  const result: CompilerFeatureDescriptor[] = []
+
+  for (let rowIndex = 0; rowIndex < compilerFeatureDescriptorRows.length; rowIndex = rowIndex + 1) {
+    const row = compilerFeatureDescriptorRowAt(rowIndex)
+
+    pushAllDescriptors(result, row)
+  }
+
+  return result
 }
 
-function compilerFeatureRuntimeRequirementsAt(index: number): IrRuntimeRequirement[] {
-  return compilerFeatureRuntimeRequirementRows[index]
+function createCompilerFeatureIds(): IrFeature[] {
+  const result: IrFeature[] = []
+
+  for (let index = 0; index < compilerFeatureDescriptors.length; index = index + 1) {
+    result.push(compilerFeatureDescriptorAt(index).id)
+  }
+
+  return result
 }
 
-function compilerFeatureCPreludeIncludesAt(index: number): string[] {
-  return compilerFeatureCPreludeIncludeRows[index]
+function compilerFeatureDescriptorRowAt(index: number): CompilerFeatureDescriptor[] {
+  return compilerFeatureDescriptorRows[index]
 }
 
-function compilerFeatureCPreludeHelpersAt(index: number): CompilerFeatureHelperEmitter[] {
-  return compilerFeatureCPreludeHelperRows[index]
+function compilerFeatureDescriptorAt(index: number): CompilerFeatureDescriptor {
+  return compilerFeatureDescriptors[index]
 }
 
-function findCompilerFeatureIndex(featureName: IrFeature): number {
-  for (let index = 0; index < compilerFeatures.length; index = index + 1) {
-    if (compilerFeatureAt(index) === featureName) {
-      return index
+function findCompilerFeatureDescriptor(featureName: IrFeature): CompilerFeatureDescriptor | null {
+  for (let index = 0; index < compilerFeatureDescriptors.length; index = index + 1) {
+    const descriptor = compilerFeatureDescriptorAt(index)
+
+    if (descriptor.id === featureName) {
+      return descriptor
     }
   }
 
-  return -1
-}
-
-function collectCompilerFeatureIrFeature(featureName: IrFeature, node: AnyNode, features: Set<IrFeature>): void {
-  if (collectRuntimeBackedIrFeature(featureName, node, features)) {
-    return
-  }
-
-  if (featureName === arrayPopNullFeatureId) {
-    collectArrayPopNullIrFeatures(node, features)
-    return
-  }
-
-  if (featureName === mapGetNullFeatureId) {
-    collectMapGetNullIrFeatures(node, features)
-    return
-  }
-
-  if (featureName === mapIndexSetFeatureId) {
-    collectMapIndexSetIrFeatures(node, features)
-    return
-  }
-
-  if (featureName === numberFromStringNullFeatureId) {
-    collectNumberFromStringNullIrFeatures(node, features)
-    return
-  }
-
-  if (featureName === numericCastsFeatureId) {
-    collectNumericCastsIrFeatures(node, features)
-    return
-  }
-
-  if (featureName === regexpFeatureId) {
-    collectRegExpIrFeatures(node, features)
-    return
-  }
-
-  if (featureName === weakReferencesFeatureId) {
-    collectWeakReferencesIrFeatures(node, features)
-  }
+  return null
 }
 
 function compilerFeatureHasCPrelude(featureName: IrFeature): boolean {
-  const featureIndex = findCompilerFeatureIndex(featureName)
+  const descriptor = findCompilerFeatureDescriptor(featureName)
 
-  if (featureIndex < 0) {
+  if (descriptor === null || typeof descriptor === 'undefined') {
     return false
   }
 
-  return compilerFeatureCPreludeIncludesAt(featureIndex).length > 0
+  return descriptor.cPreludeIncludes.length > 0 || descriptor.cPreludeHelpers.length > 0
 }
 
 function copyRuntimeRequirements(values: IrRuntimeRequirement[]): IrRuntimeRequirement[] {
@@ -352,6 +215,12 @@ function copyStrings(values: string[]): string[] {
 }
 
 function pushAll(target: string[], values: string[]): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    target.push(values[index])
+  }
+}
+
+function pushAllDescriptors(target: CompilerFeatureDescriptor[], values: CompilerFeatureDescriptor[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     target.push(values[index])
   }

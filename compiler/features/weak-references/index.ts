@@ -1,4 +1,5 @@
 import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
+import type { CompilerFeatureDescriptor } from '../types.ts'
 
 type WeakReferencesFeatureSet = Set<IrFeature>
 
@@ -14,6 +15,13 @@ export const weakReferencesFeatureRuntimeRequirements: IrRuntimeRequirement[] = 
 ]
 export const weakReferencesFeatureCPreludeIncludes: string[] = []
 export const weakReferencesFeatureCPreludeHelpers: (() => string[])[] = []
+export const weakReferencesFeature: CompilerFeatureDescriptor = {
+  id: weakReferencesFeatureId,
+  runtimeRequirements: weakReferencesFeatureRuntimeRequirements,
+  cPreludeIncludes: weakReferencesFeatureCPreludeIncludes,
+  cPreludeHelpers: weakReferencesFeatureCPreludeHelpers,
+  collect: collectWeakReferencesIrFeatures
+}
 
 export function collectWeakReferencesIrFeatures(node: AnyNode, features: WeakReferencesFeatureSet): void {
   const item = node as WeakReferencesFeatureNode
