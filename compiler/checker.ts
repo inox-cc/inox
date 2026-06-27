@@ -31,6 +31,7 @@ import {
 } from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
+import { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from './checker/std/os.ts'
 import { runtimeImportValueType } from './checker/std/runtime-imports.ts'
 import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
@@ -89,12 +90,6 @@ import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
 } from './stdlib/descriptors/node-builtins.ts'
-import {
-  isNodeOsImportSource,
-  isOsRuntimeConstant,
-  isOsRuntimeMethod,
-  isUnsupportedOsRuntimeMethod
-} from './stdlib/descriptors/os.ts'
 import {
   isNodePathImportSource,
   isPathRuntimeConstant,
@@ -2611,8 +2606,7 @@ class Checker {
         if (
           importedName !== null &&
           typeof importedName !== 'undefined' &&
-          isNodeOsImportSource(importSource) &&
-          isOsRuntimeConstant(importedName)
+          isOsRuntimeConstantImport(importSource, importedName)
         ) {
           expression.osRuntimeConstant = importedName
         }
@@ -5609,7 +5603,12 @@ class Checker {
   }
 
   checkOsCall(expression: AnyNode): ValueType | null {
-    const call = this.resolveOsRuntimeCall(expression)
+    const path = memberExpressionPath(expression.callee)
+    const call = osRuntimeCallInfo(
+      path,
+      this.resolveStdlibRuntimeDirectImportName(path, 'os'),
+      this.resolveStdlibModuleObjectMemberName(path, 'os')
+    )
 
     if (call === null || typeof call === 'undefined') {
       return null
@@ -5647,53 +5646,12 @@ class Checker {
     return 'string'
   }
 
-  resolveOsRuntimeCall(expression: AnyNode): RuntimeCallInfo | null {
-    const path = memberExpressionPath(expression.callee)
-    const method = this.resolveOsRuntimeMethod(path)
-
-    if (method === null || typeof method === 'undefined') {
-      return null
-    }
-
-    let label = method
-
-    if (path !== null && typeof path !== 'undefined') {
-      label = joinStrings(path, '.')
-    }
-
-    return {
-      method,
-      label,
-      unsupported: !isOsRuntimeMethod(method)
-    }
-  }
-
-  resolveOsRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'os')
-
-    if (importedName !== null && typeof importedName !== 'undefined') {
-      if (isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName)) {
-        return importedName
-      }
-
-      return null
-    }
-
-    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'os')
-
-    if (memberName !== null && typeof memberName !== 'undefined') {
-      if (isOsRuntimeMethod(memberName) || isUnsupportedOsRuntimeMethod(memberName)) {
-        return memberName
-      }
-
-      return null
-    }
-
-    return null
-  }
-
   checkOsConstantMemberExpression(expression: AnyNode): ValueType | null {
-    const constant = this.resolveOsRuntimeConstant(memberExpressionPath(expression))
+    const path = memberExpressionPath(expression)
+    const constant = osRuntimeConstantName(
+      this.resolveStdlibRuntimeDirectImportName(path, 'os'),
+      this.resolveStdlibModuleObjectMemberName(path, 'os')
+    )
 
     if (constant === null || typeof constant === 'undefined') {
       return null
@@ -5703,26 +5661,6 @@ class Checker {
     expression.valueType = 'string'
 
     return 'string'
-  }
-
-  resolveOsRuntimeConstant(path: readonly string[] | null | undefined): string | null {
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'os')
-
-    if (
-      importedName !== null &&
-      typeof importedName !== 'undefined' &&
-      isOsRuntimeConstant(importedName)
-    ) {
-      return importedName
-    }
-
-    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'os')
-
-    if (memberName !== null && typeof memberName !== 'undefined' && isOsRuntimeConstant(memberName)) {
-      return memberName
-    }
-
-    return null
   }
 
   checkProcessCall(expression: AnyNode): ValueType | null {
