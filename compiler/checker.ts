@@ -61,7 +61,6 @@ import {
   cryptoRuntimeMethodNameFromKnownPath,
   isCryptoRuntimeMethod,
   isCryptoRuntimeMethodPath,
-  isNodeCryptoImportSource,
   isUnsupportedNodeCryptoMethod
 } from './stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
@@ -82,7 +81,11 @@ import {
 import type { FsRuntimeCallInfo } from './stdlib/descriptors/fs.ts'
 import { unsupportedFsRuntimeMethodMessage } from './stdlib/descriptors/fs.ts'
 import { knownMathRuntimeArgCount } from './stdlib/descriptors/math.ts'
-import { isStdlibModuleRuntimeImportBinding } from './stdlib/descriptors/modules.ts'
+import type { StdlibModuleId } from './stdlib/descriptors/modules.ts'
+import {
+  isStdlibModuleImportSourceForId,
+  isStdlibModuleRuntimeImportBinding
+} from './stdlib/descriptors/modules.ts'
 import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
@@ -4645,31 +4648,14 @@ class Checker {
       return null
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'buffer')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
-      }
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodeBufferImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined' &&
-        isUnsupportedBufferRuntimeExport(importedName)
-      ) {
-        return importedName
-      }
+    if (
+      importedName !== null &&
+      typeof importedName !== 'undefined' &&
+      isUnsupportedBufferRuntimeExport(importedName)
+    ) {
+      return importedName
     }
 
     if (path.length === 2) {
@@ -4742,40 +4728,31 @@ class Checker {
     }
 
     if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+      const eventsImportedName = this.resolveStdlibRuntimeDirectImportName(path, 'events')
 
       if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
+        eventsImportedName !== null &&
+        typeof eventsImportedName !== 'undefined' &&
+        isUnsupportedEventsRuntimeExport(eventsImportedName)
       ) {
-        importedName = symbol.importedName
+        return {
+          source: 'node:events',
+          name: eventsImportedName,
+          reason: unsupportedEventsRuntimeExportReason(eventsImportedName)
+        }
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        importedName !== null &&
-        typeof importedName !== 'undefined'
-      ) {
-        if (isNodeEventsImportSource(symbol.importSource) && isUnsupportedEventsRuntimeExport(importedName)) {
-          return {
-            source: 'node:events',
-            name: importedName,
-            reason: unsupportedEventsRuntimeExportReason(importedName)
-          }
-        }
+      const streamImportedName = this.resolveStdlibRuntimeDirectImportName(path, 'stream')
 
-        if (isNodeStreamImportSource(symbol.importSource) && isUnsupportedStreamRuntimeExport(importedName)) {
-          return {
-            source: 'node:stream',
-            name: importedName,
-            reason: unsupportedStreamRuntimeExportReason(importedName)
-          }
+      if (
+        streamImportedName !== null &&
+        typeof streamImportedName !== 'undefined' &&
+        isUnsupportedStreamRuntimeExport(streamImportedName)
+      ) {
+        return {
+          source: 'node:stream',
+          name: streamImportedName,
+          reason: unsupportedStreamRuntimeExportReason(streamImportedName)
         }
       }
     }
@@ -5499,61 +5476,24 @@ class Checker {
   }
 
   resolveChildProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'child-process')
+
+    if (importedName !== null && typeof importedName !== 'undefined') {
+      if (isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)) {
+        return importedName
+      }
+
       return null
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'child-process')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
+    if (memberName !== null && typeof memberName !== 'undefined') {
+      if (isChildProcessRuntimeMethod(memberName) || isUnsupportedChildProcessRuntimeMethod(memberName)) {
+        return memberName
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodeChildProcessImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined'
-      ) {
-        if (isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)) {
-          return importedName
-        }
-
-        return null
-      }
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(
-          symbol.importSource,
-          'child-process',
-          'module-object',
-          symbol.importedName
-        )
-      ) {
-        if (isChildProcessRuntimeMethod(path[1]) || isUnsupportedChildProcessRuntimeMethod(path[1])) {
-          return path[1]
-        }
-
-        return null
-      }
+      return null
     }
 
     return null
@@ -5732,56 +5672,24 @@ class Checker {
   }
 
   resolveOsRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'os')
+
+    if (importedName !== null && typeof importedName !== 'undefined') {
+      if (isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName)) {
+        return importedName
+      }
+
       return null
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'os')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
+    if (memberName !== null && typeof memberName !== 'undefined') {
+      if (isOsRuntimeMethod(memberName) || isUnsupportedOsRuntimeMethod(memberName)) {
+        return memberName
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodeOsImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined'
-      ) {
-        if (isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName)) {
-          return importedName
-        }
-
-        return null
-      }
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'os', 'module-object', symbol.importedName)
-      ) {
-        if (isOsRuntimeMethod(path[1]) || isUnsupportedOsRuntimeMethod(path[1])) {
-          return path[1]
-        }
-
-        return null
-      }
+      return null
     }
 
     return null
@@ -5801,50 +5709,20 @@ class Checker {
   }
 
   resolveOsRuntimeConstant(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
-      return null
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'os')
+
+    if (
+      importedName !== null &&
+      typeof importedName !== 'undefined' &&
+      isOsRuntimeConstant(importedName)
+    ) {
+      return importedName
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'os')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
-      }
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodeOsImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined' &&
-        isOsRuntimeConstant(importedName)
-      ) {
-        return importedName
-      }
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'os', 'module-object', symbol.importedName) &&
-        isOsRuntimeConstant(path[1])
-      ) {
-        return path[1]
-      }
+    if (memberName !== null && typeof memberName !== 'undefined' && isOsRuntimeConstant(memberName)) {
+      return memberName
     }
 
     return null
@@ -5928,56 +5806,24 @@ class Checker {
   }
 
   resolveProcessRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'process')
+
+    if (importedName !== null && typeof importedName !== 'undefined') {
+      if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
+        return importedName
+      }
+
       return null
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'process')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
+    if (memberName !== null && typeof memberName !== 'undefined') {
+      if (isProcessRuntimeMethod(memberName) || isUnsupportedProcessRuntimeMethod(memberName)) {
+        return memberName
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodeProcessImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined'
-      ) {
-        if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
-          return importedName
-        }
-
-        return null
-      }
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'process', 'module-object', symbol.importedName)
-      ) {
-        if (isProcessRuntimeMethod(path[1]) || isUnsupportedProcessRuntimeMethod(path[1])) {
-          return path[1]
-        }
-
-        return null
-      }
+      return null
     }
 
     return null
@@ -6283,56 +6129,24 @@ class Checker {
   }
 
   resolveUrlRuntimeMethod(path: readonly string[] | null | undefined): string | null {
-    if (path === null || typeof path === 'undefined') {
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'url')
+
+    if (importedName !== null && typeof importedName !== 'undefined') {
+      if (isUrlRuntimeMethod(importedName) || isUnsupportedUrlRuntimeMethod(importedName)) {
+        return importedName
+      }
+
       return null
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const memberName = this.resolveStdlibModuleObjectMemberName(path, 'url')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
+    if (memberName !== null && typeof memberName !== 'undefined') {
+      if (isUrlRuntimeMethod(memberName) || isUnsupportedUrlRuntimeMethod(memberName)) {
+        return memberName
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodeUrlImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined'
-      ) {
-        if (isUrlRuntimeMethod(importedName) || isUnsupportedUrlRuntimeMethod(importedName)) {
-          return importedName
-        }
-
-        return null
-      }
-    }
-
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'url', 'module-object', symbol.importedName)
-      ) {
-        if (isUrlRuntimeMethod(path[1]) || isUnsupportedUrlRuntimeMethod(path[1])) {
-          return path[1]
-        }
-
-        return null
-      }
+      return null
     }
 
     return null
@@ -6369,51 +6183,25 @@ class Checker {
         return cryptoRuntimeMethodNameFromKnownPath(path)
       }
 
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
+      const memberName = this.resolveStdlibModuleObjectMemberName(path, 'crypto')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'crypto', 'module-object', symbol.importedName)
-      ) {
-        if (isCryptoRuntimeMethod(path[1]) || isUnsupportedNodeCryptoMethod(path[1])) {
-          return path[1]
+      if (memberName !== null && typeof memberName !== 'undefined') {
+        if (isCryptoRuntimeMethod(memberName) || isUnsupportedNodeCryptoMethod(memberName)) {
+          return memberName
         }
 
         return null
       }
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'crypto')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
+    if (importedName !== null && typeof importedName !== 'undefined') {
+      if (isCryptoRuntimeMethod(importedName) || isUnsupportedNodeCryptoMethod(importedName)) {
+        return importedName
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodeCryptoImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined'
-      ) {
-        if (isCryptoRuntimeMethod(importedName) || isUnsupportedNodeCryptoMethod(importedName)) {
-          return importedName
-        }
-
-        return null
-      }
+      return null
     }
 
     return null
@@ -6602,34 +6390,24 @@ class Checker {
       return null
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'path')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
+    if (importedName !== null && typeof importedName !== 'undefined') {
+      if (isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName)) {
+        return importedName
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        isNodePathImportSource(symbol.importSource) &&
-        importedName !== null &&
-        typeof importedName !== 'undefined'
-      ) {
-        if (isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName)) {
-          return importedName
-        }
+      return null
+    }
 
-        return null
+    const moduleObjectMemberName = this.resolveStdlibModuleObjectMemberName(path, 'path')
+
+    if (moduleObjectMemberName !== null && typeof moduleObjectMemberName !== 'undefined') {
+      if (isPathRuntimeMethod(moduleObjectMemberName) || isUnsupportedPathRuntimeMethod(moduleObjectMemberName)) {
+        return moduleObjectMemberName
       }
+
+      return null
     }
 
     if (path.length === 2) {
@@ -6641,8 +6419,7 @@ class Checker {
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
-        (isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName) ||
-          symbol.importedName === 'posix')
+        symbol.importedName === 'posix'
       ) {
         if (isPathRuntimeMethod(path[1]) || isUnsupportedPathRuntimeMethod(path[1])) {
           return path[1]
@@ -6692,6 +6469,16 @@ class Checker {
       return null
     }
 
+    const moduleObjectMemberName = this.resolveStdlibModuleObjectMemberName(path, 'path')
+
+    if (
+      moduleObjectMemberName !== null &&
+      typeof moduleObjectMemberName !== 'undefined' &&
+      isPathRuntimeConstant(moduleObjectMemberName)
+    ) {
+      return moduleObjectMemberName
+    }
+
     if (path.length === 2) {
       const rootName = firstPathSegment(path)
       const symbol = this.scope.resolve(rootName)
@@ -6701,8 +6488,7 @@ class Checker {
         typeof symbol !== 'undefined' &&
         symbol.kind === 'import' &&
         isNodePathImportSource(symbol.importSource) &&
-        (isStdlibModuleRuntimeImportBinding(symbol.importSource, 'path', 'module-object', symbol.importedName) ||
-          symbol.importedName === 'posix') &&
+        symbol.importedName === 'posix' &&
         isPathRuntimeConstant(path[1])
       ) {
         return path[1]
@@ -7461,6 +7247,54 @@ class Checker {
 
   supportsCryptoHash(): boolean {
     return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
+  }
+
+  resolveStdlibRuntimeDirectImportName(
+    path: readonly string[] | null | undefined,
+    moduleId: StdlibModuleId
+  ): string | null {
+    if (path === null || typeof path === 'undefined' || path.length !== 1) {
+      return null
+    }
+
+    const rootName = firstPathSegment(path)
+    const symbol = this.scope.resolve(rootName)
+
+    if (
+      symbol === null ||
+      typeof symbol === 'undefined' ||
+      symbol.kind !== 'import' ||
+      !isStdlibModuleImportSourceForId(symbol.importSource, moduleId) ||
+      symbol.importedName === null ||
+      typeof symbol.importedName === 'undefined'
+    ) {
+      return null
+    }
+
+    return symbol.importedName
+  }
+
+  resolveStdlibModuleObjectMemberName(
+    path: readonly string[] | null | undefined,
+    moduleId: StdlibModuleId
+  ): string | null {
+    if (path === null || typeof path === 'undefined' || path.length !== 2) {
+      return null
+    }
+
+    const rootName = firstPathSegment(path)
+    const symbol = this.scope.resolve(rootName)
+
+    if (
+      symbol === null ||
+      typeof symbol === 'undefined' ||
+      symbol.kind !== 'import' ||
+      !isStdlibModuleRuntimeImportBinding(symbol.importSource, moduleId, 'module-object', symbol.importedName)
+    ) {
+      return null
+    }
+
+    return path[1]
   }
 
   runtimeImportValueType(source: string, importedName: string): ValueType {
@@ -9721,54 +9555,20 @@ class Checker {
       return null
     }
 
-    if (path.length === 1) {
-      const rootName = firstPathSegment(path)
-      const symbol = this.scope.resolve(rootName)
-      let importedName: string | null = null
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'timers')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.importedName !== null &&
-        typeof symbol.importedName !== 'undefined'
-      ) {
-        importedName = symbol.importedName
-      }
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        symbol.importSource !== null &&
-        typeof symbol.importSource !== 'undefined'
-      ) {
-        if (
-          isNodeTimerImportSource(symbol.importSource) &&
-          importedName !== null &&
-          typeof importedName !== 'undefined' &&
-          isTimerRuntimeMethod(importedName)
-        ) {
-          return importedName
-        }
-      }
+    if (
+      importedName !== null &&
+      typeof importedName !== 'undefined' &&
+      isTimerRuntimeMethod(importedName)
+    ) {
+      return importedName
     }
 
-    if (path.length === 2) {
-      const rootName = firstPathSegment(path)
-      const methodName = stringAt(path, 1)
-      const symbol = this.scope.resolve(rootName)
+    const methodName = this.resolveStdlibModuleObjectMemberName(path, 'timers')
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'import' &&
-        symbol.importSource !== null &&
-        typeof symbol.importSource !== 'undefined' &&
-        isStdlibModuleRuntimeImportBinding(symbol.importSource, 'timers', 'module-object', symbol.importedName) &&
-        isTimerRuntimeMethod(methodName)
-      ) {
-        return methodName
-      }
+    if (methodName !== null && typeof methodName !== 'undefined' && isTimerRuntimeMethod(methodName)) {
+      return methodName
     }
 
     return null
@@ -11252,28 +11052,9 @@ class Checker {
       return null
     }
 
-    const symbol = this.scope.resolve(firstPathSegment(expression.callee.path))
-    let importedName: string | null = null
+    const importedName = this.resolveStdlibRuntimeDirectImportName(expression.callee.path, 'url')
 
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.importedName !== null &&
-      typeof symbol.importedName !== 'undefined'
-    ) {
-      importedName = symbol.importedName
-    }
-
-    if (
-      symbol === null ||
-      typeof symbol === 'undefined' ||
-      symbol.kind !== 'import' ||
-      symbol.importSource === null ||
-      typeof symbol.importSource === 'undefined' ||
-      !isNodeUrlImportSource(symbol.importSource) ||
-      importedName === null ||
-      typeof importedName === 'undefined'
-    ) {
+    if (importedName === null || typeof importedName === 'undefined') {
       return null
     }
 
