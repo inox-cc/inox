@@ -10962,17 +10962,19 @@ class Checker {
       expression.mapKeyType = 'unknown'
       expression.mapValueType = 'unknown'
 
-      if (argTypes.length > 0 && argTypes[0] === 'map') {
-        const mapType = this.resolveExpressionMapType(expression.args[0])
+      const mapType = this.resolveMapConstructorType(expression, argTypes)
 
-        if (mapType !== null && typeof mapType !== 'undefined') {
-          if (mapType.key !== null && typeof mapType.key !== 'undefined') {
-            expression.mapKeyType = mapType.key
-          }
+      if (mapType !== null && typeof mapType !== 'undefined') {
+        if (mapType.key !== null && typeof mapType.key !== 'undefined') {
+          expression.mapKeyType = mapType.key
+        }
 
-          if (mapType.value !== null && typeof mapType.value !== 'undefined') {
-            expression.mapValueType = mapType.value
-          }
+        if (mapType.value !== null && typeof mapType.value !== 'undefined') {
+          expression.mapValueType = mapType.value
+        }
+
+        if (mapType.valueShape !== null && typeof mapType.valueShape !== 'undefined') {
+          expression.mapValueShape = mapType.valueShape
         }
       }
 
@@ -11118,6 +11120,63 @@ class Checker {
     }
 
     return 'object'
+  }
+
+  resolveMapConstructorType(expression: AnyNode, argTypes: ValueType[]): CheckerMapType | null {
+    if (expression.args.length === 0 || argTypes.length === 0) {
+      return null
+    }
+
+    const firstArg = checkerNodeAt(expression.args, 0)
+
+    if (argTypes[0] === 'map') {
+      return this.resolveExpressionMapType(firstArg)
+    }
+
+    if (argTypes[0] === 'array' && firstArg.type === 'ArrayLiteral') {
+      return this.resolveMapEntryArrayType(firstArg)
+    }
+
+    return null
+  }
+
+  resolveMapEntryArrayType(expression: AnyNode): CheckerMapType | null {
+    if (expression.elements.length === 0) {
+      return null
+    }
+
+    let key: ValueType | null = null
+    let value: ValueType | null = null
+
+    for (const entry of expression.elements) {
+      if (entry.type !== 'ArrayLiteral' || entry.elements.length < 2) {
+        return null
+      }
+
+      const entryKeyType = nodeValueTypeOrUnknown(checkerNodeAt(entry.elements, 0))
+      const entryValueType = nodeValueTypeOrUnknown(checkerNodeAt(entry.elements, 1))
+
+      if (entryKeyType === 'unknown' || entryValueType === 'unknown') {
+        return null
+      }
+
+      if (key === null) {
+        key = entryKeyType
+      } else if (key !== entryKeyType) {
+        return null
+      }
+
+      if (value === null) {
+        value = entryValueType
+      } else if (value !== entryValueType) {
+        return null
+      }
+    }
+
+    return {
+      key,
+      value
+    }
   }
 
   checkUrlConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {

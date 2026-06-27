@@ -218,7 +218,7 @@ export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
   fields: readonlyDebugMemoryStatsFields(debugMemoryStatsFields)
 }
 
-export const fsConstantValues: Map<string, number> = new Map([
+export const fsConstantValues = new Map([
   ['F_OK', 0],
   ['X_OK', 1],
   ['W_OK', 2],
@@ -229,7 +229,7 @@ export function isFsConstantValue(name: string): boolean {
   return name === 'F_OK' || name === 'X_OK' || name === 'W_OK' || name === 'R_OK'
 }
 
-export const libuvOnlyRuntimeImports: Map<string, string> = new Map([
+export const libuvOnlyRuntimeImports = new Map([
   ['dgram', 'node:dgram'],
   ['http', 'node:http'],
   ['net', 'node:net'],

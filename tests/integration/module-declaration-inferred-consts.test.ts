@@ -13,6 +13,14 @@ export function assertModuleDeclarationInferredConsts(): void {
       `
 export const methods = ['createHash', 'createHmac']
 export const names = new Set(['random'])
+export const constants = new Map([
+  ['F_OK', 0],
+  ['R_OK', 4]
+])
+export const imports = new Map([
+  ['net', 'node:net'],
+  ['node:http', 'node:http']
+])
 `,
       {
         file: 'source.ts'
@@ -24,6 +32,8 @@ export const names = new Set(['random'])
 
   assert.match(seedCode, /export const methods: array<string>;/)
   assert.match(seedCode, /export const names: set<string>;/)
+  assert.match(seedCode, /export const constants: map<string,number>;/)
+  assert.match(seedCode, /export const imports: map<string,string>;/)
 
   const checked = checkProgram(seedProgram, {})
   const hir = lowerProgram(checked.ast)
@@ -31,6 +41,8 @@ export const names = new Set(['random'])
 
   assert.match(refinedCode, /export const methods: array<string>;/)
   assert.match(refinedCode, /export const names: set<string>;/)
+  assert.match(refinedCode, /export const constants: map<string,number>;/)
+  assert.match(refinedCode, /export const imports: map<string,string>;/)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
