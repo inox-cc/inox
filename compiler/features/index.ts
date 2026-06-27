@@ -38,6 +38,57 @@ import {
   regexpFeatureRuntimeRequirements
 } from './regexp/index.ts'
 import {
+  binaryFeatureCPreludeHelpers,
+  binaryFeatureCPreludeIncludes,
+  binaryFeatureId,
+  binaryFeatureRuntimeRequirements,
+  childProcessFeatureCPreludeHelpers,
+  childProcessFeatureCPreludeIncludes,
+  childProcessFeatureId,
+  childProcessFeatureRuntimeRequirements,
+  clocksFeatureCPreludeHelpers,
+  clocksFeatureCPreludeIncludes,
+  clocksFeatureId,
+  clocksFeatureRuntimeRequirements,
+  collectRuntimeBackedIrFeature,
+  cryptoFeatureCPreludeHelpers,
+  cryptoFeatureCPreludeIncludes,
+  cryptoFeatureId,
+  cryptoFeatureRuntimeRequirements,
+  debugMemoryFeatureCPreludeHelpers,
+  debugMemoryFeatureCPreludeIncludes,
+  debugMemoryFeatureId,
+  debugMemoryFeatureRuntimeRequirements,
+  fsFeatureCPreludeHelpers,
+  fsFeatureCPreludeIncludes,
+  fsFeatureId,
+  fsFeatureRuntimeRequirements,
+  jsonFeatureCPreludeHelpers,
+  jsonFeatureCPreludeIncludes,
+  jsonFeatureId,
+  jsonFeatureRuntimeRequirements,
+  osFeatureCPreludeHelpers,
+  osFeatureCPreludeIncludes,
+  osFeatureId,
+  osFeatureRuntimeRequirements,
+  pathFeatureCPreludeHelpers,
+  pathFeatureCPreludeIncludes,
+  pathFeatureId,
+  pathFeatureRuntimeRequirements,
+  processFeatureCPreludeHelpers,
+  processFeatureCPreludeIncludes,
+  processFeatureId,
+  processFeatureRuntimeRequirements,
+  timersFeatureCPreludeHelpers,
+  timersFeatureCPreludeIncludes,
+  timersFeatureId,
+  timersFeatureRuntimeRequirements,
+  urlFeatureCPreludeHelpers,
+  urlFeatureCPreludeIncludes,
+  urlFeatureId,
+  urlFeatureRuntimeRequirements
+} from './runtime-backed/index.ts'
+import {
   collectWeakReferencesIrFeatures,
   weakReferencesFeatureCPreludeHelpers,
   weakReferencesFeatureCPreludeIncludes,
@@ -49,39 +100,87 @@ type CompilerFeatureHelperEmitter = () => string[]
 
 export const compilerFeatures: IrFeature[] = [
   arrayPopNullFeatureId,
+  binaryFeatureId,
+  childProcessFeatureId,
+  clocksFeatureId,
+  cryptoFeatureId,
+  debugMemoryFeatureId,
+  fsFeatureId,
+  jsonFeatureId,
   mapGetNullFeatureId,
   mapIndexSetFeatureId,
   numberFromStringNullFeatureId,
   numericCastsFeatureId,
+  osFeatureId,
+  pathFeatureId,
+  processFeatureId,
   regexpFeatureId,
+  timersFeatureId,
+  urlFeatureId,
   weakReferencesFeatureId
 ]
 
 const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [
   arrayPopNullFeatureRuntimeRequirements,
+  binaryFeatureRuntimeRequirements,
+  childProcessFeatureRuntimeRequirements,
+  clocksFeatureRuntimeRequirements,
+  cryptoFeatureRuntimeRequirements,
+  debugMemoryFeatureRuntimeRequirements,
+  fsFeatureRuntimeRequirements,
+  jsonFeatureRuntimeRequirements,
   mapGetNullFeatureRuntimeRequirements,
   mapIndexSetFeatureRuntimeRequirements,
   numberFromStringNullFeatureRuntimeRequirements,
   numericCastsFeatureRuntimeRequirements,
+  osFeatureRuntimeRequirements,
+  pathFeatureRuntimeRequirements,
+  processFeatureRuntimeRequirements,
   regexpFeatureRuntimeRequirements,
+  timersFeatureRuntimeRequirements,
+  urlFeatureRuntimeRequirements,
   weakReferencesFeatureRuntimeRequirements
 ]
 const compilerFeatureCPreludeIncludeRows: string[][] = [
   arrayPopNullFeatureCPreludeIncludes,
+  binaryFeatureCPreludeIncludes,
+  childProcessFeatureCPreludeIncludes,
+  clocksFeatureCPreludeIncludes,
+  cryptoFeatureCPreludeIncludes,
+  debugMemoryFeatureCPreludeIncludes,
+  fsFeatureCPreludeIncludes,
+  jsonFeatureCPreludeIncludes,
   mapGetNullFeatureCPreludeIncludes,
   mapIndexSetFeatureCPreludeIncludes,
   numberFromStringNullFeatureCPreludeIncludes,
   numericCastsFeatureCPreludeIncludes,
+  osFeatureCPreludeIncludes,
+  pathFeatureCPreludeIncludes,
+  processFeatureCPreludeIncludes,
   regexpFeatureCPreludeIncludes,
+  timersFeatureCPreludeIncludes,
+  urlFeatureCPreludeIncludes,
   weakReferencesFeatureCPreludeIncludes
 ]
 const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [
   arrayPopNullFeatureCPreludeHelpers,
+  binaryFeatureCPreludeHelpers,
+  childProcessFeatureCPreludeHelpers,
+  clocksFeatureCPreludeHelpers,
+  cryptoFeatureCPreludeHelpers,
+  debugMemoryFeatureCPreludeHelpers,
+  fsFeatureCPreludeHelpers,
+  jsonFeatureCPreludeHelpers,
   mapGetNullFeatureCPreludeHelpers,
   mapIndexSetFeatureCPreludeHelpers,
   numberFromStringNullFeatureCPreludeHelpers,
   numericCastsFeatureCPreludeHelpers,
+  osFeatureCPreludeHelpers,
+  pathFeatureCPreludeHelpers,
+  processFeatureCPreludeHelpers,
   regexpFeatureCPreludeHelpers,
+  timersFeatureCPreludeHelpers,
+  urlFeatureCPreludeHelpers,
   weakReferencesFeatureCPreludeHelpers
 ]
 
@@ -183,6 +282,10 @@ function findCompilerFeatureIndex(featureName: IrFeature): number {
 }
 
 function collectCompilerFeatureIrFeature(featureName: IrFeature, node: AnyNode, features: Set<IrFeature>): void {
+  if (collectRuntimeBackedIrFeature(featureName, node, features)) {
+    return
+  }
+
   if (featureName === arrayPopNullFeatureId) {
     collectArrayPopNullIrFeatures(node, features)
     return

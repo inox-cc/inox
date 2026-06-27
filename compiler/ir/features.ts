@@ -11,15 +11,6 @@ import {
   isMapMethod,
   isSetMethod
 } from '../stdlib/descriptors/collections.ts'
-import { debugRuntimeMethodNameFromPath } from '../stdlib/descriptors/debug.ts'
-import { fsRuntimeMethodForPath } from '../stdlib/descriptors/fs.ts'
-import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
-import {
-  dateConstructorRuntimeMethodNameFromPath,
-  dateInstanceRuntimeMethodName,
-  dateInstanceRuntimeMethodReturnType,
-  timeRuntimeMethodNameFromPath
-} from '../stdlib/descriptors/time.ts'
 import { timerRuntimeMethodNameFromPath } from '../stdlib/descriptors/timers.ts'
 import type { AnyNode, IrFeature, IrRuntimeRequirement, IrSyntaxFeatureUsage, ProgramNode } from '../types.ts'
 
@@ -215,60 +206,12 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
 
     if (feature === 'runtime-values') {
       requirements.add('managed-values')
-    } else if (feature === 'child-process') {
-      requirements.add('child-process')
-      requirements.add('managed-values')
-      requirements.add('string-bytes')
-    } else if (feature === 'binary') {
-      requirements.add('binary')
-      requirements.add('managed-values')
     } else if (feature === 'collections') {
       requirements.add('collections')
-      requirements.add('managed-values')
-    } else if (feature === 'crypto') {
-      requirements.add('binary')
-      requirements.add('crypto')
       requirements.add('managed-values')
     } else if (feature === 'objects') {
       requirements.add('managed-values')
       requirements.add('objects')
-    } else if (feature === 'os') {
-      requirements.add('managed-values')
-      requirements.add('os')
-      requirements.add('string-bytes')
-    } else if (feature === 'path') {
-      requirements.add('managed-values')
-      requirements.add('path')
-      requirements.add('string-bytes')
-    } else if (feature === 'process') {
-      requirements.add('managed-values')
-      requirements.add('process')
-      requirements.add('string-bytes')
-    } else if (feature === 'url') {
-      requirements.add('managed-values')
-      requirements.add('objects')
-      requirements.add('string-bytes')
-      requirements.add('url')
-    } else if (feature === 'debug-memory') {
-      requirements.add('managed-values')
-      requirements.add('objects')
-      requirements.add('debug-memory')
-    } else if (feature === 'fs') {
-      requirements.add('async-runtime')
-      requirements.add('collections')
-      requirements.add('fs')
-      requirements.add('managed-values')
-    } else if (feature === 'json') {
-      requirements.add('collections')
-      requirements.add('json')
-      requirements.add('managed-values')
-      requirements.add('objects')
-      requirements.add('string-bytes')
-    } else if (feature === 'timers') {
-      requirements.add('async-runtime')
-      requirements.add('callback-values')
-      requirements.add('managed-values')
-      requirements.add('timers')
     } else {
       const requirement = runtimeRequirementFeature(feature)
 
@@ -576,21 +519,8 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
     features.add('async-runtime')
   }
 
-  if (node.valueType === 'bytes' || node.returnType === 'bytes') {
-    features.add('binary')
-    features.add('runtime-values')
-  }
-
   if (node.type === 'FunctionDeclaration' || node.type === 'MethodDefinition') {
     recordCallableSignatureFeatures(node, features)
-  }
-
-  if (
-    (node.osRuntimeMethod !== null && typeof node.osRuntimeMethod !== 'undefined') ||
-    (node.osRuntimeConstant !== null && typeof node.osRuntimeConstant !== 'undefined')
-  ) {
-    features.add('os')
-    features.add('runtime-values')
   }
 
   if (node.objectRuntimeMethod !== null && typeof node.objectRuntimeMethod !== 'undefined') {
@@ -651,8 +581,6 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
 
     if (collectionConstructorName(node)) {
       features.add('collections')
-    } else if (binaryConstructorName(node)) {
-      features.add('binary')
     } else if (objectConstructorName(node)) {
       features.add('objects')
     }
@@ -703,29 +631,6 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
   if (isObjectFieldExpression(node)) {
     features.add('objects')
     features.add('runtime-values')
-  }
-
-  if (
-    node.type === 'MemberExpression' &&
-    node.fsRuntimeConstant !== null &&
-    typeof node.fsRuntimeConstant !== 'undefined'
-  ) {
-    features.add('fs')
-  }
-
-  if (node.pathRuntimeConstant !== null && typeof node.pathRuntimeConstant !== 'undefined') {
-    features.add('path')
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
-  if (
-    (node.processRuntimeProperty !== null && typeof node.processRuntimeProperty !== 'undefined') ||
-    (node.processRuntimeEnvName !== null && typeof node.processRuntimeEnvName !== 'undefined')
-  ) {
-    features.add('process')
-    features.add('runtime-values')
-    features.add('string-bytes')
   }
 
   if (node.type === 'OptionalCallExpression') {
@@ -791,15 +696,6 @@ function recordCallableSignatureFeatures(node: FeatureNode, features: IrFeatureS
 
 function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): void {
   const callee = expression.callee
-  let timeCall = nullableString(expression.timeRuntimeMethod)
-
-  if ((timeCall === null || typeof timeCall === 'undefined') && callee !== null && typeof callee !== 'undefined') {
-    timeCall = timeRuntimeCallName(callee)
-  }
-
-  if ((timeCall === null || typeof timeCall === 'undefined') && callee !== null && typeof callee !== 'undefined') {
-    timeCall = dateReceiverRuntimeMethodName(callee)
-  }
 
   if (
     callee !== null &&
@@ -811,73 +707,9 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     features.add('runtime-values')
   }
 
-  if (timeCall !== null && typeof timeCall !== 'undefined') {
-    features.add('clocks')
-
-    if (dateInstanceRuntimeMethodReturnType(timeCall) === 'string') {
-      features.add('runtime-values')
-      features.add('string-bytes')
-    }
-
-    if (timeCall === 'sleep') {
-      features.add('runtime-values')
-    }
-  }
-
-  if (
-    (expression.fsRuntimeMethod !== null && typeof expression.fsRuntimeMethod !== 'undefined') ||
-    fsRuntimeMethodForPath(memberExpressionPath(callee))
-  ) {
-    features.add('fs')
-  }
-
-  if (callee !== null && typeof callee !== 'undefined' && jsonRuntimeCallName(callee)) {
-    features.add('json')
-    features.add('runtime-values')
-  }
-
-  if (cryptoRuntimeMethodName(expression)) {
-    features.add('crypto')
-    features.add('runtime-values')
-  }
-
-  if (debugRuntimeMethodName(expression)) {
-    features.add('debug-memory')
-    features.add('objects')
-    features.add('runtime-values')
-  }
-
-  if (pathRuntimeMethodName(expression)) {
-    features.add('path')
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
-  if (urlRuntimeMethodName(expression)) {
-    features.add('url')
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
-  if (processRuntimeMethodName(expression)) {
-    features.add('process')
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
-  if (childProcessRuntimeMethodName(expression)) {
-    features.add('child-process')
-    features.add('runtime-values')
-    features.add('string-bytes')
-  }
-
   if (plainFunctionCallHasStringArgument(expression)) {
     features.add('runtime-values')
     features.add('string-bytes')
-  }
-
-  if (timerRuntimeCallName(expression)) {
-    features.add('timers')
   }
 
   if (isArrayFromCall(expression)) {
@@ -908,11 +740,6 @@ function recordCallFeatures(expression: FeatureNode, features: IrFeatureSet): vo
     features.add('string-bytes')
   }
 
-  if (binaryRuntimeMethodName(expression)) {
-    features.add('binary')
-    features.add('runtime-values')
-  }
-
   const stringMethod = stringRuntimeMethodName(expression)
 
   if (stringMethod !== null && typeof stringMethod !== 'undefined') {
@@ -936,68 +763,20 @@ function runtimeRequirementFeature(feature: IrFeature): IrRuntimeRequirement | n
     return 'async-runtime'
   }
 
-  if (feature === 'binary') {
-    return 'binary'
-  }
-
   if (feature === 'callback-values') {
     return 'callback-values'
-  }
-
-  if (feature === 'child-process') {
-    return 'child-process'
-  }
-
-  if (feature === 'clocks') {
-    return 'clocks'
   }
 
   if (feature === 'collections') {
     return 'collections'
   }
 
-  if (feature === 'crypto') {
-    return 'crypto'
-  }
-
-  if (feature === 'debug-memory') {
-    return 'debug-memory'
-  }
-
-  if (feature === 'fs') {
-    return 'fs'
-  }
-
-  if (feature === 'json') {
-    return 'json'
-  }
-
   if (feature === 'objects') {
     return 'objects'
   }
 
-  if (feature === 'os') {
-    return 'os'
-  }
-
-  if (feature === 'path') {
-    return 'path'
-  }
-
-  if (feature === 'process') {
-    return 'process'
-  }
-
   if (feature === 'string-bytes') {
     return 'string-bytes'
-  }
-
-  if (feature === 'timers') {
-    return 'timers'
-  }
-
-  if (feature === 'url') {
-    return 'url'
   }
 
   return null
@@ -1118,104 +897,6 @@ function isBinaryArrayLiteralConstructor(expression: FeatureNode): boolean {
   const first = args[0]
 
   return first.type === 'ArrayLiteral'
-}
-
-function binaryRuntimeMethodName(expression: FeatureNode): string | null {
-  const callee = expression.callee
-
-  if (
-    expression.type !== 'CallExpression' ||
-    callee === null ||
-    typeof callee === 'undefined' ||
-    callee.type !== 'MemberExpression'
-  ) {
-    return null
-  }
-
-  if (expression.binaryRuntimeMethod !== null && typeof expression.binaryRuntimeMethod !== 'undefined') {
-    return expression.binaryRuntimeMethod
-  }
-
-  return null
-}
-
-function cryptoRuntimeMethodName(expression: FeatureNode): string | null {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.cryptoRuntimeMethod === null ||
-    typeof expression.cryptoRuntimeMethod === 'undefined'
-  ) {
-    return null
-  }
-
-  return expression.cryptoRuntimeMethod
-}
-
-function debugRuntimeMethodName(expression: FeatureNode): string | null {
-  const callee = expression.callee
-
-  if (
-    expression.type !== 'CallExpression' ||
-    callee === null ||
-    typeof callee === 'undefined' ||
-    callee.type !== 'MemberExpression'
-  ) {
-    return null
-  }
-
-  if (debugRuntimeMethodNameFromPath(memberExpressionPath(callee)) === expression.debugRuntimeMethod) {
-    return expression.debugRuntimeMethod
-  }
-
-  return null
-}
-
-function pathRuntimeMethodName(expression: FeatureNode): string | null {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.pathRuntimeMethod === null ||
-    typeof expression.pathRuntimeMethod === 'undefined'
-  ) {
-    return null
-  }
-
-  return expression.pathRuntimeMethod
-}
-
-function urlRuntimeMethodName(expression: FeatureNode): string | null {
-  if (
-    (expression.type !== 'CallExpression' && expression.type !== 'NewExpression') ||
-    expression.urlRuntimeMethod === null ||
-    typeof expression.urlRuntimeMethod === 'undefined'
-  ) {
-    return null
-  }
-
-  return expression.urlRuntimeMethod
-}
-
-function processRuntimeMethodName(expression: FeatureNode): string | null {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.processRuntimeMethod === null ||
-    typeof expression.processRuntimeMethod === 'undefined'
-  ) {
-    return null
-  }
-
-  return expression.processRuntimeMethod
-}
-
-function childProcessRuntimeMethodName(expression: FeatureNode): string | null {
-  if (
-    expression.type !== 'CallExpression' ||
-    expression.childProcessRuntimeMethod === null ||
-    typeof expression.childProcessRuntimeMethod === 'undefined'
-  ) {
-    return null
-  }
-
-  return expression.childProcessRuntimeMethod
 }
 
 function isObjectFieldExpression(expression: FeatureNode | null | undefined): boolean {
@@ -1358,35 +1039,6 @@ function stringRuntimeMethodName(expression: FeatureNode): string | null {
   }
 
   return collectionStringRuntimeMethodName(property)
-}
-
-function timeRuntimeCallName(callee: AnyNode): string | null {
-  const path = memberExpressionPath(callee)
-  const method = timeRuntimeMethodNameFromPath(path)
-
-  if (method !== null && typeof method !== 'undefined') {
-    return method
-  }
-
-  return dateConstructorRuntimeMethodNameFromPath(path)
-}
-
-function dateReceiverRuntimeMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  const receiver = callee.object
-
-  if (receiver === null || typeof receiver === 'undefined' || receiver.valueType !== 'date') {
-    return null
-  }
-
-  return dateInstanceRuntimeMethodName(callee.property)
-}
-
-function jsonRuntimeCallName(callee: AnyNode): string | null {
-  return jsonRuntimeMethodNameFromPath(memberExpressionPath(callee))
 }
 
 function timerRuntimeCallName(expression: FeatureNode): string | null {
