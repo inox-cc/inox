@@ -31,6 +31,7 @@ import {
 } from './checker/std/fs.ts'
 import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
 import { isMathRuntimeMethod } from './checker/std/math.ts'
+import { runtimeImportValueType } from './checker/std/runtime-imports.ts'
 import { timerCallbackFunctionType, timerClearMethodName, timerRuntimeMethodName } from './checker/std/timers.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { memberExpressionPath } from './member-paths.ts'
@@ -45,7 +46,6 @@ import {
 } from './stdlib/descriptors/binary.ts'
 import {
   isChildProcessRuntimeMethod,
-  isNodeChildProcessImportSource,
   isUnsupportedChildProcessRuntimeMethod
 } from './stdlib/descriptors/child-process.ts'
 import {
@@ -65,7 +65,6 @@ import {
 } from './stdlib/descriptors/crypto.ts'
 import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
 import {
-  isNodeEventsImportSource,
   isUnsupportedEventsRuntimeExport,
   unsupportedEventsRuntimeExportReason
 } from './stdlib/descriptors/events.ts'
@@ -111,7 +110,6 @@ import {
   processRuntimePropertyValueType
 } from './stdlib/descriptors/process.ts'
 import {
-  isNodeStreamImportSource,
   isUnsupportedStreamRuntimeExport,
   unsupportedStreamRuntimeExportReason
 } from './stdlib/descriptors/stream.ts'
@@ -123,7 +121,6 @@ import {
 } from './stdlib/descriptors/time.ts'
 import { isNodeTimerImportSource, isTimerHandleMethod, isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
 import {
-  isNodeUrlImportSource,
   isUnsupportedUrlRuntimeMethod,
   isUrlMutableObjectField,
   isUrlRuntimeConstructor,
@@ -1308,7 +1305,7 @@ class Checker {
           const symbol: SymbolInfo = {
             kind: 'import',
             mutable: false,
-            valueType: this.runtimeImportValueType(item.source, specifier.imported),
+            valueType: runtimeImportValueType(item.source, specifier.imported),
             importedName: specifier.imported,
             importSource: item.source,
             loc: specifier.loc
@@ -7295,131 +7292,6 @@ class Checker {
     }
 
     return path[1]
-  }
-
-  runtimeImportValueType(source: string, importedName: string): ValueType {
-    if (isNodeOsImportSource(source)) {
-      if (isOsRuntimeConstant(importedName)) {
-        return 'string'
-      }
-
-      if (isOsRuntimeMethod(importedName) || isUnsupportedOsRuntimeMethod(importedName)) {
-        return 'function'
-      }
-
-      if (isStdlibModuleRuntimeImportBinding(source, 'os', 'module-object', importedName)) {
-        return 'object'
-      }
-    }
-
-    if (isNodePathImportSource(source)) {
-      if (isPathRuntimeConstant(importedName)) {
-        return 'string'
-      }
-
-      if (isPathRuntimeMethod(importedName) || isUnsupportedPathRuntimeMethod(importedName)) {
-        return 'function'
-      }
-
-      if (
-        isStdlibModuleRuntimeImportBinding(source, 'path', 'module-object', importedName) ||
-        importedName === 'posix'
-      ) {
-        return 'object'
-      }
-    }
-
-    if (isNodeUrlImportSource(source)) {
-      if (
-        isUrlRuntimeMethod(importedName) ||
-        isUrlRuntimeConstructor(importedName) ||
-        isUnsupportedUrlRuntimeMethod(importedName)
-      ) {
-        return 'function'
-      }
-
-      if (isStdlibModuleRuntimeImportBinding(source, 'url', 'module-object', importedName)) {
-        return 'object'
-      }
-    }
-
-    if (isNodeProcessImportSource(source)) {
-      if (isProcessRuntimeMethod(importedName) || isUnsupportedProcessRuntimeMethod(importedName)) {
-        return 'function'
-      }
-
-      const propertyType = resolvedConcreteValueTypeMetadata(processRuntimePropertyValueType(importedName), 'unknown')
-
-      if (propertyType !== 'unknown') {
-        return propertyType
-      }
-
-      if (isStdlibModuleRuntimeImportBinding(source, 'process', 'module-object', importedName)) {
-        return 'object'
-      }
-    }
-
-    if (isNodeChildProcessImportSource(source)) {
-      if (isChildProcessRuntimeMethod(importedName) || isUnsupportedChildProcessRuntimeMethod(importedName)) {
-        return 'function'
-      }
-
-      if (isStdlibModuleRuntimeImportBinding(source, 'child-process', 'module-object', importedName)) {
-        return 'object'
-      }
-    }
-
-    if (isNodeBufferImportSource(source)) {
-      if (
-        importedName === 'Buffer' ||
-        isStdlibModuleRuntimeImportBinding(source, 'buffer', 'module-object', importedName)
-      ) {
-        return 'object'
-      }
-
-      if (importedName === 'constants') {
-        return 'object'
-      }
-
-      if (isUnsupportedBufferRuntimeExport(importedName)) {
-        return 'function'
-      }
-    }
-
-    if (isNodeEventsImportSource(source)) {
-      if (isStdlibModuleRuntimeImportBinding(source, 'events', 'module-object', importedName)) {
-        return 'object'
-      }
-
-      if (isUnsupportedEventsRuntimeExport(importedName)) {
-        return 'function'
-      }
-    }
-
-    if (isNodeStreamImportSource(source)) {
-      if (
-        isStdlibModuleRuntimeImportBinding(source, 'stream', 'module-object', importedName) ||
-        importedName === 'promises'
-      ) {
-        return 'object'
-      }
-
-      if (isUnsupportedStreamRuntimeExport(importedName)) {
-        return 'function'
-      }
-    }
-
-    if (isNodeTimerImportSource(source)) {
-      if (isTimerRuntimeMethod(importedName)) {
-        return 'function'
-      }
-
-      if (isStdlibModuleRuntimeImportBinding(source, 'timers', 'module-object', importedName)) {
-        return 'object'
-      }
-    }
-
-    return 'unknown'
   }
 
   checkRuntimeBuiltinImport(statement: AnyNode): void {
