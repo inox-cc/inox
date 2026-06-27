@@ -587,7 +587,11 @@ function isFunctionSignatureStart(tokens: Token[], position: number): boolean {
     current = current + 1
   }
 
-  return tokenValue(tokens, current) === 'function'
+  if (tokenValue(tokens, current) !== 'function') {
+    return false
+  }
+
+  return tokenAt(tokens, current + 1).type === 'identifier'
 }
 
 function isInterfaceDeclarationStart(tokens: Token[], position: number): boolean {

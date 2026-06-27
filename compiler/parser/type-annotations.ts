@@ -24,6 +24,7 @@ export function readTypeAnnotation(
 ): TypeAnnotationReadResult {
   const parts: string[] = []
   let genericDepth = 0
+  let parenDepth = 0
   let position = startPosition
   let lastTokenLine = 0
   const startToken = tokenAt(tokens, position)
@@ -40,6 +41,7 @@ export function readTypeAnnotation(
 
     if (
       genericDepth === 0 &&
+      parenDepth === 0 &&
       stringArrayIncludes(stopValues, token.value) &&
       !isArrayTypeSuffixClose(parts, token.value)
     ) {
@@ -48,6 +50,7 @@ export function readTypeAnnotation(
 
     if (
       genericDepth === 0 &&
+      parenDepth === 0 &&
       parts.length > 0 &&
       actualOptions.stopAtLineBreak === true &&
       token.line > lastTokenLine
@@ -57,6 +60,7 @@ export function readTypeAnnotation(
 
     if (
       genericDepth === 0 &&
+      parenDepth === 0 &&
       parts.length > 0 &&
       actualOptions.stopAtStatementBoundary === true &&
       token.line > lastTokenLine &&
@@ -69,6 +73,10 @@ export function readTypeAnnotation(
       genericDepth = genericDepth + 1
     } else if (token.value === '>' && genericDepth > 0) {
       genericDepth = genericDepth - 1
+    } else if (token.value === '(') {
+      parenDepth = parenDepth + 1
+    } else if (token.value === ')' && parenDepth > 0) {
+      parenDepth = parenDepth - 1
     }
 
     if (token.value === 'readonly') {
@@ -155,6 +163,12 @@ function isArrayTypeSuffixClose(parts: string[], value: string): boolean {
 }
 
 export function normalizeTypeName(name: string): string {
+  const parenthesizedInner = parenthesizedTypeInner(name)
+
+  if (parenthesizedInner !== null && typeof parenthesizedInner !== 'undefined') {
+    return normalizeTypeName(parenthesizedInner)
+  }
+
   if (isFunctionTypeName(name)) {
     return 'function'
   }
@@ -395,6 +409,38 @@ function isFunctionTypeName(name: string): boolean {
   const arrow = functionTypeArrowIndex(name)
 
   return arrow > 0
+}
+
+function parenthesizedTypeInner(name: string): string | null {
+  if (!name.startsWith('(') || !name.endsWith(')')) {
+    return null
+  }
+
+  let parenDepth = 0
+
+  for (let index = 0; index < name.length; index = index + 1) {
+    const current = name[index]
+
+    if (current === '(') {
+      parenDepth = parenDepth + 1
+    } else if (current === ')') {
+      parenDepth = parenDepth - 1
+    }
+
+    if (parenDepth < 0) {
+      return null
+    }
+
+    if (parenDepth === 0 && index < name.length - 1) {
+      return null
+    }
+  }
+
+  if (parenDepth !== 0) {
+    return null
+  }
+
+  return name.slice(1, -1)
 }
 
 function functionTypeArrowIndex(name: string): number {

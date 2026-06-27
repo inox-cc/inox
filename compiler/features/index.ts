@@ -6,14 +6,30 @@ import {
   regexpFeatureId,
   regexpFeatureRuntimeRequirements
 } from './regexp/index.ts'
+import {
+  collectWeakReferencesIrFeatures,
+  weakReferencesFeatureCPreludeHelpers,
+  weakReferencesFeatureCPreludeIncludes,
+  weakReferencesFeatureId,
+  weakReferencesFeatureRuntimeRequirements
+} from './weak-references/index.ts'
 
 type CompilerFeatureHelperEmitter = () => string[]
 
-export const compilerFeatures: IrFeature[] = [regexpFeatureId]
+export const compilerFeatures: IrFeature[] = [regexpFeatureId, weakReferencesFeatureId]
 
-const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [regexpFeatureRuntimeRequirements]
-const compilerFeatureCPreludeIncludeRows: string[][] = [regexpFeatureCPreludeIncludes]
-const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [regexpFeatureCPreludeHelpers]
+const compilerFeatureRuntimeRequirementRows: IrRuntimeRequirement[][] = [
+  regexpFeatureRuntimeRequirements,
+  weakReferencesFeatureRuntimeRequirements
+]
+const compilerFeatureCPreludeIncludeRows: string[][] = [
+  regexpFeatureCPreludeIncludes,
+  weakReferencesFeatureCPreludeIncludes
+]
+const compilerFeatureCPreludeHelperRows: CompilerFeatureHelperEmitter[][] = [
+  regexpFeatureCPreludeHelpers,
+  weakReferencesFeatureCPreludeHelpers
+]
 
 export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<IrFeature>): void {
   if (node === null || typeof node === 'undefined' || typeof node !== 'object') {
@@ -115,6 +131,11 @@ function findCompilerFeatureIndex(featureName: IrFeature): number {
 function collectCompilerFeatureIrFeature(featureName: IrFeature, node: AnyNode, features: Set<IrFeature>): void {
   if (featureName === regexpFeatureId) {
     collectRegExpIrFeatures(node, features)
+    return
+  }
+
+  if (featureName === weakReferencesFeatureId) {
+    collectWeakReferencesIrFeatures(node, features)
   }
 }
 

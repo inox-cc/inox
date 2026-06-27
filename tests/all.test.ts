@@ -109,6 +109,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImportBoundary } =
     await import('./integration/module-declaration-import-boundary.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
+  const { assertModuleDeclarationFunctionKeywordType } =
+    await import('./integration/module-declaration-function-keyword-type.test.ts')
   const { assertModuleDeclarationInferredConsts } =
     await import('./integration/module-declaration-inferred-consts.test.ts')
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
@@ -135,6 +137,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-contracts', () => {
       assertModuleDeclarationContracts()
+    })
+
+    await t.test('module-declaration-function-keyword-type', () => {
+      assertModuleDeclarationFunctionKeywordType()
     })
 
     await t.test('module-declaration-inferred-consts', () => {

@@ -1,5 +1,5 @@
 // @targets c
-// @expect diagnostics INOX_EXPECTED_EXPRESSION
+// @expect diagnostics INOX_CONST_INIT
 
 const value: number
 console.log(value)

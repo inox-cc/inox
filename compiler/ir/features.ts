@@ -249,10 +249,6 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
       requirements.add('objects')
       requirements.add('string-bytes')
       requirements.add('url')
-    } else if (feature === 'weak-references') {
-      requirements.add('managed-values')
-      requirements.add('objects')
-      requirements.add('weak-references')
     } else if (feature === 'debug-memory') {
       requirements.add('managed-values')
       requirements.add('objects')
@@ -582,12 +578,6 @@ function recordNodeFeatures(node: FeatureNode, features: IrFeatureSet): void {
 
   if (node.nullable === true) {
     features.add('runtime-values')
-  }
-
-  if (node.ownership === 'weak') {
-    features.add('runtime-values')
-    features.add('objects')
-    features.add('weak-references')
   }
 
   if (node.valueType === 'promise' || node.returnType === 'promise') {
@@ -1031,10 +1021,6 @@ function runtimeRequirementFeature(feature: IrFeature): IrRuntimeRequirement | n
 
   if (feature === 'url') {
     return 'url'
-  }
-
-  if (feature === 'weak-references') {
-    return 'weak-references'
   }
 
   return null
