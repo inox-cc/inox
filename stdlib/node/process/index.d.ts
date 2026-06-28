@@ -7,6 +7,19 @@ export interface ProcessEnv {
   [key: string]: string;
 }
 
+export interface ProcessHrtime {
+  readonly length: number;
+  [index: number]: number;
+}
+
+export interface ProcessMemoryUsage {
+  readonly rss: number;
+  readonly heapTotal: number;
+  readonly heapUsed: number;
+  readonly external: number;
+  readonly arrayBuffers: number;
+}
+
 export interface ProcessVersions {
   readonly node: string;
 }
@@ -25,6 +38,8 @@ export interface ProcessModule {
 
   cwd(): string;
   exit(code?: number): void;
+  hrtime(time?: ProcessHrtime): ProcessHrtime;
+  memoryUsage(): ProcessMemoryUsage;
 }
 
 export const arch: string;
@@ -40,6 +55,8 @@ export const versions: ProcessVersions;
 
 export function cwd(): string;
 export function exit(code?: number): void;
+export function hrtime(time?: ProcessHrtime): ProcessHrtime;
+export function memoryUsage(): ProcessMemoryUsage;
 
 declare const process: ProcessModule;
 export default process;

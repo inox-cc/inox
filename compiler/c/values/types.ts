@@ -1127,6 +1127,7 @@ function anyNodeLikeStringFields(): string[] {
     'pathRuntimeMethod',
     'pathRuntimeConstant',
     'processRuntimeMethod',
+    'processRuntimeObject',
     'processRuntimeProperty',
     'processRuntimeEnvName',
     'dgramMessageHandlerName',

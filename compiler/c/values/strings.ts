@@ -847,6 +847,27 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    stringDeps(context).isNodeRuntimeProducedStringExpression(expression) &&
+    stringDeps(context).inferExpressionType(expression, context) === 'string'
+  ) {
+    const value = stringDeps(context).emitCValueExpression(expression, context)
+    const string = nextCName(context, tempPrefix)
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+    lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+    return {
+      lines,
+      bytes: `${string}->bytes`,
+      length: `${string}->len`
+    }
+  }
+
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'TemplateLiteral') {
     const value = emitCTemplateLiteralValueExpression(expression, context)
     const string = nextCName(context, tempPrefix)
@@ -2529,7 +2550,8 @@ function isStringLengthObject(expression: AnyNode | null | undefined, context: S
 
     return (
       (variables !== null && typeof variables !== 'undefined' && variables.get(name) === 'string') ||
-      (runtimeStrings !== null && typeof runtimeStrings !== 'undefined' && runtimeStrings.has(name))
+      (runtimeStrings !== null && typeof runtimeStrings !== 'undefined' && runtimeStrings.has(name)) ||
+      stringDeps(context).inferExpressionType(expression, context) === 'string'
     )
   }
 

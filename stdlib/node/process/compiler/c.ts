@@ -7,9 +7,15 @@ import type { AnyNode } from '../../../../compiler/types.ts'
 import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
 import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
 import type {
+  CObjectShape,
+  CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../../../../compiler/c/types.ts'
+import { type } from 'os'
+import { push } from 'stream/iter'
+import { emitPreparedNumberExpression } from '../../../../compiler/c/values/expressions.ts'
+import { registerObjectShape } from '../../../../compiler/c/values/objects.ts'
 
 type ProcessCContext = {
   cleanupEnabled: boolean
@@ -21,10 +27,14 @@ type ProcessCContext = {
   statusReturn: boolean
   throwingFunction: boolean
   usedCleanupGoto: boolean
+  objectShapes: Map<string, CObjectShapeField[]>
+  variables: Map<string, string>
 }
 
 export type ProcessLoweringDependencies = {
+  emitCValueExpression(expression: AnyNode, context: ProcessCContext): PreparedExpression
   emitPreparedNumberExpression(expression: AnyNode, context: ProcessCContext): PreparedExpression
+  registerObjectShape(context: ProcessCContext, name: string, shape: CObjectShape | null | undefined): void
 }
 
 export function cProcessRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
@@ -50,6 +60,20 @@ export function cProcessRuntimePropertyName(expression: AnyNode | null | undefin
 
   if (property !== null && typeof property !== 'undefined') {
     return property
+  }
+
+  return null
+}
+
+export function cProcessRuntimeObjectName(expression: AnyNode | null | undefined): string | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  const object = expression.processRuntimeObject
+
+  if (object !== null && typeof object !== 'undefined') {
+    return object
   }
 
   return null
@@ -166,7 +190,9 @@ export function emitPreparedProcessStringExpression(
     }
 
     pushLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_process_${functionName}(&inox_default_allocator, &${out})`, context))
+    const callName = functionName === 'process' ? 'inox_process' : `inox_process_${functionName}`
+
+    lines.push(emitStatusCheck(`${callName}(&inox_default_allocator, &${out})`, context))
   } else {
     let name = ''
 
@@ -213,6 +239,85 @@ export function emitPreparedProcessNumberExpression(expression: AnyNode): Prepar
   return {
     lines: [],
     expression: 'inox_process_get_exit_code()'
+  }
+}
+
+export function emitPreparedProcessValueExpression(
+  expression: AnyNode,
+  context: ProcessCContext,
+  dependencies: ProcessLoweringDependencies,
+  options: PreparedCallOptions | null | undefined
+): PreparedExpression | null {
+  const method = cProcessRuntimeMethodName(expression)
+  const object = cProcessRuntimeObjectName(expression)
+  const property = cProcessRuntimePropertyName(expression)
+
+  if (method !== 'hrtime' && method !== 'memoryUsage' && object !== 'process' && property !== 'versions') {
+    return null
+  }
+
+  let out = nextCName(context, 'inox_process_value')
+  const lines: string[] = []
+
+  if (
+    options !== null &&
+    typeof options !== 'undefined' &&
+    options.out !== null &&
+    typeof options.out !== 'undefined'
+  ) {
+    out = options.out
+  }
+
+  if (options === null || typeof options === 'undefined' || options.owned !== false) {
+    registerOwnedValue(context, out)
+  }
+
+  pushLines(lines, emitPrepareOwnedValueWrite(out))
+
+  if (method === 'memoryUsage' || object === 'process' || property === 'versions') {
+    let functionName = 'process'
+
+    if (method === 'memoryUsage') {
+      functionName = 'memoryUsage'
+    } else if (property === 'versions') {
+      functionName = 'versions'
+    }
+
+    context.variables.set(out, 'object')
+    dependencies.registerObjectShape(context, out, expression.shape)
+
+    const callName = functionName === 'process' ? 'inox_process' : `inox_process_${functionName}`
+
+    lines.push(emitStatusCheck(`${callName}(&inox_default_allocator, &${out})`, context))
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  let previous: PreparedExpression = {
+    lines: [],
+    expression: 'inox_undefined_value()'
+  }
+  let hasPrevious = '0'
+
+  if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+    previous = dependencies.emitCValueExpression(expression.args[0], context)
+    hasPrevious = '1'
+  }
+
+  pushLines(lines, previous.lines)
+  lines.push(
+    emitStatusCheck(
+      `inox_process_hrtime(&inox_default_allocator, ${previous.expression}, ${hasPrevious}, &${out})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: out
   }
 }
 

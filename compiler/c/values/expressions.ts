@@ -4840,6 +4840,7 @@ export type CValueExpressionDependencies = {
   emitPreparedPathObjectCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessStringExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedProcessValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -4918,6 +4919,12 @@ export function emitCValueExpression(
 
   if (processString !== null && typeof processString !== 'undefined') {
     return processString
+  }
+
+  const processValue = deps.emitPreparedProcessValueExpression(expression, context)
+
+  if (processValue !== null && typeof processValue !== 'undefined') {
+    return processValue
   }
 
   const urlStringCall = deps.emitPreparedUrlStringCallExpression(expression, context)

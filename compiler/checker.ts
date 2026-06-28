@@ -413,6 +413,7 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('pathRuntimeMethod', 'string', null, true, loc),
       anyNodeField('pathRuntimeConstant', 'string', null, true, loc),
       anyNodeField('processRuntimeMethod', 'string', null, true, loc),
+      anyNodeField('processRuntimeObject', 'string', null, true, loc),
       anyNodeField('processRuntimeProperty', 'string', null, true, loc),
       anyNodeField('processRuntimeEnvName', 'string', null, true, loc),
       anyNodeField('dgramMessageHandlerName', 'string', null, true, loc),
@@ -2613,6 +2614,7 @@ class Checker {
 
     if (expression.type === 'Reference') {
       const symbol = this.resolveReference(expression)
+      const path: string[] = expression.path
       let valueType: ValueType = 'unknown'
 
       expression.nullable = false
@@ -2630,7 +2632,6 @@ class Checker {
       expression.className = null
 
       if (symbol !== null && typeof symbol !== 'undefined') {
-        const path: string[] = expression.path
         valueType = symbol.valueType
         expression.nullable = symbol.nullable === true && !this.narrowedNullableNames.has(path[0])
         expression.valueType = valueType
@@ -2697,6 +2698,7 @@ class Checker {
         if (processImportInfo !== null && typeof processImportInfo !== 'undefined') {
           expression.processRuntimeProperty = processImportInfo.property
           expression.valueType = processImportInfo.valueType
+          expression.shape = processImportInfo.shape ?? null
         }
 
         if (
@@ -2706,6 +2708,16 @@ class Checker {
         ) {
           expression.pathRuntimeConstant = importedName
         }
+      }
+
+      if (
+        symbol !== null &&
+        typeof symbol !== 'undefined' &&
+        symbol.kind === 'global' &&
+        path.length === 1 &&
+        path[0] === 'process'
+      ) {
+        expression.processRuntimeObject = 'process'
       }
 
       return valueType
@@ -5195,10 +5207,12 @@ class Checker {
 
   checkProcessCall(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.callee)
+    const rootSymbol = this.resolveMemberPathRootSymbol(path)
     const call = processRuntimeCallInfo(
       path,
       this.resolveStdlibRuntimeDirectImportName(path, 'process'),
-      this.resolveStdlibModuleObjectMemberName(path, 'process')
+      this.resolveStdlibModuleObjectMemberName(path, 'process'),
+      rootSymbol
     )
 
     if (call === null || typeof call === 'undefined') {
@@ -5225,7 +5239,7 @@ class Checker {
 
     expression.processRuntimeMethod = call.method
 
-    if (call.method === 'cwd') {
+    if (call.method === 'cwd' || call.method === 'memoryUsage') {
       if (expression.args.length !== 0) {
         this.report(
           'INOX_ARG_COUNT',
@@ -5234,8 +5248,27 @@ class Checker {
         )
       }
 
-      expression.valueType = 'string'
-      return 'string'
+      expression.valueType = call.valueType
+      expression.shape = call.shape ?? null
+      return expression.valueType
+    }
+
+    if (call.method === 'hrtime') {
+      if (expression.args.length > 1) {
+        this.report(
+          'INOX_ARG_COUNT',
+          `function ${call.label} expects 0 or 1 argument(s), got ${expression.args.length}`,
+          expression.loc
+        )
+      }
+
+      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+        this.checkAssignableType(argTypes[0], 'array', expression.args[0].loc, false, false)
+      }
+
+      expression.valueType = call.valueType
+      expression.arrayElementType = call.arrayElementType ?? null
+      return expression.valueType
     }
 
     if (expression.args.length > 1) {
@@ -5280,6 +5313,7 @@ class Checker {
 
     expression.processRuntimeProperty = info.property
     expression.valueType = info.valueType
+    expression.shape = info.shape ?? null
     return expression.valueType
   }
 
@@ -6286,7 +6320,14 @@ class Checker {
       return null
     }
 
-    return this.scope.resolve(firstPathSegment(path))
+    const root = firstPathSegment(path)
+    const symbol = this.scope.resolve(root)
+
+    if (symbol !== null && typeof symbol !== 'undefined') {
+      return symbol
+    }
+
+    return builtinGlobalSymbol(root)
   }
 
   resolveStdlibRuntimeDirectImportName(

@@ -1,7 +1,7 @@
 export const nodeProcessImportSource = 'node:process'
 export const nodeProcessModuleObjectImportNames = ['default', 'process']
 
-export type ProcessRuntimeMethod = 'cwd' | 'exit'
+export type ProcessRuntimeMethod = 'cwd' | 'exit' | 'hrtime' | 'memoryUsage'
 
 export type ProcessRuntimeProperty =
   | 'arch'
@@ -22,7 +22,7 @@ export type ProcessRuntimeStringProperty = 'arch' | 'argv0' | 'execPath' | 'plat
 export type ProcessRuntimeNumberProperty = 'argv.length' | 'exitCode' | 'pid'
 export type ProcessRuntimeObjectProperty = 'argv' | 'env' | 'versions'
 
-export const processRuntimeMethods: ProcessRuntimeMethod[] = ['cwd', 'exit']
+export const processRuntimeMethods: ProcessRuntimeMethod[] = ['cwd', 'exit', 'hrtime', 'memoryUsage']
 export const processRuntimeProperties: ProcessRuntimeProperty[] = [
   'arch',
   'argv',
@@ -56,10 +56,8 @@ export const unsupportedProcessRuntimeMethods = [
   'chdir',
   'cpuUsage',
   'emit',
-  'hrtime',
   'kill',
   'listenerCount',
-  'memoryUsage',
   'nextTick',
   'off',
   'on',

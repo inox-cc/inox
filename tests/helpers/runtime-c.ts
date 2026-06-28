@@ -86,7 +86,7 @@ export async function compileRuntimeProgram(
 }
 
 async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<string> {
-  const compileArgs = runtimeArchiveCompileArgs(variant)
+  const compileArgs = await runtimeArchiveCompileArgs(variant)
   const includeArgs = await runtimeIncludeArgs()
   const sources = await runtimeSources()
   const fingerprint = await runtimeArchiveFingerprint(variant, compileArgs, sources)
@@ -181,12 +181,27 @@ function runtimeArchiveVariantForArgs(extraArgs: string[]): RuntimeArchiveVarian
   return undefined
 }
 
-function runtimeArchiveCompileArgs(variant: RuntimeArchiveVariant): string[] {
+async function runtimeArchiveCompileArgs(variant: RuntimeArchiveVariant): Promise<string[]> {
+  const args = [`-DINOX_PACKAGE_VERSION="${await inoxPackageVersion()}"`]
+
   if (variant === 'weak') {
-    return ['-DINOX_ENABLE_WEAK=1']
+    args.push('-DINOX_ENABLE_WEAK=1')
   }
 
-  return []
+  return args
+}
+
+async function inoxPackageVersion(): Promise<string> {
+  const packageJson = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')) as {
+    version?: unknown
+  }
+  const version = packageJson.version
+
+  if (typeof version === 'string') {
+    return version
+  }
+
+  return '0.0.0'
 }
 
 async function runtimeArchiveFingerprint(

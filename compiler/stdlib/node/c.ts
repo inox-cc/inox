@@ -68,7 +68,8 @@ import {
   cProcessRuntimeMethodName,
   cProcessRuntimePropertyName,
   cProcessRuntimePropertyValueType,
-  cProcessRuntimeStringPropertyName
+  cProcessRuntimeStringPropertyName,
+  emitPreparedProcessValueExpression
 } from '../../../stdlib/node/process/compiler/c.ts'
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
 import type { UrlLoweringDependencies as PackageUrlLoweringDependencies } from '../../../stdlib/node/url/compiler/c.ts'
@@ -111,6 +112,7 @@ export {
 } from '../../../stdlib/node/path/compiler/c.ts'
 export {
   emitPreparedProcessNumberExpression,
+  emitPreparedProcessValueExpression,
   emitPreparedProcessStringExpression,
   emitProcessExitCodeAssignment,
   emitProcessExitStatement
@@ -465,6 +467,14 @@ export function inferNodeStdlibExpressionType(expression: AnyNode): string | nul
   if (processMethod !== null && typeof processMethod !== 'undefined') {
     if (processMethod === 'cwd') {
       return 'string'
+    }
+
+    if (processMethod === 'hrtime') {
+      return 'array'
+    }
+
+    if (processMethod === 'memoryUsage') {
+      return 'object'
     }
 
     return 'void'

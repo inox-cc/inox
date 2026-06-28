@@ -14,6 +14,13 @@ set(INOX_TLS_CA_PATH "" CACHE PATH "TLS CA directory path")
 
 set(INOX_RUNTIME_DIR "${CMAKE_CURRENT_LIST_DIR}")
 set(INOX_REPO_ROOT "${INOX_RUNTIME_DIR}/..")
+file(READ "${INOX_REPO_ROOT}/package.json" INOX_PACKAGE_JSON)
+string(REGEX MATCH "\"version\"[ \t\r\n]*:[ \t\r\n]*\"([^\"]+)\"" INOX_PACKAGE_VERSION_MATCH "${INOX_PACKAGE_JSON}")
+if(CMAKE_MATCH_1)
+  set(INOX_PACKAGE_VERSION "${CMAKE_MATCH_1}")
+else()
+  set(INOX_PACKAGE_VERSION "0.0.0")
+endif()
 set(INOX_STDLIB_GLOBAL_DIR "${INOX_REPO_ROOT}/stdlib/global")
 set(INOX_STDLIB_NODE_DIR "${INOX_REPO_ROOT}/stdlib/node")
 file(GLOB INOX_STDLIB_GLOBAL_SOURCES
@@ -107,7 +114,7 @@ target_include_directories(inox_runtime PUBLIC
   ${INOX_STDLIB_NODE_INCLUDE_DIRS}
   ${INOX_TLS_INCLUDE_DIRS}
 )
-target_compile_definitions(inox_runtime PUBLIC ${INOX_TLS_COMPILE_DEFINITION})
+target_compile_definitions(inox_runtime PUBLIC ${INOX_TLS_COMPILE_DEFINITION} INOX_PACKAGE_VERSION=\"${INOX_PACKAGE_VERSION}\")
 
 if(INOX_TLS_LIBRARIES)
   target_link_libraries(inox_runtime PUBLIC ${INOX_TLS_LIBRARIES})

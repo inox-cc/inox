@@ -173,6 +173,7 @@ import {
   emitPreparedPathStringCallExpression,
   emitPreparedProcessNumberExpression,
   emitPreparedProcessStringExpression,
+  emitPreparedProcessValueExpression,
   emitPreparedTimerCallExpression,
   emitPreparedUrlObjectExpression,
   emitPreparedUrlSearchParamsCallExpression,
@@ -803,7 +804,9 @@ pathLoweringDependencies = {
 }
 
 processLoweringDependencies = {
-  emitPreparedNumberExpression
+  emitCValueExpression,
+  emitPreparedNumberExpression,
+  registerObjectShape
 }
 
 urlLoweringDependencies = {
@@ -1265,6 +1268,8 @@ const cValueExpressionDependencies = {
     emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, null),
   emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null),
+  emitPreparedProcessValueExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedProcessValueExpression(expression, context, processLoweringDependencies, null),
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedRuntimeArrayIndexValueExpression,
   emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext) =>

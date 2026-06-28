@@ -7,17 +7,66 @@ import {
   isUnsupportedProcessRuntimeProperty,
   processRuntimePropertyValueType
 } from './descriptor.ts'
-import type { SymbolInfo, ValueType } from '../../../../compiler/types.ts'
+import type { ObjectShapeInfo, SymbolInfo, ValueType } from '../../../../compiler/types.ts'
+import { name, length } from 'assert'
 
 export type ProcessRuntimeCallInfo = {
   method: string
   label: string
   unsupported: boolean
+  valueType: ValueType
+  arrayElementType?: ValueType | null
+  shape?: ObjectShapeInfo | null
 }
 
 export type ProcessRuntimePropertyInfo = {
   property: string
   valueType: ValueType
+  shape?: ObjectShapeInfo | null
+}
+
+export const processMemoryUsageObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'process.MemoryUsage',
+  fields: [
+    {
+      name: 'rss',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'heapTotal',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'heapUsed',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'external',
+      valueType: 'number',
+      readonly: true
+    },
+    {
+      name: 'arrayBuffers',
+      valueType: 'number',
+      readonly: true
+    }
+  ]
+}
+
+export const processVersionsObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'process.Versions',
+  fields: [
+    {
+      name: 'node',
+      valueType: 'string',
+      readonly: true
+    }
+  ]
 }
 
 export type ProcessRuntimeMemberInfo =
@@ -25,6 +74,7 @@ export type ProcessRuntimeMemberInfo =
       kind: 'property'
       property: string
       valueType: ValueType
+      shape?: ObjectShapeInfo | null
     }
   | {
       kind: 'env-name'
@@ -38,9 +88,10 @@ export type ProcessRuntimeMemberInfo =
 export function processRuntimeCallInfo(
   path: readonly string[] | null | undefined,
   importedName: string | null | undefined,
-  moduleObjectMemberName: string | null | undefined
+  moduleObjectMemberName: string | null | undefined,
+  rootSymbol?: SymbolInfo | null
 ): ProcessRuntimeCallInfo | null {
-  const method = processRuntimeMethodName(importedName, moduleObjectMemberName)
+  const method = processRuntimeMethodName(importedName, moduleObjectMemberName, path, rootSymbol)
 
   if (method === null || typeof method === 'undefined') {
     return null
@@ -55,7 +106,10 @@ export function processRuntimeCallInfo(
   return {
     method,
     label,
-    unsupported: !isProcessRuntimeMethod(method)
+    unsupported: !isProcessRuntimeMethod(method),
+    valueType: processRuntimeMethodValueType(method),
+    arrayElementType: processRuntimeMethodArrayElementType(method),
+    shape: processRuntimeMethodShape(method)
   }
 }
 
@@ -85,14 +139,14 @@ export function processRuntimeMemberInfo(
     path.length < 1 ||
     rootSymbol === null ||
     typeof rootSymbol === 'undefined' ||
-    !isProcessImportSymbol(rootSymbol)
+    !isProcessRuntimeRootSymbol(path, rootSymbol)
   ) {
     return null
   }
 
   const root = rootSymbol
 
-  if (isProcessModuleObjectImportSymbol(root)) {
+  if (isProcessModuleObjectImportSymbol(root) || isProcessGlobalRoot(path, root)) {
     return processModuleObjectMemberInfo(path)
   }
 
@@ -119,7 +173,7 @@ export function processRuntimeAssignmentProperty(
     typeof path !== 'undefined' &&
     path.length === 2 &&
     path[1] === 'exitCode' &&
-    isProcessModuleObjectImportSymbol(rootSymbol)
+    (isProcessModuleObjectImportSymbol(rootSymbol) || isProcessGlobalRoot(path, rootSymbol))
   ) {
     return 'exitCode'
   }
@@ -136,7 +190,7 @@ export function processRuntimeIndexProperty(
     typeof path === 'undefined' ||
     rootSymbol === null ||
     typeof rootSymbol === 'undefined' ||
-    !isProcessImportSymbol(rootSymbol)
+    !isProcessRuntimeRootSymbol(path, rootSymbol)
   ) {
     return null
   }
@@ -145,6 +199,7 @@ export function processRuntimeIndexProperty(
 
   if (
     (isProcessModuleObjectImportSymbol(root) && path.length === 2 && path[1] === 'argv') ||
+    (isProcessGlobalRoot(path, root) && path.length === 2 && path[1] === 'argv') ||
     (root.importedName === 'argv' && path.length === 1)
   ) {
     return 'argv'
@@ -155,7 +210,9 @@ export function processRuntimeIndexProperty(
 
 function processRuntimeMethodName(
   importedName: string | null | undefined,
-  moduleObjectMemberName: string | null | undefined
+  moduleObjectMemberName: string | null | undefined,
+  path?: readonly string[] | null,
+  rootSymbol?: SymbolInfo | null
 ): string | null {
   if (importedName !== null && typeof importedName !== 'undefined') {
     return knownProcessRuntimeMethodName(importedName)
@@ -163,6 +220,15 @@ function processRuntimeMethodName(
 
   if (moduleObjectMemberName !== null && typeof moduleObjectMemberName !== 'undefined') {
     return knownProcessRuntimeMethodName(moduleObjectMemberName)
+  }
+
+  if (
+    path !== null &&
+    typeof path !== 'undefined' &&
+    path.length === 2 &&
+    isProcessGlobalRoot(path, rootSymbol)
+  ) {
+    return knownProcessRuntimeMethodName(path[1])
   }
 
   return null
@@ -199,7 +265,8 @@ function processRuntimePropertyInfoOrNull(property: string): ProcessRuntimeMembe
     return {
       kind: 'property',
       property,
-      valueType: processRuntimePropertyConcreteValueType(property)
+      valueType: processRuntimePropertyConcreteValueType(property),
+      shape: processRuntimePropertyShape(property)
     }
   }
 
@@ -209,7 +276,8 @@ function processRuntimePropertyInfoOrNull(property: string): ProcessRuntimeMembe
 function processRuntimePropertyInfo(property: string): ProcessRuntimePropertyInfo {
   return {
     property,
-    valueType: processRuntimePropertyConcreteValueType(property)
+    valueType: processRuntimePropertyConcreteValueType(property),
+    shape: processRuntimePropertyShape(property)
   }
 }
 
@@ -231,6 +299,50 @@ function knownProcessRuntimeMethodName(method: string): string | null {
   return null
 }
 
+function processRuntimeMethodValueType(method: string): ValueType {
+  if (method === 'cwd') {
+    return 'string'
+  }
+
+  if (method === 'hrtime') {
+    return 'array'
+  }
+
+  if (method === 'memoryUsage') {
+    return 'object'
+  }
+
+  if (method === 'exit') {
+    return 'void'
+  }
+
+  return 'unknown'
+}
+
+function processRuntimeMethodArrayElementType(method: string): ValueType | null {
+  if (method === 'hrtime') {
+    return 'number'
+  }
+
+  return null
+}
+
+function processRuntimeMethodShape(method: string): ObjectShapeInfo | null {
+  if (method === 'memoryUsage') {
+    return processMemoryUsageObjectShape
+  }
+
+  return null
+}
+
+function processRuntimePropertyShape(property: string): ObjectShapeInfo | null {
+  if (property === 'versions') {
+    return processVersionsObjectShape
+  }
+
+  return null
+}
+
 function isProcessImportSymbol(symbol: SymbolInfo | null | undefined): boolean {
   return (
     symbol !== null &&
@@ -240,12 +352,35 @@ function isProcessImportSymbol(symbol: SymbolInfo | null | undefined): boolean {
   )
 }
 
+function isProcessRuntimeRootSymbol(
+  path: readonly string[] | null | undefined,
+  symbol: SymbolInfo | null | undefined
+): boolean {
+  return isProcessImportSymbol(symbol) || isProcessGlobalRoot(path, symbol)
+}
+
 function isProcessModuleObjectImportSymbol(symbol: SymbolInfo | null | undefined): boolean {
   return (
     symbol !== null &&
     typeof symbol !== 'undefined' &&
     symbol.kind === 'import' &&
     isNodeStdlibRuntimeImportBinding(symbol.importSource, 'process', 'module-object', symbol.importedName)
+  )
+}
+
+function isProcessGlobalRoot(
+  path: readonly string[] | null | undefined,
+  symbol: SymbolInfo | null | undefined
+): boolean {
+  return (
+    path !== null &&
+    typeof path !== 'undefined' &&
+    path.length > 0 &&
+    path[0] === 'process' &&
+    symbol !== null &&
+    typeof symbol !== 'undefined' &&
+    symbol.kind === 'global' &&
+    symbol.valueType === 'object'
   )
 }
 

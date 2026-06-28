@@ -169,6 +169,7 @@ export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeFie
     'pathRuntimeMethod',
     'pathRuntimeConstant',
     'processRuntimeMethod',
+    'processRuntimeObject',
     'processRuntimeProperty',
     'processRuntimeEnvName',
     'dgramMessageHandlerName',

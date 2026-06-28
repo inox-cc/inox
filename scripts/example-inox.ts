@@ -1,4 +1,4 @@
-import { access, mkdir } from 'node:fs/promises'
+import { access, mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -74,6 +74,7 @@ async function runExampleInox(): Promise<number> {
   const compile = await runCommand(
     'cc',
     [
+      `-DINOX_PACKAGE_VERSION="${await inoxPackageVersion()}"`,
       ...(await exampleInoxRuntimeIncludeArgs()),
       paths.generatedC,
       ...(await exampleInoxRuntimeSources()),
@@ -96,6 +97,19 @@ async function runExampleInox(): Promise<number> {
   })
 
   return run.code
+}
+
+async function inoxPackageVersion(): Promise<string> {
+  const packageJson = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8')) as {
+    version?: unknown
+  }
+  const version = packageJson.version
+
+  if (typeof version === 'string') {
+    return version
+  }
+
+  return '0.0.0'
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
