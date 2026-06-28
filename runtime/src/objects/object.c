@@ -12,6 +12,8 @@
 #include "inox/weak.h"
 #endif
 
+static void inox_object_dispose_ref(inox_ref* ref);
+
 static bool inox_object_field_is_weak(const inox_object* object, uint32_t index) {
   return object != 0 && index < object->shape->field_count && (object->shape->fields[index].flags & INOX_FIELD_WEAK) != 0;
 }
@@ -86,6 +88,7 @@ inox_status inox_object_new(inox_allocator* allocator, const inox_shape* shape, 
   object->header.size = size;
   object->header.align = _Alignof(inox_object);
   object->header.allocator = allocator;
+  object->header.dispose = inox_object_dispose_ref;
   inox_ref_init_weak(&object->header);
   object->shape = shape;
 
@@ -192,6 +195,42 @@ void inox_object_dispose_fields(inox_object* object) {
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
     inox_object_release_field(object, index);
   }
+}
+
+static void inox_object_dispose_ref(inox_ref* ref) {
+  if (ref == 0) {
+    return;
+  }
+
+  inox_object* object = (inox_object*)ref;
+
+  inox_object_dispose_fields(object);
+
+  if (
+    (object->header.flags & INOX_OBJECT_OWNED_SHAPE) == 0 || object->header.allocator == 0 ||
+    object->header.allocator->free == 0 || object->shape == 0
+  ) {
+    return;
+  }
+
+  for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
+    const char* name = object->shape->fields[index].name;
+
+    if (name != 0) {
+      object->header.allocator->free(object->header.allocator->user, (void*)name, strlen(name) + 1, _Alignof(char));
+    }
+  }
+
+  if (object->shape->fields != 0) {
+    object->header.allocator->free(
+      object->header.allocator->user, (void*)object->shape->fields,
+      sizeof(inox_field_info) * object->shape->field_count, _Alignof(inox_field_info)
+    );
+  }
+
+  object->header.allocator->free(
+    object->header.allocator->user, (void*)object->shape, sizeof(inox_shape), _Alignof(inox_shape)
+  );
 }
 
 inox_status inox_object_set(inox_value object, const char* name, size_t len, inox_value value) {

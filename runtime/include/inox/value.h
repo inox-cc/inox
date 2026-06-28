@@ -43,19 +43,22 @@ typedef enum inox_ref_kind {
   INOX_REF_KIND_COUNT
 } inox_ref_kind;
 
+typedef struct inox_ref inox_ref;
 typedef struct inox_weak_cell inox_weak_cell;
+typedef void (*inox_ref_dispose_fn)(inox_ref* ref);
 
-typedef struct inox_ref {
+struct inox_ref {
   inox_ref_kind kind;
   uint32_t ref_count;
   uint32_t flags;
   size_t size;
   size_t align;
   inox_allocator* allocator;
+  inox_ref_dispose_fn dispose;
 #ifdef INOX_ENABLE_WEAK
   inox_weak_cell* weak_cell;
 #endif
-} inox_ref;
+};
 
 typedef struct inox_value {
   inox_tag tag;

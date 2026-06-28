@@ -110,6 +110,24 @@ static inox_status inox_array_reserve(inox_array* array, size_t cap) {
   return INOX_OK;
 }
 
+static void inox_array_dispose_ref(inox_ref* ref) {
+  if (ref == 0) {
+    return;
+  }
+
+  inox_array* array = (inox_array*)ref;
+
+  for (size_t index = 0; index < array->len; index += 1) {
+    inox_release(array->items[index]);
+  }
+
+  if (array->header.allocator != 0 && array->header.allocator->free != 0 && array->items != 0) {
+    array->header.allocator->free(
+      array->header.allocator->user, array->items, sizeof(inox_value) * array->cap, _Alignof(inox_value)
+    );
+  }
+}
+
 inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || out == 0) {
     return INOX_ERR_TYPE;
@@ -138,6 +156,7 @@ inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* ou
   array->header.size = sizeof(inox_array);
   array->header.align = _Alignof(inox_array);
   array->header.allocator = allocator;
+  array->header.dispose = inox_array_dispose_ref;
   inox_ref_init_weak(&array->header);
   array->len = len;
   array->cap = len;

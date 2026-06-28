@@ -4,6 +4,8 @@
 #include "inox/hash.h"
 #include "inox/set.h"
 
+static void inox_set_dispose_ref(inox_ref* ref);
+
 static void inox_set_init_entries(inox_set_entry* entries, size_t cap) {
   for (size_t index = 0; index < cap; index += 1) {
     entries[index].value = inox_undefined_value();
@@ -272,6 +274,10 @@ void inox_set_dispose(inox_set* set) {
   }
 }
 
+static void inox_set_dispose_ref(inox_ref* ref) {
+  inox_set_dispose((inox_set*)ref);
+}
+
 inox_status inox_set_has(inox_value set, inox_value value, bool* out) {
   if (out == 0 || set.tag != INOX_TAG_SET || set.as.ref == 0) {
     return INOX_ERR_TYPE;
@@ -308,6 +314,7 @@ inox_status inox_set_new(inox_allocator* allocator, inox_value* out) {
   set->header.size = sizeof(inox_set);
   set->header.align = _Alignof(inox_set);
   set->header.allocator = allocator;
+  set->header.dispose = inox_set_dispose_ref;
   inox_ref_init_weak(&set->header);
   set->len = 0;
   set->cap = 0;

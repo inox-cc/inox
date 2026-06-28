@@ -4,6 +4,8 @@
 #include "inox/hash.h"
 #include "inox/map.h"
 
+static void inox_map_dispose_ref(inox_ref* ref);
+
 static void inox_map_init_entries(inox_map_entry* entries, size_t cap) {
   for (size_t index = 0; index < cap; index += 1) {
     entries[index].key = inox_undefined_value();
@@ -168,6 +170,7 @@ inox_status inox_map_new(inox_allocator* allocator, inox_value* out) {
   map->header.size = sizeof(inox_map);
   map->header.align = _Alignof(inox_map);
   map->header.allocator = allocator;
+  map->header.dispose = inox_map_dispose_ref;
   inox_ref_init_weak(&map->header);
   map->len = 0;
   map->cap = 0;
@@ -269,6 +272,10 @@ void inox_map_dispose(inox_map* map) {
       map->header.allocator->user, map->entries, sizeof(inox_map_entry) * map->cap, _Alignof(inox_map_entry)
     );
   }
+}
+
+static void inox_map_dispose_ref(inox_ref* ref) {
+  inox_map_dispose((inox_map*)ref);
 }
 
 inox_status inox_map_get(inox_value map, inox_value key, inox_value* out) {

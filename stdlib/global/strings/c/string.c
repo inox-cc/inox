@@ -29,6 +29,7 @@ inox_status inox_string_from_literal(inox_allocator* allocator, const char* byte
   string->header.size = size;
   string->header.align = _Alignof(inox_string);
   string->header.allocator = allocator;
+  string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
   string->len = len;
   memcpy(string->bytes, bytes, len);
@@ -555,6 +556,7 @@ inox_status inox_string_concat_parts(
   string->header.size = size;
   string->header.align = _Alignof(inox_string);
   string->header.allocator = allocator;
+  string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
   string->len = len;
 
@@ -656,6 +658,7 @@ inox_status inox_string_to_upper_case_parts(inox_allocator* allocator, const cha
   string->header.size = size;
   string->header.align = _Alignof(inox_string);
   string->header.allocator = allocator;
+  string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
   string->len = value_len;
 
@@ -750,6 +753,7 @@ inox_status inox_string_pad_start_parts(
   string->header.size = size;
   string->header.align = _Alignof(inox_string);
   string->header.allocator = allocator;
+  string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
   string->len = len;
 

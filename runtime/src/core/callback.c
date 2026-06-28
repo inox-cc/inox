@@ -3,6 +3,18 @@
 #include "inox/debug.h"
 #endif
 
+static void inox_callback_dispose_ref(inox_ref* ref) {
+  if (ref == 0) {
+    return;
+  }
+
+  inox_callback* callback = (inox_callback*)ref;
+
+  if (callback->finalizer != 0) {
+    callback->finalizer(callback->context);
+  }
+}
+
 inox_status inox_callback_new(
   inox_allocator* allocator,
   inox_callback_call_fn call,
@@ -27,6 +39,7 @@ inox_status inox_callback_new(
   callback->header.size = sizeof(inox_callback);
   callback->header.align = _Alignof(inox_callback);
   callback->header.allocator = allocator;
+  callback->header.dispose = inox_callback_dispose_ref;
   inox_ref_init_weak(&callback->header);
   callback->call = call;
   callback->context = context;

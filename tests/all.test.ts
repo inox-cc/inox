@@ -119,6 +119,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
     await import('./integration/native-inox-help.test.ts')
+  const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
+    await import('./integration/runtime-value-core-dependencies.test.ts')
 
   await test('compiler integration checks', async (t) => {
     await t.test('no-example-dependencies', async () => {
@@ -171,6 +173,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-inox-runtime-smoke', async () => {
       await assertNativeInoxRuntimeSmoke()
+    })
+
+    await t.test('runtime-value-core-dependencies', async () => {
+      await assertRuntimeValueCoreDoesNotReferenceFeatureDisposers()
     })
   })
 }

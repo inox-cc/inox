@@ -213,6 +213,7 @@ static inox_status inox_bytes_allocate(inox_allocator* allocator, size_t len, in
   bytes->header.size = size;
   bytes->header.align = _Alignof(inox_bytes);
   bytes->header.allocator = allocator;
+  bytes->header.dispose = 0;
   inox_ref_init_weak(&bytes->header);
   bytes->len = len;
   *out = bytes;
