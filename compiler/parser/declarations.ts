@@ -90,11 +90,13 @@ export function createParam(
   token: Token,
   valueType: string,
   optional: boolean,
-  defaultValue: AnyNode | null = null
+  defaultValue: AnyNode | null = null,
+  rest: boolean = false
 ): AnyNode {
   const param: AnyNode = {
     name: token.value,
     optional,
+    rest: rest === true,
     valueType,
     loc: locFromToken(token)
   }

@@ -6,6 +6,10 @@ import { join } from 'node:path'
 import { createServer } from 'node:tls'
 import { fileURLToPath } from 'node:url'
 import { compileSource } from '../../compiler/compiler.ts'
+import {
+  collectStdlibNativeIncludeArgs,
+  collectStdlibNativeSources
+} from '../../scripts/lib/stdlib-native-files.ts'
 
 export type CommandResult = {
   code: number
@@ -23,31 +27,21 @@ const runtimeArchiveVersion = '1'
 const defaultRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE'
 const weakRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE_WEAK'
 const runtimeArchiveRoot = join(repoRoot, 'dist/test-runtime')
-const runtimeSources = [
+const runtimeBaseIncludeArgs = [
+  '-Iruntime/include',
+  '-Iruntime/src/async'
+]
+const runtimeBaseSources = [
   'runtime/src/core/value.c',
   'runtime/src/core/allocator.c',
   'runtime/src/core/callback.c',
-  'runtime/src/core/debug.c',
-  'runtime/src/binary/binary.c',
-  'runtime/src/crypto/crypto.c',
   'runtime/src/core/weak.c',
   'runtime/src/async/loop.c',
   'runtime/src/async/promise.c',
-  'runtime/src/strings/string.c',
-  'runtime/src/child_process/child_process.c',
-  'runtime/src/objects/object.c',
-  'runtime/src/arrays/array.c',
-  'runtime/src/collections/map.c',
-  'runtime/src/collections/set.c',
-  'runtime/src/console/console.c',
-  'runtime/src/fs/fs.c',
-  'runtime/src/json/json.c',
-  'runtime/src/os/os.c',
-  'runtime/src/path/path.c',
-  'runtime/src/process/process.c',
-  'runtime/src/time/time.c',
-  'runtime/src/url/url.c'
+  'runtime/src/objects/object.c'
 ]
+let runtimeIncludeArgsPromise: Promise<string[]> | null = null
+let runtimeSourcesPromise: Promise<string[]> | null = null
 
 export async function createTestTempDir(prefix: string): Promise<string> {
   const root = join(repoRoot, 'dist/test-tmp')
@@ -69,22 +63,23 @@ export async function prepareRuntimeArchives(): Promise<void> {
   process.env[weakRuntimeArchiveEnv] = weakArchive
 }
 
-export function compileRuntimeProgram(
+export async function compileRuntimeProgram(
   source: string,
   output: string,
   extraArgs: string[] = []
 ): Promise<CommandResult> {
+  const includeArgs = await runtimeIncludeArgs()
   const archive = preparedRuntimeArchiveForArgs(extraArgs)
 
   if (archive) {
-    return runCommand('cc', ['-Iruntime/include', ...extraArgs, source, archive, '-o', output])
+    return await runCommand('cc', [...includeArgs, ...extraArgs, source, archive, '-o', output])
   }
 
-  return runCommand('cc', [
-    '-Iruntime/include',
+  return await runCommand('cc', [
+    ...includeArgs,
     ...extraArgs,
     source,
-    ...runtimeSources,
+    ...(await runtimeSources()),
     '-o',
     output
   ])
@@ -92,7 +87,9 @@ export function compileRuntimeProgram(
 
 async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<string> {
   const compileArgs = runtimeArchiveCompileArgs(variant)
-  const fingerprint = await runtimeArchiveFingerprint(variant, compileArgs)
+  const includeArgs = await runtimeIncludeArgs()
+  const sources = await runtimeSources()
+  const fingerprint = await runtimeArchiveFingerprint(variant, compileArgs, sources)
   const dir = join(runtimeArchiveRoot, `${variant}-${fingerprint}`)
   const archive = join(dir, 'libinox_runtime.a')
   const readyPath = join(dir, '.ready')
@@ -110,9 +107,9 @@ async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<st
 
   const objects: string[] = []
 
-  for (const source of runtimeSources) {
+  for (const source of sources) {
     const object = join(objectDir, runtimeObjectName(source))
-    const compile = await runCommand('cc', ['-Iruntime/include', ...compileArgs, '-c', source, '-o', object])
+    const compile = await runCommand('cc', [...includeArgs, ...compileArgs, '-c', source, '-o', object])
 
     assert.equal(
       compile.code,
@@ -192,12 +189,17 @@ function runtimeArchiveCompileArgs(variant: RuntimeArchiveVariant): string[] {
   return []
 }
 
-async function runtimeArchiveFingerprint(variant: RuntimeArchiveVariant, compileArgs: string[]): Promise<string> {
+async function runtimeArchiveFingerprint(
+  variant: RuntimeArchiveVariant,
+  compileArgs: string[],
+  sources: string[]
+): Promise<string> {
   const hash = createHash('sha256')
   const dependencies = [
-    ...runtimeSources,
+    ...sources,
     ...(await collectRuntimeFiles('runtime/include')),
-    ...(await collectRuntimeFiles('runtime/src', '.h'))
+    ...(await collectRuntimeFiles('runtime/src', '.h')),
+    ...(await collectRuntimeFiles('stdlib/node', '.h'))
   ].sort()
 
   hash.update(`version:${runtimeArchiveVersion}\n`)
@@ -213,6 +215,30 @@ async function runtimeArchiveFingerprint(variant: RuntimeArchiveVariant, compile
   }
 
   return hash.digest('hex').slice(0, 16)
+}
+
+async function runtimeIncludeArgs(): Promise<string[]> {
+  if (runtimeIncludeArgsPromise === null) {
+    runtimeIncludeArgsPromise = collectRuntimeIncludeArgs()
+  }
+
+  return await runtimeIncludeArgsPromise
+}
+
+async function collectRuntimeIncludeArgs(): Promise<string[]> {
+  return [...runtimeBaseIncludeArgs, ...(await collectStdlibNativeIncludeArgs())]
+}
+
+async function runtimeSources(): Promise<string[]> {
+  if (runtimeSourcesPromise === null) {
+    runtimeSourcesPromise = collectRuntimeSources()
+  }
+
+  return await runtimeSourcesPromise
+}
+
+async function collectRuntimeSources(): Promise<string[]> {
+  return [...runtimeBaseSources, ...(await collectStdlibNativeSources())]
 }
 
 async function collectRuntimeFiles(directory: string, extension?: string): Promise<string[]> {

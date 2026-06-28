@@ -17,7 +17,7 @@ import {
   dateConstructorRuntimeMethodNameFromPath,
   dateInstanceRuntimeMethodReturnType,
   timeRuntimeMethodNameFromPath
-} from '../stdlib/descriptors/time.ts'
+} from '../../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -62,27 +62,25 @@ import {
 import type {
   CAsyncTaskWrapperMap,
   CCallbackWrapperMap,
-  CDgramMessageHandlerMap,
   CEmitContext,
-  CHttpHandlerMap,
-  CNetHandlerMap,
   CPromiseChainWrapperMap
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCPrelude } from './prelude.ts'
-import { collectStdlibRuntimeImportNames } from './runtime-imports.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
-import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
 import {
-  collectDgramMessageHandlers,
-  emitDgramMessageHandlerDeclaration,
-  emitDgramMessageHandlerHead
-} from './stdlib/dgram.ts'
-import type { HttpLoweringDependencies } from './stdlib/http.ts'
-import { collectHttpHandlers, emitHttpHandlerDeclaration, emitHttpHandlerHead } from './stdlib/http.ts'
-import type { NetLoweringDependencies } from './stdlib/net.ts'
-import { collectNetHandlers, emitNetHandlerDeclaration, emitNetHandlerHead } from './stdlib/net.ts'
+  collectNodeNetworkHandlers,
+  emitNodeNetworkHandlerDeclarations,
+  emitNodeNetworkHandlerPrototypeLines,
+  hasNodeNetworkHandlers,
+  registerNodeStdlibRuntimeImportNames
+} from '../../stdlib/node/compiler/c.ts'
+import type {
+  DgramLoweringDependencies,
+  HttpLoweringDependencies,
+  NetLoweringDependencies
+} from '../../stdlib/node/compiler/c.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -1170,46 +1168,7 @@ export function emitCUnit(
   baseContext.processEntryPath = entryPath
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
-  baseContext.dgramImportNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'dgram',
-    'module-object'
-  )
-  baseContext.dgramCreateSocketNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'dgram',
-    'create-socket'
-  )
-  baseContext.cryptoImportNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'crypto',
-    'module-object'
-  )
-  baseContext.httpImportNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'http',
-    'module-object'
-  )
-  baseContext.httpCreateServerNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'http',
-    'create-server'
-  )
-  baseContext.netImportNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'net',
-    'module-object'
-  )
-  baseContext.netCreateServerNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'net',
-    'create-server'
-  )
-  baseContext.netConnectNames = collectStdlibRuntimeImportNames(
-    irPrograms,
-    'net',
-    'connect'
-  )
+  registerNodeStdlibRuntimeImportNames(baseContext, irPrograms)
   baseContext.classInfos = createClassInfos(classes, diagnostics)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext, deps.callbackLoweringDependencies)
@@ -1223,9 +1182,7 @@ export function emitCUnit(
     baseContext,
     deps.asyncTaskLoweringDependencies
   )
-  baseContext.dgramMessageHandlers = collectDgramMessageHandlers(irPrograms, baseContext)
-  baseContext.httpHandlers = collectHttpHandlers(irPrograms, baseContext)
-  baseContext.netHandlers = collectNetHandlers(irPrograms, baseContext)
+  collectNodeNetworkHandlers(irPrograms, baseContext)
   const classMethods = collectClassMethods(baseContext)
   addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, baseContext)
   const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)
@@ -1307,9 +1264,6 @@ export function emitCUnit(
   const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers
   const promiseChainWrappers: CPromiseChainWrapperMap = baseContext.promiseChainWrappers
   const asyncTaskWrappers: CAsyncTaskWrapperMap = baseContext.asyncTaskWrappers
-  const dgramMessageHandlers: CDgramMessageHandlerMap = baseContext.dgramMessageHandlers
-  const httpHandlers: CHttpHandlerMap = baseContext.httpHandlers
-  const netHandlers: CNetHandlerMap = baseContext.netHandlers
 
   if (callbackWrappers.size > 0) {
     for (const wrapper of callbackWrappers.values()) {
@@ -1389,23 +1343,7 @@ export function emitCUnit(
     }
   }
 
-  if (dgramMessageHandlers.size > 0) {
-    for (const wrapper of dgramMessageHandlers.values()) {
-      lines.push(`${emitDgramMessageHandlerHead(wrapper)};`)
-    }
-  }
-
-  if (httpHandlers.size > 0) {
-    for (const wrapper of httpHandlers.values()) {
-      lines.push(`${emitHttpHandlerHead(wrapper)};`)
-    }
-  }
-
-  if (netHandlers.size > 0) {
-    for (const wrapper of netHandlers.values()) {
-      lines.push(`${emitNetHandlerHead(wrapper)};`)
-    }
-  }
+  pushUnitLines(lines, emitNodeNetworkHandlerPrototypeLines(baseContext))
 
   if (
     functions.length > 0 ||
@@ -1413,9 +1351,7 @@ export function emitCUnit(
     asyncTaskWrappers.size > 0 ||
     callbackWrappers.size > 0 ||
     promiseChainWrappers.size > 0 ||
-    dgramMessageHandlers.size > 0 ||
-    httpHandlers.size > 0 ||
-    netHandlers.size > 0
+    hasNodeNetworkHandlers(baseContext)
   ) {
     lines.push('')
   }
@@ -1455,26 +1391,14 @@ export function emitCUnit(
     }
   }
 
-  if (dgramMessageHandlers.size > 0) {
-    for (const wrapper of dgramMessageHandlers.values()) {
-      pushUnitLines(lines, emitDgramMessageHandlerDeclaration(wrapper, baseContext, deps.dgramLoweringDependencies))
-      lines.push('')
-    }
-  }
-
-  if (httpHandlers.size > 0) {
-    for (const wrapper of httpHandlers.values()) {
-      pushUnitLines(lines, emitHttpHandlerDeclaration(wrapper, baseContext, deps.httpLoweringDependencies))
-      lines.push('')
-    }
-  }
-
-  if (netHandlers.size > 0) {
-    for (const wrapper of netHandlers.values()) {
-      pushUnitLines(lines, emitNetHandlerDeclaration(wrapper, baseContext, deps.netLoweringDependencies))
-      lines.push('')
-    }
-  }
+  pushUnitLines(
+    lines,
+    emitNodeNetworkHandlerDeclarations(baseContext, {
+      dgram: deps.dgramLoweringDependencies,
+      http: deps.httpLoweringDependencies,
+      net: deps.netLoweringDependencies
+    })
+  )
 
   for (const item of functions) {
     pushUnitLines(lines, deps.emitFunctionDeclaration(item, baseContext))

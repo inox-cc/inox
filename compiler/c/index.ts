@@ -4,14 +4,13 @@ import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
 import { memberExpressionPath } from '../member-paths.ts'
-import type { DebugMemoryStatsField } from '../stdlib/descriptors/debug.ts'
-import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
 import {
   dateConstructorRuntimeMethodNameFromPath,
   dateInstanceRuntimeMethodName,
   dateInstanceRuntimeMethodReturnType,
+  debugMemoryStatsFields,
   timeRuntimeMethodNameFromPath
-} from '../stdlib/descriptors/time.ts'
+} from '../../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
   Diagnostic,
@@ -22,7 +21,12 @@ import type {
   ModuleGraph,
   SourceLocation
 } from '../types.ts'
-import type { CallbackLoweringDependencies } from './async/callbacks.ts'
+
+type DebugMemoryStatsField = {
+  name: string
+  cField: string
+}
+import type { CallbackLoweringDependencies, RuntimeCallbackArgumentInfo } from './async/callbacks.ts'
 import {
   callbackContextWrapperCaptures,
   callbackContextWrapperContextTypeName,
@@ -122,123 +126,98 @@ import type { CModuleFileEmitters } from './modules.ts'
 import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
 import { mathRuntimeMethodName } from './runtime-methods.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
-import type { BinaryLoweringDependencies } from './stdlib/binary.ts'
+import type {
+  BinaryLoweringDependencies,
+  ChildProcessLoweringDependencies,
+  CryptoLoweringDependencies,
+  DgramLoweringDependencies,
+  FsLoweringDependencies,
+  HttpLoweringDependencies,
+  NetLoweringDependencies,
+  NodeNetworkLoweringDependencies,
+  NodeStdlibAsyncTaskLoweringDependencies,
+  PathLoweringDependencies,
+  ProcessLoweringDependencies,
+  TimerLoweringDependencies,
+  UrlLoweringDependencies
+} from '../../stdlib/node/compiler/c.ts'
 import {
   binaryRuntimeExpressionReturnType,
+  cFsRuntimeConstantExpression,
+  cFsRuntimeExpressionMethod,
+  emitCryptoHandleVariableDeclaration,
+  emitCryptoHashVariableDeclaration,
   emitPreparedBinaryNumberCallExpression,
   emitPreparedBinaryValueExpression,
   emitPreparedBytesIndexAssignment,
   emitPreparedBytesIndexExpression,
   emitPreparedBytesLengthExpression,
-  isBinaryConstructorExpression,
-  isBinaryRuntimeCall
-} from './stdlib/binary.ts'
-import type { ChildProcessLoweringDependencies } from './stdlib/child-process.ts'
-import { cChildProcessRuntimeMethodName, emitPreparedChildProcessCallExpression } from './stdlib/child-process.ts'
-import { isConsoleLog } from './stdlib/console.ts'
-import type { CryptoLoweringDependencies } from './stdlib/crypto.ts'
-import {
-  cryptoRuntimeMethodName,
-  emitCryptoHandleVariableDeclaration,
-  emitCryptoHashVariableDeclaration,
+  emitPreparedChildProcessCallExpression,
   emitPreparedCryptoCallExpression,
   emitPreparedCryptoHashCallExpression,
   emitPreparedCryptoHmacCallExpression,
-  emitPreparedCryptoNumberCallExpression
-} from './stdlib/crypto.ts'
-import { cDebugRuntimeMethodName } from './stdlib/debug.ts'
-import type { DgramLoweringDependencies } from './stdlib/dgram.ts'
-import {
-  emitDgramAddressVariableDeclaration,
-  emitDgramNumberVariableDeclaration,
-  emitDgramSocketCallStatement,
-  emitDgramSocketVariableDeclaration,
-  emitPreparedDgramAddressPortExpression
-} from './stdlib/dgram.ts'
-import type { FetchLoweringDependencies } from './stdlib/fetch.ts'
+  emitPreparedCryptoNumberCallExpression,
+  emitPreparedFsCallExpression,
+  emitPreparedFsStatsMethodExpression,
+  emitPreparedFsSyncStatementExpression,
+  emitPreparedFsSyncValueExpression,
+  emitPreparedNodeStdlibAsyncTaskSourceExpression,
+  emitNodeNetworkCallStatement,
+  emitNodeNetworkVariableDeclaration,
+  emitPreparedNodeNetworkAddressPortExpression,
+  emitPreparedOsConstantExpression,
+  emitPreparedOsStringCallExpression,
+  emitPreparedPathBooleanCallExpression,
+  emitPreparedPathConstantExpression,
+  emitPreparedPathObjectCallExpression,
+  emitPreparedPathStringCallExpression,
+  emitPreparedProcessNumberExpression,
+  emitPreparedProcessStringExpression,
+  emitPreparedTimerCallExpression,
+  emitPreparedUrlObjectExpression,
+  emitPreparedUrlSearchParamsCallExpression,
+  emitPreparedUrlSearchParamsObjectExpression,
+  emitPreparedUrlStringCallExpression,
+  emitProcessExitCodeAssignment,
+  emitProcessExitStatement,
+  emitTimerVariableDeclaration,
+  emitUrlObjectFieldAssignment,
+  inferNodeStdlibExpressionType,
+  inferNodeStdlibMemberExpressionType,
+  isAsyncNodeStdlibRuntimeCallExpression,
+  isBinaryConstructorExpression,
+  isBinaryRuntimeCall,
+  isTimerStartCallExpression,
+  isNodeRuntimeProducedStringExpression,
+  nodeRuntimeStringConstantValue,
+  resolveBinaryExpressionKind,
+  resolveNodeNetworkAddressStringMember,
+  timerCallbackFunctionType
+} from '../../stdlib/node/compiler/c.ts'
+import { isConsoleLog } from '../../stdlib/global/console/compiler/c.ts'
+import type { FetchLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
   cFetchRuntimeExpressionMethod,
   emitFetchHeadersBooleanVariableDeclaration,
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
   emitPreparedFetchInitOperand
-} from './stdlib/fetch.ts'
-import type { FsLoweringDependencies } from './stdlib/fs.ts'
+} from '../../stdlib/global/compiler/c.ts'
+import type { JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
-  cFsRuntimeConstantExpression,
-  cFsRuntimeExpressionMethod,
-  emitFsBooleanFlag,
-  emitPreparedFsAccessModeExpression,
-  emitPreparedFsCallExpression,
-  emitPreparedFsStatsMethodExpression,
-  emitPreparedFsSyncStatementExpression,
-  emitPreparedFsSyncValueExpression
-} from './stdlib/fs.ts'
-import type { HttpLoweringDependencies } from './stdlib/http.ts'
-import { emitHttpServerCallStatement, emitHttpServerVariableDeclaration } from './stdlib/http.ts'
-import type { JsonDeclarationDependencies } from './stdlib/json.ts'
-import {
+  cDebugRuntimeMethodName,
   cJsonRuntimeCallName,
   emitJsonParseVariableDeclaration,
   emitPreparedJsonCallExpression,
   emitPreparedJsonScalarParseExpression
-} from './stdlib/json.ts'
-import type { NetLoweringDependencies } from './stdlib/net.ts'
-import {
-  emitNetAddressMemberVariableDeclaration,
-  emitNetAddressVariableDeclaration,
-  emitNetNumberVariableDeclaration,
-  emitNetServerCallStatement,
-  emitNetServerVariableDeclaration,
-  emitNetSocketCallStatement,
-  emitNetSocketVariableDeclaration,
-  emitPreparedNetAddressPortExpression,
-  resolveNetAddressStringMember
-} from './stdlib/net.ts'
-import {
-  cOsRuntimeConstantName,
-  cOsRuntimeMethodName,
-  emitPreparedOsConstantExpression,
-  emitPreparedOsStringCallExpression
-} from './stdlib/os.ts'
-import type { PathLoweringDependencies } from './stdlib/path.ts'
-import {
-  cPathRuntimeConstantName,
-  cPathRuntimeMethodName,
-  emitPreparedPathBooleanCallExpression,
-  emitPreparedPathConstantExpression,
-  emitPreparedPathObjectCallExpression,
-  emitPreparedPathStringCallExpression
-} from './stdlib/path.ts'
-import type { ProcessLoweringDependencies } from './stdlib/process.ts'
-import {
-  cProcessRuntimeEnvName,
-  cProcessRuntimeMethodName,
-  cProcessRuntimePropertyName,
-  cProcessRuntimePropertyValueType,
-  emitPreparedProcessNumberExpression,
-  emitPreparedProcessStringExpression,
-  emitProcessExitCodeAssignment,
-  emitProcessExitStatement
-} from './stdlib/process.ts'
-import type { TimeLoweringDependencies } from './stdlib/time.ts'
+} from '../../stdlib/global/compiler/c.ts'
+import type { TimeLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
   cTimeRuntimeCallName,
   emitPreparedDateNumberExpression,
   emitPreparedDateStringExpression,
   isDateStringExpression
-} from './stdlib/time.ts'
-import type { TimerLoweringDependencies } from './stdlib/timers.ts'
-import { emitPreparedTimerCallExpression, emitTimerVariableDeclaration } from './stdlib/timers.ts'
-import type { UrlLoweringDependencies } from './stdlib/url.ts'
-import {
-  cUrlRuntimeMethodName,
-  emitPreparedUrlObjectExpression,
-  emitPreparedUrlSearchParamsCallExpression,
-  emitPreparedUrlSearchParamsObjectExpression,
-  emitPreparedUrlStringCallExpression,
-  emitUrlObjectFieldAssignment
-} from './stdlib/url.ts'
+} from '../../stdlib/global/compiler/c.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression } from './syntax.ts'
 import type {
   CArrayElementInfo,
@@ -546,6 +525,7 @@ let cryptoLoweringDependencies = {} as CryptoLoweringDependencies
 let dgramLoweringDependencies = {} as DgramLoweringDependencies
 let httpLoweringDependencies = {} as HttpLoweringDependencies
 let netLoweringDependencies = {} as NetLoweringDependencies
+let nodeNetworkLoweringDependencies = {} as NodeNetworkLoweringDependencies
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
@@ -569,13 +549,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitCExpression,
   emitCObjectLiteralValueExpression,
   emitCValueExpression,
-  emitDgramAddressVariableDeclaration,
-  emitDgramNumberVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitDgramNumberVariableDeclaration(statement, context),
-  emitDgramSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitDgramSocketVariableDeclaration(statement, context, dgramLoweringDependencies),
-  emitDgramSocketCallStatement: (expression: AnyNode, context: CFunctionContext) =>
-    emitDgramSocketCallStatement(expression, context, dgramLoweringDependencies),
   emitDynamicObjectMemberVariableDeclaration,
   emitDynamicObjectMemberAssignment,
   emitDynamicObjectFieldAssignment: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
@@ -585,26 +558,16 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitFetchAbortControllerVariableDeclaration,
   emitFetchAbortControllerAbortStatement,
   emitFunctionPointerVariable,
-  emitHttpServerVariableDeclaration,
-  emitHttpServerCallStatement: (expression: AnyNode, context: CFunctionContext) =>
-    emitHttpServerCallStatement(expression, context, httpLoweringDependencies),
   emitJsonParseVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
     emitJsonParseVariableDeclaration(statement, context, jsonDeclarationDependencies),
   emitKnownArrayIndexAssignment,
   emitKnownArrayIndexVariableDeclaration,
   emitKnownObjectMemberAssignment,
   emitKnownObjectMemberVariableDeclaration,
-  emitNetAddressMemberVariableDeclaration,
-  emitNetAddressVariableDeclaration,
-  emitNetNumberVariableDeclaration,
-  emitNetServerCallStatement: (expression: AnyNode, context: CFunctionContext) =>
-    emitNetServerCallStatement(expression, context, netLoweringDependencies),
-  emitNetServerVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitNetServerVariableDeclaration(statement, context),
-  emitNetSocketCallStatement: (expression: AnyNode, context: CFunctionContext) =>
-    emitNetSocketCallStatement(expression, context, netLoweringDependencies),
-  emitNetSocketVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
-    emitNetSocketVariableDeclaration(statement, context, netLoweringDependencies),
+  emitNodeNetworkCallStatement: (expression: AnyNode, context: CFunctionContext) =>
+    emitNodeNetworkCallStatement(expression, context, nodeNetworkLoweringDependencies),
+  emitNodeNetworkVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
+    emitNodeNetworkVariableDeclaration(statement, context, nodeNetworkLoweringDependencies),
   emitNullableScalarValueExpression,
   emitNullableRuntimeValueAssignment,
   emitObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
@@ -723,6 +686,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   registerErrorObjectShape,
   resolveForOfElementType,
   resolveKnownArrayIndex,
+  resolveBytesExpressionKind: resolveBinaryExpressionKind,
   resolveKnownForOfArray,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
@@ -817,6 +781,10 @@ fsLoweringDependencies = {
   inferExpressionType
 }
 
+const nodeStdlibAsyncTaskLoweringDependencies: NodeStdlibAsyncTaskLoweringDependencies = {
+  fs: fsLoweringDependencies
+}
+
 binaryLoweringDependencies = {
   emitCValueExpression,
   emitPreparedNumberExpression,
@@ -897,9 +865,11 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   isBoxedRuntimeStringName,
   isBoxedRuntimeStringReference,
   isMemberAccessExpression,
+  isNodeRuntimeProducedStringExpression,
+  nodeRuntimeStringConstantValue,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
-  resolveNetAddressStringMember,
+  resolveNodeNetworkAddressStringMember,
   resolveRuntimeArrayIndex
 }
 
@@ -927,6 +897,17 @@ httpLoweringDependencies = {
   emitStatementList
 }
 
+function runtimeCallbackArgumentInfoForNodeStdlibCall(expression: AnyNode): RuntimeCallbackArgumentInfo | null {
+  if (isTimerStartCallExpression(expression)) {
+    return {
+      functionType: timerCallbackFunctionType(),
+      index: 0
+    }
+  }
+
+  return null
+}
+
 const callbackLoweringDependencies: CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions,
   createFunctionContext,
@@ -942,7 +923,9 @@ const callbackLoweringDependencies: CallbackLoweringDependencies = {
   emitReturnValueDeclarations,
   emitRuntimeCallbackRuntimeValueReturnLines,
   emitStatementList,
+  isExternalEventLoopCallExpression: isTimerStartCallExpression,
   registerObjectShape,
+  runtimeCallbackArgumentInfoForCall: runtimeCallbackArgumentInfoForNodeStdlibCall,
   shouldEmitCleanupLabel
 }
 
@@ -969,20 +952,24 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitCallee,
   emitCValueExpression,
   emitFunctionHead: (statement, context) => emitFunctionHead(statement, context as CFunctionContext),
-  emitFsBooleanFlag,
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
   emitPreparedCallArgs,
   emitPreparedCallExpression,
   emitPreparedFetchInitOperand: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchInitOperand(expression, context, fetchLoweringDependencies),
-  emitPreparedFsAccessModeExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFsAccessModeExpression(expression, context, fsLoweringDependencies),
+  emitPreparedNodeStdlibAsyncTaskSourceExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedNodeStdlibAsyncTaskSourceExpression(
+      expression,
+      context,
+      nodeStdlibAsyncTaskLoweringDependencies
+    ),
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeArrowCaptureStoreLines,
   emitStatementList,
   inferExpressionType,
+  isAsyncNodeStdlibRuntimeCallExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
   isRuntimeProducedStringExpression,
@@ -1017,27 +1004,22 @@ netLoweringDependencies = {
   findObjectLiteralPropertyValue
 }
 
+nodeNetworkLoweringDependencies = {
+  dgram: dgramLoweringDependencies,
+  http: httpLoweringDependencies,
+  net: netLoweringDependencies
+}
+
 const expressionTypeDependencies = {
   binaryRuntimeExpressionReturnType,
-  cChildProcessRuntimeMethodName,
   cDebugRuntimeMethodName,
   cFetchRuntimeExpressionMethod,
-  cFsRuntimeExpressionMethod,
   cJsonRuntimeCallName,
-  cOsRuntimeConstantName,
-  cOsRuntimeMethodName,
-  cPathRuntimeConstantName,
-  cPathRuntimeMethodName,
-  cProcessRuntimeEnvName,
-  cProcessRuntimeMethodName,
-  cProcessRuntimePropertyName,
-  cProcessRuntimePropertyValueType,
   cPromiseRuntimeCallName,
   cTimeRuntimeCallName,
-  cUrlRuntimeMethodName,
   collectionConstructorName,
-  cryptoRuntimeMethodName,
-  emitPreparedNetAddressPortExpression,
+  inferNodeStdlibExpressionType,
+  inferNodeStdlibMemberExpressionType,
   isArrayIncludesCall,
   isArrayIsArrayCall,
   isArrayJoinCall,
@@ -1066,7 +1048,6 @@ const expressionTypeDependencies = {
   resolveKnownArrayLength,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
-  resolveNetAddressStringMember,
   resolveObjectExpressionIndex,
   resolveObjectExpressionMember,
   resolvePromiseExpressionValueType,
@@ -1165,10 +1146,9 @@ const cScalarExpressionDependencies = {
   emitPreparedCollectionSizeExpression,
   emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
-  emitPreparedDgramAddressPortExpression,
+  emitPreparedNodeNetworkAddressPortExpression,
   emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies),
-  emitPreparedNetAddressPortExpression,
   emitPreparedNullableScalarRuntimeValueExpression,
   emitPreparedObjectExpressionScalarIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionScalarIndexValueExpression(expression, context, objectExpressionFieldDependencies),
@@ -2408,7 +2388,7 @@ function collectExternalEventLoopFunctions(functions: AnyNode[]): CNameSet {
         continue
       }
 
-      if (functionUsesExternalEventLoop(item, names)) {
+      if (functionUsesExternalEventLoop(item, names, callbackLoweringDependencies)) {
         names.add(name)
         changed = true
       }
@@ -6306,7 +6286,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 
   if (isMemberAccessExpression(expression)) {
-    const netAddressMember = resolveNetAddressStringMember(expression, context) ?? ''
+    const netAddressMember = resolveNodeNetworkAddressStringMember(expression, context) ?? ''
 
     if (netAddressMember !== '') {
       return {

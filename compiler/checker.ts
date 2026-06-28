@@ -3,8 +3,51 @@ import {
   binaryInstanceRuntimeMethodName,
   binaryStaticRuntimeMethodName,
   bufferRuntimeConstantName,
-  unsupportedBufferRuntimeExport
-} from './checker/std/binary.ts'
+  childProcessRuntimeCallInfo,
+  checkCryptoCall as checkPackageCryptoCall,
+  checkCryptoHashMethodCall as checkPackageCryptoHashMethodCall,
+  cryptoRuntimeCallInfo,
+  fsRuntimeCallInfo,
+  fsRuntimeCallInfoFromImportSymbol,
+  fsRuntimeCallPlan,
+  fsRuntimeConstantName,
+  fsStatsRuntimeMethodInfo,
+  isFsPromisesImportSymbol,
+  isFsRuntimeRootSymbol,
+  isOsRuntimeConstantImport,
+  isPathRuntimeConstantImport,
+  isTimerHandleMethod,
+  isTimerRuntimeImportSymbol,
+  isUrlMutableObjectField,
+  isUrlSearchParamsRuntimeMethod,
+  osRuntimeCallInfo,
+  osRuntimeConstantName,
+  pathRuntimeCallInfo,
+  pathRuntimeConstantName,
+  processRuntimeAssignmentProperty,
+  processRuntimeCallInfo,
+  processRuntimeIndexProperty,
+  processRuntimeMemberInfo,
+  processRuntimePropertyImportInfo,
+  timerCallbackFunctionType,
+  timerClearMethodName,
+  timerRuntimeImportMethodName,
+  timerRuntimeMethodName,
+  unsupportedBufferRuntimeExport,
+  unsupportedEventsRuntimeExport,
+  unsupportedStreamRuntimeExport,
+  urlRuntimeCallInfo,
+  urlRuntimeConstructorImportInfo
+} from '../stdlib/node/compiler/checker.ts'
+import type {
+  CryptoCheckerContext,
+  CryptoCheckerDiagnostic,
+  CryptoHashMethodCheckerContext,
+  FsBooleanOptions,
+  FsRuntimeArgumentCheck,
+  FsRuntimeCallInfo,
+  FsRuntimeCallPlan
+} from '../stdlib/node/compiler/checker.ts'
 import {
   commonArrayElementType,
   commonValueType,
@@ -24,15 +67,11 @@ import {
   fetchResponseObjectShape,
   fsDirentObjectShape,
   fsStatsObjectShape,
-  isNumericCastName,
   libuvOnlyRuntimeImportFeature,
   pathParseObjectShape,
   urlObjectShape,
   urlSearchParamsObjectShape
 } from './checker/builtins.ts'
-import { childProcessRuntimeCallInfo } from './checker/std/child-process.ts'
-import { cryptoRuntimeCallInfo } from './checker/std/crypto.ts'
-import { unsupportedEventStreamRuntimeExport } from './checker/std/events-stream.ts'
 import {
   fetchAbortControllerConstructorName,
   fetchAbortControllerRuntimeMethod,
@@ -40,72 +79,46 @@ import {
   fetchInitOptionName,
   fetchResponseBodyMethodInfo,
   fetchRuntimeCallName,
+  isJsonParseDeclaredType,
   isFetchHttpsLiteral,
   isFetchUnsupportedResponseBodyMember,
-  isSupportedFetchRedirectLiteral
-} from './checker/std/fetch.ts'
-import {
-  fsRuntimeCallPlan,
-  fsRuntimeCallInfo,
-  fsRuntimeCallInfoFromImportSymbol,
-  fsRuntimeConstantName,
-  fsStatsRuntimeMethodInfo,
-  isFsPromisesImportSymbol,
-  isFsRuntimeRootSymbol
-} from './checker/std/fs.ts'
-import type { FsBooleanOptions, FsRuntimeArgumentCheck, FsRuntimeCallInfo, FsRuntimeCallPlan } from './checker/std/fs.ts'
-import { isJsonParseDeclaredType, jsonRuntimeMethodName } from './checker/std/json.ts'
-import { isMathRuntimeMethod } from './checker/std/math.ts'
-import { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from './checker/std/os.ts'
-import { isPathRuntimeConstantImport, pathRuntimeCallInfo, pathRuntimeConstantName } from './checker/std/path.ts'
-import {
-  processRuntimeAssignmentProperty,
-  processRuntimeCallInfo,
-  processRuntimeIndexProperty,
-  processRuntimeMemberInfo,
-  processRuntimePropertyImportInfo
-} from './checker/std/process.ts'
-import { runtimeImportValueType } from './checker/std/runtime-imports.ts'
-import {
-  isTimerRuntimeImportSymbol,
-  timerCallbackFunctionType,
-  timerClearMethodName,
-  timerRuntimeImportMethodName,
-  timerRuntimeMethodName
-} from './checker/std/timers.ts'
+  isMathRuntimeMethod,
+  isSupportedFetchRedirectLiteral,
+  jsonRuntimeMethodName
+} from '../stdlib/global/compiler/checker.ts'
+import { runtimeImportValueType } from '../stdlib/node/compiler/runtime-imports.ts'
 import {
   dateInstanceRuntimeMethodInfo,
   isDateConstructorRuntimeExpression,
   timeRuntimeCallInfo
-} from './checker/std/time.ts'
-import { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from './checker/std/url.ts'
+} from '../stdlib/global/compiler/checker.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { memberExpressionPath } from './member-paths.ts'
 import {
   collectionConstructorNameFromPath,
   isArrayMethod,
+  isNumericCastName,
   isStringIndexMethod,
   isStringPredicateMethod,
   mapRuntimeMethodName,
   setRuntimeMethodName,
   stringRuntimeMethodName
-} from './stdlib/descriptors/collections.ts'
-import { debugRuntimeMethodNameFromKnownPath, isDebugRuntimeMethodPath } from './stdlib/descriptors/debug.ts'
-import { knownMathRuntimeArgCount } from './stdlib/descriptors/math.ts'
-import type { StdlibModuleId } from './stdlib/descriptors/modules.ts'
+} from '../stdlib/global/compiler/descriptor.ts'
 import {
+  debugRuntimeMethodNameFromKnownPath,
+  isDebugRuntimeMethodPath,
+  knownMathRuntimeArgCount
+} from '../stdlib/global/compiler/descriptor.ts'
+import type { StdlibModuleId } from '../stdlib/node/compiler/modules.ts'
+import {
+  isStdlibModuleImportSource,
   isStdlibModuleImportSourceForId,
   isStdlibModuleRuntimeImportBinding
-} from './stdlib/descriptors/modules.ts'
+} from '../stdlib/node/compiler/modules.ts'
 import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
-} from './stdlib/descriptors/node-builtins.ts'
-import { isTimerHandleMethod } from './stdlib/descriptors/timers.ts'
-import {
-  isUrlMutableObjectField,
-  isUrlSearchParamsRuntimeMethod
-} from './stdlib/descriptors/url.ts'
+} from '../stdlib/node/compiler/builtins.ts'
 import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
@@ -165,6 +178,7 @@ type OwnershipGraphEdge = {
 
 type OptionalParamInfo = {
   optional?: boolean
+  rest?: boolean
   [key: string]: unknown
 }
 
@@ -189,6 +203,7 @@ type FunctionTypeParamMetadata = {
   name: string
   loc: SourceLocation
   optional?: boolean
+  rest?: boolean
   declaredType?: string
   valueType: ValueType
   nullable?: boolean
@@ -394,6 +409,7 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('returnShape', 'object', null, true, loc),
       anyNodeField('functionType', 'object', null, true, loc),
       anyNodeField('shape', 'object', null, true, loc),
+      anyNodeField('rest', 'boolean', null, false, loc),
       anyNodeField('pathRuntimeMethod', 'string', null, true, loc),
       anyNodeField('pathRuntimeConstant', 'string', null, true, loc),
       anyNodeField('processRuntimeMethod', 'string', null, true, loc),
@@ -589,6 +605,10 @@ function optionalParamAt(values: OptionalParamInfo[], index: number): OptionalPa
 }
 
 function isOptionalParam(param: OptionalParamInfo): boolean {
+  if (param.rest === true) {
+    return true
+  }
+
   if (param.optional === true) {
     return true
   }
@@ -1192,6 +1212,20 @@ export function checkProgram(program: ProgramNode, options: CompileOptions = {})
   }
 }
 
+function importSpecifierValueType(specifier: AnyNode, source: string): ValueType {
+  const valueType = specifier.valueType
+
+  if (typeof valueType !== 'string') {
+    return runtimeImportValueType(source, specifier.imported)
+  }
+
+  if (valueType === '') {
+    return runtimeImportValueType(source, specifier.imported)
+  }
+
+  return valueType.slice(0)
+}
+
 class Checker {
   program: ProgramNode
   options: CompileOptions
@@ -1272,11 +1306,13 @@ class Checker {
           const symbol: SymbolInfo = {
             kind: 'import',
             mutable: false,
-            valueType: runtimeImportValueType(item.source, specifier.imported),
+            valueType: importSpecifierValueType(specifier, item.source),
             importedName: specifier.imported,
             importSource: item.source,
             loc: specifier.loc
           }
+
+          this.applyImportSpecifierValueMetadata(symbol, specifier)
 
           if (specifier.returnType !== null && typeof specifier.returnType !== 'undefined') {
             symbol.valueType = 'function'
@@ -1352,6 +1388,37 @@ class Checker {
     }
   }
 
+  applyImportSpecifierValueMetadata(symbol: SymbolInfo, specifier: AnyNode): void {
+    const declaredType = specifier.declaredType
+
+    if (typeof declaredType === 'string' && declaredType !== '') {
+      this.applyResolvedTypeInfoToSymbol(symbol, this.resolveDeclaredType(declaredType, specifier.loc))
+      return
+    }
+
+    symbol.arrayElementType = specifier.arrayElementType ?? symbol.arrayElementType ?? null
+    symbol.arrayElementDeclaredType = specifier.arrayElementDeclaredType ?? symbol.arrayElementDeclaredType ?? null
+    symbol.mapKeyType = specifier.mapKeyType ?? symbol.mapKeyType ?? null
+    symbol.mapValueType = specifier.mapValueType ?? symbol.mapValueType ?? null
+    symbol.promiseValueType = specifier.promiseValueType ?? symbol.promiseValueType ?? null
+    symbol.setElementType = specifier.setElementType ?? symbol.setElementType ?? null
+    symbol.shape = specifier.shape ?? symbol.shape ?? null
+  }
+
+  applyResolvedTypeInfoToSymbol(symbol: SymbolInfo, info: ResolvedTypeInfo): void {
+    symbol.valueType = info.valueType
+    symbol.nullable = info.nullable
+    symbol.arrayElementType = info.arrayElementType
+    symbol.arrayElementDeclaredType = info.arrayElementDeclaredType
+    symbol.mapKeyType = info.mapKeyType
+    symbol.mapValueType = info.mapValueType
+    symbol.mapValueShape = info.mapValueShape
+    symbol.promiseValueType = info.promiseValueType
+    symbol.setElementType = info.setElementType
+    symbol.functionType = info.functionType
+    symbol.shape = info.shape
+  }
+
   resolveParams(params: AnyNode[]): FunctionTypeParamMetadata[] {
     const resolved: FunctionTypeParamMetadata[] = []
 
@@ -1378,6 +1445,7 @@ class Checker {
       loc: param.loc,
       declaredType,
       optional: isOptionalParam(param),
+      rest: param.rest === true,
       valueType: paramInfo.valueType,
       nullable: paramInfo.nullable,
       arrayElementType: paramInfo.arrayElementType,
@@ -1399,6 +1467,10 @@ class Checker {
   }
 
   acceptsArgumentCount(params: OptionalParamInfo[], count: number): boolean {
+    if (this.hasRestParam(params)) {
+      return count >= this.requiredParamCount(params)
+    }
+
     return count >= this.requiredParamCount(params) && count <= params.length
   }
 
@@ -1406,6 +1478,10 @@ class Checker {
     const min = this.requiredParamCount(params)
     const max = params.length
     let expected = `${max}`
+
+    if (this.hasRestParam(params)) {
+      return `${label} expects ${min}+ argument(s), got ${count}`
+    }
 
     if (min !== max) {
       expected = `${min}-${max}`
@@ -1426,6 +1502,39 @@ class Checker {
     }
 
     return count
+  }
+
+  hasRestParam(params: OptionalParamInfo[]): boolean {
+    if (params.length === 0) {
+      return false
+    }
+
+    return optionalParamAt(params, params.length - 1).rest === true
+  }
+
+  paramForArgument(params: OptionalParamInfo[], index: number): OptionalParamInfo | null {
+    if (index < params.length) {
+      return optionalParamAt(params, index)
+    }
+
+    if (this.hasRestParam(params)) {
+      return optionalParamAt(params, params.length - 1)
+    }
+
+    return null
+  }
+
+  argumentParamValueType(param: OptionalParamInfo): ValueType {
+    if (
+      param.rest === true &&
+      param.valueType === 'array' &&
+      param.arrayElementType !== null &&
+      typeof param.arrayElementType !== 'undefined'
+    ) {
+      return param.arrayElementType as ValueType
+    }
+
+    return param.valueType as ValueType
   }
 
   resolveClassInstanceShape(statement: AnyNode, constructorParams: AnyNode[]): ObjectShapeInfo {
@@ -2699,13 +2808,13 @@ class Checker {
           )
         }
 
-        for (let index = 0; index < params.length; index++) {
-          const param = params[index]
+        for (let index = 0; index < expression.args.length; index = index + 1) {
+          const param = this.paramForArgument(params, index)
 
-          if (index < argTypes.length) {
+          if (param !== null && typeof param !== 'undefined' && index < argTypes.length) {
             this.checkAssignableType(
               argTypes[index],
-              param.valueType,
+              this.argumentParamValueType(param),
               expression.args[index].loc,
               param.nullable === true,
               this.expressionCanBeNull(expression.args[index])
@@ -4330,13 +4439,13 @@ class Checker {
       )
     }
 
-    for (let index = 0; index < params.length; index++) {
-      const param = params[index]
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const param = this.paramForArgument(params, index)
 
-      if (index < argTypes.length) {
+      if (param !== null && typeof param !== 'undefined' && index < argTypes.length) {
         this.checkAssignableType(
           argTypes[index],
-          param.valueType,
+          this.argumentParamValueType(param),
           expression.args[index].loc,
           param.nullable === true,
           this.expressionCanBeNull(expression.args[index])
@@ -4559,12 +4668,15 @@ class Checker {
 
   checkEventStreamUnsupportedCall(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.callee)
-    const usage = unsupportedEventStreamRuntimeExport(
+    const rootSymbol = this.resolveMemberPathRootSymbol(path)
+    const eventsUsage = unsupportedEventsRuntimeExport(
       path,
       this.resolveStdlibRuntimeDirectImportName(path, 'events'),
-      this.resolveStdlibRuntimeDirectImportName(path, 'stream'),
-      this.resolveMemberPathRootSymbol(path)
+      rootSymbol
     )
+    const usage =
+      eventsUsage ??
+      unsupportedStreamRuntimeExport(path, this.resolveStdlibRuntimeDirectImportName(path, 'stream'), rootSymbol)
 
     if (usage === null || typeof usage === 'undefined') {
       return null
@@ -4592,12 +4704,15 @@ class Checker {
     }
 
     const path = expression.callee.path
-    const usage = unsupportedEventStreamRuntimeExport(
+    const rootSymbol = this.resolveMemberPathRootSymbol(path)
+    const eventsUsage = unsupportedEventsRuntimeExport(
       path,
       this.resolveStdlibRuntimeDirectImportName(path, 'events'),
-      this.resolveStdlibRuntimeDirectImportName(path, 'stream'),
-      this.resolveMemberPathRootSymbol(path)
+      rootSymbol
     )
+    const usage =
+      eventsUsage ??
+      unsupportedStreamRuntimeExport(path, this.resolveStdlibRuntimeDirectImportName(path, 'stream'), rootSymbol)
 
     if (usage === null || typeof usage === 'undefined') {
       return null
@@ -4631,371 +4746,28 @@ class Checker {
 
   checkCryptoCall(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.callee)
-    const call = cryptoRuntimeCallInfo(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'crypto'),
-      this.resolveStdlibModuleObjectMemberName(path, 'crypto')
-    )
+    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'crypto')
+    const moduleObjectMemberName = this.resolveStdlibModuleObjectMemberName(path, 'crypto')
+    const call = cryptoRuntimeCallInfo(path, importedName, moduleObjectMemberName)
 
     if (call === null || typeof call === 'undefined') {
       return null
     }
 
-    if (call.unsupported) {
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-
-        this.checkExpression(arg)
-      }
-
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:crypto ${call.method} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
+    const diagnostics: CryptoCheckerDiagnostic[] = []
+    const context: CryptoCheckerContext = {
+      argNullables: this.cryptoArgumentNullables(expression),
+      argTypes: this.cryptoArgumentTypes(expression),
+      diagnostics,
+      importedName,
+      moduleObjectMemberName,
+      supportsCryptoHash: this.supportsCryptoHash()
     }
+    const valueType = checkPackageCryptoCall(expression, context)
 
-    const method = call.method
-    const argTypes: ValueType[] = []
+    this.reportCryptoCheckerDiagnostics(diagnostics)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (method === 'getHashes') {
-      expression.valueType = 'array'
-      expression.arrayElementType = 'string'
-      expression.cryptoRuntimeMethod = method
-
-      if (expression.args.length !== 0) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (!this.supportsCryptoHash()) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          "node:crypto getHashes requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
-          expression.loc
-        )
-      }
-
-      return 'array'
-    }
-
-    if (method === 'createHash') {
-      expression.valueType = 'crypto-hash'
-      expression.cryptoRuntimeMethod = method
-
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-        return 'crypto-hash'
-      }
-
-      this.checkAssignableType(
-        argTypes[0],
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-
-      if (!this.supportsCryptoHash()) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          "node:crypto createHash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
-          expression.loc
-        )
-        return 'crypto-hash'
-      }
-
-      if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          "node:crypto createHash only supports the 'sha256' algorithm in the current C backend",
-          expression.args[0].loc
-        )
-      }
-
-      return 'crypto-hash'
-    }
-
-    if (method === 'createHmac') {
-      expression.valueType = 'crypto-hmac'
-      expression.cryptoRuntimeMethod = method
-
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-        return 'crypto-hmac'
-      }
-
-      this.checkAssignableType(
-        argTypes[0],
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-
-      if (!this.supportsCryptoHash()) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          "node:crypto createHmac requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
-          expression.loc
-        )
-        return 'crypto-hmac'
-      }
-
-      if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          "node:crypto createHmac only supports the 'sha256' algorithm in the current C backend",
-          expression.args[0].loc
-        )
-      }
-
-      if (argTypes[1] !== 'string' && argTypes[1] !== 'bytes') {
-        this.report(
-          'INOX_TYPE_MISMATCH',
-          'node:crypto createHmac key must be a string or Buffer in the current C backend',
-          expression.args[1].loc
-        )
-      }
-
-      return 'crypto-hmac'
-    }
-
-    if (method === 'hash') {
-      expression.cryptoRuntimeMethod = method
-
-      if (expression.args.length < 2 || expression.args.length > 3) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 2 or 3 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          argTypes[0],
-          'string',
-          expression.args[0].loc,
-          false,
-          this.expressionCanBeNull(expression.args[0])
-        )
-
-        if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'sha256') {
-          this.report(
-            'INOX_NOT_IMPLEMENTED',
-            "node:crypto hash only supports the 'sha256' algorithm in the current C backend",
-            expression.args[0].loc
-          )
-        }
-      }
-
-      if (
-        expression.args[1] !== null &&
-        typeof expression.args[1] !== 'undefined' &&
-        argTypes[1] !== 'string' &&
-        argTypes[1] !== 'bytes'
-      ) {
-        this.report(
-          'INOX_TYPE_MISMATCH',
-          'node:crypto hash data must be a string or Buffer in the current C backend',
-          expression.args[1].loc
-        )
-      }
-
-      if (!this.supportsCryptoHash()) {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          "node:crypto hash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
-          expression.loc
-        )
-      }
-
-      if (expression.args[2] === null || typeof expression.args[2] === 'undefined') {
-        expression.cryptoHashDigestEncoding = 'hex'
-        expression.valueType = 'string'
-        return 'string'
-      }
-
-      this.checkAssignableType(
-        argTypes[2],
-        'string',
-        expression.args[2].loc,
-        false,
-        this.expressionCanBeNull(expression.args[2])
-      )
-
-      if (expression.args[2].type === 'StringLiteral' && expression.args[2].value === 'buffer') {
-        expression.cryptoHashDigestEncoding = 'bytes'
-        expression.valueType = 'bytes'
-        return 'bytes'
-      }
-
-      if (expression.args[2].type !== 'StringLiteral' || expression.args[2].value !== 'hex') {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          "node:crypto hash only supports the 'hex' and 'buffer' output encodings in the current C backend",
-          expression.args[2].loc
-        )
-      }
-
-      expression.cryptoHashDigestEncoding = 'hex'
-      expression.valueType = 'string'
-
-      return 'string'
-    }
-
-    if (method === 'timingSafeEqual') {
-      expression.valueType = 'boolean'
-      expression.cryptoRuntimeMethod = method
-
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-        return 'boolean'
-      }
-
-      this.checkAssignableType(
-        argTypes[0],
-        'bytes',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-      this.checkAssignableType(
-        argTypes[1],
-        'bytes',
-        expression.args[1].loc,
-        false,
-        this.expressionCanBeNull(expression.args[1])
-      )
-
-      return 'boolean'
-    }
-
-    expression.valueType = 'bytes'
-
-    if (method === 'randomInt') {
-      expression.valueType = 'number'
-    } else if (method === 'randomUUID') {
-      expression.valueType = 'string'
-    }
-    expression.cryptoRuntimeMethod = method
-
-    if (method === 'getRandomValues') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-        return 'bytes'
-      }
-
-      this.checkAssignableType(
-        argTypes[0],
-        'bytes',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-
-      return 'bytes'
-    }
-
-    if (method === 'randomBytes') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-        return 'bytes'
-      }
-
-      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
-      return 'bytes'
-    }
-
-    if (method === 'randomFillSync') {
-      if (expression.args.length < 1 || expression.args.length > 3) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 to 3 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-        return 'bytes'
-      }
-
-      this.checkAssignableType(
-        argTypes[0],
-        'bytes',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-
-      for (let index = 0; index < argTypes.length; index++) {
-        const argType = argTypes[index]
-
-        if (index > 0) {
-          this.checkAssignableType(argType, 'number', expression.args[index].loc, false, false)
-        }
-      }
-
-      return 'bytes'
-    }
-
-    if (method === 'randomInt') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-        return 'number'
-      }
-
-      for (let index = 0; index < argTypes.length; index++) {
-        const argType = argTypes[index]
-
-        this.checkAssignableType(argType, 'number', expression.args[index].loc, false, false)
-      }
-
-      return 'number'
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        'node:crypto randomUUID options are not implemented by the current C backend',
-        expression.loc
-      )
-    }
-
-    return 'string'
+    return valueType
   }
 
   checkCryptoHashMethodCall(expression: AnyNode): ValueType | null {
@@ -5015,93 +4787,77 @@ class Checker {
       return null
     }
 
-    let label = 'Hash'
+    const diagnostics: CryptoCheckerDiagnostic[] = []
+    const context: CryptoHashMethodCheckerContext = {
+      argNullables: this.cryptoHashMethodArgumentNullables(expression, method),
+      argTypes: this.cryptoHashMethodArgumentTypes(expression, method),
+      diagnostics
+    }
+    const valueType = checkPackageCryptoHashMethodCall(expression, objectType, context)
 
-    if (objectType === 'crypto-hmac') {
-      label = 'Hmac'
+    this.reportCryptoCheckerDiagnostics(diagnostics)
+
+    return valueType
+  }
+
+  cryptoArgumentTypes(expression: AnyNode): ValueType[] {
+    const result: ValueType[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+
+      result.push(this.checkExpression(arg))
     }
 
-    expression.cryptoRuntimeMethod = `${label}.${method}`
+    return result
+  }
 
-    if (method === 'update') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${label}.update expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
+  cryptoArgumentNullables(expression: AnyNode): boolean[] {
+    const result: boolean[] = []
 
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        const dataType = this.checkExpression(expression.args[0])
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
 
-        if (dataType !== 'string' && dataType !== 'bytes') {
-          this.report(
-            'INOX_TYPE_MISMATCH',
-            `${label}.update data must be a string or Buffer in the current C backend`,
-            expression.args[0].loc
-          )
-        }
-      }
-
-      if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-        const encodingType = this.checkExpression(expression.args[1])
-        this.checkAssignableType(
-          encodingType,
-          'string',
-          expression.args[1].loc,
-          false,
-          this.expressionCanBeNull(expression.args[1])
-        )
-
-        if (expression.args[1].type !== 'StringLiteral' || expression.args[1].value !== 'utf8') {
-          this.report(
-            'INOX_NOT_IMPLEMENTED',
-            `${label}.update only supports the 'utf8' input encoding in the current C backend`,
-            expression.args[1].loc
-          )
-        }
-      }
-
-      expression.valueType = objectType
-      return objectType
+      result.push(this.expressionCanBeNull(arg))
     }
 
-    if (expression.args.length > 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${label}.digest expects 0 or 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
+    return result
+  }
+
+  cryptoHashMethodArgumentTypes(expression: AnyNode, method: string): ValueType[] {
+    const result: ValueType[] = []
+
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+      result.push(this.checkExpression(expression.args[0]))
     }
 
-    if (expression.args[0] === null || typeof expression.args[0] === 'undefined') {
-      expression.cryptoHashDigestEncoding = 'bytes'
-      expression.valueType = 'bytes'
-      return 'bytes'
+    if (method === 'update' && expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
+      result.push(this.checkExpression(expression.args[1]))
     }
 
-    const encodingType = this.checkExpression(expression.args[0])
-    this.checkAssignableType(
-      encodingType,
-      'string',
-      expression.args[0].loc,
-      false,
-      this.expressionCanBeNull(expression.args[0])
-    )
+    return result
+  }
 
-    if (expression.args[0].type !== 'StringLiteral' || expression.args[0].value !== 'hex') {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `${label}.digest only supports the 'hex' encoding in the current C backend`,
-        expression.args[0].loc
-      )
+  cryptoHashMethodArgumentNullables(expression: AnyNode, method: string): boolean[] {
+    const result: boolean[] = []
+
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+      result.push(this.expressionCanBeNull(expression.args[0]))
     }
 
-    expression.cryptoHashDigestEncoding = 'hex'
-    expression.valueType = 'string'
+    if (method === 'update' && expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
+      result.push(this.expressionCanBeNull(expression.args[1]))
+    }
 
-    return 'string'
+    return result
+  }
+
+  reportCryptoCheckerDiagnostics(diagnostics: CryptoCheckerDiagnostic[]): void {
+    for (let index = 0; index < diagnostics.length; index = index + 1) {
+      const item = diagnostics[index]
+
+      this.report(item.code, item.message, item.loc)
+    }
   }
 
   checkChildProcessCall(expression: AnyNode): ValueType | null {
@@ -5979,13 +5735,13 @@ class Checker {
       )
     }
 
-    for (let index = 0; index < params.length; index++) {
-      const param = params[index]
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const param = this.paramForArgument(params, index)
 
-      if (index < argTypes.length) {
+      if (param !== null && typeof param !== 'undefined' && index < argTypes.length) {
         this.checkAssignableType(
           argTypes[index],
-          param.valueType,
+          this.argumentParamValueType(param),
           expression.args[index].loc,
           param.nullable === true,
           this.expressionCanBeNull(expression.args[index])
@@ -6583,6 +6339,15 @@ class Checker {
 
   checkRuntimeBuiltinImport(statement: AnyNode): void {
     if (statement.typeOnly) {
+      return
+    }
+
+    if (!isStdlibModuleImportSource(statement.source) && !isRelativeImportSource(statement.source)) {
+      this.report(
+        'INOX_UNSUPPORTED_IMPORT_SOURCE',
+        `only relative imports are implemented, got ${statement.source}`,
+        statement.loc
+      )
       return
     }
 
@@ -12472,6 +12237,7 @@ class Checker {
               name: param.name,
               loc: param.loc,
               optional: isOptionalParam(param),
+              rest: param.rest === true,
               declaredType,
               valueType: paramInfo.valueType,
               nullable: paramInfo.nullable,
@@ -12741,6 +12507,7 @@ class Checker {
         name: param.name,
         loc: param.loc,
         optional: isOptionalParam(param),
+        rest: param.rest === true,
         declaredType,
         valueType: paramInfo.valueType,
         nullable: paramInfo.nullable,
@@ -14035,6 +13802,10 @@ function stringPredicateArgCountMessage(method: string, actual: number): string 
 
 function isConsoleMethod(name: string): boolean {
   return name === 'log' || name === 'info' || name === 'warn' || name === 'error'
+}
+
+function isRelativeImportSource(source: string): boolean {
+  return source.startsWith('./') || source.startsWith('../')
 }
 
 function isPromiseMethod(name: string): boolean {

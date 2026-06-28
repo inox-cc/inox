@@ -3,8 +3,10 @@ import type { AnyNode, Diagnostic, IrFunctionDeclaration, SourceLocation } from 
 import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, nextCName } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cFetchRuntimeExpressionMethod, isAsyncFetchRuntimeCallExpression } from '../stdlib/fetch.ts'
-import { cFsRuntimeExpressionMethod, isAsyncFsRuntimeCallExpression } from '../stdlib/fs.ts'
+import {
+  cFetchRuntimeExpressionMethod,
+  isAsyncFetchRuntimeCallExpression
+} from '../../../stdlib/global/compiler/c.ts'
 import type {
   CArrayElementInfo,
   CAsyncTaskAwaitFrameLocal,
@@ -211,7 +213,6 @@ export type AsyncTaskLoweringDependencies = {
   emitCallee(callee: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string
   emitCValueExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitFunctionHead(statement: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string
-  emitFsBooleanFlag(expression: AsyncTaskAstNode, field: string): string
   emitOwnedValueCleanup(context: AsyncTaskFunctionContext): string[]
   emitOwnedValueDeclarations(context: AsyncTaskFunctionContext): string[]
   emitPreparedCallArgs(
@@ -221,10 +222,10 @@ export type AsyncTaskLoweringDependencies = {
   ): CPreparedCallArgs
   emitPreparedCallExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedFetchInitOperand(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
-  emitPreparedFsAccessModeExpression(
+  emitPreparedNodeStdlibAsyncTaskSourceExpression(
     expression: AsyncTaskAstNode,
     context: AsyncTaskFunctionContext
-  ): PreparedExpression
+  ): PreparedAsyncTaskPromise | null
   emitPreparedNumberExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AsyncTaskAstNode,
@@ -240,6 +241,7 @@ export type AsyncTaskLoweringDependencies = {
   inferExpressionType(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string
   isIndexAccessExpression(expression: AsyncTaskAstNode): boolean
   isMemberAccessExpression(expression: AsyncTaskAstNode): boolean
+  isAsyncNodeStdlibRuntimeCallExpression(expression: AsyncTaskAstNode | null | undefined): boolean
   isRuntimeProducedStringExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
   isThrowingFunctionCallee(callee: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
   pushVariableScope(context: AsyncTaskFunctionContext): AsyncTaskVariableScopeSnapshot
@@ -2469,7 +2471,7 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
     return true
   }
 
-  if (isAsyncFsRuntimeCallExpression(expression)) {
+  if (asyncTaskDeps(context).isAsyncNodeStdlibRuntimeCallExpression(expression)) {
     return true
   }
 
@@ -3236,10 +3238,12 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
     return rejected
   }
 
-  const fsCall = emitPreparedAsyncTaskFsSourceExpression(expression, wrapper, context, options)
+  const nodeStdlibCall = asyncTaskDeps(context).emitPreparedNodeStdlibAsyncTaskSourceExpression(expression, context)
 
-  if (fsCall !== null && typeof fsCall !== 'undefined') {
-    return fsCall
+  if (nodeStdlibCall !== null && typeof nodeStdlibCall !== 'undefined') {
+    appendAsyncTaskLines(nodeStdlibCall.lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+
+    return nodeStdlibCall
   }
 
   const fetchCall = emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context, options)
@@ -3267,138 +3271,6 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
   }
 
   return null
-}
-
-function emitPreparedAsyncTaskFsSourceExpression(
-  expression: AsyncTaskAstNode,
-  wrapper: CAsyncTaskWrapper,
-  context: AsyncTaskFunctionContext,
-  options: AsyncTaskScheduleOptions
-): PreparedAsyncTaskPromise | null {
-  if (!isAsyncFsRuntimeCallExpression(expression)) {
-    return null
-  }
-
-  const method = cFsRuntimeExpressionMethod(expression)
-  const path = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
-  const lines: string[] = []
-
-  appendAsyncTaskLines(lines, path.lines)
-
-  if (method === 'readFile') {
-    if (expression.fsBytes === true) {
-      lines.push(`status = inox_fs_read_file_bytes(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-    } else {
-      lines.push(`status = inox_fs_read_file(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-    }
-  } else if (method === 'readdir') {
-    if (expression.fsDirents === true) {
-      lines.push(`status = inox_fs_read_dir_dirents(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-    } else {
-      lines.push(`status = inox_fs_read_dir(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-    }
-  } else if (method === 'stat') {
-    lines.push(`status = inox_fs_stat(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'lstat') {
-    lines.push(`status = inox_fs_lstat(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'realpath') {
-    lines.push(`status = inox_fs_realpath(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'readlink') {
-    lines.push(`status = inox_fs_readlink(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'access') {
-    const mode = asyncTaskDeps(context).emitPreparedFsAccessModeExpression(expression, context)
-
-    appendAsyncTaskLines(lines, mode.lines)
-    lines.push(
-      `status = inox_fs_access(inox_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
-    )
-  } else if (method === 'appendFile') {
-    if (expression.fsBytes === true) {
-      const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
-
-      appendAsyncTaskLines(lines, bytes.lines)
-      lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-      lines.push(
-        `status = inox_fs_append_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
-      )
-    } else {
-      const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
-
-      appendAsyncTaskLines(lines, bytes.lines)
-      lines.push(
-        `status = inox_fs_append_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
-      )
-    }
-  } else if (method === 'copyFile') {
-    const destPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(
-      expression.args[1],
-      context,
-      'inox_fs_dest_path'
-    )
-
-    appendAsyncTaskLines(lines, destPath.lines)
-    lines.push(
-      `status = inox_fs_copy_file(inox_loop, ${path.bytes}, ${path.length}, ${destPath.bytes}, ${destPath.length}, &frame->awaited);`
-    )
-  } else if (method === 'symlink') {
-    const linkPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(
-      expression.args[1],
-      context,
-      'inox_fs_link_path'
-    )
-
-    appendAsyncTaskLines(lines, linkPath.lines)
-    lines.push(
-      `status = inox_fs_symlink(inox_loop, ${path.bytes}, ${path.length}, ${linkPath.bytes}, ${linkPath.length}, &frame->awaited);`
-    )
-  } else if (method === 'mkdir') {
-    const recursiveFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')
-
-    lines.push(`status = inox_fs_mkdir(inox_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, &frame->awaited);`)
-  } else if (method === 'unlink') {
-    lines.push(`status = inox_fs_unlink(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (method === 'rm') {
-    const recursiveFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsRecursive')
-    const forceFlag: string = asyncTaskDeps(context).emitFsBooleanFlag(expression, 'fsForce')
-
-    lines.push(
-      `status = inox_fs_rm(inox_loop, ${path.bytes}, ${path.length}, ${recursiveFlag}, ${forceFlag}, &frame->awaited);`
-    )
-  } else if (method === 'rename') {
-    const newPath = asyncTaskDeps(context).emitPreparedStringBytesOperand(
-      expression.args[1],
-      context,
-      'inox_fs_new_path'
-    )
-
-    appendAsyncTaskLines(lines, newPath.lines)
-    lines.push(
-      `status = inox_fs_rename(inox_loop, ${path.bytes}, ${path.length}, ${newPath.bytes}, ${newPath.length}, &frame->awaited);`
-    )
-  } else {
-    if (expression.fsBytes === true) {
-      const bytes = asyncTaskDeps(context).emitCValueExpression(expression.args[1], context)
-
-      appendAsyncTaskLines(lines, bytes.lines)
-      lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-      lines.push(
-        `status = inox_fs_write_file_bytes(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
-      )
-    } else {
-      const bytes = asyncTaskDeps(context).emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
-
-      appendAsyncTaskLines(lines, bytes.lines)
-      lines.push(
-        `status = inox_fs_write_file(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
-      )
-    }
-  }
-
-  appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
-
-  return {
-    lines: lines
-  }
 }
 
 function emitPreparedAsyncTaskFetchSourceExpression(

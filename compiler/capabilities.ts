@@ -1,8 +1,7 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
-import { isCryptoRuntimeMethodPath } from './stdlib/descriptors/crypto.ts'
-import { timeRuntimeCapabilityFromPath } from './stdlib/descriptors/time.ts'
-import { isTimerRuntimeMethod } from './stdlib/descriptors/timers.ts'
+import { isCryptoRuntimeMethodPath, isTimerRuntimeMethod } from '../stdlib/node/compiler/descriptor.ts'
+import { timeRuntimeCapabilityFromPath } from '../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
   CompileOptions,

@@ -1,5 +1,5 @@
 import { memberExpressionPath } from '../member-paths.ts'
-import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
+import { mathRuntimeMethodNameFromPath } from '../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode } from '../types.ts'
 
 export const cMathNullaryMethods = new Set(['random'])

@@ -659,6 +659,7 @@ function cloneParam(param: AnyNode): AnyNode {
   return {
     name: param.name,
     optional: param.optional === true,
+    rest: param.rest === true,
     valueType: param.valueType,
     loc: param.loc,
     declaredType: nullableNodeValue(param.declaredType),

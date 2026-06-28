@@ -7,26 +7,18 @@ import {
   mapGetNullFeature,
   mapIndexSetFeature
 } from './map-access/index.ts'
-import {
-  collectNumberFromStringNullIrFeatures,
-  collectNumericCastsIrFeatures,
-  numberFromStringNullFeature,
-  numericCastsFeature
-} from './numeric-conversions/index.ts'
 import { collectRegExpIrFeatures, emitCRegExpPreludeHelpers, regexpFeature } from './regexp/index.ts'
-import { binaryFeatureChildNodes, collectBinaryIrFeatures } from './runtime-backed/binary.ts'
-import { collectChildProcessIrFeatures } from './runtime-backed/child-process.ts'
-import { collectClocksIrFeatures } from './runtime-backed/clocks.ts'
-import { collectCryptoIrFeatures } from './runtime-backed/crypto.ts'
 import { collectDebugMemoryIrFeatures } from './runtime-backed/debug-memory.ts'
-import { collectFsIrFeatures } from './runtime-backed/fs.ts'
+import {
+  collectNodeStdlibIrFeatures,
+  nodeStdlibFeatureChildNodes,
+  nodeStdlibFeatures
+} from '../../stdlib/node/compiler/feature.ts'
+import {
+  collectGlobalStdlibIrFeatures,
+  globalStdlibFeatures
+} from '../../stdlib/global/compiler/feature.ts'
 import { runtimeBackedFeatures } from './runtime-backed/index.ts'
-import { collectJsonIrFeatures } from './runtime-backed/json.ts'
-import { collectOsIrFeatures } from './runtime-backed/os.ts'
-import { collectPathIrFeatures } from './runtime-backed/path.ts'
-import { collectProcessIrFeatures } from './runtime-backed/process.ts'
-import { collectTimersIrFeatures } from './runtime-backed/timers.ts'
-import { collectUrlIrFeatures } from './runtime-backed/url.ts'
 import type { CompilerFeatureDescriptor } from './types.ts'
 import { collectWeakReferencesIrFeatures, weakReferencesFeature } from './weak-references/index.ts'
 
@@ -34,11 +26,11 @@ const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
   [arrayPopNullFeature],
   coreRuntimeFeatures,
   runtimeBackedFeatures,
+  globalStdlibFeatures,
+  nodeStdlibFeatures,
   [
     mapGetNullFeature,
     mapIndexSetFeature,
-    numberFromStringNullFeature,
-    numericCastsFeature,
     regexpFeature,
     weakReferencesFeature
   ]
@@ -107,22 +99,11 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
 
   collectArrayPopNullIrFeatures(featureNode, features)
   collectCoreRuntimeIrFeatures(featureNode, features)
-  collectBinaryIrFeatures(featureNode, features)
-  collectChildProcessIrFeatures(featureNode, features)
-  collectClocksIrFeatures(featureNode, features)
-  collectCryptoIrFeatures(featureNode, features)
+  collectNodeStdlibIrFeatures(featureNode, features)
+  collectGlobalStdlibIrFeatures(featureNode, features)
   collectDebugMemoryIrFeatures(featureNode, features)
-  collectFsIrFeatures(featureNode, features)
-  collectJsonIrFeatures(featureNode, features)
-  collectOsIrFeatures(featureNode, features)
-  collectPathIrFeatures(featureNode, features)
-  collectProcessIrFeatures(featureNode, features)
-  collectTimersIrFeatures(featureNode, features)
-  collectUrlIrFeatures(featureNode, features)
   collectMapGetNullIrFeatures(featureNode, features)
   collectMapIndexSetIrFeatures(featureNode, features)
-  collectNumberFromStringNullIrFeatures(featureNode, features)
-  collectNumericCastsIrFeatures(featureNode, features)
   collectRegExpIrFeatures(featureNode, features)
   collectWeakReferencesIrFeatures(featureNode, features)
 }
@@ -134,7 +115,7 @@ export function compilerFeatureChildNodes(node: unknown): AnyNode[] | null {
 
   const featureNode = node as AnyNode
 
-  return binaryFeatureChildNodes(featureNode)
+  return nodeStdlibFeatureChildNodes(featureNode)
 }
 
 export function compilerFeatureRuntimeRequirements(featureName: IrFeature): IrRuntimeRequirement[] | null {

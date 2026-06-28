@@ -53,14 +53,15 @@ export type FeatureTestFile = {
   usesModuleGraph: boolean
 }
 
-const featureRoot = fileURLToPath(new URL('../features/', import.meta.url))
+const featureMainRoot = fileURLToPath(new URL('../features/', import.meta.url))
+const featureRoots = [featureMainRoot, fileURLToPath(new URL('../../stdlib/', import.meta.url))]
 const defaultFeatureTestCompiler: FeatureTestCompiler = {
   kind: 'hosted'
 }
 
 export async function collectFeatureTestFiles(args: string[]): Promise<string[]> {
   const requestedArgs = args.filter((arg) => arg !== '--')
-  const requests = requestedArgs.length > 0 ? requestedArgs : [featureRoot]
+  const requests = requestedArgs.length > 0 ? requestedArgs : featureRoots
   const files: string[] = []
 
   for (const request of requests) {
@@ -173,11 +174,21 @@ async function collectExistingPath(path: string): Promise<string[] | undefined> 
 
 async function collectFeatureTestName(name: string): Promise<string[]> {
   const normalizedName = normalizeFeatureTestName(name)
-  const matches = (await collectPath(featureRoot)).filter((file) => featureTestName(file) === normalizedName)
+  const matches = (await collectFeatureRootPaths()).filter((file) => featureTestName(file) === normalizedName)
 
   assert.ok(matches.length > 0, `feature tests: no test named ${name}`)
 
   return matches
+}
+
+async function collectFeatureRootPaths(): Promise<string[]> {
+  const files: string[] = []
+
+  for (const root of featureRoots) {
+    files.push(...(await collectPath(root)))
+  }
+
+  return files
 }
 
 function normalizeFeatureTestName(name: string): string {
@@ -279,12 +290,12 @@ function parseFeatureTestFile(path: string, raw: string): FeatureTestFile {
     expectedStdout: expectedText(stdout),
     expectedStderr: expectedText(stderr),
     nodeSkipReason,
-    usesModuleGraph: usesRelativeModuleImport(source)
+    usesModuleGraph: usesModuleImport(source)
   }
 }
 
 function isInoxFeaturePath(path: string): boolean {
-  const normalizedFeatureRoot = removeTrailingSlash(normalizeFilePath(featureRoot))
+  const normalizedFeatureRoot = removeTrailingSlash(normalizeFilePath(featureMainRoot))
   const normalizedPath = normalizeFilePath(path)
 
   return normalizedPath.startsWith(`${normalizedFeatureRoot}/inox/`)
@@ -572,8 +583,8 @@ function words(value: string): string[] {
   return value.split(/\s+/).filter((word) => word.length > 0)
 }
 
-function usesRelativeModuleImport(source: string): boolean {
-  return /(?:^|\n)\s*(?:import|export)\s+(?:[^'"]+\s+from\s+)?['"](?:\.\/|\.\.\/)/.test(source)
+function usesModuleImport(source: string): boolean {
+  return /(?:^|\n)\s*(?:import|export)\s+(?:[^'"]+\s+from\s+)?['"][^'"]+['"]/.test(source)
 }
 
 function featureCompilerStage(compiler: FeatureTestCompiler): string {

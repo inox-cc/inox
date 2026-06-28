@@ -2,11 +2,12 @@ import { memberExpressionPath } from '../../member-paths.ts'
 import {
   arrayRuntimeMethodName,
   collectionConstructorNameFromPath,
-  stringRuntimeMethodName as collectionStringRuntimeMethodName,
   isMapMethod,
-  isSetMethod
-} from '../../stdlib/descriptors/collections.ts'
-import { timerRuntimeMethodNameFromPath } from '../../stdlib/descriptors/timers.ts'
+  isNumericCastName,
+  isSetMethod,
+  stringRuntimeMethodName as stdlibStringRuntimeMethodName
+} from '../../../stdlib/global/compiler/descriptor.ts'
+import { timerRuntimeMethodNameFromPath } from '../../../stdlib/node/compiler/descriptor.ts'
 import type { AnyNode, IrFeature } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../types.ts'
 
@@ -573,7 +574,7 @@ function stringRuntimeMethodName(expression: CoreRuntimeNode): string | null {
     return null
   }
 
-  return collectionStringRuntimeMethodName(property)
+  return stdlibStringRuntimeMethodName(property)
 }
 
 function timerRuntimeCallName(expression: CoreRuntimeNode): string | null {
@@ -687,10 +688,6 @@ function isRuntimeCallableReturnType(valueType: string): boolean {
 
 function isRuntimeCallableParamValueType(valueType: string | null | undefined): boolean {
   return valueType === 'bytes' || valueType === 'string' || valueType === 'object'
-}
-
-function isNumericCastName(name: string | undefined): boolean {
-  return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'
 }
 
 function isPossibleStringBytesNodeType(nodeType: string | null | undefined): boolean {

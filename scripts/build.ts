@@ -64,7 +64,9 @@ const legacyCmakeRootDir = join(rootDir, 'dist/build-cmake')
 const cmakeSourceDir = compilerDistDir
 const cmakeBuildDir = join(compilerDistDir, 'build')
 const cmakeBinDir = join(compilerDistDir, 'bin')
-const compilerSourceRoot = '/project/compiler'
+const projectSourceRoot = '/project'
+const compilerSourceRoot = `${projectSourceRoot}/compiler`
+const selfHostedSourceDirs = ['compiler', 'stdlib']
 const buildLoopBackend = 'libuv'
 const buildTlsBackend = 'openssl'
 
@@ -95,14 +97,15 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   })
 
   const compilerFiles = await readCompilerSources()
+  const stdlibDeclarationFiles = await readStdlibDeclarationSources()
   const driverPath = `${compilerSourceRoot}/index.ts`
 
   console.log('emitting self-hosted compiler declaration contracts')
-  const declarationContracts = await emitCompilerDeclarationContracts(driverPath, compilerFiles)
+  const declarationContracts = await emitCompilerDeclarationContracts(driverPath, compilerFiles, stdlibDeclarationFiles)
   const generatedFiles: GeneratedFileMap = new Map()
 
   console.log('emitting self-hosted compiler C modules')
-  await emitCompilerModules(compilerFiles, driverPath, declarationContracts, generatedFiles)
+  await emitCompilerModules(compilerFiles, driverPath, declarationContracts, generatedFiles, stdlibDeclarationFiles)
   addFunctionEffectSidecarFiles(generatedFiles, declarationContracts)
 
   await rm(options.generatedDir, {
@@ -155,25 +158,27 @@ function addGeneratedFiles(files: GeneratedFileMap, generated: { path: string; c
 
 async function emitCompilerDeclarationContracts(
   driverPath: string,
-  compilerFiles: SourceFile[]
+  compilerFiles: SourceFile[],
+  stdlibDeclarationFiles: SourceFile[]
 ): Promise<DeclarationContract[]> {
   const modules = compilerSourceModules(compilerFiles)
   const contracts = seedCompilerDeclarationContracts(modules)
   const orderedFiles = orderCompilerFilesByDependencies(driverPath, modules)
 
-  return await refineCompilerDeclarationContracts(orderedFiles, contracts)
+  return await refineCompilerDeclarationContracts(orderedFiles, contracts, stdlibDeclarationFiles)
 }
 
 async function refineCompilerDeclarationContracts(
   compilerFiles: SourceFile[],
-  contracts: DeclarationContract[]
+  contracts: DeclarationContract[],
+  stdlibDeclarationFiles: SourceFile[]
 ): Promise<DeclarationContract[]> {
   const refined = copyDeclarationContracts(contracts)
   const compiledModules: DeclarationEffectModule[] = []
 
   for (const file of compilerFiles) {
     console.log(`refining compiler declaration ${file.path.slice('/project/'.length)}`)
-    const modules = await compileCompilerModuleIr(file, refined)
+    const modules = await compileCompilerModuleIr(file, refined, stdlibDeclarationFiles)
     const module = compiledDeclarationModule(modules.graph.modules, file.path)
     const declarationProgram = module.declarationProgram
 
@@ -199,11 +204,12 @@ async function emitCompilerModules(
   compilerFiles: SourceFile[],
   driverPath: string,
   declarationContracts: DeclarationContract[],
-  generatedFiles: GeneratedFileMap
+  generatedFiles: GeneratedFileMap,
+  stdlibDeclarationFiles: SourceFile[]
 ): Promise<void> {
   for (const file of compilerFiles) {
     console.log(`emitting compiler module ${file.path.slice('/project/'.length)}`)
-    const modules = await compileCompilerModule(file, file.path === driverPath, declarationContracts)
+    const modules = await compileCompilerModule(file, file.path === driverPath, declarationContracts, stdlibDeclarationFiles)
 
     addGeneratedFiles(generatedFiles, modules.files)
   }
@@ -212,18 +218,19 @@ async function emitCompilerModules(
 async function compileCompilerModule(
   file: SourceFile,
   callMain: boolean,
-  declarationContracts: DeclarationContract[]
+  declarationContracts: DeclarationContract[],
+  stdlibDeclarationFiles: SourceFile[]
 ): Promise<{
   files: GeneratedFile[]
 }> {
   const contractFiles = declarationContractSourceFiles(declarationContracts, file.path)
   const declarationImports = declarationImportOptions(declarationContracts, file.path)
 
-  return await compileMemoryPackageToCModules(file.path, [file, ...contractFiles], {
+  return await compileMemoryPackageToCModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     callMain,
     declarationImports,
     loopBackend: buildLoopBackend,
-    sourceRoot: compilerSourceRoot,
+    sourceRoot: projectSourceRoot,
     target: 'c',
     tlsBackend: buildTlsBackend
   })
@@ -231,7 +238,8 @@ async function compileCompilerModule(
 
 async function compileCompilerModuleIr(
   file: SourceFile,
-  declarationContracts: DeclarationContract[]
+  declarationContracts: DeclarationContract[],
+  stdlibDeclarationFiles: SourceFile[]
 ): Promise<{
   graph: {
     modules: DeclarationEffectModule[]
@@ -240,7 +248,7 @@ async function compileCompilerModuleIr(
   const contractFiles = declarationContractSourceFiles(declarationContracts, file.path)
   const declarationImports = declarationImportOptions(declarationContracts, file.path)
 
-  return await compileMemoryPackageToIrModules(file.path, [file, ...contractFiles], {
+  return await compileMemoryPackageToIrModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     declarationImports,
     loopBackend: buildLoopBackend,
     target: 'c',
@@ -778,11 +786,11 @@ function functionEffectsPathForSourcePath(sourcePath: string): string {
 }
 
 function generatedPathForSourcePath(sourcePath: string, extension: string): string {
-  if (!sourcePath.startsWith(`${compilerSourceRoot}/`) || !sourcePath.endsWith('.ts')) {
+  if (!sourcePath.startsWith(`${projectSourceRoot}/`) || !sourcePath.endsWith('.ts')) {
     throw new Error(`unsupported compiler source path ${sourcePath}`)
   }
 
-  return `${sourcePath.slice(`${compilerSourceRoot}/`.length, -'.ts'.length)}${extension}`
+  return `${sourcePath.slice(`${projectSourceRoot}/`.length, -'.ts'.length)}${extension}`
 }
 
 async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number }> {
@@ -844,7 +852,28 @@ async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number
 }
 
 async function readCompilerSources(): Promise<SourceFile[]> {
-  const paths = await readCompilerSourcePaths(join(rootDir, 'compiler'))
+  const paths: string[] = []
+  const files: SourceFile[] = []
+
+  for (const dir of selfHostedSourceDirs) {
+    paths.push(...(await readCompilerSourcePaths(join(rootDir, dir))))
+  }
+
+  paths.sort()
+
+  for (const path of paths) {
+    files.push({
+      path: `/project/${relative(rootDir, path)}`,
+      source: await readFile(path, 'utf8')
+    })
+  }
+
+  return files
+}
+
+async function readStdlibDeclarationSources(): Promise<SourceFile[]> {
+  const root = join(rootDir, 'stdlib/node')
+  const paths = await readStdlibDeclarationSourcePaths(root)
   const files: SourceFile[] = []
 
   paths.sort()
@@ -859,7 +888,7 @@ async function readCompilerSources(): Promise<SourceFile[]> {
   return files
 }
 
-async function readCompilerSourcePaths(dir: string): Promise<string[]> {
+async function readStdlibDeclarationSourcePaths(dir: string): Promise<string[]> {
   const entries = await readdir(dir, {
     withFileTypes: true
   })
@@ -869,8 +898,32 @@ async function readCompilerSourcePaths(dir: string): Promise<string[]> {
     const path = join(dir, entry.name)
 
     if (entry.isDirectory()) {
+      paths.push(...(await readStdlibDeclarationSourcePaths(path)))
+    } else if (entry.isFile() && entry.name === 'index.d.ts') {
+      paths.push(path)
+    }
+  }
+
+  return paths
+}
+
+async function readCompilerSourcePaths(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, {
+    withFileTypes: true
+  })
+  const paths: string[] = []
+
+  for (const entry of entries) {
+    const path = join(dir, entry.name)
+
+    if (entry.isDirectory() && entry.name !== 'tests') {
       paths.push(...(await readCompilerSourcePaths(path)))
-    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith('.ts') &&
+      !entry.name.endsWith('.d.ts') &&
+      !entry.name.endsWith('.test.ts')
+    ) {
       paths.push(path)
     }
   }

@@ -14,33 +14,39 @@ set(INOX_TLS_CA_PATH "" CACHE PATH "TLS CA directory path")
 
 set(INOX_RUNTIME_DIR "${CMAKE_CURRENT_LIST_DIR}")
 set(INOX_REPO_ROOT "${INOX_RUNTIME_DIR}/..")
+set(INOX_STDLIB_GLOBAL_DIR "${INOX_REPO_ROOT}/stdlib/global")
+set(INOX_STDLIB_NODE_DIR "${INOX_REPO_ROOT}/stdlib/node")
+file(GLOB INOX_STDLIB_GLOBAL_SOURCES
+  CONFIGURE_DEPENDS
+  "${INOX_STDLIB_GLOBAL_DIR}/*/c/*.c"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/*/c/*.c"
+)
+file(GLOB INOX_STDLIB_NODE_SOURCES
+  CONFIGURE_DEPENDS
+  "${INOX_STDLIB_NODE_DIR}/*/c/*.c"
+  "${INOX_STDLIB_NODE_DIR}/*/*/c/*.c"
+)
+file(GLOB INOX_STDLIB_GLOBAL_INCLUDE_DIRS
+  LIST_DIRECTORIES true
+  CONFIGURE_DEPENDS
+  "${INOX_STDLIB_GLOBAL_DIR}/*/include"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/*/include"
+)
+file(GLOB INOX_STDLIB_NODE_INCLUDE_DIRS
+  LIST_DIRECTORIES true
+  CONFIGURE_DEPENDS
+  "${INOX_STDLIB_NODE_DIR}/*/include"
+  "${INOX_STDLIB_NODE_DIR}/*/*/include"
+)
 
 set(INOX_RUNTIME_SOURCES
-  "${INOX_RUNTIME_DIR}/src/arrays/array.c"
   "${INOX_RUNTIME_DIR}/src/async/promise.c"
-  "${INOX_RUNTIME_DIR}/src/binary/binary.c"
-  "${INOX_RUNTIME_DIR}/src/child_process/child_process.c"
-  "${INOX_RUNTIME_DIR}/src/collections/map.c"
-  "${INOX_RUNTIME_DIR}/src/collections/set.c"
-  "${INOX_RUNTIME_DIR}/src/console/console.c"
   "${INOX_RUNTIME_DIR}/src/core/allocator.c"
   "${INOX_RUNTIME_DIR}/src/core/callback.c"
-  "${INOX_RUNTIME_DIR}/src/core/debug.c"
   "${INOX_RUNTIME_DIR}/src/core/value.c"
-  "${INOX_RUNTIME_DIR}/src/crypto/crypto.c"
-  "${INOX_RUNTIME_DIR}/src/fs/fs.c"
-  "${INOX_RUNTIME_DIR}/src/json/json.c"
-  "${INOX_RUNTIME_DIR}/src/network/dgram.c"
-  "${INOX_RUNTIME_DIR}/src/network/fetch.c"
-  "${INOX_RUNTIME_DIR}/src/network/http.c"
-  "${INOX_RUNTIME_DIR}/src/network/net.c"
   "${INOX_RUNTIME_DIR}/src/objects/object.c"
-  "${INOX_RUNTIME_DIR}/src/os/os.c"
-  "${INOX_RUNTIME_DIR}/src/path/path.c"
-  "${INOX_RUNTIME_DIR}/src/process/process.c"
-  "${INOX_RUNTIME_DIR}/src/strings/string.c"
-  "${INOX_RUNTIME_DIR}/src/time/time.c"
-  "${INOX_RUNTIME_DIR}/src/url/url.c"
+  ${INOX_STDLIB_GLOBAL_SOURCES}
+  ${INOX_STDLIB_NODE_SOURCES}
 )
 
 if(INOX_LOOP_BACKEND STREQUAL "embedded")
@@ -96,6 +102,9 @@ endif()
 add_library(inox_runtime STATIC ${INOX_RUNTIME_SOURCES})
 target_include_directories(inox_runtime PUBLIC
   "${INOX_RUNTIME_DIR}/include"
+  "${INOX_RUNTIME_DIR}/src/async"
+  ${INOX_STDLIB_GLOBAL_INCLUDE_DIRS}
+  ${INOX_STDLIB_NODE_INCLUDE_DIRS}
   ${INOX_TLS_INCLUDE_DIRS}
 )
 target_compile_definitions(inox_runtime PUBLIC ${INOX_TLS_COMPILE_DEFINITION})

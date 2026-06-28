@@ -692,7 +692,7 @@ function isKeyword(value: string): boolean {
 }
 
 function isThreeCharPunctuator(value: string): boolean {
-  return value === '===' || value === '!=='
+  return value === '===' || value === '!==' || value === '...'
 }
 
 function isTwoCharPunctuator(value: string): boolean {

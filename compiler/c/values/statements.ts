@@ -54,7 +54,6 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
 import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
-import { resolveBinaryExpressionKind } from '../stdlib/binary.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
 import {
@@ -291,10 +290,6 @@ export type StatementLoweringDependencies = {
   ): PreparedExpression
   emitCValueExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   collectionConstructorName(expression: StatementNode): string | null
-  emitDgramAddressVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitDgramNumberVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitDgramSocketVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitDgramSocketCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
   emitDynamicObjectMemberVariableDeclaration(
     statement: StatementNode,
     member: CKnownObjectIndexField,
@@ -318,8 +313,6 @@ export type StatementLoweringDependencies = {
     functionType: CFunctionType | null | undefined,
     loc: CSourceLocation
   ): string
-  emitHttpServerVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitHttpServerCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
   emitJsonParseVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
   emitKnownArrayIndexAssignment(
     expression: StatementNode,
@@ -341,13 +334,8 @@ export type StatementLoweringDependencies = {
     member: CKnownObjectField,
     context: CFunctionContext
   ): string[]
-  emitNetAddressMemberVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitNetAddressVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitNetNumberVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitNetServerCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
-  emitNetServerVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
-  emitNetSocketCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
-  emitNetSocketVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
+  emitNodeNetworkCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
+  emitNodeNetworkVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
   emitNullableScalarValueExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitNullableRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
   emitObjectVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
@@ -520,6 +508,7 @@ export type StatementLoweringDependencies = {
   resolveKnownArrayIndex(expression: StatementNode, context: CFunctionContext): CKnownArrayElement | null
   resolveKnownObjectIndex(expression: StatementNode, context: CFunctionContext): CKnownObjectIndexField | null
   resolveKnownObjectMember(expression: StatementNode, context: CFunctionContext): CKnownObjectField | null
+  resolveBytesExpressionKind(expression: StatementNode | null | undefined, context: CFunctionContext): string | null
   resolveKnownForOfArray(expression: StatementNode, context: CFunctionContext): KnownForOfArray | null
   resolveNullableScalarConditionNarrowing(
     expression: StatementNode,
@@ -1615,7 +1604,7 @@ export function registerRuntimeValueMetadata(
   } else if (valueType === 'set') {
     context.setElementTypes.set(name, resolveRuntimeSetMetadataElementType(declaration, expression, context))
   } else if (valueType === 'bytes') {
-    const byteKind = resolveBinaryExpressionKind(expression, context)
+    const byteKind = statementDeps(context).resolveBytesExpressionKind(expression, context)
 
     if (byteKind !== null && typeof byteKind !== 'undefined') {
       context.byteKinds.set(name, byteKind)
@@ -3672,58 +3661,10 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
-  const dgramSocket = deps.emitDgramSocketVariableDeclaration(statement, context)
+  const nodeNetworkDeclaration = deps.emitNodeNetworkVariableDeclaration(statement, context)
 
-  if (dgramSocket !== null && typeof dgramSocket !== 'undefined') {
-    return dgramSocket
-  }
-
-  const dgramNumber = deps.emitDgramNumberVariableDeclaration(statement, context)
-
-  if (dgramNumber !== null && typeof dgramNumber !== 'undefined') {
-    return dgramNumber
-  }
-
-  const dgramAddress = deps.emitDgramAddressVariableDeclaration(statement, context)
-
-  if (dgramAddress !== null && typeof dgramAddress !== 'undefined') {
-    return dgramAddress
-  }
-
-  const httpServer = deps.emitHttpServerVariableDeclaration(statement, context)
-
-  if (httpServer !== null && typeof httpServer !== 'undefined') {
-    return httpServer
-  }
-
-  const netServer = deps.emitNetServerVariableDeclaration(statement, context)
-
-  if (netServer !== null && typeof netServer !== 'undefined') {
-    return netServer
-  }
-
-  const netSocket = deps.emitNetSocketVariableDeclaration(statement, context)
-
-  if (netSocket !== null && typeof netSocket !== 'undefined') {
-    return netSocket
-  }
-
-  const netAddress = deps.emitNetAddressVariableDeclaration(statement, context)
-
-  if (netAddress !== null && typeof netAddress !== 'undefined') {
-    return netAddress
-  }
-
-  const netAddressMember = deps.emitNetAddressMemberVariableDeclaration(statement, context)
-
-  if (netAddressMember !== null && typeof netAddressMember !== 'undefined') {
-    return netAddressMember
-  }
-
-  const netNumber = deps.emitNetNumberVariableDeclaration(statement, context)
-
-  if (netNumber !== null && typeof netNumber !== 'undefined') {
-    return netNumber
+  if (nodeNetworkDeclaration !== null && typeof nodeNetworkDeclaration !== 'undefined') {
+    return nodeNetworkDeclaration
   }
 
   const fetchAbortController = deps.emitFetchAbortControllerVariableDeclaration(statement, context)
@@ -4118,7 +4059,7 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
   lines.push(`${target} = ${value.expression};`)
 
   if (targetType === 'bytes') {
-    const byteKind = resolveBinaryExpressionKind(expression.value, context)
+    const byteKind = statementDeps(context).resolveBytesExpressionKind(expression.value, context)
 
     if (byteKind !== null && typeof byteKind !== 'undefined') {
       context.byteKinds.set(target, byteKind)
@@ -4208,28 +4149,10 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   if (expression.type === 'CallExpression') {
-    const dgramSocketCall = deps.emitDgramSocketCallStatement(expression, context)
+    const nodeNetworkCall = deps.emitNodeNetworkCallStatement(expression, context)
 
-    if (dgramSocketCall !== null && typeof dgramSocketCall !== 'undefined') {
-      return dgramSocketCall
-    }
-
-    const httpServerCall = deps.emitHttpServerCallStatement(expression, context)
-
-    if (httpServerCall !== null && typeof httpServerCall !== 'undefined') {
-      return httpServerCall
-    }
-
-    const netServerCall = deps.emitNetServerCallStatement(expression, context)
-
-    if (netServerCall !== null && typeof netServerCall !== 'undefined') {
-      return netServerCall
-    }
-
-    const netSocketCall = deps.emitNetSocketCallStatement(expression, context)
-
-    if (netSocketCall !== null && typeof netSocketCall !== 'undefined') {
-      return netSocketCall
+    if (nodeNetworkCall !== null && typeof nodeNetworkCall !== 'undefined') {
+      return nodeNetworkCall
     }
 
     const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, preparedCallDiscard())

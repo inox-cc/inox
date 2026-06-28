@@ -1,6 +1,7 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import { tokenize } from '../lexer.ts'
 import { parse } from '../parser.ts'
+import { readTypeAnnotation } from '../parser/type-annotations.ts'
 import type { AnyNode, Diagnostic, ProgramNode, Token, ValueType } from '../types.ts'
 
 export type ModuleDeclarationContractEmitResult = {
@@ -11,6 +12,21 @@ export type ModuleDeclarationContractEmitResult = {
 export type ModuleDeclarationContractParseResult = {
   program: ProgramNode
   diagnostics: Diagnostic[]
+}
+
+type DeclarationContractDefaultExport = {
+  syntheticName: string
+}
+
+type DeclarationContractNormalizeResult = {
+  source: string
+  defaultExports: DeclarationContractDefaultExport[]
+}
+
+type DeclareConstDeclaration = {
+  name: string
+  valueType: string
+  position: number
 }
 
 type DeclarationValueMetadata = {
@@ -159,11 +175,12 @@ export function parseModuleDeclarationContractResult(
       }
     }
 
-    const tokens = tokenize(normalized, {
+    const tokens = tokenize(normalized.source, {
       file: declarationContractFileName(file)
     })
     const program = parse(tokens)
 
+    renameModuleDeclarationDefaultExports(program, normalized.defaultExports)
     markModuleDeclarationContractProgram(program)
     validateModuleDeclarationContractProgram(program, diagnostics)
 
@@ -422,11 +439,13 @@ function normalizeModuleDeclarationContractSource(
   source: string,
   file: string | null,
   diagnostics: Diagnostic[]
-): string {
+): DeclarationContractNormalizeResult {
   const tokens = tokenize(source, {
     file: declarationContractFileName(file)
   })
   const parts: string[] = []
+  const declareConstTypes: Map<string, string> = new Map()
+  const defaultExports: DeclarationContractDefaultExport[] = []
   let position = 0
 
   while (!tokenIs(tokens, position, 'eof', '<eof>')) {
@@ -454,6 +473,26 @@ function normalizeModuleDeclarationContractSource(
       continue
     }
 
+    if (isDeclareConstDeclarationStart(tokens, position)) {
+      const declaration = readDeclareConstDeclaration(tokens, position)
+
+      if (declaration !== null) {
+        declareConstTypes.set(declaration.name, declaration.valueType)
+        position = declaration.position
+        continue
+      }
+    }
+
+    if (isDefaultExportDeclarationStart(tokens, position)) {
+      position = appendNormalizedDefaultExport(parts, defaultExports, declareConstTypes, tokens, position)
+      continue
+    }
+
+    if (isClassDeclarationStart(tokens, position)) {
+      position = appendNormalizedClassDeclaration(parts, tokens, position)
+      continue
+    }
+
     if (isInterfaceDeclarationStart(tokens, position)) {
       position = appendNormalizedInterfaceDeclaration(parts, tokens, position)
       continue
@@ -468,7 +507,141 @@ function normalizeModuleDeclarationContractSource(
     position = position + 1
   }
 
-  return joinParts(parts)
+  return {
+    source: joinParts(parts),
+    defaultExports
+  }
+}
+
+function renameModuleDeclarationDefaultExports(
+  program: ProgramNode,
+  defaultExports: DeclarationContractDefaultExport[]
+): void {
+  if (defaultExports.length === 0) {
+    return
+  }
+
+  const syntheticNames: Set<string> = new Set()
+
+  for (const item of defaultExports) {
+    syntheticNames.add(item.syntheticName)
+  }
+
+  for (const item of program.body) {
+    if (item.type === 'VariableDeclaration' && syntheticNames.has(item.name)) {
+      item.name = 'default'
+    }
+  }
+}
+
+function readDeclareConstDeclaration(tokens: Token[], position: number): DeclareConstDeclaration | null {
+  const name = tokenAt(tokens, position + 2)
+
+  if (!isDeclarationLocalNameToken(name)) {
+    return null
+  }
+
+  let current = position + 3
+
+  if (tokenValue(tokens, current) !== ':') {
+    return null
+  }
+
+  current = current + 1
+
+  const typeResult = readTypeAnnotation(tokens, current, [';'], {
+    stopAtLineBreak: true
+  })
+  let next = typeResult.position
+
+  if (tokenValue(tokens, next) === ';') {
+    next = next + 1
+  }
+
+  return {
+    name: name.value,
+    valueType: nonEmptyTypeNameOrUnknown(typeResult.typeName),
+    position: next
+  }
+}
+
+function appendNormalizedDefaultExport(
+  parts: string[],
+  defaultExports: DeclarationContractDefaultExport[],
+  declareConstTypes: Map<string, string>,
+  tokens: Token[],
+  position: number
+): number {
+  const localName = tokenValue(tokens, position + 2)
+  const declaredType = declareConstTypes.get(localName) ?? 'unknown'
+  const syntheticName = `__inox_default_export_${defaultExports.length}`
+
+  parts.push('export')
+  parts.push('const')
+  parts.push(syntheticName)
+  parts.push(':')
+  parts.push(declaredType)
+  parts.push(';')
+  defaultExports.push({ syntheticName })
+
+  return skipToStatementEnd(tokens, position)
+}
+
+function appendNormalizedClassDeclaration(parts: string[], tokens: Token[], position: number): number {
+  let current = position
+
+  while (!tokenIs(tokens, current, 'eof', '<eof>') && tokenValue(tokens, current) !== '{') {
+    parts.push(tokenSource(tokenAt(tokens, current)))
+    current = current + 1
+  }
+
+  if (tokenValue(tokens, current) !== '{') {
+    return current
+  }
+
+  const close = findBalancedClose(tokens, current, '{', '}')
+
+  parts.push(tokenSource(tokenAt(tokens, current)))
+  current = current + 1
+
+  while (current < close && !tokenIs(tokens, current, 'eof', '<eof>')) {
+    if (isClassMethodSignatureStart(tokens, current)) {
+      current = appendNormalizedClassMethodSignature(parts, tokens, current)
+      continue
+    }
+
+    parts.push(tokenSource(tokenAt(tokens, current)))
+    current = current + 1
+  }
+
+  parts.push(tokenSource(tokenAt(tokens, close)))
+
+  if (tokenValue(tokens, close + 1) === ';') {
+    return close + 2
+  }
+
+  return close + 1
+}
+
+function appendNormalizedClassMethodSignature(parts: string[], tokens: Token[], position: number): number {
+  const end = findFunctionSignatureEnd(tokens, position)
+
+  if (end === -1) {
+    parts.push(tokenSource(tokenAt(tokens, position)))
+    return position + 1
+  }
+
+  let current = position
+
+  while (current < end) {
+    parts.push(tokenSource(tokenAt(tokens, current)))
+    current = current + 1
+  }
+
+  parts.push('{')
+  parts.push('}')
+
+  return end + 1
 }
 
 function appendNormalizedInterfaceDeclaration(parts: string[], tokens: Token[], position: number): number {
@@ -591,7 +764,7 @@ function isFunctionSignatureStart(tokens: Token[], position: number): boolean {
     return false
   }
 
-  return tokenAt(tokens, current + 1).type === 'identifier'
+  return isFunctionDeclarationNameToken(tokenAt(tokens, current + 1))
 }
 
 function isInterfaceDeclarationStart(tokens: Token[], position: number): boolean {
@@ -600,6 +773,14 @@ function isInterfaceDeclarationStart(tokens: Token[], position: number): boolean
   }
 
   return tokenValue(tokens, position) === 'export' && tokenValue(tokens, position + 1) === 'interface'
+}
+
+function isClassDeclarationStart(tokens: Token[], position: number): boolean {
+  if (tokenValue(tokens, position) === 'class') {
+    return true
+  }
+
+  return tokenValue(tokens, position) === 'export' && tokenValue(tokens, position + 1) === 'class'
 }
 
 function isUnsupportedExportStar(tokens: Token[], position: number): boolean {
@@ -612,6 +793,48 @@ function isUnsupportedNamespace(tokens: Token[], position: number): boolean {
   }
 
   return tokenValue(tokens, position) === 'export' && tokenValue(tokens, position + 1) === 'namespace'
+}
+
+function isDeclareConstDeclarationStart(tokens: Token[], position: number): boolean {
+  return (
+    tokenValue(tokens, position) === 'declare' &&
+    tokenValue(tokens, position + 1) === 'const' &&
+    isDeclarationLocalNameToken(tokenAt(tokens, position + 2))
+  )
+}
+
+function isDefaultExportDeclarationStart(tokens: Token[], position: number): boolean {
+  return (
+    tokenValue(tokens, position) === 'export' &&
+    tokenValue(tokens, position + 1) === 'default' &&
+    isDeclarationLocalNameToken(tokenAt(tokens, position + 2))
+  )
+}
+
+function isFunctionDeclarationNameToken(token: Token): boolean {
+  return token.type === 'identifier' || token.value === 'type'
+}
+
+function isDeclarationLocalNameToken(token: Token): boolean {
+  return token.type === 'identifier' || token.value === 'type'
+}
+
+function isClassMethodSignatureStart(tokens: Token[], position: number): boolean {
+  let current = position
+
+  if (tokenValue(tokens, current) === 'static') {
+    current = current + 1
+  }
+
+  if (!isClassMemberNameToken(tokenAt(tokens, current))) {
+    return false
+  }
+
+  return tokenValue(tokens, current + 1) === '('
+}
+
+function isClassMemberNameToken(token: Token): boolean {
+  return token.type === 'identifier' || token.type === 'keyword'
 }
 
 function skipToStatementEnd(tokens: Token[], position: number): number {
@@ -754,9 +977,10 @@ function formatParamList(params: AnyNode[] | null | undefined): string {
 
   for (const param of params) {
     const optional = param.optional === true ? '?' : ''
+    const rest = param.rest === true ? '...' : ''
     const typeName = declaredTypeName(param) ?? typeNameFromMetadata(param, 'unknown')
 
-    names.push(`${param.name}${optional}: ${typeName}`)
+    names.push(`${rest}${param.name}${optional}: ${typeName}`)
   }
 
   return joinStrings(names, ', ')
@@ -846,6 +1070,16 @@ function exportPrefix(item: AnyNode): string {
 
 function typeNameOrUnknown(value: string | null | undefined): string {
   return stringMetadata(value, 'unknown')
+}
+
+function nonEmptyTypeNameOrUnknown(value: string | null | undefined): string {
+  const typeName = typeNameOrUnknown(value)
+
+  if (typeName === '') {
+    return 'unknown'
+  }
+
+  return typeName
 }
 
 function tokenAt(tokens: Token[], position: number): Token {

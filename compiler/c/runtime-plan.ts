@@ -4,16 +4,15 @@ import {
 import {
   dateInstanceRuntimeMethodName,
   dateInstanceRuntimeMethodReturnType
-} from '../stdlib/descriptors/time.ts'
+} from '../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import type { CGlobalUsageSupportContext } from './diagnostics.ts'
 import {
-  isSupportedCCryptoGlobalUsage,
   isSupportedCFetchGlobalUsage,
   isSupportedCMathGlobalUsage
 } from './diagnostics.ts'
-import { irProgramsUseStdlibRuntimeImport } from './runtime-imports.ts'
-import { irProgramsUseConsoleRuntime } from './stdlib/console.ts'
+import { irProgramsUseConsoleRuntime } from '../../stdlib/global/console/compiler/c.ts'
+import { nodeStdlibHasSupportedCryptoGlobalUsage, nodeStdlibRuntimeImportUsage } from '../../stdlib/node/compiler/c.ts'
 
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
@@ -103,7 +102,8 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('set')
   const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classInfoCount > 0
-  const needsDgramRuntime = irProgramsUseStdlibRuntimeImport(input.irPrograms, 'dgram')
+  const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
+  const needsDgramRuntime = nodeRuntimeImports.dgram
   const needsObjectRuntime =
     input.runtimeRequirements.has('objects') ||
     needsFsRuntime ||
@@ -112,8 +112,8 @@ export function resolveCRuntimePreludeRequirements(
     needsPathRuntime ||
     needsUrlRuntime ||
     signatureRuntimeTypes.has('object')
-  const needsHttpRuntime = irProgramsUseStdlibRuntimeImport(input.irPrograms, 'http')
-  const needsNetRuntime = irProgramsUseStdlibRuntimeImport(input.irPrograms, 'net')
+  const needsHttpRuntime = nodeRuntimeImports.http
+  const needsNetRuntime = nodeRuntimeImports.net
   const needsRuntime =
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||
@@ -143,7 +143,7 @@ export function resolveCRuntimePreludeRequirements(
   const needsMathRuntime = runtimePlanHasSupportedMathGlobalUsage(input.globalUsages)
   const needsCryptoRuntime =
     input.runtimeRequirements.has('crypto') ||
-    runtimePlanHasSupportedCryptoGlobalUsage(input.globalUsages, input.cryptoContext)
+    nodeStdlibHasSupportedCryptoGlobalUsage(input.globalUsages, input.cryptoContext)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     input.runtimeRequirements.has('string-bytes') ||
@@ -204,21 +204,6 @@ function runtimePlanHasSupportedMathGlobalUsage(globalUsages: IrGlobalUsage[]): 
     const usage = globalUsages[index] as IrGlobalUsage
 
     if (isSupportedCMathGlobalUsage(usage)) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function runtimePlanHasSupportedCryptoGlobalUsage(
-  globalUsages: IrGlobalUsage[],
-  context: CGlobalUsageSupportContext
-): boolean {
-  for (let index = 0; index < globalUsages.length; index = index + 1) {
-    const usage = globalUsages[index] as IrGlobalUsage
-
-    if (isSupportedCCryptoGlobalUsage(usage, context)) {
       return true
     }
   }

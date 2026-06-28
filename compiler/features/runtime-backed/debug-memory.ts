@@ -1,5 +1,5 @@
 import { memberExpressionPath } from '../../member-paths.ts'
-import { debugRuntimeMethodNameFromPath } from '../../stdlib/descriptors/debug.ts'
+import { debugRuntimeMethodNameFromPath } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, IrFeature } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../types.ts'
 import { nullableString } from './common.ts'

@@ -1,4 +1,4 @@
-import { arrayRuntimeMethodName } from '../../stdlib/descriptors/collections.ts'
+import { arrayRuntimeMethodName } from '../../../stdlib/global/compiler/descriptor.ts'
 import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'

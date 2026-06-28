@@ -1,5 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { collectionConstructorNameFromPath } from '../../stdlib/descriptors/collections.ts'
+import { collectionConstructorNameFromPath } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, SourceLocation } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
 import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'

@@ -1969,7 +1969,11 @@ function registerPromiseChainExpression(
 
   const returnType = promiseCallbackReturnType(callback, expression)
   const returnShape = promiseCallbackReturnShape(callback)
-  const needsEventLoop = functionUsesExternalEventLoop(callback, context.externalEventLoopFunctions)
+  const needsEventLoop = functionUsesExternalEventLoop(
+    callback,
+    context.externalEventLoopFunctions,
+    deps.callbackLoweringDependencies
+  )
   const wrapper: CPromiseChainWrapper = {
     kind: 'promise-chain-arrow',
     key: key,

@@ -6,6 +6,12 @@ import { tokenize } from '../lexer.ts'
 import { lowerProgram } from '../lower.ts'
 import { parse } from '../parser.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
+import {
+  findStdlibDeclarationExport,
+  isStdlibDeclarationRuntimeImportTypingSource,
+  stdlibDeclarationNodeValueType
+} from '../stdlib/declarations.ts'
+import { stdlibModuleDeclarationPath } from '../../stdlib/node/compiler/modules.ts'
 import type {
   AnyNode,
   CompileOptions,
@@ -36,6 +42,8 @@ type ModuleGraphContext = {
   declarationImports: Map<string, ModuleGraphDeclarationImport>
   modules: Map<string, ModuleRecord>
   order: ModuleRecord[]
+  missingStdlibDeclarationPrograms: Set<string>
+  stdlibDeclarationPrograms: Map<string, ProgramNode>
   visiting: Set<string>
   diagnostics: Diagnostic[]
 }
@@ -81,6 +89,8 @@ export function buildModuleGraphWithHostSync(entry: string, options: CompileOpti
     declarationImports: prepareModuleGraphDeclarationImports(options.declarationImports, host),
     modules: new Map(),
     order: [],
+    missingStdlibDeclarationPrograms: new Set(),
+    stdlibDeclarationPrograms: new Map(),
     visiting: new Set(),
     diagnostics: []
   }
@@ -175,6 +185,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
     importIndex = importIndex + 1
 
     if (isRuntimeBuiltinImportSource(item.source)) {
+      prepareStdlibRuntimeImportDeclarations(context, item, declarationIndex, importTypeDeclarations)
       continue
     }
 
@@ -682,6 +693,149 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
   }
 }
 
+function prepareStdlibRuntimeImportDeclarations(
+  context: ModuleGraphContext,
+  item: AnyNode,
+  declarationIndex: number,
+  importTypeDeclarations: Map<number, AnyNode[]>
+): void {
+  if (item.typeOnly === true) {
+    return
+  }
+
+  const importedProgram = stdlibRuntimeImportDeclarationProgram(context, item.source)
+
+  if (importedProgram === null || typeof importedProgram === 'undefined') {
+    return
+  }
+
+  const types: AnyNode[] = []
+  const typeNames: Set<string> = new Set()
+
+  for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
+    const specifier = item.specifiers[specifierIndex]
+    const exported = findStdlibDeclarationExport(importedProgram, specifier.imported)
+
+    if (exported === null || typeof exported === 'undefined') {
+      continue
+    }
+
+    applyImportedDeclarationMetadata(specifier, exported)
+
+    if (exported.type !== 'FunctionDeclaration' && exported.type !== 'ClassDeclaration') {
+      continue
+    }
+
+    const declarations = createValueImportTypeDeclarations(specifier, importedProgram)
+
+    for (
+      let declarationIndex = 0;
+      declarationIndex < declarations.length;
+      declarationIndex = declarationIndex + 1
+    ) {
+      const declaration = declarations[declarationIndex]
+
+      if (!typeNames.has(declaration.name)) {
+        typeNames.add(declaration.name)
+        types.push(declaration)
+      }
+    }
+  }
+
+  if (types.length > 0) {
+    importTypeDeclarations.set(declarationIndex, types)
+  }
+}
+
+function stdlibRuntimeImportDeclarationProgram(context: ModuleGraphContext, source: string): ProgramNode | null {
+  if (!isStdlibDeclarationRuntimeImportTypingSource(source)) {
+    return null
+  }
+
+  if (context.stdlibDeclarationPrograms.has(source)) {
+    return context.stdlibDeclarationPrograms.get(source) ?? null
+  }
+
+  if (context.missingStdlibDeclarationPrograms.has(source)) {
+    return null
+  }
+
+  const declarationPath = stdlibRuntimeImportDeclarationPath(context, source)
+
+  if (declarationPath === null || typeof declarationPath === 'undefined') {
+    context.missingStdlibDeclarationPrograms.add(source)
+    return null
+  }
+
+  const declarationSource = context.host.readFileSync(declarationPath)
+
+  if (declarationSource === null || typeof declarationSource === 'undefined') {
+    context.missingStdlibDeclarationPrograms.add(source)
+    return null
+  }
+
+  const result = parseModuleDeclarationContractResult(declarationSource, declarationPath)
+
+  for (const item of result.diagnostics) {
+    context.diagnostics.push(item)
+  }
+
+  if (result.diagnostics.length > 0) {
+    context.missingStdlibDeclarationPrograms.add(source)
+    return null
+  }
+
+  context.stdlibDeclarationPrograms.set(source, result.program)
+  return result.program
+}
+
+function stdlibRuntimeImportDeclarationPath(context: ModuleGraphContext, source: string): string | null {
+  const relativePath = stdlibModuleDeclarationPath(source)
+
+  if (relativePath === null || typeof relativePath === 'undefined') {
+    return null
+  }
+
+  const candidates = stdlibRuntimeImportDeclarationPathCandidates(context, relativePath)
+
+  for (let index = 0; index < candidates.length; index = index + 1) {
+    const candidate = candidates[index]
+
+    if (context.host.readFileSync(candidate) !== null) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function stdlibRuntimeImportDeclarationPathCandidates(context: ModuleGraphContext, relativePath: string): string[] {
+  const candidates: string[] = [context.host.resolvePath(relativePath)]
+  const projectRoot = stdlibRuntimeImportProjectRoot(context.entry)
+
+  if (projectRoot !== null && typeof projectRoot !== 'undefined') {
+    candidates.push(context.host.joinPath(projectRoot, relativePath))
+  }
+
+  return candidates
+}
+
+function stdlibRuntimeImportProjectRoot(entry: string): string | null {
+  const compilerIndex = entry.indexOf('/compiler/')
+
+  if (compilerIndex >= 0) {
+    return entry.slice(0, compilerIndex)
+  }
+
+  const stdlibIndex = entry.indexOf('/stdlib/')
+
+  if (stdlibIndex >= 0) {
+    return entry.slice(0, stdlibIndex)
+  }
+
+  return null
+}
+
 function appendSyntheticDeclarations(program: ProgramNode, declarations: AnyNode[]): ProgramNode {
   if (declarations.length === 0) {
     return program
@@ -734,10 +888,43 @@ function applyImportedFunctionMetadata(specifier: AnyNode, importedProgram: Prog
     return
   }
 
+  applyImportedFunctionDeclarationMetadata(specifier, declaration)
+}
+
+function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNode): void {
+  if (declaration.type === 'FunctionDeclaration') {
+    applyImportedFunctionDeclarationMetadata(specifier, declaration)
+    return
+  }
+
+  if (declaration.type === 'ClassDeclaration') {
+    specifier.valueType = 'function'
+    specifier.className = declaration.name
+    specifier.constructable = true
+    specifier.constructorParams = declaration.constructorParams ?? []
+    return
+  }
+
+  if (declaration.type !== 'VariableDeclaration') {
+    return
+  }
+
+  specifier.valueType = stdlibDeclarationNodeValueType(declaration)
+  specifier.arrayElementType = declaration.arrayElementType ?? null
+  specifier.arrayElementDeclaredType = declaration.arrayElementDeclaredType ?? null
+  specifier.mapKeyType = declaration.mapKeyType ?? null
+  specifier.mapValueType = declaration.mapValueType ?? null
+  specifier.promiseValueType = declaration.promiseValueType ?? null
+  specifier.setElementType = declaration.setElementType ?? null
+  specifier.shape = declaration.shape ?? null
+}
+
+function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaration: AnyNode): void {
+  specifier.valueType = 'function'
   specifier.async = declaration.async === true
   specifier.params = declaration.params
-  specifier.declaredReturnType = declaration.declaredReturnType ?? null
-  specifier.returnType = declaration.returnType
+  specifier.declaredReturnType = declaration.declaredReturnType ?? declaration.returnType ?? null
+  specifier.returnType = declaration.returnType ?? declaration.declaredReturnType ?? 'unknown'
   specifier.returnNullable = declaration.returnNullable === true
   specifier.returnArrayElementType = declaration.returnArrayElementType ?? null
   specifier.returnArrayElementDeclaredType = declaration.returnArrayElementDeclaredType ?? null

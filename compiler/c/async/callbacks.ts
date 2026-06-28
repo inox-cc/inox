@@ -2,7 +2,6 @@ import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import type { AnyNode, IrProgram } from '../../types.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
-import { isTimerStartCallExpression, timerCallbackFunctionType } from '../stdlib/timers.ts'
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
@@ -46,6 +45,15 @@ type CallbackStringMap = Map<string, string>
 type CallbackStringSet = Set<string>
 type CallbackWrapperMap = Map<string, CCallbackWrapper>
 type RuntimeArrowCaptureMap = Map<string, CRuntimeArrowCapture>
+
+export type RuntimeCallbackArgumentInfo = {
+  functionType: CFunctionType
+  index: number
+}
+
+export type ExternalEventLoopScanDependencies = {
+  isExternalEventLoopCallExpression(expression: AnyNode | null | undefined): boolean
+}
 
 type CallbackEmitContext = {
   boxedMutableCaptureDeclarations: CallbackMutableDeclarationSet
@@ -227,6 +235,8 @@ export type CallbackLoweringDependencies = {
   emitRuntimeCallbackRuntimeValueReturnLines(argument: AnyNode, context: CallbackFunctionContext): string[]
   emitStatementList(statements: AnyNode[], context: CallbackFunctionContext): string[]
   registerObjectShape(context: CallbackFunctionContext, name: string, shape: CObjectShape | null | undefined): void
+  isExternalEventLoopCallExpression(expression: AnyNode | null | undefined): boolean
+  runtimeCallbackArgumentInfoForCall(expression: AnyNode): RuntimeCallbackArgumentInfo | null
   shouldEmitCleanupLabel(context: CallbackFunctionContext): boolean
 }
 
@@ -255,6 +265,7 @@ type PendingPlainFunctionArg = {
 }
 
 type ExternalEventLoopScanState = {
+  deps: ExternalEventLoopScanDependencies
   externalNames: Set<string>
   found: boolean
 }
@@ -558,8 +569,13 @@ function isSupportedRuntimeCallbackParamValueType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'object'
 }
 
-function externalEventLoopNodeUses(node: AnyNode, externalNames: Set<string>): boolean {
+function externalEventLoopNodeUses(
+  node: AnyNode,
+  externalNames: Set<string>,
+  deps: ExternalEventLoopScanDependencies
+): boolean {
   const state: ExternalEventLoopScanState = {
+    deps: deps,
     externalNames: externalNames,
     found: false
   }
@@ -586,7 +602,7 @@ function visitExternalEventLoopNode(
     return
   }
 
-  if (isTimerStartCallExpression(value)) {
+  if (state.deps.isExternalEventLoopCallExpression(value)) {
     state.found = true
     return
   }
@@ -749,8 +765,12 @@ function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLo
   }
 }
 
-export function functionUsesExternalEventLoop(node: AnyNode, externalNames: Set<string>): boolean {
-  return externalEventLoopNodeUses(node, externalNames)
+export function functionUsesExternalEventLoop(
+  node: AnyNode,
+  externalNames: Set<string>,
+  deps: ExternalEventLoopScanDependencies
+): boolean {
+  return externalEventLoopNodeUses(node, externalNames, deps)
 }
 
 const genericFunctionType: CFunctionType = {
@@ -1059,7 +1079,11 @@ function registerPlainFunctionValueVariable(
     statement.init === null ||
     typeof statement.init === 'undefined' ||
     statement.init.type !== 'ArrowFunctionExpression' ||
-    functionUsesExternalEventLoop(statement.init, context.externalEventLoopFunctions) ||
+    functionUsesExternalEventLoop(
+      statement.init,
+      context.externalEventLoopFunctions,
+      deps
+    ) ||
     callbackNodeMayContainReference(statement.init.body)
   ) {
     return
@@ -1143,7 +1167,11 @@ function registerCallbackExpression(
     expression !== null &&
     typeof expression !== 'undefined' &&
     expression.type === 'ArrowFunctionExpression' &&
-    functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions)
+    functionUsesExternalEventLoop(
+      expression,
+      context.externalEventLoopFunctions,
+      deps
+    )
 
   if (isPlainFunctionPointerType(functionType)) {
     if (
@@ -1320,7 +1348,11 @@ function registerArrowCallbackWrapper(
     finalizerName: `inox_callback_context_${index}_finalize`,
     expression: expression,
     functionType: resolvedFunctionType,
-    needsEventLoop: functionUsesExternalEventLoop(expression, context.externalEventLoopFunctions),
+    needsEventLoop: functionUsesExternalEventLoop(
+      expression,
+      context.externalEventLoopFunctions,
+      deps
+    ),
     captures: captures
   }
 
@@ -2285,8 +2317,17 @@ function visitCallbackCallExpression(
   context: CallbackEmitContext,
   deps: CallbackLoweringDependencies
 ): void {
-  if (isTimerStartCallExpression(expression)) {
-    registerRuntimeCallbackExpression(expression.args[0], timerCallbackFunctionType(), scopes, wrappers, context, deps)
+  const runtimeCallback = deps.runtimeCallbackArgumentInfoForCall(expression)
+
+  if (runtimeCallback !== null) {
+    registerRuntimeCallbackExpression(
+      expression.args[runtimeCallback.index],
+      runtimeCallback.functionType,
+      scopes,
+      wrappers,
+      context,
+      deps
+    )
   }
 
   const params = resolveStaticFunctionParams(expression.callee, context)

@@ -7,7 +7,7 @@ import {
   isStringIndexMethod,
   isStringPredicateMethod,
   isStringRuntimeMethod
-} from '../../stdlib/descriptors/collections.ts'
+} from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFailureStatement,
@@ -21,13 +21,6 @@ import {
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cOsRuntimeConstantName, cOsRuntimeConstantValue } from '../stdlib/os.ts'
-import { cPathRuntimeConstantName, cPathRuntimeConstantValue } from '../stdlib/path.ts'
-import {
-  cProcessRuntimeEnvName,
-  cProcessRuntimePropertyName,
-  cProcessRuntimeStringPropertyName
-} from '../stdlib/process.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import type {
   CObjectFieldInfo,
@@ -168,9 +161,11 @@ export type StringLoweringDependencies = {
   isBoxedRuntimeStringName(name: string, context: StringCContext): boolean
   isBoxedRuntimeStringReference(expression: AnyNode, context: StringCContext): boolean
   isMemberAccessExpression(expression: AnyNode): boolean
+  isNodeRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean
+  nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null
   resolveKnownObjectIndex(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
   resolveKnownObjectMember(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null
-  resolveNetAddressStringMember(expression: AnyNode, context: StringCContext): string | null
+  resolveNodeNetworkAddressStringMember(expression: AnyNode, context: StringCContext): string | null
   resolveRuntimeArrayIndex(expression: AnyNode, context: StringCContext): CRuntimeArrayElement | null
 }
 
@@ -284,7 +279,7 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     return JSON.stringify(cookTemplateLiteralText(expression.raw.slice(1, -1)))
   }
 
-  const runtimeConstant = runtimeStringConstantValue(expression)
+  const runtimeConstant = runtimeStringConstantValue(expression, context)
 
   if (runtimeConstant !== null && typeof runtimeConstant !== 'undefined') {
     return JSON.stringify(runtimeConstant)
@@ -361,20 +356,8 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
   return '""'
 }
 
-function runtimeStringConstantValue(expression: AnyNode | null | undefined): string | null {
-  const osConstant = cOsRuntimeConstantName(expression)
-
-  if (osConstant !== null && typeof osConstant !== 'undefined') {
-    return cOsRuntimeConstantValue(osConstant)
-  }
-
-  const pathConstant = cPathRuntimeConstantName(expression)
-
-  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
-    return cPathRuntimeConstantValue(pathConstant)
-  }
-
-  return null
+function runtimeStringConstantValue(expression: AnyNode | null | undefined, context: StringCContext): string | null {
+  return stringDeps(context).nodeRuntimeStringConstantValue(expression)
 }
 
 export function emitPreparedStringLengthExpression(
@@ -513,7 +496,7 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     return true
   }
 
-  if (runtimeStringConstantValue(expression) !== null) {
+  if (runtimeStringConstantValue(expression, context) !== null) {
     return true
   }
 
@@ -543,7 +526,7 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     }
   }
 
-  if (stringDeps(context).resolveNetAddressStringMember(expression, context)) {
+  if (stringDeps(context).resolveNodeNetworkAddressStringMember(expression, context)) {
     return true
   }
 
@@ -854,7 +837,7 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
-  const runtimeConstant = runtimeStringConstantValue(expression)
+  const runtimeConstant = runtimeStringConstantValue(expression, context)
 
   if (runtimeConstant !== null && typeof runtimeConstant !== 'undefined') {
     return {
@@ -962,7 +945,7 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
-  const netAddressMember = stringDeps(context).resolveNetAddressStringMember(expression, context)
+  const netAddressMember = stringDeps(context).resolveNodeNetworkAddressStringMember(expression, context)
 
   if (netAddressMember !== null && typeof netAddressMember !== 'undefined') {
     return {
@@ -2154,23 +2137,7 @@ export function isRuntimeProducedStringExpression(
     return true
   }
 
-  if (cOsRuntimeConstantName(expression)) {
-    return true
-  }
-
-  if (cPathRuntimeConstantName(expression)) {
-    return true
-  }
-
-  if (cProcessRuntimeStringPropertyName(expression)) {
-    return true
-  }
-
-  if (cProcessRuntimeEnvName(expression)) {
-    return true
-  }
-
-  if (cProcessRuntimePropertyName(expression) === 'argv' && expression.type === 'IndexExpression') {
+  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
     return true
   }
 

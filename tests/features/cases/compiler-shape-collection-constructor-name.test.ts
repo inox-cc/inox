@@ -3,7 +3,7 @@
 // @stdout 1
 // @stdout 1
 
-import { collectionConstructorNameFromPath } from '../../../compiler/stdlib/descriptors/collections.ts'
+import { collectionConstructorNameFromPath } from '../../../stdlib/global/collections/compiler/descriptor.ts'
 
 console.log(collectionConstructorNameFromPath(['Set']) === 'Set')
 console.log(collectionConstructorNameFromPath(['Map']) === 'Map')

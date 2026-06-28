@@ -1,5 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { emitCRegExpFlags } from '../../features/regexp/index.ts'
+import { isNumericCastName } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
@@ -25,7 +26,7 @@ import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
-import { cTimeRuntimeCallName } from '../stdlib/time.ts'
+import { cTimeRuntimeCallName } from '../../../stdlib/global/compiler/c.ts'
 import {
   cUnsupportedExpressionCode,
   emitCOperator,
@@ -267,10 +268,6 @@ function joinStrings(values: string[], separator: string): string {
 
 function isNumberOrBooleanValueType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean'
-}
-
-function isNumericCastName(name: string): boolean {
-  return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'
 }
 
 function isEqualityOperator(operator: string): boolean {
@@ -1703,9 +1700,11 @@ export type CScalarExpressionDependencies = {
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCryptoNumberCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedDgramAddressPortExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedNodeNetworkAddressPortExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedJsonScalarParseExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedNetAddressPortExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNullableScalarRuntimeValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -2958,16 +2957,10 @@ export function emitPreparedNumberExpression(
   }
 
   if (deps.isMemberAccessExpression(expression)) {
-    const dgramAddressPort = deps.emitPreparedDgramAddressPortExpression(expression, context)
+    const nodeNetworkAddressPort = deps.emitPreparedNodeNetworkAddressPortExpression(expression, context)
 
-    if (dgramAddressPort !== null && typeof dgramAddressPort !== 'undefined') {
-      return dgramAddressPort
-    }
-
-    const netAddressPort = deps.emitPreparedNetAddressPortExpression(expression, context)
-
-    if (netAddressPort !== null && typeof netAddressPort !== 'undefined') {
-      return netAddressPort
+    if (nodeNetworkAddressPort !== null && typeof nodeNetworkAddressPort !== 'undefined') {
+      return nodeNetworkAddressPort
     }
 
     const stringLength = deps.emitPreparedStringLengthExpression(expression, context)

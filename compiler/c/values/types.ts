@@ -8,7 +8,6 @@ import type {
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
-  CPreparedExpression,
   CFunctionType,
   CObjectFieldInfo,
   CRuntimeArrayElement
@@ -18,27 +17,16 @@ import { isMemberAccessExpression, resolveKnownObjectMember, resolveObjectExpres
 
 export type CExpressionTypeDependencies = {
   binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
-  cChildProcessRuntimeMethodName: (expression: AnyNode) => string | null
   cDebugRuntimeMethodName: (expression: AnyNode) => string | null
   cFetchRuntimeExpressionMethod: (expression: AnyNode) => string | null
-  cFsRuntimeExpressionMethod: (expression: AnyNode) => string | null
   cJsonRuntimeCallName: (callee: AnyNode) => string | null
-  cOsRuntimeConstantName: (expression: AnyNode) => string | null
-  cOsRuntimeMethodName: (expression: AnyNode) => string | null
-  cPathRuntimeConstantName: (expression: AnyNode) => string | null
-  cPathRuntimeMethodName: (expression: AnyNode) => string | null
-  cProcessRuntimeEnvName: (expression: AnyNode) => string | null
-  cProcessRuntimeMethodName: (expression: AnyNode) => string | null
-  cProcessRuntimePropertyName: (expression: AnyNode) => string | null
-  cProcessRuntimePropertyValueType: (expression: AnyNode) => string | null
   cPromiseRuntimeCallName: (callee: AnyNode) => string | null
   cTimeRuntimeCallName: (callee: AnyNode) => string | null
-  cUrlRuntimeMethodName: (expression: AnyNode) => string | null
   collectionConstructorName: (expression: AnyNode) => string | null
-  cryptoRuntimeMethodName: (expression: AnyNode) => string | null
   isArrayIncludesCall: (expression: AnyNode) => boolean
   isArrayIsArrayCall: (expression: AnyNode) => boolean
-  emitPreparedNetAddressPortExpression: (expression: AnyNode, context: CFunctionContext) => CPreparedExpression | null
+  inferNodeStdlibExpressionType(expression: AnyNode): string | null
+  inferNodeStdlibMemberExpressionType(expression: AnyNode, context: CFunctionContext): string | null
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isBinaryConstructorExpression: (expression: AnyNode) => boolean
@@ -65,7 +53,6 @@ export type CExpressionTypeDependencies = {
   resolveKnownArrayLength: (expression: AnyNode, context: CFunctionContext) => string | null
   resolveKnownObjectIndex: (expression: AnyNode, context: CFunctionContext) => CKnownObjectIndexField | null
   resolveKnownObjectMember: (expression: AnyNode, context: CFunctionContext) => CKnownObjectField | null
-  resolveNetAddressStringMember: (expression: AnyNode, context: CFunctionContext) => string | null
   resolveObjectExpressionIndex: (expression: AnyNode) => CObjectFieldInfo | null
   resolveObjectExpressionMember: (expression: AnyNode) => CObjectFieldInfo | null
   resolvePromiseExpressionValueType: (expression: AnyNode, context: CFunctionContext) => string | null
@@ -456,90 +443,10 @@ export function inferExpressionType(
   context: CFunctionContext,
   deps: CExpressionTypeDependencies
 ): string {
-  const childProcessMethod = deps.cChildProcessRuntimeMethodName(expression)
+  const nodeStdlibType = deps.inferNodeStdlibExpressionType(expression)
 
-  if (childProcessMethod !== null && typeof childProcessMethod !== 'undefined') {
-    if (childProcessMethod === 'spawnSync') {
-      return 'object'
-    }
-
-    return 'string'
-  }
-
-  if (deps.cOsRuntimeConstantName(expression) || deps.cOsRuntimeMethodName(expression)) {
-    return 'string'
-  }
-
-  const processMethod = deps.cProcessRuntimeMethodName(expression)
-
-  if (processMethod !== null && typeof processMethod !== 'undefined') {
-    if (processMethod === 'cwd') {
-      return 'string'
-    }
-
-    return 'void'
-  }
-
-  const processProperty = deps.cProcessRuntimePropertyName(expression)
-
-  if (processProperty === 'argv' && expression.type === 'IndexExpression') {
-    return 'string'
-  }
-
-  const processPropertyType = deps.cProcessRuntimePropertyValueType(expression)
-
-  if (processPropertyType !== null && typeof processPropertyType !== 'undefined') {
-    return processPropertyType
-  }
-
-  if (deps.cProcessRuntimeEnvName(expression)) {
-    return 'string'
-  }
-
-  const urlMethod = deps.cUrlRuntimeMethodName(expression)
-
-  if (urlMethod !== null && typeof urlMethod !== 'undefined') {
-    if (
-      urlMethod === 'fileURLToPath' ||
-      urlMethod === 'URLSearchParams.get' ||
-      urlMethod === 'URLSearchParams.toString'
-    ) {
-      return 'string'
-    }
-
-    if (urlMethod === 'URLSearchParams.has') {
-      return 'boolean'
-    }
-
-    if (
-      urlMethod === 'URLSearchParams.append' ||
-      urlMethod === 'URLSearchParams.delete' ||
-      urlMethod === 'URLSearchParams.set'
-    ) {
-      return 'void'
-    }
-
-    return 'object'
-  }
-
-  const pathConstant = deps.cPathRuntimeConstantName(expression)
-
-  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
-    return 'string'
-  }
-
-  const pathMethod = deps.cPathRuntimeMethodName(expression)
-
-  if (pathMethod !== null && typeof pathMethod !== 'undefined') {
-    if (pathMethod === 'isAbsolute') {
-      return 'boolean'
-    }
-
-    if (pathMethod === 'parse') {
-      return 'object'
-    }
-
-    return 'string'
+  if (nodeStdlibType !== null && typeof nodeStdlibType !== 'undefined') {
+    return nodeStdlibType
   }
 
   if (expression.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee)) {
@@ -548,14 +455,6 @@ export function inferExpressionType(
 
   if (isRegExpTestCall(expression, context)) {
     return 'boolean'
-  }
-
-  if (expression.type === 'CallExpression' && deps.cFsRuntimeExpressionMethod(expression)) {
-    if (expression.valueType === 'promise') {
-      return 'promise'
-    }
-
-    return cValueTypeOrUnknown(expression)
   }
 
   if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression)) {
@@ -580,40 +479,6 @@ export function inferExpressionType(
 
       return 'string'
     }
-  }
-
-  const cryptoMethod = deps.cryptoRuntimeMethodName(expression)
-
-  if (cryptoMethod === 'createHash' || cryptoMethod === 'Hash.update') {
-    return 'crypto-hash'
-  }
-
-  if (cryptoMethod === 'createHmac' || cryptoMethod === 'Hmac.update') {
-    return 'crypto-hmac'
-  }
-
-  if (cryptoMethod === 'Hash.digest' || cryptoMethod === 'Hmac.digest' || cryptoMethod === 'hash') {
-    return cValueTypeOrUnknown(expression)
-  }
-
-  if (cryptoMethod === 'getHashes') {
-    return 'array'
-  }
-
-  if (cryptoMethod === 'getRandomValues' || cryptoMethod === 'randomBytes' || cryptoMethod === 'randomFillSync') {
-    return 'bytes'
-  }
-
-  if (cryptoMethod === 'randomInt') {
-    return 'number'
-  }
-
-  if (cryptoMethod === 'timingSafeEqual') {
-    return 'boolean'
-  }
-
-  if (cryptoMethod === 'randomUUID') {
-    return 'string'
   }
 
   if (deps.cDebugRuntimeMethodName(expression) === 'memory') {
@@ -880,12 +745,10 @@ export function inferExpressionType(
       return narrowedType
     }
 
-    if (deps.emitPreparedNetAddressPortExpression(expression, context)) {
-      return 'number'
-    }
+    const nodeStdlibMemberType = deps.inferNodeStdlibMemberExpressionType(expression, context)
 
-    if (deps.resolveNetAddressStringMember(expression, context)) {
-      return 'string'
+    if (nodeStdlibMemberType !== null && typeof nodeStdlibMemberType !== 'undefined') {
+      return nodeStdlibMemberType
     }
 
     if (deps.isArrayLengthExpression(expression, context)) {

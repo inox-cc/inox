@@ -363,7 +363,7 @@ class Parser {
   }
 
   parseFunctionDeclaration(exported: boolean, isAsync: boolean): AnyNode {
-    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected function name')
+    const name = this.expectFunctionDeclarationName()
     const params: AnyNode[] = []
 
     this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( after function name')
@@ -391,6 +391,14 @@ class Parser {
       returnType,
       body: this.parseBlock()
     })
+  }
+
+  expectFunctionDeclarationName(): Token {
+    if (this.is('identifier') || this.isKeywordValue('type')) {
+      return this.advance()
+    }
+
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected function name')
   }
 
   parseTypeAliasDeclaration(exported: boolean): AnyNode {
@@ -444,12 +452,13 @@ class Parser {
     this.expectValue('(', 'INOX_EXPECTED_TYPE', 'expected ( in function type')
 
     while (!this.isValue(')') && !this.is('eof')) {
+      const rest = this.matchValue('...')
       const name = this.expectTypeParameterName('expected function type parameter name')
       const optional = this.matchValue('?')
       this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after function type parameter name')
       const valueType = this.parseTypeAnnotation([',', ')'], null)
 
-      params.push(createParam(name, valueType, optional))
+      params.push(createParam(name, valueType, optional, null, rest))
 
       if (!this.matchValue(',')) {
         break
@@ -576,12 +585,13 @@ class Parser {
     this.expectValue('(', 'INOX_EXPECTED_TYPE', 'expected ( in object type method')
 
     while (!this.isValue(')') && !this.is('eof')) {
+      const rest = this.matchValue('...')
       const name = this.expectTypeParameterName()
       const optional = this.matchValue('?')
       this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after method type parameter name')
       const valueType = this.parseTypeAnnotation([',', ')'], null)
 
-      params.push(createParam(name, valueType, optional))
+      params.push(createParam(name, valueType, optional, null, rest))
 
       if (!this.matchValue(',')) {
         break
@@ -770,7 +780,7 @@ class Parser {
   }
 
   parseClassMemberName(): Token {
-    if (this.is('identifier') || this.isKeywordValue('constructor')) {
+    if (this.is('identifier') || this.is('keyword')) {
       return this.advance()
     }
 
@@ -784,7 +794,7 @@ class Parser {
 
     const next = this.peek(1)
 
-    if (next.type !== 'identifier' && !this.isClassStaticKeywordFollower(next.value)) {
+    if (next.type !== 'identifier' && next.type !== 'keyword' && !this.isClassStaticKeywordFollower(next.value)) {
       return null
     }
 
@@ -1305,7 +1315,8 @@ class Parser {
   }
 
   parseRuntimeParam(): AnyNode {
-    const param = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected parameter name')
+    const rest = this.matchValue('...')
+    const param = this.expectParameterName('expected parameter name')
     let optional = this.matchValue('?')
     let valueType = 'unknown'
     let defaultValue: AnyNode | null = null
@@ -1319,7 +1330,23 @@ class Parser {
       defaultValue = this.parseExpression()
     }
 
-    return createParam(param, valueType, optional, defaultValue)
+    return createParam(param, valueType, optional, defaultValue, rest)
+  }
+
+  expectParameterName(message: string): Token {
+    if (this.is('identifier') || this.isContextualParameterKeyword()) {
+      return this.advance()
+    }
+
+    return this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', message)
+  }
+
+  isContextualParameterKeyword(): boolean {
+    if (!this.is('keyword')) {
+      return false
+    }
+
+    return this.current().value === 'type' || this.current().value === 'from'
   }
 
   parseNullish(): AnyNode {

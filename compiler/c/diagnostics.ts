@@ -1,12 +1,15 @@
 import { diagnostic } from '../diagnostics.ts'
-import { isBinaryGlobalUsagePath } from '../stdlib/descriptors/binary.ts'
-import { isCollectionConstructorGlobalUsagePath } from '../stdlib/descriptors/collections.ts'
-import { isCryptoRuntimeMethod, isCryptoRuntimeMethodPath } from '../stdlib/descriptors/crypto.ts'
-import { isDebugRuntimeMethodPath } from '../stdlib/descriptors/debug.ts'
-import { isFetchGlobalRoot } from '../stdlib/descriptors/fetch.ts'
-import { jsonRuntimeMethodNameFromPath } from '../stdlib/descriptors/json.ts'
-import { mathRuntimeMethodNameFromPath } from '../stdlib/descriptors/math.ts'
-import { dateConstructorRuntimeMethodNameFromPath, timeRuntimeMethodNameFromPath } from '../stdlib/descriptors/time.ts'
+import { isBinaryGlobalUsagePath } from '../../stdlib/node/compiler/descriptor.ts'
+import {
+  dateConstructorRuntimeMethodNameFromPath,
+  isCollectionConstructorGlobalUsagePath,
+  isDebugRuntimeMethodPath,
+  isFetchGlobalRoot,
+  jsonRuntimeMethodNameFromPath,
+  mathRuntimeMethodNameFromPath,
+  timeRuntimeMethodNameFromPath
+} from '../../stdlib/global/compiler/descriptor.ts'
+import { isSupportedNodeStdlibCGlobalUsage } from '../../stdlib/node/compiler/c.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 type CGlobalNameSet = Set<string>
@@ -99,11 +102,8 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'setInterval' ||
     path === 'setTimeout' ||
     isCollectionConstructorGlobalUsagePath(usage.path) ||
-    isSupportedCDgramGlobalUsage(usage, context) ||
+    isSupportedNodeStdlibCGlobalUsage(usage, context) ||
     isSupportedCFetchGlobalUsage(usage) ||
-    isSupportedCHttpGlobalUsage(usage, context) ||
-    isSupportedCNetGlobalUsage(usage, context) ||
-    isSupportedCCryptoGlobalUsage(usage, context) ||
     isSupportedCDebugGlobalUsage(usage) ||
     isSupportedCMathGlobalUsage(usage)
   )
@@ -125,55 +125,6 @@ function joinStrings(values: string[], separator: string): string {
 
 export function isSupportedCFetchGlobalUsage(usage: IrGlobalUsage): boolean {
   return usage.path.length === 1 && isFetchGlobalRoot(usage.path[0])
-}
-
-function isSupportedCDgramGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
-  return (
-    (usage.path.length === 2 &&
-      usage.path[1] === 'createSocket' &&
-      runtimeNameSetHas(context.dgramImportNames, usage.root)) ||
-    (usage.path.length === 1 && runtimeNameSetHas(context.dgramCreateSocketNames, usage.root))
-  )
-}
-
-function isSupportedCHttpGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
-  return (
-    (usage.path.length === 2 &&
-      usage.path[1] === 'createServer' &&
-      runtimeNameSetHas(context.httpImportNames, usage.root)) ||
-    (usage.path.length === 1 && runtimeNameSetHas(context.httpCreateServerNames, usage.root))
-  )
-}
-
-function isSupportedCNetGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
-  return (
-    (usage.path.length === 2 &&
-      usage.path[1] === 'createServer' &&
-      runtimeNameSetHas(context.netImportNames, usage.root)) ||
-    (usage.path.length === 2 &&
-      (usage.path[1] === 'connect' || usage.path[1] === 'createConnection') &&
-      runtimeNameSetHas(context.netImportNames, usage.root)) ||
-    (usage.path.length === 1 &&
-      (runtimeNameSetHas(context.netCreateServerNames, usage.root) ||
-        runtimeNameSetHas(context.netConnectNames, usage.root)))
-  )
-}
-
-export function isSupportedCCryptoGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
-  return (
-    isCryptoRuntimeMethodPath(usage.path) ||
-    (usage.path.length === 2 &&
-      runtimeNameSetHas(context.cryptoImportNames, usage.root) &&
-      isCryptoRuntimeMethod(usage.path[1]))
-  )
-}
-
-function runtimeNameSetHas(names: CGlobalNameSet | undefined, root: string): boolean {
-  if (names === null || typeof names === 'undefined') {
-    return false
-  }
-
-  return names.has(root)
 }
 
 export function isSupportedCDebugGlobalUsage(usage: IrGlobalUsage): boolean {

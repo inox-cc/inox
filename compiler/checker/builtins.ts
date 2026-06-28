@@ -1,7 +1,6 @@
-import { debugMemoryStatsFields } from '../stdlib/descriptors/debug.ts'
-import { stdlibModuleLibuvRuntimeFeature } from '../stdlib/descriptors/modules.ts'
-import { pathParseObjectFields } from '../stdlib/descriptors/path.ts'
-import { urlObjectFields } from '../stdlib/descriptors/url.ts'
+import { debugMemoryStatsFields } from '../../stdlib/global/compiler/descriptor.ts'
+import { stdlibModuleLibuvRuntimeFeature } from '../../stdlib/node/compiler/modules.ts'
+import { pathParseObjectFields, urlObjectFields } from '../../stdlib/node/compiler/descriptor.ts'
 import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
 
 type DebugMemoryStatsField = {
@@ -541,10 +540,4 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
   }
 
   return null
-}
-
-export const numericCastNames = new Set(['i32', 'u32', 'u64', 'f32', 'f64'])
-
-export function isNumericCastName(name: string): boolean {
-  return name === 'i32' || name === 'u32' || name === 'u64' || name === 'f32' || name === 'f64'
 }
