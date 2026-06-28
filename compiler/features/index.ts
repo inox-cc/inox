@@ -1,11 +1,5 @@
 import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import { collectCoreRuntimeIrFeatures, coreRuntimeFeatures } from './core-runtime/index.ts'
-import {
-  collectMapGetNullIrFeatures,
-  collectMapIndexSetIrFeatures,
-  mapGetNullFeature,
-  mapIndexSetFeature
-} from './map-access/index.ts'
 import { collectDebugMemoryIrFeatures } from './runtime-backed/debug-memory.ts'
 import {
   collectNodeStdlibIrFeatures,
@@ -27,8 +21,6 @@ const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
   globalStdlibFeatures,
   nodeStdlibFeatures,
   [
-    mapGetNullFeature,
-    mapIndexSetFeature,
     weakReferencesFeature
   ]
 ]
@@ -98,8 +90,6 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
   collectNodeStdlibIrFeatures(featureNode, features)
   collectGlobalStdlibIrFeatures(featureNode, features)
   collectDebugMemoryIrFeatures(featureNode, features)
-  collectMapGetNullIrFeatures(featureNode, features)
-  collectMapIndexSetIrFeatures(featureNode, features)
   collectWeakReferencesIrFeatures(featureNode, features)
 }
 
