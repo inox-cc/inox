@@ -1,8 +1,16 @@
 import { binaryConstructorNameFromPath } from './descriptor.ts'
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { nullableString, simpleReferencePath } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { nullableString, simpleReferencePath } from '../../../../compiler/ir/node-utils.ts'
+
+type BinaryFeatureNode = AnyNode & {
+  args?: AnyNode[] | null
+  binaryRuntimeMethod?: string | null
+  callee?: AnyNode | null
+  returnType?: string | null
+  type?: string | null
+  valueType?: string | null
+}
 
 export const binaryFeature: CompilerFeatureDescriptor = {
   id: 'binary',
@@ -12,7 +20,7 @@ export const binaryFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectBinaryIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as BinaryFeatureNode
 
   if (item.valueType === 'bytes' || item.returnType === 'bytes') {
     features.add('binary')
@@ -31,7 +39,7 @@ export function collectBinaryIrFeatures(node: AnyNode, features: Set<IrFeature>)
 }
 
 export function binaryFeatureChildNodes(node: AnyNode): AnyNode[] | null {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as BinaryFeatureNode
 
   if (!isBinaryArrayLiteralConstructor(item)) {
     return null
@@ -55,11 +63,11 @@ export function binaryFeatureChildNodes(node: AnyNode): AnyNode[] | null {
   return result
 }
 
-function isBinaryConstructorExpression(expression: RuntimeBackedFeatureNode): boolean {
+function isBinaryConstructorExpression(expression: BinaryFeatureNode): boolean {
   return expression.type === 'NewExpression' && binaryConstructorName(expression) !== null
 }
 
-function isBinaryArrayLiteralConstructor(expression: RuntimeBackedFeatureNode): boolean {
+function isBinaryArrayLiteralConstructor(expression: BinaryFeatureNode): boolean {
   if (!isBinaryConstructorExpression(expression)) {
     return false
   }
@@ -75,7 +83,7 @@ function isBinaryArrayLiteralConstructor(expression: RuntimeBackedFeatureNode): 
   return first.type === 'ArrayLiteral'
 }
 
-function binaryConstructorName(expression: RuntimeBackedFeatureNode): string | null {
+function binaryConstructorName(expression: BinaryFeatureNode): string | null {
   const calleePath = simpleReferencePath(expression.callee)
 
   if (calleePath === null || typeof calleePath === 'undefined') {
@@ -85,7 +93,7 @@ function binaryConstructorName(expression: RuntimeBackedFeatureNode): string | n
   return binaryConstructorNameFromPath(calleePath)
 }
 
-function binaryRuntimeMethodName(expression: RuntimeBackedFeatureNode): string | null {
+function binaryRuntimeMethodName(expression: BinaryFeatureNode): string | null {
   const callee = expression.callee
   const method = nullableString(expression.binaryRuntimeMethod)
 
@@ -105,7 +113,7 @@ function binaryRuntimeMethodName(expression: RuntimeBackedFeatureNode): string |
   return null
 }
 
-function nodeArgsOrEmpty(node: RuntimeBackedFeatureNode): AnyNode[] {
+function nodeArgsOrEmpty(node: BinaryFeatureNode): AnyNode[] {
   const args = node.args
   const result: AnyNode[] = []
 

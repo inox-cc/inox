@@ -7,8 +7,13 @@ import {
 } from './descriptor.ts'
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { isCallLikeNode, nullableString } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { isCallLikeNode, nullableString } from '../../../../compiler/ir/node-utils.ts'
+
+type TimeFeatureNode = AnyNode & {
+  callee?: AnyNode | null
+  timeRuntimeMethod?: string | null
+  type?: string | null
+}
 
 export const clocksFeature: CompilerFeatureDescriptor = {
   id: 'clocks',
@@ -18,7 +23,7 @@ export const clocksFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectClocksIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as TimeFeatureNode
 
   if (!isCallLikeNode(item)) {
     return
@@ -42,7 +47,7 @@ export function collectClocksIrFeatures(node: AnyNode, features: Set<IrFeature>)
   }
 }
 
-function clocksRuntimeCallName(expression: RuntimeBackedFeatureNode): string | null {
+function clocksRuntimeCallName(expression: TimeFeatureNode): string | null {
   const directCall = nullableString(expression.timeRuntimeMethod)
   const callee = expression.callee
 

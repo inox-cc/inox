@@ -1,9 +1,14 @@
-import { memberExpressionPath } from '../../member-paths.ts'
-import { debugRuntimeMethodNameFromPath } from '../../../stdlib/global/compiler/descriptor.ts'
-import type { AnyNode, IrFeature } from '../../types.ts'
-import type { CompilerFeatureDescriptor } from '../types.ts'
-import { nullableString } from './common.ts'
-import type { RuntimeBackedFeatureNode } from './common.ts'
+import { memberExpressionPath } from '../../../../compiler/member-paths.ts'
+import { nullableString } from '../../../../compiler/ir/node-utils.ts'
+import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
+import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
+import { debugRuntimeMethodNameFromPath } from './descriptor.ts'
+
+type DebugMemoryFeatureNode = AnyNode & {
+  callee?: AnyNode | null
+  debugRuntimeMethod?: string | null
+  type?: string | null
+}
 
 export const debugMemoryFeature: CompilerFeatureDescriptor = {
   id: 'debug-memory',
@@ -13,7 +18,7 @@ export const debugMemoryFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectDebugMemoryIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as DebugMemoryFeatureNode
 
   if (!debugRuntimeMethodName(item)) {
     return
@@ -24,7 +29,7 @@ export function collectDebugMemoryIrFeatures(node: AnyNode, features: Set<IrFeat
   features.add('runtime-values')
 }
 
-function debugRuntimeMethodName(expression: RuntimeBackedFeatureNode): string | null {
+function debugRuntimeMethodName(expression: DebugMemoryFeatureNode): string | null {
   const callee = expression.callee
   const method = nullableString(expression.debugRuntimeMethod)
 

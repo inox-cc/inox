@@ -52,6 +52,7 @@ function isReservedCIdentifier(value: string): boolean {
     value === 'inline' ||
     value === 'int' ||
     value === 'long' ||
+    value === 'random' ||
     value === 'register' ||
     value === 'restrict' ||
     value === 'return' ||

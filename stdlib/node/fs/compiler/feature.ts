@@ -2,8 +2,14 @@ import { memberExpressionPath } from '../../../../compiler/member-paths.ts'
 import { fsRuntimeMethodForPath } from './descriptor.ts'
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { hasStringValue, nullableString } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { hasStringValue, nullableString } from '../../../../compiler/ir/node-utils.ts'
+
+type FsFeatureNode = AnyNode & {
+  callee?: AnyNode | null
+  fsRuntimeConstant?: string | null
+  fsRuntimeMethod?: string | null
+  type?: string | null
+}
 
 export const fsFeature: CompilerFeatureDescriptor = {
   id: 'fs',
@@ -13,7 +19,7 @@ export const fsFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectFsIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as FsFeatureNode
 
   if (item.type === 'MemberExpression' && hasStringValue(item.fsRuntimeConstant)) {
     features.add('fs')
@@ -26,7 +32,7 @@ export function collectFsIrFeatures(node: AnyNode, features: Set<IrFeature>): vo
   features.add('fs')
 }
 
-function fsRuntimeMethodName(expression: RuntimeBackedFeatureNode): string | null {
+function fsRuntimeMethodName(expression: FsFeatureNode): string | null {
   const method = nullableString(expression.fsRuntimeMethod)
 
   if (expression.type !== 'CallExpression') {

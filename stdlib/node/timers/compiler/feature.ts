@@ -1,8 +1,13 @@
 import { timerRuntimeMethodNameFromPath } from './descriptor.ts'
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { nullableString, simpleReferencePath } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { nullableString, simpleReferencePath } from '../../../../compiler/ir/node-utils.ts'
+
+type TimersFeatureNode = AnyNode & {
+  callee?: AnyNode | null
+  timerRuntimeMethod?: string | null
+  type?: string | null
+}
 
 export const timersFeature: CompilerFeatureDescriptor = {
   id: 'timers',
@@ -12,7 +17,7 @@ export const timersFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectTimersIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as TimersFeatureNode
 
   if (!timerRuntimeCallName(item)) {
     return
@@ -21,7 +26,7 @@ export function collectTimersIrFeatures(node: AnyNode, features: Set<IrFeature>)
   features.add('timers')
 }
 
-function timerRuntimeCallName(expression: RuntimeBackedFeatureNode): string | null {
+function timerRuntimeCallName(expression: TimersFeatureNode): string | null {
   const method = nullableString(expression.timerRuntimeMethod)
 
   if (expression.type === 'CallExpression' && method !== null && typeof method !== 'undefined') {

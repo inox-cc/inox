@@ -1,7 +1,11 @@
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { nullableString } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { nullableString } from '../../../../compiler/ir/node-utils.ts'
+
+type CryptoFeatureNode = AnyNode & {
+  cryptoRuntimeMethod?: string | null
+  type?: string | null
+}
 
 export const cryptoFeature: CompilerFeatureDescriptor = {
   id: 'crypto',
@@ -11,7 +15,7 @@ export const cryptoFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectCryptoIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as CryptoFeatureNode
 
   if (!cryptoRuntimeMethodName(item)) {
     return
@@ -21,7 +25,7 @@ export function collectCryptoIrFeatures(node: AnyNode, features: Set<IrFeature>)
   features.add('runtime-values')
 }
 
-function cryptoRuntimeMethodName(expression: RuntimeBackedFeatureNode): string | null {
+function cryptoRuntimeMethodName(expression: CryptoFeatureNode): string | null {
   const method = nullableString(expression.cryptoRuntimeMethod)
 
   if (expression.type !== 'CallExpression' || method === null || typeof method === 'undefined') {

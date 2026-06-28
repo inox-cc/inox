@@ -1,7 +1,7 @@
 // @targets c
 // @expect pass
 // @stdout buffer:hi/A/bc/true
-// @stdout uint8:7/B/4
+// @stdout uint8:7/66/4
 // @stdout clocks:true/true/true
 
 import { Buffer, constants } from 'node:buffer'

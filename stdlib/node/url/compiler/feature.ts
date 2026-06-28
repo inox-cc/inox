@@ -1,7 +1,11 @@
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { nullableString } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { nullableString } from '../../../../compiler/ir/node-utils.ts'
+
+type UrlFeatureNode = AnyNode & {
+  type?: string | null
+  urlRuntimeMethod?: string | null
+}
 
 export const urlFeature: CompilerFeatureDescriptor = {
   id: 'url',
@@ -11,7 +15,7 @@ export const urlFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectUrlIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as UrlFeatureNode
 
   if (!urlRuntimeMethodName(item)) {
     return
@@ -22,7 +26,7 @@ export function collectUrlIrFeatures(node: AnyNode, features: Set<IrFeature>): v
   features.add('string-bytes')
 }
 
-function urlRuntimeMethodName(expression: RuntimeBackedFeatureNode): string | null {
+function urlRuntimeMethodName(expression: UrlFeatureNode): string | null {
   const method = nullableString(expression.urlRuntimeMethod)
 
   if (

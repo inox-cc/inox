@@ -1,6 +1,5 @@
 import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
 import { collectCoreRuntimeIrFeatures, coreRuntimeFeatures } from './core-runtime/index.ts'
-import { collectDebugMemoryIrFeatures } from './runtime-backed/debug-memory.ts'
 import {
   collectNodeStdlibIrFeatures,
   nodeStdlibFeatureChildNodes,
@@ -11,13 +10,11 @@ import {
   emitGlobalStdlibCPreludeHelpers,
   globalStdlibFeatures
 } from '../../stdlib/global/compiler/feature.ts'
-import { runtimeBackedFeatures } from './runtime-backed/index.ts'
 import type { CompilerFeatureDescriptor } from './types.ts'
 import { collectWeakReferencesIrFeatures, weakReferencesFeature } from './weak-references/index.ts'
 
 const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
   coreRuntimeFeatures,
-  runtimeBackedFeatures,
   globalStdlibFeatures,
   nodeStdlibFeatures,
   [
@@ -89,7 +86,6 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
   collectCoreRuntimeIrFeatures(featureNode, features)
   collectNodeStdlibIrFeatures(featureNode, features)
   collectGlobalStdlibIrFeatures(featureNode, features)
-  collectDebugMemoryIrFeatures(featureNode, features)
   collectWeakReferencesIrFeatures(featureNode, features)
 }
 

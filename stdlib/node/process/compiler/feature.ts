@@ -1,7 +1,13 @@
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { hasStringValue, nullableString } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { hasStringValue, nullableString } from '../../../../compiler/ir/node-utils.ts'
+
+type ProcessFeatureNode = AnyNode & {
+  processRuntimeEnvName?: string | null
+  processRuntimeMethod?: string | null
+  processRuntimeProperty?: string | null
+  type?: string | null
+}
 
 export const processFeature: CompilerFeatureDescriptor = {
   id: 'process',
@@ -11,7 +17,7 @@ export const processFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectProcessIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as ProcessFeatureNode
 
   if (!hasStringValue(item.processRuntimeProperty) && !hasStringValue(item.processRuntimeEnvName) && !processRuntimeMethodName(item)) {
     return
@@ -22,7 +28,7 @@ export function collectProcessIrFeatures(node: AnyNode, features: Set<IrFeature>
   features.add('string-bytes')
 }
 
-function processRuntimeMethodName(expression: RuntimeBackedFeatureNode): string | null {
+function processRuntimeMethodName(expression: ProcessFeatureNode): string | null {
   const method = nullableString(expression.processRuntimeMethod)
 
   if (expression.type !== 'CallExpression' || method === null || typeof method === 'undefined') {

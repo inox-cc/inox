@@ -1,7 +1,11 @@
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
-import { nullableString } from '../../../../compiler/features/runtime-backed/common.ts'
-import type { RuntimeBackedFeatureNode } from '../../../../compiler/features/runtime-backed/common.ts'
+import { nullableString } from '../../../../compiler/ir/node-utils.ts'
+
+type ChildProcessFeatureNode = AnyNode & {
+  childProcessRuntimeMethod?: string | null
+  type?: string | null
+}
 
 export const childProcessFeature: CompilerFeatureDescriptor = {
   id: 'child-process',
@@ -11,7 +15,7 @@ export const childProcessFeature: CompilerFeatureDescriptor = {
 }
 
 export function collectChildProcessIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
-  const item = node as RuntimeBackedFeatureNode
+  const item = node as ChildProcessFeatureNode
 
   if (!childProcessRuntimeMethodName(item)) {
     return
@@ -22,7 +26,7 @@ export function collectChildProcessIrFeatures(node: AnyNode, features: Set<IrFea
   features.add('string-bytes')
 }
 
-function childProcessRuntimeMethodName(expression: RuntimeBackedFeatureNode): string | null {
+function childProcessRuntimeMethodName(expression: ChildProcessFeatureNode): string | null {
   const method = nullableString(expression.childProcessRuntimeMethod)
 
   if (expression.type !== 'CallExpression' || method === null || typeof method === 'undefined') {
