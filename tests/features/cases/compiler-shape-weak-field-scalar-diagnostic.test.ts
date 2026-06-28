@@ -2,7 +2,7 @@
 // @expect diagnostics INOX_WEAK_TYPE
 
 class Box {
-  weak value: number | null
+  value: weak<number | null>
   constructor(value: number | null) {
     this.value = value
   }

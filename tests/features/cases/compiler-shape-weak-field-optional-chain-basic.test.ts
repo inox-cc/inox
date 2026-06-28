@@ -1,7 +1,6 @@
 // @targets c
 // @expect pass
 // @stdout Ada
-// @skip-node node: inox weak field syntax
 
 class Parent {
   name: string
@@ -11,7 +10,7 @@ class Parent {
 }
 
 class Child {
-  weak parent: Parent | null
+  parent: weak<Parent | null>
   constructor(parent: Parent | null) {
     this.parent = parent
   }

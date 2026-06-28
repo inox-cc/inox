@@ -47,6 +47,7 @@ import {
 } from './parser/expressions.ts'
 import { locFromToken } from './parser/locations.ts'
 import { readTypeAnnotation } from './parser/type-annotations.ts'
+import { weakTypeNameFromTypeName } from './type-names.ts'
 import type { AnyNode, Diagnostic, ProgramNode, SourceLocation, Token } from './types.ts'
 
 export function parse(tokens: Token[]): ProgramNode {
@@ -56,7 +57,11 @@ export function parse(tokens: Token[]): ProgramNode {
 
 type FieldModifiers = {
   readOnly: boolean
-  weakToken: Token | null
+}
+
+type FieldTypeAnnotation = {
+  ownership: string
+  valueType: string
 }
 
 type TypeAnnotationOptions = {
@@ -70,14 +75,6 @@ function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
 
     target.push(node)
   }
-}
-
-function ownershipFromWeakToken(weakToken: Token | null): string {
-  if (weakToken === null || typeof weakToken === 'undefined') {
-    return 'strong'
-  }
-
-  return 'weak'
 }
 
 function stringArrayIncludes(values: string[], value: string): boolean {
@@ -98,6 +95,22 @@ function typeAnnotationOptionsOrEmpty(options: TypeAnnotationOptions | null): Ty
   return {}
 }
 
+function fieldTypeAnnotation(valueType: string): FieldTypeAnnotation {
+  const weakTargetType = weakTypeNameFromTypeName(valueType)
+
+  if (weakTargetType !== null && typeof weakTargetType !== 'undefined') {
+    return {
+      ownership: 'weak',
+      valueType: weakTargetType
+    }
+  }
+
+  return {
+    ownership: 'strong',
+    valueType
+  }
+}
+
 function stringArrayOrEmpty(values: string[] | null): string[] {
   if (values !== null && typeof values !== 'undefined') {
     return values
@@ -111,7 +124,7 @@ function cloneObjectTypeField(field: AnyNode): AnyNode {
     name: field.name,
     optional: field.optional === true,
     readonly: field.readonly === true,
-    ownership: ownershipFromWeakToken(null),
+    ownership: 'strong',
     weakLoc: null,
     valueType: field.valueType,
     loc: field.loc
@@ -526,8 +539,7 @@ class Parser {
           modifiers.readOnly,
           optional,
           'function',
-          ownershipFromWeakToken(modifiers.weakToken),
-          modifiers.weakToken
+          'strong'
         )
         field.functionType = this.parseObjectTypeMethodSignature()
         fields.push(field)
@@ -543,8 +555,7 @@ class Parser {
           modifiers.readOnly,
           optional,
           'function',
-          ownershipFromWeakToken(modifiers.weakToken),
-          modifiers.weakToken
+          'strong'
         )
 
         field.functionType = this.parseFunctionType(true)
@@ -554,18 +565,18 @@ class Parser {
         continue
       }
 
-      const valueType = this.parseTypeAnnotation([',', ';', '}'], {
+      const parsedValueType = this.parseTypeAnnotation([',', ';', '}'], {
         stopAtLineBreak: true
       })
+      const valueType = fieldTypeAnnotation(parsedValueType)
 
       fields.push(
         createObjectTypeField(
           name,
           modifiers.readOnly,
           optional,
-          valueType,
-          ownershipFromWeakToken(modifiers.weakToken),
-          modifiers.weakToken
+          valueType.valueType,
+          valueType.ownership
         )
       )
 
@@ -692,40 +703,32 @@ class Parser {
     const modifiers = this.parseFieldModifiers()
     const name = this.parseClassMemberName()
 
-    if (
-      !modifiers.readOnly &&
-      (modifiers.weakToken === null || typeof modifiers.weakToken === 'undefined') &&
-      this.isValue('(')
-    ) {
+    if (!modifiers.readOnly && this.isValue('(')) {
       return this.parseClassMethod(name, staticToken)
     }
 
-    if (
-      (modifiers.readOnly || (modifiers.weakToken !== null && typeof modifiers.weakToken !== 'undefined')) &&
-      this.isValue('(')
-    ) {
+    if (modifiers.readOnly && this.isValue('(')) {
       this.report('INOX_EXPECTED_TYPE', 'class method ownership modifiers are not supported; use fields', null)
     }
 
     this.expectValue(':', 'INOX_EXPECTED_TYPE', 'expected : after class field name')
-    const valueType = this.parseTypeAnnotation([';', '}'], {
+    const parsedValueType = this.parseTypeAnnotation([';', '}'], {
       stopAtLineBreak: true
     })
+    const valueType = fieldTypeAnnotation(parsedValueType)
     this.matchValue(';')
 
     return createFieldDefinition({
       name,
       staticToken,
       readOnly: modifiers.readOnly,
-      ownership: ownershipFromWeakToken(modifiers.weakToken),
-      weakToken: modifiers.weakToken,
-      valueType
+      ownership: valueType.ownership,
+      valueType: valueType.valueType
     })
   }
 
   parseFieldModifiers(): FieldModifiers {
     let readOnly = false
-    let weakToken: Token | null = null
     let matched = true
 
     while (matched) {
@@ -736,14 +739,9 @@ class Parser {
         matched = true
         continue
       }
-
-      if ((weakToken === null || typeof weakToken === 'undefined') && this.isWeakFieldModifier()) {
-        weakToken = this.advance()
-        matched = true
-      }
     }
 
-    return { readOnly, weakToken }
+    return { readOnly }
   }
 
   parseClassMethod(name: Token, staticToken: Token | null): AnyNode {
@@ -1894,16 +1892,6 @@ class Parser {
 
   isContextualKeyword(value: string): boolean {
     return this.current().type === 'identifier' && this.current().value === value
-  }
-
-  isWeakFieldModifier(): boolean {
-    if (!this.isContextualKeyword('weak')) {
-      return false
-    }
-
-    const next = this.peek(1)
-
-    return next.type === 'identifier' || (next.type === 'keyword' && next.value === 'readonly')
   }
 
   isValue(value: string): boolean {

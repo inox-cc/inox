@@ -2,6 +2,7 @@ import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import { tokenize } from '../lexer.ts'
 import { parse } from '../parser.ts'
 import { readTypeAnnotation } from '../parser/type-annotations.ts'
+import { isWeakTypeName } from '../type-names.ts'
 import type { AnyNode, Diagnostic, ProgramNode, Token, ValueType } from '../types.ts'
 
 export type ModuleDeclarationContractEmitResult = {
@@ -316,13 +317,12 @@ function appendModuleDeclarationClassFields(lines: string[], fields: AnyNode[] |
   }
 
   for (const field of fields) {
-    const typeName = declaredTypeName(field) ?? typeNameFromMetadata(field, 'unknown')
+    const typeName = ownershipTypeName(field, declaredTypeName(field) ?? typeNameFromMetadata(field, 'unknown'))
     const staticPrefix = field.static === true ? 'static ' : ''
     const readonlyPrefix = field.readonly === true ? 'readonly ' : ''
-    const weakPrefix = field.ownership === 'weak' ? 'weak ' : ''
     const optional = field.optional === true ? '?' : ''
 
-    lines.push(`  ${staticPrefix}${weakPrefix}${readonlyPrefix}${field.name}${optional}: ${typeName};`)
+    lines.push(`  ${staticPrefix}${readonlyPrefix}${field.name}${optional}: ${typeName};`)
   }
 }
 
@@ -949,11 +949,10 @@ function formatObjectTypeBody(info: AnyNode): string {
 
 function formatObjectTypeField(field: AnyNode): string {
   const readonlyPrefix = field.readonly === true ? 'readonly ' : ''
-  const weakPrefix = field.ownership === 'weak' ? 'weak ' : ''
   const optional = field.optional === true ? '?' : ''
   const typeName = objectFieldTypeName(field)
 
-  return `${weakPrefix}${readonlyPrefix}${field.name}${optional}: ${typeName}`
+  return `${readonlyPrefix}${field.name}${optional}: ${ownershipTypeName(field, typeName)}`
 }
 
 function objectFieldTypeName(field: AnyNode | null | undefined): string {
@@ -1011,6 +1010,14 @@ function declarationReturnType(item: AnyNode): string {
 
 function declaredTypeName(item: AnyNode): string | null {
   return nullableStringMetadata(item.declaredType)
+}
+
+function ownershipTypeName(item: AnyNode, typeName: string): string {
+  if (item.ownership === 'weak' && !isWeakTypeName(typeName)) {
+    return `weak<${typeName}>`
+  }
+
+  return typeName
 }
 
 function declarationValueTypeName(item: AnyNode): string | null {

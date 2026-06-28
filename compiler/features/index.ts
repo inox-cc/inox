@@ -11,15 +11,11 @@ import {
   globalStdlibFeatures
 } from '../../stdlib/global/compiler/feature.ts'
 import type { CompilerFeatureDescriptor } from './types.ts'
-import { collectWeakReferencesIrFeatures, weakReferencesFeature } from './weak-references/index.ts'
 
 const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
   coreRuntimeFeatures,
   globalStdlibFeatures,
-  nodeStdlibFeatures,
-  [
-    weakReferencesFeature
-  ]
+  nodeStdlibFeatures
 ]
 
 const compilerFeatureDescriptors = createCompilerFeatureDescriptors()
@@ -38,7 +34,6 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
   collectCoreRuntimeIrFeatures(featureNode, features)
   collectNodeStdlibIrFeatures(featureNode, features)
   collectGlobalStdlibIrFeatures(featureNode, features)
-  collectWeakReferencesIrFeatures(featureNode, features)
 }
 
 export function compilerFeatureChildNodes(node: unknown): AnyNode[] | null {

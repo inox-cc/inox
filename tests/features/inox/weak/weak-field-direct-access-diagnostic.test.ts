@@ -9,7 +9,7 @@ class Parent {
 }
 
 class Child {
-  weak parent: Parent | null
+  parent: weak<Parent | null>
   constructor(parent: Parent | null) {
     this.parent = parent
   }

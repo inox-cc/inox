@@ -24,7 +24,6 @@ type FieldDefinitionOptions = {
   staticToken: Token | null
   readOnly: boolean
   ownership: string
-  weakToken: Token | null
   valueType: string
 }
 
@@ -166,15 +165,14 @@ export function createObjectTypeField(
   readOnly: boolean,
   optional: boolean,
   valueType: string,
-  ownership: string,
-  weakToken: Token | null
+  ownership: string
 ): AnyNode {
   return {
     name: name.value,
     optional,
     readonly: readOnly,
     ownership,
-    weakLoc: nullableTokenLocation(weakToken),
+    weakLoc: null,
     valueType,
     loc: locFromToken(name)
   }
@@ -201,7 +199,7 @@ export function createFieldDefinition(options: FieldDefinitionOptions): AnyNode 
     staticLoc: nullableTokenLocation(options.staticToken),
     readonly: options.readOnly,
     ownership: options.ownership,
-    weakLoc: nullableTokenLocation(options.weakToken),
+    weakLoc: null,
     valueType: options.valueType,
     loc: locFromToken(options.name)
   }

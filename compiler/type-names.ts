@@ -32,6 +32,26 @@ export function nullableTypeNameFromKnownTypeName(name: string): string {
   return knownGenericTypeInner(name, 'nullable')
 }
 
+export function weakTypeNameFromTypeName(name: string): string | null {
+  const inner = genericTypeInner(name, 'weak')
+
+  if (inner !== null && typeof inner !== 'undefined') {
+    const args = splitGenericArgs(inner)
+
+    if (args.length === 1) {
+      return args[0]
+    }
+
+    return null
+  }
+
+  return null
+}
+
+export function isWeakTypeName(name: string): boolean {
+  return hasGenericTypeInner(name, 'weak')
+}
+
 export function mapTypeNamesFromTypeName(name: string): MapTypeNames | null {
   const inner = genericTypeInner(name, 'map')
 
@@ -163,6 +183,18 @@ export function normalizeTypeName(name: string): string {
 
   if (nullableInner !== null && typeof nullableInner !== 'undefined') {
     return `nullable<${normalizeTypeName(nullableInner)}>`
+  }
+
+  const normalizedWeakInner = genericTypeInner(name, 'weak')
+
+  if (normalizedWeakInner !== null && typeof normalizedWeakInner !== 'undefined') {
+    const args = splitGenericArgs(normalizedWeakInner)
+
+    if (args.length === 1) {
+      return `weak<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'unknown'
   }
 
   const unionInner = genericTypeInner(name, 'union')
@@ -421,7 +453,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'true' || name === 'undefined' || name === 'union' || name === 'unknown') {
+  if (name === 'true' || name === 'undefined' || name === 'union' || name === 'unknown' || name === 'weak') {
     return true
   }
 

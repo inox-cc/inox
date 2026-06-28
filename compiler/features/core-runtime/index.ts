@@ -43,6 +43,7 @@ type CoreRuntimeNode = AnyNode & {
   object?: CoreRuntimeChildNode | null
   objectRuntimeMethod?: string | null
   operator?: string | null
+  ownership?: string | null
   params?: CoreRuntimeRawNode[]
   path?: string[]
   property?: string | null
@@ -94,6 +95,12 @@ export const stringBytesFeature: CompilerFeatureDescriptor = {
   cPreludeIncludes: [],
   hasCPreludeHelpers: false
 }
+export const weakReferencesFeature: CompilerFeatureDescriptor = {
+  id: 'weak-references',
+  runtimeRequirements: ['managed-values', 'objects', 'weak-references'],
+  cPreludeIncludes: [],
+  hasCPreludeHelpers: false
+}
 
 export const coreRuntimeFeatures: CompilerFeatureDescriptor[] = [
   asyncRuntimeFeature,
@@ -101,7 +108,8 @@ export const coreRuntimeFeatures: CompilerFeatureDescriptor[] = [
   collectionsFeature,
   objectsFeature,
   runtimeValuesFeature,
-  stringBytesFeature
+  stringBytesFeature,
+  weakReferencesFeature
 ]
 
 export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntimeFeatureSet): void {
@@ -113,6 +121,12 @@ export function collectCoreRuntimeIrFeatures(node: AnyNode, features: CoreRuntim
 
   if (item.valueType === 'promise' || item.returnType === 'promise') {
     features.add('async-runtime')
+  }
+
+  if (item.ownership === 'weak') {
+    features.add('runtime-values')
+    features.add('objects')
+    features.add('weak-references')
   }
 
   if (item.type === 'FunctionDeclaration' || item.type === 'MethodDefinition') {
