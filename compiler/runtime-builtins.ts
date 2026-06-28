@@ -2,7 +2,7 @@ import {
   isStdlibModuleImportSource,
   stdlibModuleImportSourceAt,
   stdlibModuleImportSourceCount
-} from '../stdlib/node/compiler/modules.ts'
+} from './stdlib/node/modules.ts'
 
 export const runtimeBuiltinImportSources: Set<string> = createRuntimeBuiltinImportSources()
 

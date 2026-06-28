@@ -2,13 +2,13 @@ import type {
   CryptoCheckerContext as PackageCryptoCheckerContext,
   CryptoCheckerDiagnostic as PackageCryptoCheckerDiagnostic,
   CryptoHashMethodCheckerContext as PackageCryptoHashMethodCheckerContext
-} from '../crypto/compiler/checker.ts'
+} from '../../../stdlib/node/crypto/compiler/checker.ts'
 import type {
   FsBooleanOptions as PackageFsBooleanOptions,
   FsRuntimeArgumentCheck as PackageFsRuntimeArgumentCheck,
   FsRuntimeCallInfo as PackageFsRuntimeCallInfo,
   FsRuntimeCallPlan as PackageFsRuntimeCallPlan
-} from '../fs/compiler/checker.ts'
+} from '../../../stdlib/node/fs/compiler/checker.ts'
 
 export {
   binaryConstructorName,
@@ -16,14 +16,14 @@ export {
   binaryStaticRuntimeMethodName,
   bufferRuntimeConstantName,
   unsupportedBufferRuntimeExport
-} from '../buffer/compiler/checker.ts'
-export { childProcessRuntimeCallInfo } from '../child_process/compiler/checker.ts'
+} from '../../../stdlib/node/buffer/compiler/checker.ts'
+export { childProcessRuntimeCallInfo } from '../../../stdlib/node/child_process/compiler/checker.ts'
 export {
   checkCryptoCall,
   checkCryptoHashMethodCall,
   cryptoRuntimeCallInfo
-} from '../crypto/compiler/checker.ts'
-export { unsupportedEventsRuntimeExport } from '../events/compiler/checker.ts'
+} from '../../../stdlib/node/crypto/compiler/checker.ts'
+export { unsupportedEventsRuntimeExport } from '../../../stdlib/node/events/compiler/checker.ts'
 export {
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
@@ -32,34 +32,34 @@ export {
   fsStatsRuntimeMethodInfo,
   isFsPromisesImportSymbol,
   isFsRuntimeRootSymbol
-} from '../fs/compiler/checker.ts'
-export { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from '../os/compiler/checker.ts'
+} from '../../../stdlib/node/fs/compiler/checker.ts'
+export { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from '../../../stdlib/node/os/compiler/checker.ts'
 export {
   isPathRuntimeConstantImport,
   pathRuntimeCallInfo,
   pathRuntimeConstantName
-} from '../path/compiler/checker.ts'
+} from '../../../stdlib/node/path/compiler/checker.ts'
 export {
   processRuntimeAssignmentProperty,
   processRuntimeCallInfo,
   processRuntimeIndexProperty,
   processRuntimeMemberInfo,
   processRuntimePropertyImportInfo
-} from '../process/compiler/checker.ts'
-export { unsupportedStreamRuntimeExport } from '../stream/compiler/checker.ts'
+} from '../../../stdlib/node/process/compiler/checker.ts'
+export { unsupportedStreamRuntimeExport } from '../../../stdlib/node/stream/compiler/checker.ts'
 export {
   isTimerRuntimeImportSymbol,
   timerCallbackFunctionType,
   timerClearMethodName,
   timerRuntimeImportMethodName,
   timerRuntimeMethodName
-} from '../timers/compiler/checker.ts'
-export { isTimerHandleMethod } from '../timers/compiler/descriptor.ts'
-export { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from '../url/compiler/checker.ts'
+} from '../../../stdlib/node/timers/compiler/checker.ts'
+export { isTimerHandleMethod } from '../../../stdlib/node/timers/compiler/descriptor.ts'
+export { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from '../../../stdlib/node/url/compiler/checker.ts'
 export {
   isUrlMutableObjectField,
   isUrlSearchParamsRuntimeMethod
-} from '../url/compiler/descriptor.ts'
+} from '../../../stdlib/node/url/compiler/descriptor.ts'
 
 export type CryptoCheckerContext = PackageCryptoCheckerContext
 export type CryptoCheckerDiagnostic = PackageCryptoCheckerDiagnostic

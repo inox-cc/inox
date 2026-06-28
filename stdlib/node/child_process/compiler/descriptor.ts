@@ -1,4 +1,4 @@
-import { nodeStringListIncludes } from '../../compiler/string-list.ts'
+import { nodeStringListIncludes } from '../../../../compiler/stdlib/node/string-list.ts'
 
 export const nodeChildProcessImportSource = 'node:child_process'
 export const nodeChildProcessModuleObjectImportNames = ['default', 'childProcess']

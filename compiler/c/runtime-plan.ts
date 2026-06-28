@@ -12,7 +12,7 @@ import {
   isSupportedCMathGlobalUsage
 } from './diagnostics.ts'
 import { irProgramsUseConsoleRuntime } from '../../stdlib/global/console/compiler/c.ts'
-import { nodeStdlibHasSupportedCryptoGlobalUsage, nodeStdlibRuntimeImportUsage } from '../../stdlib/node/compiler/c.ts'
+import { nodeStdlibHasSupportedCryptoGlobalUsage, nodeStdlibRuntimeImportUsage } from '../stdlib/node/c.ts'
 
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean

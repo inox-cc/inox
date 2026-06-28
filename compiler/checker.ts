@@ -38,7 +38,7 @@ import {
   unsupportedStreamRuntimeExport,
   urlRuntimeCallInfo,
   urlRuntimeConstructorImportInfo
-} from '../stdlib/node/compiler/checker.ts'
+} from './stdlib/node/checker.ts'
 import type {
   CryptoCheckerContext,
   CryptoCheckerDiagnostic,
@@ -47,7 +47,7 @@ import type {
   FsRuntimeArgumentCheck,
   FsRuntimeCallInfo,
   FsRuntimeCallPlan
-} from '../stdlib/node/compiler/checker.ts'
+} from './stdlib/node/checker.ts'
 import {
   commonArrayElementType,
   commonValueType,
@@ -86,7 +86,7 @@ import {
   isSupportedFetchRedirectLiteral,
   jsonRuntimeMethodName
 } from '../stdlib/global/compiler/checker.ts'
-import { runtimeImportValueType } from '../stdlib/node/compiler/runtime-imports.ts'
+import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
 import {
   dateInstanceRuntimeMethodInfo,
   isDateConstructorRuntimeExpression,
@@ -109,16 +109,16 @@ import {
   isDebugRuntimeMethodPath,
   knownMathRuntimeArgCount
 } from '../stdlib/global/compiler/descriptor.ts'
-import type { StdlibModuleId } from '../stdlib/node/compiler/modules.ts'
+import type { StdlibModuleId } from './stdlib/node/modules.ts'
 import {
   isStdlibModuleImportSource,
   isStdlibModuleImportSourceForId,
   isStdlibModuleRuntimeImportBinding
-} from '../stdlib/node/compiler/modules.ts'
+} from './stdlib/node/modules.ts'
 import {
   isUnsupportedRuntimeBuiltinImportSource,
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
-} from '../stdlib/node/compiler/builtins.ts'
+} from './stdlib/node/builtins.ts'
 import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,

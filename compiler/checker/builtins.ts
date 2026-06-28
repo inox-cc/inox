@@ -1,6 +1,6 @@
 import { debugMemoryStatsFields } from '../../stdlib/global/compiler/descriptor.ts'
-import { stdlibModuleLibuvRuntimeFeature } from '../../stdlib/node/compiler/modules.ts'
-import { pathParseObjectFields, urlObjectFields } from '../../stdlib/node/compiler/descriptor.ts'
+import { stdlibModuleLibuvRuntimeFeature } from '../stdlib/node/modules.ts'
+import { pathParseObjectFields, urlObjectFields } from '../stdlib/node/descriptor.ts'
 import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
 
 type DebugMemoryStatsField = {

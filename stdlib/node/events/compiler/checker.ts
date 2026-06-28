@@ -1,4 +1,4 @@
-import { isNodeStdlibRuntimeImportBinding } from '../../compiler/descriptor.ts'
+import { isNodeStdlibRuntimeImportBinding } from '../../../../compiler/stdlib/node/descriptor.ts'
 import type { SymbolInfo } from '../../../../compiler/types.ts'
 import { isUnsupportedEventsRuntimeExport, unsupportedEventsRuntimeExportReason } from './descriptor.ts'
 

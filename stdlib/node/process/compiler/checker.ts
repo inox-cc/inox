@@ -1,4 +1,4 @@
-import { isNodeStdlibRuntimeImportBinding } from '../../compiler/descriptor.ts'
+import { isNodeStdlibRuntimeImportBinding } from '../../../../compiler/stdlib/node/descriptor.ts'
 import {
   isNodeProcessImportSource,
   isProcessRuntimeMethod,

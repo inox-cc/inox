@@ -1,65 +1,65 @@
 import {
   nodeBufferImportSource,
   nodeBufferModuleObjectImportNames
-} from '../buffer/compiler/descriptor.ts'
+} from '../../../stdlib/node/buffer/compiler/descriptor.ts'
 import {
   nodeChildProcessImportSource,
   nodeChildProcessModuleObjectImportNames
-} from '../child_process/compiler/descriptor.ts'
+} from '../../../stdlib/node/child_process/compiler/descriptor.ts'
 import {
   nodeCryptoImportSource,
   nodeCryptoModuleObjectImportNames
-} from '../crypto/compiler/descriptor.ts'
+} from '../../../stdlib/node/crypto/compiler/descriptor.ts'
 import {
   nodeDgramCreateSocketImportNames,
   nodeDgramImportSource,
   nodeDgramModuleObjectImportNames
-} from '../dgram/compiler/descriptor.ts'
+} from '../../../stdlib/node/dgram/compiler/descriptor.ts'
 import {
   nodeEventsImportSource,
   nodeEventsModuleObjectImportNames
-} from '../events/compiler/descriptor.ts'
-import { nodeFsImportSource } from '../fs/compiler/descriptor.ts'
-import { nodeFsPromisesImportSource } from '../fs/promises/compiler/descriptor.ts'
+} from '../../../stdlib/node/events/compiler/descriptor.ts'
+import { nodeFsImportSource } from '../../../stdlib/node/fs/compiler/descriptor.ts'
+import { nodeFsPromisesImportSource } from '../../../stdlib/node/fs/promises/compiler/descriptor.ts'
 import {
   nodeHttpCreateServerImportNames,
   nodeHttpImportSource,
   nodeHttpModuleObjectImportNames
-} from '../http/compiler/descriptor.ts'
+} from '../../../stdlib/node/http/compiler/descriptor.ts'
 import {
   nodeNetConnectImportNames,
   nodeNetCreateServerImportNames,
   nodeNetImportSource,
   nodeNetModuleObjectImportNames
-} from '../net/compiler/descriptor.ts'
-import { nodeOsImportSource, nodeOsModuleObjectImportNames } from '../os/compiler/descriptor.ts'
+} from '../../../stdlib/node/net/compiler/descriptor.ts'
+import { nodeOsImportSource, nodeOsModuleObjectImportNames } from '../../../stdlib/node/os/compiler/descriptor.ts'
 import {
   nodePathImportSource,
   nodePathModuleObjectImportNames
-} from '../path/compiler/descriptor.ts'
+} from '../../../stdlib/node/path/compiler/descriptor.ts'
 import {
   nodeProcessImportSource,
   nodeProcessModuleObjectImportNames
-} from '../process/compiler/descriptor.ts'
+} from '../../../stdlib/node/process/compiler/descriptor.ts'
 import {
   nodeStreamImportSource,
   nodeStreamModuleObjectImportNames
-} from '../stream/compiler/descriptor.ts'
+} from '../../../stdlib/node/stream/compiler/descriptor.ts'
 import {
   nodeTimersImportSource,
   nodeTimersModuleObjectImportNames
-} from '../timers/compiler/descriptor.ts'
-import { nodeUrlImportSource, nodeUrlModuleObjectImportNames } from '../url/compiler/descriptor.ts'
+} from '../../../stdlib/node/timers/compiler/descriptor.ts'
+import { nodeUrlImportSource, nodeUrlModuleObjectImportNames } from '../../../stdlib/node/url/compiler/descriptor.ts'
 
-export { isBinaryGlobalUsagePath } from '../buffer/compiler/descriptor.ts'
-export { isCryptoRuntimeMethodPath } from '../crypto/compiler/descriptor.ts'
-export { fsGlobalUsagePathForRuntimeMethod } from '../fs/compiler/descriptor.ts'
-export { pathParseObjectFields } from '../path/compiler/descriptor.ts'
+export { isBinaryGlobalUsagePath } from '../../../stdlib/node/buffer/compiler/descriptor.ts'
+export { isCryptoRuntimeMethodPath } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
+export { fsGlobalUsagePathForRuntimeMethod } from '../../../stdlib/node/fs/compiler/descriptor.ts'
+export { pathParseObjectFields } from '../../../stdlib/node/path/compiler/descriptor.ts'
 export {
   isTimerRuntimeMethod,
   timerRuntimeMethodNameFromPath
-} from '../timers/compiler/descriptor.ts'
-export { urlObjectFields } from '../url/compiler/descriptor.ts'
+} from '../../../stdlib/node/timers/compiler/descriptor.ts'
+export { urlObjectFields } from '../../../stdlib/node/url/compiler/descriptor.ts'
 
 export type NodeStdlibRuntimeImportKind =
   | 'connect'

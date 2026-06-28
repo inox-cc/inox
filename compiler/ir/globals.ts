@@ -1,4 +1,4 @@
-import { fsGlobalUsagePathForRuntimeMethod } from '../../stdlib/node/compiler/descriptor.ts'
+import { fsGlobalUsagePathForRuntimeMethod } from '../stdlib/node/descriptor.ts'
 import type { AnyNode, IrGlobalUsage, ProgramNode, SourceLocation } from '../types.ts'
 
 type NodeList = AnyNode[]

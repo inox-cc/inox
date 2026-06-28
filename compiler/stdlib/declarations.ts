@@ -1,5 +1,5 @@
 import type { AnyNode, ProgramNode, ValueType } from '../types.ts'
-import { stdlibModuleDeclarationPath } from '../../stdlib/node/compiler/modules.ts'
+import { stdlibModuleDeclarationPath } from './node/modules.ts'
 
 export function isStdlibDeclarationRuntimeImportTypingSource(source: string): boolean {
   return stdlibModuleDeclarationPath(source) !== null

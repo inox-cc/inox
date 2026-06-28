@@ -11,7 +11,7 @@ import {
   isStdlibDeclarationRuntimeImportTypingSource,
   stdlibDeclarationNodeValueType
 } from '../stdlib/declarations.ts'
-import { stdlibModuleDeclarationPath } from '../../stdlib/node/compiler/modules.ts'
+import { stdlibModuleDeclarationPath } from '../stdlib/node/modules.ts'
 import type {
   AnyNode,
   CompileOptions,

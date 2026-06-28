@@ -4,7 +4,7 @@ import {
   collectNodeStdlibIrFeatures,
   nodeStdlibFeatureChildNodes,
   nodeStdlibFeatures
-} from '../../stdlib/node/compiler/feature.ts'
+} from '../stdlib/node/feature.ts'
 import {
   collectGlobalStdlibIrFeatures,
   emitGlobalStdlibCPreludeHelpers,

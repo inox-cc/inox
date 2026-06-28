@@ -1,4 +1,4 @@
-import { nodeStringListIncludes } from '../../compiler/string-list.ts'
+import { nodeStringListIncludes } from '../../../../compiler/stdlib/node/string-list.ts'
 
 export const nodeTimersImportSource = 'node:timers'
 export const nodeTimersModuleObjectImportNames = ['default', 'timers']

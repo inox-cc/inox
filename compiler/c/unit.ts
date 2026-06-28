@@ -75,12 +75,12 @@ import {
   emitNodeNetworkHandlerPrototypeLines,
   hasNodeNetworkHandlers,
   registerNodeStdlibRuntimeImportNames
-} from '../../stdlib/node/compiler/c.ts'
+} from '../stdlib/node/c.ts'
 import type {
   DgramLoweringDependencies,
   HttpLoweringDependencies,
   NetLoweringDependencies
-} from '../../stdlib/node/compiler/c.ts'
+} from '../stdlib/node/c.ts'
 import type {
   CClassInfo,
   CClassMethod,

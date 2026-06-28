@@ -1,5 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
-import { isBinaryGlobalUsagePath } from '../../stdlib/node/compiler/descriptor.ts'
+import { isBinaryGlobalUsagePath } from '../stdlib/node/descriptor.ts'
 import {
   dateConstructorRuntimeMethodNameFromPath,
   isCollectionConstructorGlobalUsagePath,
@@ -9,7 +9,7 @@ import {
   mathRuntimeMethodNameFromPath,
   timeRuntimeMethodNameFromPath
 } from '../../stdlib/global/compiler/descriptor.ts'
-import { isSupportedNodeStdlibCGlobalUsage } from '../../stdlib/node/compiler/c.ts'
+import { isSupportedNodeStdlibCGlobalUsage } from '../stdlib/node/c.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
 
 type CGlobalNameSet = Set<string>

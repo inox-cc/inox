@@ -1,10 +1,10 @@
 import { collectIrTopLevelNodes } from '../ir.ts'
-import type { StdlibModuleId } from '../../stdlib/node/compiler/modules.ts'
-import type { StdlibModuleRuntimeImportKind } from '../../stdlib/node/compiler/modules.ts'
+import type { StdlibModuleId } from '../stdlib/node/modules.ts'
+import type { StdlibModuleRuntimeImportKind } from '../stdlib/node/modules.ts'
 import {
   stdlibModuleImportSourceSetForId,
   stdlibModuleRuntimeImportNameSet
-} from '../../stdlib/node/compiler/modules.ts'
+} from '../stdlib/node/modules.ts'
 import type { IrProgram } from '../types.ts'
 
 type RuntimeImportSourceSet = Set<string>

@@ -140,7 +140,7 @@ import type {
   ProcessLoweringDependencies,
   TimerLoweringDependencies,
   UrlLoweringDependencies
-} from '../../stdlib/node/compiler/c.ts'
+} from '../stdlib/node/c.ts'
 import {
   binaryRuntimeExpressionReturnType,
   cFsRuntimeConstantExpression,
@@ -193,7 +193,7 @@ import {
   resolveBinaryExpressionKind,
   resolveNodeNetworkAddressStringMember,
   timerCallbackFunctionType
-} from '../../stdlib/node/compiler/c.ts'
+} from '../stdlib/node/c.ts'
 import { isConsoleLog } from '../../stdlib/global/console/compiler/c.ts'
 import type { FetchLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
 import {

@@ -1,4 +1,4 @@
-import { nodeStringListIncludes } from '../../compiler/string-list.ts'
+import { nodeStringListIncludes } from '../../../../compiler/stdlib/node/string-list.ts'
 import type { IrGlobalUsage } from '../../../../compiler/types.ts'
 
 export const nodeCryptoImportSource = 'node:crypto'

@@ -1,13 +1,13 @@
-import type { CEmitContext, CFunctionContext } from '../../../compiler/c/context.ts'
-import type { CPreparedExpression as PreparedExpression } from '../../../compiler/c/types.ts'
-import type { AnyNode, IrGlobalUsage, IrProgram } from '../../../compiler/types.ts'
-import type { BinaryLoweringDependencies as PackageBinaryLoweringDependencies } from '../buffer/compiler/c.ts'
-import type { ChildProcessLoweringDependencies as PackageChildProcessLoweringDependencies } from '../child_process/compiler/c.ts'
-import type { CryptoLoweringDependencies as PackageCryptoLoweringDependencies } from '../crypto/compiler/c.ts'
-import { cChildProcessRuntimeMethodName } from '../child_process/compiler/c.ts'
-import { isSupportedNodeCryptoCGlobalUsage } from '../crypto/compiler/descriptor.ts'
-import { cryptoRuntimeMethodName, registerCryptoRuntimeImportNames } from '../crypto/compiler/c.ts'
-import type { DgramLoweringDependencies as PackageDgramLoweringDependencies } from '../dgram/compiler/c.ts'
+import type { CEmitContext, CFunctionContext } from '../../c/context.ts'
+import type { CPreparedExpression as PreparedExpression } from '../../c/types.ts'
+import type { AnyNode, IrGlobalUsage, IrProgram } from '../../types.ts'
+import type { BinaryLoweringDependencies as PackageBinaryLoweringDependencies } from '../../../stdlib/node/buffer/compiler/c.ts'
+import type { ChildProcessLoweringDependencies as PackageChildProcessLoweringDependencies } from '../../../stdlib/node/child_process/compiler/c.ts'
+import type { CryptoLoweringDependencies as PackageCryptoLoweringDependencies } from '../../../stdlib/node/crypto/compiler/c.ts'
+import { cChildProcessRuntimeMethodName } from '../../../stdlib/node/child_process/compiler/c.ts'
+import { isSupportedNodeCryptoCGlobalUsage } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
+import { cryptoRuntimeMethodName, registerCryptoRuntimeImportNames } from '../../../stdlib/node/crypto/compiler/c.ts'
+import type { DgramLoweringDependencies as PackageDgramLoweringDependencies } from '../../../stdlib/node/dgram/compiler/c.ts'
 import {
   collectDgramMessageHandlers,
   emitDgramAddressVariableDeclaration,
@@ -19,18 +19,18 @@ import {
   emitDgramSocketVariableDeclaration,
   irProgramsUseDgramRuntimeImport,
   registerDgramRuntimeImportNames
-} from '../dgram/compiler/c.ts'
-import { isSupportedNodeDgramCGlobalUsage } from '../dgram/compiler/descriptor.ts'
+} from '../../../stdlib/node/dgram/compiler/c.ts'
+import { isSupportedNodeDgramCGlobalUsage } from '../../../stdlib/node/dgram/compiler/descriptor.ts'
 import type {
   FsAsyncTaskSourceExpression,
   FsLoweringDependencies as PackageFsLoweringDependencies
-} from '../fs/compiler/c.ts'
+} from '../../../stdlib/node/fs/compiler/c.ts'
 import {
   cFsRuntimeExpressionMethod,
   emitPreparedFsAsyncTaskSourceExpression,
   isAsyncFsRuntimeCallExpression
-} from '../fs/compiler/c.ts'
-import type { HttpLoweringDependencies as PackageHttpLoweringDependencies } from '../http/compiler/c.ts'
+} from '../../../stdlib/node/fs/compiler/c.ts'
+import type { HttpLoweringDependencies as PackageHttpLoweringDependencies } from '../../../stdlib/node/http/compiler/c.ts'
 import {
   collectHttpHandlers,
   emitHttpHandlerDeclaration,
@@ -39,9 +39,9 @@ import {
   emitHttpServerVariableDeclaration,
   irProgramsUseHttpRuntimeImport,
   registerHttpRuntimeImportNames
-} from '../http/compiler/c.ts'
-import { isSupportedNodeHttpCGlobalUsage } from '../http/compiler/descriptor.ts'
-import type { NetLoweringDependencies as PackageNetLoweringDependencies } from '../net/compiler/c.ts'
+} from '../../../stdlib/node/http/compiler/c.ts'
+import { isSupportedNodeHttpCGlobalUsage } from '../../../stdlib/node/http/compiler/descriptor.ts'
+import type { NetLoweringDependencies as PackageNetLoweringDependencies } from '../../../stdlib/node/net/compiler/c.ts'
 import {
   collectNetHandlers,
   emitNetHandlerDeclaration,
@@ -57,22 +57,22 @@ import {
   irProgramsUseNetRuntimeImport,
   registerNetRuntimeImportNames,
   resolveNetAddressStringMember
-} from '../net/compiler/c.ts'
-import { isSupportedNodeNetCGlobalUsage } from '../net/compiler/descriptor.ts'
-import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from '../os/compiler/c.ts'
-import type { PathLoweringDependencies as PackagePathLoweringDependencies } from '../path/compiler/c.ts'
-import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from '../path/compiler/c.ts'
-import type { ProcessLoweringDependencies as PackageProcessLoweringDependencies } from '../process/compiler/c.ts'
+} from '../../../stdlib/node/net/compiler/c.ts'
+import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compiler/descriptor.ts'
+import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from '../../../stdlib/node/os/compiler/c.ts'
+import type { PathLoweringDependencies as PackagePathLoweringDependencies } from '../../../stdlib/node/path/compiler/c.ts'
+import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from '../../../stdlib/node/path/compiler/c.ts'
+import type { ProcessLoweringDependencies as PackageProcessLoweringDependencies } from '../../../stdlib/node/process/compiler/c.ts'
 import {
   cProcessRuntimeEnvName,
   cProcessRuntimeMethodName,
   cProcessRuntimePropertyName,
   cProcessRuntimePropertyValueType,
   cProcessRuntimeStringPropertyName
-} from '../process/compiler/c.ts'
-import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../timers/compiler/c.ts'
-import type { UrlLoweringDependencies as PackageUrlLoweringDependencies } from '../url/compiler/c.ts'
-import { cUrlRuntimeMethodName } from '../url/compiler/c.ts'
+} from '../../../stdlib/node/process/compiler/c.ts'
+import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
+import type { UrlLoweringDependencies as PackageUrlLoweringDependencies } from '../../../stdlib/node/url/compiler/c.ts'
+import { cUrlRuntimeMethodName } from '../../../stdlib/node/url/compiler/c.ts'
 
 export {
   binaryRuntimeExpressionReturnType,
@@ -84,8 +84,8 @@ export {
   isBinaryConstructorExpression,
   isBinaryRuntimeCall,
   resolveBinaryExpressionKind
-} from '../buffer/compiler/c.ts'
-export { emitPreparedChildProcessCallExpression } from '../child_process/compiler/c.ts'
+} from '../../../stdlib/node/buffer/compiler/c.ts'
+export { emitPreparedChildProcessCallExpression } from '../../../stdlib/node/child_process/compiler/c.ts'
 export {
   emitCryptoHandleVariableDeclaration,
   emitCryptoHashVariableDeclaration,
@@ -93,7 +93,7 @@ export {
   emitPreparedCryptoHashCallExpression,
   emitPreparedCryptoHmacCallExpression,
   emitPreparedCryptoNumberCallExpression
-} from '../crypto/compiler/c.ts'
+} from '../../../stdlib/node/crypto/compiler/c.ts'
 export {
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
@@ -101,33 +101,33 @@ export {
   emitPreparedFsStatsMethodExpression,
   emitPreparedFsSyncStatementExpression,
   emitPreparedFsSyncValueExpression
-} from '../fs/compiler/c.ts'
-export { emitPreparedOsConstantExpression, emitPreparedOsStringCallExpression } from '../os/compiler/c.ts'
+} from '../../../stdlib/node/fs/compiler/c.ts'
+export { emitPreparedOsConstantExpression, emitPreparedOsStringCallExpression } from '../../../stdlib/node/os/compiler/c.ts'
 export {
   emitPreparedPathBooleanCallExpression,
   emitPreparedPathConstantExpression,
   emitPreparedPathObjectCallExpression,
   emitPreparedPathStringCallExpression
-} from '../path/compiler/c.ts'
+} from '../../../stdlib/node/path/compiler/c.ts'
 export {
   emitPreparedProcessNumberExpression,
   emitPreparedProcessStringExpression,
   emitProcessExitCodeAssignment,
   emitProcessExitStatement
-} from '../process/compiler/c.ts'
+} from '../../../stdlib/node/process/compiler/c.ts'
 export {
   emitPreparedTimerCallExpression,
   emitTimerVariableDeclaration,
   isTimerStartCallExpression,
   timerCallbackFunctionType
-} from '../timers/compiler/c.ts'
+} from '../../../stdlib/node/timers/compiler/c.ts'
 export {
   emitPreparedUrlObjectExpression,
   emitPreparedUrlSearchParamsCallExpression,
   emitPreparedUrlSearchParamsObjectExpression,
   emitPreparedUrlStringCallExpression,
   emitUrlObjectFieldAssignment
-} from '../url/compiler/c.ts'
+} from '../../../stdlib/node/url/compiler/c.ts'
 
 export type BinaryLoweringDependencies = PackageBinaryLoweringDependencies
 export type ChildProcessLoweringDependencies = PackageChildProcessLoweringDependencies

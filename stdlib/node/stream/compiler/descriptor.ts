@@ -1,4 +1,4 @@
-import { nodeStringListIncludes } from '../../compiler/string-list.ts'
+import { nodeStringListIncludes } from '../../../../compiler/stdlib/node/string-list.ts'
 
 export const nodeStreamImportSource = 'node:stream'
 export const nodeStreamModuleObjectImportNames = ['default', 'stream']
