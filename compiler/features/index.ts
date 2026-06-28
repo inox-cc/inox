@@ -1,5 +1,4 @@
 import type { AnyNode, IrFeature, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import { arrayPopNullFeature, collectArrayPopNullIrFeatures } from './array-pop-null/index.ts'
 import { collectCoreRuntimeIrFeatures, coreRuntimeFeatures } from './core-runtime/index.ts'
 import {
   collectMapGetNullIrFeatures,
@@ -23,7 +22,6 @@ import type { CompilerFeatureDescriptor } from './types.ts'
 import { collectWeakReferencesIrFeatures, weakReferencesFeature } from './weak-references/index.ts'
 
 const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
-  [arrayPopNullFeature],
   coreRuntimeFeatures,
   runtimeBackedFeatures,
   globalStdlibFeatures,
@@ -96,7 +94,6 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
 
   const featureNode = node as AnyNode
 
-  collectArrayPopNullIrFeatures(featureNode, features)
   collectCoreRuntimeIrFeatures(featureNode, features)
   collectNodeStdlibIrFeatures(featureNode, features)
   collectGlobalStdlibIrFeatures(featureNode, features)

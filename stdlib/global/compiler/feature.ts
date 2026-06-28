@@ -1,6 +1,10 @@
 import type { CompilerFeatureDescriptor } from '../../../compiler/features/types.ts'
 import type { AnyNode, IrFeature } from '../../../compiler/types.ts'
 import {
+  arrayPopNullFeature,
+  collectArrayPopNullIrFeatures
+} from '../collections/compiler/feature.ts'
+import {
   collectNumberFromStringNullIrFeatures,
   collectNumericCastsIrFeatures,
   numberFromStringNullFeature,
@@ -13,6 +17,7 @@ import { clocksFeature, collectClocksIrFeatures } from '../time/compiler/feature
 export { emitCRegExpFlags } from '../regexp/compiler/feature.ts'
 
 export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
+  arrayPopNullFeature,
   clocksFeature,
   jsonFeature,
   numberFromStringNullFeature,
@@ -21,6 +26,7 @@ export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
 ]
 
 export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
+  collectArrayPopNullIrFeatures(node, features)
   collectClocksIrFeatures(node, features)
   collectJsonIrFeatures(node, features)
   collectNumberFromStringNullIrFeatures(node, features)
