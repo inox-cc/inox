@@ -13,6 +13,12 @@ import type {
   CRuntimeArrayElement
 } from '../types.ts'
 import { isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
+import {
+  compilerAnyNodeArrayFields,
+  compilerAnyNodeBooleanFields,
+  compilerAnyNodeObjectFields,
+  compilerAnyNodeStringFields
+} from './any-node-fields.ts'
 import { isMemberAccessExpression, resolveKnownObjectMember, resolveObjectExpressionMember, isIndexAccessExpression, resolveKnownObjectIndex, resolveObjectExpressionIndex } from './objects.ts'
 
 export type CExpressionTypeDependencies = {
@@ -1041,19 +1047,19 @@ function objectAccessFieldName(expression: AnyNode): string | null {
 }
 
 function anyNodeLikeFieldValueType(fieldName: string): string {
-  if (anyNodeLikeStringFields().includes(fieldName)) {
+  if (compilerAnyNodeStringFields.includes(fieldName)) {
     return 'string'
   }
 
-  if (anyNodeLikeBooleanFields().includes(fieldName)) {
+  if (compilerAnyNodeBooleanFields.includes(fieldName)) {
     return 'boolean'
   }
 
-  if (anyNodeLikeArrayFields().includes(fieldName)) {
+  if (compilerAnyNodeArrayFields.includes(fieldName)) {
     return 'array'
   }
 
-  if (anyNodeLikeObjectFields().includes(fieldName)) {
+  if (compilerAnyNodeObjectFields.includes(fieldName)) {
     return 'object'
   }
 
@@ -1061,7 +1067,7 @@ function anyNodeLikeFieldValueType(fieldName: string): string {
 }
 
 export function isAnyNodeLikeArrayFieldName(fieldName: string): boolean {
-  return anyNodeLikeArrayFields().includes(fieldName)
+  return compilerAnyNodeArrayFields.includes(fieldName)
 }
 
 export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | null {
@@ -1101,140 +1107,4 @@ export function anyNodeLikeObjectFieldDeclaredType(fieldName: string): string | 
   }
 
   return null
-}
-
-function anyNodeLikeStringFields(): string[] {
-  return [
-    'type',
-    'builtin',
-    'imported',
-    'kind',
-    'local',
-    'name',
-    'ownership',
-    'property',
-    'operator',
-    'declaredType',
-    'valueType',
-    'arrayElementType',
-    'arrayElementDeclaredType',
-    'mapKeyType',
-    'mapValueType',
-    'promiseValueType',
-    'promiseRejectionValueType',
-    'setElementType',
-    'propertyValueType',
-    'pathRuntimeMethod',
-    'pathRuntimeConstant',
-    'processRuntimeMethod',
-    'processRuntimeProperty',
-    'processRuntimeEnvName',
-    'runtimeObjectName',
-    'runtimeObjectSource',
-    'dgramMessageHandlerName',
-    'urlRuntimeMethod',
-    'urlRuntimeField',
-    'httpHandlerName',
-    'binaryRuntimeMethod',
-    'bufferRuntimeConstant',
-    'childProcessRuntimeMethod',
-    'cryptoHashDigestEncoding',
-    'cryptoRuntimeMethod',
-    'debugRuntimeMethod',
-    'fetchRuntimeMethod',
-    'fsRuntimeConstant',
-    'fsRuntimeMethod',
-    'jsonRuntimeMethod',
-    'mathRuntimeMethod',
-    'osRuntimeConstant',
-    'osRuntimeMethod',
-    'objectRuntimeMethod',
-    'stringRuntimeMethod',
-    'timeRuntimeMethod',
-    'timerRuntimeMethod',
-    'numericCast',
-    'returnType',
-    'declaredReturnType',
-    'returnArrayElementType',
-    'returnArrayElementDeclaredType',
-    'returnMapKeyType',
-    'returnMapValueType',
-    'returnPromiseValueType',
-    'returnSetElementType',
-    'className',
-    'collectionKind',
-    'param',
-    'functionTypeOwnership',
-    'shapeOwnership'
-  ]
-}
-
-function anyNodeLikeBooleanFields(): string[] {
-  return [
-    'async',
-    'default',
-    'exported',
-    'expressionBody',
-    'fsBytes',
-    'fsDirents',
-    'fsForce',
-    'fsRecursive',
-    'nullable',
-    'optional',
-    'optionalChainProtected',
-    'readonly',
-    'readonlyField',
-    'returnNullable',
-    'static',
-    'typeOnly',
-    'weakTypeValidated'
-  ]
-}
-
-function anyNodeLikeArrayFields(): string[] {
-  return [
-    'args',
-    'cases',
-    'elements',
-    'expressions',
-    'fields',
-    'methods',
-    'params',
-    'path',
-    'properties',
-    'specifiers'
-  ]
-}
-
-function anyNodeLikeObjectFields(): string[] {
-  return [
-    'argument',
-    'block',
-    'callee',
-    'condition',
-    'consequent',
-    'discriminant',
-    'alternate',
-    'defaultValue',
-    'dynamicField',
-    'expression',
-    'finalizer',
-    'functionType',
-    'handler',
-    'index',
-    'init',
-    'iterable',
-    'left',
-    'mapValueShape',
-    'loc',
-    'object',
-    'paramLoc',
-    'returnShape',
-    'right',
-    'shape',
-    'staticLoc',
-    'target',
-    'test',
-    'update'
-  ]
 }

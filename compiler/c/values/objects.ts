@@ -31,6 +31,13 @@ import {
   isNullableScalarType,
   isOpaqueRuntimeValueType
 } from '../value-types.ts'
+import {
+  compilerAnyNodeArrayFields,
+  compilerAnyNodeBooleanFields,
+  compilerAnyNodeObjectFields,
+  compilerAnyNodeStringFields,
+  compilerAnyNodeUnknownFields
+} from './any-node-fields.ts'
 import { inferExpressionType } from './types.ts'
 import { emitPreparedStringBytesOperand } from './strings.ts'
 import { emitCValueExpression } from './expressions.ts'
@@ -146,129 +153,13 @@ function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): nu
 }
 
 export function appendCompilerAnyNodeFallbackShapeFields(fields: CObjectShapeField[]): void {
-  const stringFields = [
-    'type',
-    'builtin',
-    'imported',
-    'kind',
-    'local',
-    'name',
-    'ownership',
-    'property',
-    'operator',
-    'declaredType',
-    'valueType',
-    'arrayElementType',
-    'arrayElementDeclaredType',
-    'mapKeyType',
-    'mapValueType',
-    'promiseValueType',
-    'promiseRejectionValueType',
-    'setElementType',
-    'propertyValueType',
-    'pathRuntimeMethod',
-    'pathRuntimeConstant',
-    'processRuntimeMethod',
-    'processRuntimeProperty',
-    'processRuntimeEnvName',
-    'runtimeObjectName',
-    'runtimeObjectSource',
-    'dgramMessageHandlerName',
-    'urlRuntimeMethod',
-    'urlRuntimeField',
-    'httpHandlerName',
-    'binaryRuntimeMethod',
-    'bufferRuntimeConstant',
-    'childProcessRuntimeMethod',
-    'cryptoHashDigestEncoding',
-    'cryptoRuntimeMethod',
-    'debugRuntimeMethod',
-    'fetchRuntimeMethod',
-    'fsRuntimeConstant',
-    'fsRuntimeMethod',
-    'jsonRuntimeMethod',
-    'mathRuntimeMethod',
-    'osRuntimeConstant',
-    'osRuntimeMethod',
-    'objectRuntimeMethod',
-    'stringRuntimeMethod',
-    'timeRuntimeMethod',
-    'timerRuntimeMethod',
-    'numericCast',
-    'returnType',
-    'declaredReturnType',
-    'returnArrayElementType',
-    'returnArrayElementDeclaredType',
-    'returnMapKeyType',
-    'returnMapValueType',
-    'returnPromiseValueType',
-    'returnSetElementType',
-    'className',
-    'collectionKind',
-    'param',
-    'functionTypeOwnership',
-    'shapeOwnership'
-  ]
-  const booleanFields = [
-    'async',
-    'default',
-    'exported',
-    'expressionBody',
-    'fsBytes',
-    'fsDirents',
-    'fsForce',
-    'fsRecursive',
-    'nullable',
-    'optional',
-    'optionalChainProtected',
-    'readonly',
-    'readonlyField',
-    'returnNullable',
-    'static',
-    'typeOnly',
-    'weakTypeValidated'
-  ]
-  const arrayFields = ['args', 'cases', 'elements', 'fields', 'methods', 'params', 'path', 'properties', 'specifiers']
-  const objectFields = [
-    'argument',
-    'block',
-    'callee',
-    'condition',
-    'consequent',
-    'discriminant',
-    'defaultValue',
-    'dynamicField',
-    'alternate',
-    'expression',
-    'finalizer',
-    'arrayElementFunctionType',
-    'functionType',
-    'handler',
-    'index',
-    'init',
-    'iterable',
-    'left',
-    'mapValueShape',
-    'loc',
-    'object',
-    'paramLoc',
-    'returnShape',
-    'right',
-    'shape',
-    'staticLoc',
-    'target',
-    'test',
-    'update'
-  ]
-  const unknownFields = ['body', 'raw', 'source', 'value']
-
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, stringFields, 'string')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, booleanFields, 'boolean')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, arrayFields, 'array')
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, objectFields, 'object', 'AnyNode', {
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeStringFields, 'string')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeBooleanFields, 'boolean')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeArrayFields, 'array')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeObjectFields, 'object', 'AnyNode', {
     builtin: 'compiler.AnyNode'
   })
-  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, unknownFields, 'unknown')
+  appendCompilerAnyNodeFallbackShapeFieldGroup(fields, compilerAnyNodeUnknownFields, 'unknown')
 }
 
 export function appendCompilerObjectShapeInfoFallbackShapeFields(fields: CObjectShapeField[]): void {
@@ -280,7 +171,7 @@ export function appendCompilerObjectShapeInfoFallbackShapeFields(fields: CObject
 
 function appendCompilerAnyNodeFallbackShapeFieldGroup(
   fields: CObjectShapeField[],
-  names: string[],
+  names: readonly string[],
   valueType: string,
   declaredType: string | null = null,
   shape: CObjectShape | null = null
