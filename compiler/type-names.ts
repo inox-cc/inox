@@ -142,6 +142,220 @@ export function unionTypeNamesFromTypeName(name: string): string[] | null {
   return args
 }
 
+export function normalizeTypeName(name: string): string {
+  const parenthesizedInner = parenthesizedTypeInner(name)
+
+  if (parenthesizedInner !== null && typeof parenthesizedInner !== 'undefined') {
+    return normalizeTypeName(parenthesizedInner)
+  }
+
+  if (isFunctionTypeName(name)) {
+    return 'function'
+  }
+
+  const unionArgs = splitUnionArgs(name)
+
+  if (unionArgs.length > 1) {
+    return normalizeUnionTypeNames(unionArgs)
+  }
+
+  const nullableInner = genericTypeInner(name, 'nullable')
+
+  if (nullableInner !== null && typeof nullableInner !== 'undefined') {
+    return `nullable<${normalizeTypeName(nullableInner)}>`
+  }
+
+  const unionInner = genericTypeInner(name, 'union')
+
+  if (unionInner !== null && typeof unionInner !== 'undefined') {
+    const args = splitGenericArgs(unionInner)
+
+    if (args.length === 0) {
+      return 'unknown'
+    }
+
+    return normalizeUnionTypeNames(args)
+  }
+
+  if (name.endsWith('[]')) {
+    return `array<${normalizeTypeName(name.slice(0, -2))}>`
+  }
+
+  const normalizedArrayInner = genericTypeInner(name, 'array')
+
+  if (normalizedArrayInner !== null && typeof normalizedArrayInner !== 'undefined') {
+    return `array<${normalizeTypeName(normalizedArrayInner)}>`
+  }
+
+  const arrayInner = genericTypeInner(name, 'Array')
+
+  if (arrayInner !== null && typeof arrayInner !== 'undefined') {
+    return `array<${normalizeTypeName(arrayInner)}>`
+  }
+
+  const normalizedMapInner = genericTypeInner(name, 'map')
+
+  if (normalizedMapInner !== null && typeof normalizedMapInner !== 'undefined') {
+    const args = splitGenericArgs(normalizedMapInner)
+
+    if (args.length === 2) {
+      return `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'map'
+  }
+
+  const mapInner = genericTypeInner(name, 'Map')
+
+  if (mapInner !== null && typeof mapInner !== 'undefined') {
+    const args = splitGenericArgs(mapInner)
+
+    if (args.length === 2) {
+      return `map<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'map'
+  }
+
+  const normalizedRecordInner = genericTypeInner(name, 'record')
+
+  if (normalizedRecordInner !== null && typeof normalizedRecordInner !== 'undefined') {
+    const args = splitGenericArgs(normalizedRecordInner)
+
+    if (args.length === 2) {
+      return `record<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'object'
+  }
+
+  const recordInner = genericTypeInner(name, 'Record')
+
+  if (recordInner !== null && typeof recordInner !== 'undefined') {
+    const args = splitGenericArgs(recordInner)
+
+    if (args.length === 2) {
+      return `record<${normalizeTypeName(args[0])},${normalizeTypeName(args[1])}>`
+    }
+
+    return 'object'
+  }
+
+  const normalizedSetInner = genericTypeInner(name, 'set')
+
+  if (normalizedSetInner !== null && typeof normalizedSetInner !== 'undefined') {
+    const args = splitGenericArgs(normalizedSetInner)
+
+    if (args.length === 1) {
+      return `set<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'set'
+  }
+
+  const setInner = genericTypeInner(name, 'Set')
+
+  if (setInner !== null && typeof setInner !== 'undefined') {
+    const args = splitGenericArgs(setInner)
+
+    if (args.length === 1) {
+      return `set<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'set'
+  }
+
+  const normalizedPromiseInner = genericTypeInner(name, 'promise')
+
+  if (normalizedPromiseInner !== null && typeof normalizedPromiseInner !== 'undefined') {
+    const args = splitGenericArgs(normalizedPromiseInner)
+
+    if (args.length === 1) {
+      return `promise<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'promise'
+  }
+
+  const promiseInner = genericTypeInner(name, 'Promise')
+
+  if (promiseInner !== null && typeof promiseInner !== 'undefined') {
+    const args = splitGenericArgs(promiseInner)
+
+    if (args.length === 1) {
+      return `promise<${normalizeTypeName(args[0])}>`
+    }
+
+    return 'promise'
+  }
+
+  if (isSimpleTypeName(name)) {
+    return name
+  }
+
+  if (name === 'Array' || name === 'array') {
+    return 'array'
+  }
+
+  if (name === 'Map' || name === 'map') {
+    return 'map'
+  }
+
+  if (name === 'Set' || name === 'set') {
+    return 'set'
+  }
+
+  if (name === 'Promise' || name === 'promise') {
+    return 'promise'
+  }
+
+  if (name === 'Function' || name === 'function') {
+    return 'function'
+  }
+
+  if (name === 'true' || name === 'false') {
+    return 'boolean'
+  }
+
+  if (name === 'any') {
+    return 'unknown'
+  }
+
+  if (isIdentifierTypeName(name)) {
+    return name
+  }
+
+  return 'unknown'
+}
+
+export function typeNameDependencyNames(typeName: string | null | undefined): string[] {
+  const names: string[] = []
+
+  if (typeName === null || typeof typeName === 'undefined') {
+    return names
+  }
+
+  let current = ''
+  let index = 0
+
+  while (index < typeName.length) {
+    const unit = typeName.slice(index, index + 1)
+
+    if (isTypeNameDependencyIdentifierChar(unit)) {
+      current = current + unit
+    } else {
+      pushTypeNameDependencyName(current, names)
+      current = ''
+    }
+
+    index = index + 1
+  }
+
+  pushTypeNameDependencyName(current, names)
+
+  return uniqueTypeNameDependencyNames(names)
+}
+
 export function isBuiltinValueType(name: string): boolean {
   if (name === 'array') {
     return true
@@ -190,8 +404,275 @@ export function isBuiltinValueType(name: string): boolean {
   return false
 }
 
+export function isBuiltinTypeDependencyName(name: string): boolean {
+  if (isBuiltinValueType(name)) {
+    return true
+  }
+
+  if (name === 'Array' || name === 'Function' || name === 'Map' || name === 'Promise' || name === 'Record') {
+    return true
+  }
+
+  if (name === 'Set' || name === 'any' || name === 'class' || name === 'false' || name === 'map') {
+    return true
+  }
+
+  if (name === 'never' || name === 'nullable' || name === 'record' || name === 'set' || name === 'timer') {
+    return true
+  }
+
+  if (name === 'true' || name === 'undefined' || name === 'union' || name === 'unknown') {
+    return true
+  }
+
+  return false
+}
+
 export function isBytesTypeName(name: string): boolean {
   return name === 'Buffer' || name === 'Uint8Array'
+}
+
+function normalizeUnionTypeNames(unionArgs: string[]): string {
+  const normalized: string[] = []
+  const withoutNullish: string[] = []
+
+  for (let index = 0; index < unionArgs.length; index = index + 1) {
+    const arg = unionArgs[index]
+    const normalizedArg = normalizeTypeName(arg)
+    normalized.push(normalizedArg)
+
+    if (!isAbsentTypeName(normalizedArg)) {
+      withoutNullish.push(normalizedArg)
+    }
+  }
+
+  if (allStringsSame(normalized)) {
+    return normalized[0]
+  }
+
+  if (withoutNullish.length === 0) {
+    return 'unknown'
+  }
+
+  if (normalized.length > withoutNullish.length) {
+    if (withoutNullish.length === 1) {
+      return `nullable<${withoutNullish[0]}>`
+    }
+
+    return `nullable<union<${joinStrings(withoutNullish, ',')}>>`
+  }
+
+  return `union<${joinStrings(normalized, ',')}>`
+}
+
+function allStringsSame(values: string[]): boolean {
+  if (values.length === 0) {
+    return false
+  }
+
+  const first = values[0]
+
+  for (const value of values) {
+    if (value !== first) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function joinStrings(values: string[], separator: string): string {
+  let result = ''
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (index > 0) {
+      result = result + separator
+    }
+
+    result = result + values[index]
+  }
+
+  return result
+}
+
+function isAbsentTypeName(name: string): boolean {
+  return name === 'null' || name === 'undefined'
+}
+
+function isFunctionTypeName(name: string): boolean {
+  if (!name.startsWith('(')) {
+    return false
+  }
+
+  const arrow = functionTypeArrowIndex(name)
+
+  return arrow > 0
+}
+
+function parenthesizedTypeInner(name: string): string | null {
+  if (!name.startsWith('(') || !name.endsWith(')')) {
+    return null
+  }
+
+  let parenDepth = 0
+
+  for (let index = 0; index < name.length; index = index + 1) {
+    const current = name[index]
+
+    if (current === '(') {
+      parenDepth = parenDepth + 1
+    } else if (current === ')') {
+      parenDepth = parenDepth - 1
+    }
+
+    if (parenDepth < 0) {
+      return null
+    }
+
+    if (parenDepth === 0 && index < name.length - 1) {
+      return null
+    }
+  }
+
+  if (parenDepth !== 0) {
+    return null
+  }
+
+  return name.slice(1, -1)
+}
+
+function functionTypeArrowIndex(name: string): number {
+  let parenDepth = 0
+  let genericDepth = 0
+
+  for (let index = 0; index < name.length - 1; index = index + 1) {
+    const current = name[index]
+    const next = name[index + 1]
+
+    if (current === '<') {
+      genericDepth = genericDepth + 1
+    } else if (current === '>' && genericDepth > 0) {
+      genericDepth = genericDepth - 1
+    } else if (current === '(') {
+      parenDepth = parenDepth + 1
+    } else if (current === ')' && parenDepth > 0) {
+      parenDepth = parenDepth - 1
+    }
+
+    if (current === '=' && next === '>' && parenDepth === 0 && genericDepth === 0) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function isSimpleTypeName(name: string): boolean {
+  if (name === 'number') {
+    return true
+  }
+
+  if (name === 'string') {
+    return true
+  }
+
+  if (name === 'boolean') {
+    return true
+  }
+
+  if (name === 'void') {
+    return true
+  }
+
+  if (name === 'null') {
+    return true
+  }
+
+  if (name === 'unknown') {
+    return true
+  }
+
+  return false
+}
+
+function isIdentifierTypeName(name: string): boolean {
+  if (name.length === 0) {
+    return false
+  }
+
+  if (!isIdentifierStartChar(name.slice(0, 1))) {
+    return false
+  }
+
+  let index = 1
+
+  while (index < name.length) {
+    if (!isIdentifierPartChar(name.slice(index, index + 1))) {
+      return false
+    }
+
+    index = index + 1
+  }
+
+  return true
+}
+
+function pushTypeNameDependencyName(name: string, names: string[]): void {
+  if (name.length === 0 || isBuiltinTypeDependencyName(name)) {
+    return
+  }
+
+  names.push(name)
+}
+
+function uniqueTypeNameDependencyNames(names: string[]): string[] {
+  const seen: Set<string> = new Set()
+  const result: string[] = []
+
+  for (const name of names) {
+    if (!seen.has(name)) {
+      seen.add(name)
+      result.push(name)
+    }
+  }
+
+  return result
+}
+
+function isTypeNameDependencyIdentifierChar(ch: string): boolean {
+  return isIdentifierPartChar(ch)
+}
+
+function isIdentifierStartChar(ch: string): boolean {
+  if (ch === '_' || ch === '$') {
+    return true
+  }
+
+  const code = ch.charCodeAt(0)
+
+  if (code >= 65 && code <= 90) {
+    return true
+  }
+
+  if (code >= 97 && code <= 122) {
+    return true
+  }
+
+  return false
+}
+
+function isIdentifierPartChar(ch: string): boolean {
+  if (isIdentifierStartChar(ch)) {
+    return true
+  }
+
+  const code = ch.charCodeAt(0)
+
+  if (code >= 48 && code <= 57) {
+    return true
+  }
+
+  return false
 }
 
 function genericTypeInner(name: string, wrapper: string): string | null {

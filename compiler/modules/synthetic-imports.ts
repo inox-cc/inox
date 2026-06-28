@@ -1,3 +1,4 @@
+import { typeNameDependencyNames } from '../type-names.ts'
 import type { AnyNode, ProgramNode, SourceLocation } from '../types.ts'
 
 type SyntheticImportNode = AnyNode
@@ -430,36 +431,11 @@ function collectTypeAliasDependencyNames(valueType: TypeAliasValueNode, names: s
 }
 
 function collectTypeNameDependencyNames(typeName: string | null | undefined, names: string[]): void {
-  if (typeName === null || typeof typeName === 'undefined') {
-    return
+  const dependencies = typeNameDependencyNames(typeName)
+
+  for (let index = 0; index < dependencies.length; index = index + 1) {
+    names.push(dependencies[index])
   }
-
-  let current = ''
-
-  let index = 0
-
-  while (index < typeName.length) {
-    const unit = typeName.slice(index, index + 1)
-
-    if (isTypeNameIdentifierChar(unit)) {
-      current = current + unit
-    } else {
-      pushTypeNameDependency(current, names)
-      current = ''
-    }
-
-    index = index + 1
-  }
-
-  pushTypeNameDependency(current, names)
-}
-
-function pushTypeNameDependency(name: string, names: string[]): void {
-  if (name.length === 0 || isBuiltinTypeName(name)) {
-    return
-  }
-
-  names.push(name)
 }
 
 function uniqueTypeNames(names: string[]): string[] {
@@ -474,38 +450,6 @@ function uniqueTypeNames(names: string[]): string[] {
   }
 
   return result
-}
-
-function isTypeNameIdentifierChar(ch: string): boolean {
-  const code = ch.charCodeAt(0)
-
-  return (
-    (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || ch === '_' || ch === '$'
-  )
-}
-
-function isBuiltinTypeName(name: string): boolean {
-  return (
-    name === 'Array' ||
-    name === 'Function' ||
-    name === 'Map' ||
-    name === 'Promise' ||
-    name === 'Set' ||
-    name === 'any' ||
-    name === 'array' ||
-    name === 'boolean' ||
-    name === 'bytes' ||
-    name === 'function' ||
-    name === 'map' ||
-    name === 'null' ||
-    name === 'nullable' ||
-    name === 'number' ||
-    name === 'promise' ||
-    name === 'set' ||
-    name === 'string' ||
-    name === 'unknown' ||
-    name === 'void'
-  )
 }
 
 function cloneTypeAliasValue(valueType: TypeAliasValueNode): AnyNode {
