@@ -1,13 +1,4 @@
 import { memberExpressionPath } from '../../member-paths.ts'
-import {
-  arrayRuntimeMethodName,
-  collectionConstructorNameFromPath,
-  isMapMethod,
-  isNumericCastName,
-  isSetMethod,
-  stringRuntimeMethodName as stdlibStringRuntimeMethodName
-} from '../../../stdlib/global/compiler/descriptor.ts'
-import { timerRuntimeMethodNameFromPath } from '../../../stdlib/node/compiler/descriptor.ts'
 import type { AnyNode, IrFeature } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../types.ts'
 
@@ -38,6 +29,7 @@ type CoreRuntimeChildNode = AnyNode & {
 
 type CoreRuntimeNode = AnyNode & {
   args?: CoreRuntimeChildNode[]
+  arrayElementType?: string | null
   arrayElementFunctionType?: CoreRuntimeFunctionType | null
   callee?: CoreRuntimeChildNode | null
   collectionKind?: string | null
@@ -47,6 +39,7 @@ type CoreRuntimeNode = AnyNode & {
   kind?: string | null
   left?: CoreRuntimeChildNode | null
   nullable?: boolean
+  numericCast?: string | null
   object?: CoreRuntimeChildNode | null
   objectRuntimeMethod?: string | null
   operator?: string | null
@@ -58,6 +51,7 @@ type CoreRuntimeNode = AnyNode & {
   returnType?: string | null
   right?: CoreRuntimeChildNode | null
   shape?: CoreRuntimeShape | null
+  stringRuntimeMethod?: string | null
   target?: CoreRuntimeChildNode | null
   timerRuntimeMethod?: string | null
   type?: string
@@ -335,13 +329,7 @@ function recordCallFeatures(expression: CoreRuntimeNode, features: CoreRuntimeFe
     features.add('string-bytes')
   }
 
-  const arrayMethod = arrayMethodCallName(expression)
-  const collectionMethod = collectionMethodCallName(expression)
-
-  if (
-    (collectionMethod !== null && typeof collectionMethod !== 'undefined') ||
-    (arrayMethod !== null && typeof arrayMethod !== 'undefined')
-  ) {
+  if (isCollectionMethodCall(expression) || isArrayMethodCall(expression)) {
     features.add('collections')
     features.add('runtime-values')
   }
@@ -412,13 +400,15 @@ function runtimeConstructorName(expression: CoreRuntimeNode): string | null {
 }
 
 function collectionConstructorName(expression: CoreRuntimeNode): string | null {
-  const calleePath = simpleReferencePath(expression.callee)
-
-  if (calleePath === null || typeof calleePath === 'undefined') {
-    return null
+  if (expression.valueType === 'map') {
+    return 'Map'
   }
 
-  return collectionConstructorNameFromPath(calleePath)
+  if (expression.valueType === 'set') {
+    return 'Set'
+  }
+
+  return null
 }
 
 function objectConstructorName(expression: CoreRuntimeNode): string | null {
@@ -487,48 +477,36 @@ function isStringIndexExpression(expression: CoreRuntimeNode | null | undefined)
   )
 }
 
-function collectionMethodCallName(expression: CoreRuntimeNode): string | null {
+function isCollectionMethodCall(expression: CoreRuntimeNode): boolean {
   const callee = expression.callee
 
   if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return null
+    return false
   }
 
-  const property = callee.property
+  const object = callee.object
 
-  if (property !== null && typeof property !== 'undefined' && (isMapMethod(property) || isSetMethod(property))) {
-    return property
+  if (object === null || typeof object === 'undefined') {
+    return false
   }
 
-  return null
+  return object.valueType === 'map' || object.valueType === 'set'
 }
 
-function arrayMethodCallName(expression: CoreRuntimeNode): string | null {
+function isArrayMethodCall(expression: CoreRuntimeNode): boolean {
   const callee = expression.callee
 
   if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  const property = callee.property
-
-  if (property === null || typeof property === 'undefined') {
-    return null
-  }
-
-  const method = arrayRuntimeMethodName(property)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
+    return false
   }
 
   const object = callee.object
 
   if (object === null || typeof object === 'undefined' || object.valueType !== 'array') {
-    return null
+    return false
   }
 
-  return method
+  return true
 }
 
 function isArrayFromCall(expression: CoreRuntimeNode): boolean {
@@ -556,25 +534,15 @@ function isNumberConversionCall(expression: CoreRuntimeNode): boolean {
 }
 
 function isNumericCastCall(expression: CoreRuntimeNode): boolean {
-  const calleePath = simpleReferencePath(expression.callee)
-
-  return calleePath !== null && typeof calleePath !== 'undefined' && isNumericCastName(calleePath[0])
+  return expression.numericCast !== null && typeof expression.numericCast !== 'undefined'
 }
 
 function stringRuntimeMethodName(expression: CoreRuntimeNode): string | null {
-  const callee = expression.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return null
+  if (expression.stringRuntimeMethod !== null && typeof expression.stringRuntimeMethod !== 'undefined') {
+    return expression.stringRuntimeMethod
   }
 
-  const property = callee.property
-
-  if (property === null || typeof property === 'undefined') {
-    return null
-  }
-
-  return stdlibStringRuntimeMethodName(property)
+  return null
 }
 
 function timerRuntimeCallName(expression: CoreRuntimeNode): string | null {
@@ -586,13 +554,7 @@ function timerRuntimeCallName(expression: CoreRuntimeNode): string | null {
     return expression.timerRuntimeMethod
   }
 
-  const calleePath = simpleReferencePath(expression.callee)
-
-  if (calleePath === null || typeof calleePath === 'undefined') {
-    return null
-  }
-
-  return timerRuntimeMethodNameFromPath(calleePath)
+  return null
 }
 
 function mayBeStringBytesOperand(expression: CoreRuntimeNode | null | undefined): boolean {

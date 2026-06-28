@@ -23,56 +23,8 @@ const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
 ]
 
 const compilerFeatureDescriptors = createCompilerFeatureDescriptors()
-
-const compilerFeatureOrder: IrFeature[] = [
-  'array-pop-null',
-  'async-runtime',
-  'binary',
-  'callback-values',
-  'child-process',
-  'clocks',
-  'collections',
-  'crypto',
-  'debug-memory',
-  'fs',
-  'json',
-  'map-get-null',
-  'map-index-set',
-  'number-from-string-null',
-  'numeric-casts',
-  'objects',
-  'os',
-  'path',
-  'process',
-  'regexp',
-  'runtime-values',
-  'string-bytes',
-  'timers',
-  'url',
-  'weak-references'
-]
-
-const compilerRuntimeRequirementOrder: IrRuntimeRequirement[] = [
-  'async-runtime',
-  'binary',
-  'callback-values',
-  'child-process',
-  'clocks',
-  'collections',
-  'crypto',
-  'debug-memory',
-  'fs',
-  'json',
-  'managed-values',
-  'objects',
-  'os',
-  'path',
-  'process',
-  'string-bytes',
-  'timers',
-  'url',
-  'weak-references'
-]
+const compilerFeatureOrder = createCompilerFeatureOrder()
+const compilerRuntimeRequirementOrder = createCompilerRuntimeRequirementOrder()
 
 export const compilerFeatures: IrFeature[] = copyCompilerFeatureOrder()
 
@@ -188,6 +140,40 @@ function createCompilerFeatureDescriptors(): CompilerFeatureDescriptor[] {
     const row = compilerFeatureDescriptorRowAt(rowIndex)
 
     pushAllDescriptors(result, row)
+  }
+
+  return result
+}
+
+function createCompilerFeatureOrder(): IrFeature[] {
+  const result: IrFeature[] = []
+
+  for (let index = 0; index < compilerFeatureDescriptors.length; index = index + 1) {
+    result.push(compilerFeatureDescriptorAt(index).id)
+  }
+
+  return result
+}
+
+function createCompilerRuntimeRequirementOrder(): IrRuntimeRequirement[] {
+  const result: IrRuntimeRequirement[] = []
+  const seen: Set<IrRuntimeRequirement> = new Set()
+
+  for (let descriptorIndex = 0; descriptorIndex < compilerFeatureDescriptors.length; descriptorIndex = descriptorIndex + 1) {
+    const descriptor = compilerFeatureDescriptorAt(descriptorIndex)
+
+    for (
+      let requirementIndex = 0;
+      requirementIndex < descriptor.runtimeRequirements.length;
+      requirementIndex = requirementIndex + 1
+    ) {
+      const requirement = descriptor.runtimeRequirements[requirementIndex]
+
+      if (!seen.has(requirement)) {
+        seen.add(requirement)
+        result.push(requirement)
+      }
+    }
   }
 
   return result
