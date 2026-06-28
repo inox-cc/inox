@@ -1,6 +1,10 @@
 #ifndef INOX_PROMISE_H
 #define INOX_PROMISE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include "inox/loop.h"
 #include "inox/value.h"
@@ -45,5 +49,9 @@ inox_status inox_promise_resolved(inox_loop* loop, inox_value value, inox_promis
 inox_status inox_promise_rejected(inox_loop* loop, inox_value error, inox_promise** out);
 inox_status inox_promise_resolve(inox_promise* promise, inox_value value);
 inox_status inox_promise_reject(inox_promise* promise, inox_value error);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

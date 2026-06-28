@@ -39,7 +39,7 @@ import {
   registerOwnedValue,
   shouldEmitCleanupLabel
 } from './context.ts'
-import { cStringLiteral, emitCFunctionName, emitCObjectFunctionFieldName } from './identifiers.ts'
+import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitRuntimeNullableValueCheck } from './runtime-values.ts'
 import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
 import {
@@ -137,6 +137,16 @@ function pushIndentedDeclarationLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(`  ${line}`)
   }
+}
+
+function pushScopedDeclarationBody(target: string[], lines: string[]): void {
+  target.push('  {')
+  pushIndentedDeclarationLines(target, lines)
+  target.push('  }')
+}
+
+function emitCLocalName(name: string): string {
+  return emitCIdentifier(name)
 }
 
 function joinDeclarationParams(params: string[]): string {
@@ -248,6 +258,7 @@ export function emitFunctionDeclaration(
 
   pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(statement, params, context))
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(statement.body, context))
+  pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
 
   lines.push(`${emitFunctionHead(statement, context)} {`)
   pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
@@ -261,8 +272,7 @@ export function emitFunctionDeclaration(
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
-  pushDeclarationLines(lines, bodyLines)
-  pushIndentedDeclarationLines(lines, emitEventLoopDrain(context))
+  pushScopedDeclarationBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('inox_cleanup:')
@@ -604,16 +614,16 @@ function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: 
       return `inox_value ${emitCObjectParamName(param.name)}`
     }
 
-    return `inox_value ${param.name}`
+    return `inox_value ${emitCLocalName(param.name)}`
   }
 
   if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
-    return `inox_value ${param.name}`
+    return `inox_value ${emitCLocalName(param.name)}`
   }
 
   if (param.valueType === 'function') {
     if (resolveFunctionParameterRuntimeType(statement.name, index, param, context)) {
-      return `inox_value ${param.name}`
+      return `inox_value ${emitCLocalName(param.name)}`
     }
 
     return emitFunctionParameter(param.name, param.functionType, context, param.loc)
@@ -623,7 +633,7 @@ function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: 
     return `${emitCType(param.valueType)} ${emitCScalarParamName(param.name)}`
   }
 
-  return `${emitCType(param.valueType)} ${param.name}`
+  return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
 }
 
 export function emitClassMethodDeclaration(
@@ -658,6 +668,7 @@ export function emitClassMethodDeclaration(
 
   pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(method, params, context))
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(method.body, context))
+  pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
 
   lines.push(`${emitClassMethodHead(info, method, context)} {`)
   pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
@@ -671,7 +682,7 @@ export function emitClassMethodDeclaration(
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
-  pushDeclarationLines(lines, bodyLines)
+  pushScopedDeclarationBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('inox_cleanup:')
@@ -705,7 +716,7 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
     params.push('inox_loop* inox_loop')
   }
 
-  params.push('inox_value this')
+  params.push(`inox_value ${emitCLocalName('this')}`)
 
   for (let index = 0; index < method.params.length; index = index + 1) {
     params.push(emitClassMethodParam(method.params[index], index, method, context))
@@ -744,16 +755,16 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
       return `inox_value ${emitCObjectParamName(param.name)}`
     }
 
-    return `inox_value ${param.name}`
+    return `inox_value ${emitCLocalName(param.name)}`
   }
 
   if (param.valueType === 'array' || param.valueType === 'map' || param.valueType === 'set') {
-    return `inox_value ${param.name}`
+    return `inox_value ${emitCLocalName(param.name)}`
   }
 
   if (param.valueType === 'function') {
     if (resolveFunctionParameterRuntimeType(method.name, index, param, context)) {
-      return `inox_value ${param.name}`
+      return `inox_value ${emitCLocalName(param.name)}`
     }
 
     return emitFunctionParameter(param.name, param.functionType, context, param.loc)
@@ -763,7 +774,7 @@ function emitClassMethodParam(param: CFunctionParam, index: number, method: CNod
     return `${emitCType(param.valueType)} ${emitCScalarParamName(param.name)}`
   }
 
-  return `${emitCType(param.valueType)} ${param.name}`
+  return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
 }
 
 function resolveCFunctionReturnInfo(statement: CNode, context: CEmitContext): CFunctionReturnInfo {
@@ -803,7 +814,7 @@ export function emitFunctionParameter(
   reportUnsupportedCFunctionType(functionType, context, loc)
 
   if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
-    return `inox_value ${name}`
+    return `inox_value ${emitCLocalName(name)}`
   }
 
   return emitFunctionPointerParameter(name, functionType, seenTypes)
@@ -814,7 +825,7 @@ export function emitFunctionPointerParameter(
   functionType: CFunctionType | null | undefined,
   seenTypes: string[] = []
 ): string {
-  return `${emitFunctionPointerReturnType(functionType)} (*${name})(${emitFunctionPointerParams(functionType, [], seenTypes)})`
+  return `${emitFunctionPointerReturnType(functionType)} (*${emitCLocalName(name)})(${emitFunctionPointerParams(functionType, [], seenTypes)})`
 }
 
 export function reportUnsupportedCFunctionType(
@@ -858,6 +869,7 @@ export function emitMainWrapper(
   }
 
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
+  pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
 
   if (context.processRuntime) {
     if (baseContext.processEntryPath !== null) {
@@ -875,8 +887,7 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
-  pushDeclarationLines(lines, bodyLines)
-  pushIndentedDeclarationLines(lines, emitEventLoopDrain(context))
+  pushScopedDeclarationBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('inox_cleanup:')
@@ -929,6 +940,7 @@ function emitRuntimeParamPreludeForParam(
   context: CFunctionContext
 ): string[] {
   const lines: string[] = []
+  const localName = emitCLocalName(param.name)
 
   pushDeclarationLines(lines, emitDefaultRuntimeParamPreludeForParam(param, context))
 
@@ -937,7 +949,7 @@ function emitRuntimeParamPreludeForParam(
     const expectedTag = cRuntimeValueTag(param.valueType)
 
     pushDeclarationLines(lines, emitRuntimeNullableValueCheck(paramName, expectedTag, context))
-    lines.push(`inox_value ${param.name} = ${paramName};`)
+    lines.push(`inox_value ${localName} = ${paramName};`)
     return lines
   }
 
@@ -951,10 +963,10 @@ function emitRuntimeParamPreludeForParam(
     }
 
     lines.push(emitRuntimeTypeCheck(`${paramName}.tag != ${tag} || ${paramName}.as.ref == 0`, context))
-    lines.push(`${param.name} = inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
-    lines.push(`if (${param.name} == 0) ${emitFailureStatement(context)}`)
-    lines.push(`*${param.name} = ${paramName};`)
-    lines.push(`inox_retain(*${param.name});`)
+    lines.push(`${localName} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
+    lines.push(`if (${localName} == 0) ${emitFailureStatement(context)}`)
+    lines.push(`*${localName} = ${paramName};`)
+    lines.push(`inox_retain(*${localName});`)
     return lines
   }
 
@@ -963,22 +975,22 @@ function emitRuntimeParamPreludeForParam(
 
     if (param.nullable === true) {
       pushDeclarationLines(lines, emitRuntimeNullableValueCheck(paramName, 'INOX_TAG_STRING', context))
-      lines.push(`inox_value ${param.name} = ${paramName};`)
+      lines.push(`inox_value ${localName} = ${paramName};`)
       return lines
     }
 
     lines.push(emitRuntimeTypeCheck(`${paramName}.tag != INOX_TAG_STRING || ${paramName}.as.ref == 0`, context))
-    lines.push(`inox_string* ${param.name} = (inox_string*)${paramName}.as.ref;`)
+    lines.push(`inox_string* ${localName} = (inox_string*)${paramName}.as.ref;`)
     return lines
   }
 
   if (param.valueType === 'object') {
     if (param.nullable === true || param.optional === true) {
-      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_OBJECT', context))
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(localName, 'INOX_TAG_OBJECT', context))
       return lines
     }
 
-    lines.push(emitRuntimeTypeCheck(`${param.name}.tag != INOX_TAG_OBJECT || ${param.name}.as.ref == 0`, context))
+    lines.push(emitRuntimeTypeCheck(`${localName}.tag != INOX_TAG_OBJECT || ${localName}.as.ref == 0`, context))
     return lines
   }
 
@@ -986,28 +998,28 @@ function emitRuntimeParamPreludeForParam(
     const tag = cRuntimeValueTag(param.valueType)
 
     if (param.nullable === true || param.optional === true) {
-      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(param.name, tag, context))
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(localName, tag, context))
       return lines
     }
 
-    lines.push(emitRuntimeTypeCheck(`${param.name}.tag != ${tag} || ${param.name}.as.ref == 0`, context))
+    lines.push(emitRuntimeTypeCheck(`${localName}.tag != ${tag} || ${localName}.as.ref == 0`, context))
     return lines
   }
 
   if (param.valueType === 'function' && resolveFunctionParameterRuntimeType(statement.name, index, param, context)) {
     if (param.nullable === true || param.optional === true) {
-      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(param.name, 'INOX_TAG_FUNCTION', context))
+      pushDeclarationLines(lines, emitRuntimeNullableValueCheck(localName, 'INOX_TAG_FUNCTION', context))
       return lines
     }
 
-    lines.push(emitRuntimeTypeCheck(`${param.name}.tag != INOX_TAG_FUNCTION || ${param.name}.as.ref == 0`, context))
+    lines.push(emitRuntimeTypeCheck(`${localName}.tag != INOX_TAG_FUNCTION || ${localName}.as.ref == 0`, context))
     return lines
   }
 
   if (isBoxedFunctionParam(param, index, statement, context) && isBoxedScalarParamValueType(param.valueType)) {
-    lines.push(`${param.name} = inox_default_alloc(0, sizeof(double), _Alignof(double));`)
-    lines.push(`if (${param.name} == 0) ${emitFailureStatement(context)}`)
-    lines.push(`*${param.name} = ${emitCScalarParamName(param.name)};`)
+    lines.push(`${localName} = (double*)inox_default_alloc(0, sizeof(double), _Alignof(double));`)
+    lines.push(`if (${localName} == 0) ${emitFailureStatement(context)}`)
+    lines.push(`*${localName} = ${emitCScalarParamName(param.name)};`)
   }
 
   return lines
@@ -1015,6 +1027,7 @@ function emitRuntimeParamPreludeForParam(
 
 function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: CFunctionContext): string[] {
   const value = param.defaultValue
+  const localName = emitCLocalName(param.name)
 
   if (
     param.valueType === 'object' &&
@@ -1033,14 +1046,14 @@ function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: 
       '  0,',
       `  ${fieldsName}`,
       '};',
-      `if (${param.name}.tag == INOX_TAG_UNDEFINED) {`
+      `if (${localName}.tag == INOX_TAG_UNDEFINED) {`
     ]
 
     registerOwnedValue(context, temp)
     lines.push(
       `  if (inox_object_new(&inox_default_allocator, &${shapeName}, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`
     )
-    lines.push(`  ${param.name} = ${temp};`)
+    lines.push(`  ${localName} = ${temp};`)
     lines.push('}')
 
     return lines
@@ -1057,9 +1070,9 @@ function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: 
     registerOwnedValue(context, temp)
 
     return [
-      `if (${param.name}.tag == INOX_TAG_UNDEFINED) {`,
+      `if (${localName}.tag == INOX_TAG_UNDEFINED) {`,
       `  if (inox_array_new(&inox_default_allocator, 0, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
-      `  ${param.name} = ${temp};`,
+      `  ${localName} = ${temp};`,
       '}'
     ]
   }

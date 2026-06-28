@@ -1,6 +1,10 @@
 #ifndef INOX_NET_H
 #define INOX_NET_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/loop.h"
 
@@ -91,5 +95,9 @@ inox_status inox_net_socket_end_with_callback(
 inox_status inox_net_socket_write_and_close(inox_net_socket* socket, const char* bytes, size_t len);
 inox_status inox_net_socket_destroy(inox_net_socket* socket);
 void inox_net_socket_close(inox_net_socket* socket);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

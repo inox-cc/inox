@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout diag:E7:line=3:main
 

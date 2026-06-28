@@ -1,6 +1,10 @@
 #ifndef INOX_OBJECT_H
 #define INOX_OBJECT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
@@ -40,5 +44,9 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
 inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_value* out);
 inox_status inox_object_values(inox_allocator* allocator, inox_value object, inox_value* out);
 void inox_object_dispose_fields(inox_object* object);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

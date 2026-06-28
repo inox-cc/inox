@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout path:/tmp/b:/tmp/file.txt
 // @stdout url

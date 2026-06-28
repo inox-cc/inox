@@ -1,6 +1,10 @@
 #ifndef INOX_VALUE_H
 #define INOX_VALUE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -70,25 +74,27 @@ typedef struct inox_value {
 } inox_value;
 
 static inline inox_value inox_undefined_value(void) {
-  inox_value value = { .tag = INOX_TAG_UNDEFINED };
+  inox_value value = { INOX_TAG_UNDEFINED };
 
   return value;
 }
 
 static inline inox_value inox_null_value(void) {
-  inox_value value = { .tag = INOX_TAG_NULL };
+  inox_value value = { INOX_TAG_NULL };
 
   return value;
 }
 
 static inline inox_value inox_bool_value(bool boolean) {
-  inox_value value = { .tag = INOX_TAG_BOOL, .as.boolean = boolean };
+  inox_value value = { INOX_TAG_BOOL };
+  value.as.boolean = boolean;
 
   return value;
 }
 
 static inline inox_value inox_number_value(inox_number number) {
-  inox_value value = { .tag = INOX_TAG_NUMBER, .as.number = number };
+  inox_value value = { INOX_TAG_NUMBER };
+  value.as.number = number;
 
   return value;
 }
@@ -112,5 +118,9 @@ static inline void inox_ref_init_weak(inox_ref* ref) {
 
 void inox_retain(inox_value value);
 void inox_release(inox_value value);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

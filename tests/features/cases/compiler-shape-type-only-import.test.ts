@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout E_TYPE:2
 

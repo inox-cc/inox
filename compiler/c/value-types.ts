@@ -1,3 +1,5 @@
+import { emitCIdentifier } from './identifiers.ts'
+
 export type CValueTypeInput = string | null | undefined
 
 export type CReturnTypeContext = {
@@ -199,13 +201,13 @@ function isNullableScalarParamRecord(param: CNullableScalarParamRecord): boolean
 }
 
 export function emitCStringParamName(name: string): string {
-  return `inox_param_${name}`
+  return `inox_param_${emitCIdentifier(name)}`
 }
 
 export function emitCScalarParamName(name: string): string {
-  return `inox_param_${name}`
+  return `inox_param_${emitCIdentifier(name)}`
 }
 
 export function emitCObjectParamName(name: string): string {
-  return `inox_param_${name}`
+  return `inox_param_${emitCIdentifier(name)}`
 }

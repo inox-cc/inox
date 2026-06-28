@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout INOX_MODULE 2
 

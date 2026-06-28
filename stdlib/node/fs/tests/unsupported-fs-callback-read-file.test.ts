@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_FS_UNSUPPORTED
 
 import fs from 'node:fs'

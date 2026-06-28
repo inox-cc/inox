@@ -18,6 +18,7 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
+import { emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import type {
   CArrayElementInfo,
@@ -35,7 +36,7 @@ import type {
 import { cRuntimeValueTag } from '../value-types.ts'
 import { emitCConditionClause } from './expressions.ts'
 import { emitSliceIndexNormalizationLines } from './slices.ts'
-import { isAnyNodeLikeArrayFieldName, isAnyNodeLikeDeclaredType } from './types.ts'
+import { inferExpressionType, isAnyNodeLikeArrayFieldName, isAnyNodeLikeDeclaredType } from './types.ts'
 
 type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 type CFunctionTypeMap = Map<string, CFunctionType>
@@ -1209,7 +1210,13 @@ function isArrayLengthReceiver(
     return false
   }
 
-  if (deps.inferExpressionType(expression, context) === 'array') {
+  const inferredType = deps.inferExpressionType(expression, context)
+
+  if (inferredType === 'string' || expression.valueType === 'string') {
+    return false
+  }
+
+  if (inferredType === 'array') {
     return true
   }
 
@@ -1478,10 +1485,10 @@ export function resolveRuntimeForOfArray(
 
 function emitArrayReferenceName(name: string, context: ArrayFunctionContext): string {
   if (context.localValueNames.has(name)) {
-    return name
+    return emitCIdentifier(name)
   }
 
-  return context.moduleValueNames.get(name) ?? name
+  return context.moduleValueNames.get(name) ?? emitCIdentifier(name)
 }
 
 export function resolveForOfElementType(elements: CArrayElementInfo[]): string {
@@ -3297,7 +3304,7 @@ function emitPreparedArrayReceiver(
 
     return {
       lines: [],
-      expression: name,
+      expression: emitArrayReferenceName(name, context),
       elementType
     }
   }

@@ -1,4 +1,4 @@
-import { access, mkdir, readFile } from 'node:fs/promises'
+import { access, mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -12,7 +12,8 @@ import {
 export type ExampleInoxPaths = {
   compiler: string
   source: string
-  generatedC: string
+  generatedCc: string
+  objectDir: string
   output: string
 }
 
@@ -35,7 +36,8 @@ export function exampleInoxPaths(): ExampleInoxPaths {
   return {
     compiler: join(rootDir, 'dist/inox'),
     source: join(rootDir, 'examples/simple/src/index.ts'),
-    generatedC: join(rootDir, 'dist/examples/simple/build-inox/index.c'),
+    generatedCc: join(rootDir, 'dist/examples/simple/build-inox/index.cc'),
+    objectDir: join(rootDir, 'dist/examples/simple/build-inox/objects'),
     output: join(rootDir, 'dist/examples/simple/build-inox/inox_example')
   }
 }
@@ -62,7 +64,7 @@ async function runExampleInox(): Promise<number> {
     recursive: true
   })
 
-  const emit = await runCommand(paths.compiler, [paths.source, paths.generatedC], {
+  const emit = await runCommand(paths.compiler, [paths.source, paths.generatedCc], {
     stdout: process.stdout,
     stderr: process.stderr
   })
@@ -71,13 +73,19 @@ async function runExampleInox(): Promise<number> {
     return emit.code
   }
 
+  const runtimeCompile = await compileExampleInoxRuntime(paths.objectDir)
+
+  if (runtimeCompile.code !== 0) {
+    return runtimeCompile.code
+  }
+
   const compile = await runCommand(
-    'cc',
+    'c++',
     [
-      `-DINOX_PACKAGE_VERSION="${await inoxPackageVersion()}"`,
+      '-std=c++20',
       ...(await exampleInoxRuntimeIncludeArgs()),
-      paths.generatedC,
-      ...(await exampleInoxRuntimeSources()),
+      paths.generatedCc,
+      ...runtimeCompile.objects,
       '-o',
       paths.output
     ],
@@ -99,6 +107,38 @@ async function runExampleInox(): Promise<number> {
   return run.code
 }
 
+async function compileExampleInoxRuntime(objectDir: string): Promise<{ code: number; objects: string[] }> {
+  const includeArgs = await exampleInoxRuntimeIncludeArgs()
+  const compileArgs = [`-DINOX_PACKAGE_VERSION="${await inoxPackageVersion()}"`]
+  const sources = await exampleInoxRuntimeSources()
+  const objects: string[] = []
+
+  await rm(objectDir, { recursive: true, force: true })
+  await mkdir(objectDir, { recursive: true })
+
+  for (const source of sources) {
+    const object = join(objectDir, runtimeObjectName(source))
+    const compile = await runCommand('cc', [...includeArgs, ...compileArgs, '-c', source, '-o', object], {
+      stdout: process.stdout,
+      stderr: process.stderr
+    })
+
+    if (compile.code !== 0) {
+      return {
+        code: compile.code,
+        objects
+      }
+    }
+
+    objects.push(object)
+  }
+
+  return {
+    code: 0,
+    objects
+  }
+}
+
 async function inoxPackageVersion(): Promise<string> {
   const packageJson = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8')) as {
     version?: unknown
@@ -110,6 +150,10 @@ async function inoxPackageVersion(): Promise<string> {
   }
 
   return '0.0.0'
+}
+
+function runtimeObjectName(source: string): string {
+  return `${source.replace(/[^a-zA-Z0-9]/g, '_')}.o`
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

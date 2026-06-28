@@ -1,4 +1,4 @@
-// @targets js c
+// @targets js cc
 // @expect pass
 // @stdout 1
 // @stdout 1

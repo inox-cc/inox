@@ -232,7 +232,7 @@ export type ModuleGraph = {
   modules: ModuleRecord[]
 }
 
-export type CompileTarget = 'c'
+export type CompileTarget = 'cc'
 
 export type RandomOptions = {
   backend?: 'simple' | 'xorshift32' | 'os'

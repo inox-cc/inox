@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout buffer:hi/A/bc/true
 // @stdout uint8:7/66/4

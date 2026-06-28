@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout module:Ada:13:core
 // @stdout alias:Grace=13

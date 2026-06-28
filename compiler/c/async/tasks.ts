@@ -2660,7 +2660,7 @@ function emitAsyncTaskStartDeclaration(wrapper: CAsyncTaskWrapper, baseContext: 
   lines.push('  if (inox_loop == 0 || inox_loop->allocator == 0 || out == 0) return INOX_ERR_TYPE;')
   lines.push('  *out = 0;')
   lines.push(
-    `  ${wrapper.frameTypeName}* frame = inox_loop->allocator->alloc(inox_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`
+    `  ${wrapper.frameTypeName}* frame = (${wrapper.frameTypeName}*)inox_loop->allocator->alloc(inox_loop->allocator->user, sizeof(${wrapper.frameTypeName}), _Alignof(${wrapper.frameTypeName}));`
   )
   lines.push('  if (frame == 0) return INOX_ERR_OOM;')
   lines.push('  frame->inox_loop = inox_loop;')
@@ -3700,7 +3700,7 @@ function emitAsyncTaskPromiseChainCallbackContextForWrapper(
   const contextName = nextCName(context, 'inox_promise_callback_ctx')
 
   lines.push(
-    `${chainWrapper.contextTypeName}* ${contextName} = inox_default_alloc(0, sizeof(${chainWrapper.contextTypeName}), _Alignof(${chainWrapper.contextTypeName}));`
+    `${chainWrapper.contextTypeName}* ${contextName} = (${chainWrapper.contextTypeName}*)inox_default_alloc(0, sizeof(${chainWrapper.contextTypeName}), _Alignof(${chainWrapper.contextTypeName}));`
   )
   lines.push('if (' + contextName + ' == 0) {')
   lines.push('  status = INOX_ERR_OOM;')

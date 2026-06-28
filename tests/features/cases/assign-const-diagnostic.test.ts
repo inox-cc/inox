@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_ASSIGN_CONST
 
 const value: number = 1

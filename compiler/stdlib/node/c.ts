@@ -71,6 +71,7 @@ import {
   cProcessRuntimeStringPropertyName,
   emitPreparedProcessValueExpression
 } from '../../../stdlib/node/process/compiler/c.ts'
+import { nodeProcessImportSource } from '../../../stdlib/node/process/compiler/descriptor.ts'
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
 import type { UrlLoweringDependencies as PackageUrlLoweringDependencies } from '../../../stdlib/node/url/compiler/c.ts'
 import { cUrlRuntimeMethodName } from '../../../stdlib/node/url/compiler/c.ts'
@@ -151,6 +152,10 @@ export type NodeNetworkLoweringDependencies = {
 
 export type NodeStdlibAsyncTaskLoweringDependencies = {
   fs: FsLoweringDependencies
+}
+
+export type NodeStdlibRuntimeObjectReferenceDependencies = {
+  process: ProcessLoweringDependencies
 }
 
 type NodeCGlobalNameSet = Set<string>
@@ -393,6 +398,38 @@ export function emitPreparedNodeStdlibAsyncTaskSourceExpression(
   dependencies: NodeStdlibAsyncTaskLoweringDependencies
 ): FsAsyncTaskSourceExpression | null {
   return emitPreparedFsAsyncTaskSourceExpression(expression, context, dependencies.fs)
+}
+
+export function emitPreparedNodeStdlibRuntimeObjectReferenceExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
+): PreparedExpression | null {
+  if (!isImplicitProcessRuntimeObjectReference(expression, context)) {
+    return null
+  }
+
+  const processExpression: AnyNode = {
+    path: expression.path,
+    type: 'Reference',
+    runtimeObjectName: 'process',
+    runtimeObjectSource: nodeProcessImportSource,
+    valueType: 'object'
+  }
+
+  if (expression.loc !== null && typeof expression.loc !== 'undefined') {
+    processExpression.loc = expression.loc
+  }
+
+  return emitPreparedProcessValueExpression(processExpression, context, dependencies.process, null)
+}
+
+function isImplicitProcessRuntimeObjectReference(expression: AnyNode, context: CFunctionContext): boolean {
+  if (expression.type !== 'Reference' || expression.path.length !== 1 || expression.path[0] !== 'process') {
+    return false
+  }
+
+  return !context.variables.has('process')
 }
 
 export function nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null {

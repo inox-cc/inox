@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout [owner, mode, retries]
 // @stdout [[owner, Ada], [mode, smoke], [retries, 2]]

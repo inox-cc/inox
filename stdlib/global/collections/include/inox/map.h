@@ -1,6 +1,10 @@
 #ifndef INOX_MAP_H
 #define INOX_MAP_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -32,5 +36,9 @@ inox_status inox_map_get(inox_value map, inox_value key, inox_value* out);
 inox_status inox_map_has(inox_value map, inox_value key, bool* out);
 inox_status inox_map_set(inox_value map, inox_value key, inox_value value);
 inox_status inox_map_size(inox_value map, size_t* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

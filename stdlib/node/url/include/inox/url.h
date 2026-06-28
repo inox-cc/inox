@@ -1,6 +1,10 @@
 #ifndef INOX_URL_H
 #define INOX_URL_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "inox/allocator.h"
 #include "inox/object.h"
 #include "inox/value.h"
@@ -43,5 +47,9 @@ inox_status inox_url_search_params_append(
 );
 inox_status inox_url_search_params_delete(inox_allocator* allocator, inox_value params, const char* name, size_t name_len);
 inox_status inox_url_search_params_to_string(inox_allocator* allocator, inox_value params, inox_value* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

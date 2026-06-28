@@ -1,6 +1,10 @@
 #ifndef INOX_CHILD_PROCESS_H
 #define INOX_CHILD_PROCESS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/object.h"
@@ -24,5 +28,9 @@ inox_status inox_child_process_spawn_sync(
   const inox_shape* shape,
   inox_value* out
 );
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

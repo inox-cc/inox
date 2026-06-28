@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_ASYNC_TIMER_CALLBACK
 
 setTimeout(async () => {

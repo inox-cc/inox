@@ -1,6 +1,10 @@
 #ifndef INOX_WEAK_H
 #define INOX_WEAK_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 #include "inox/value.h"
@@ -30,5 +34,9 @@ void inox_weak_retain(inox_weak_ref weak);
 void inox_weak_release(inox_weak_ref weak);
 inox_status inox_weak_upgrade(inox_weak_ref weak, inox_value* out);
 void inox_weak_clear_target(inox_ref* ref);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

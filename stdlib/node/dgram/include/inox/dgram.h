@@ -1,6 +1,10 @@
 #ifndef INOX_DGRAM_H
 #define INOX_DGRAM_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/loop.h"
 
@@ -69,5 +73,9 @@ inox_status inox_dgram_set_recv_buffer_size(inox_dgram_socket* socket, int size)
 inox_status inox_dgram_ref(inox_dgram_socket* socket);
 inox_status inox_dgram_unref(inox_dgram_socket* socket);
 void inox_dgram_close(inox_dgram_socket* socket);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

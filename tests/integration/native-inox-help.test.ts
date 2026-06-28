@@ -18,17 +18,17 @@ export async function assertNativeInoxHelp(): Promise<void> {
   assert.equal(result.stderr, '')
   assert.match(result.stdout, /Usage:/)
   assert.match(result.stdout, /inox --help/)
-  assert.match(result.stdout, /inox input\.ts \[output\.c\]/)
+  assert.match(result.stdout, /inox input\.ts \[output\.cc\]/)
   assert.match(result.stdout, /--out-dir generated --entry/)
-  assert.match(result.stdout, /input\.c/)
-  assert.doesNotMatch(result.stdout, /input\.ts\.c/)
+  assert.match(result.stdout, /input\.cc/)
+  assert.doesNotMatch(result.stdout, /input\.ts\.cc/)
 }
 
 export async function assertNativeInoxDefaultOutput(): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-inox-default-output')
   const input = join(workspace, 'input.ts')
-  const output = join(workspace, 'input.c')
-  const oldOutput = join(workspace, 'input.ts.c')
+  const output = join(workspace, 'input.cc')
+  const oldOutput = join(workspace, 'input.ts.cc')
 
   try {
     await rm(workspace, {
@@ -65,7 +65,7 @@ export async function assertNativeInoxDefaultOutput(): Promise<void> {
 export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-inox-runtime-smoke')
   const input = join(workspace, 'index.ts')
-  const outputC = join(workspace, 'index.c')
+  const outputCc = join(workspace, 'index.cc')
   const output = join(workspace, 'native-smoke')
 
   try {
@@ -88,7 +88,7 @@ export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
       ].join('\n')
     )
 
-    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputC])
+    const emit = await runCommand(join(rootDir, 'dist/inox'), [input, outputCc])
 
     assert.equal(
       emit.code,
@@ -97,12 +97,12 @@ export async function assertNativeInoxRuntimeSmoke(): Promise<void> {
     )
     assert.equal(emit.stderr, '')
 
-    const compile = await compileRuntimeProgram(outputC, output)
+    const compile = await compileRuntimeProgram(outputCc, output)
 
     assert.equal(
       compile.code,
       0,
-      `native runtime smoke C compile failed\nstdout:\n${compile.stdout}\nstderr:\n${compile.stderr}`
+      `native runtime smoke C++ compile failed\nstdout:\n${compile.stdout}\nstderr:\n${compile.stderr}`
     )
 
     const run = await runCommand(output, [])

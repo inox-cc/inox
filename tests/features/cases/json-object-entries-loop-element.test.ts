@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout [1, 2]
 // @stdout [3, 4]

@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout 0
 // @stdout [[0, { 1: 2 }], [1, { 3: 4, 5: 6 }]]

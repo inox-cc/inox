@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_NO_VAR
 
 var value = 1

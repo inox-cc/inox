@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_ASSIGN_READONLY_FIELD
 
 class User {

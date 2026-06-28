@@ -1,6 +1,10 @@
 #ifndef INOX_CRYPTO_H
 #define INOX_CRYPTO_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
@@ -50,5 +54,9 @@ inox_status inox_crypto_hmac_digest_bytes(inox_allocator* allocator, inox_crypto
 inox_status inox_crypto_hmac_digest_hex(inox_allocator* allocator, inox_crypto_hmac* hmac, inox_value* out);
 void inox_crypto_hmac_free(inox_crypto_hmac* hmac);
 inox_status inox_crypto_timing_safe_equal(inox_value left, inox_value right, int* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

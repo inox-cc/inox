@@ -70,7 +70,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
     pushCryptoCheckerDiagnostic(
       context.diagnostics,
       'INOX_NOT_IMPLEMENTED',
-      `node:crypto ${call.method} is not implemented by the current C backend`,
+      `node:crypto ${call.method} is not implemented by the current C++ backend`,
       expression.loc
     )
     expression.valueType = 'unknown'
@@ -98,7 +98,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_NOT_IMPLEMENTED',
-        "node:crypto getHashes requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+        "node:crypto getHashes requires tlsBackend: 'boringssl' or 'openssl' in the current C++ backend",
         expression.loc
       )
     }
@@ -133,7 +133,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_NOT_IMPLEMENTED',
-        "node:crypto createHash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+        "node:crypto createHash requires tlsBackend: 'boringssl' or 'openssl' in the current C++ backend",
         expression.loc
       )
       return 'crypto-hash'
@@ -143,7 +143,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_NOT_IMPLEMENTED',
-        "node:crypto createHash only supports the 'sha256' algorithm in the current C backend",
+        "node:crypto createHash only supports the 'sha256' algorithm in the current C++ backend",
         expression.args[0].loc
       )
     }
@@ -178,7 +178,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_NOT_IMPLEMENTED',
-        "node:crypto createHmac requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+        "node:crypto createHmac requires tlsBackend: 'boringssl' or 'openssl' in the current C++ backend",
         expression.loc
       )
       return 'crypto-hmac'
@@ -188,7 +188,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_NOT_IMPLEMENTED',
-        "node:crypto createHmac only supports the 'sha256' algorithm in the current C backend",
+        "node:crypto createHmac only supports the 'sha256' algorithm in the current C++ backend",
         expression.args[0].loc
       )
     }
@@ -197,7 +197,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_TYPE_MISMATCH',
-        'node:crypto createHmac key must be a string or Buffer in the current C backend',
+        'node:crypto createHmac key must be a string or Buffer in the current C++ backend',
         expression.args[1].loc
       )
     }
@@ -231,7 +231,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
         pushCryptoCheckerDiagnostic(
           context.diagnostics,
           'INOX_NOT_IMPLEMENTED',
-          "node:crypto hash only supports the 'sha256' algorithm in the current C backend",
+          "node:crypto hash only supports the 'sha256' algorithm in the current C++ backend",
           expression.args[0].loc
         )
       }
@@ -246,7 +246,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_TYPE_MISMATCH',
-        'node:crypto hash data must be a string or Buffer in the current C backend',
+        'node:crypto hash data must be a string or Buffer in the current C++ backend',
         expression.args[1].loc
       )
     }
@@ -255,7 +255,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_NOT_IMPLEMENTED',
-        "node:crypto hash requires tlsBackend: 'boringssl' or 'openssl' in the current C backend",
+        "node:crypto hash requires tlsBackend: 'boringssl' or 'openssl' in the current C++ backend",
         expression.loc
       )
     }
@@ -285,7 +285,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
       pushCryptoCheckerDiagnostic(
         context.diagnostics,
         'INOX_NOT_IMPLEMENTED',
-        "node:crypto hash only supports the 'hex' and 'buffer' output encodings in the current C backend",
+        "node:crypto hash only supports the 'hex' and 'buffer' output encodings in the current C++ backend",
         expression.args[2].loc
       )
     }
@@ -432,7 +432,7 @@ export function checkCryptoCall(expression: AnyNode, context: CryptoCheckerConte
     pushCryptoCheckerDiagnostic(
       context.diagnostics,
       'INOX_NOT_IMPLEMENTED',
-      'node:crypto randomUUID options are not implemented by the current C backend',
+      'node:crypto randomUUID options are not implemented by the current C++ backend',
       expression.loc
     )
   }
@@ -484,7 +484,7 @@ export function checkCryptoHashMethodCall(
         pushCryptoCheckerDiagnostic(
           context.diagnostics,
           'INOX_TYPE_MISMATCH',
-          `${label}.update data must be a string or Buffer in the current C backend`,
+          `${label}.update data must be a string or Buffer in the current C++ backend`,
           expression.args[0].loc
         )
       }
@@ -505,7 +505,7 @@ export function checkCryptoHashMethodCall(
         pushCryptoCheckerDiagnostic(
           context.diagnostics,
           'INOX_NOT_IMPLEMENTED',
-          `${label}.update only supports the 'utf8' input encoding in the current C backend`,
+          `${label}.update only supports the 'utf8' input encoding in the current C++ backend`,
           expression.args[1].loc
         )
       }
@@ -544,7 +544,7 @@ export function checkCryptoHashMethodCall(
     pushCryptoCheckerDiagnostic(
       context.diagnostics,
       'INOX_NOT_IMPLEMENTED',
-      `${label}.digest only supports the 'hex' encoding in the current C backend`,
+      `${label}.digest only supports the 'hex' encoding in the current C++ backend`,
       expression.args[0].loc
     )
   }

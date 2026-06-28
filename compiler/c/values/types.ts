@@ -156,7 +156,26 @@ function contextObjectShapeFieldValueType(
   context: CFunctionContext
 ): string | null {
   const objectName = cObjectExpressionPathName(objectExpression)
+  const directValueType = contextObjectShapeNameFieldValueType(objectName, fieldName, context)
 
+  if (directValueType !== null && typeof directValueType !== 'undefined') {
+    return directValueType
+  }
+
+  const aliasedObjectName = cAliasedObjectExpressionPathName(objectExpression, context)
+
+  if (aliasedObjectName === objectName) {
+    return null
+  }
+
+  return contextObjectShapeNameFieldValueType(aliasedObjectName, fieldName, context)
+}
+
+function contextObjectShapeNameFieldValueType(
+  objectName: string | null,
+  fieldName: string,
+  context: CFunctionContext
+): string | null {
   if (objectName === null || typeof objectName === 'undefined') {
     return null
   }
@@ -179,6 +198,58 @@ function contextObjectShapeFieldValueType(
 
   if (valueType !== null && typeof valueType !== 'undefined') {
     return valueType
+  }
+
+  return null
+}
+
+function cAliasedObjectExpressionPathName(expression: AnyNode, context: CFunctionContext): string | null {
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+    const alias = context.objectAliases.get(name)
+
+    if (alias !== null && typeof alias !== 'undefined') {
+      return alias
+    }
+
+    return name
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return 'this'
+  }
+
+  if (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') {
+    const objectName = cAliasedObjectExpressionPathName(expression.object, context)
+
+    if (objectName !== null && typeof objectName !== 'undefined') {
+      const path = `${objectName}_${expression.property}`
+      const alias = context.objectAliases.get(path)
+
+      if (alias !== null && typeof alias !== 'undefined') {
+        return alias
+      }
+
+      return path
+    }
+  }
+
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral'
+  ) {
+    const objectName = cAliasedObjectExpressionPathName(expression.object, context)
+
+    if (objectName !== null && typeof objectName !== 'undefined') {
+      const path = `${objectName}_${expression.index.value}`
+      const alias = context.objectAliases.get(path)
+
+      if (alias !== null && typeof alias !== 'undefined') {
+        return alias
+      }
+
+      return path
+    }
   }
 
   return null

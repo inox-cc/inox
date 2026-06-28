@@ -1,6 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { emitCRegExpFlags } from '../../../stdlib/global/compiler/feature.ts'
-import { isNumericCastName } from '../../../stdlib/global/compiler/descriptor.ts'
+import { isNumericCastName, stringRuntimeReturnType } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
@@ -23,7 +23,7 @@ import {
 } from '../context.ts'
 import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
-import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cTimeRuntimeCallName } from '../../../stdlib/global/compiler/c.ts'
@@ -278,6 +278,68 @@ function isPositiveEqualityOperator(operator: string): boolean {
   return operator === '==='
 }
 
+function isTypedStringValueExpression(expression: CValueNode): boolean {
+  if (expression.valueType !== 'string') {
+    return false
+  }
+
+  if (
+    expression.type === 'Reference' ||
+    expression.type === 'StringLiteral' ||
+    expression.type === 'TemplateLiteral'
+  ) {
+    return false
+  }
+
+  return true
+}
+
+function shouldEmitTypedStringValueCompare(expression: CValueNode): boolean {
+  return isTypedStringValueExpression(expression.left) && isTypedStringValueExpression(expression.right)
+}
+
+function canEmitStringCompareOperands(
+  expression: CValueNode,
+  leftType: string,
+  rightType: string,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): boolean {
+  if (isStringValueRuntimeMethodCall(expression.right)) {
+    return (
+      deps.canEmitStringBytesOperand(expression.right, context) &&
+      deps.canEmitStringBytesOperand(expression.left, context)
+    )
+  }
+
+  if (isStringValueRuntimeMethodCall(expression.left)) {
+    return (
+      deps.canEmitStringBytesOperand(expression.left, context) &&
+      deps.canEmitStringBytesOperand(expression.right, context)
+    )
+  }
+
+  if (leftType !== 'string' && rightType === 'string') {
+    return (
+      deps.canEmitStringBytesOperand(expression.right, context) &&
+      deps.canEmitStringBytesOperand(expression.left, context)
+    )
+  }
+
+  return (
+    deps.canEmitStringBytesOperand(expression.left, context) &&
+    deps.canEmitStringBytesOperand(expression.right, context)
+  )
+}
+
+function isStringValueRuntimeMethodCall(expression: CValueNode): boolean {
+  return (
+    expression.type === 'CallExpression' &&
+    expression.callee.type === 'MemberExpression' &&
+    stringRuntimeReturnType(expression.callee.property) === 'string'
+  )
+}
+
 function isRuntimeReferenceEqualityType(valueType: string): boolean {
   return (
     valueType === 'object' ||
@@ -416,7 +478,7 @@ function emitPreparedTypeofArgumentValue(
       }
     }
 
-    if (context.runtimeStrings.has(name) || context.runtimeStrings.has(reference) || variableType === 'string') {
+    if (context.runtimeStrings.has(name) || variableType === 'string') {
       return {
         lines: [],
         expression: reference,
@@ -2674,6 +2736,12 @@ export function emitPreparedNumberExpression(
     }
   }
 
+  const referencePathStringLength = deps.emitPreparedStringLengthExpression(expression, context)
+
+  if (referencePathStringLength !== null && typeof referencePathStringLength !== 'undefined') {
+    return referencePathStringLength
+  }
+
   if (expression.type === 'Reference') {
     return {
       lines: [],
@@ -2816,8 +2884,9 @@ export function emitPreparedNumberExpression(
 
     if (
       isEqualityOperator(expression.operator) &&
-      deps.canEmitStringBytesOperand(expression.left, context) &&
-      deps.canEmitStringBytesOperand(expression.right, context)
+      (shouldEmitTypedStringValueCompare(expression) ||
+        ((leftType === 'string' || rightType === 'string') &&
+          canEmitStringCompareOperands(expression, leftType, rightType, context, deps)))
     ) {
       return deps.emitPreparedStringCompareExpression(expression, context)
     }
@@ -2956,17 +3025,17 @@ export function emitPreparedNumberExpression(
     }
   }
 
+  const stringLength = deps.emitPreparedStringLengthExpression(expression, context)
+
+  if (stringLength !== null && typeof stringLength !== 'undefined') {
+    return stringLength
+  }
+
   if (deps.isMemberAccessExpression(expression)) {
     const nodeNetworkAddressPort = deps.emitPreparedNodeNetworkAddressPortExpression(expression, context)
 
     if (nodeNetworkAddressPort !== null && typeof nodeNetworkAddressPort !== 'undefined') {
       return nodeNetworkAddressPort
-    }
-
-    const stringLength = deps.emitPreparedStringLengthExpression(expression, context)
-
-    if (stringLength !== null && typeof stringLength !== 'undefined') {
-      return stringLength
     }
 
     let length: PreparedExpression | null = null
@@ -4410,7 +4479,7 @@ function runtimeValueReferenceName(expression: CValueNode, context: CFunctionCon
     return null
   }
 
-  return name
+  return emitCIdentifier(name)
 }
 
 function runtimeValueReferenceUsesInoxValueStorage(
@@ -5176,6 +5245,7 @@ export function emitCValueExpression(
 
   if (expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
+    const reference = emitCIdentifier(name)
     let valueType = context.variables.get(name) ?? ''
     let moduleValueName = ''
 
@@ -5222,7 +5292,7 @@ export function emitCValueExpression(
     if (context.nullableVariables.has(name)) {
       return {
         lines: [],
-        expression: name
+        expression: reference
       }
     }
 
@@ -5234,8 +5304,8 @@ export function emitCValueExpression(
       }
 
       return {
-        lines: [emitRuntimeTypeCheck(`(*${name}).tag != ${tag} || (*${name}).as.ref == 0`, context)],
-        expression: `(*${name})`
+        lines: [emitRuntimeTypeCheck(`(*${reference}).tag != ${tag} || (*${reference}).as.ref == 0`, context)],
+        expression: `(*${reference})`
       }
     }
 
@@ -5246,7 +5316,7 @@ export function emitCValueExpression(
         lines: [
           `inox_value ${temp};`,
           `${temp}.tag = INOX_TAG_STRING;`,
-          `${temp}.as.ref = (inox_ref*)&${name}->header;`
+          `${temp}.as.ref = (inox_ref*)&${reference}->header;`
         ],
         expression: temp
       }
@@ -5260,7 +5330,7 @@ export function emitCValueExpression(
       appendLines(lines, emitPrepareOwnedValueWrite(temp))
       lines.push(
         emitStatusCheck(
-          `inox_string_from_literal(&inox_default_allocator, ${name}, strlen(${name}), &${temp})`,
+          `inox_string_from_literal(&inox_default_allocator, ${reference}, strlen(${reference}), &${temp})`,
           context
         )
       )
@@ -5274,35 +5344,35 @@ export function emitCValueExpression(
     if (valueType === 'bytes' || valueType === 'object' || valueType === 'array') {
       return {
         lines: [],
-        expression: name
+        expression: reference
       }
     }
 
     if (valueType === 'map' || valueType === 'set') {
       return {
         lines: [],
-        expression: name
+        expression: reference
       }
     }
 
     if (valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)) {
       return {
         lines: [],
-        expression: name
+        expression: reference
       }
     }
 
     if (valueType === 'number') {
       return {
         lines: [],
-        expression: `inox_number_value(${name})`
+        expression: `inox_number_value(${reference})`
       }
     }
 
     if (valueType === 'boolean') {
       return {
         lines: [],
-        expression: `inox_bool_value(${name})`
+        expression: `inox_bool_value(${reference})`
       }
     }
   }
@@ -5310,7 +5380,7 @@ export function emitCValueExpression(
   if (expression.type === 'ThisExpression') {
     return {
       lines: [],
-      expression: 'this'
+      expression: emitCIdentifier('this')
     }
   }
 

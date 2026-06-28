@@ -9,7 +9,7 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import { cStringLiteral, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
 import type {
@@ -43,6 +43,7 @@ import { emitPreparedStringBytesOperand } from './strings.ts'
 import { emitCValueExpression } from './expressions.ts'
 
 type ObjectShapeContext = {
+  objectAliases?: Map<string, string>
   objectDeclaredTypes?: Map<string, string | null>
   objectShapes: Map<string, CObjectShapeField[]>
 }
@@ -405,6 +406,12 @@ export function resolveKnownObjectMember(
   expression: AnyNode,
   context: ObjectFunctionContext
 ): CKnownObjectMemberField | null {
+  const referenceField = resolveKnownObjectReferenceMember(expression, context)
+
+  if (referenceField !== null && typeof referenceField !== 'undefined') {
+    return referenceField
+  }
+
   if (!isMemberAccessExpression(expression)) {
     return null
   }
@@ -416,7 +423,7 @@ export function resolveKnownObjectMember(
   const objectName = resolveCObjectExpressionName(expression.object)
 
   if (objectName !== null && typeof objectName !== 'undefined') {
-    const fields = context.objectShapes.get(objectName)
+    const fields = objectShapeFieldsForLookup(context, objectName)
 
     if (fields !== null && typeof fields !== 'undefined') {
       const index = findObjectShapeFieldIndex(fields, expression.property)
@@ -432,6 +439,47 @@ export function resolveKnownObjectMember(
   }
 
   return null
+}
+
+function resolveKnownObjectReferenceMember(
+  expression: AnyNode,
+  context: ObjectFunctionContext
+): CKnownObjectMemberField | null {
+  if (expression.type !== 'Reference' || expression.path.length <= 1) {
+    return null
+  }
+
+  const fieldName = expression.path[expression.path.length - 1]
+  const objectName = referenceObjectPathName(expression.path)
+  const fields = objectShapeFieldsForLookup(context, objectName)
+
+  if (fields === null || typeof fields === 'undefined') {
+    return null
+  }
+
+  const index = findObjectShapeFieldIndex(fields, fieldName)
+
+  if (index === -1) {
+    return null
+  }
+
+  const field = fields[index]
+
+  if (field === null || typeof field === 'undefined') {
+    return null
+  }
+
+  return knownObjectMemberField(objectName, index, field)
+}
+
+function referenceObjectPathName(path: string[]): string {
+  let result = path[0]
+
+  for (let index = 1; index < path.length - 1; index = index + 1) {
+    result = `${result}_${path[index]}`
+  }
+
+  return result
 }
 
 function knownObjectMemberField(objectName: string, index: number, field: CObjectShapeField): CKnownObjectMemberField {
@@ -483,10 +531,10 @@ export function emitObjectValueReference(name: string, context: ObjectFunctionCo
   }
 
   if (context.boxedVariables.has(name) && context.variables.get(name) === 'object') {
-    return `(*${name})`
+    return `(*${emitCIdentifier(name)})`
   }
 
-  return name
+  return emitCIdentifier(name)
 }
 
 export function resolveKnownObjectIndex(
@@ -504,7 +552,7 @@ export function resolveKnownObjectIndex(
   const objectName = resolveCObjectExpressionName(expression.object)
 
   if (objectName !== null && typeof objectName !== 'undefined') {
-    const fields = context.objectShapes.get(objectName)
+    const fields = objectShapeFieldsForLookup(context, objectName)
 
     if (fields !== null && typeof fields !== 'undefined') {
       const index = findObjectShapeFieldIndex(fields, expression.index.value)
@@ -533,6 +581,37 @@ function isCompilerAnyNodeExpression(expression: AnyNode | null | undefined): bo
   }
 
   return expression.shape.builtin === 'compiler.AnyNode'
+}
+
+function objectShapeFieldsForLookup(
+  context: ObjectShapeContext,
+  objectName: string
+): CObjectShapeField[] | null {
+  const fields = context.objectShapes.get(objectName)
+
+  if (fields !== null && typeof fields !== 'undefined') {
+    return fields
+  }
+
+  const aliases = context.objectAliases
+
+  if (aliases === null || typeof aliases === 'undefined') {
+    return null
+  }
+
+  const alias = aliases.get(objectName)
+
+  if (alias === null || typeof alias === 'undefined') {
+    return null
+  }
+
+  const aliasedFields = context.objectShapes.get(alias)
+
+  if (aliasedFields !== null && typeof aliasedFields !== 'undefined') {
+    return aliasedFields
+  }
+
+  return null
 }
 
 function isCompilerAnyNodeShape(shape: CObjectShape | null | undefined): boolean {
@@ -1621,7 +1700,8 @@ export function emitObjectVariableDeclaration(
   context: ObjectFunctionContext,
   dependencies: ObjectVariableDeclarationDependencies
 ): string[] {
-  const shapeName = nextCName(context, `inox_shape_${statement.name}`)
+  const reference = emitCIdentifier(statement.name)
+  const shapeName = nextCName(context, `inox_shape_${reference}`)
   const fieldsName = `${shapeName}_fields`
   const fields = objectVariableShapeFields(statement, context, dependencies)
   const properties = statement.init.properties
@@ -1638,7 +1718,7 @@ export function emitObjectVariableDeclaration(
   lines.push('};')
   registerOwnedValue(context, statement.name)
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${statement.name})`, context))
+  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${reference})`, context))
 
   context.variables.set(statement.name, 'object')
   registerObjectShapeFields(context, statement.name, fields, new Set())
@@ -1669,7 +1749,7 @@ export function emitObjectVariableDeclaration(
 
       const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
       appendLines(lines, value.lines)
-      lines.push(emitStatusCheck(`inox_object_init_known(${statement.name}, ${index}, ${value.expression})`, context))
+      lines.push(emitStatusCheck(`inox_object_init_known(${reference}, ${index}, ${value.expression})`, context))
       appendLines(
         lines,
         emitNestedObjectFunctionFieldVariableDeclarations(

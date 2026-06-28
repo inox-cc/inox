@@ -6,7 +6,8 @@ import { nullableTypeNameFromTypeName } from '../../type-names.ts'
 import {
   isStringIndexMethod,
   isStringPredicateMethod,
-  isStringRuntimeMethod
+  isStringRuntimeMethod,
+  stringRuntimeReturnType
 } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
@@ -19,7 +20,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
-import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import type {
@@ -84,6 +85,11 @@ type CompileErrorLike = {
 
 type CompileErrorCandidate = {
   diagnostics?: Diagnostic[]
+}
+
+type RuntimeObjectFieldAccess = {
+  key: string
+  object: AnyNode
 }
 
 type TemplateLocationState = {
@@ -156,6 +162,10 @@ export type StringLoweringDependencies = {
     context: StringCContext,
     tempPrefix: string
   ): PreparedExpression
+  emitPreparedRuntimeObjectReferenceExpression(
+    expression: AnyNode,
+    context: StringCContext
+  ): PreparedExpression | null
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
   isBoxedRuntimeStringName(name: string, context: StringCContext): boolean
@@ -364,21 +374,20 @@ export function emitPreparedStringLengthExpression(
   expression: AnyNode | null | undefined,
   context: StringCContext
 ): PreparedExpression | null {
+  const object = stringLengthObjectExpression(expression)
+
+  if (object === null || typeof object === 'undefined' || !isStringLengthObject(object, context)) {
+    return null
+  }
+
   if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'MemberExpression' ||
-    expression.property !== 'length' ||
-    !isStringLengthObject(expression.object, context)
+    isDynamicRuntimeStringFieldExpression(object, context) &&
+    !stringDeps(context).isNodeRuntimeProducedStringExpression(object)
   ) {
     return null
   }
 
-  if (isDynamicRuntimeStringFieldExpression(expression.object, context)) {
-    return null
-  }
-
-  const operand = emitPreparedStringBytesOperand(expression.object, context, 'inox_length_string')
+  const operand = emitPreparedStringBytesOperand(object, context, 'inox_length_string')
   const length = nextCName(context, 'inox_string_length')
   const lines: string[] = []
 
@@ -389,6 +398,26 @@ export function emitPreparedStringLengthExpression(
     lines,
     expression: `((double)${length})`
   }
+}
+
+function stringLengthObjectExpression(expression: AnyNode | null | undefined): AnyNode | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type === 'MemberExpression' && expression.property === 'length') {
+    return expression.object
+  }
+
+  if (expression.type === 'Reference' && expression.path.length > 1) {
+    const last = stringPathAt(expression.path, expression.path.length - 1)
+
+    if (last === 'length') {
+      return referencePathObjectExpression(expression)
+    }
+  }
+
+  return null
 }
 
 export function emitPreparedStringCompareExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
@@ -500,6 +529,14 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     return true
   }
 
+  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
+    return true
+  }
+
+  if (nodeValueType(expression) === 'string') {
+    return true
+  }
+
   if (expression.type === 'Reference' && expression.path.length === 1) {
     if (isModuleRuntimeStringReference(expression, context)) {
       return true
@@ -542,7 +579,15 @@ export function canEmitStringBytesOperand(expression: AnyNode | null | undefined
     return true
   }
 
+  if (isRuntimeObjectStringFieldCandidate(expression, context)) {
+    return true
+  }
+
   if (isStringIndexExpression(expression, context)) {
+    return true
+  }
+
+  if (isStringValueCallExpression(expression, context)) {
     return true
   }
 
@@ -850,8 +895,7 @@ export function emitPreparedStringBytesOperand(
   if (
     expression !== null &&
     typeof expression !== 'undefined' &&
-    stringDeps(context).isNodeRuntimeProducedStringExpression(expression) &&
-    stringDeps(context).inferExpressionType(expression, context) === 'string'
+    stringDeps(context).isNodeRuntimeProducedStringExpression(expression)
   ) {
     const value = stringDeps(context).emitCValueExpression(expression, context)
     const string = nextCName(context, tempPrefix)
@@ -909,11 +953,12 @@ export function emitPreparedStringBytesOperand(
 
     if (isNullableRuntimeStringReference(name, context)) {
       const string = nextCName(context, tempPrefix)
+      const reference = emitCIdentifier(name)
 
       return {
         lines: [
-          emitRuntimeTypeCheck(`${name}.tag != INOX_TAG_STRING || ${name}.as.ref == 0`, context),
-          `inox_string* ${string} = (inox_string*)${name}.as.ref;`
+          emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context),
+          `inox_string* ${string} = (inox_string*)${reference}.as.ref;`
         ],
         bytes: `${string}->bytes`,
         length: `${string}->len`
@@ -921,23 +966,24 @@ export function emitPreparedStringBytesOperand(
     }
 
     if (valueType === 'string') {
+      const reference = stringDeps(context).emitReference(expression, context)
+
       if (stringDeps(context).isBoxedRuntimeStringName(name, context)) {
         const string = nextCName(context, tempPrefix)
 
         return {
           lines: [
-            emitRuntimeTypeCheck(`(*${name}).tag != INOX_TAG_STRING || (*${name}).as.ref == 0`, context),
-            `inox_string* ${string} = (inox_string*)(*${name}).as.ref;`
+            emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context),
+            `inox_string* ${string} = (inox_string*)${reference}.as.ref;`
           ],
           bytes: `${string}->bytes`,
           length: `${string}->len`
         }
       }
 
-      const reference = stringDeps(context).emitReference(expression, context)
       const runtimeStrings = context.runtimeStrings
 
-      if (runtimeStrings !== null && typeof runtimeStrings !== 'undefined' && runtimeStrings.has(reference)) {
+      if (runtimeStrings !== null && typeof runtimeStrings !== 'undefined' && runtimeStrings.has(name)) {
         return {
           lines: [],
           bytes: `${reference}->bytes`,
@@ -1004,6 +1050,42 @@ export function emitPreparedStringBytesOperand(
     return dynamicRuntimeString
   }
 
+  const stringValueCall = emitPreparedStringValueCallBytesOperand(expression, context, tempPrefix)
+
+  if (stringValueCall !== null && typeof stringValueCall !== 'undefined') {
+    return stringValueCall
+  }
+
+  const typedStringValue = emitPreparedTypedStringValueBytesOperand(expression, context, tempPrefix)
+
+  if (typedStringValue !== null && typeof typedStringValue !== 'undefined') {
+    return typedStringValue
+  }
+
+  if (
+    !isKnownOptionalObjectStringField(expression, context) &&
+    stringDeps(context).inferExpressionType(expression, context) === 'string'
+  ) {
+    const value = stringDeps(context).emitCValueExpression(expression, context)
+    const string = nextCName(context, tempPrefix)
+    const lines: string[] = []
+
+    pushAllLines(lines, value.lines)
+    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+    return {
+      lines,
+      bytes: `${string}->bytes`,
+      length: `${string}->len`
+    }
+  }
+
+  const runtimeObjectFieldString = emitPreparedRuntimeObjectStringFieldBytesOperand(expression, context, tempPrefix)
+
+  if (runtimeObjectFieldString !== null && typeof runtimeObjectFieldString !== 'undefined') {
+    return runtimeObjectFieldString
+  }
+
   const runtimeArrayString = emitPreparedRuntimeArrayStringBytesOperand(expression, context, tempPrefix)
 
   if (runtimeArrayString !== null && typeof runtimeArrayString !== 'undefined') {
@@ -1027,24 +1109,6 @@ export function emitPreparedStringBytesOperand(
     }
   }
 
-  if (
-    !isKnownOptionalObjectStringField(expression, context) &&
-    stringDeps(context).inferExpressionType(expression, context) === 'string'
-  ) {
-    const value = stringDeps(context).emitCValueExpression(expression, context)
-    const string = nextCName(context, tempPrefix)
-    const lines: string[] = []
-
-    pushAllLines(lines, value.lines)
-    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
-
-    return {
-      lines,
-      bytes: `${string}->bytes`,
-      length: `${string}->len`
-    }
-  }
-
   pushStringDiagnostic(
     context,
     diagnostic(
@@ -1059,6 +1123,165 @@ export function emitPreparedStringBytesOperand(
     bytes: '""',
     length: '0'
   }
+}
+
+function emitPreparedTypedStringValueBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  if (nodeValueType(expression) !== 'string' || isKnownOptionalObjectStringField(expression, context)) {
+    return null
+  }
+
+  const value = stringDeps(context).emitCValueExpression(expression, context)
+  const string = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function emitPreparedStringValueCallBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  if (!isStringValueCallExpression(expression, context)) {
+    return null
+  }
+
+  const value = emitRuntimeStringValueCallExpression(expression, context) ?? stringDeps(context).emitCValueExpression(expression, context)
+  const string = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function isStringValueCallExpression(expression: AnyNode, context: StringCContext): boolean {
+  return (
+    isStringSliceCall(expression, context) ||
+    isStringTrimCall(expression, context) ||
+    isStringCaseCall(expression, context) ||
+    isRuntimeStringValueCallExpression(expression, context)
+  )
+}
+
+function emitRuntimeStringValueCallExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null {
+  const method = runtimeStringValueCallMethod(expression)
+
+  if (method === null || typeof method === 'undefined') {
+    return null
+  }
+
+  if (!canEmitRuntimeStringValueCallExpression(expression, method, context)) {
+    return null
+  }
+
+  if (method === 'slice') {
+    return emitCStringSliceValueExpression(expression, context)
+  }
+
+  if (method === 'toUpperCase') {
+    return emitCStringCaseValueExpression(expression, context)
+  }
+
+  if (method === 'padStart') {
+    return emitCStringPadStartValueExpression(expression, context)
+  }
+
+  if (isStringTrimMethod(method)) {
+    return emitCStringTrimValueExpression(expression, context)
+  }
+
+  return null
+}
+
+function isRuntimeStringValueCallExpression(expression: AnyNode, context: StringCContext): boolean {
+  const method = runtimeStringValueCallMethod(expression)
+
+  if (method === null || typeof method === 'undefined') {
+    return false
+  }
+
+  return canEmitRuntimeStringValueCallExpression(expression, method, context)
+}
+
+function runtimeStringValueCallMethod(expression: AnyNode): string | null {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    stringRuntimeReturnType(expression.callee.property) !== 'string'
+  ) {
+    return null
+  }
+
+  return expression.callee.property
+}
+
+function canEmitRuntimeStringValueCallExpression(
+  expression: AnyNode,
+  method: string,
+  context: StringCContext
+): boolean {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.callee.type !== 'MemberExpression' ||
+    !canEmitStringBytesOperand(expression.callee.object, context)
+  ) {
+    return false
+  }
+
+  if (method === 'slice') {
+    if (expression.args.length < 1 || expression.args.length > 2) {
+      return false
+    }
+
+    for (const arg of expression.args) {
+      if (stringDeps(context).inferExpressionType(arg, context) !== 'number') {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  if (method === 'toUpperCase' || isStringTrimMethod(method)) {
+    return expression.args.length === 0
+  }
+
+  if (method === 'padStart') {
+    if (expression.args.length < 1 || expression.args.length > 2) {
+      return false
+    }
+
+    if (stringDeps(context).inferExpressionType(expression.args[0], context) !== 'number') {
+      return false
+    }
+
+    if (expression.args.length > 1) {
+      return canEmitStringBytesOperand(expression.args[1], context)
+    }
+
+    return true
+  }
+
+  return false
 }
 
 function isNullableRuntimeStringReference(name: string, context: StringCContext): boolean {
@@ -1229,11 +1452,9 @@ function emitPreparedKnownObjectStringBytesOperand(
 }
 
 function knownObjectStringField(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null {
-  let field: CObjectFieldInfo | null = null
+  let field = stringDeps(context).resolveKnownObjectMember(expression, context)
 
-  if (stringDeps(context).isMemberAccessExpression(expression)) {
-    field = stringDeps(context).resolveKnownObjectMember(expression, context)
-  } else if (expression.type === 'IndexExpression') {
+  if ((field === null || typeof field === 'undefined') && expression.type === 'IndexExpression') {
     field = stringDeps(context).resolveKnownObjectIndex(expression, context)
   }
 
@@ -1302,11 +1523,9 @@ function isKnownOptionalObjectStringField(expression: AnyNode, context: StringCC
 }
 
 function knownOptionalObjectStringField(expression: AnyNode, context: StringCContext): CObjectFieldInfo | null {
-  let field: CObjectFieldInfo | null = null
+  let field = stringDeps(context).resolveKnownObjectMember(expression, context)
 
-  if (stringDeps(context).isMemberAccessExpression(expression)) {
-    field = stringDeps(context).resolveKnownObjectMember(expression, context)
-  } else if (expression.type === 'IndexExpression') {
+  if ((field === null || typeof field === 'undefined') && expression.type === 'IndexExpression') {
     field = stringDeps(context).resolveKnownObjectIndex(expression, context)
   }
 
@@ -1446,6 +1665,113 @@ function emitPreparedDynamicRuntimeStringBytesOperand(
   }
 }
 
+function emitPreparedRuntimeObjectStringFieldBytesOperand(
+  expression: AnyNode,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand | null {
+  if (!isRuntimeObjectStringFieldCandidate(expression, context)) {
+    return null
+  }
+
+  const value = emitPreparedRuntimeObjectFieldValueExpression(expression, context)
+
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  const string = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(
+    emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context)
+  )
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
+  }
+}
+
+function emitPreparedRuntimeObjectFieldValueExpression(
+  expression: AnyNode,
+  context: StringCContext
+): PreparedExpression | null {
+  const access = runtimeObjectFieldAccess(expression)
+
+  if (access === null || typeof access === 'undefined') {
+    return null
+  }
+
+  const object = emitPreparedRuntimeObjectReceiverExpression(access.object, context)
+
+  if (object === null || typeof object === 'undefined') {
+    return null
+  }
+
+  const value = nextCName(context, 'inox_value')
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+  pushAllLines(lines, object.lines)
+  lines.push(emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context))
+  pushAllLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(
+    emitStatusCheck(
+      `inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: value,
+    valueType: expression.valueType
+  }
+}
+
+function emitPreparedRuntimeObjectReceiverExpression(
+  expression: AnyNode,
+  context: StringCContext
+): PreparedExpression | null {
+  if (isRuntimeObjectMetadataReferenceExpression(expression)) {
+    return stringDeps(context).emitCValueExpression(expression, context)
+  }
+
+  const runtimeObjectReference = stringDeps(context).emitPreparedRuntimeObjectReferenceExpression(expression, context)
+
+  if (runtimeObjectReference !== null && typeof runtimeObjectReference !== 'undefined') {
+    return runtimeObjectReference
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    return {
+      lines: [],
+      expression: stringDeps(context).emitObjectValueReference(expression.path[0], context),
+      valueType: 'object'
+    }
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return {
+      lines: [],
+      expression: emitCIdentifier('this'),
+      valueType: 'object'
+    }
+  }
+
+  const nested = emitPreparedRuntimeObjectFieldValueExpression(expression, context)
+
+  if (nested !== null && typeof nested !== 'undefined') {
+    return nested
+  }
+
+  return stringDeps(context).emitCValueExpression(expression, context)
+}
+
 function isDynamicRuntimeStringFieldExpression(expression: AnyNode, context: StringCContext): boolean {
   const object = dynamicRuntimeObjectFieldObject(expression)
 
@@ -1488,7 +1814,109 @@ function isDynamicRuntimeObjectExpression(expression: AnyNode, context: StringCC
   return isDynamicRuntimeObjectExpression(object, context)
 }
 
+function isRuntimeObjectStringFieldCandidate(expression: AnyNode, context: StringCContext): boolean {
+  const access = runtimeObjectFieldAccess(expression)
+
+  if (access === null || typeof access === 'undefined') {
+    return false
+  }
+
+  const fieldValueType = knownObjectFieldValueType(expression, context)
+
+  if (fieldValueType === 'string') {
+    return true
+  }
+
+  if (
+    fieldValueType !== null &&
+    typeof fieldValueType !== 'undefined' &&
+    fieldValueType !== 'unknown'
+  ) {
+    return false
+  }
+
+  return isRuntimeObjectReceiverCandidate(access.object, context)
+}
+
+function isRuntimeObjectReceiverCandidate(expression: AnyNode, context: StringCContext): boolean {
+  const objectValueType = nodeValueType(expression)
+
+  if (objectValueType === 'object' || objectValueType === 'unknown') {
+    return true
+  }
+
+  if (
+    objectValueType !== null &&
+    typeof objectValueType !== 'undefined' &&
+    objectValueType !== 'object' &&
+    objectValueType !== 'unknown'
+  ) {
+    return false
+  }
+
+  if (stringDeps(context).inferExpressionType(expression, context) === 'object') {
+    return true
+  }
+
+  if (expression.type === 'Reference' && expression.path.length === 1) {
+    const valueType = runtimeObjectReferenceValueType(expression.path[0], context)
+
+    if (valueType === null || typeof valueType === 'undefined') {
+      return true
+    }
+
+    return valueType === 'object' || valueType === 'unknown' || isOpaqueRuntimeValueType(valueType)
+  }
+
+  const access = runtimeObjectFieldAccess(expression)
+
+  if (access !== null && typeof access !== 'undefined') {
+    const fieldValueType = knownObjectFieldValueType(expression, context)
+
+    if (
+      fieldValueType !== null &&
+      typeof fieldValueType !== 'undefined' &&
+      fieldValueType !== 'object' &&
+      fieldValueType !== 'unknown'
+    ) {
+      return false
+    }
+
+    return true
+  }
+
+  return isDynamicRuntimeObjectExpression(expression, context)
+}
+
+function runtimeObjectReferenceValueType(name: string, context: StringCContext): string | null {
+  const variables = context.variables
+
+  if (variables !== null && typeof variables !== 'undefined') {
+    const variableType = variables.get(name)
+
+    if (variableType !== null && typeof variableType !== 'undefined') {
+      return variableType
+    }
+  }
+
+  const moduleValueTypes = context.moduleValueTypes
+
+  if (moduleValueTypes !== null && typeof moduleValueTypes !== 'undefined') {
+    const moduleValueType = moduleValueTypes.get(name)
+
+    if (moduleValueType !== null && typeof moduleValueType !== 'undefined') {
+      return moduleValueType
+    }
+  }
+
+  return null
+}
+
 function isRuntimeObjectValueReferenceExpression(expression: AnyNode, context: StringCContext): boolean {
+  if (isRuntimeObjectMetadataReferenceExpression(expression)) {
+    return true
+  }
+
   if (
     expression === null ||
     typeof expression === 'undefined' ||
@@ -1512,6 +1940,24 @@ function isRuntimeObjectValueReferenceExpression(expression: AnyNode, context: S
   }
 
   return runtimeValueReferenceUsesInoxValueStorage(name, valueType, context)
+}
+
+function isRuntimeObjectMetadataReferenceExpression(expression: AnyNode): boolean {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return false
+  }
+
+  return (
+    expression.runtimeObjectSource !== null &&
+    typeof expression.runtimeObjectSource !== 'undefined' &&
+    expression.runtimeObjectName !== null &&
+    typeof expression.runtimeObjectName !== 'undefined'
+  )
 }
 
 function runtimeValueReferenceUsesInoxValueStorage(
@@ -1555,12 +2001,16 @@ function isRuntimeArrayObjectIndexExpression(expression: AnyNode, context: Strin
 }
 
 function knownObjectFieldValueType(expression: AnyNode, context: StringCContext): string | null {
-  if (stringDeps(context).isMemberAccessExpression(expression)) {
-    const member = stringDeps(context).resolveKnownObjectMember(expression, context)
+  const shapeFieldValueType = nodeObjectShapeFieldValueType(expression)
 
-    if (member !== null && typeof member !== 'undefined') {
-      return member.valueType
-    }
+  if (shapeFieldValueType !== null && typeof shapeFieldValueType !== 'undefined') {
+    return shapeFieldValueType
+  }
+
+  const member = stringDeps(context).resolveKnownObjectMember(expression, context)
+
+  if (member !== null && typeof member !== 'undefined') {
+    return member.valueType
   }
 
   if (expression.type === 'IndexExpression') {
@@ -1574,7 +2024,38 @@ function knownObjectFieldValueType(expression: AnyNode, context: StringCContext)
   return null
 }
 
+function nodeObjectShapeFieldValueType(expression: AnyNode): string | null {
+  const access = runtimeObjectFieldAccess(expression)
+
+  if (access === null || typeof access === 'undefined') {
+    return null
+  }
+
+  const shape = access.object.shape
+
+  if (
+    shape === null ||
+    typeof shape === 'undefined' ||
+    shape.fields === null ||
+    typeof shape.fields === 'undefined'
+  ) {
+    return null
+  }
+
+  for (const field of shape.fields) {
+    if (field.name === access.key) {
+      return field.valueType
+    }
+  }
+
+  return null
+}
+
 function dynamicRuntimeObjectFieldObject(expression: AnyNode): AnyNode | null {
+  if (expression.type === 'Reference' && expression.path.length > 1) {
+    return referencePathObjectExpression(expression)
+  }
+
   if (expression.type === 'MemberExpression') {
     return expression.object
   }
@@ -1584,6 +2065,50 @@ function dynamicRuntimeObjectFieldObject(expression: AnyNode): AnyNode | null {
   }
 
   return null
+}
+
+function runtimeObjectFieldAccess(expression: AnyNode): RuntimeObjectFieldAccess | null {
+  if (expression.type === 'Reference' && expression.path.length > 1) {
+    return {
+      object: referencePathObjectExpression(expression),
+      key: stringPathAt(expression.path, expression.path.length - 1)
+    }
+  }
+
+  if (expression.type === 'MemberExpression') {
+    return {
+      object: expression.object,
+      key: expression.property
+    }
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return {
+      object: expression.object,
+      key: expression.index.value
+    }
+  }
+
+  return null
+}
+
+function referencePathObjectExpression(expression: AnyNode): AnyNode {
+  const path: string[] = []
+
+  for (let index = 0; index < expression.path.length - 1; index = index + 1) {
+    path.push(stringPathAt(expression.path, index))
+  }
+
+  const object: AnyNode = {
+    type: 'Reference',
+    path
+  }
+
+  if (expression.loc !== null && typeof expression.loc !== 'undefined') {
+    object.loc = expression.loc
+  }
+
+  return object
 }
 
 export function emitCStringConcatValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
@@ -2540,6 +3065,14 @@ function isStringLengthObject(expression: AnyNode | null | undefined, context: S
   }
 
   if (expression.type === 'TemplateLiteral') {
+    return true
+  }
+
+  if (nodeValueType(expression) === 'string') {
+    return true
+  }
+
+  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
     return true
   }
 

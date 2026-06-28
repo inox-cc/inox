@@ -49,9 +49,9 @@ function assertModuleDeclarationImportSkipsExternalEmission(): void {
   const files = result.files as GeneratedFile[]
   const paths = files.map((file) => file.path).sort()
   const externalModule = result.graph.modules.find((module) => module.path === '/pkg/src/lib.ts')
-  const source = generatedFile(files, 'src/index.c')
+  const source = generatedFile(files, 'src/index.cc')
 
-  assert.deepEqual(paths, ['src/index.c', 'src/index.d.ts', 'src/index.h'])
+  assert.deepEqual(paths, ['src/index.cc', 'src/index.d.ts', 'src/index.h'])
   assert.equal(externalModule?.external, true)
   assert.equal(externalModule?.ir, null)
   assert.doesNotMatch(paths.join('\n'), /src\/lib\.(c|h|d\.ts)/)
@@ -248,7 +248,7 @@ export type User = {
   const factoryModule = result.graph.modules.find((module) => module.path === '/pkg/src/factory.ts')
   const typesModule = result.graph.modules.find((module) => module.path === '/pkg/src/types.ts')
 
-  assert.deepEqual(paths, ['src/index.c', 'src/index.d.ts', 'src/index.h'])
+  assert.deepEqual(paths, ['src/index.cc', 'src/index.d.ts', 'src/index.h'])
   assert.equal(factoryModule?.external, true)
   assert.equal(typesModule?.external, true)
 }

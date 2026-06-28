@@ -1,6 +1,10 @@
 #ifndef INOX_CALLBACK_H
 #define INOX_CALLBACK_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
@@ -23,5 +27,9 @@ inox_status inox_callback_new(
   inox_value* out
 );
 inox_status inox_callback_call(inox_value callback, const inox_value* args, size_t arg_count, inox_value* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

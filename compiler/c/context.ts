@@ -18,6 +18,7 @@ import type {
   CPromiseChainWrapper,
   CPromiseConstructorHandler
 } from './types.ts'
+import { emitCIdentifier } from './identifiers.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
@@ -50,6 +51,10 @@ export type CRegExpLiteralMap = Map<string, AnyNode>
 export type CStringMap = Map<string, string>
 export type CStringNullableMap = Map<string, string | null>
 export type CStringSet = Set<string>
+
+function emitCLocalName(name: string): string {
+  return emitCIdentifier(name)
+}
 
 type CDiagnosticContext = {
   diagnostics: Diagnostic[]
@@ -578,7 +583,9 @@ function stringArrayHas(values: string[], needle: string): boolean {
 }
 
 export function emitPrepareOwnedValueWrite(name: string): string[] {
-  return [`inox_release(${name});`, `${name} = inox_undefined_value();`]
+  const reference = emitCIdentifier(name)
+
+  return [`inox_release(${reference});`, `${reference} = inox_undefined_value();`]
 }
 
 type CReturnValueDeclarationContext = {
@@ -722,15 +729,15 @@ export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContex
   }
 
   for (const name of ownedValues) {
-    lines.push(`inox_value ${name} = inox_undefined_value();`)
+    lines.push(`inox_value ${emitCLocalName(name)} = inox_undefined_value();`)
   }
 
   for (const name of ownedCryptoHashes) {
-    lines.push(`inox_crypto_hash* ${name} = 0;`)
+    lines.push(`inox_crypto_hash* ${emitCLocalName(name)} = 0;`)
   }
 
   for (const name of ownedCryptoHmacs) {
-    lines.push(`inox_crypto_hmac* ${name} = 0;`)
+    lines.push(`inox_crypto_hmac* ${emitCLocalName(name)} = 0;`)
   }
 
   return lines
@@ -745,7 +752,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
   }
 
   for (const name of ownedPromises) {
-    lines.push(`inox_promise* ${name} = 0;`)
+    lines.push(`inox_promise* ${emitCLocalName(name)} = 0;`)
   }
 
   return lines
@@ -782,9 +789,9 @@ export function emitBoxedValueDeclarations(context: CBoxedValueDeclarationContex
 
   for (const name of boxedValues) {
     if (isRuntimeBoxedValueType(boxedValueTypes.get(name))) {
-      lines.push(`inox_value* ${name} = 0;`)
+      lines.push(`inox_value* ${emitCLocalName(name)} = 0;`)
     } else {
-      lines.push(`double* ${name} = 0;`)
+      lines.push(`double* ${emitCLocalName(name)} = 0;`)
     }
   }
 
@@ -796,17 +803,17 @@ export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
 
   for (let index = context.ownedCryptoHmacs.length - 1; index >= 0; index--) {
     const name = context.ownedCryptoHmacs[index]
-    lines.push(`inox_crypto_hmac_free(${name});`)
+    lines.push(`inox_crypto_hmac_free(${emitCLocalName(name)});`)
   }
 
   for (let index = context.ownedCryptoHashes.length - 1; index >= 0; index--) {
     const name = context.ownedCryptoHashes[index]
-    lines.push(`inox_crypto_hash_free(${name});`)
+    lines.push(`inox_crypto_hash_free(${emitCLocalName(name)});`)
   }
 
   for (let index = context.ownedValues.length - 1; index >= 0; index--) {
     const name = context.ownedValues[index]
-    lines.push(`inox_release(${name});`)
+    lines.push(`inox_release(${emitCLocalName(name)});`)
   }
 
   return lines
@@ -817,14 +824,15 @@ export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
 
   for (let index = context.ownedPromises.length - 1; index >= 0; index--) {
     const name = context.ownedPromises[index]
-    const release = `if (${name} != 0) inox_promise_release(${name});`
+    const localName = emitCLocalName(name)
+    const release = `if (${localName} != 0) inox_promise_release(${localName});`
 
     if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
       lines.push(release)
       continue
     }
 
-    lines.push(`if (${name} != 0 && inox_promise_is_unhandled_rejection(${name})) {`)
+    lines.push(`if (${localName} != 0 && inox_promise_is_unhandled_rejection(${localName})) {`)
     lines.push('  fprintf(stderr, "Unhandled Promise rejection\\n");')
     lines.push(`  ${context.unhandledRejectionFlag} = 1;`)
     lines.push('}')
@@ -916,14 +924,15 @@ export function emitBoxedValueCleanup(context: CFunctionContext): string[] {
 
   for (let index = context.boxedValues.length - 1; index >= 0; index--) {
     const name = context.boxedValues[index]
+    const localName = emitCLocalName(name)
 
     if (isRuntimeBoxedValueType(context.boxedValueTypes.get(name))) {
-      lines.push(`if (${name} != 0) {`)
-      lines.push(`  inox_release(*${name});`)
-      lines.push(`  inox_default_free(0, ${name}, sizeof(inox_value), _Alignof(inox_value));`)
+      lines.push(`if (${localName} != 0) {`)
+      lines.push(`  inox_release(*${localName});`)
+      lines.push(`  inox_default_free(0, ${localName}, sizeof(inox_value), _Alignof(inox_value));`)
       lines.push('}')
     } else {
-      lines.push(`if (${name} != 0) inox_default_free(0, ${name}, sizeof(double), _Alignof(double));`)
+      lines.push(`if (${localName} != 0) inox_default_free(0, ${localName}, sizeof(double), _Alignof(double));`)
     }
   }
 

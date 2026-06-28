@@ -9,7 +9,7 @@ import {
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import { isCoalesceExpression } from '../syntax.ts'
 import type {
@@ -619,7 +619,7 @@ export function emitNullableRuntimeValueVariableDeclaration(
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
-    lines.push(`${statement.name} = inox_null_value();`)
+    lines.push(`${emitCIdentifier(statement.name)} = inox_null_value();`)
 
     return lines
   }
@@ -631,9 +631,9 @@ export function emitNullableRuntimeValueVariableDeclaration(
 
   appendLines(lines, value.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(`${statement.name} = ${value.expression};`)
-  appendLines(lines, emitRuntimeNullableValueCheck(statement.name, expectedTag, context))
-  lines.push(`inox_retain(${statement.name});`)
+  lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
+  appendLines(lines, emitRuntimeNullableValueCheck(emitCIdentifier(statement.name), expectedTag, context))
+  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
 
   return lines
 }

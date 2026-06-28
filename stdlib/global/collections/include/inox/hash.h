@@ -1,6 +1,10 @@
 #ifndef INOX_HASH_H
 #define INOX_HASH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <string.h>
 #include "inox/string.h"
@@ -114,5 +118,9 @@ static inline bool inox_hash_value_equal(inox_value left, inox_value right) {
 
   return left.tag == INOX_TAG_NULL || left.tag == INOX_TAG_UNDEFINED;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,6 +1,10 @@
 #ifndef INOX_TLS_H
 #define INOX_TLS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/loop.h"
 
@@ -40,5 +44,9 @@ inox_status inox_tls_client_end_with_callback(
 );
 inox_status inox_tls_client_destroy(inox_tls_client* client);
 void inox_tls_client_close(inox_tls_client* client);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

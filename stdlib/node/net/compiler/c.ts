@@ -315,7 +315,7 @@ function emitNetHandlerStatement(
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_HANDLER',
-        'net event listeners in the C backend currently support only static string local declarations',
+        'net event listeners in the C++ backend currently support only static string local declarations',
         statement.loc
       )
     )
@@ -371,7 +371,7 @@ function emitNetHandlerStatement(
   context.diagnostics.push(
     diagnostic(
       'INOX_NET_HANDLER',
-      'this net event listener statement is not supported by the current C backend slice',
+      'this net event listener statement is not supported by the current C++ backend slice',
       statement.loc
     )
   )
@@ -472,7 +472,7 @@ function emitNetHandlerSocketCallStatement(
   context.diagnostics.push(
     diagnostic(
       'INOX_NET_HANDLER',
-      `socket.${method} is not supported inside net connection listeners by the current C backend slice`,
+      `socket.${method} is not supported inside net connection listeners by the current C++ backend slice`,
       netNodeLoc(callee)
     )
   )
@@ -854,7 +854,7 @@ function emitNetSocketConnectLines(
 
   if (portArg === null || typeof portArg === 'undefined') {
     context.diagnostics.push(
-      diagnostic('INOX_NET_SOCKET', 'net.connect in the C backend currently requires a port argument', expression.loc)
+      diagnostic('INOX_NET_SOCKET', 'net.connect in the C++ backend currently requires a port argument', expression.loc)
     )
   }
 
@@ -866,7 +866,7 @@ function emitNetSocketConnectLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
-        'net.connect callback in the C backend currently requires an inline listener',
+        'net.connect callback in the C++ backend currently requires an inline listener',
         netNodeLoc(callback)
       )
     )
@@ -930,7 +930,7 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
-        "socket.on in the C backend currently supports 'connect', 'ready', 'data', 'end', 'close', 'error' and 'drain'",
+        "socket.on in the C++ backend currently supports 'connect', 'ready', 'data', 'end', 'close', 'error' and 'drain'",
         netNodeLoc(eventArg)
       )
     )
@@ -955,7 +955,7 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
-        `socket.on('${eventName}') in the C backend currently requires an inline listener`,
+        `socket.on('${eventName}') in the C++ backend currently requires an inline listener`,
         netNodeLoc(listener)
       )
     )
@@ -1029,7 +1029,7 @@ function emitNetSocketWriteLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
-        `socket.${method} callback in the C backend currently requires an inline listener`,
+        `socket.${method} callback in the C++ backend currently requires an inline listener`,
         callback.loc
       )
     )
@@ -1056,7 +1056,7 @@ function emitNetSocketSetEncodingLines(socketName: string, args: AnyNode[], cont
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SOCKET',
-        'socket.setEncoding in the C backend currently requires a static string',
+        'socket.setEncoding in the C++ backend currently requires a static string',
         netNodeLoc(firstArg)
       )
     )
@@ -1143,7 +1143,7 @@ function emitNetSocketOptionCallStatement(
       context.diagnostics.push(
         diagnostic(
           'INOX_NET_SOCKET',
-          `socket.${method} in the C backend does not take arguments`,
+          `socket.${method} in the C++ backend does not take arguments`,
           netNodeLoc(expression.args[0])
         )
       )
@@ -1201,7 +1201,7 @@ function emitNetServerCreateLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
-        'net.createServer in the C backend currently requires an inline connection listener',
+        'net.createServer in the C++ backend currently requires an inline connection listener',
         netNodeLoc(listener)
       )
     )
@@ -1329,7 +1329,7 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
-        "server.on in the C backend currently supports 'connection', 'listening', 'close' and 'error'",
+        "server.on in the C++ backend currently supports 'connection', 'listening', 'close' and 'error'",
         netNodeLoc(eventArg)
       )
     )
@@ -1354,7 +1354,7 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
-        `server.on('${eventName}') in the C backend currently requires an inline listener`,
+        `server.on('${eventName}') in the C++ backend currently requires an inline listener`,
         netNodeLoc(listener)
       )
     )
@@ -1384,7 +1384,7 @@ function emitNetServerCloseLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
-        'server.close in the C backend supports only an optional callback',
+        'server.close in the C++ backend supports only an optional callback',
         netNodeLoc(args[1])
       )
     )
@@ -1415,7 +1415,7 @@ function emitNetZeroArgCallbackLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_NET_SERVER',
-        'net server lifecycle callbacks in the C backend currently require a synchronous zero-argument arrow function',
+        'net server lifecycle callbacks in the C++ backend currently require a synchronous zero-argument arrow function',
         callback.loc
       )
     )
@@ -1513,7 +1513,7 @@ function emitNetListenHostExpression(expression: AnyNode | null | undefined, con
   context.diagnostics.push(
     diagnostic(
       'INOX_NET_SERVER',
-      'server.listen host in the C backend currently must be a string literal',
+      'server.listen host in the C++ backend currently must be a string literal',
       expression.loc
     )
   )

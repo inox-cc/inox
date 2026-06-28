@@ -1,6 +1,10 @@
 #ifndef INOX_PROCESS_H
 #define INOX_PROCESS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
@@ -25,5 +29,9 @@ inox_status inox_process_versions(inox_allocator* allocator, inox_value* out);
 inox_status inox_process_versions_node(inox_allocator* allocator, inox_value* out);
 void inox_process_set_exit_code(int code);
 void inox_process_exit(int code);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

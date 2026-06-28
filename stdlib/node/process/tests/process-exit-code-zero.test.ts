@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 
 import process from 'node:process'

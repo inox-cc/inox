@@ -10,7 +10,7 @@ export async function assertCompilerIndexNodeHelp(): Promise<void> {
   assert.equal(result.code, 1, `node compiler/index.ts should require an input\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
   assert.equal(result.stdout, '')
   assert.match(result.stderr, /Usage:/)
-  assert.match(result.stderr, /inox input\.ts \[output\.c\]/)
+  assert.match(result.stderr, /inox input\.ts \[output\.cc\]/)
   assert.match(result.stderr, /--out-dir generated --entry/)
   assert.doesNotMatch(result.stderr, /INOX_NOT_IMPLEMENTED/)
 }

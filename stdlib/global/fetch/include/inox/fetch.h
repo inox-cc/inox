@@ -1,6 +1,10 @@
 #ifndef INOX_FETCH_H
 #define INOX_FETCH_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include "inox/loop.h"
@@ -59,5 +63,9 @@ inox_status inox_fetch_abort_controller_new(inox_allocator* allocator, inox_valu
 inox_status inox_fetch_abort_controller_signal(inox_value controller, inox_value* out);
 inox_status inox_fetch_abort_controller_abort(inox_value controller);
 inox_status inox_fetch_signal_aborted(inox_value signal, int* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

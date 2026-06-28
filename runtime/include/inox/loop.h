@@ -1,6 +1,10 @@
 #ifndef INOX_LOOP_H
 #define INOX_LOOP_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
@@ -65,5 +69,9 @@ size_t inox_loop_pending_microtasks(const inox_loop* loop);
 size_t inox_loop_pending_immediates(const inox_loop* loop);
 size_t inox_loop_pending_timers(const inox_loop* loop);
 int inox_loop_next_timer_due_ms(const inox_loop* loop, inox_number* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,6 +1,10 @@
 #ifndef INOX_BINARY_H
 #define INOX_BINARY_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
@@ -20,5 +24,9 @@ inox_status inox_bytes_set(inox_value value, size_t index, uint8_t byte);
 inox_status inox_bytes_slice(inox_value value, size_t start, size_t end, inox_value* out);
 inox_status inox_bytes_to_string(inox_allocator* allocator, inox_value value, inox_value* out);
 inox_status inox_bytes_to_uint8array_string(inox_allocator* allocator, inox_value value, inox_value* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

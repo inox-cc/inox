@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(inox_http_server C)
+project(inox_http_server C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(INOX_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(INOX_LOOP_BACKEND "libuv" CACHE STRING "inox C runtime event loop backend")
@@ -15,7 +17,7 @@ set(INOX_NODE_COMPILER "${INOX_REPO_ROOT}/compiler/index.ts" CACHE FILEPATH "ino
 set(INOX_NATIVE_COMPILER "${INOX_REPO_ROOT}/dist/inox" CACHE FILEPATH "inox native compiler")
 set(INOX_ENTRY "${CMAKE_CURRENT_SOURCE_DIR}/index.ts")
 set(INOX_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-set(INOX_GENERATED_C "${INOX_GENERATED_DIR}/index.c")
+set(INOX_GENERATED_CC "${INOX_GENERATED_DIR}/index.cc")
 set(INOX_OUTPUT_DIR "${INOX_REPO_ROOT}/dist/http-server/out")
 set(INOX_STATIC_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/public")
 set(INOX_STATIC_OUTPUT_DIR "${INOX_OUTPUT_DIR}/static")
@@ -56,8 +58,8 @@ file(GLOB_RECURSE INOX_STATIC_SOURCES CONFIGURE_DEPENDS
 )
 
 add_custom_command(
-  OUTPUT "${INOX_GENERATED_C}"
-  COMMAND ${INOX_COMPILER_COMMAND} "${INOX_ENTRY}" --emit c --loop-backend "${INOX_LOOP_BACKEND}" -o "${INOX_GENERATED_C}"
+  OUTPUT "${INOX_GENERATED_CC}"
+  COMMAND ${INOX_COMPILER_COMMAND} "${INOX_ENTRY}" --emit cc --loop-backend "${INOX_LOOP_BACKEND}" -o "${INOX_GENERATED_CC}"
   MAIN_DEPENDENCY "${INOX_ENTRY}"
   DEPENDS "${INOX_ENTRY}" ${INOX_COMPILER_SOURCES} "${INOX_COMPILER_DEPENDENCY}"
   WORKING_DIRECTORY "${INOX_REPO_ROOT}"
@@ -72,6 +74,7 @@ add_custom_target(inox_http_server_static_assets ALL
   VERBATIM
 )
 
-add_executable(http-server "${INOX_GENERATED_C}")
+add_executable(http-server "${INOX_GENERATED_CC}")
 add_dependencies(http-server inox_http_server_static_assets)
 target_link_libraries(http-server PRIVATE inox_runtime)
+set_property(TARGET http-server PROPERTY LINKER_LANGUAGE CXX)

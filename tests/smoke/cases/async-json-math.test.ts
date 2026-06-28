@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stdout async:8
 // @stdout parsed:Ada:7

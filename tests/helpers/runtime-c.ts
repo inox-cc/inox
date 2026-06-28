@@ -24,6 +24,7 @@ export { assert, compileSource, join, mkdir, readFile, rm, writeFile }
 type RuntimeArchiveVariant = 'default' | 'weak'
 
 const runtimeArchiveVersion = '1'
+const cxxGeneratedCompileArgs = ['-std=c++20']
 const defaultRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE'
 const weakRuntimeArchiveEnv = 'INOX_TEST_RUNTIME_ARCHIVE_WEAK'
 const runtimeArchiveRoot = join(repoRoot, 'dist/test-runtime')
@@ -72,17 +73,57 @@ export async function compileRuntimeProgram(
   const archive = preparedRuntimeArchiveForArgs(extraArgs)
 
   if (archive) {
-    return await runCommand('cc', [...includeArgs, ...extraArgs, source, archive, '-o', output])
+    return await runCommand('c++', [...cxxGeneratedCompileArgs, ...includeArgs, ...extraArgs, source, archive, '-o', output])
   }
 
-  return await runCommand('cc', [
+  const runtimeObjects = await compileRuntimeObjectFiles(output, includeArgs, extraArgs)
+
+  if (runtimeObjects.code !== 0) {
+    return runtimeObjects
+  }
+
+  return await runCommand('c++', [
+    ...cxxGeneratedCompileArgs,
     ...includeArgs,
     ...extraArgs,
     source,
-    ...(await runtimeSources()),
+    ...runtimeObjects.objects,
     '-o',
     output
   ])
+}
+
+async function compileRuntimeObjectFiles(
+  output: string,
+  includeArgs: string[],
+  compileArgs: string[]
+): Promise<CommandResult & { objects: string[] }> {
+  const objectDir = `${output}.runtime-objects`
+  const objects: string[] = []
+
+  await rm(objectDir, { recursive: true, force: true })
+  await mkdir(objectDir, { recursive: true })
+
+  for (const source of await runtimeSources()) {
+    const object = join(objectDir, runtimeObjectName(source))
+    const compile = await runCommand('cc', [...includeArgs, ...compileArgs, '-c', source, '-o', object])
+
+    if (compile.code !== 0) {
+      return {
+        ...compile,
+        objects
+      }
+    }
+
+    objects.push(object)
+  }
+
+  return {
+    code: 0,
+    stdout: '',
+    stderr: '',
+    objects
+  }
 }
 
 async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<string> {

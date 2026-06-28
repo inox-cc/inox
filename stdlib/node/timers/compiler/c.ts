@@ -286,7 +286,7 @@ export function emitPreparedTimerCallExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_TIMER_CALLBACK',
-        'timer calls inside runtime callbacks need callback loop capture and are not supported by the current C backend slice',
+        'timer calls inside runtime callbacks need callback loop capture and are not supported by the current C++ backend slice',
         expression.loc
       )
     )
@@ -305,7 +305,7 @@ export function emitPreparedTimerCallExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_C_TIMER_HANDLE',
-        'setInterval requires a timer handle so it can be cleared by the current C backend slice',
+        'setInterval requires a timer handle so it can be cleared by the current C++ backend slice',
         expression.loc
       )
     )
@@ -328,7 +328,7 @@ export function emitPreparedTimerCallExpression(
   }
 
   appendTimerLines(lines, callback.lines)
-  lines.push(`inox_value* ${callbackContext} = inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
+  lines.push(`inox_value* ${callbackContext} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
   lines.push(`if (${callbackContext} == 0) ${emitFailureStatement(context)}`)
   lines.push(`*${callbackContext} = ${callback.expression};`)
   lines.push(`inox_retain(*${callbackContext});`)

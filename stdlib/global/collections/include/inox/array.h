@@ -1,6 +1,10 @@
 #ifndef INOX_ARRAY_H
 #define INOX_ARRAY_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
@@ -28,5 +32,9 @@ inox_status inox_array_set(inox_value array, size_t index, inox_value value);
 inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out);
 inox_status inox_array_sort(inox_value array);
 inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

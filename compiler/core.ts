@@ -71,7 +71,7 @@ export type MemoryCModuleCompileOptions = {
 }
 
 export type CModuleCompileResult = {
-  target: 'c'
+  target: 'cc'
   graph: ModuleGraph
   files: any[]
 }
@@ -125,7 +125,7 @@ export function compileSourceToIr(source: string, options: CompileOptions = {}):
 }
 
 export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: CompileOptions = {}): string {
-  if (target === 'c') {
+  if (target === 'cc') {
     const emitOptions: CEmitOptions = options
 
     return emitCFromIr(ir, emitOptions)
@@ -192,7 +192,7 @@ export function compileFileToCModulesWithHostSync(
   options: CModuleCompileOptions,
   host: CompilerHost
 ): CModuleCompileResult {
-  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'), host)
+  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'cc'), host)
   const irModules: IrProgram[] = []
 
   for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
@@ -211,7 +211,7 @@ export function compileFileToCModulesWithHostSync(
   }
 
   return {
-    target: 'c',
+    target: 'cc',
     graph: compiled.graph,
     files: emitCModuleFilesFromGraph(compiled.graph, emitOptions)
   }
@@ -233,7 +233,7 @@ export function compileFileToCModuleTextsWithHostSync(
   options: CModuleCompileOptions,
   host: CompilerHost
 ): any[] {
-  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'c'), host)
+  const compiled = compileGraphToIrModulesWithHostSync(entry, cModuleOptionsWithHostAndTarget(options, host, 'cc'), host)
   const irModules: IrProgram[] = []
 
   for (let moduleIndex = 0; moduleIndex < compiled.irModules.length; moduleIndex = moduleIndex + 1) {
@@ -324,8 +324,8 @@ export function runCStaticChecks(irs: IrProgram[], options: CompileOptions = {})
 function resolveCompileTarget(options: CompileOptions): CompileTarget {
   const target = options.target
 
-  if (target === null || typeof target === 'undefined' || target === 'c') {
-    return 'c'
+  if (target === null || typeof target === 'undefined' || target === 'cc') {
+    return 'cc'
   }
 
   throw new Error(`Unsupported target ${target}`)

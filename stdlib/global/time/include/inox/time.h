@@ -1,6 +1,10 @@
 #ifndef INOX_TIME_H
 #define INOX_TIME_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "inox/value.h"
 
 typedef struct inox_time_adapter {
@@ -37,5 +41,9 @@ inox_number inox_date_get_part(inox_number value, int part, bool utc);
 inox_number inox_date_get_timezone_offset(inox_number value);
 inox_status inox_date_to_string(inox_allocator* allocator, inox_number value, int kind, inox_value* out);
 void inox_time_sleep_ms(inox_number delay_ms);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

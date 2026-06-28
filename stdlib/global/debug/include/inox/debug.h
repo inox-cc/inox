@@ -1,6 +1,10 @@
 #ifndef INOX_DEBUG_H
 #define INOX_DEBUG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
@@ -37,5 +41,9 @@ void inox_debug_memory_record_promise_created(void);
 void inox_debug_memory_record_promise_destroyed(void);
 void inox_debug_memory_record_weak_cell_created(void);
 void inox_debug_memory_record_weak_cell_destroyed(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

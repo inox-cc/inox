@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_REDECLARED_NAME
 
 const value = 1

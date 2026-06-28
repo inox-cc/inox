@@ -1,6 +1,10 @@
 #ifndef INOX_ALLOCATOR_H
 #define INOX_ALLOCATOR_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 
 typedef struct inox_allocator {
@@ -9,5 +13,9 @@ typedef struct inox_allocator {
   void* (*realloc)(void* user, void* ptr, size_t old_size, size_t new_size, size_t align);
   void (*free)(void* user, void* ptr, size_t size, size_t align);
 } inox_allocator;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

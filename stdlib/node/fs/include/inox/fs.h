@@ -1,6 +1,10 @@
 #ifndef INOX_FS_H
 #define INOX_FS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include "inox/loop.h"
@@ -164,5 +168,9 @@ bool inox_fs_stats_is_directory(inox_value stats);
 inox_status inox_fs_dirent_new(inox_allocator* allocator, const char* name, size_t name_len, bool is_file, bool is_directory, inox_value* out);
 bool inox_fs_dirent_is_file(inox_value dirent);
 bool inox_fs_dirent_is_directory(inox_value dirent);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

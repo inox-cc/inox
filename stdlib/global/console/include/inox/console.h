@@ -1,6 +1,10 @@
 #ifndef INOX_CONSOLE_H
 #define INOX_CONSOLE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/value.h"
 
@@ -26,6 +30,10 @@ int inox_console_printf(inox_console_stream stream, const char* format, ...);
 
 #ifndef INOX_CONSOLE_NO_PRINTF_MACRO
 #define printf(...) inox_console_printf(INOX_CONSOLE_STDOUT, __VA_ARGS__)
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

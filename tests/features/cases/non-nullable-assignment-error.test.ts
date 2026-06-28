@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_TYPE_MISMATCH
 
 const value: number = null

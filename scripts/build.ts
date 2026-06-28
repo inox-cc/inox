@@ -87,9 +87,8 @@ if (parsed.help) {
 await buildSelfHostedCompiler(parsed.options)
 
 async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
-  await rm(compilerDistDir, {
-    recursive: true,
-    force: true
+  await mkdir(compilerDistDir, {
+    recursive: true
   })
   await rm(legacyCmakeRootDir, {
     recursive: true,
@@ -104,7 +103,7 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   const declarationContracts = await emitCompilerDeclarationContracts(driverPath, compilerFiles, stdlibDeclarationFiles)
   const generatedFiles: GeneratedFileMap = new Map()
 
-  console.log('emitting self-hosted compiler C modules')
+  console.log('emitting self-hosted compiler C++ modules')
   await emitCompilerModules(compilerFiles, driverPath, declarationContracts, generatedFiles, stdlibDeclarationFiles)
   addFunctionEffectSidecarFiles(generatedFiles, declarationContracts)
 
@@ -231,7 +230,7 @@ async function compileCompilerModule(
     declarationImports,
     loopBackend: buildLoopBackend,
     sourceRoot: projectSourceRoot,
-    target: 'c',
+    target: 'cc',
     tlsBackend: buildTlsBackend
   })
 }
@@ -251,7 +250,7 @@ async function compileCompilerModuleIr(
   return await compileMemoryPackageToIrModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     declarationImports,
     loopBackend: buildLoopBackend,
-    target: 'c',
+    target: 'cc',
     tlsBackend: buildTlsBackend
   })
 }
@@ -794,14 +793,6 @@ function generatedPathForSourcePath(sourcePath: string, extension: string): stri
 }
 
 async function linkNativeCompiler(options: BuildOptions): Promise<{ code: number }> {
-  await rm(cmakeBuildDir, {
-    recursive: true,
-    force: true
-  })
-  await rm(cmakeBinDir, {
-    recursive: true,
-    force: true
-  })
   await rm(join(cmakeSourceDir, 'CMakeLists.txt'), {
     force: true
   })
@@ -1011,11 +1002,11 @@ function usage(): string {
   pnpm run build -- --generated-dir dist/compiler/source
 
 Builds a self-hosted compiler binary:
-- emits generated C modules to ${relative(rootDir, defaultGeneratedDir)}
+- emits generated C++ modules to ${relative(rootDir, defaultGeneratedDir)}
 - links ${relative(rootDir, defaultOut)}
 
 The native binary is a narrow compiler driver:
-  ${relative(rootDir, defaultOut)} input.ts output.c
+  ${relative(rootDir, defaultOut)} input.ts output.cc
 `
 }
 
@@ -1026,19 +1017,19 @@ project(inox_selfhost C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${cmakeString(cmakeBinDir)}")
 
 add_subdirectory("${cmakeString(join(rootDir, 'runtime'))}" "${cmakeString(join(cmakeBuildDir, 'inox_runtime'))}")
 
-file(GLOB_RECURSE INOX_GENERATED_SOURCES CONFIGURE_DEPENDS "${cmakeString(generatedDir)}/*.c")
+file(GLOB_RECURSE INOX_GENERATED_SOURCES CONFIGURE_DEPENDS "${cmakeString(generatedDir)}/*.cc")
 
 add_executable(inox \${INOX_GENERATED_SOURCES})
 target_include_directories(inox PRIVATE "${cmakeString(generatedDir)}")
 target_link_libraries(inox PRIVATE inox_runtime)
 
-if(INOX_TLS_BACKEND STREQUAL "boringssl")
-  set_property(TARGET inox PROPERTY LINKER_LANGUAGE CXX)
-endif()
+set_property(TARGET inox PROPERTY LINKER_LANGUAGE CXX)
 `
 }
 

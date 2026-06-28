@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_UNSUPPORTED_OPERATOR
 
 function compare(value: number): void {

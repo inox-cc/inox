@@ -17,7 +17,7 @@ import {
   restoreNullableScalarNarrowing,
   restoreVariableScope
 } from '../context.ts'
-import { cStringLiteral } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import type {
@@ -554,11 +554,7 @@ function pushIndentedLines(target: string[], source: string[], indent: string): 
   }
 }
 
-function constPrefix(isConst: boolean): string {
-  if (isConst) {
-    return 'const '
-  }
-
+function constPrefix(_isConst: boolean): string {
   return ''
 }
 
@@ -1146,7 +1142,9 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   if (condition.lines.length === 0) {
     const lines: string[] = []
     lines.push(`while ${emitCConditionClause(condition.expression)} {`)
-    pushIndentedLines(lines, body, '  ')
+    lines.push('  {')
+    pushIndentedLines(lines, body, '    ')
+    lines.push('  }')
     pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
     lines.push('}')
     pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
@@ -1158,7 +1156,9 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   lines.push('while (1) {')
   pushIndentedLines(lines, condition.lines, '  ')
   lines.push(`  if ${emitCNegatedConditionClause(condition.expression)} break;`)
-  pushIndentedLines(lines, body, '  ')
+  lines.push('  {')
+  pushIndentedLines(lines, body, '    ')
+  lines.push('  }')
   pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
   lines.push('}')
   pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
@@ -1196,7 +1196,9 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     if (!needsPreparedLowering) {
       const lines: string[] = []
       lines.push(`for (${init.expression}; ${test.expression}; ${update.expression}) {`)
-      pushIndentedLines(lines, body, '  ')
+      lines.push('  {')
+      pushIndentedLines(lines, body, '    ')
+      lines.push('  }')
       pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
       lines.push('}')
       pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
@@ -1219,7 +1221,9 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
       lines.push(`    if ${emitCNegatedConditionClause(test.expression)} break;`)
     }
 
-    pushIndentedLines(lines, body, '    ')
+    lines.push('    {')
+    pushIndentedLines(lines, body, '      ')
+    lines.push('    }')
     pushIndentedLines(lines, emitContinueTargetLabel(continueLabel, context), '  ')
     pushIndentedLines(lines, update.lines, '    ')
 
@@ -1251,7 +1255,7 @@ export function emitRuntimeStringVariableDeclaration(
   lines.push(`${storage} = ${value.expression};`)
   lines.push(emitRuntimeValueCheck(storage, 'INOX_TAG_STRING', context))
   lines.push(
-    `${constPrefix(statement.kind === 'const')}inox_string* ${statement.name} = (inox_string*)${storage}.as.ref;`
+    `${constPrefix(statement.kind === 'const')}inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${storage}.as.ref;`
   )
 
   context.variables.set(statement.name, 'string')
@@ -1279,7 +1283,7 @@ export function emitStringScalarVariableDeclaration(
 
   if (runtimeString !== null && typeof runtimeString !== 'undefined') {
     context.runtimeStrings.add(statement.name)
-    return [`${constPrefix(statement.kind === 'const')}inox_string* ${statement.name} = ${runtimeString};`]
+    return [`${constPrefix(statement.kind === 'const')}inox_string* ${emitCIdentifier(statement.name)} = ${runtimeString};`]
   }
 
   const runtimeElement = deps.resolveRuntimeArrayIndex(statement.init, context)
@@ -1304,7 +1308,7 @@ export function emitStringScalarVariableDeclaration(
   }
 
   return [
-    `${constPrefix(statement.kind === 'const')}char* ${statement.name} = ${deps.emitStringExpression(statement.init, context)};`
+    `${constPrefix(statement.kind === 'const')}char* ${emitCIdentifier(statement.name)} = ${deps.emitStringExpression(statement.init, context)};`
   ]
 }
 
@@ -1383,9 +1387,9 @@ function emitRuntimeArrayFunctionValueVariableDeclaration(
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(`${statement.name} = ${value.expression};`)
-  lines.push(emitRuntimeValueCheck(statement.name, 'INOX_TAG_FUNCTION', context))
-  lines.push(`inox_retain(${statement.name});`)
+  lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(emitRuntimeValueCheck(emitCIdentifier(statement.name), 'INOX_TAG_FUNCTION', context))
+  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
 
   return lines
 }
@@ -1413,7 +1417,7 @@ export function emitNumberBooleanScalarVariableDeclaration(
 
     context.variables.set(statement.name, 'date')
     pushAllLines(lines, value.lines)
-    lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)
+    lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${value.expression};`)
 
     return lines
   }
@@ -1427,7 +1431,7 @@ export function emitNumberBooleanScalarVariableDeclaration(
         statement.loc
       )
     )
-    return [`double ${statement.name} = 0;`]
+    return [`double ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   let arrayLength: PreparedExpression | null = null
@@ -1439,7 +1443,7 @@ export function emitNumberBooleanScalarVariableDeclaration(
   if (arrayLength !== null && typeof arrayLength !== 'undefined') {
     const lines: string[] = []
     const lengthExpression: string = arrayLength.expression
-    const line: string = `${constPrefix(statement.kind === 'const')}double ${statement.name} = ${lengthExpression};`
+    const line: string = `${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${lengthExpression};`
 
     pushAllLines(lines, arrayLength.lines)
     lines.push(line)
@@ -1457,7 +1461,7 @@ export function emitNumberBooleanScalarVariableDeclaration(
   const value = deps.emitPreparedNumberExpression(statement.init, context)
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${value.expression};`)
+  lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${value.expression};`)
 
   return lines
 }
@@ -1483,7 +1487,7 @@ function emitDynamicObjectScalarVariableDeclaration(
 
   pushAllLines(lines, value.lines)
   lines.push(emitRuntimeValueCheck(value.expression, tag, context))
-  lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${runtimeValueExpression};`)
+  lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
   return lines
 }
@@ -1555,19 +1559,19 @@ export function emitRuntimeValueVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(`${statement.name} = ${value.expression};`)
+  lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
 
   if (statement.nullable === true && isRuntimeNullableType(valueType)) {
-    pushAllLines(lines, emitRuntimeNullableValueCheck(statement.name, expectedTag, context))
+    pushAllLines(lines, emitRuntimeNullableValueCheck(emitCIdentifier(statement.name), expectedTag, context))
   } else {
-    const valueCheck = emitRuntimeValueCheck(statement.name, expectedTag, context)
+    const valueCheck = emitRuntimeValueCheck(emitCIdentifier(statement.name), expectedTag, context)
 
     if (valueCheck !== '') {
       lines.push(valueCheck)
     }
   }
 
-  lines.push(`inox_retain(${statement.name});`)
+  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
 
   return lines
 }
@@ -1992,9 +1996,9 @@ export function emitBoxedScalarVariableDeclaration(statement: StatementNode, con
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${statement.name} = inox_default_alloc(0, sizeof(double), _Alignof(double));`)
-  lines.push(`if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`)
-  lines.push(`*${statement.name} = ${value.expression};`)
+  lines.push(`${emitCIdentifier(statement.name)} = (double*)inox_default_alloc(0, sizeof(double), _Alignof(double));`)
+  lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${deps.emitFailureStatement(context)}`)
+  lines.push(`*${emitCIdentifier(statement.name)} = ${value.expression};`)
 
   return lines
 }
@@ -2019,11 +2023,11 @@ export function emitBoxedRuntimeValueVariableDeclaration(
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${statement.name} = inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
-  lines.push(`if (${statement.name} == 0) ${deps.emitFailureStatement(context)}`)
-  lines.push(`*${statement.name} = ${value.expression};`)
-  lines.push(emitRuntimeTypeCheck(`(*${statement.name}).tag != ${tag} || (*${statement.name}).as.ref == 0`, context))
-  lines.push(`inox_retain(*${statement.name});`)
+  lines.push(`${emitCIdentifier(statement.name)} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
+  lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${deps.emitFailureStatement(context)}`)
+  lines.push(`*${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(emitRuntimeTypeCheck(`(*${emitCIdentifier(statement.name)}).tag != ${tag} || (*${emitCIdentifier(statement.name)}).as.ref == 0`, context))
+  lines.push(`inox_retain(*${emitCIdentifier(statement.name)});`)
 
   return lines
 }
@@ -2152,7 +2156,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
         statement.loc
       )
     )
-    return [`double ${statement.name} = 0;`]
+    return [`double ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   const args: StatementNode[] = statement.init.args
@@ -2191,7 +2195,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
 
     const lines: string[] = []
     pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-    lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${statement.name})`, context))
+    lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${emitCIdentifier(statement.name)})`, context))
 
     pushAllLines(lines, emitMapConstructorEntries(statement.name, constructorArg, context, statement.init.loc))
 
@@ -2210,7 +2214,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
 
   const lines: string[] = []
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${statement.name})`, context))
+  lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${emitCIdentifier(statement.name)})`, context))
 
   pushAllLines(lines, emitSetConstructorValues(statement.name, constructorArg, context, statement.init.loc))
 
@@ -2234,8 +2238,8 @@ function emitCollectionVariableCopyConstructor(statement: StatementNode, context
 
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAllLines(lines, value.lines)
-  lines.push(`${statement.name} = ${value.expression};`)
-  lines.push(`inox_retain(${statement.name});`)
+  lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
 
   return lines
 }
@@ -2374,9 +2378,9 @@ function emitDirentArrayIndexVariableDeclaration(statement: StatementNode, conte
   const lines: string[] = []
   pushAllLines(lines, array.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_array_get(${array.expression}, ${index}, &${statement.name})`, context))
-  lines.push(emitRuntimeValueCheck(statement.name, 'INOX_TAG_OBJECT', context))
-  lines.push(`inox_retain(${statement.name});`)
+  lines.push(emitStatusCheck(`inox_array_get(${array.expression}, ${index}, &${emitCIdentifier(statement.name)})`, context))
+  lines.push(emitRuntimeValueCheck(emitCIdentifier(statement.name), 'INOX_TAG_OBJECT', context))
+  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
 
   return lines
 }
@@ -2688,15 +2692,10 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
     if (runtimeString !== null && typeof runtimeString !== 'undefined') {
       context.runtimeStrings.add(statement.name)
-      let constPrefix = ''
-
-      if (statement.kind === 'const') {
-        constPrefix = 'const '
-      }
 
       return {
         lines: [],
-        expression: `${constPrefix}inox_string* ${statement.name} = ${runtimeString}`
+        expression: `inox_string* ${emitCIdentifier(statement.name)} = ${runtimeString}`
       }
     }
 
@@ -2707,15 +2706,9 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
       }
     }
 
-    let constPrefix = ''
-
-    if (statement.kind === 'const') {
-      constPrefix = 'const '
-    }
-
     return {
       lines: [],
-      expression: `${constPrefix}char* ${statement.name} = ${deps.emitStringExpression(statement.init, context)}`
+      expression: `char* ${emitCIdentifier(statement.name)} = ${deps.emitStringExpression(statement.init, context)}`
     }
   }
 
@@ -2731,20 +2724,15 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
 
     return {
       lines: [],
-      expression: `double ${statement.name} = 0`
+      expression: `double ${emitCIdentifier(statement.name)} = 0`
     }
   }
 
   const value = deps.emitPreparedNumberExpression(statement.init, context)
-  let constPrefix = ''
-
-  if (statement.kind === 'const') {
-    constPrefix = 'const '
-  }
 
   return {
     lines: value.lines,
-    expression: `${constPrefix}double ${statement.name} = ${value.expression}`
+    expression: `double ${emitCIdentifier(statement.name)} = ${value.expression}`
   }
 }
 
@@ -2760,7 +2748,7 @@ function emitRegExpLiteralVariableDeclaration(statement: StatementNode, context:
 }
 
 function emitRegExpLiteralVariableInitializer(statement: StatementNode): string {
-  return `${constPrefix(statement.kind === 'const')}inox_regexp_literal ${statement.name} = { ${cStringLiteral(
+  return `${constPrefix(statement.kind === 'const')}inox_regexp_literal ${emitCIdentifier(statement.name)} = { ${cStringLiteral(
     statement.init.pattern
   )}, ${emitCRegExpFlags(statement.init.flags)} }`
 }
@@ -2984,11 +2972,13 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     }
 
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
-    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
-    lines.push(`  ${getElementStatus}`)
-    pushIndentedLines(lines, element.lines, '  ')
-    lines.push(`  ${element.expression}`)
-    pushIndentedLines(lines, body, '  ')
+    lines.push('  {')
+    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '    ')
+    lines.push(`    ${getElementStatus}`)
+    pushIndentedLines(lines, element.lines, '    ')
+    lines.push(`    ${element.expression}`)
+    pushIndentedLines(lines, body, '    ')
+    lines.push('  }')
     pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
     lines.push('}')
     pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
@@ -3051,13 +3041,13 @@ function emitRuntimeMapForOfStatement(
     const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
-    const createEntryStatus = emitStatusCheck(`inox_array_new(&inox_default_allocator, 2, &${statement.name})`, context)
+    const createEntryStatus = emitStatusCheck(`inox_array_new(&inox_default_allocator, 2, &${emitCIdentifier(statement.name)})`, context)
     const initKeyStatus = emitStatusCheck(
-      `inox_array_set(${statement.name}, 0, ${map}->entries[${index}].key)`,
+      `inox_array_set(${emitCIdentifier(statement.name)}, 0, ${map}->entries[${index}].key)`,
       context
     )
     const initValueStatus = emitStatusCheck(
-      `inox_array_set(${statement.name}, 1, ${map}->entries[${index}].value)`,
+      `inox_array_set(${emitCIdentifier(statement.name)}, 1, ${map}->entries[${index}].value)`,
       context
     )
 
@@ -3066,11 +3056,13 @@ function emitRuntimeMapForOfStatement(
     lines.push(`inox_map* ${map} = (inox_map*)${runtimeMap.name}.as.ref;`)
     lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`)
     lines.push(`  if (${map}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) continue;`)
-    pushIndentedLines(lines, emitPrepareOwnedValueWrite(statement.name), '  ')
-    lines.push(`  ${createEntryStatus}`)
-    lines.push(`  ${initKeyStatus}`)
-    lines.push(`  ${initValueStatus}`)
-    pushIndentedLines(lines, body, '  ')
+    lines.push('  {')
+    pushIndentedLines(lines, emitPrepareOwnedValueWrite(statement.name), '    ')
+    lines.push(`    ${createEntryStatus}`)
+    lines.push(`    ${initKeyStatus}`)
+    lines.push(`    ${initValueStatus}`)
+    pushIndentedLines(lines, body, '    ')
+    lines.push('  }')
     pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
     lines.push('}')
     pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
@@ -3179,16 +3171,18 @@ function emitRuntimeCollectionValueForOfStatement(
     lines.push(`${collectionType}* ${collection} = (${collectionType}*)${collectionName}.as.ref;`)
     lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->cap; ${index} += 1) {`)
     lines.push(`  if (${collection}->entries[${index}].state != ${slotState}) continue;`)
-    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
+    lines.push('  {')
+    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '    ')
     if (isMap && useKey) {
-      lines.push(`  ${value} = ${collection}->entries[${index}].key;`)
+      lines.push(`    ${value} = ${collection}->entries[${index}].key;`)
     } else {
-      lines.push(`  ${value} = ${collection}->entries[${index}].value;`)
+      lines.push(`    ${value} = ${collection}->entries[${index}].value;`)
     }
-    lines.push(`  inox_retain(${value});`)
-    pushIndentedLines(lines, element.lines, '  ')
-    lines.push(`  ${element.expression}`)
-    pushIndentedLines(lines, body, '  ')
+    lines.push(`    inox_retain(${value});`)
+    pushIndentedLines(lines, element.lines, '    ')
+    lines.push(`    ${element.expression}`)
+    pushIndentedLines(lines, body, '    ')
+    lines.push('  }')
     pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
     lines.push('}')
     pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
@@ -3329,7 +3323,9 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     popStringTarget(context.errorTargets)
   }
 
-  pushIndentedLines(lines, tryBody, '  ')
+  lines.push('  {')
+  pushIndentedLines(lines, tryBody, '    ')
+  lines.push('  }')
   if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
     lines.push(`  goto ${finallyLabel};`)
   } else {
@@ -3460,7 +3456,9 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     }
 
     lines.push(`${finallyLabel}:`)
-    pushIndentedLines(lines, finalizerBody, '  ')
+    lines.push('  {')
+    pushIndentedLines(lines, finalizerBody, '    ')
+    lines.push('  }')
 
     if (outerThrowTarget !== null && typeof outerThrowTarget !== 'undefined') {
       lines.push(`  if (inox_error_active) goto ${outerThrowTarget};`)
@@ -3655,7 +3653,7 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
       context.variables.set(statement.name, 'number')
       pushAllLines(lines, arrayReduceCall.lines)
-      lines.push(`${constPrefix(statement.kind === 'const')}double ${statement.name} = ${arrayReduceCall.expression};`)
+      lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`)
 
       return lines
     }
@@ -4009,7 +4007,7 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
   lines.push(`inox_retain(${value.expression});`)
   pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
   lines.push(`${storage} = ${value.expression};`)
-  lines.push(`${target} = (inox_string*)${storage}.as.ref;`)
+  lines.push(`${emitCIdentifier(target)} = (inox_string*)${storage}.as.ref;`)
 
   return lines
 }
@@ -4035,6 +4033,7 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
 
   const path: string[] = expression.target.path
   const target = path[0]
+  const reference = emitCIdentifier(target)
   const targetType = context.variables.get(target)
 
   if (!isRuntimeValueDeclarationValueType(targetType)) {
@@ -4055,8 +4054,8 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
   }
 
   lines.push(`inox_retain(${value.expression});`)
-  lines.push(`inox_release(${target});`)
-  lines.push(`${target} = ${value.expression};`)
+  lines.push(`inox_release(${reference});`)
+  lines.push(`${reference} = ${value.expression};`)
 
   if (targetType === 'bytes') {
     const byteKind = statementDeps(context).resolveBytesExpressionKind(expression.value, context)

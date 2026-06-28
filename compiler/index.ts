@@ -12,7 +12,7 @@ type DiagnosticError = {
 }
 
 type CliPlan = {
-  emitC: boolean
+  emitCc: boolean
   entryMode: boolean
   hasOutDir: boolean
   hasOutput: boolean
@@ -41,14 +41,14 @@ function defaultOutputPath(input: string): string {
   const dot = input.lastIndexOf('.')
 
   if (dot > separator) {
-    return input.slice(0, dot) + '.c'
+    return input.slice(0, dot) + '.cc'
   }
 
-  return input + '.c'
+  return input + '.cc'
 }
 
 function usage(): string {
-  return 'Usage:\n  inox --help\n  inox input.ts [output.c]\n  inox input.ts --emit c [-o output.c] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n  inox input.ts --emit c --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n\nCompiles a TypeScript entry file to C source.\nIf output.c is omitted, inox writes input.c.'
+  return 'Usage:\n  inox --help\n  inox input.ts [output.cc]\n  inox input.ts --emit cc [-o output.cc] [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n  inox input.ts --emit cc --out-dir generated --entry [--loop-backend embedded|libuv] [--tls-backend none|boringssl|openssl]\n\nCompiles a TypeScript entry file to C++ source.\nIf output.cc is omitted, inox writes input.cc.'
 }
 
 function isHelpArgument(value: string): boolean {
@@ -70,7 +70,7 @@ function parseCliArgs(args: string[]): CliParseResult {
     }
   }
 
-  let emitC = false
+  let emitCc = false
   let entryMode = false
   let hasOutDir = false
   let hasOutput = false
@@ -87,11 +87,11 @@ function parseCliArgs(args: string[]): CliParseResult {
       const value = args[index + 1]
       index = index + 1
 
-      if (value !== 'c') {
-        return failCliParse('--emit expects c')
+      if (value !== 'cc') {
+        return failCliParse('--emit expects cc')
       }
 
-      emitC = true
+      emitCc = true
     } else if (arg === '-o' || arg === '--out') {
       const value = args[index + 1]
       index = index + 1
@@ -140,7 +140,7 @@ function parseCliArgs(args: string[]): CliParseResult {
       return failCliParse(`unknown option ${arg}`)
     } else if (input === null) {
       input = arg
-    } else if (!hasOutput && !emitC && !hasOutDir) {
+    } else if (!hasOutput && !emitCc && !hasOutDir) {
       hasOutput = true
       output = arg
     } else {
@@ -152,8 +152,8 @@ function parseCliArgs(args: string[]): CliParseResult {
     return failCliParse('missing input file')
   }
 
-  if (hasOutDir && !emitC) {
-    return failCliParse('--out-dir requires --emit c')
+  if (hasOutDir && !emitCc) {
+    return failCliParse('--out-dir requires --emit cc')
   }
 
   if (hasOutDir && !entryMode) {
@@ -172,7 +172,7 @@ function parseCliArgs(args: string[]): CliParseResult {
     ok: true,
     help: false,
     plan: {
-      emitC,
+      emitCc,
       entryMode,
       hasOutDir,
       hasOutput,
@@ -202,7 +202,7 @@ function outputDir(plan: CliPlan): string {
 
 function compileOptions(plan: CliPlan): CompileOptions {
   const options: CompileOptions = {
-    target: 'c'
+    target: 'cc'
   }
 
   if (plan.loopBackend !== null) {
@@ -218,7 +218,7 @@ function compileOptions(plan: CliPlan): CompileOptions {
 
 function cModuleCompileOptions(plan: CliPlan): CModuleCompileOptions {
   const options: CModuleCompileOptions = {
-    target: 'c',
+    target: 'cc',
     callMain: plan.entryMode,
     sourceRoot: process.cwd()
   }

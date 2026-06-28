@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 
 const handle = setImmediate(() => {

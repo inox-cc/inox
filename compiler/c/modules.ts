@@ -81,7 +81,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     }
 
     const relativeSourcePath = relativeCModuleSourcePath(sourceRoot, record.path, host)
-    const sourcePath = replaceCModuleExtension(relativeSourcePath, '.c', host)
+    const sourcePath = replaceCModuleExtension(relativeSourcePath, '.cc', host)
     const headerPath = replaceCModuleExtension(relativeSourcePath, '.h', host)
     const declarationPath = replaceCModuleExtension(relativeSourcePath, '.d.ts', host)
     const symbolPrefix = cModuleSymbolPrefix(relativeSourcePath, record.path, host)
@@ -145,7 +145,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
         diagnostics.push(
           diagnostic(
             'INOX_C_MODULE_IMPORT',
-            `cannot resolve generated C module for ${declaration.source}`,
+            `cannot resolve generated C++ module for ${declaration.source}`,
             declaration.loc
           )
         )

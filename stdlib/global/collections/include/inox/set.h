@@ -1,6 +1,10 @@
 #ifndef INOX_SET_H
 #define INOX_SET_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -30,5 +34,9 @@ void inox_set_dispose(inox_set* set);
 inox_status inox_set_has(inox_value set, inox_value value, bool* out);
 inox_status inox_set_new(inox_allocator* allocator, inox_value* out);
 inox_status inox_set_size(inox_value set, size_t* out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

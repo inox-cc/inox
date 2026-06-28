@@ -1735,7 +1735,7 @@ function emitPromiseChainCallbackContext(
   const contextName = nextCName(context, 'inox_promise_callback_ctx')
 
   lines.push(
-    `${wrapper.contextTypeName}* ${contextName} = inox_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
+    `${wrapper.contextTypeName}* ${contextName} = (${wrapper.contextTypeName}*)inox_default_alloc(0, sizeof(${wrapper.contextTypeName}), _Alignof(${wrapper.contextTypeName}));`
   )
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
 

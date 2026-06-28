@@ -119,6 +119,9 @@ async function runIntegrationTests(): Promise<void> {
   const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
     await import('./integration/native-inox-help.test.ts')
+  const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
+  const { assertNativeInoxProcessRuntimeString } =
+    await import('./integration/native-inox-process-runtime-string.test.ts')
   const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
     await import('./integration/runtime-value-core-dependencies.test.ts')
 
@@ -173,6 +176,14 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-inox-runtime-smoke', async () => {
       await assertNativeInoxRuntimeSmoke()
+    })
+
+    await t.test('native-inox-module-graph', async () => {
+      await assertNativeInoxModuleGraph()
+    })
+
+    await t.test('native-inox-process-runtime-string', async () => {
+      await assertNativeInoxProcessRuntimeString()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {
@@ -353,7 +364,7 @@ async function runFeatureFile(file: string, compiler: FeatureTestCompiler): Prom
     }
   }
 
-  if (!featureFile.targets.includes('c')) {
+  if (!featureFile.targets.includes('cc')) {
     return {
       name: featureFile.name,
       status: 'skipped',

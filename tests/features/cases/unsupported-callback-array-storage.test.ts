@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_C_FUNCTION_VALUE
 
 const callbacks: Function[] = []

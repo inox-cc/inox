@@ -114,6 +114,7 @@ import { formatGeneratedC } from './format.ts'
 import {
   cStringLiteral,
   emitCFunctionName,
+  emitCIdentifier,
   emitCObjectFunctionFieldName,
   escapeCString,
   utf8ByteLength
@@ -162,6 +163,7 @@ import {
   emitPreparedFsSyncStatementExpression,
   emitPreparedFsSyncValueExpression,
   emitPreparedNodeStdlibAsyncTaskSourceExpression,
+  emitPreparedNodeStdlibRuntimeObjectReferenceExpression,
   emitNodeNetworkCallStatement,
   emitNodeNetworkVariableDeclaration,
   emitPreparedNodeNetworkAddressPortExpression,
@@ -863,6 +865,10 @@ const stringLoweringDependencies: StringLoweringDependencies = {
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedNumberExpression,
   emitPreparedRuntimeArrayIndexValue,
+  emitPreparedRuntimeObjectReferenceExpression: (expression: AnyNode, context: CFunctionContext) =>
+    emitPreparedNodeStdlibRuntimeObjectReferenceExpression(expression, context, {
+      process: processLoweringDependencies
+    }),
   emitReference,
   inferExpressionType,
   isBoxedRuntimeStringName,
@@ -3121,7 +3127,7 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
 
     context.variables.set(statement.name, 'number')
     pushAll(lines, arrayReduceCall.lines)
-    lines.push(`${uninitializedDeclarationPrefix(statement)}double ${statement.name} = ${arrayReduceCall.expression};`)
+    lines.push(`${uninitializedDeclarationPrefix(statement)}double ${emitCIdentifier(statement.name)} = ${arrayReduceCall.expression};`)
 
     return lines
   }
@@ -3184,7 +3190,7 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
       context,
       diagnostic('INOX_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc)
     )
-    return [`double ${statement.name} = 0;`]
+    return [`double ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   const timerHandleDeclaration = emitTimerVariableDeclaration(statement, context, timerLoweringDependencies, inferred)
@@ -3243,7 +3249,7 @@ function emitRegExpLiteralVariableDeclaration(
   context.regexpLiterals.set(statement.name, statement.init)
 
   return [
-    `${regexpVariableConstPrefix(statement)}inox_regexp_literal ${statement.name} = { ${cStringLiteral(
+    `${regexpVariableConstPrefix(statement)}inox_regexp_literal ${emitCIdentifier(statement.name)} = { ${cStringLiteral(
       statement.init.pattern
     )}, ${emitCRegExpFlags(statement.init.flags)} };`
   ]
@@ -3327,35 +3333,35 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
   const prefix = uninitializedDeclarationPrefix(statement)
 
   if (inferred === 'string') {
-    return [`${prefix}char* ${statement.name} = "";`]
+    return [`${prefix}char* ${emitCIdentifier(statement.name)} = "";`]
   }
 
   if (isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
     registerOwnedValue(context, statement.name)
-    return [`${prefix}inox_value ${statement.name} = inox_undefined_value();`]
+    return [`${prefix}inox_value ${emitCIdentifier(statement.name)} = inox_undefined_value();`]
   }
 
   if (inferred === 'promise') {
-    return [`${prefix}inox_promise* ${statement.name} = 0;`]
+    return [`${prefix}inox_promise* ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   if (inferred === 'timer') {
-    return [`${prefix}inox_timer_handle* ${statement.name} = 0;`]
+    return [`${prefix}inox_timer_handle* ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   if (inferred === 'crypto-hash') {
-    return [`${prefix}inox_crypto_hash* ${statement.name} = 0;`]
+    return [`${prefix}inox_crypto_hash* ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   if (inferred === 'crypto-hmac') {
-    return [`${prefix}inox_crypto_hmac* ${statement.name} = 0;`]
+    return [`${prefix}inox_crypto_hmac* ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   if (inferred === 'function') {
-    return [`${prefix}void* ${statement.name} = 0;`]
+    return [`${prefix}void* ${emitCIdentifier(statement.name)} = 0;`]
   }
 
-  return [`${prefix}double ${statement.name} = 0;`]
+  return [`${prefix}double ${emitCIdentifier(statement.name)} = 0;`]
 }
 
 function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctionContext): string[] {
@@ -4255,6 +4261,7 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
     value = emitCValueExpression(expression.value, context)
   }
   const temp = nextCName(context, 'inox_nullable_value')
+  const reference = emitCIdentifier(name)
   const lines: string[] = []
   const valueLines: string[] = value.lines
 
@@ -4271,8 +4278,8 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
   }
 
   lines.push(`inox_retain(${temp});`)
-  lines.push(`inox_release(${name});`)
-  lines.push(`${name} = ${temp};`)
+  lines.push(`inox_release(${reference});`)
+  lines.push(`${reference} = ${temp};`)
 
   const narrowingLines: string[] = clearNullableScalarNarrowing(name, context)
 
@@ -4286,6 +4293,7 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
 function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunctionContext): string[] {
   const path: string[] = expression.target.path
   const name = path[0]
+  const reference = emitCIdentifier(name)
   const expected = context.variables.get(name)
   const value = emitCValueExpression(expression.value, context)
   const temp = nextCName(context, 'inox_box_value')
@@ -4305,8 +4313,8 @@ function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunction
   lines.push(`inox_value ${temp} = ${value.expression};`)
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context))
   lines.push(`inox_retain(${temp});`)
-  lines.push(`inox_release(*${name});`)
-  lines.push(`*${name} = ${temp};`)
+  lines.push(`inox_release(*${reference});`)
+  lines.push(`*${reference} = ${temp};`)
 
   return lines
 }
@@ -4328,7 +4336,7 @@ function isBoxedRuntimeStringReference(expression: AnyNode, context: CFunctionCo
 }
 
 function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
-  const shapeName = nextCName(context, `inox_shape_${statement.name}`)
+  const shapeName = nextCName(context, `inox_shape_${emitCIdentifier(statement.name)}`)
   const fieldsName = `${shapeName}_fields`
   let fields: CObjectShapeField[] = []
   const shape: CObjectShape | null | undefined = statement.shape
@@ -4391,10 +4399,10 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   }
 
   context.objectShapes.set(statement.name, objectShapeFields)
-  lines.push(`${statement.name} = inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
-  lines.push(`if (${statement.name} == 0) ${emitFailureStatement(context)}`)
-  lines.push(`*${statement.name} = inox_undefined_value();`)
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, ${statement.name})`, context))
+  lines.push(`${emitCIdentifier(statement.name)} = (inox_value*)inox_default_alloc(0, sizeof(inox_value), _Alignof(inox_value));`)
+  lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${emitFailureStatement(context)}`)
+  lines.push(`*${emitCIdentifier(statement.name)} = inox_undefined_value();`)
+  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, ${emitCIdentifier(statement.name)})`, context))
   const seenTypes: string[] = []
 
   if (statement.declaredType !== null && typeof statement.declaredType !== 'undefined') {
@@ -4441,7 +4449,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
       lines.push(line)
     }
 
-    lines.push(emitStatusCheck(`inox_object_init_known(*${statement.name}, ${index}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_object_init_known(*${emitCIdentifier(statement.name)}, ${index}, ${value.expression})`, context))
   }
 
   return lines
@@ -4512,18 +4520,13 @@ function emitObjectMemberVariableDeclaration(
     }
 
     pushDiagnostic(context, diagnostic(cUnsupportedExpressionCode(member.valueType), message, statement.loc))
-    return [`double ${statement.name} = 0;`]
+    return [`double ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   const temp = nextCName(context, 'inox_field')
   registerOwnedValue(context, temp)
-  let constPrefix = ''
   let runtimeValueExpression = `${temp}.as.number`
   const lines: string[] = []
-
-  if (statement.kind === 'const') {
-    constPrefix = 'const '
-  }
 
   if (member.valueType === 'boolean') {
     runtimeValueExpression = `${temp}.as.boolean ? 1 : 0`
@@ -4531,7 +4534,7 @@ function emitObjectMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(emitStatusCheck(emitGetCall(temp), context))
-  lines.push(`${constPrefix}double ${statement.name} = ${runtimeValueExpression};`)
+  lines.push(`double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, member.valueType)
 
@@ -4550,7 +4553,7 @@ function emitObjectArrayMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(emitGetCall(statement.name), context))
-  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != INOX_TAG_ARRAY || ${statement.name}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_ARRAY || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
 
   context.variables.set(statement.name, 'array')
   let arrayElementType = 'unknown'
@@ -4582,7 +4585,7 @@ function emitObjectCollectionMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(emitGetCall(statement.name), context))
-  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != ${tag} || ${statement.name}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != ${tag} || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
 
   context.variables.set(statement.name, member.valueType)
 
@@ -4630,7 +4633,7 @@ function emitObjectBytesMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(emitGetCall(statement.name), context))
-  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != INOX_TAG_BYTES || ${statement.name}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_BYTES || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
 
   context.variables.set(statement.name, member.valueType)
 
@@ -4648,7 +4651,7 @@ function emitObjectObjectMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(emitGetCall(statement.name), context))
-  lines.push(emitRuntimeTypeCheck(`${statement.name}.tag != INOX_TAG_OBJECT || ${statement.name}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_OBJECT || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
 
   context.variables.set(statement.name, 'object')
 
@@ -4677,19 +4680,14 @@ function emitObjectStringMemberVariableDeclaration(
   emitGetCall: TempValueEmitter
 ): string[] {
   const temp = nextCName(context, 'inox_field')
-  let constPrefix = ''
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
 
-  if (statement.kind === 'const') {
-    constPrefix = 'const '
-  }
-
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(emitStatusCheck(emitGetCall(temp), context))
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
-  lines.push(`${constPrefix}inox_string* ${statement.name} = (inox_string*)${temp}.as.ref;`)
+  lines.push(`inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${temp}.as.ref;`)
 
   context.variables.set(statement.name, 'string')
   context.runtimeStrings.add(statement.name)
@@ -4776,18 +4774,13 @@ function emitKnownArrayIndexVariableDeclaration(
         statement.loc
       )
     )
-    return [`double ${statement.name} = 0;`]
+    return [`double ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   const temp = nextCName(context, 'inox_item')
   registerOwnedValue(context, temp)
-  let constPrefix = ''
   let runtimeValueExpression = `${temp}.as.number`
   const lines: string[] = []
-
-  if (statement.kind === 'const') {
-    constPrefix = 'const '
-  }
 
   if (element.valueType === 'boolean') {
     runtimeValueExpression = `${temp}.as.boolean ? 1 : 0`
@@ -4795,7 +4788,7 @@ function emitKnownArrayIndexVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
-  lines.push(`${constPrefix}double ${statement.name} = ${runtimeValueExpression};`)
+  lines.push(`double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, element.valueType)
 
@@ -4808,6 +4801,7 @@ function emitKnownArrayFunctionIndexVariableDeclaration(
   context: CFunctionContext
 ): string[] {
   const name = statement.name
+  const reference = emitCIdentifier(name)
   const functionType = normalizeFunctionType(element.functionType ?? statement.functionType)
   const lines: string[] = []
 
@@ -4817,9 +4811,9 @@ function emitKnownArrayFunctionIndexVariableDeclaration(
   context.runtimeCallbacks.add(name)
 
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${name})`, context))
-  lines.push(emitRuntimeValueCheck(name, 'INOX_TAG_FUNCTION', context))
-  lines.push(`inox_retain(${name});`)
+  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${reference})`, context))
+  lines.push(emitRuntimeValueCheck(reference, 'INOX_TAG_FUNCTION', context))
+  lines.push(`inox_retain(${reference});`)
 
   return lines
 }
@@ -4830,16 +4824,17 @@ function emitKnownArrayRuntimeIndexVariableDeclaration(
   context: CFunctionContext
 ): string[] {
   const name = statement.name
+  const reference = emitCIdentifier(name)
 
   registerOwnedValue(context, name)
   const tag = cRuntimeValueTag(element.valueType)
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${name})`, context))
+  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${reference})`, context))
 
   if (tag !== null && typeof tag !== 'undefined') {
-    lines.push(emitRuntimeTypeCheck(`${name}.tag != ${tag} || ${name}.as.ref == 0`, context))
+    lines.push(emitRuntimeTypeCheck(`${reference}.tag != ${tag} || ${reference}.as.ref == 0`, context))
   }
 
   context.variables.set(name, element.valueType)
@@ -4893,19 +4888,14 @@ function emitKnownArrayStringIndexVariableDeclaration(
   context: CFunctionContext
 ): string[] {
   const temp = nextCName(context, 'inox_item')
-  let constPrefix = ''
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
 
-  if (statement.kind === 'const') {
-    constPrefix = 'const '
-  }
-
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
-  lines.push(`${constPrefix}inox_string* ${statement.name} = (inox_string*)${temp}.as.ref;`)
+  lines.push(`inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${temp}.as.ref;`)
 
   context.variables.set(statement.name, 'string')
   context.runtimeStrings.add(statement.name)
@@ -4937,7 +4927,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(
     emitStatusCheck(
-      `inox_array_new(&inox_default_allocator, ${statement.init.elements.length}, &${statement.name})`,
+      `inox_array_new(&inox_default_allocator, ${statement.init.elements.length}, &${emitCIdentifier(statement.name)})`,
       context
     )
   )
@@ -4976,7 +4966,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
     }
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_array_set(${statement.name}, ${index}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox_array_set(${emitCIdentifier(statement.name)}, ${index}, ${value.expression})`, context))
   }
 
   return lines
@@ -5139,7 +5129,6 @@ function emitNullableRuntimeStringReferenceValueExpression(
   if (
     context.variables.get(name) === 'string' ||
     context.runtimeStrings.has(name) ||
-    context.runtimeStrings.has(reference) ||
     isBoxedRuntimeStringName(name, context)
   ) {
     return emitCValueExpression(expression, context)
@@ -5163,7 +5152,7 @@ function emitPreparedNullableScalarRuntimeValueExpression(
     if (context.nullableVariables.has(name) && isNullableScalarType(context.variables.get(name))) {
       return {
         lines: [],
-        expression: name
+        expression: emitCIdentifier(name)
       }
     }
   }
@@ -5380,7 +5369,7 @@ function emitNullableFunctionValueExpression(
     if (context.nullableVariables.has(name) && context.variables.get(name) === 'function') {
       return {
         lines: [],
-        expression: name
+        expression: emitCIdentifier(name)
       }
     }
   }
@@ -6225,14 +6214,15 @@ function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext
 function emitStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
     const name = joinStrings(expression.path, '_')
+    const emittedName = emitCIdentifier(name)
 
     if (isBoxedRuntimeStringName(name, context)) {
       const string = nextCName(context, 'inox_log_string')
 
       return {
         lines: [
-          emitRuntimeTypeCheck(`(*${name}).tag != INOX_TAG_STRING || (*${name}).as.ref == 0`, context),
-          `inox_string* ${string} = (inox_string*)(*${name}).as.ref;`
+          emitRuntimeTypeCheck(`(*${emittedName}).tag != INOX_TAG_STRING || (*${emittedName}).as.ref == 0`, context),
+          `inox_string* ${string} = (inox_string*)(*${emittedName}).as.ref;`
         ],
         format: '%.*s',
         values: [`(int)${string}->len`, `${string}->bytes`]
@@ -6264,7 +6254,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       }
     }
 
-    if (context.runtimeStrings.has(reference)) {
+    if (context.runtimeStrings.has(name)) {
       return {
         lines: [],
         format: '%.*s',
@@ -6773,10 +6763,10 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
       }
 
       if (context.boxedVariables.has(name)) {
-        return `(*${name})`
+        return `(*${emitCIdentifier(name)})`
       }
 
-      return name
+      return emitCIdentifier(name)
     }
 
     const functionName = context.functionNames.get(name)
@@ -6785,7 +6775,7 @@ function emitReference(expression: AnyNode, context: CFunctionContext): string {
       return functionName
     }
 
-    return name
+    return emitCIdentifier(name)
   }
 
   pushDiagnostic(
@@ -6839,7 +6829,7 @@ function emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_fetch_abort_controller_new(&inox_default_allocator, &${statement.name})`, context))
+  lines.push(emitStatusCheck(`inox_fetch_abort_controller_new(&inox_default_allocator, &${emitCIdentifier(statement.name)})`, context))
 
   return lines
 }
@@ -7787,7 +7777,7 @@ function emitRuntimeArrowCallbackValueInto(
   const contextTypeName = callbackContextWrapperContextTypeName(wrapper)
 
   lines.push(
-    `${contextTypeName}* ${contextName} = inox_default_alloc(0, sizeof(${contextTypeName}), _Alignof(${contextTypeName}));`
+    `${contextTypeName}* ${contextName} = (${contextTypeName}*)inox_default_alloc(0, sizeof(${contextTypeName}), _Alignof(${contextTypeName}));`
   )
   lines.push(`if (${contextName} == 0) ${emitFailureStatement(context)}`)
 
@@ -7817,22 +7807,23 @@ function emitRuntimeArrowCaptureStoreLines(
   context: CFunctionContext
 ): string[] {
   const field = `${contextName}->${emitRuntimeArrowCaptureField(capture)}`
+  const captureName = emitCIdentifier(capture.name)
   const lines: string[] = []
 
   if (isSupportedMutableRuntimeArrowCapture(capture, context)) {
-    lines.push(`${field} = ${capture.name};`)
+    lines.push(`${field} = ${captureName};`)
     return lines
   }
 
   if (isRetainedRuntimeArrowCapture(capture)) {
     if (capture.valueType === 'string') {
       lines.push(`${field}.tag = INOX_TAG_STRING;`)
-      lines.push(`${field}.as.ref = (inox_ref*)&${capture.name}->header;`)
+      lines.push(`${field}.as.ref = (inox_ref*)&${captureName}->header;`)
       lines.push(`inox_retain(${field});`)
       return lines
     }
 
-    lines.push(`${field} = ${capture.name};`)
+    lines.push(`${field} = ${captureName};`)
     lines.push(`inox_retain(${field});`)
     return lines
   }

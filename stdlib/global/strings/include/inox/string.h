@@ -1,6 +1,10 @@
 #ifndef INOX_STRING_H
 #define INOX_STRING_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include "inox/allocator.h"
@@ -80,5 +84,9 @@ double inox_string_last_index_of_parts(
 );
 bool inox_string_starts_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
 bool inox_string_ends_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,2 +1,2 @@
-// @targets c
+// @targets cc
 // @expect pass

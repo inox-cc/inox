@@ -340,6 +340,9 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('type', 'string', null, true, loc),
       anyNodeField('loc', 'object', null, true, loc, { shape: anyNodeLocObjectShape(loc) }),
       anyNodeField('name', 'string', null, false, loc),
+      anyNodeField('imported', 'string', null, false, loc),
+      anyNodeField('local', 'string', null, false, loc),
+      anyNodeField('source', 'string', null, false, loc),
       anyNodeField('path', 'array', null, false, loc, {
         arrayElementType: 'string',
         arrayElementDeclaredType: 'string'
@@ -365,6 +368,10 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('cases', 'array', null, false, loc, {
         arrayElementType: 'object'
       }),
+      anyNodeField('specifiers', 'array', null, false, loc, {
+        arrayElementType: 'object',
+        arrayElementDeclaredType: 'AnyNode'
+      }),
       anyNodeField('body', 'unknown', null, false, loc),
       anyNodeField('callee', 'unknown', null, false, loc),
       anyNodeField('expression', 'unknown', null, false, loc),
@@ -382,6 +389,8 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('param', 'string', null, true, loc),
       anyNodeField('paramLoc', 'object', null, true, loc, { shape: anyNodeLocObjectShape(loc) }),
       anyNodeField('expressionBody', 'boolean', null, false, loc),
+      anyNodeField('default', 'boolean', null, true, loc),
+      anyNodeField('typeOnly', 'boolean', null, false, loc),
       anyNodeField('property', 'string', null, false, loc),
       anyNodeField('operator', 'string', null, false, loc),
       anyNodeField('raw', 'string', null, false, loc),
@@ -5295,6 +5304,10 @@ class Checker {
 
     if (info === null || typeof info === 'undefined') {
       return null
+    }
+
+    if (expression.object !== null && typeof expression.object !== 'undefined') {
+      this.checkExpression(expression.object)
     }
 
     if (info.kind === 'unsupported-property') {

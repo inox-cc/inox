@@ -32,7 +32,7 @@ export function unsupportedStreamRuntimeExportReason(name: string): string {
     name === 'Transform' ||
     name === 'PassThrough'
   ) {
-    return 'stream buffering and backpressure support are not implemented by the current C backend'
+    return 'stream buffering and backpressure support are not implemented by the current C++ backend'
   }
 
   if (name === 'pipeline' || name === 'promises.pipeline') {
@@ -43,5 +43,5 @@ export function unsupportedStreamRuntimeExportReason(name: string): string {
     return 'stream completion tracking needs stream runtime support'
   }
 
-  return 'node:stream runtime support is not implemented by the current C backend'
+  return 'node:stream runtime support is not implemented by the current C++ backend'
 }

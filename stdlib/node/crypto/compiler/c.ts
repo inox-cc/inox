@@ -546,7 +546,7 @@ export function emitPreparedCryptoHashHandleExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_C_CRYPTO_HASH',
-      'this crypto hash expression is not supported by the current C backend slice',
+      'this crypto hash expression is not supported by the current C++ backend slice',
       expression.loc
     )
   )
@@ -584,7 +584,7 @@ export function emitPreparedCryptoHmacHandleExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_C_CRYPTO_HMAC',
-      'this crypto hmac expression is not supported by the current C backend slice',
+      'this crypto hmac expression is not supported by the current C++ backend slice',
       expression.loc
     )
   )

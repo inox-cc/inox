@@ -752,7 +752,7 @@ function emitDgramMessageHandlerStatement(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_HANDLER',
-        'dgram message listeners in the C backend currently support only static string local declarations',
+        'dgram message listeners in the C++ backend currently support only static string local declarations',
         statement.loc
       )
     )
@@ -796,7 +796,7 @@ function emitDgramMessageHandlerStatement(
   context.diagnostics.push(
     diagnostic(
       'INOX_DGRAM_HANDLER',
-      'this dgram message listener statement is not supported by the current C backend slice',
+      'this dgram message listener statement is not supported by the current C++ backend slice',
       statement.loc
     )
   )
@@ -859,7 +859,7 @@ function emitDgramSocketCreateLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'dgram.createSocket in the C backend currently requires an inline message listener callback',
+        'dgram.createSocket in the C++ backend currently requires an inline message listener callback',
         listener.loc
       )
     )
@@ -959,7 +959,7 @@ function emitDgramBindLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'socket.bind in the C backend currently supports port, optional address and optional callback',
+        'socket.bind in the C++ backend currently supports port, optional address and optional callback',
         dgramNodeLoc(lastDgramArgument(args))
       )
     )
@@ -1011,7 +1011,7 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        "socket.on in the C backend currently supports only the 'message' event",
+        "socket.on in the C++ backend currently supports only the 'message' event",
         dgramNodeLoc(eventArg)
       )
     )
@@ -1043,7 +1043,7 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        "socket.on('message') in the C backend currently requires an inline message listener",
+        "socket.on('message') in the C++ backend currently requires an inline message listener",
         dgramNodeLoc(listener)
       )
     )
@@ -1069,7 +1069,7 @@ function emitDgramConnectLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'socket.connect in the C backend currently requires a port argument',
+        'socket.connect in the C++ backend currently requires a port argument',
         dgramNodeLoc(args[0])
       )
     )
@@ -1097,7 +1097,7 @@ function emitDgramConnectLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'socket.connect in the C backend currently supports port, optional address and optional callback',
+        'socket.connect in the C++ backend currently supports port, optional address and optional callback',
         dgramNodeLoc(args[3])
       )
     )
@@ -1117,7 +1117,7 @@ function emitDgramDisconnectLines(socketName: string, args: AnyNode[], context: 
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'socket.disconnect in the C backend does not take arguments',
+        'socket.disconnect in the C++ backend does not take arguments',
         dgramNodeLoc(args[0])
       )
     )
@@ -1188,7 +1188,7 @@ function emitDgramSocketOptionCallStatement(
       context.diagnostics.push(
         diagnostic(
           'INOX_DGRAM_SOCKET',
-          `socket.${method} in the C backend does not take arguments`,
+          `socket.${method} in the C++ backend does not take arguments`,
           dgramNodeLoc(expression.args[0])
         )
       )
@@ -1248,7 +1248,7 @@ function emitDgramSendLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'socket.send in the C backend currently requires message, port and address arguments, or a connected socket message form',
+        'socket.send in the C++ backend currently requires message, port and address arguments, or a connected socket message form',
         dgramNodeLoc(args[0])
       )
     )
@@ -1279,7 +1279,7 @@ function emitDgramSendLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'socket.send offset/length arguments are not supported by the current C backend slice yet',
+        'socket.send offset/length arguments are not supported by the current C++ backend slice yet',
         dgramNodeLoc(args[1])
       )
     )
@@ -1315,7 +1315,7 @@ function emitDgramCloseLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'socket.close in the C backend supports only an optional callback',
+        'socket.close in the C++ backend supports only an optional callback',
         dgramNodeLoc(args[1])
       )
     )
@@ -1452,7 +1452,7 @@ function emitDgramHostExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_DGRAM_SOCKET',
-      'socket host/address arguments in the C backend currently must be static strings or rinfo.address',
+      'socket host/address arguments in the C++ backend currently must be static strings or rinfo.address',
       expression.loc
     )
   )
@@ -1571,7 +1571,7 @@ function emitDgramZeroArgCallbackLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_DGRAM_SOCKET',
-        'dgram socket callbacks in the C backend currently require a synchronous zero-argument arrow function',
+        'dgram socket callbacks in the C++ backend currently require a synchronous zero-argument arrow function',
         callback.loc
       )
     )
@@ -1717,7 +1717,7 @@ function emitDgramSocketTypeDiagnostics(
   context.diagnostics.push(
     diagnostic(
       'INOX_DGRAM_SOCKET',
-      "dgram.createSocket in the C backend currently supports only the 'udp4' socket type",
+      "dgram.createSocket in the C++ backend currently supports only the 'udp4' socket type",
       dgramNodeLoc(expression)
     )
   )

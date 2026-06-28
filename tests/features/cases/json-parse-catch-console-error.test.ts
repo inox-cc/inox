@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect pass
 // @stderr SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
 

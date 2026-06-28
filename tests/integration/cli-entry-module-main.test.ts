@@ -48,14 +48,14 @@ export async function assertCliEntryModuleMain(): Promise<void> {
 
     const result = await runCommand(
       join(repoRoot, 'dist/inox'),
-      [entry, '--emit', 'c', '--out-dir', outDir, '--entry'],
+      [entry, '--emit', 'cc', '--out-dir', outDir, '--entry'],
       workspace
     )
 
     assert.equal(result.code, 0, `driver module emit failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`)
 
-    const generated = await readFile(join(outDir, 'src/index.c'), 'utf8')
-    const generatedDependency = await readFile(join(outDir, 'src/lib/value.c'), 'utf8')
+    const generated = await readFile(join(outDir, 'src/index.cc'), 'utf8')
+    const generatedDependency = await readFile(join(outDir, 'src/lib/value.cc'), 'utf8')
     const generatedDependencyHeader = await readFile(join(outDir, 'src/lib/value.h'), 'utf8')
     const generatedDeclaration = await readFile(join(outDir, 'src/lib/value.d.ts'), 'utf8')
 

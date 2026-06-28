@@ -1,6 +1,10 @@
 #ifndef INOX_HTTP_H
 #define INOX_HTTP_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include "inox/loop.h"
 
@@ -68,5 +72,9 @@ int inox_http_response_send_fs_file(
   const char* root,
   size_t root_len
 );
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

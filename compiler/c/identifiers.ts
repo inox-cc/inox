@@ -33,18 +33,46 @@ function isDigitCode(code: number): boolean {
 function isReservedCIdentifier(value: string): boolean {
   return (
     value === 'auto' ||
+    value === 'alignas' ||
+    value === 'alignof' ||
+    value === 'and' ||
+    value === 'and_eq' ||
+    value === 'asm' ||
+    value === 'bitand' ||
+    value === 'bitor' ||
+    value === 'bool' ||
     value === 'break' ||
     value === 'case' ||
+    value === 'catch' ||
     value === 'char' ||
+    value === 'char8_t' ||
+    value === 'char16_t' ||
+    value === 'char32_t' ||
+    value === 'class' ||
+    value === 'compl' ||
+    value === 'concept' ||
     value === 'const' ||
+    value === 'consteval' ||
+    value === 'constexpr' ||
+    value === 'constinit' ||
+    value === 'const_cast' ||
     value === 'continue' ||
+    value === 'co_await' ||
+    value === 'co_return' ||
+    value === 'co_yield' ||
+    value === 'decltype' ||
     value === 'default' ||
+    value === 'delete' ||
     value === 'do' ||
     value === 'double' ||
+    value === 'dynamic_cast' ||
     value === 'else' ||
     value === 'enum' ||
+    value === 'explicit' ||
     value === 'extern' ||
+    value === 'false' ||
     value === 'float' ||
+    value === 'friend' ||
     value === 'for' ||
     value === 'goto' ||
     value === 'if' ||
@@ -52,22 +80,52 @@ function isReservedCIdentifier(value: string): boolean {
     value === 'inline' ||
     value === 'int' ||
     value === 'long' ||
+    value === 'mutable' ||
+    value === 'namespace' ||
+    value === 'new' ||
+    value === 'noexcept' ||
+    value === 'not' ||
+    value === 'not_eq' ||
+    value === 'nullptr' ||
+    value === 'or' ||
+    value === 'or_eq' ||
+    value === 'operator' ||
+    value === 'private' ||
+    value === 'protected' ||
+    value === 'public' ||
     value === 'random' ||
     value === 'register' ||
+    value === 'reinterpret_cast' ||
+    value === 'requires' ||
     value === 'restrict' ||
     value === 'return' ||
     value === 'short' ||
     value === 'signed' ||
     value === 'sizeof' ||
     value === 'static' ||
+    value === 'static_assert' ||
+    value === 'static_cast' ||
     value === 'struct' ||
     value === 'switch' ||
+    value === 'template' ||
+    value === 'this' ||
+    value === 'thread_local' ||
+    value === 'throw' ||
+    value === 'true' ||
     value === 'typedef' ||
+    value === 'typeid' ||
+    value === 'typename' ||
+    value === 'try' ||
     value === 'union' ||
     value === 'unsigned' ||
+    value === 'using' ||
+    value === 'virtual' ||
     value === 'void' ||
     value === 'volatile' ||
-    value === 'while'
+    value === 'wchar_t' ||
+    value === 'while' ||
+    value === 'xor' ||
+    value === 'xor_eq'
   )
 }
 

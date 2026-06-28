@@ -163,6 +163,12 @@ function pushIndentedCModuleLines(target: string[], source: string[]): void {
   }
 }
 
+function pushScopedCModuleBody(target: string[], source: string[]): void {
+  target.push('  {')
+  pushIndentedCModuleLines(target, source)
+  target.push('  }')
+}
+
 function pushIrFunctionDeclaration(target: IrFunctionDeclaration[], declaration: IrFunctionDeclaration): void {
   target.push(declaration)
 }
@@ -1732,14 +1738,16 @@ function emitCModuleInitFunction(
   const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   context.moduleValueDeclarationScope = true
-  const bodyLines = deps.emitStatementList(body, context)
+  const bodyLines: string[] = []
+  pushIndentedCModuleLines(bodyLines, initCalls)
+  pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
+  pushIndentedCModuleLines(bodyLines, emitEventLoopDrain(context))
   const lines: string[] = []
 
   lines.push(`void ${plan.initName}(void) {`)
   lines.push('  static bool inox_initialized = false;')
   lines.push('  if (inox_initialized) return;')
   lines.push('  inox_initialized = true;')
-  pushIndentedCModuleLines(lines, initCalls)
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
@@ -1749,8 +1757,7 @@ function emitCModuleInitFunction(
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitEventLoopInit(context))
-  pushIndentedCModuleLines(lines, bodyLines)
-  pushIndentedCModuleLines(lines, emitEventLoopDrain(context))
+  pushScopedCModuleBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('inox_cleanup:')
@@ -1776,7 +1783,10 @@ function emitCModuleMainFunction(
   const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   context.moduleValueDeclarationScope = true
-  const bodyLines = deps.emitStatementList(body, context)
+  const bodyLines: string[] = []
+  pushIndentedCModuleLines(bodyLines, initCalls)
+  pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
+  pushIndentedCModuleLines(bodyLines, emitEventLoopDrain(context))
   const lines: string[] = []
 
   if (context.processRuntime) {
@@ -1797,9 +1807,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitEventLoopInit(context))
-  pushIndentedCModuleLines(lines, initCalls)
-  pushIndentedCModuleLines(lines, bodyLines)
-  pushIndentedCModuleLines(lines, emitEventLoopDrain(context))
+  pushScopedCModuleBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
     lines.push('inox_cleanup:')

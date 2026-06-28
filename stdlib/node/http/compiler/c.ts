@@ -235,7 +235,7 @@ function emitHttpHandlerStatement(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_HANDLER',
-        'HTTP request listeners in the C backend currently support only static string local declarations',
+        'HTTP request listeners in the C++ backend currently support only static string local declarations',
         statement.loc
       )
     )
@@ -276,7 +276,7 @@ function emitHttpHandlerStatement(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_HANDLER',
-        'this HTTP request listener statement is not supported by the current C backend slice',
+        'this HTTP request listener statement is not supported by the current C++ backend slice',
         statement.loc
       )
     )
@@ -307,7 +307,7 @@ function emitHttpHandlerStatement(
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_HANDLER',
-      'this HTTP request listener statement is not supported by the current C backend slice',
+      'this HTTP request listener statement is not supported by the current C++ backend slice',
       statement.loc
     )
   )
@@ -859,7 +859,7 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_HANDLER',
-        'HTTP response headers in the C backend must be an object literal',
+        'HTTP response headers in the C++ backend must be an object literal',
         expression.loc
       )
     )
@@ -893,7 +893,7 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
       context.diagnostics.push(
         diagnostic(
           'INOX_HTTP_HANDLER',
-          'HTTP response header values in the C backend must be static strings',
+          'HTTP response header values in the C++ backend must be static strings',
           property.loc
         )
       )
@@ -923,7 +923,7 @@ function emitHttpConditionExpression(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_HANDLER',
-        'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
+        'HTTP request listener conditions in the C++ backend currently support req.method/req.url string comparisons',
         null
       )
     )
@@ -957,7 +957,7 @@ function emitHttpConditionExpression(
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_HANDLER',
-      'HTTP request listener conditions in the C backend currently support req.method/req.url string comparisons',
+      'HTTP request listener conditions in the C++ backend currently support req.method/req.url string comparisons',
       expression.loc
     )
   )
@@ -1060,7 +1060,7 @@ function emitHttpStringBytesOperand(
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_HANDLER',
-      'HTTP response body expressions in the C backend currently support static strings, JSON.stringify(object literals), req.method, req.url and String(Date.now())',
+      'HTTP response body expressions in the C++ backend currently support static strings, JSON.stringify(object literals), req.method, req.url and String(Date.now())',
       expression.loc
     )
   )
@@ -1271,7 +1271,7 @@ function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, co
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_HANDLER',
-      'HTTP status values in the C backend currently must be numeric literals',
+      'HTTP status values in the C++ backend currently must be numeric literals',
       httpNodeLoc(expression)
     )
   )
@@ -1430,7 +1430,7 @@ function emitHttpServerCreateLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
-        'http.createServer in the C backend currently requires an inline request listener',
+        'http.createServer in the C++ backend currently requires an inline request listener',
         expression.loc
       )
     )
@@ -1466,7 +1466,7 @@ function emitHttpServerListenLines(
 ): string[] {
   if (args.length < 1) {
     context.diagnostics.push(
-      diagnostic('INOX_HTTP_SERVER', 'server.listen in the C backend currently requires a port argument')
+      diagnostic('INOX_HTTP_SERVER', 'server.listen in the C++ backend currently requires a port argument')
     )
 
     return []
@@ -1490,7 +1490,7 @@ function emitHttpServerListenLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
-        'server.listen in the C backend currently supports port, optional host and optional callback',
+        'server.listen in the C++ backend currently supports port, optional host and optional callback',
         httpNodeLoc(args[3])
       )
     )
@@ -1526,7 +1526,7 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
-        "server.on in the C backend currently supports only the 'request' event",
+        "server.on in the C++ backend currently supports only the 'request' event",
         httpNodeLoc(eventArg)
       )
     )
@@ -1558,7 +1558,7 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
-        "server.on('request') in the C backend currently requires an inline request listener",
+        "server.on('request') in the C++ backend currently requires an inline request listener",
         httpNodeLoc(listener)
       )
     )
@@ -1578,7 +1578,7 @@ function emitHttpServerCloseLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
-        'server.close in the C backend supports only an optional callback',
+        'server.close in the C++ backend supports only an optional callback',
         httpNodeLoc(args[1])
       )
     )
@@ -1604,7 +1604,7 @@ function emitHttpZeroArgCallbackLines(
     context.diagnostics.push(
       diagnostic(
         'INOX_HTTP_SERVER',
-        'HTTP server lifecycle callbacks in the C backend currently require a synchronous zero-argument arrow function',
+        'HTTP server lifecycle callbacks in the C++ backend currently require a synchronous zero-argument arrow function',
         callback.loc
       )
     )
@@ -1642,7 +1642,7 @@ function emitHttpListenHostExpression(expression: AnyNode | null | undefined, co
   context.diagnostics.push(
     diagnostic(
       'INOX_HTTP_SERVER',
-      'server.listen host in the C backend currently must be a string literal',
+      'server.listen host in the C++ backend currently must be a string literal',
       expression.loc
     )
   )

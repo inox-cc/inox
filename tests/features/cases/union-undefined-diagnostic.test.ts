@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_UNKNOWN_NAME
 
 const value: string | undefined = undefined

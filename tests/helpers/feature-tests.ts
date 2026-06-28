@@ -79,8 +79,10 @@ export async function readFeatureTestFile(path: string): Promise<FeatureTestFile
 
 export async function assertCcAvailable(): Promise<void> {
   const cc = await runCommand('cc', ['--version'])
+  const cxx = await runCommand('c++', ['--version'])
 
   assert.equal(cc.code, 0, 'cc is not available')
+  assert.equal(cxx.code, 0, 'c++ is not available')
 }
 
 export async function assertFeatureCompilerAvailable(compiler: FeatureTestCompiler): Promise<void> {
@@ -339,7 +341,7 @@ function parseExpectation(value: string): FeatureExpectation {
 
 async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: FeatureTestCompiler): Promise<void> {
   const dir = await createTestTempDir('inox-feature-')
-  const emittedCPath = join(dir, `${sanitizePath(featureFile.name)}.c`)
+  const emittedCPath = join(dir, `${sanitizePath(featureFile.name)}.cc`)
   const exePath = join(dir, sanitizePath(featureFile.name))
   let keepArtifacts = false
 
@@ -360,7 +362,7 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: Fea
     assert.equal(
       compile.code,
       0,
-      `${featureFile.name}: emitted-c-compile failed\nemitted C: ${emittedCPath}\nstdout: ${compile.stdout}\nstderr: ${compile.stderr}`
+      `${featureFile.name}: emitted-cc-compile failed\nemitted C++: ${emittedCPath}\nstdout: ${compile.stdout}\nstderr: ${compile.stderr}`
     )
 
     const run = await runCommand(exePath, [])
@@ -369,12 +371,12 @@ async function assertCompilesAndRuns(featureFile: FeatureTestFile, compiler: Fea
     assert.equal(
       run.code,
       0,
-      `${featureFile.name}: emitted-binary-run failed\nemitted C: ${emittedCPath}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
+      `${featureFile.name}: emitted-binary-run failed\nemitted C++: ${emittedCPath}\nstdout: ${run.stdout}\nstderr: ${run.stderr}`
     )
     assert.equal(
       run.stdout,
       featureFile.expectedStdout,
-      `${featureFile.name}: stdout mismatch\nemitted C: ${emittedCPath}`
+      `${featureFile.name}: stdout mismatch\nemitted C++: ${emittedCPath}`
     )
     assert.equal(
       run.stderr,
@@ -518,14 +520,14 @@ async function compileFeatureTestToC(featureFile: FeatureTestFile, compiler: Fea
 
   if (featureFile.usesModuleGraph) {
     const result = await compileFile(featureFile.path, {
-      target: 'c'
+      target: 'cc'
     })
 
     return result.code
   }
 
   const result = compileSource(featureFile.source, {
-    target: 'c'
+    target: 'cc'
   })
 
   return result.code
@@ -536,7 +538,7 @@ async function compileFeatureTestWithBinary(
   compiler: Extract<FeatureTestCompiler, { kind: 'binary' }>
 ): Promise<string> {
   const dir = await createTestTempDir('inox-feature-compiler-')
-  const outputPath = join(dir, `${sanitizePath(featureFile.name)}.c`)
+  const outputPath = join(dir, `${sanitizePath(featureFile.name)}.cc`)
 
   try {
     const compile = await runCommand(compiler.path, [featureFile.path, outputPath])

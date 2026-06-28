@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_C_SWITCH_CASE
 
 const value: string = 'ok'

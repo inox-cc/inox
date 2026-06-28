@@ -1,4 +1,4 @@
-// @targets c
+// @targets cc
 // @expect diagnostics INOX_WEAK_ACCESS
 
 class Parent {
