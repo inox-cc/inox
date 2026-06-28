@@ -68,7 +68,7 @@ const projectSourceRoot = '/project'
 const compilerSourceRoot = `${projectSourceRoot}/compiler`
 const selfHostedSourceDirs = ['compiler', 'stdlib']
 const buildLoopBackend = 'libuv'
-const buildTlsBackend = 'openssl'
+const buildTlsBackend = 'boringssl'
 
 const parsed = parseArgs(process.argv.slice(2))
 
@@ -1022,7 +1022,7 @@ The native binary is a narrow compiler driver:
 function nativeCompilerCMakeLists(generatedDir: string): string {
   return `cmake_minimum_required(VERSION 3.20)
 
-project(inox_selfhost C)
+project(inox_selfhost C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -1035,6 +1035,10 @@ file(GLOB_RECURSE INOX_GENERATED_SOURCES CONFIGURE_DEPENDS "${cmakeString(genera
 add_executable(inox \${INOX_GENERATED_SOURCES})
 target_include_directories(inox PRIVATE "${cmakeString(generatedDir)}")
 target_link_libraries(inox PRIVATE inox_runtime)
+
+if(INOX_TLS_BACKEND STREQUAL "boringssl")
+  set_property(TARGET inox PROPERTY LINKER_LANGUAGE CXX)
+endif()
 `
 }
 
