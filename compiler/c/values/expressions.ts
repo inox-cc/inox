@@ -1,5 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { emitCRegExpFlags } from '../../features/regexp/index.ts'
+import { emitCRegExpFlags } from '../../../stdlib/global/compiler/feature.ts'
 import { isNumericCastName } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {

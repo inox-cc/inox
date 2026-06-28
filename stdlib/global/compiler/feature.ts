@@ -7,13 +7,17 @@ import {
   numericCastsFeature
 } from '../conversions/compiler/feature.ts'
 import { collectJsonIrFeatures, jsonFeature } from '../json/compiler/feature.ts'
+import { collectRegExpIrFeatures, emitCRegExpPreludeHelpers, regexpFeature } from '../regexp/compiler/feature.ts'
 import { clocksFeature, collectClocksIrFeatures } from '../time/compiler/feature.ts'
+
+export { emitCRegExpFlags } from '../regexp/compiler/feature.ts'
 
 export const globalStdlibFeatures: CompilerFeatureDescriptor[] = [
   clocksFeature,
   jsonFeature,
   numberFromStringNullFeature,
-  numericCastsFeature
+  numericCastsFeature,
+  regexpFeature
 ]
 
 export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
@@ -21,4 +25,13 @@ export function collectGlobalStdlibIrFeatures(node: AnyNode, features: Set<IrFea
   collectJsonIrFeatures(node, features)
   collectNumberFromStringNullIrFeatures(node, features)
   collectNumericCastsIrFeatures(node, features)
+  collectRegExpIrFeatures(node, features)
+}
+
+export function emitGlobalStdlibCPreludeHelpers(featureName: IrFeature): string[] {
+  if (featureName === 'regexp') {
+    return emitCRegExpPreludeHelpers()
+  }
+
+  return []
 }

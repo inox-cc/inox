@@ -1,5 +1,5 @@
-import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../types.ts'
-import type { CompilerFeatureDescriptor } from '../types.ts'
+import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
+import type { AnyNode, IrFeature, IrRuntimeRequirement } from '../../../../compiler/types.ts'
 
 type RegExpFeatureSet = Set<IrFeature>
 

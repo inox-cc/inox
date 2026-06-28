@@ -1,5 +1,5 @@
 import { diagnostic } from '../../diagnostics.ts'
-import { emitCRegExpFlags } from '../../features/regexp/index.ts'
+import { emitCRegExpFlags } from '../../../stdlib/global/compiler/feature.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'

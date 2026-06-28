@@ -7,7 +7,6 @@ import {
   mapGetNullFeature,
   mapIndexSetFeature
 } from './map-access/index.ts'
-import { collectRegExpIrFeatures, emitCRegExpPreludeHelpers, regexpFeature } from './regexp/index.ts'
 import { collectDebugMemoryIrFeatures } from './runtime-backed/debug-memory.ts'
 import {
   collectNodeStdlibIrFeatures,
@@ -16,6 +15,7 @@ import {
 } from '../../stdlib/node/compiler/feature.ts'
 import {
   collectGlobalStdlibIrFeatures,
+  emitGlobalStdlibCPreludeHelpers,
   globalStdlibFeatures
 } from '../../stdlib/global/compiler/feature.ts'
 import { runtimeBackedFeatures } from './runtime-backed/index.ts'
@@ -31,7 +31,6 @@ const compilerFeatureDescriptorRows: CompilerFeatureDescriptor[][] = [
   [
     mapGetNullFeature,
     mapIndexSetFeature,
-    regexpFeature,
     weakReferencesFeature
   ]
 ]
@@ -104,7 +103,6 @@ export function collectCompilerFeatureIrFeatures(node: unknown, features: Set<Ir
   collectDebugMemoryIrFeatures(featureNode, features)
   collectMapGetNullIrFeatures(featureNode, features)
   collectMapIndexSetIrFeatures(featureNode, features)
-  collectRegExpIrFeatures(featureNode, features)
   collectWeakReferencesIrFeatures(featureNode, features)
 }
 
@@ -165,8 +163,8 @@ export function emitCompilerFeatureCPreludeHelpers(featureName: IrFeature): stri
 
   const lines: string[] = []
 
-  if (descriptor.id === 'regexp') {
-    pushAll(lines, emitCRegExpPreludeHelpers())
+  if (descriptor.hasCPreludeHelpers) {
+    pushAll(lines, emitGlobalStdlibCPreludeHelpers(featureName))
   }
 
   return lines

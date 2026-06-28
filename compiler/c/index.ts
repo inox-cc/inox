@@ -1,5 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
-import { emitCRegExpFlags } from '../features/regexp/index.ts'
+import { emitCRegExpFlags } from '../../stdlib/global/compiler/feature.ts'
 import { collectIrLocalThrowValueTypes, collectIrPrograms } from '../ir.ts'
 import type { IrLocalThrowValueTypeOptions } from '../ir/effects.ts'
 import type { IrModuleRecord } from '../ir/top-level.ts'
