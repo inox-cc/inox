@@ -20,6 +20,7 @@ import {
   isTimerRuntimeImportSymbol,
   isUrlMutableObjectField,
   isUrlSearchParamsRuntimeMethod,
+  nodeStdlibRuntimeObjectInfo,
   osRuntimeCallInfo,
   osRuntimeConstantName,
   pathRuntimeCallInfo,
@@ -413,9 +414,10 @@ function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('pathRuntimeMethod', 'string', null, true, loc),
       anyNodeField('pathRuntimeConstant', 'string', null, true, loc),
       anyNodeField('processRuntimeMethod', 'string', null, true, loc),
-      anyNodeField('processRuntimeObject', 'string', null, true, loc),
       anyNodeField('processRuntimeProperty', 'string', null, true, loc),
       anyNodeField('processRuntimeEnvName', 'string', null, true, loc),
+      anyNodeField('runtimeObjectName', 'string', null, true, loc),
+      anyNodeField('runtimeObjectSource', 'string', null, true, loc),
       anyNodeField('dgramMessageHandlerName', 'string', null, true, loc),
       anyNodeField('regexpRuntimeMethod', 'string', null, true, loc),
       anyNodeField('urlRuntimeMethod', 'string', null, true, loc),
@@ -2710,14 +2712,14 @@ class Checker {
         }
       }
 
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.kind === 'global' &&
-        path.length === 1 &&
-        path[0] === 'process'
-      ) {
-        expression.processRuntimeObject = 'process'
+      const runtimeObject = nodeStdlibRuntimeObjectInfo(path, symbol)
+
+      if (runtimeObject !== null && typeof runtimeObject !== 'undefined') {
+        expression.runtimeObjectSource = runtimeObject.source
+        expression.runtimeObjectName = runtimeObject.name
+        valueType = runtimeObject.valueType
+        expression.valueType = runtimeObject.valueType
+        expression.shape = runtimeObject.shape
       }
 
       return valueType

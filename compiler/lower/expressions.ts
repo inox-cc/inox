@@ -428,14 +428,19 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.processRuntimeMethod = processRuntimeMethod
   }
 
-  const processRuntimeObject = nullableString(source.processRuntimeObject)
-  if (processRuntimeObject !== null && typeof processRuntimeObject !== 'undefined') {
-    target.processRuntimeObject = processRuntimeObject
-  }
-
   const processRuntimeProperty = nullableString(source.processRuntimeProperty)
   if (processRuntimeProperty !== null && typeof processRuntimeProperty !== 'undefined') {
     target.processRuntimeProperty = processRuntimeProperty
+  }
+
+  const runtimeObjectName = nullableString(source.runtimeObjectName)
+  if (runtimeObjectName !== null && typeof runtimeObjectName !== 'undefined') {
+    target.runtimeObjectName = runtimeObjectName
+  }
+
+  const runtimeObjectSource = nullableString(source.runtimeObjectSource)
+  if (runtimeObjectSource !== null && typeof runtimeObjectSource !== 'undefined') {
+    target.runtimeObjectSource = runtimeObjectSource
   }
 
   const stringRuntimeMethod = nullableString(source.stringRuntimeMethod)

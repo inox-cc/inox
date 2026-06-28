@@ -3,12 +3,12 @@ import {
   isNodeProcessImportSource,
   isProcessRuntimeMethod,
   isProcessRuntimeProperty,
+  nodeProcessImportSource,
   isUnsupportedProcessRuntimeMethod,
   isUnsupportedProcessRuntimeProperty,
   processRuntimePropertyValueType
 } from './descriptor.ts'
 import type { ObjectShapeInfo, SymbolInfo, ValueType } from '../../../../compiler/types.ts'
-import { name, length } from 'assert'
 
 export type ProcessRuntimeCallInfo = {
   method: string
@@ -23,6 +23,13 @@ export type ProcessRuntimePropertyInfo = {
   property: string
   valueType: ValueType
   shape?: ObjectShapeInfo | null
+}
+
+export type ProcessRuntimeObjectInfo = {
+  source: string
+  name: string
+  valueType: ValueType
+  shape: ObjectShapeInfo
 }
 
 export const processMemoryUsageObjectShape: ObjectShapeInfo = {
@@ -65,6 +72,24 @@ export const processVersionsObjectShape: ObjectShapeInfo = {
       name: 'node',
       valueType: 'string',
       readonly: true
+    }
+  ]
+}
+
+export const processObjectShape: ObjectShapeInfo = {
+  kind: 'object',
+  builtin: 'process.Process',
+  fields: [
+    {
+      name: 'version',
+      valueType: 'string',
+      readonly: true
+    },
+    {
+      name: 'versions',
+      valueType: 'object',
+      readonly: true,
+      shape: processVersionsObjectShape
     }
   ]
 }
@@ -127,6 +152,26 @@ export function processRuntimePropertyImportInfo(
   }
 
   return null
+}
+
+export function processRuntimeObjectInfo(
+  path: readonly string[] | null | undefined,
+  rootSymbol: SymbolInfo | null | undefined
+): ProcessRuntimeObjectInfo | null {
+  if (path === null || typeof path === 'undefined' || path.length !== 1) {
+    return null
+  }
+
+  if (!isProcessModuleObjectImportSymbol(rootSymbol) && !isProcessGlobalRoot(path, rootSymbol)) {
+    return null
+  }
+
+  return {
+    source: nodeProcessImportSource,
+    name: 'process',
+    valueType: 'object',
+    shape: processObjectShape
+  }
 }
 
 export function processRuntimeMemberInfo(

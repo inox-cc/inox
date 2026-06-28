@@ -9,6 +9,15 @@ import type {
   FsRuntimeCallInfo as PackageFsRuntimeCallInfo,
   FsRuntimeCallPlan as PackageFsRuntimeCallPlan
 } from '../../../stdlib/node/fs/compiler/checker.ts'
+import type { ObjectShapeInfo, SymbolInfo, ValueType } from '../../types.ts'
+import { processRuntimeObjectInfo } from '../../../stdlib/node/process/compiler/checker.ts'
+
+export type NodeStdlibRuntimeObjectInfo = {
+  source: string
+  name: string
+  valueType: ValueType
+  shape: ObjectShapeInfo
+}
 
 export {
   binaryConstructorName,
@@ -68,3 +77,16 @@ export type FsBooleanOptions = PackageFsBooleanOptions
 export type FsRuntimeArgumentCheck = PackageFsRuntimeArgumentCheck
 export type FsRuntimeCallInfo = PackageFsRuntimeCallInfo
 export type FsRuntimeCallPlan = PackageFsRuntimeCallPlan
+
+export function nodeStdlibRuntimeObjectInfo(
+  path: readonly string[] | null | undefined,
+  rootSymbol: SymbolInfo | null | undefined
+): NodeStdlibRuntimeObjectInfo | null {
+  const processInfo = processRuntimeObjectInfo(path, rootSymbol)
+
+  if (processInfo !== null && typeof processInfo !== 'undefined') {
+    return processInfo
+  }
+
+  return null
+}

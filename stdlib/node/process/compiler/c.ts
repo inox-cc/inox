@@ -1,6 +1,7 @@
 import {
   isProcessRuntimeNumberProperty,
   isProcessRuntimeStringProperty,
+  nodeProcessImportSource,
   processRuntimePropertyValueType
 } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
@@ -12,10 +13,6 @@ import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression
 } from '../../../../compiler/c/types.ts'
-import { type } from 'os'
-import { push } from 'stream/iter'
-import { emitPreparedNumberExpression } from '../../../../compiler/c/values/expressions.ts'
-import { registerObjectShape } from '../../../../compiler/c/values/objects.ts'
 
 type ProcessCContext = {
   cleanupEnabled: boolean
@@ -70,7 +67,11 @@ export function cProcessRuntimeObjectName(expression: AnyNode | null | undefined
     return null
   }
 
-  const object = expression.processRuntimeObject
+  if (expression.runtimeObjectSource !== nodeProcessImportSource) {
+    return null
+  }
+
+  const object = expression.runtimeObjectName
 
   if (object !== null && typeof object !== 'undefined') {
     return object

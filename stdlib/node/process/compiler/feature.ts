@@ -1,12 +1,14 @@
 import type { AnyNode, IrFeature } from '../../../../compiler/types.ts'
 import type { CompilerFeatureDescriptor } from '../../../../compiler/features/types.ts'
 import { hasStringValue, nullableString } from '../../../../compiler/ir/node-utils.ts'
+import { nodeProcessImportSource } from './descriptor.ts'
 
 type ProcessFeatureNode = AnyNode & {
   processRuntimeEnvName?: string | null
   processRuntimeMethod?: string | null
-  processRuntimeObject?: string | null
   processRuntimeProperty?: string | null
+  runtimeObjectName?: string | null
+  runtimeObjectSource?: string | null
   type?: string | null
 }
 
@@ -21,7 +23,7 @@ export function collectProcessIrFeatures(node: AnyNode, features: Set<IrFeature>
   const item = node as ProcessFeatureNode
 
   if (
-    !hasStringValue(item.processRuntimeObject) &&
+    !isProcessRuntimeObject(item) &&
     !hasStringValue(item.processRuntimeProperty) &&
     !hasStringValue(item.processRuntimeEnvName) &&
     !processRuntimeMethodName(item)
@@ -34,7 +36,6 @@ export function collectProcessIrFeatures(node: AnyNode, features: Set<IrFeature>
   features.add('string-bytes')
 
   const method = processRuntimeMethodName(item)
-  const object = nullableString(item.processRuntimeObject)
   const property = nullableString(item.processRuntimeProperty)
 
   if (method === 'hrtime') {
@@ -45,9 +46,16 @@ export function collectProcessIrFeatures(node: AnyNode, features: Set<IrFeature>
     features.add('objects')
   }
 
-  if (object === 'process' || property === 'versions') {
+  if (isProcessRuntimeObject(item) || property === 'versions') {
     features.add('objects')
   }
+}
+
+function isProcessRuntimeObject(expression: ProcessFeatureNode): boolean {
+  return (
+    nullableString(expression.runtimeObjectSource) === nodeProcessImportSource &&
+    nullableString(expression.runtimeObjectName) === 'process'
+  )
 }
 
 function processRuntimeMethodName(expression: ProcessFeatureNode): string | null {
