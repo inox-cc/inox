@@ -1430,6 +1430,10 @@ class Parser {
       return createUnaryExpression(this.previous(), this.parseUnary())
     }
 
+    if (this.matchKeyword('delete')) {
+      return createUnaryExpression(this.previous(), this.parseUnary())
+    }
+
     if (this.isValue('++') || this.isValue('--')) {
       const operator = this.advance()
 

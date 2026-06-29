@@ -54,6 +54,7 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
 import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
+import { emitNativeClassFieldAssignment } from './classes.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
 import {
@@ -4349,6 +4350,12 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (urlFieldAssignment !== null && typeof urlFieldAssignment !== 'undefined') {
       return urlFieldAssignment
+    }
+
+    const nativeClassFieldAssignment = emitNativeClassFieldAssignment(expression, context)
+
+    if (nativeClassFieldAssignment !== null && typeof nativeClassFieldAssignment !== 'undefined') {
+      return nativeClassFieldAssignment
     }
 
     if (expression.target.type === 'MemberExpression') {

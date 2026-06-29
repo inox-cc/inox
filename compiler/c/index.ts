@@ -100,8 +100,10 @@ import {
   shouldEmitCleanupLabel
 } from './context.ts'
 import {
+  emitClassConstructorDeclaration as emitClassConstructorDeclarationWithDependencies,
   emitClassMethodDeclaration as emitClassMethodDeclarationWithDependencies,
   emitClassMethodHead,
+  emitClassMethodPrototype,
   emitFunctionDeclaration as emitFunctionDeclarationWithDependencies,
   emitFunctionHead,
   emitMainReturnExpression,
@@ -291,10 +293,14 @@ import {
 } from './values/arrays.ts'
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
-  emitCClassObjectValueExpression,
-  emitClassObjectVariableDeclaration,
-  emitPreparedClassMethodCallExpression,
-  isClassConstructorExpression
+  cClassNameFromValueType,
+  emitCClassObjectValueExpression as emitCClassObjectValueExpressionWithDependencies,
+  emitClassObjectVariableDeclaration as emitClassObjectVariableDeclarationWithDependencies,
+  emitCNativeClassAssignmentLines,
+  emitPreparedNativeClassFieldScalarExpression,
+  emitPreparedNativeClassFieldValueExpression,
+  emitPreparedClassMethodCallExpression as emitPreparedClassMethodCallExpressionWithDependencies,
+  isClassConstructorExpression as isClassConstructorExpressionWithDependencies
 } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
 import {
@@ -708,6 +714,26 @@ const classLoweringDependencies: ClassLoweringDependencies = {
   emitCFieldFlags,
   emitCValueExpression,
   emitPreparedCallArgs
+}
+
+function emitClassObjectVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {
+  return emitClassObjectVariableDeclarationWithDependencies(statement, context)
+}
+
+function emitCClassObjectValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
+  return emitCClassObjectValueExpressionWithDependencies(expression, context)
+}
+
+function emitPreparedClassMethodCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  options: PreparedCallOptions = {}
+): PreparedExpression | null {
+  return emitPreparedClassMethodCallExpressionWithDependencies(expression, context, options)
+}
+
+function isClassConstructorExpression(expression: AnyNode, context: CFunctionContext): boolean {
+  return isClassConstructorExpressionWithDependencies(expression, context)
 }
 
 objectVariableDeclarationDependencies = {
@@ -1314,9 +1340,12 @@ const cUnitDependencies = {
   collectionLoweringDependencies,
   createBaseContext,
   dgramLoweringDependencies,
+  emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) =>
+    emitClassConstructorDeclarationWithDependencies(info, baseContext, declarationEmissionDependencies),
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) =>
     emitClassMethodDeclarationWithDependencies(info, method, baseContext, declarationEmissionDependencies),
   emitClassMethodHead,
+  emitClassMethodPrototype,
   emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) =>
     emitFunctionDeclarationWithDependencies(statement, baseContext, declarationEmissionDependencies),
   emitFunctionHead,
@@ -1339,9 +1368,12 @@ const cModuleEmissionDependencies = {
   collectionLoweringDependencies,
   createBaseContext,
   dgramLoweringDependencies,
+  emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) =>
+    emitClassConstructorDeclarationWithDependencies(info, baseContext, declarationEmissionDependencies),
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) =>
     emitClassMethodDeclarationWithDependencies(info, method, baseContext, declarationEmissionDependencies),
   emitClassMethodHead,
+  emitClassMethodPrototype,
   emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) =>
     emitFunctionDeclarationWithDependencies(statement, baseContext, declarationEmissionDependencies),
   emitFunctionHead,
@@ -3384,6 +3416,24 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
   }
 
+  const moduleClassName = cClassNameFromValueType(moduleValueType)
+
+  if (moduleClassName !== null && typeof moduleClassName !== 'undefined') {
+    const info = context.classInfos.get(moduleClassName)
+
+    if (
+      info !== null &&
+      typeof info !== 'undefined' &&
+      info.native &&
+      isClassConstructorExpression(statement.init, context)
+    ) {
+      context.variables.set(statement.name, moduleValueType)
+      context.moduleValueTypes.set(statement.name, moduleValueType)
+      context.classInstanceTypes.set(statement.name, moduleClassName)
+      return emitCNativeClassAssignmentLines(name, statement.init, info, context)
+    }
+  }
+
   if (inferred === 'regexp' && statement.init.type === 'RegExpLiteral') {
     context.moduleValueTypes.set(statement.name, 'regexp')
     context.regexpLiterals.set(statement.name, statement.init)
@@ -5294,6 +5344,12 @@ function emitPreparedNullableScalarFieldValueExpression(
   context: CFunctionContext
 ): PreparedExpression | null {
   if (expression.type === 'MemberExpression') {
+    const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
+
+    if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
+      return nativeClassField
+    }
+
     const knownMember = emitPreparedKnownObjectMemberValueExpression(expression, context)
 
     if (knownMember !== null && typeof knownMember !== 'undefined') {
@@ -6291,6 +6347,32 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       }
     }
 
+    const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
+
+    if (
+      nativeClassField !== null &&
+      typeof nativeClassField !== 'undefined' &&
+      inferExpressionType(expression, context) === 'string'
+    ) {
+      const string = nextCName(context, 'inox_log_string')
+      const lines: string[] = []
+
+      pushAll(lines, nativeClassField.lines)
+      lines.push(
+        emitRuntimeTypeCheck(
+          `${nativeClassField.expression}.tag != INOX_TAG_STRING || ${nativeClassField.expression}.as.ref == 0`,
+          context
+        )
+      )
+      lines.push(`inox_string* ${string} = (inox_string*)${nativeClassField.expression}.as.ref;`)
+
+      return {
+        lines,
+        format: '%.*s',
+        values: [`(int)${string}->len`, `${string}->bytes`]
+      }
+    }
+
     const member = resolveKnownObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && member.valueType === 'string') {
@@ -6474,6 +6556,16 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
         lines: length.lines,
         format: consoleLogNumberFormat,
         values: [`((double)${length.expression})`]
+      }
+    }
+
+    const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
+
+    if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
+      return {
+        lines: nativeClassField.lines,
+        format: consoleLogNumberFormat,
+        values: [`((double)${nativeClassField.expression})`]
       }
     }
 

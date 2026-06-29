@@ -663,6 +663,7 @@ function isKeyword(value: string): boolean {
     value === 'constructor' ||
     value === 'continue' ||
     value === 'default' ||
+    value === 'delete' ||
     value === 'export' ||
     value === 'false' ||
     value === 'finally' ||

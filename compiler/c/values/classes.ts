@@ -2,7 +2,14 @@ import { diagnostic } from '../../diagnostics.ts'
 import { irClassMethodEffectName } from '../../ir.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import { functionTakesEventLoopParam } from '../async/promises.ts'
-import type { CFunctionContext } from '../context.ts'
+import type {
+  CEmitContext,
+  CEventLoopContext,
+  CFailureContext,
+  CNameContext,
+  COwnedPromiseContext,
+  COwnedValueContext
+} from '../context.ts'
 import {
   emitEventLoopReference,
   emitFailureStatement,
@@ -26,6 +33,9 @@ import type {
 } from '../types.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
+  emitCScalarParamName,
+  emitCStringParamName,
+  emitCType,
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
   isNullableScalarType,
@@ -40,8 +50,10 @@ export type ClassLoweringDependencies = {
 }
 
 type ClassMethodCallInfo = {
+  accessOperator: string
   info: CClassInfo
   methodName: string
+  native: boolean
   objectExpression: string
   objectLines: string[]
 }
@@ -55,13 +67,53 @@ type ClassMaybeNode = AnyNode | null | undefined
 
 type ClassEmitContext = {
   classInfos: CClassInfoMap
+  diagnostics: Diagnostic[]
 }
 
-type ClassFunctionContext = CFunctionContext
-
-function emitFallbackClassFieldFlags(_field: CObjectShapeField): string {
-  return '0'
+type ClassFunctionContext = CFailureContext &
+  CNameContext &
+  CEventLoopContext &
+  COwnedValueContext &
+  COwnedPromiseContext & {
+    classInfos: CClassInfoMap
+    classInstanceTypes: Map<string, string>
+    classLoweringDependencies: ClassLoweringDependencies
+    boxedVariables: Set<string>
+    diagnostics: Diagnostic[]
+    errorChannelUsed: boolean
+    errorTargets: string[]
+    externalEventLoopFunctions: Set<string>
+    functionAsyncFlags: Map<string, boolean>
+    functionReturnTypes: Map<string, string>
+    localValueNames: Set<string>
+    moduleValueNames: Map<string, string>
+    objectShapes: Map<string, CObjectShapeField[]>
+    throwingFunctions: Set<string>
+    variables: Map<string, string>
+  }
+type ClassLookupContext = {
+  classInfos: CClassInfoMap
+  classInstanceTypes: Map<string, string>
+  localValueNames: Set<string>
+  moduleValueNames: Map<string, string>
+  variables: Map<string, string>
 }
+type CNativeClassReceiver = {
+  accessOperator: string
+  className: string
+  expression: string
+  lines: string[]
+}
+
+type CNativeClassFieldAccess = {
+  accessOperator: string
+  field: CObjectShapeField
+  info: CClassInfo
+  objectExpression: string
+  reference: string
+}
+
+export type CClassMethodPrototypeMap = Map<string, string[]>
 
 function emitFallbackClassValueExpression(
   _expression: ClassExpressionNode,
@@ -82,6 +134,10 @@ function emitFallbackPreparedClassCallArgs(
     lines: [],
     args: []
   }
+}
+
+function emitFallbackClassFieldFlags(_field: CObjectShapeField): string {
+  return '0'
 }
 
 function emitClassFieldFlags(context: ClassFunctionContext, field: CObjectShapeField): string {
@@ -170,6 +226,322 @@ function classFieldOwnership(field: CObjectShapeField): string {
   return 'strong'
 }
 
+export function cClassValueTypeName(className: string): string {
+  return `class:${className}`
+}
+
+export function cClassNameFromValueType(valueType: string | null | undefined): string | null {
+  if (valueType === null || typeof valueType === 'undefined' || !valueType.startsWith('class:')) {
+    return null
+  }
+
+  return valueType.slice('class:'.length)
+}
+
+export function emitCClassTypeName(className: string): string {
+  return emitCIdentifier(className)
+}
+
+function emitCClassFieldName(name: string): string {
+  return emitCIdentifier(name)
+}
+
+function emitCClassMethodIdentifier(name: string): string {
+  return emitCIdentifier(name)
+}
+
+export function emitCClassMethodName(className: string, methodName: string): string {
+  return `inox_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
+}
+
+function classValueType(info: CClassInfo): string {
+  return cClassValueTypeName(info.name)
+}
+
+function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
+  return (
+    field.valueType === 'unknown' ||
+    isManagedRuntimeReturnType(field.valueType) ||
+    isOpaqueRuntimeValueType(field.valueType) ||
+    (field.nullable === true && isNullableScalarType(field.valueType))
+  )
+}
+
+function classCanUseNativeLowering(fields: CObjectShapeField[]): boolean {
+  for (const field of fields) {
+    if (!classFieldSupportsNativeLowering(field)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
+  if (field.className !== null && typeof field.className !== 'undefined') {
+    return false
+  }
+
+  return (
+    field.valueType === 'number' ||
+    field.valueType === 'boolean' ||
+    field.valueType === 'string' ||
+    field.valueType === 'date' ||
+    field.valueType === 'regexp'
+  )
+}
+
+function emitCClassFieldType(field: CObjectShapeField): string {
+  if (classFieldUsesRuntimeValueStorage(field)) {
+    return 'inox_value'
+  }
+
+  return emitCType(field.valueType)
+}
+
+function emitCClassFieldDefaultValue(field: CObjectShapeField): string {
+  if (classFieldUsesRuntimeValueStorage(field)) {
+    return 'inox_undefined_value()'
+  }
+
+  if (field.valueType === 'regexp') {
+    return '{ 0, 0 }'
+  }
+
+  return '0'
+}
+
+function emitCClassParamType(param: CFunctionParam): string {
+  if (param.nullable === true && isNullableScalarType(param.valueType)) {
+    return 'inox_value'
+  }
+
+  if (param.valueType === 'string') {
+    return 'inox_value'
+  }
+
+  return emitCType(param.valueType)
+}
+
+function emitCClassParamName(param: CFunctionParam): string {
+  if (param.nullable === true && isNullableScalarType(param.valueType)) {
+    return emitCScalarParamName(param.name)
+  }
+
+  if (param.valueType === 'string') {
+    return emitCStringParamName(param.name)
+  }
+
+  return emitCIdentifier(param.name)
+}
+
+function emitCClassParamDeclaration(param: CFunctionParam): string {
+  return `${emitCClassParamType(param)} ${emitCClassParamName(param)}`
+}
+
+function emitCClassParamDeclarations(params: CFunctionParam[]): string {
+  const declarations: string[] = []
+
+  for (const param of params) {
+    declarations.push(emitCClassParamDeclaration(param))
+  }
+
+  return joinStrings(declarations, ', ')
+}
+
+function emitCClassFieldWriteLines(target: string, value: string, field: CObjectShapeField): string[] {
+  if (!classFieldUsesRuntimeValueStorage(field)) {
+    return [`${target} = ${value};`]
+  }
+
+  return [`inox_retain(${value});`, `inox_release(${target});`, `${target} = ${value};`]
+}
+
+function emitCClassConstructorInitializers(info: CClassInfo): string {
+  const initializers: string[] = []
+
+  for (const field of info.fields) {
+    initializers.push(`${emitCClassFieldName(field.name)}(${emitCClassFieldDefaultValue(field)})`)
+  }
+
+  if (initializers.length === 0) {
+    return ''
+  }
+
+  return ` : ${joinStrings(initializers, ', ')}`
+}
+
+function emitCClassDefaultConstructor(info: CClassInfo): string {
+  return `${emitCClassTypeName(info.name)}()${emitCClassConstructorInitializers(info)} {}`
+}
+
+export function emitCClassConstructorPrototype(info: CClassInfo): string | null {
+  const constructorMethod = info.constructor
+
+  if (constructorMethod === null || typeof constructorMethod === 'undefined') {
+    return null
+  }
+
+  const params: CFunctionParam[] = constructorMethod.params
+
+  return `${emitCClassTypeName(info.name)}(${emitCClassParamDeclarations(params)});`
+}
+
+export function emitCClassConstructorHead(info: CClassInfo): string | null {
+  const constructorMethod = info.constructor
+
+  if (constructorMethod === null || typeof constructorMethod === 'undefined') {
+    return null
+  }
+
+  const params: CFunctionParam[] = constructorMethod.params
+  const typeName = emitCClassTypeName(info.name)
+
+  return `${typeName}::${typeName}(${emitCClassParamDeclarations(params)})${emitCClassConstructorInitializers(info)}`
+}
+
+function classHasRuntimeValueFields(info: CClassInfo): boolean {
+  for (const field of info.fields) {
+    if (classFieldUsesRuntimeValueStorage(field)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function emitCClassCopyConstructor(info: CClassInfo): string[] {
+  const initializers: string[] = []
+
+  for (const field of info.fields) {
+    const name = emitCClassFieldName(field.name)
+    initializers.push(`${name}(other.${name})`)
+  }
+
+  const suffix = initializers.length > 0 ? ` : ${joinStrings(initializers, ', ')}` : ''
+  const lines = [`${emitCClassTypeName(info.name)}(const ${emitCClassTypeName(info.name)}& other)${suffix} {`]
+
+  for (const field of info.fields) {
+    if (classFieldUsesRuntimeValueStorage(field)) {
+      lines.push(`  inox_retain(${emitCClassFieldName(field.name)});`)
+    }
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function emitCClassAssignmentOperator(info: CClassInfo): string[] {
+  const typeName = emitCClassTypeName(info.name)
+  const lines = [`${typeName}& operator=(const ${typeName}& other) {`, '  if (this != &other) {']
+
+  for (const field of info.fields) {
+    const name = emitCClassFieldName(field.name)
+
+    if (classFieldUsesRuntimeValueStorage(field)) {
+      lines.push(`    inox_retain(other.${name});`)
+      lines.push(`    inox_release(${name});`)
+      lines.push(`    ${name} = other.${name};`)
+    } else {
+      lines.push(`    ${name} = other.${name};`)
+    }
+  }
+
+  lines.push('  }')
+  lines.push('  return *this;')
+  lines.push('}')
+
+  return lines
+}
+
+function emitCClassDestructor(info: CClassInfo): string[] {
+  const lines = [`~${emitCClassTypeName(info.name)}() {`]
+
+  for (const field of info.fields) {
+    if (classFieldUsesRuntimeValueStorage(field)) {
+      lines.push(`  inox_release(${emitCClassFieldName(field.name)});`)
+    }
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function pushIndentedClassLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push(`  ${line}`)
+  }
+}
+
+export function emitCNativeClassDeclarations(
+  context: CEmitContext,
+  methodPrototypes: CClassMethodPrototypeMap
+): string[] {
+  const lines: string[] = []
+
+  for (const info of context.classInfos.values()) {
+    if (!info.native) {
+      continue
+    }
+
+    lines.push(`class ${emitCClassTypeName(info.name)} {`)
+    lines.push('public:')
+
+    for (const field of info.fields) {
+      lines.push(`  ${emitCClassFieldType(field)} ${emitCClassFieldName(field.name)};`)
+    }
+
+    if (info.fields.length > 0) {
+      lines.push('')
+    }
+
+    const constructorPrototype = emitCClassConstructorPrototype(info)
+
+    if (constructorPrototype !== null && typeof constructorPrototype !== 'undefined') {
+      if (!classHasNoArgConstructor(info)) {
+        lines.push(`  ${emitCClassDefaultConstructor(info)}`)
+      }
+
+      lines.push(`  ${constructorPrototype}`)
+    } else {
+      lines.push(`  ${emitCClassDefaultConstructor(info)}`)
+    }
+
+    if (classHasRuntimeValueFields(info)) {
+      pushIndentedClassLines(lines, emitCClassCopyConstructor(info))
+      pushIndentedClassLines(lines, emitCClassAssignmentOperator(info))
+      pushIndentedClassLines(lines, emitCClassDestructor(info))
+    }
+
+    const prototypes = methodPrototypes.get(info.name)
+
+    if (prototypes !== null && typeof prototypes !== 'undefined') {
+      for (const prototype of prototypes) {
+        lines.push(`  ${prototype}`)
+      }
+    }
+
+    lines.push('};')
+    lines.push('')
+  }
+
+  return lines
+}
+
+function classHasNoArgConstructor(info: CClassInfo): boolean {
+  const constructorMethod = info.constructor
+
+  if (constructorMethod === null || typeof constructorMethod === 'undefined') {
+    return false
+  }
+
+  const params: CFunctionParam[] = constructorMethod.params
+
+  return params.length === 0
+}
+
 export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]): CClassInfoMap {
   const infos = createClassInfoMap()
   const classNodes: ClassExpressionNode[] = classes
@@ -193,11 +565,32 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
       constructor: constructorMethod,
       assignments,
       fields,
-      methods
+      methods,
+      native: classCanUseNativeLowering(fields)
     })
   }
 
+  markClassFieldTargetsRuntimeBacked(infos)
+
   return infos
+}
+
+function markClassFieldTargetsRuntimeBacked(infos: CClassInfoMap): void {
+  for (const info of infos.values()) {
+    for (const field of info.fields) {
+      const className = field.className
+
+      if (className === null || typeof className === 'undefined') {
+        continue
+      }
+
+      const target = infos.get(className)
+
+      if (target !== null && typeof target !== 'undefined') {
+        target.native = false
+      }
+    }
+  }
 }
 
 function findClassConstructorMethod(classNode: AnyNode): AnyNode | null {
@@ -343,11 +736,15 @@ function resolveClassShapeField(field: CObjectShapeField): CObjectShapeField {
     ownership,
     valueType,
     arrayElementType: field.arrayElementType,
+    arrayElementDeclaredType: field.arrayElementDeclaredType,
+    className: field.className,
+    declaredType: field.declaredType,
     mapKeyType: field.mapKeyType,
     mapValueType: field.mapValueType,
     setElementType: field.setElementType,
     shape: field.shape,
-    functionType: field.functionType
+    functionType: field.functionType,
+    nullable: field.nullable
   }
 }
 
@@ -472,12 +869,18 @@ function emitSupportedClassObjectVariableDeclaration(
   info: CClassInfo,
   context: ClassFunctionContext
 ): string[] {
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'object')
-  registerClassInstanceType(context, statement.name, info.name)
-  registerClassObjectShape(context, statement.name, info)
+  if (!info.native) {
+    registerOwnedValue(context, statement.name)
+    context.variables.set(statement.name, 'object')
+    registerClassInstanceType(context, statement.name, info.name)
+    registerClassObjectShape(context, statement.name, info)
 
-  return emitCClassObjectInitLines(statement.name, statement.init, info, context)
+    return emitCClassRuntimeObjectInitLines(statement.name, statement.init, info, context)
+  }
+
+  context.variables.set(statement.name, classValueType(info))
+  registerClassInstanceType(context, statement.name, info.name)
+  return emitCNativeClassVariableDeclaration(statement.name, statement.init, info, context)
 }
 
 function registerClassInstanceType(context: ClassFunctionContext, name: string, className: string): void {
@@ -493,13 +896,24 @@ export function emitCClassObjectValueExpression(
   context: ClassFunctionContext
 ): PreparedExpression {
   const info = resolveClassConstructorInfo(expression, context)
-  const temp = nextCName(context, 'inox_class_object')
-  registerOwnedValue(context, temp)
 
   if (info !== null && typeof info !== 'undefined') {
+    if (!info.native) {
+      const temp = nextCName(context, 'inox_class_object')
+      registerOwnedValue(context, temp)
+
+      return {
+        lines: emitCClassRuntimeObjectInitLines(temp, expression, info, context),
+        expression: temp,
+        valueType: 'object'
+      }
+    }
+
+    const temp = nextCName(context, `inox_class_${info.name}`)
     return {
-      lines: emitCClassObjectInitLines(temp, expression, info, context),
-      expression: temp
+      lines: emitCNativeClassVariableDeclaration(temp, expression, info, context),
+      expression: temp,
+      valueType: classValueType(info)
     }
   }
 
@@ -511,17 +925,13 @@ export function emitCClassObjectValueExpression(
     )
   )
 
-  const lines: string[] = []
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`${temp} = inox_undefined_value();`)
-
   return {
-    lines,
-    expression: temp
+    lines: [],
+    expression: '0'
   }
 }
 
-function emitCClassObjectInitLines(
+function emitCClassRuntimeObjectInitLines(
   target: string,
   expression: AnyNode,
   info: CClassInfo,
@@ -578,11 +988,15 @@ export function registerClassObjectShape(context: ClassFunctionContext, name: st
       readonlyField: isReadonlyCObjectShapeField(field),
       valueType: field.valueType,
       arrayElementType: field.arrayElementType,
+      arrayElementDeclaredType: field.arrayElementDeclaredType,
+      className: field.className,
+      declaredType: field.declaredType,
       mapKeyType: field.mapKeyType,
       mapValueType: field.mapValueType,
       setElementType: field.setElementType,
       shape: field.shape,
-      functionType: field.functionType
+      functionType: field.functionType,
+      nullable: field.nullable
     })
   }
 
@@ -590,7 +1004,7 @@ export function registerClassObjectShape(context: ClassFunctionContext, name: st
 }
 
 function findClassFieldIndex(fields: CObjectShapeField[], name: string): number {
-  for (let index = 0; index < fields.length; index++) {
+  for (let index = 0; index < fields.length; index = index + 1) {
     if (fields[index].name === name) {
       return index
     }
@@ -603,54 +1017,15 @@ function mapClassConstructorArgs(expression: AnyNode, info: CClassInfo): CConstr
   const args = createConstructorArgMap()
   const params = classConstructorParams(info)
 
-  for (let index = 0; index < params.length; index++) {
+  for (let index = 0; index < params.length; index = index + 1) {
     const param = params[index]
+
     if (expression.args[index] !== null && typeof expression.args[index] !== 'undefined') {
       args.set(param.name, expression.args[index])
     }
   }
 
   return args
-}
-
-function classMethodAcceptsArgumentCount(params: CFunctionParam[], count: number): boolean {
-  return count >= requiredClassMethodParamCount(params) && count <= params.length
-}
-
-function classMethodArgumentCountMessage(method: string, params: CFunctionParam[], count: number): string {
-  const min = requiredClassMethodParamCount(params)
-  const max = params.length
-  let expected = `${max}`
-
-  if (min !== max) {
-    expected = `${min}-${max}`
-  }
-
-  return `method ${method} expects ${expected} argument(s), got ${count}`
-}
-
-function requiredClassMethodParamCount(params: CFunctionParam[]): number {
-  let count = 0
-
-  for (let index = 0; index < params.length; index = index + 1) {
-    const param = params[index]
-
-    if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
-      count = count + 1
-    }
-  }
-
-  return count
-}
-
-function classConstructorParams(info: CClassInfo): AnyNode[] {
-  const constructorMethod = info.constructor
-
-  if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
-    return constructorMethod.params
-  }
-
-  return []
 }
 
 function substituteClassConstructorParams(node: ClassMaybeNode, args: CConstructorArgMap, target: string): AnyNode {
@@ -799,6 +1174,91 @@ function substituteCallLikeExpression(node: AnyNode, args: CConstructorArgMap, t
   }
 }
 
+export function emitCNativeClassAssignmentLines(
+  target: string,
+  expression: AnyNode,
+  info: CClassInfo,
+  context: ClassFunctionContext
+): string[] {
+  const prepared = emitPreparedClassCallArgs(context, expression, classConstructorParams(info))
+  const lines: string[] = []
+
+  pushAllLines(lines, prepared.lines)
+  lines.push(`${target} = ${emitCClassTypeName(info.name)}(${joinStrings(prepared.args, ', ')});`)
+
+  return lines
+}
+
+function emitCNativeClassVariableDeclaration(
+  target: string,
+  expression: AnyNode,
+  info: CClassInfo,
+  context: ClassFunctionContext
+): string[] {
+  const prepared = emitPreparedClassCallArgs(context, expression, classConstructorParams(info))
+  const lines: string[] = []
+
+  pushAllLines(lines, prepared.lines)
+
+  if (prepared.args.length === 0) {
+    lines.push(`${emitCClassTypeName(info.name)} ${emitCIdentifier(target)};`)
+  } else {
+    lines.push(`${emitCClassTypeName(info.name)} ${emitCIdentifier(target)}(${joinStrings(prepared.args, ', ')});`)
+  }
+
+  return lines
+}
+
+function classFieldForName(info: CClassInfo, name: string): CObjectShapeField | null {
+  for (const field of info.fields) {
+    if (field.name === name) {
+      return field
+    }
+  }
+
+  return null
+}
+
+function classMethodAcceptsArgumentCount(params: CFunctionParam[], count: number): boolean {
+  return count >= requiredClassMethodParamCount(params) && count <= params.length
+}
+
+function classMethodArgumentCountMessage(method: string, params: CFunctionParam[], count: number): string {
+  const min = requiredClassMethodParamCount(params)
+  const max = params.length
+  let expected = `${max}`
+
+  if (min !== max) {
+    expected = `${min}-${max}`
+  }
+
+  return `method ${method} expects ${expected} argument(s), got ${count}`
+}
+
+function requiredClassMethodParamCount(params: CFunctionParam[]): number {
+  let count = 0
+
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = params[index]
+
+    if (param.optional !== true && (param.defaultValue === null || typeof param.defaultValue === 'undefined')) {
+      count = count + 1
+    }
+  }
+
+  return count
+}
+
+function classConstructorParams(info: CClassInfo): CFunctionParam[] {
+  const constructorMethod = info.constructor
+
+  if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
+    return constructorMethod.params
+  }
+
+  return []
+}
+
 function resolveClassConstructorInfo(expression: ClassMaybeNode, context: ClassFunctionContext): CClassInfo | null {
   if (expression === null || typeof expression === 'undefined' || expression.type !== 'NewExpression') {
     return null
@@ -900,7 +1360,12 @@ function emitKnownPreparedClassMethodCallExpression(
 
   if (method.returnType === 'promise') {
     let out = callExpression
-    const promiseValueType = method.returnPromiseValueType ?? 'unknown'
+    let promiseValueType = 'unknown'
+    const methodPromiseValueType = method.returnPromiseValueType
+
+    if (methodPromiseValueType !== null && typeof methodPromiseValueType !== 'undefined') {
+      promiseValueType = methodPromiseValueType
+    }
 
     if (options.out !== null && typeof options.out !== 'undefined') {
       out = options.out
@@ -978,7 +1443,9 @@ function emitPreparedThrowingClassMethodCallExpression(
     callArgs.push(emitEventLoopReference(context))
   }
 
-  callArgs.push(call.objectExpression)
+  if (!call.native) {
+    callArgs.push(call.objectExpression)
+  }
 
   for (const arg of prepared.args) {
     callArgs.push(arg)
@@ -1003,9 +1470,16 @@ function emitPreparedThrowingClassMethodCallExpression(
   callArgs.push('&inox_error')
 
   const status = nextCName(context, 'inox_method_status')
-  lines.push(
-    `inox_status ${status} = ${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')});`
-  )
+  let callExpression = `${call.objectExpression}${call.accessOperator}${emitCClassMethodIdentifier(method.name)}(${joinStrings(
+    callArgs,
+    ', '
+  )})`
+
+  if (!call.native) {
+    callExpression = `${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')})`
+  }
+
+  lines.push(`inox_status ${status} = ${callExpression};`)
   pushAllLines(lines, emitThrowingClassMethodStatusCheck(status, context))
 
   return {
@@ -1081,13 +1555,16 @@ function emitClassMethodCallExpression(
     args.push(emitEventLoopReference(context))
   }
 
-  args.push(call.objectExpression)
-
   for (const arg of prepared.args) {
     args.push(arg)
   }
 
-  return `${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(args, ', ')})`
+  if (!call.native) {
+    args.unshift(call.objectExpression)
+    return `${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(args, ', ')})`
+  }
+
+  return `${call.objectExpression}${call.accessOperator}${emitCClassMethodIdentifier(method.name)}(${joinStrings(args, ', ')})`
 }
 
 function classMethodTakesEventLoopParam(info: CClassInfo, method: AnyNode, context: ClassFunctionContext): boolean {
@@ -1112,16 +1589,39 @@ function resolveClassMethodCallInfo(
   if (objectName) {
     const className = classNameForObject(context, objectName)
 
-    if (className !== null && typeof className !== 'undefined') {
+    if (
+      className !== null &&
+      typeof className !== 'undefined' &&
+      !isNativeClassObjectName(context, objectName, className)
+    ) {
       const info = classInfoForName(context, className)
 
       if (info !== null && typeof info !== 'undefined') {
         return {
+          accessOperator: '.',
           info,
           methodName: expression.callee.property,
+          native: false,
           objectExpression: emitObjectValueReference(objectName, context),
           objectLines: []
         }
+      }
+    }
+  }
+
+  const receiver = resolveNativeClassReceiverExpression(expression.callee.object, context)
+
+  if (receiver !== null && typeof receiver !== 'undefined') {
+    const info = classInfoForName(context, receiver.className)
+
+    if (info !== null && typeof info !== 'undefined' && info.native) {
+      return {
+        accessOperator: receiver.accessOperator,
+        info,
+        methodName: expression.callee.property,
+        native: true,
+        objectExpression: receiver.expression,
+        objectLines: receiver.lines
       }
     }
   }
@@ -1135,8 +1635,10 @@ function resolveClassMethodCallInfo(
       const object = emitClassValueExpression(context, expression.callee.object)
 
       return {
+        accessOperator: info.native ? '.' : '.',
         info,
         methodName: expression.callee.property,
+        native: info.native && object.valueType === classValueType(info),
         objectExpression: object.expression,
         objectLines: object.lines
       }
@@ -1146,7 +1648,236 @@ function resolveClassMethodCallInfo(
   return null
 }
 
-function classNameForObject(context: ClassFunctionContext, objectName: string): string | null {
+export function resolveNativeClassReceiverExpression(
+  expression: ClassMaybeNode,
+  context: ClassLookupContext
+): CNativeClassReceiver | null {
+  if (isThisObjectExpression(expression)) {
+    const className = classNameForObject(context, 'this')
+
+    if (
+      className !== null &&
+      typeof className !== 'undefined' &&
+      isNativeClassObjectName(context, 'this', className)
+    ) {
+      return {
+        accessOperator: '->',
+        className,
+        expression: 'this',
+        lines: []
+      }
+    }
+  }
+
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
+    if (expression.path.length !== 1) {
+      return null
+    }
+
+    const name = expression.path[0]
+    let className = ''
+    const objectClassName = classNameForObject(context, name)
+
+    if (
+      objectClassName !== null &&
+      typeof objectClassName !== 'undefined' &&
+      isNativeClassObjectName(context, name, objectClassName)
+    ) {
+      className = objectClassName
+    } else {
+      const expressionClassName = expression.className
+
+      if (
+        expressionClassName !== null &&
+        typeof expressionClassName !== 'undefined' &&
+        isNativeClassObjectName(context, name, expressionClassName)
+      ) {
+        className = expressionClassName
+      }
+    }
+
+    if (className !== '') {
+      return {
+        accessOperator: '.',
+        className,
+        expression: emitCClassObjectReference(name, context),
+        lines: []
+      }
+    }
+  }
+
+  return null
+}
+
+function isNativeClassObjectName(context: ClassLookupContext, objectName: string, className: string): boolean {
+  const info = classInfoForName(context, className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return false
+  }
+
+  const valueType = context.variables.get(objectName)
+
+  return valueType === classValueType(info)
+}
+
+function emitCClassObjectReference(name: string, context: ClassLookupContext): string {
+  if (!context.localValueNames.has(name)) {
+    const moduleName = context.moduleValueNames.get(name)
+
+    if (moduleName !== null && typeof moduleName !== 'undefined') {
+      return moduleName
+    }
+  }
+
+  return emitCIdentifier(name)
+}
+
+function resolveNativeClassFieldAccess(
+  expression: ClassMaybeNode,
+  context: ClassLookupContext
+): CNativeClassFieldAccess | null {
+  if (expression === null || typeof expression === 'undefined' || expression.type !== 'MemberExpression') {
+    return null
+  }
+
+  const receiver = resolveNativeClassReceiverExpression(expression.object, context)
+
+  if (receiver === null || typeof receiver === 'undefined') {
+    return null
+  }
+
+  const info = classInfoForName(context, receiver.className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  const field = classFieldForName(info, expression.property)
+
+  if (field === null || typeof field === 'undefined') {
+    return null
+  }
+
+  const reference = `${receiver.expression}${receiver.accessOperator}${emitCClassFieldName(field.name)}`
+
+  return {
+    accessOperator: receiver.accessOperator,
+    field,
+    info,
+    objectExpression: receiver.expression,
+    reference
+  }
+}
+
+export function resolveNativeClassFieldMetadata(
+  expression: AnyNode,
+  context: ClassLookupContext
+): CObjectShapeField | null {
+  const access = resolveNativeClassFieldAccess(expression, context)
+
+  if (access === null || typeof access === 'undefined') {
+    return null
+  }
+
+  return access.field
+}
+
+export function emitPreparedNativeClassFieldScalarExpression(
+  expression: AnyNode,
+  context: ClassLookupContext
+): PreparedExpression | null {
+  const access = resolveNativeClassFieldAccess(expression, context)
+
+  if (access === null || typeof access === 'undefined') {
+    return null
+  }
+
+  if (access.field.valueType !== 'number' && access.field.valueType !== 'boolean' && access.field.valueType !== 'date') {
+    return null
+  }
+
+  return {
+    lines: [],
+    expression: access.reference
+  }
+}
+
+export function emitPreparedNativeClassFieldValueExpression(
+  expression: AnyNode,
+  context: ClassLookupContext
+): PreparedExpression | null {
+  const access = resolveNativeClassFieldAccess(expression, context)
+
+  if (access === null || typeof access === 'undefined') {
+    return null
+  }
+
+  if (access.field.valueType === 'number' || access.field.valueType === 'date') {
+    return {
+      lines: [],
+      expression: `inox_number_value(${access.reference})`
+    }
+  }
+
+  if (access.field.valueType === 'boolean') {
+    return {
+      lines: [],
+      expression: `inox_bool_value(${access.reference})`
+    }
+  }
+
+  return {
+    lines: [],
+    expression: access.reference,
+    valueType: access.field.valueType
+  }
+}
+
+export function emitNativeClassFieldAssignment(
+  expression: AnyNode,
+  context: ClassFunctionContext
+): string[] | null {
+  if (expression.type !== 'AssignmentExpression' || expression.target.type !== 'MemberExpression') {
+    return null
+  }
+
+  const access = resolveNativeClassFieldAccess(expression.target, context)
+
+  if (access === null || typeof access === 'undefined') {
+    return null
+  }
+
+  const lines: string[] = []
+
+  if (classFieldUsesRuntimeValueStorage(access.field)) {
+    const value = emitClassValueExpression(context, expression.value)
+
+    pushAllLines(lines, value.lines)
+    pushAllLines(lines, emitCClassFieldWriteLines(access.reference, value.expression, access.field))
+    return lines
+  }
+
+  const value = emitClassValueExpression(context, expression.value)
+
+  pushAllLines(lines, value.lines)
+
+  if (access.field.valueType === 'number' || access.field.valueType === 'date') {
+    lines.push(`${access.reference} = ${value.expression}.as.number;`)
+    return lines
+  }
+
+  if (access.field.valueType === 'boolean') {
+    lines.push(`${access.reference} = ${value.expression}.as.boolean;`)
+    return lines
+  }
+
+  lines.push(`${access.reference} = ${value.expression};`)
+
+  return lines
+}
+
+function classNameForObject(context: ClassLookupContext, objectName: string): string | null {
   const classInstanceTypes = context.classInstanceTypes
 
   if (classInstanceTypes === null || typeof classInstanceTypes === 'undefined') {
@@ -1162,7 +1893,7 @@ function classNameForObject(context: ClassFunctionContext, objectName: string): 
   return null
 }
 
-function classInfoForName(context: ClassFunctionContext, className: string): CClassInfo | null {
+function classInfoForName(context: ClassLookupContext, className: string): CClassInfo | null {
   const classInfos = context.classInfos
 
   if (classInfos === null || typeof classInfos === 'undefined') {
@@ -1186,8 +1917,4 @@ function resolveClassMethod(info: CClassInfo, name: string): AnyNode | null {
   }
 
   return null
-}
-
-export function emitCClassMethodName(className: string, methodName: string): string {
-  return `inox_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
 }

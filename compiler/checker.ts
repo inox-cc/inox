@@ -2912,6 +2912,15 @@ class Checker {
 
     if (expression.type === 'UnaryExpression') {
       this.checkExpression(expression.argument)
+      if (expression.operator === 'delete') {
+        if (this.isClassShapeMutationTarget(expression.argument)) {
+          this.report('INOX_C_CLASS', 'class fields cannot be deleted', expression.loc)
+        }
+
+        expression.valueType = 'boolean'
+        return 'boolean'
+      }
+
       if (expression.operator === 'typeof') {
         expression.valueType = 'string'
         return 'string'
@@ -3877,6 +3886,11 @@ class Checker {
     const indexType = this.checkExpression(expression.target.index)
     const valueType = this.checkExpression(expression.value)
 
+    if (this.isClassInstanceExpression(expression.target.object)) {
+      this.report('INOX_C_CLASS', 'dynamic writes to class fields are not supported', expression.target.loc)
+      return valueType
+    }
+
     if (objectType === 'map') {
       const mapType = this.resolveExpressionMapType(expression.target.object) ?? {
         key: 'unknown',
@@ -4094,6 +4108,24 @@ class Checker {
     }
 
     return valueType
+  }
+
+  isClassShapeMutationTarget(expression: AnyNode): boolean {
+    if (expression.type === 'MemberExpression') {
+      return this.isClassInstanceExpression(expression.object)
+    }
+
+    if (expression.type === 'IndexExpression') {
+      return this.isClassInstanceExpression(expression.object)
+    }
+
+    return false
+  }
+
+  isClassInstanceExpression(expression: AnyNode): boolean {
+    const className = this.resolveClassMethodReceiverClassName(expression)
+
+    return className !== null && typeof className !== 'undefined'
   }
 
   checkCallExpression(expression: AnyNode): ValueType {

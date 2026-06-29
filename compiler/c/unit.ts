@@ -99,8 +99,15 @@ import {
   isRuntimeNullableType
 } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
-import type { ClassLoweringDependencies } from './values/classes.ts'
-import { collectClassMethods, createClassInfos } from './values/classes.ts'
+import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
+import {
+  cClassNameFromValueType,
+  cClassValueTypeName,
+  collectClassMethods,
+  createClassInfos,
+  emitCClassTypeName,
+  emitCNativeClassDeclarations
+} from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
@@ -121,8 +128,10 @@ export type CUnitDependencies = {
     topLevelNodes: AnyNode[]
   ): CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
+  emitClassConstructorDeclaration: (info: CClassInfo, baseContext: CEmitContext) => string[]
   emitClassMethodDeclaration: (info: CClassInfo, method: AnyNode, baseContext: CEmitContext) => string[]
   emitClassMethodHead: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
+  emitClassMethodPrototype: (info: CClassInfo, method: AnyNode, context: CEmitContext) => string
   emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) => string[]
   emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
   emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) => string[]
@@ -346,6 +355,24 @@ function emitCUnitValueFunctionFieldDefinitions(
   }
 }
 
+function collectCUnitClassMethodPrototypes(context: CEmitContext, deps: CUnitDependencies): CClassMethodPrototypeMap {
+  const prototypes: CClassMethodPrototypeMap = new Map()
+
+  for (const classMethod of collectClassMethods(context)) {
+    const foundItems = prototypes.get(classMethod.info.name)
+    let items: string[] = []
+
+    if (foundItems !== null && typeof foundItems !== 'undefined') {
+      items = foundItems
+    }
+
+    items.push(deps.emitClassMethodPrototype(classMethod.info, classMethod.method, context))
+    prototypes.set(classMethod.info.name, items)
+  }
+
+  return prototypes
+}
+
 function cUnitObjectFunctionFieldSeenTypes(): string[] {
   return ['CFunctionContext']
 }
@@ -417,6 +444,11 @@ function emitCUnitObjectFunctionFieldDefinitions(
 function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cUnitTimeExpressionValueType(node.init)
+  const classValueType = cUnitNativeClassValueType(node, context)
+
+  if (classValueType !== null && typeof classValueType !== 'undefined') {
+    return classValueType
+  }
 
   if (
     timeValueType !== null &&
@@ -452,6 +484,33 @@ function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   }
 
   return valueType
+}
+
+function cUnitNativeClassValueType(node: AnyNode, context: CEmitContext): string | null {
+  let className: string | null = null
+
+  if (node.className !== null && typeof node.className !== 'undefined') {
+    className = node.className
+  } else if (
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.className !== null &&
+    typeof node.init.className !== 'undefined'
+  ) {
+    className = node.init.className
+  }
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
+  const info = context.classInfos.get(className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  return cClassValueTypeName(className)
 }
 
 function cUnitTimeExpressionValueType(expression: AnyNode | null | undefined): string | null {
@@ -583,6 +642,12 @@ function isUnionValueTypeName(valueType: string): boolean {
 }
 
 function cUnitValueCType(valueType: string): string {
+  const className = cClassNameFromValueType(valueType)
+
+  if (className !== null && typeof className !== 'undefined') {
+    return emitCClassTypeName(className)
+  }
+
   if (valueType === 'string') {
     return 'char*'
   }
@@ -595,6 +660,10 @@ function cUnitValueCType(valueType: string): string {
 }
 
 function cUnitValueGlobalInitializer(valueType: string): string {
+  if (cClassNameFromValueType(valueType) !== null) {
+    return ''
+  }
+
   if (valueType === 'string') {
     return '""'
   }
@@ -1166,10 +1235,10 @@ export function emitCUnit(
     topLevelNodes
   )
   baseContext.processEntryPath = entryPath
+  baseContext.classInfos = createClassInfos(classes, diagnostics)
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
   registerNodeStdlibRuntimeImportNames(baseContext, irPrograms)
-  baseContext.classInfos = createClassInfos(classes, diagnostics)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext, deps.callbackLoweringDependencies)
   baseContext.promiseChainWrappers = collectPromiseChainWrappers(
@@ -1257,6 +1326,7 @@ export function emitCUnit(
     needsNetRuntime,
     options
   )
+  pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps)))
   emitCUnitValueDefinitions(lines, valueDeclarations)
   emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
@@ -1308,7 +1378,9 @@ export function emitCUnit(
   }
 
   for (const classMethod of classMethods) {
-    lines.push(`${deps.emitClassMethodHead(classMethod.info, classMethod.method, baseContext)};`)
+    if (!classMethod.info.native) {
+      lines.push(deps.emitClassMethodPrototype(classMethod.info, classMethod.method, baseContext))
+    }
   }
 
   if (asyncTaskWrappers.size > 0) {
@@ -1402,6 +1474,11 @@ export function emitCUnit(
 
   for (const item of functions) {
     pushUnitLines(lines, deps.emitFunctionDeclaration(item, baseContext))
+    lines.push('')
+  }
+
+  for (const classInfo of baseContext.classInfos.values()) {
+    pushUnitLines(lines, deps.emitClassConstructorDeclaration(classInfo, baseContext))
     lines.push('')
   }
 

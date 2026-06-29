@@ -55,7 +55,13 @@ import {
   isRuntimeNullableType,
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
-import { emitCClassMethodName, registerClassObjectShape } from './values/classes.ts'
+import {
+  cClassValueTypeName,
+  emitCClassConstructorHead,
+  emitCClassMethodName,
+  emitCClassTypeName,
+  registerClassObjectShape
+} from './values/classes.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
 import { registerObjectShape } from './values/objects.ts'
 import { registerErrorChannel } from './values/statements.ts'
@@ -630,8 +636,8 @@ function emitFunctionHeadParam(param: CFunctionParam, index: number, statement: 
   }
 
   if (isBoxedFunctionParam(param, index, statement, context) && isBoxedScalarParamValueType(param.valueType)) {
-    return `${emitCType(param.valueType)} ${emitCScalarParamName(param.name)}`
-  }
+  return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
+}
 
   return `${emitCType(param.valueType)} ${emitCLocalName(param.name)}`
 }
@@ -655,9 +661,15 @@ export function emitClassMethodDeclaration(
   context.externalEventLoop = functionTakesEventLoopParam(methodEffectName, baseContext)
   context.functionReturnOut = 'inox_out'
   context.functionErrorOut = 'inox_error_out'
-  context.variables.set('this', 'object')
+
+  if (info.native) {
+    context.variables.set('this', cClassValueTypeName(info.name))
+  } else {
+    context.variables.set('this', 'object')
+    registerClassObjectShape(context, 'this', info)
+  }
+
   context.classInstanceTypes.set('this', info.name)
-  registerClassObjectShape(context, 'this', info)
   if (context.throwingFunction) {
     registerErrorChannel(context)
   }
@@ -707,9 +719,117 @@ export function emitClassMethodDeclaration(
   return lines
 }
 
+export function emitClassConstructorDeclaration(
+  info: CClassInfo,
+  baseContext: CEmitContext,
+  deps: CDeclarationEmissionDependencies
+): string[] {
+  if (!info.native) {
+    return []
+  }
+
+  const constructorMethod = info.constructor
+  const head = emitCClassConstructorHead(info)
+
+  if (
+    constructorMethod === null ||
+    typeof constructorMethod === 'undefined' ||
+    head === null ||
+    typeof head === 'undefined'
+  ) {
+    return []
+  }
+
+  const context: CDeclarationFunctionContext = createFunctionContext(baseContext, 'void', false)
+  const params: CFunctionParam[] = constructorMethod.params
+
+  context.returnShape = null
+  context.throwingFunction = false
+  context.externalEventLoop = false
+  context.functionReturnOut = null
+  context.functionErrorOut = null
+  context.variables.set('this', cClassValueTypeName(info.name))
+  context.classInstanceTypes.set('this', info.name)
+  registerFunctionParamsInContext(constructorMethod, params, context)
+
+  const bodyLines: string[] = []
+  const lines: string[] = []
+
+  pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(constructorMethod, params, context))
+  pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(constructorMethod.body, context))
+  pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
+
+  lines.push(`${head} {`)
+  pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitStatusResultDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitEventLoopDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitOwnedValueDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitOwnedPromiseDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
+  pushScopedDeclarationBody(lines, bodyLines)
+
+  if (shouldEmitCleanupLabel(context)) {
+    lines.push('inox_cleanup:')
+    pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
+    pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
+    pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
+    pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
+    pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+export function emitClassMethodPrototype(info: CClassInfo, method: CNode, context: CEmitContext): string {
+  if (!info.native) {
+    return `${emitRuntimeClassMethodHead(info, method, context)};`
+  }
+
+  const params = emitClassMethodParams(info, method, context)
+
+  if (isThrowingClassMethod(info, method, context)) {
+    return `inox_status ${emitCIdentifier(method.name)}(${joinDeclarationParams(params)});`
+  }
+
+  return `${emitCReturnType(method.returnType, method.returnNullable)} ${emitCIdentifier(method.name)}(${joinDeclarationParams(
+    params
+  )});`
+}
+
 export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
-  const params: string[] = []
+  if (!info.native) {
+    return emitRuntimeClassMethodHead(info, method, context)
+  }
+
+  const params = emitClassMethodParams(info, method, context)
+  const name = `${emitCClassTypeName(info.name)}::${emitCIdentifier(method.name)}`
+
+  if (isThrowingClassMethod(info, method, context)) {
+    return `inox_status ${name}(${joinDeclarationParams(params)})`
+  }
+
+  return `${emitCReturnType(method.returnType, method.returnNullable)} ${name}(${joinDeclarationParams(params)})`
+}
+
+function emitRuntimeClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
+  const params = emitRuntimeClassMethodParams(info, method, context)
   const name = emitCClassMethodName(info.name, method.name)
+
+  if (isThrowingClassMethod(info, method, context)) {
+    return `static inox_status ${name}(${joinDeclarationParams(params)})`
+  }
+
+  return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${name}(${joinDeclarationParams(params)})`
+}
+
+function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: CEmitContext): string[] {
+  const params: string[] = []
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
   if (functionTakesEventLoopParam(methodEffectName, context)) {
@@ -729,11 +849,33 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
     }
 
     params.push('inox_value* inox_error_out')
-
-    return `static inox_status ${name}(${joinDeclarationParams(params)})`
   }
 
-  return `static ${emitCReturnType(method.returnType, method.returnNullable)} ${name}(${joinDeclarationParams(params)})`
+  return params
+}
+
+function emitClassMethodParams(info: CClassInfo, method: CNode, context: CEmitContext): string[] {
+  const params: string[] = []
+  const methodEffectName = irClassMethodEffectName(info.name, method.name)
+
+  if (functionTakesEventLoopParam(methodEffectName, context)) {
+    params.push('inox_loop* inox_loop')
+  }
+
+  for (let index = 0; index < method.params.length; index = index + 1) {
+    params.push(emitClassMethodParam(method.params[index], index, method, context))
+    pushObjectFunctionFieldParams(params, method.params[index], context)
+  }
+
+  if (isThrowingClassMethod(info, method, context)) {
+    if (method.returnType !== 'void') {
+      params.push(`${emitThrowingFunctionOutType(method.returnType, method.returnNullable === true)}* inox_out`)
+    }
+
+    params.push('inox_value* inox_error_out')
+  }
+
+  return params
 }
 
 function isThrowingClassMethod(info: CClassInfo, method: CNode, context: CEmitContext): boolean {

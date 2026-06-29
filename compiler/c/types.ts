@@ -194,6 +194,7 @@ export type CClassInfo = {
   assignments: AnyNode[]
   fields: CObjectShapeField[]
   methods: Map<string, AnyNode>
+  native: boolean
 }
 
 export type CClassMethod = {

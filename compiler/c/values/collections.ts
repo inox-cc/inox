@@ -8,9 +8,11 @@ import type {
   CFunctionReturnMapType,
   CObjectFieldInfo,
   CObjectIndexFieldInfo,
+  CObjectShapeField,
   CPreparedExpression as PreparedExpression
 } from '../types.ts'
 import { cRuntimeValueTag } from '../value-types.ts'
+import { resolveNativeClassFieldMetadata } from './classes.ts'
 
 type PreparedCollectionCall = PreparedExpression
 type CollectionNode = AnyNode
@@ -367,6 +369,12 @@ function knownCollectionReceiverField(
   expression: AnyNode,
   context: CollectionFunctionContext
 ): 'map' | 'set' | null {
+  const classField = resolveNativeClassFieldMetadata(expression, context)
+
+  if (classField !== null && typeof classField !== 'undefined' && classField.optional !== true) {
+    return knownCollectionShapeFieldType(classField)
+  }
+
   const member = resolveKnownCollectionObjectMember(expression, context)
 
   if (member !== null && typeof member !== 'undefined' && member.optional !== true) {
@@ -380,6 +388,10 @@ function knownCollectionReceiverField(
   }
 
   return null
+}
+
+function knownCollectionShapeFieldType(field: CObjectShapeField): 'map' | 'set' | null {
+  return knownCollectionFieldType(field.valueType)
 }
 
 function knownCollectionFieldType(valueType: string | null | undefined): 'map' | 'set' | null {
@@ -1071,6 +1083,15 @@ export function resolveRuntimeMapType(expression: AnyNode, context: CollectionFu
   }
 
   if (expression.type === 'MemberExpression') {
+    const classField = resolveNativeClassFieldMetadata(expression, context)
+
+    if (classField !== null && typeof classField !== 'undefined' && classField.valueType === 'map') {
+      return {
+        key: stringOrUnknown(classField.mapKeyType),
+        value: stringOrUnknown(classField.mapValueType)
+      }
+    }
+
     const member = resolveKnownCollectionObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && member.valueType === 'map') {

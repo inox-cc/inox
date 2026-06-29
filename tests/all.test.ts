@@ -122,6 +122,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
   const { assertNativeInoxProcessRuntimeString } =
     await import('./integration/native-inox-process-runtime-string.test.ts')
+  const { assertNativeClassLowering } = await import('./integration/native-class-lowering.test.ts')
   const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
     await import('./integration/runtime-value-core-dependencies.test.ts')
 
@@ -184,6 +185,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-inox-process-runtime-string', async () => {
       await assertNativeInoxProcessRuntimeString()
+    })
+
+    await t.test('native-class-lowering', () => {
+      assertNativeClassLowering()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {

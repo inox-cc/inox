@@ -110,8 +110,15 @@ import type {
 } from './types.ts'
 import { emitCType, isManagedRuntimeReturnType, isOpaqueRuntimeValueType, isRuntimeNullableType } from './value-types.ts'
 import type { ArrayLoweringDependencies } from './values/arrays.ts'
-import type { ClassLoweringDependencies } from './values/classes.ts'
-import { collectClassMethods, createClassInfos } from './values/classes.ts'
+import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './values/classes.ts'
+import {
+  cClassNameFromValueType,
+  cClassValueTypeName,
+  collectClassMethods,
+  createClassInfos,
+  emitCClassTypeName,
+  emitCNativeClassDeclarations
+} from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
 import type { NullableLoweringDependencies } from './values/nullable.ts'
 import type { StatementLoweringDependencies } from './values/statements.ts'
@@ -307,6 +314,27 @@ function cModuleHasRuntimeCallbackWrapper(context: CModuleRuntimeCallbackWrapper
   return false
 }
 
+function collectCModuleClassMethodPrototypes(
+  context: CEmitContext,
+  deps: CModuleEmissionDependencies
+): CClassMethodPrototypeMap {
+  const prototypes: CClassMethodPrototypeMap = new Map()
+
+  for (const classMethod of collectClassMethods(context)) {
+    const foundItems = prototypes.get(classMethod.info.name)
+    let items: string[] = []
+
+    if (foundItems !== null && typeof foundItems !== 'undefined') {
+      items = foundItems
+    }
+
+    items.push(deps.emitClassMethodPrototype(classMethod.info, classMethod.method, context))
+    prototypes.set(classMethod.info.name, items)
+  }
+
+  return prototypes
+}
+
 export type CModuleEmissionDependencies = {
   arrayLoweringDependencies: ArrayLoweringDependencies
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
@@ -322,8 +350,10 @@ export type CModuleEmissionDependencies = {
     topLevelNodes: AnyNode[]
   ): CEmitContext
   dgramLoweringDependencies: DgramLoweringDependencies
+  emitClassConstructorDeclaration(info: CClassInfo, baseContext: CEmitContext): string[]
   emitClassMethodDeclaration(info: CClassInfo, method: AnyNode, baseContext: CEmitContext): string[]
   emitClassMethodHead(info: CClassInfo, method: AnyNode, context: CEmitContext): string
+  emitClassMethodPrototype(info: CClassInfo, method: AnyNode, context: CEmitContext): string
   emitFunctionDeclaration(statement: AnyNode, baseContext: CEmitContext): string[]
   emitFunctionHead(statement: AnyNode, context: CEmitContext): string
   emitMainReturnExpression(context: CFunctionContext): string
@@ -432,6 +462,7 @@ export function emitCModuleSource(
     )
   )
 
+  pushCModuleLines(lines, emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps)))
   emitCModuleValueDefinitions(lines, moduleValues)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
 
@@ -478,6 +509,11 @@ export function emitCModuleSource(
     const item = cModuleNodeAt(functions, functionIndex)
 
     pushCModuleLines(bodyLines, emitCModuleFunctionDeclaration(plan, item, context, deps))
+    bodyLines.push('')
+  }
+
+  for (const classInfo of context.classInfos.values()) {
+    pushCModuleLines(bodyLines, deps.emitClassConstructorDeclaration(classInfo, context))
     bodyLines.push('')
   }
 
@@ -628,7 +664,9 @@ function emitCModuleDeclarations(
   for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
     const item = cModuleClassMethodAt(classMethods, methodIndex)
 
-    lines.push(`${deps.emitClassMethodHead(item.info, item.method, context)};`)
+    if (!item.info.native) {
+      lines.push(deps.emitClassMethodPrototype(item.info, item.method, context))
+    }
   }
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
@@ -1529,6 +1567,11 @@ function emitCModuleObjectFunctionFieldDefinitions(
 function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cModuleTimeExpressionValueType(node.init)
+  const classValueType = cModuleNativeClassValueType(node, context)
+
+  if (classValueType !== null && typeof classValueType !== 'undefined') {
+    return classValueType
+  }
 
   if (
     timeValueType !== null &&
@@ -1564,6 +1607,37 @@ function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   }
 
   return valueType
+}
+
+function cModuleNativeClassValueType(node: AnyNode, context: CEmitContext | null | undefined): string | null {
+  if (context === null || typeof context === 'undefined') {
+    return null
+  }
+
+  let className: string | null = null
+
+  if (node.className !== null && typeof node.className !== 'undefined') {
+    className = node.className
+  } else if (
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.className !== null &&
+    typeof node.init.className !== 'undefined'
+  ) {
+    className = node.init.className
+  }
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
+  const info = context.classInfos.get(className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  return cClassValueTypeName(className)
 }
 
 function cModuleTimeExpressionValueType(expression: AnyNode | null | undefined): string | null {
@@ -1701,6 +1775,12 @@ function isUnionValueTypeName(valueType: string): boolean {
 }
 
 function cModuleValueCType(valueType: string): string {
+  const className = cClassNameFromValueType(valueType)
+
+  if (className !== null && typeof className !== 'undefined') {
+    return emitCClassTypeName(className)
+  }
+
   if (valueType === 'string') {
     return 'char*'
   }
@@ -1713,6 +1793,10 @@ function cModuleValueCType(valueType: string): string {
 }
 
 function cModuleValueGlobalInitializer(valueType: string): string {
+  if (cClassNameFromValueType(valueType) !== null) {
+    return ''
+  }
+
   if (valueType === 'string') {
     return '""'
   }

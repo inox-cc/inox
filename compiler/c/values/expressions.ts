@@ -48,7 +48,8 @@ import type {
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
-  CPreparedStringBytesOperand as PreparedStringBytesOperand
+  CPreparedStringBytesOperand as PreparedStringBytesOperand,
+  CClassInfo
 } from '../types.ts'
 import {
   cRuntimeValueTag,
@@ -59,6 +60,10 @@ import {
   isRuntimeNullableType
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies } from './arrays.ts'
+import {
+  emitPreparedNativeClassFieldScalarExpression,
+  emitPreparedNativeClassFieldValueExpression
+} from './classes.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
 import type { NullableLoweringDependencies } from './nullable.ts'
@@ -150,6 +155,8 @@ type CFunctionContext = CEmitContext & {
   diagnostics: Diagnostic[]
   eventLoopUsed: boolean
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
+  classInfos: Map<string, CClassInfo>
+  classInstanceTypes: CStringMap
   classLoweringDependencies: ClassLoweringDependencies
   collectionLoweringDependencies: CollectionLoweringDependencies
   externalEventLoop: boolean
@@ -3060,6 +3067,12 @@ export function emitPreparedNumberExpression(
       return bytesLength
     }
 
+    const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
+
+    if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
+      return nativeClassField
+    }
+
     const member = deps.resolveKnownObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && isNumberOrBooleanValueType(member.valueType)) {
@@ -5393,6 +5406,12 @@ export function emitCValueExpression(
   }
 
   if (deps.isMemberAccessExpression(expression)) {
+    const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
+
+    if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
+      return nativeClassField
+    }
+
     const memberValue = deps.emitPreparedKnownObjectMemberValueExpression(expression, context)
 
     if (memberValue !== null && typeof memberValue !== 'undefined') {
