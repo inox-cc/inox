@@ -3327,6 +3327,16 @@ class Checker {
       return 'number'
     }
 
+    if (this.hasClassInstanceMethod(expression.object, expression.property)) {
+      this.report(
+        'INOX_C_CLASS',
+        'unbound class method extraction is not supported',
+        expression.loc
+      )
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
     const shape = this.resolveExpressionShape(expression.object)
     const anyNodeMetadataType = this.checkAnyNodeMetadataMemberExpression(expression, objectType, shape)
 
@@ -4166,6 +4176,36 @@ class Checker {
       const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
 
       return returnInfo.valueType === 'string' && this.acceptsArgumentCount(params, 0)
+    }
+
+    return false
+  }
+
+  hasClassInstanceMethod(expression: AnyNode, methodName: string): boolean {
+    const className = this.resolveClassMethodReceiverClassName(expression)
+
+    if (className === null || typeof className === 'undefined') {
+      return false
+    }
+
+    const classSymbol = this.scope.resolve(className)
+
+    if (classSymbol === null || typeof classSymbol === 'undefined') {
+      return false
+    }
+
+    const classMethods = classSymbol.classMethods
+
+    if (classMethods === null || typeof classMethods === 'undefined') {
+      return false
+    }
+
+    for (let index = 0; index < classMethods.length; index = index + 1) {
+      const method = checkerNodeAt(classMethods, index)
+
+      if (nodeNameEquals(method, methodName)) {
+        return true
+      }
     }
 
     return false
