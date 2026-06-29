@@ -4854,7 +4854,7 @@ function emitKnownObjectMemberAssignment(
   member: CKnownObjectField,
   context: CFunctionContext
 ): string[] {
-  const value = emitCValueExpression(expression.value, context)
+  const value = emitRuntimeObjectAssignmentValue(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
   const lines: string[] = []
 
@@ -4877,7 +4877,7 @@ function emitDynamicObjectMemberAssignment(
   member: CKnownObjectIndexField,
   context: CFunctionContext
 ): string[] {
-  const value = emitCValueExpression(expression.value, context)
+  const value = emitRuntimeObjectAssignmentValue(expression.value, context)
   const valueType = inferExpressionType(expression.value, context)
   const lines: string[] = []
 
@@ -4892,6 +4892,26 @@ function emitDynamicObjectMemberAssignment(
   )
 
   return lines
+}
+
+function emitRuntimeObjectAssignmentValue(valueExpression: AnyNode, context: CFunctionContext): PreparedExpression {
+  const value = emitCValueExpression(valueExpression, context)
+  const classInstanceValue = emitPreparedClassInstanceRefValueExpression(value, context)
+
+  if (classInstanceValue === null || typeof classInstanceValue === 'undefined') {
+    return value
+  }
+
+  const lines: string[] = []
+
+  pushAll(lines, value.lines)
+  pushAll(lines, classInstanceValue.lines)
+
+  return {
+    lines,
+    expression: classInstanceValue.expression,
+    valueType: classInstanceValue.valueType
+  }
 }
 
 function knownObjectMemberKey(member: CKnownObjectField): string {

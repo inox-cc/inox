@@ -101,6 +101,38 @@ console.log(arrayBox.values.length)
   assert.doesNotMatch(result.code, /inox_object_get\(arrayBox/)
 }
 
+export function assertNativeClassMapRuntimeFieldLowering(): void {
+  const source = `
+class ScoreBox {
+  scores: Map<string, number>
+
+  constructor(scores: Map<string, number>) {
+    this.scores = scores
+  }
+
+  size(): number {
+    return this.scores.size
+  }
+}
+
+const scores: Map<string, number> = new Map()
+scores.set('Ada', 7)
+const scoreBox = new ScoreBox(scores)
+console.log(scoreBox.size())
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /class ScoreBox|struct ScoreBox/)
+  assert.match(result.code, /inox_value scores/)
+  assert.match(result.code, classDescriptorFieldPattern('scores', 'map', 'map<string,number>', 'strong'))
+  assert.match(result.code, /inox_map_size\(this->scores/)
+  assert.doesNotMatch(result.code, /inox_shape_ScoreBox/)
+  assert.doesNotMatch(result.code, /inox_object_get\(scoreBox/)
+}
+
 export function assertNativeClassFieldAliasLowering(): void {
   const source = `
 class Child {

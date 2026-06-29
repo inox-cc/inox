@@ -1158,11 +1158,11 @@ function commonResolvedOptionalValueType(infos: ResolvedTypeInfo[], kind: Resolv
   return commonValueType(values)
 }
 
-class Scope {
-  parent: Scope | null
+class CheckerScope {
+  parent: CheckerScope | null
   bindings: Map<string, SymbolInfo>
 
-  constructor(parent: Scope | null) {
+  constructor(parent: CheckerScope | null) {
     this.parent = parent
     this.bindings = new Map()
   }
@@ -1195,7 +1195,7 @@ class Scope {
 }
 
 type CheckerScopeState = {
-  scope: Scope
+  scope: CheckerScope
   narrowedNullableNames: Set<string>
 }
 
@@ -1242,7 +1242,7 @@ class Checker {
   program: ProgramNode
   options: CompileOptions
   diagnostics: Diagnostic[]
-  scope: Scope
+  scope: CheckerScope
   types: Map<string, TypeAliasInfo>
   classNames: Set<string>
   breakDepth: number
@@ -1262,7 +1262,7 @@ class Checker {
     this.program = program
     this.options = options
     this.diagnostics = []
-    this.scope = new Scope(null)
+    this.scope = new CheckerScope(null)
     this.types = new Map()
     this.classNames = new Set()
     this.breakDepth = 0
@@ -11963,7 +11963,7 @@ class Checker {
     fields: AnyNode[]
   ): void {
     for (const field of fields) {
-      if (owner === 'Scope' && nodeNameEquals(field, 'parent')) {
+      if ((owner === 'Scope' || owner === 'CheckerScope') && nodeNameEquals(field, 'parent')) {
         continue
       }
 
@@ -13771,7 +13771,7 @@ class Checker {
       narrowedNullableNames: this.narrowedNullableNames
     }
 
-    this.scope = new Scope(previous.scope)
+    this.scope = new CheckerScope(previous.scope)
     this.narrowedNullableNames = cloneStringSet(previous.narrowedNullableNames)
 
     return previous

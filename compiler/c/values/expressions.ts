@@ -66,6 +66,7 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies } from './arrays.ts'
 import {
+  cClassValueTypeName,
   emitPreparedClassInstanceRefValueExpression,
   emitPreparedNativeClassFieldScalarExpression,
   emitPreparedNativeClassFieldValueExpression
@@ -5317,6 +5318,16 @@ export function emitCValueExpression(
     }
 
     if (moduleValueName !== '') {
+      const nativeClassValueType = nativeClassReferenceValueType(name, context)
+
+      if (nativeClassValueType !== null) {
+        return {
+          lines: [],
+          expression: moduleValueName,
+          valueType: nativeClassValueType
+        }
+      }
+
       const moduleValueType = context.moduleValueTypes.get(name)
 
       if (moduleValueType === 'string') {
@@ -5349,6 +5360,16 @@ export function emitCValueExpression(
         lines: [],
         expression: reference,
         valueType
+      }
+    }
+
+    const nativeClassValueType = nativeClassReferenceValueType(name, context)
+
+    if (nativeClassValueType !== null) {
+      return {
+        lines: [],
+        expression: reference,
+        valueType: nativeClassValueType
       }
     }
 
@@ -5707,6 +5728,22 @@ function emitCConditionalBranchValueExpression(
   }
 
   return deps.emitCValueExpression(branch, context)
+}
+
+function nativeClassReferenceValueType(name: string, context: CFunctionContext): string | null {
+  const registeredClassName = context.classInstanceTypes.get(name)
+
+  if (registeredClassName === null || typeof registeredClassName === 'undefined') {
+    return null
+  }
+
+  const info = context.classInfos.get(registeredClassName)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  return cClassValueTypeName(registeredClassName)
 }
 
 function retainConditionalBranchValueExpression(expression: string, context: CFunctionContext): string[] {

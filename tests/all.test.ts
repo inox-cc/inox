@@ -126,6 +126,7 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassArrayRuntimeFieldLowering,
     assertNativeClassFieldAliasLowering,
     assertNativeClassLowering,
+    assertNativeClassMapRuntimeFieldLowering,
     assertNativeClassRuntimeValueFieldLowering
   } =
     await import('./integration/native-class-lowering.test.ts')
@@ -203,6 +204,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-array-runtime-field-lowering', () => {
       assertNativeClassArrayRuntimeFieldLowering()
+    })
+
+    await t.test('native-class-map-runtime-field-lowering', () => {
+      assertNativeClassMapRuntimeFieldLowering()
     })
 
     await t.test('native-class-field-alias-lowering', () => {

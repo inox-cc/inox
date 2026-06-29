@@ -362,7 +362,7 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
     return true
   }
 
-  return field.valueType === 'object' || field.valueType === 'array'
+  return field.valueType === 'object' || field.valueType === 'array' || field.valueType === 'map'
 }
 
 function emitCClassFieldType(field: CObjectShapeField): string {
@@ -1469,7 +1469,21 @@ function emitCClassRuntimeObjectInitLines(
     }
 
     const valueExpression = substituteClassConstructorParams(assignment.value, constructorArgs, target)
-    const value = emitClassValueExpression(context, valueExpression)
+    let value = emitClassValueExpression(context, valueExpression)
+    const classInstance = emitPreparedClassInstanceRefValueExpression(value, context)
+
+    if (classInstance !== null && typeof classInstance !== 'undefined') {
+      const wrappedValueLines: string[] = []
+
+      pushAllLines(wrappedValueLines, value.lines)
+      pushAllLines(wrappedValueLines, classInstance.lines)
+      value = {
+        lines: wrappedValueLines,
+        expression: classInstance.expression,
+        valueType: classInstance.valueType
+      }
+    }
+
     pushAllLines(lines, value.lines)
     lines.push(emitStatusCheck(`inox_object_init_known(${target}, ${fieldIndex}, ${value.expression})`, context))
   }
@@ -2133,11 +2147,37 @@ function resolveClassMethodCallInfo(
     if (info !== null && typeof info !== 'undefined') {
       const object = emitClassValueExpression(context, expression.callee.object)
 
+      if (info.native && object.valueType === classValueType(info)) {
+        return {
+          accessOperator: '.',
+          info,
+          methodName: expression.callee.property,
+          native: true,
+          objectExpression: object.expression,
+          objectLines: object.lines
+        }
+      }
+
+      if (info.native) {
+        const nativeReceiver = emitRuntimeClassInstanceRefReceiver(object, info, context)
+
+        if (nativeReceiver !== null && typeof nativeReceiver !== 'undefined') {
+          return {
+            accessOperator: nativeReceiver.accessOperator,
+            info,
+            methodName: expression.callee.property,
+            native: true,
+            objectExpression: nativeReceiver.expression,
+            objectLines: nativeReceiver.lines
+          }
+        }
+      }
+
       return {
-        accessOperator: info.native ? '.' : '.',
+        accessOperator: '.',
         info,
         methodName: expression.callee.property,
-        native: info.native && object.valueType === classValueType(info),
+        native: false,
         objectExpression: object.expression,
         objectLines: object.lines
       }
@@ -2145,6 +2185,42 @@ function resolveClassMethodCallInfo(
   }
 
   return null
+}
+
+function emitRuntimeClassInstanceRefReceiver(
+  value: PreparedExpression,
+  info: CClassInfo,
+  context: ClassFunctionContext
+): CNativeClassReceiver | null {
+  if (value.expression === '') {
+    return null
+  }
+
+  const ref = nextCName(context, 'inox_class_instance_ref')
+  const receiver = nextCName(context, `inox_${info.name}_receiver`)
+  const typeName = emitCClassTypeName(info.name)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(
+    `if (${value.expression}.tag != INOX_TAG_CLASS_INSTANCE || ${value.expression}.as.ref == 0) ${emitFailureStatement(
+      context
+    )}`
+  )
+  lines.push(`inox_class_instance_ref* ${ref} = (inox_class_instance_ref*)${value.expression}.as.ref;`)
+  lines.push(
+    `if (${ref}->descriptor != &${emitCClassDescriptorName(info.name)} || ${ref}->instance == 0) ${emitFailureStatement(
+      context
+    )}`
+  )
+  lines.push(`${typeName}* ${receiver} = (${typeName}*)${ref}->instance;`)
+
+  return {
+    accessOperator: '->',
+    className: info.name,
+    expression: receiver,
+    lines
+  }
 }
 
 export function resolveNativeClassReceiverExpression(

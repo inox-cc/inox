@@ -14,6 +14,7 @@
 #endif
 
 static void inox_object_dispose_ref(inox_ref* ref);
+static bool inox_class_descriptor_is_valid(const inox_class_descriptor* descriptor);
 
 static bool inox_object_field_is_weak(const inox_object* object, uint32_t index) {
   return object != 0 && index < object->shape->field_count && (object->shape->fields[index].flags & INOX_FIELD_WEAK) != 0;
@@ -168,7 +169,32 @@ inox_status inox_object_set_known(inox_value object, uint32_t index, inox_value 
 }
 
 inox_status inox_object_get(inox_value object, const char* name, size_t len, inox_value* out) {
-  if (out == 0 || object.tag != INOX_TAG_OBJECT || object.as.ref == 0 || name == 0) {
+  if (out == 0 || object.as.ref == 0 || name == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (object.tag == INOX_TAG_CLASS_INSTANCE) {
+    inox_class_instance_ref* ref = (inox_class_instance_ref*)object.as.ref;
+    const inox_class_descriptor* descriptor = ref->descriptor;
+
+    if (ref->instance == 0 || !inox_class_descriptor_is_valid(descriptor)) {
+      return INOX_ERR_TYPE;
+    }
+
+    for (uint32_t index = 0; index < descriptor->field_count; index += 1) {
+      const char* field = descriptor->fields[index].name;
+
+      if (strlen(field) == len && strncmp(field, name, len) == 0) {
+        return descriptor->read_field(ref->instance, index, out);
+      }
+    }
+
+    *out = inox_undefined_value();
+
+    return INOX_ERR_FIELD;
+  }
+
+  if (object.tag != INOX_TAG_OBJECT) {
     return INOX_ERR_TYPE;
   }
 
