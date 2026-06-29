@@ -317,7 +317,12 @@ function registerFunctionParamsInContext(
       context.nullableVariables.add(param.name)
     }
 
-    if (isNullableScalarParam(param)) {
+    const nativeClassParam = nativeClassParamName(param, context)
+
+    if (nativeClassParam !== null && typeof nativeClassParam !== 'undefined') {
+      context.variables.set(param.name, cClassValueTypeName(nativeClassParam))
+      context.classInstanceTypes.set(param.name, nativeClassParam)
+    } else if (isNullableScalarParam(param)) {
       context.variables.set(param.name, param.valueType)
     } else if (isBoxedFunctionParam(param, index, statement, context) && isBoxedParamValueType(param.valueType)) {
       context.variables.set(param.name, param.valueType)
@@ -1084,6 +1089,10 @@ function emitRuntimeParamPreludeForParam(
   const lines: string[] = []
   const localName = emitCLocalName(param.name)
 
+  if (isNativeClassParam(param, context)) {
+    return lines
+  }
+
   pushDeclarationLines(lines, emitDefaultRuntimeParamPreludeForParam(param, context))
 
   if (isNullableScalarParam(param)) {
@@ -1165,6 +1174,26 @@ function emitRuntimeParamPreludeForParam(
   }
 
   return lines
+}
+
+function isNativeClassParam(param: CFunctionParam, context: CFunctionContext): boolean {
+  return nativeClassParamName(param, context) !== null
+}
+
+function nativeClassParamName(param: CFunctionParam, context: CFunctionContext): string | null {
+  const className = param.className
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
+  const info = context.classInfos.get(className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  return className
 }
 
 function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: CFunctionContext): string[] {

@@ -277,11 +277,24 @@ function classValueType(info: CClassInfo): string {
 }
 
 function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
+  if (classFieldUsesNativeClassStorage(field)) {
+    return false
+  }
+
   return (
     field.valueType === 'unknown' ||
     isManagedRuntimeReturnType(field.valueType) ||
     isOpaqueRuntimeValueType(field.valueType) ||
     (field.nullable === true && isNullableScalarType(field.valueType))
+  )
+}
+
+function classFieldUsesNativeClassStorage(field: CObjectShapeField): boolean {
+  return (
+    field.className !== null &&
+    typeof field.className !== 'undefined' &&
+    field.nullable !== true &&
+    field.ownership !== 'weak'
   )
 }
 
@@ -296,8 +309,8 @@ function classCanUseNativeLowering(fields: CObjectShapeField[]): boolean {
 }
 
 function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
-  if (field.className !== null && typeof field.className !== 'undefined') {
-    return false
+  if (classFieldUsesNativeClassStorage(field)) {
+    return true
   }
 
   return (
@@ -310,6 +323,10 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
 }
 
 function emitCClassFieldType(field: CObjectShapeField): string {
+  if (classFieldUsesNativeClassStorage(field)) {
+    return emitCClassTypeName(field.className)
+  }
+
   if (classFieldUsesRuntimeValueStorage(field)) {
     return 'inox_value'
   }
@@ -318,6 +335,10 @@ function emitCClassFieldType(field: CObjectShapeField): string {
 }
 
 function emitCClassFieldDefaultValue(field: CObjectShapeField): string {
+  if (classFieldUsesNativeClassStorage(field)) {
+    return emitCClassTypeName(field.className) + '()'
+  }
+
   if (classFieldUsesRuntimeValueStorage(field)) {
     return 'inox_undefined_value()'
   }
@@ -330,6 +351,15 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField): string {
 }
 
 function emitCClassParamType(param: CFunctionParam): string {
+  if (
+    param.className !== null &&
+    typeof param.className !== 'undefined' &&
+    param.nullable !== true &&
+    param.ownership !== 'weak'
+  ) {
+    return 'const ' + emitCClassTypeName(param.className) + '&'
+  }
+
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
     return 'inox_value'
   }
@@ -342,6 +372,15 @@ function emitCClassParamType(param: CFunctionParam): string {
 }
 
 function emitCClassParamName(param: CFunctionParam): string {
+  if (
+    param.className !== null &&
+    typeof param.className !== 'undefined' &&
+    param.nullable !== true &&
+    param.ownership !== 'weak'
+  ) {
+    return emitCIdentifier(param.name)
+  }
+
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
     return emitCScalarParamName(param.name)
   }
@@ -720,9 +759,38 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
     })
   }
 
-  markClassFieldTargetsRuntimeBacked(infos)
+  markClassFieldOwnersRuntimeBacked(infos)
+  annotateClassMethodParamClassNames(infos)
 
   return infos
+}
+
+function annotateClassMethodParamClassNames(infos: CClassInfoMap): void {
+  for (const info of infos.values()) {
+    const methods: ClassExpressionNode[] = info.node.methods
+
+    for (const method of methods) {
+      const params: ClassExpressionNode[] = method.params
+
+      for (const param of params) {
+        const className = classParamClassName(param, infos)
+
+        if (className !== null && typeof className !== 'undefined') {
+          param.className = className
+        }
+      }
+    }
+  }
+}
+
+function classParamClassName(param: ClassExpressionNode, infos: CClassInfoMap): string | null {
+  for (const className of infos.keys()) {
+    if (param.className === className || param.declaredType === className || param.valueType === className) {
+      return className
+    }
+  }
+
+  return null
 }
 
 function classFieldDeclaredType(field: CObjectShapeField): string | null {
@@ -747,19 +815,31 @@ function classFieldIsWeak(field: CObjectShapeField): boolean {
   return field.shapeOwnership === 'weak'
 }
 
-function markClassFieldTargetsRuntimeBacked(infos: CClassInfoMap): void {
-  for (const info of infos.values()) {
-    for (const field of info.fields) {
-      const className = field.className
+function markClassFieldOwnersRuntimeBacked(infos: CClassInfoMap): void {
+  let changed = true
 
-      if (className === null || typeof className === 'undefined') {
+  while (changed) {
+    changed = false
+
+    for (const info of infos.values()) {
+      if (!info.native) {
         continue
       }
 
-      const target = infos.get(className)
+      for (const field of info.fields) {
+        const className = field.className
 
-      if (target !== null && typeof target !== 'undefined') {
-        target.native = false
+        if (className === null || typeof className === 'undefined') {
+          continue
+        }
+
+        const target = infos.get(className)
+
+        if (target === null || typeof target === 'undefined' || !target.native) {
+          info.native = false
+          changed = true
+          break
+        }
       }
     }
   }
@@ -1878,6 +1958,28 @@ export function resolveNativeClassReceiverExpression(
     }
   }
 
+  if (expression !== null && typeof expression !== 'undefined' && expression.type === 'MemberExpression') {
+    const access = resolveNativeClassFieldAccess(expression, context)
+
+    if (
+      access !== null &&
+      typeof access !== 'undefined' &&
+      access.field.className !== null &&
+      typeof access.field.className !== 'undefined'
+    ) {
+      const info = classInfoForName(context, access.field.className)
+
+      if (info !== null && typeof info !== 'undefined' && info.native) {
+        return {
+          accessOperator: '.',
+          className: access.field.className,
+          expression: access.reference,
+          lines: []
+        }
+      }
+    }
+  }
+
   return null
 }
 
@@ -1996,6 +2098,23 @@ export function emitPreparedNativeClassFieldValueExpression(
     return {
       lines: [],
       expression: `inox_bool_value(${access.reference})`
+    }
+  }
+
+  if (
+    access.field.className !== null &&
+    typeof access.field.className !== 'undefined'
+  ) {
+    const info = classInfoForName(context, access.field.className)
+
+    if (info === null || typeof info === 'undefined' || !info.native) {
+      return null
+    }
+
+    return {
+      lines: [],
+      expression: access.reference,
+      valueType: cClassValueTypeName(access.field.className)
     }
   }
 

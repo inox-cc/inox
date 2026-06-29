@@ -1458,6 +1458,7 @@ class Checker {
       declaredType,
       optional: isOptionalParam(param),
       rest: param.rest === true,
+      className: this.declaredClassName(declaredType),
       valueType: paramInfo.valueType,
       nullable: paramInfo.nullable,
       arrayElementType: paramInfo.arrayElementType,
@@ -10606,13 +10607,28 @@ class Checker {
 
         for (let index = 0; index < method.params.length; index = index + 1) {
           const param = checkerNodeAt(method.params, index)
+          const declaredType = nodeDeclaredTypeOrValueType(param)
+          const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
+          param.declaredType = declaredType
+          param.valueType = paramInfo.valueType
+          param.nullable = paramInfo.nullable
+          param.arrayElementType = paramInfo.arrayElementType
+          param.arrayElementDeclaredType = paramInfo.arrayElementDeclaredType
+          param.mapKeyType = paramInfo.mapKeyType
+          param.mapValueType = paramInfo.mapValueType
+          param.mapValueShape = paramInfo.mapValueShape
+          param.promiseValueType = paramInfo.promiseValueType ?? null
+          param.setElementType = paramInfo.setElementType
+          param.functionType = paramInfo.functionType
+          param.shape = paramInfo.shape
+          param.className = this.declaredClassName(declaredType)
 
-          const paramInfo = this.resolveDeclaredType(param.valueType, param.loc)
           this.declare(
             param.name,
             {
               kind: 'param',
               mutable: true,
+              className: param.className,
               valueType: paramInfo.valueType,
               nullable: paramInfo.nullable,
               arrayElementType: paramInfo.arrayElementType,

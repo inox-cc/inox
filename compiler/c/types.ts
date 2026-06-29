@@ -132,6 +132,7 @@ export type CRuntimeArrayElement = CArrayElementInfo & {
 
 export type CFunctionParam = {
   arrayElementType?: string | null
+  className?: string | null
   declaredType?: string | null
   defaultValue?: AnyNode | null
   functionTypeOwnership?: 'weak'
@@ -142,6 +143,7 @@ export type CFunctionParam = {
   name: string
   nullable?: boolean
   optional?: boolean
+  ownership?: string
   promiseValueType?: string | null
   setElementType?: string | null
   shape?: CObjectShape | null

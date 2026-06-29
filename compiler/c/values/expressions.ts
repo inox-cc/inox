@@ -2335,6 +2335,11 @@ function appendPreparedCallArg(
 
     appendLines(lines, value.lines)
     args.push(value.expression)
+  } else if (nativeClassParamName(param, context) !== null) {
+    const value = deps.emitCValueExpression(arg, context)
+
+    appendLines(lines, value.lines)
+    args.push(value.expression)
   } else if (paramValueType === 'object') {
     let value = deps.emitCValueExpression(arg, context)
 
@@ -2369,6 +2374,22 @@ function appendPreparedCallArg(
   } else {
     args.push(deps.emitCExpression(arg, context))
   }
+}
+
+function nativeClassParamName(param: CFunctionParam, context: CFunctionContext): string | null {
+  const className = param.className
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
+  const info = context.classInfos.get(className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  return className
 }
 
 function emitPreparedScalarCallArgumentExpression(
@@ -5299,6 +5320,14 @@ export function emitCValueExpression(
       return {
         lines: [],
         expression: moduleValueName
+      }
+    }
+
+    if (valueType.startsWith('class:')) {
+      return {
+        lines: [],
+        expression: reference,
+        valueType
       }
     }
 
