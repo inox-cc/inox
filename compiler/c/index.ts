@@ -128,7 +128,11 @@ import {
 import type { CModuleFileEmitters } from './modules.ts'
 import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
 import { mathRuntimeMethodName } from './runtime-methods.ts'
-import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
+import {
+  emitRuntimeNullableValueCheck,
+  emitRuntimeValueCheck,
+  runtimeExactObjectValueMismatchCondition
+} from './runtime-values.ts'
 import type {
   BinaryLoweringDependencies,
   ChildProcessLoweringDependencies,
@@ -4796,7 +4800,7 @@ function emitObjectObjectMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(emitGetCall(statement.name), context))
-  lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_OBJECT || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
+  lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(emitCIdentifier(statement.name)), context))
 
   context.variables.set(statement.name, 'object')
 
@@ -7067,10 +7071,7 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
 
   pushAll(lines, controller.lines)
   lines.push(
-    emitRuntimeTypeCheck(
-      `${controller.expression}.tag != INOX_TAG_OBJECT || ${controller.expression}.as.ref == 0`,
-      context
-    )
+    emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(controller.expression), context)
   )
   lines.push(emitStatusCheck(`inox_fetch_abort_controller_abort(${controller.expression})`, context))
 
@@ -7586,7 +7587,7 @@ function emitAwaitRejectedPromiseLines(
   let rejectedTypeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 
   if (rejectionValueType === 'error') {
-    rejectedTypeCheck = 'inox_error.tag != INOX_TAG_OBJECT || inox_error.as.ref == 0'
+    rejectedTypeCheck = runtimeExactObjectValueMismatchCondition('inox_error')
   }
 
   if (target === '' && !context.throwingFunction) {

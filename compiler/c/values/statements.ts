@@ -18,7 +18,12 @@ import {
   restoreVariableScope
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
-import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../runtime-values.ts'
+import {
+  emitRuntimeNullableValueCheck,
+  emitRuntimeValueCheck,
+  emitRuntimeValueCheckLines,
+  runtimeExactObjectValueMismatchCondition
+} from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import type {
   CArrayElementInfo,
@@ -3528,7 +3533,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   let typeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 
   if (isErrorObject) {
-    typeCheck = 'inox_error.tag != INOX_TAG_OBJECT || inox_error.as.ref == 0'
+    typeCheck = runtimeExactObjectValueMismatchCondition('inox_error')
   }
 
   lines.push(emitRuntimeTypeCheck(typeCheck, context))
@@ -4715,7 +4720,7 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
 
 export function emitCatchBindingTypeCheck(valueType: string): string {
   if (valueType === 'object') {
-    return 'inox_error.tag != INOX_TAG_OBJECT || inox_error.as.ref == 0'
+    return runtimeExactObjectValueMismatchCondition('inox_error')
   }
 
   if (valueType === 'unknown') {

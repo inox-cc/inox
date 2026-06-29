@@ -22,6 +22,14 @@ export function runtimeObjectLikeValueMismatchCondition(name: string): string {
   return `${runtimeObjectLikeTagMismatchCondition(name)} || ${name}.as.ref == 0`
 }
 
+export function runtimeExactObjectValueMismatchCondition(name: string): string {
+  return `${name}.tag != INOX_TAG_OBJECT || ${name}.as.ref == 0`
+}
+
+export function runtimeExactObjectPointerMismatchCondition(name: string): string {
+  return `${name}->tag != INOX_TAG_OBJECT || ${name}->as.ref == 0`
+}
+
 export function emitRuntimeNullableValueCheck(
   name: string,
   expectedTag: string | null,

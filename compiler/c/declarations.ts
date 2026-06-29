@@ -40,7 +40,7 @@ import {
   shouldEmitCleanupLabel
 } from './context.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
-import { emitRuntimeNullableValueCheck } from './runtime-values.ts'
+import { emitRuntimeNullableValueCheck, runtimeExactObjectValueMismatchCondition } from './runtime-values.ts'
 import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
 import {
   cRuntimeValueTag,
@@ -1141,7 +1141,7 @@ function emitRuntimeParamPreludeForParam(
       return lines
     }
 
-    lines.push(emitRuntimeTypeCheck(`${localName}.tag != INOX_TAG_OBJECT || ${localName}.as.ref == 0`, context))
+    lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(localName), context))
     return lines
   }
 

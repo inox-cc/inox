@@ -362,6 +362,10 @@ import {
   registerOwnedPromise
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
+import {
+  runtimeExactObjectPointerMismatchCondition,
+  runtimeExactObjectValueMismatchCondition
+} from '../runtime-values.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
 import { registerObjectShape } from '../values/objects.ts'
 
@@ -2310,7 +2314,7 @@ function emitPromiseChainCallbackParamPrelude(
 
   if (valueType === 'object') {
     return [
-      emitRuntimeTypeCheck('inox_value_input.tag != INOX_TAG_OBJECT || inox_value_input.as.ref == 0', context),
+      emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition('inox_value_input'), context),
       `inox_value ${param.name} = inox_value_input;`
     ]
   }
@@ -2440,7 +2444,7 @@ function promiseErrorObjectFieldTypeCheck(valueType: string): string {
   }
 
   if (valueType === 'object') {
-    return '(out->tag != INOX_TAG_OBJECT || out->as.ref == 0) && out->tag != INOX_TAG_NULL'
+    return `(${runtimeExactObjectPointerMismatchCondition('out')}) && out->tag != INOX_TAG_NULL`
   }
 
   return ''

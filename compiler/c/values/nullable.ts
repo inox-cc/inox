@@ -10,7 +10,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
+import { emitRuntimeNullableValueCheck, runtimeExactObjectValueMismatchCondition } from '../runtime-values.ts'
 import { isCoalesceExpression } from '../syntax.ts'
 import type {
   CFunctionReturnMapType,
@@ -777,10 +777,7 @@ function emitCOptionalObjectReadValueExpression(
   const object = nullableDeps(context).emitCValueExpression(objectExpression, context)
   const temp = nextCName(context, 'inox_optional_value')
   const expectedTag = cRuntimeValueTag(valueType)
-  const typeCheck = emitRuntimeTypeCheck(
-    `${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`,
-    context
-  )
+  const typeCheck = emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context)
   const getCall = optionalObjectReadGetCall(access, object.expression, temp, context)
   const statusCheck = emitStatusCheck(getCall, context)
   const lines: string[] = []

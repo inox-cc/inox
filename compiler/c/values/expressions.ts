@@ -25,7 +25,12 @@ import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
-import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, runtimeObjectLikeTagMatchCondition } from '../runtime-values.ts'
+import {
+  emitRuntimeNullableValueCheck,
+  emitRuntimeValueCheck,
+  runtimeExactObjectValueMismatchCondition,
+  runtimeObjectLikeTagMatchCondition
+} from '../runtime-values.ts'
 import { cTimeRuntimeCallName } from '../../../stdlib/global/compiler/c.ts'
 import {
   cUnsupportedExpressionCode,
@@ -4276,9 +4281,7 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
   lines.push(`if (${object.expression}.tag == INOX_TAG_ARRAY) {`)
   lines.push(`  ${value} = inox_undefined_value();`)
   lines.push('} else {')
-  lines.push(
-    `  ${emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)}`
-  )
+  lines.push(`  ${emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context)}`)
   lines.push(
     `  inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
   )
@@ -4372,9 +4375,7 @@ function emitPreparedDynamicObjectArrayReceiver(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(
-    emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)
-  )
+  lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context))
 
   return {
     lines,

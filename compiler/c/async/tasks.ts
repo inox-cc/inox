@@ -2,7 +2,7 @@ import { diagnostic } from '../../diagnostics.ts'
 import type { AnyNode, Diagnostic, IrFunctionDeclaration, SourceLocation } from '../../types.ts'
 import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, nextCName } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeValueCheck } from '../runtime-values.ts'
+import { emitRuntimeValueCheck, runtimeExactObjectValueMismatchCondition } from '../runtime-values.ts'
 import {
   cFetchRuntimeExpressionMethod,
   isAsyncFetchRuntimeCallExpression
@@ -3305,10 +3305,7 @@ function emitPreparedAsyncTaskFetchSourceExpression(
 
     appendAsyncTaskLines(lines, response.lines)
     lines.push(
-      emitRuntimeTypeCheck(
-        `${response.expression}.tag != INOX_TAG_OBJECT || ${response.expression}.as.ref == 0`,
-        context
-      )
+      emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(response.expression), context)
     )
     lines.push(`status = inox_fetch_response_text(inox_loop, ${response.expression}, &frame->awaited);`)
   }

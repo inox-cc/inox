@@ -2,6 +2,7 @@ import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import type { AnyNode, IrProgram } from '../../types.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
+import { runtimeExactObjectValueMismatchCondition } from '../runtime-values.ts'
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
@@ -3817,7 +3818,7 @@ function emitRuntimeCallbackWrapperArgChecks(param: CFunctionParam, index: numbe
   }
 
   if (param.valueType === 'object') {
-    return [`if (args[${index}].tag != INOX_TAG_OBJECT || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`]
+    return [`if (${runtimeExactObjectValueMismatchCondition(`args[${index}]`)}) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'number') {

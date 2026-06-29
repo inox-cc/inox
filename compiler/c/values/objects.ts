@@ -10,7 +10,11 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeFieldValueCheck, runtimeObjectLikeValueMismatchCondition } from '../runtime-values.ts'
+import {
+  emitRuntimeFieldValueCheck,
+  runtimeExactObjectValueMismatchCondition,
+  runtimeObjectLikeValueMismatchCondition
+} from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
 import type {
   CFunctionType,
@@ -1131,9 +1135,7 @@ function emitDynamicRuntimeObjectFieldAssignmentLines(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(
-    emitRuntimeTypeCheck(`${object.expression}.tag != INOX_TAG_OBJECT || ${object.expression}.as.ref == 0`, context)
-  )
+  lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context))
   appendLines(lines, value.lines)
   lines.push(
     emitStatusCheck(
