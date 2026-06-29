@@ -60,6 +60,7 @@ type PromiseFunctionContext = PromiseEmitContext & {
   nextId: number
   objectShapes: PromiseObjectShapeMap
   ownedPromises: string[]
+  ownedValues: string[]
   promiseConstructorHandlers: PromiseConstructorHandlerMap
   promiseRejectionValueTypes: PromiseStringMap
   promiseValueTypes: PromiseStringMap
@@ -353,20 +354,23 @@ export function resolveCAsyncFunctionAwaitValueType(
 import { diagnostic } from '../../diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
 import {
+  emitPrepareOwnedValueWrite,
   emitEventLoopReference,
   emitFailureStatement,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
   registerEventLoop,
+  registerOwnedValue,
   registerOwnedPromise
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import {
   runtimeExactObjectPointerMismatchCondition,
-  runtimeExactObjectValueMismatchCondition
+  runtimeObjectLikeValueMismatchCondition
 } from '../runtime-values.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
+import { cClassNameFromValueType, emitCClassDescriptorName } from '../values/classes.ts'
 import { registerObjectShape } from '../values/objects.ts'
 
 export type PromiseChainLoweringDependencies = {
@@ -898,7 +902,37 @@ function emitPreparedPromiseArgumentValue(
     }
   }
 
-  return dependencies.emitCValueExpression(argument, context)
+  return emitPreparedPromiseRuntimeArgumentValue(dependencies.emitCValueExpression(argument, context), context)
+}
+
+function emitPreparedPromiseRuntimeArgumentValue(
+  value: PreparedExpression,
+  context: PromiseFunctionContext
+): PreparedExpression {
+  const className = cClassNameFromValueType(value.valueType)
+
+  if (className === null || typeof className === 'undefined') {
+    return value
+  }
+
+  const temp = nextCName(context, 'inox_class_instance')
+  const lines: string[] = []
+
+  appendLines(lines, value.lines)
+  registerOwnedValue(context, temp)
+  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp,
+    valueType: 'object'
+  }
 }
 
 function promiseExecutorParamName(executor: AnyNode, index: number): string | null {
@@ -2314,7 +2348,7 @@ function emitPromiseChainCallbackParamPrelude(
 
   if (valueType === 'object') {
     return [
-      emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition('inox_value_input'), context),
+      emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition('inox_value_input'), context),
       `inox_value ${param.name} = inox_value_input;`
     ]
   }

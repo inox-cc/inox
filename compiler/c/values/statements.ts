@@ -22,7 +22,7 @@ import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
   emitRuntimeValueCheckLines,
-  runtimeExactObjectValueMismatchCondition
+  runtimeObjectLikeValueMismatchCondition
 } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, cUnsupportedVariableDeclarationCode, containsAwaitExpression } from '../syntax.ts'
 import type {
@@ -59,7 +59,7 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
 import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
-import { emitNativeClassFieldAssignment } from './classes.ts'
+import { cClassNameFromValueType, emitCClassDescriptorName, emitNativeClassFieldAssignment } from './classes.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
 import {
@@ -3524,7 +3524,10 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
 
   registerErrorChannel(context)
 
-  const value = statementDeps(context).emitCValueExpression(statement.argument, context)
+  const value = emitThrowableObjectValueExpression(
+    statementDeps(context).emitCValueExpression(statement.argument, context),
+    context
+  )
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
@@ -3533,7 +3536,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   let typeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 
   if (isErrorObject) {
-    typeCheck = runtimeExactObjectValueMismatchCondition('inox_error')
+    typeCheck = runtimeObjectLikeValueMismatchCondition('inox_error')
   }
 
   lines.push(emitRuntimeTypeCheck(typeCheck, context))
@@ -3552,6 +3555,33 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   }
 
   return lines
+}
+
+function emitThrowableObjectValueExpression(value: PreparedExpression, context: CFunctionContext): PreparedExpression {
+  const className = cClassNameFromValueType(value.valueType)
+
+  if (className === null || typeof className === 'undefined') {
+    return value
+  }
+
+  const temp = nextCName(context, 'inox_throw_value')
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  registerOwnedValue(context, temp)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp,
+    valueType: 'object'
+  }
 }
 
 function isThrowableObjectExpression(expression: StatementNode, context: CFunctionContext): boolean {
@@ -4720,7 +4750,7 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
 
 export function emitCatchBindingTypeCheck(valueType: string): string {
   if (valueType === 'object') {
-    return runtimeExactObjectValueMismatchCondition('inox_error')
+    return runtimeObjectLikeValueMismatchCondition('inox_error')
   }
 
   if (valueType === 'unknown') {
