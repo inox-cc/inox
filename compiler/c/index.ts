@@ -846,6 +846,19 @@ function emitPreparedClassToStringExpression(
   )
 }
 
+function emitPreparedNativeClassStringFieldExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  const field = emitPreparedNativeClassFieldValueExpression(expression, context)
+
+  if (field === null || typeof field === 'undefined' || field.valueType !== 'string') {
+    return null
+  }
+
+  return field
+}
+
 function emitPreparedJsonClassInstanceOperand(
   expression: AnyNode,
   context: CFunctionContext
@@ -969,6 +982,7 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedNumberExpression,
+  emitPreparedNativeClassStringFieldExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedClassToStringExpression,
   emitPreparedRuntimeObjectReferenceExpression: (expression: AnyNode, context: CFunctionContext) =>

@@ -156,6 +156,7 @@ export type StringLoweringDependencies = {
     context: StringCContext
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
+  emitPreparedNativeClassStringFieldExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValue(
     expression: AnyNode,
     element: CRuntimeArrayElement,
@@ -891,6 +892,14 @@ export function emitPreparedStringBytesOperand(
       lines: [],
       bytes: cStringLiteral(runtimeConstant),
       length: `${utf8ByteLength(runtimeConstant)}`
+    }
+  }
+
+  if (expression !== null && typeof expression !== 'undefined') {
+    const nativeClassString = stringDeps(context).emitPreparedNativeClassStringFieldExpression(expression, context)
+
+    if (nativeClassString !== null && typeof nativeClassString !== 'undefined') {
+      return emitPreparedRuntimeStringValueBytesOperand(nativeClassString, context, tempPrefix)
     }
   }
 
