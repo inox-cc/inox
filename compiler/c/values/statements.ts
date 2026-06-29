@@ -61,7 +61,9 @@ import type { ArrayLoweringDependencies, PreparedArrayExpression } from './array
 import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
 import {
   cClassNameFromValueType,
+  cClassValueTypeName,
   emitCClassDescriptorName,
+  emitCClassTypeName,
   emitNativeClassFieldAssignment,
   emitPreparedClassInstanceRefValueExpression
 } from './classes.ts'
@@ -3906,6 +3908,12 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitClassObjectVariableDeclaration(statement, context)
   }
 
+  const nativeClassValueDeclaration = emitNativeClassExpressionVariableDeclaration(statement, context)
+
+  if (nativeClassValueDeclaration !== null && typeof nativeClassValueDeclaration !== 'undefined') {
+    return nativeClassValueDeclaration
+  }
+
   const jsonParseDeclaration = deps.emitJsonParseVariableDeclaration(statement, context)
 
   if (jsonParseDeclaration !== null && typeof jsonParseDeclaration !== 'undefined') {
@@ -4065,6 +4073,94 @@ function registerRuntimeStringStorage(name: string, context: CFunctionContext): 
   context.runtimeStringValues.set(name, storage)
 
   return storage
+}
+
+function emitNativeClassExpressionVariableDeclaration(
+  statement: StatementNode,
+  context: CFunctionContext
+): string[] | null {
+  if (statement.init === null || typeof statement.init === 'undefined') {
+    return null
+  }
+
+  const className = nativeClassExpressionVariableDeclarationClassName(statement, context)
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
+  const info = context.classInfos.get(className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  return emitNativeClassValueVariableDeclaration(
+    statement,
+    statementDeps(context).emitCValueExpression(statement.init, context),
+    context
+  )
+}
+
+function nativeClassExpressionVariableDeclarationClassName(
+  statement: StatementNode,
+  context: CFunctionContext
+): string | null {
+  const statementClassName = stringOrNull(statement.className)
+
+  if (statementClassName !== null) {
+    return statementClassName
+  }
+
+  if (statement.init === null || typeof statement.init === 'undefined') {
+    return null
+  }
+
+  const initClassName = stringOrNull(statement.init.className)
+
+  if (initClassName !== null) {
+    return initClassName
+  }
+
+  if (statement.init.type === 'Reference' && statement.init.path.length === 1) {
+    const path: string[] = statement.init.path
+    const referenceClassName = context.classInstanceTypes.get(path[0])
+
+    if (referenceClassName !== null && typeof referenceClassName !== 'undefined') {
+      return referenceClassName
+    }
+  }
+
+  if (statement.init.type === 'ThisExpression') {
+    const thisClassName = context.classInstanceTypes.get('this')
+
+    if (thisClassName !== null && typeof thisClassName !== 'undefined') {
+      return thisClassName
+    }
+  }
+
+  return null
+}
+
+function emitNativeClassValueVariableDeclaration(
+  statement: StatementNode,
+  value: PreparedExpression,
+  context: CFunctionContext
+): string[] | null {
+  const className = cClassNameFromValueType(value.valueType)
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
+  const lines: string[] = []
+
+  context.variables.set(statement.name, cClassValueTypeName(className))
+  context.classInstanceTypes.set(statement.name, className)
+  pushAllLines(lines, value.lines)
+  lines.push(`${emitCClassTypeName(className)} ${emitCIdentifier(statement.name)} = ${value.expression};`)
+
+  return lines
 }
 
 function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[] | null {

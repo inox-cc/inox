@@ -101,6 +101,49 @@ console.log(arrayBox.values.length)
   assert.doesNotMatch(result.code, /inox_object_get\(arrayBox/)
 }
 
+export function assertNativeClassFieldAliasLowering(): void {
+  const source = `
+class Child {
+  name: string
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  label(): string {
+    return this.name
+  }
+}
+
+class Parent {
+  child: Child
+
+  constructor(child: Child) {
+    this.child = child
+  }
+
+  label(): string {
+    const current = this.child
+    return current.label()
+  }
+}
+
+const parent = new Parent(new Child('Ada'))
+console.log(parent.label())
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /class Child|struct Child/)
+  assert.match(result.code, /class Parent|struct Parent/)
+  assert.match(result.code, /Child current = this->child/)
+  assert.match(result.code, /current\.label\(\)/)
+  assert.doesNotMatch(result.code, /inox_value current/)
+  assert.doesNotMatch(result.code, /inox_method_Child_label/)
+}
+
 function classDescriptorFieldPattern(name: string, valueType: string, declaredType: string, ownership: string): RegExp {
   return new RegExp(
     `\\{ ${escapeRegExp(cStringLiteral(name))}, ${escapeRegExp(cStringLiteral(valueType))}, ${escapeRegExp(

@@ -124,6 +124,7 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/native-inox-process-runtime-string.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
+    assertNativeClassFieldAliasLowering,
     assertNativeClassLowering,
     assertNativeClassRuntimeValueFieldLowering
   } =
@@ -202,6 +203,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-array-runtime-field-lowering', () => {
       assertNativeClassArrayRuntimeFieldLowering()
+    })
+
+    await t.test('native-class-field-alias-lowering', () => {
+      assertNativeClassFieldAliasLowering()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {
