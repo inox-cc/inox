@@ -981,25 +981,21 @@ function collectClassConstructorAssignments(
     const statements: ClassExpressionNode[] = constructorMethod.body
 
     for (const statement of statements) {
-      let assignment: AnyNode | null = null
-
-      if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
-        assignment = statement.expression
-      }
+      const assignment = classConstructorFieldAssignment(statement)
 
       if (assignment !== null && typeof assignment !== 'undefined') {
-        const field = thisFieldName(assignment.target)
+        assignments.push(createClassConstructorAssignment(assignment.field, assignment.assignment))
+        continue
+      }
 
-        if (field !== null && typeof field !== 'undefined') {
-          assignments.push(createClassConstructorAssignment(field, assignment))
-          continue
-        }
+      if (isSupportedClassConstructorLocalStatement(statement)) {
+        continue
       }
 
       diagnostics.push(
         diagnostic(
           'INOX_C_CLASS',
-          `class ${classNode.name} constructor currently supports only this.field assignments in the C backend`,
+          `class ${classNode.name} constructor currently supports only local declarations and this.field assignments in the C backend`,
           nodeLocOrFallback(statement, constructorMethod)
         )
       )
@@ -1007,6 +1003,32 @@ function collectClassConstructorAssignments(
   }
 
   return assignments
+}
+
+type ClassConstructorFieldAssignment = {
+  assignment: AnyNode
+  field: string
+}
+
+function classConstructorFieldAssignment(statement: AnyNode): ClassConstructorFieldAssignment | null {
+  if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'AssignmentExpression') {
+    return null
+  }
+
+  const field = thisFieldName(statement.expression.target)
+
+  if (field === null || typeof field === 'undefined') {
+    return null
+  }
+
+  return {
+    assignment: statement.expression,
+    field
+  }
+}
+
+function isSupportedClassConstructorLocalStatement(statement: AnyNode): boolean {
+  return statement.type === 'VariableDeclaration'
 }
 
 function createClassConstructorAssignment(field: string, assignment: AnyNode): AnyNode {
