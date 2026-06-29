@@ -76,6 +76,31 @@ console.log(box.payload)
   assert.doesNotMatch(result.code, /inox_object_get\(box/)
 }
 
+export function assertNativeClassArrayRuntimeFieldLowering(): void {
+  const source = `
+class ArrayBox {
+  values: number[]
+
+  constructor(values: number[]) {
+    this.values = values
+  }
+}
+
+const arrayBox = new ArrayBox([1, 2])
+console.log(arrayBox.values.length)
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /class ArrayBox|struct ArrayBox/)
+  assert.match(result.code, /inox_value values/)
+  assert.match(result.code, classDescriptorFieldPattern('values', 'array', 'array<number>', 'strong'))
+  assert.doesNotMatch(result.code, /inox_shape_ArrayBox/)
+  assert.doesNotMatch(result.code, /inox_object_get\(arrayBox/)
+}
+
 function classDescriptorFieldPattern(name: string, valueType: string, declaredType: string, ownership: string): RegExp {
   return new RegExp(
     `\\{ ${escapeRegExp(cStringLiteral(name))}, ${escapeRegExp(cStringLiteral(valueType))}, ${escapeRegExp(
