@@ -10,7 +10,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import { emitRuntimeFieldValueCheck, runtimeObjectLikeValueMismatchCondition } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
 import type {
   CFunctionType,
@@ -1659,7 +1659,7 @@ function emitRuntimeOptionalObjectFieldValueCheck(
     return [
       emitRuntimeTypeCheck(
         `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && ` +
-          `((${value}.tag != INOX_TAG_OBJECT && ${value}.tag != INOX_TAG_CLASS_INSTANCE) || ${value}.as.ref == 0)`,
+          `(${runtimeObjectLikeValueMismatchCondition(value)})`,
         context
       )
     ]

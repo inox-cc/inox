@@ -25,7 +25,7 @@ import { reportCJsGlobalDiagnostic } from '../diagnostics.ts'
 import { isCJsGlobalRoot, usesCJsGlobal } from '../globals.ts'
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { mathRuntimeMethodName } from '../runtime-methods.ts'
-import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
+import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck, runtimeObjectLikeTagMatchCondition } from '../runtime-values.ts'
 import { cTimeRuntimeCallName } from '../../../stdlib/global/compiler/c.ts'
 import {
   cUnsupportedExpressionCode,
@@ -396,9 +396,8 @@ function typeofRuntimeValueTagCheck(value: string, typeName: string): string | n
 
   if (typeName === 'object') {
     return (
-      `(${value}.tag == INOX_TAG_NULL || ${value}.tag == INOX_TAG_OBJECT || ${value}.tag == INOX_TAG_ARRAY || ` +
-      `${value}.tag == INOX_TAG_BYTES || ${value}.tag == INOX_TAG_MAP || ${value}.tag == INOX_TAG_SET || ` +
-      `${value}.tag == INOX_TAG_CLASS_INSTANCE)`
+      `(${value}.tag == INOX_TAG_NULL || ${runtimeObjectLikeTagMatchCondition(value)} || ${value}.tag == INOX_TAG_ARRAY || ` +
+      `${value}.tag == INOX_TAG_BYTES || ${value}.tag == INOX_TAG_MAP || ${value}.tag == INOX_TAG_SET)`
     )
   }
 

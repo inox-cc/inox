@@ -19,7 +19,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { emitCIdentifier } from '../identifiers.ts'
-import { emitRuntimeFieldValueCheck } from '../runtime-values.ts'
+import { emitRuntimeFieldValueCheck, runtimeObjectLikeValueMismatchCondition } from '../runtime-values.ts'
 import type {
   CArrayElementInfo,
   CFunctionReturnMapType,
@@ -1068,7 +1068,7 @@ function emitRuntimeArrayIndexValueCheck(
   if (expectedTag === 'INOX_TAG_OBJECT') {
     return [
       emitRuntimeTypeCheck(
-        `${missingCheck} && ((${value}.tag != INOX_TAG_OBJECT && ${value}.tag != INOX_TAG_CLASS_INSTANCE) || ${value}.as.ref == 0)`,
+        `${missingCheck} && (${runtimeObjectLikeValueMismatchCondition(value)})`,
         context
       )
     ]
