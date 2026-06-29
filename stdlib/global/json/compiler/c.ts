@@ -64,6 +64,10 @@ export function cJsonRuntimeCallName(callee: AnyNode | null | undefined): string
 export type JsonDeclarationDependencies = {
   emitCFieldFlags: (field: CObjectShapeField) => string
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedClassInstanceOperand: (
+    expression: AnyNode,
+    context: CFunctionContext
+  ) => JsonClassInstanceOperand | null
   emitPreparedStringBytesOperand: (
     expression: AnyNode,
     context: CFunctionContext,
@@ -71,6 +75,12 @@ export type JsonDeclarationDependencies = {
   ) => PreparedStringBytesOperand
   inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
   registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
+}
+
+export type JsonClassInstanceOperand = {
+  descriptor: string
+  instance: string
+  lines: string[]
 }
 
 function pushJsonLines(target: string[], lines: string[]): void {
@@ -295,9 +305,27 @@ export function emitPreparedJsonCallExpression(
     }
   }
 
-  const value = dependencies.emitCValueExpression(expression.args[0], context)
   const lines: string[] = []
+  const classInstance = dependencies.emitPreparedClassInstanceOperand(expression.args[0], context)
 
+  if (classInstance !== null && typeof classInstance !== 'undefined') {
+    pushJsonLines(lines, classInstance.lines)
+    pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(
+      emitStatusCheck(
+        `inox_json_stringify_class_instance(&inox_default_allocator, &${classInstance.descriptor}, ${classInstance.instance}, &${out})`,
+        context
+      )
+    )
+    lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
+
+    return {
+      lines: lines,
+      expression: out
+    }
+  }
+
+  const value = dependencies.emitCValueExpression(expression.args[0], context)
   pushJsonLines(lines, value.lines)
   pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(emitStatusCheck(`inox_json_stringify(&inox_default_allocator, ${value.expression}, &${out})`, context))

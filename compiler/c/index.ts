@@ -208,7 +208,7 @@ import {
   emitPreparedFetchHeadersCallExpression,
   emitPreparedFetchInitOperand
 } from '../../stdlib/global/compiler/c.ts'
-import type { JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
+import type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
   cDebugRuntimeMethodName,
   cJsonRuntimeCallName,
@@ -781,9 +781,27 @@ objectVariableDeclarationDependencies = {
 jsonDeclarationDependencies = {
   emitCFieldFlags,
   emitCValueExpression,
+  emitPreparedClassInstanceOperand: emitPreparedJsonClassInstanceOperand,
   emitPreparedStringBytesOperand,
   inferExpressionType,
   registerObjectShape
+}
+
+function emitPreparedJsonClassInstanceOperand(
+  expression: AnyNode,
+  context: CFunctionContext
+): JsonClassInstanceOperand | null {
+  const instance = emitPreparedNativeClassInstanceExpression(expression, context)
+
+  if (instance === null || typeof instance === 'undefined') {
+    return null
+  }
+
+  return {
+    descriptor: emitCClassDescriptorName(instance.info.name),
+    instance: instance.expression,
+    lines: instance.lines
+  }
 }
 
 timeLoweringDependencies = {

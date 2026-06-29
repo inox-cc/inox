@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "inox/array.h"
+#include "inox/class_descriptor.h"
 #include "inox/json.h"
 #include "inox/object.h"
 #include "inox/string.h"
@@ -1127,6 +1128,105 @@ inox_status inox_json_stringify(inox_allocator* allocator, inox_value value, ino
   inox_json_buffer buffer = { .allocator = allocator };
   inox_json_stringify_stack stack = { 0 };
   inox_status status = inox_json_stringify_value(&buffer, &stack, value, 0);
+
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
+  }
+
+  inox_json_buffer_dispose(&buffer);
+
+  return status;
+}
+
+static inox_status inox_json_stringify_class_instance_value(
+  inox_json_buffer* buffer,
+  inox_json_stringify_stack* stack,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  size_t depth
+) {
+  if (depth > INOX_JSON_MAX_DEPTH) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  if (buffer == 0 || stack == 0 || descriptor == 0 || instance == 0 || descriptor->read_field == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_status status = inox_json_buffer_push_char(buffer, '{');
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  uint32_t printed = 0;
+
+  for (uint32_t index = 0; index < descriptor->field_count; index += 1) {
+    const inox_class_field_descriptor* field = &descriptor->fields[index];
+
+    if ((field->flags & INOX_CLASS_FIELD_ENUMERABLE) == 0) {
+      continue;
+    }
+
+    inox_value value = inox_undefined_value();
+    status = descriptor->read_field(instance, index, &value);
+
+    if (status != INOX_OK) {
+      inox_release(value);
+      return status;
+    }
+
+    if (value.tag == INOX_TAG_UNDEFINED || value.tag == INOX_TAG_FUNCTION) {
+      inox_release(value);
+      continue;
+    }
+
+    if (printed != 0) {
+      status = inox_json_buffer_push_char(buffer, ',');
+
+      if (status != INOX_OK) {
+        inox_release(value);
+        return status;
+      }
+    }
+
+    const char* name = field->name == 0 ? "" : field->name;
+    status = inox_json_stringify_string_bytes(buffer, name, strlen(name));
+
+    if (status == INOX_OK) {
+      status = inox_json_buffer_push_char(buffer, ':');
+    }
+
+    if (status == INOX_OK) {
+      status = inox_json_stringify_value(buffer, stack, value, depth + 1);
+    }
+
+    inox_release(value);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    printed += 1;
+  }
+
+  return inox_json_buffer_push_char(buffer, '}');
+}
+
+inox_status inox_json_stringify_class_instance(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+) {
+  if (allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = inox_undefined_value();
+  inox_json_buffer buffer = { .allocator = allocator };
+  inox_json_stringify_stack stack = { 0 };
+  inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, descriptor, instance, 0);
 
   if (status == INOX_OK) {
     status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
