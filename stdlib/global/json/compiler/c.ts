@@ -68,6 +68,7 @@ export type JsonDeclarationDependencies = {
     expression: AnyNode,
     context: CFunctionContext
   ) => JsonClassInstanceOperand | null
+  emitPreparedClassToJsonExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression | null
   emitPreparedStringBytesOperand: (
     expression: AnyNode,
     context: CFunctionContext,
@@ -306,6 +307,20 @@ export function emitPreparedJsonCallExpression(
   }
 
   const lines: string[] = []
+  const classToJson = dependencies.emitPreparedClassToJsonExpression(expression.args[0], context)
+
+  if (classToJson !== null && typeof classToJson !== 'undefined') {
+    pushJsonLines(lines, classToJson.lines)
+    pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
+    lines.push(emitStatusCheck(`inox_json_stringify(&inox_default_allocator, ${classToJson.expression}, &${out})`, context))
+    lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
+
+    return {
+      lines: lines,
+      expression: out
+    }
+  }
+
   const classInstance = dependencies.emitPreparedClassInstanceOperand(expression.args[0], context)
 
   if (classInstance !== null && typeof classInstance !== 'undefined') {

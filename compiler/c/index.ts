@@ -302,6 +302,7 @@ import {
   emitPreparedNativeClassFieldScalarExpression,
   emitPreparedNativeClassFieldValueExpression,
   emitPreparedClassMethodCallExpression as emitPreparedClassMethodCallExpressionWithDependencies,
+  hasNativeClassInstanceMethod,
   isClassConstructorExpression as isClassConstructorExpressionWithDependencies
 } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
@@ -782,9 +783,36 @@ jsonDeclarationDependencies = {
   emitCFieldFlags,
   emitCValueExpression,
   emitPreparedClassInstanceOperand: emitPreparedJsonClassInstanceOperand,
+  emitPreparedClassToJsonExpression: emitPreparedJsonClassToJsonExpression,
   emitPreparedStringBytesOperand,
   inferExpressionType,
   registerObjectShape
+}
+
+function emitPreparedJsonClassToJsonExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (!hasNativeClassInstanceMethod(expression, 'toJSON', 0, context)) {
+    return null
+  }
+
+  return emitPreparedClassMethodCallExpression(
+    {
+      type: 'CallExpression',
+      callee: {
+        type: 'MemberExpression',
+        object: expression,
+        property: 'toJSON',
+        loc: expression.loc
+      },
+      args: [],
+      loc: expression.loc,
+      valueType: 'unknown'
+    },
+    context,
+    {}
+  )
 }
 
 function emitPreparedJsonClassInstanceOperand(
