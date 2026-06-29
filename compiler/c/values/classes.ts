@@ -979,6 +979,7 @@ function collectClassConstructorAssignments(
 
   if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
     const statements: ClassExpressionNode[] = constructorMethod.body
+    const localNames = createClassConstructorLocalNameSet()
 
     for (const statement of statements) {
       const assignment = classConstructorFieldAssignment(statement)
@@ -988,14 +989,18 @@ function collectClassConstructorAssignments(
         continue
       }
 
-      if (isSupportedClassConstructorLocalStatement(statement)) {
+      if (registerSupportedClassConstructorLocalStatement(statement, localNames)) {
+        continue
+      }
+
+      if (isSupportedClassConstructorLocalAssignment(statement, localNames)) {
         continue
       }
 
       diagnostics.push(
         diagnostic(
           'INOX_C_CLASS',
-          `class ${classNode.name} constructor currently supports only local declarations and this.field assignments in the C backend`,
+          `class ${classNode.name} constructor currently supports only local declarations, local assignments and this.field assignments in the C backend`,
           nodeLocOrFallback(statement, constructorMethod)
         )
       )
@@ -1005,9 +1010,15 @@ function collectClassConstructorAssignments(
   return assignments
 }
 
+type ClassConstructorLocalNameSet = Set<string>
+
 type ClassConstructorFieldAssignment = {
   assignment: AnyNode
   field: string
+}
+
+function createClassConstructorLocalNameSet(): ClassConstructorLocalNameSet {
+  return new Set()
 }
 
 function classConstructorFieldAssignment(statement: AnyNode): ClassConstructorFieldAssignment | null {
@@ -1027,8 +1038,36 @@ function classConstructorFieldAssignment(statement: AnyNode): ClassConstructorFi
   }
 }
 
-function isSupportedClassConstructorLocalStatement(statement: AnyNode): boolean {
-  return statement.type === 'VariableDeclaration'
+function registerSupportedClassConstructorLocalStatement(
+  statement: AnyNode,
+  localNames: ClassConstructorLocalNameSet
+): boolean {
+  if (statement.type !== 'VariableDeclaration') {
+    return false
+  }
+
+  if (typeof statement.name === 'string' && statement.name !== '') {
+    localNames.add(statement.name)
+  }
+
+  return true
+}
+
+function isSupportedClassConstructorLocalAssignment(
+  statement: AnyNode,
+  localNames: ClassConstructorLocalNameSet
+): boolean {
+  if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'AssignmentExpression') {
+    return false
+  }
+
+  const target = statement.expression.target
+
+  if (target.type !== 'Reference' || target.path.length !== 1) {
+    return false
+  }
+
+  return localNames.has(target.path[0])
 }
 
 function createClassConstructorAssignment(field: string, assignment: AnyNode): AnyNode {
