@@ -1655,6 +1655,16 @@ function emitRuntimeOptionalObjectFieldValueCheck(
     ]
   }
 
+  if (expectedTag === 'INOX_TAG_OBJECT') {
+    return [
+      emitRuntimeTypeCheck(
+        `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && ` +
+          `((${value}.tag != INOX_TAG_OBJECT && ${value}.tag != INOX_TAG_CLASS_INSTANCE) || ${value}.as.ref == 0)`,
+        context
+      )
+    ]
+  }
+
   return [
     emitRuntimeTypeCheck(
       `${value}.tag != INOX_TAG_UNDEFINED && ${value}.tag != INOX_TAG_NULL && (${value}.tag != ${expectedTag} || ${value}.as.ref == 0)`,

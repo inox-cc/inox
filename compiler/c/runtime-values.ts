@@ -28,6 +28,16 @@ export function emitRuntimeNullableValueCheck(
     ]
   }
 
+  if (expectedTag === 'INOX_TAG_OBJECT') {
+    return [
+      emitRuntimeTypeCheck(
+        `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && ` +
+          `((${name}.tag != INOX_TAG_OBJECT && ${name}.tag != INOX_TAG_CLASS_INSTANCE) || ${name}.as.ref == 0)`,
+        context
+      )
+    ]
+  }
+
   return [
     emitRuntimeTypeCheck(
       `${name}.tag != INOX_TAG_UNDEFINED && ${name}.tag != INOX_TAG_NULL && (${name}.tag != ${expectedTag} || ${name}.as.ref == 0)`,
@@ -47,6 +57,13 @@ export function emitRuntimeValueCheck(
 
   if (expectedTag === 'INOX_TAG_BOOL' || expectedTag === 'INOX_TAG_NUMBER') {
     return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag}`, context)
+  }
+
+  if (expectedTag === 'INOX_TAG_OBJECT') {
+    return emitRuntimeTypeCheck(
+      `(${name}.tag != INOX_TAG_OBJECT && ${name}.tag != INOX_TAG_CLASS_INSTANCE) || ${name}.as.ref == 0`,
+      context
+    )
   }
 
   return emitRuntimeTypeCheck(`${name}.tag != ${expectedTag} || ${name}.as.ref == 0`, context)

@@ -81,6 +81,10 @@ export function emitCPrelude(
     lines.push('#include "inox/console.h"')
   }
 
+  if (needsClassDescriptorRuntime) {
+    lines.push('#include <new>')
+  }
+
   if (needsRegexpRuntime) {
     pushCPreludeLines(lines, emitCompilerFeatureCPreludeIncludes('regexp'))
   }

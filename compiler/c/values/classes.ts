@@ -272,6 +272,14 @@ function emitCClassDescriptorFieldReaderName(className: string): string {
   return `${emitCClassDescriptorName(className)}_read_field`
 }
 
+function emitCClassDescriptorCopyInstanceName(className: string): string {
+  return `${emitCClassDescriptorName(className)}_copy_instance`
+}
+
+function emitCClassDescriptorDestroyInstanceName(className: string): string {
+  return `${emitCClassDescriptorName(className)}_destroy_instance`
+}
+
 function classValueType(info: CClassInfo): string {
   return cClassValueTypeName(info.name)
 }
@@ -618,6 +626,8 @@ function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
   }
 
   if (info.native) {
+    pushAllLines(lines, emitCClassDescriptorCopyInstanceDeclaration(info))
+    pushAllLines(lines, emitCClassDescriptorDestroyInstanceDeclaration(info))
     pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info))
   }
 
@@ -630,11 +640,55 @@ function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
     lines.push(`  ${fieldsName},`)
   }
   if (info.native) {
-    lines.push(`  ${emitCClassDescriptorFieldReaderName(info.name)}`)
+    lines.push(`  ${emitCClassDescriptorFieldReaderName(info.name)},`)
+    lines.push(`  ${emitCClassDescriptorCopyInstanceName(info.name)},`)
+    lines.push(`  ${emitCClassDescriptorDestroyInstanceName(info.name)}`)
   } else {
+    lines.push('  0,')
+    lines.push('  0,')
     lines.push('  0')
   }
   lines.push('};')
+  lines.push('')
+
+  return lines
+}
+
+function emitCClassDescriptorCopyInstanceDeclaration(info: CClassInfo): string[] {
+  const copyName = emitCClassDescriptorCopyInstanceName(info.name)
+  const typeName = emitCClassTypeName(info.name)
+  const lines = [
+    `static inox_status ${copyName}(inox_allocator* allocator, const void* instance, void** out) {`
+  ]
+
+  lines.push('  if (allocator == 0 || allocator->alloc == 0 || instance == 0 || out == 0) {')
+  lines.push('    return INOX_ERR_TYPE;')
+  lines.push('  }')
+  lines.push(`  void* memory = allocator->alloc(allocator->user, sizeof(${typeName}), alignof(${typeName}));`)
+  lines.push('  if (memory == 0) {')
+  lines.push('    *out = 0;')
+  lines.push('    return INOX_ERR_OOM;')
+  lines.push('  }')
+  lines.push(`  new (memory) ${typeName}(*(const ${typeName}*)instance);`)
+  lines.push('  *out = memory;')
+  lines.push('  return INOX_OK;')
+  lines.push('}')
+  lines.push('')
+
+  return lines
+}
+
+function emitCClassDescriptorDestroyInstanceDeclaration(info: CClassInfo): string[] {
+  const destroyName = emitCClassDescriptorDestroyInstanceName(info.name)
+  const typeName = emitCClassTypeName(info.name)
+  const lines = [`static void ${destroyName}(inox_allocator* allocator, void* instance) {`]
+
+  lines.push('  if (allocator == 0 || allocator->free == 0 || instance == 0) {')
+  lines.push('    return;')
+  lines.push('  }')
+  lines.push(`  ((${typeName}*)instance)->~${typeName}();`)
+  lines.push(`  allocator->free(allocator->user, instance, sizeof(${typeName}), alignof(${typeName}));`)
+  lines.push('}')
   lines.push('')
 
   return lines
@@ -686,7 +740,7 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField): string[] 
 
   if (classFieldUsesNativeClassStorage(field)) {
     return [
-      `return inox_class_instance_ref_new(&inox_default_allocator, &${emitCClassDescriptorName(field.className)}, &${reference}, out);`
+      `return inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(field.className)}, &${reference}, out);`
     ]
   }
 

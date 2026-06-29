@@ -9,6 +9,8 @@ extern "C" {
 #include "inox/value.h"
 
 typedef inox_status (*inox_class_field_read_fn)(const void* instance, uint32_t index, inox_value* out);
+typedef inox_status (*inox_class_instance_copy_fn)(inox_allocator* allocator, const void* instance, void** out);
+typedef void (*inox_class_instance_destroy_fn)(inox_allocator* allocator, void* instance);
 
 enum {
   INOX_CLASS_FIELD_READONLY = 1u << 0,
@@ -31,15 +33,25 @@ typedef struct inox_class_descriptor {
   uint32_t field_count;
   const inox_class_field_descriptor* fields;
   inox_class_field_read_fn read_field;
+  inox_class_instance_copy_fn copy_instance;
+  inox_class_instance_destroy_fn destroy_instance;
 } inox_class_descriptor;
 
 typedef struct inox_class_instance_ref {
   inox_ref header;
   const inox_class_descriptor* descriptor;
   const void* instance;
+  bool owns_instance;
 } inox_class_instance_ref;
 
 inox_status inox_class_instance_ref_new(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+);
+
+inox_status inox_class_instance_ref_copy(
   inox_allocator* allocator,
   const inox_class_descriptor* descriptor,
   const void* instance,

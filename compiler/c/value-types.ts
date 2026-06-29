@@ -145,6 +145,10 @@ export function isThrowingFunctionRuntimeOut(context: CReturnTypeContext): boole
 }
 
 export function cRuntimeValueTag(valueType: CValueTypeInput): CRuntimeValueTag {
+  if (valueType !== null && typeof valueType !== 'undefined' && valueType.startsWith('class:')) {
+    return 'INOX_TAG_CLASS_INSTANCE'
+  }
+
   if (valueType === 'boolean') {
     return 'INOX_TAG_BOOL'
   }

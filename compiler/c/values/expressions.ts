@@ -397,7 +397,8 @@ function typeofRuntimeValueTagCheck(value: string, typeName: string): string | n
   if (typeName === 'object') {
     return (
       `(${value}.tag == INOX_TAG_NULL || ${value}.tag == INOX_TAG_OBJECT || ${value}.tag == INOX_TAG_ARRAY || ` +
-      `${value}.tag == INOX_TAG_BYTES || ${value}.tag == INOX_TAG_MAP || ${value}.tag == INOX_TAG_SET)`
+      `${value}.tag == INOX_TAG_BYTES || ${value}.tag == INOX_TAG_MAP || ${value}.tag == INOX_TAG_SET || ` +
+      `${value}.tag == INOX_TAG_CLASS_INSTANCE)`
     )
   }
 

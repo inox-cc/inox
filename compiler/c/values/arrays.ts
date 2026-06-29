@@ -1065,6 +1065,15 @@ function emitRuntimeArrayIndexValueCheck(
     return [emitRuntimeTypeCheck(`${missingCheck} && ${value}.tag != ${expectedTag}`, context)]
   }
 
+  if (expectedTag === 'INOX_TAG_OBJECT') {
+    return [
+      emitRuntimeTypeCheck(
+        `${missingCheck} && ((${value}.tag != INOX_TAG_OBJECT && ${value}.tag != INOX_TAG_CLASS_INSTANCE) || ${value}.as.ref == 0)`,
+        context
+      )
+    ]
+  }
+
   return [
     emitRuntimeTypeCheck(
       `${missingCheck} && (${value}.tag != ${expectedTag} || ${value}.as.ref == 0)`,
