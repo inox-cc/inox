@@ -11873,6 +11873,12 @@ class Checker {
   resolveReference(reference: AnyNode): SymbolInfo | null {
     const path: string[] = reference.path
     const root = path[0]
+
+    if (root === 'super') {
+      this.reportUnsupportedSuperReference(reference.loc)
+      return null
+    }
+
     let symbol = this.scope.resolve(root)
 
     if (symbol === null || typeof symbol === 'undefined') {
@@ -11889,6 +11895,27 @@ class Checker {
     }
 
     return symbol
+  }
+
+  reportUnsupportedSuperReference(loc: SourceLocation): void {
+    const diagnostics = this.diagnostics
+    const file = loc.file ?? ''
+
+    for (let index = 0; index < diagnostics.length; index = index + 1) {
+      const item = diagnostics[index]
+      const itemFile = item.file ?? ''
+
+      if (
+        item.code === 'INOX_CLASS_EXTENDS' &&
+        item.line === loc.line &&
+        item.column === loc.column &&
+        itemFile === file
+      ) {
+        return
+      }
+    }
+
+    this.report('INOX_CLASS_EXTENDS', 'super is not supported because class inheritance is not supported', loc)
   }
 
   runtimeGlobalIsShadowed(name: string): boolean {

@@ -116,6 +116,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
+  const { assertClassSuperDiagnosticUsesInheritanceCode } = await import('./integration/class-diagnostics.test.ts')
   const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
     await import('./integration/native-inox-help.test.ts')
@@ -174,6 +175,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-weak-type-marker', () => {
       assertModuleDeclarationWeakTypeMarker()
+    })
+
+    await t.test('class-super-diagnostic-uses-inheritance-code', () => {
+      assertClassSuperDiagnosticUsesInheritanceCode()
     })
 
     await t.test('native-inox-help', async () => {
