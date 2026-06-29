@@ -117,7 +117,7 @@ import {
   collectClassMethods,
   createClassInfos,
   emitCClassDescriptorDeclarations,
-  emitCClassTypeName,
+  emitCClassTypeNameForClassName,
   emitCNativeClassDeclarations
 } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
@@ -466,7 +466,7 @@ export function emitCModuleSource(
 
   pushCModuleLines(lines, emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps)))
   pushCModuleLines(lines, emitCClassDescriptorDeclarations(context))
-  emitCModuleValueDefinitions(lines, moduleValues)
+  emitCModuleValueDefinitions(lines, moduleValues, context)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
 
   const bodyLines: string[] = []
@@ -574,7 +574,7 @@ export function emitCModuleHeader(
   for (let valueIndex = 0; valueIndex < exportedValues.length; valueIndex = valueIndex + 1) {
     const item = cModuleValueDeclarationAt(exportedValues, valueIndex)
 
-    lines.push(`extern ${cModuleValueCType(item.valueType)} ${item.symbolName};`)
+    lines.push(`extern ${cModuleValueCType(item.valueType, context)} ${item.symbolName};`)
   }
 
   lines.push('')
@@ -1220,7 +1220,7 @@ function createCModuleBaseContext(
   context.functionNames = createCModuleFunctionNames(plan)
   const classNodes = collectIrTopLevelNodes(ir, 'class')
 
-  context.classInfos = createClassInfos(classNodes, diagnostics)
+  context.classInfos = createClassInfos(classNodes, diagnostics, plan.symbolPrefix)
   context.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
   context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
@@ -1425,7 +1425,7 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
   return values
 }
 
-function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclaration[]): void {
+function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclaration[], context: CEmitContext): void {
   if (values.length === 0) {
     return
   }
@@ -1439,7 +1439,7 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
       continue
     }
 
-    const cType = cModuleValueCType(item.valueType)
+    const cType = cModuleValueCType(item.valueType, context)
     const initializer = cModuleValueGlobalInitializer(item.valueType)
     let prefix = ''
 
@@ -1777,11 +1777,11 @@ function isUnionValueTypeName(valueType: string): boolean {
   return valueType.startsWith('union<')
 }
 
-function cModuleValueCType(valueType: string): string {
+function cModuleValueCType(valueType: string, context: CEmitContext): string {
   const className = cClassNameFromValueType(valueType)
 
   if (className !== null && typeof className !== 'undefined') {
-    return emitCClassTypeName(className)
+    return emitCClassTypeNameForClassName(context, className)
   }
 
   if (valueType === 'string') {

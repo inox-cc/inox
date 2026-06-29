@@ -127,6 +127,7 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassFieldAliasLowering,
     assertNativeClassLowering,
     assertNativeClassMapRuntimeFieldLowering,
+    assertNativeClassModuleUniqueSymbols,
     assertNativeClassRuntimeValueFieldLowering,
     assertNativeClassSetRuntimeFieldLowering
   } =
@@ -217,6 +218,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-field-alias-lowering', () => {
       assertNativeClassFieldAliasLowering()
+    })
+
+    await t.test('native-class-module-unique-symbols', () => {
+      assertNativeClassModuleUniqueSymbols()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {

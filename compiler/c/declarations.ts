@@ -58,8 +58,8 @@ import {
 import {
   cClassValueTypeName,
   emitCClassConstructorHead,
-  emitCClassMethodName,
-  emitCClassTypeName,
+  emitCClassInfoMethodName,
+  emitCClassInfoTypeName,
   registerClassObjectShape
 } from './values/classes.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
@@ -734,7 +734,7 @@ export function emitClassConstructorDeclaration(
   }
 
   const constructorMethod = info.constructor
-  const head = emitCClassConstructorHead(info)
+  const head = emitCClassConstructorHead(info, baseContext)
 
   if (
     constructorMethod === null ||
@@ -813,7 +813,7 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
   }
 
   const params = emitClassMethodParams(info, method, context)
-  const name = `${emitCClassTypeName(info.name)}::${emitCIdentifier(method.name)}`
+  const name = `${emitCClassInfoTypeName(info)}::${emitCIdentifier(method.name)}`
 
   if (isThrowingClassMethod(info, method, context)) {
     return `inox_status ${name}(${joinDeclarationParams(params)})`
@@ -824,7 +824,7 @@ export function emitClassMethodHead(info: CClassInfo, method: CNode, context: CE
 
 function emitRuntimeClassMethodHead(info: CClassInfo, method: CNode, context: CEmitContext): string {
   const params = emitRuntimeClassMethodParams(info, method, context)
-  const name = emitCClassMethodName(info.name, method.name)
+  const name = emitCClassInfoMethodName(info, method.name)
 
   if (isThrowingClassMethod(info, method, context)) {
     return `static inox_status ${name}(${joinDeclarationParams(params)})`

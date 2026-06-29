@@ -300,7 +300,7 @@ import {
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   cClassNameFromValueType,
-  emitCClassDescriptorName,
+  emitCClassInfoDescriptorName,
   emitCClassObjectValueExpression as emitCClassObjectValueExpressionWithDependencies,
   emitClassObjectVariableDeclaration as emitClassObjectVariableDeclarationWithDependencies,
   emitCNativeClassAssignmentLines,
@@ -879,7 +879,7 @@ function emitPreparedJsonClassInstanceOperand(
   }
 
   return {
-    descriptor: emitCClassDescriptorName(instance.info.name),
+    descriptor: emitCClassInfoDescriptorName(instance.info),
     instance: instance.expression,
     lines: instance.lines
   }
@@ -6442,7 +6442,7 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_console_format_class_instance(&inox_default_allocator, &${emitCClassDescriptorName(instance.info.name)}, ${instance.expression}, &${temp})`,
+      `inox_console_format_class_instance(&inox_default_allocator, &${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression}, &${temp})`,
       context
     )
   )
@@ -8686,7 +8686,7 @@ function emitPreparedObjectValuesCallExpression(
     pushAll(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
       emitStatusCheck(
-        `inox_class_instance_${method}(&inox_default_allocator, &${emitCClassDescriptorName(classInstance.info.name)}, ${classInstance.expression}, &${temp})`,
+        `inox_class_instance_${method}(&inox_default_allocator, &${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression}, &${temp})`,
         context
       )
     )

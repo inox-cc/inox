@@ -62,8 +62,8 @@ import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } fro
 import {
   cClassNameFromValueType,
   cClassValueTypeName,
-  emitCClassDescriptorName,
-  emitCClassTypeName,
+  emitCClassDescriptorNameForClassName,
+  emitCClassTypeNameForClassName,
   emitNativeClassFieldAssignment,
   emitPreparedClassInstanceRefValueExpression
 } from './classes.ts'
@@ -3579,7 +3579,7 @@ function emitThrowableObjectValueExpression(value: PreparedExpression, context: 
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(context, className)}, &${value.expression}, &${temp})`,
       context
     )
   )
@@ -4158,7 +4158,7 @@ function emitNativeClassValueVariableDeclaration(
   context.variables.set(statement.name, cClassValueTypeName(className))
   context.classInstanceTypes.set(statement.name, className)
   pushAllLines(lines, value.lines)
-  lines.push(`${emitCClassTypeName(className)} ${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(`${emitCClassTypeNameForClassName(context, className)} ${emitCIdentifier(statement.name)} = ${value.expression};`)
 
   return lines
 }

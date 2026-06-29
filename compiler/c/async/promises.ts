@@ -3,6 +3,7 @@ import { collectArrowCaptures, functionUsesExternalEventLoop } from './callbacks
 import type {
   CCallbackContextWrapper,
   CCallbackWrapper,
+  CClassInfo,
   CFunctionParam,
   CFunctionType,
   CObjectShape,
@@ -38,6 +39,7 @@ type PromiseEmitContext = {
   boxedMutableCaptureDeclarations: PromiseMutableDeclarationSet
   callbackArrowWrappers: PromiseCallbackArrowWrapperMap
   callbackWrappers: PromiseCallbackWrapperMap
+  classInfos: Map<string, CClassInfo>
   diagnostics: Diagnostic[]
   externalEventLoopFunctions: PromiseStringSet
   functionAsyncFlags: PromiseBooleanMap
@@ -370,7 +372,7 @@ import {
   runtimeObjectLikeValueMismatchCondition
 } from '../runtime-values.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
-import { cClassNameFromValueType, emitCClassDescriptorName } from '../values/classes.ts'
+import { cClassNameFromValueType, emitCClassDescriptorNameForClassName } from '../values/classes.ts'
 import { registerObjectShape } from '../values/objects.ts'
 
 export type PromiseChainLoweringDependencies = {
@@ -923,7 +925,7 @@ function emitPreparedPromiseRuntimeArgumentValue(
   appendLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(context, className)}, &${value.expression}, &${temp})`,
       context
     )
   )

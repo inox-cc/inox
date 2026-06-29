@@ -22,6 +22,7 @@ import type {
   CAsyncTaskTryPhaseKind,
   CAsyncTaskWrapper,
   CCallbackWrapper,
+  CClassInfo,
   CFunctionParam,
   CFunctionReturnMapType,
   CFunctionType,
@@ -76,6 +77,7 @@ type AsyncTaskEmitContext = {
   boxedMutableCaptureDeclarations: AsyncTaskAnyNodeSet
   callbackArrowWrappers: AsyncTaskCallbackArrowWrapperMap
   callbackWrappers: AsyncTaskCallbackWrapperMap
+  classInfos: Map<string, CClassInfo>
   diagnostics: Diagnostic[]
   externalEventLoopFunctions: AsyncTaskStringSet
   forceRuntimeStringDeclarations?: AsyncTaskStringSet

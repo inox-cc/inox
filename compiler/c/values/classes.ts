@@ -77,6 +77,9 @@ type ClassEmitContext = {
   classInfos: CClassInfoMap
   diagnostics: Diagnostic[]
 }
+export type ClassInfoLookupContext = {
+  classInfos: CClassInfoMap
+}
 
 type ClassFunctionContext = CFailureContext &
   CNameContext &
@@ -121,7 +124,7 @@ type CNativeClassFieldAccess = {
   reference: string
 }
 
-type ClassInstanceRefValueContext = CFailureContext & CNameContext & COwnedValueContext
+type ClassInstanceRefValueContext = CFailureContext & CNameContext & COwnedValueContext & ClassInfoLookupContext
 
 export type CNativeClassInstanceExpression = {
   expression: string
@@ -258,6 +261,10 @@ export function emitCClassTypeName(className: string): string {
   return emitCIdentifier(className)
 }
 
+export function emitCClassInfoTypeName(info: CClassInfo): string {
+  return emitCClassTypeName(info.symbolName)
+}
+
 function emitCClassFieldName(name: string): string {
   return emitCIdentifier(name)
 }
@@ -270,8 +277,36 @@ export function emitCClassMethodName(className: string, methodName: string): str
   return `inox_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
 }
 
+export function emitCClassInfoMethodName(info: CClassInfo, methodName: string): string {
+  return emitCClassMethodName(info.symbolName, methodName)
+}
+
 export function emitCClassDescriptorName(className: string): string {
   return `inox_class_descriptor_${emitCIdentifier(className)}`
+}
+
+export function emitCClassInfoDescriptorName(info: CClassInfo): string {
+  return emitCClassDescriptorName(info.symbolName)
+}
+
+export function emitCClassTypeNameForClassName(context: ClassInfoLookupContext, className: string): string {
+  const info = context.classInfos.get(className)
+
+  if (info !== null && typeof info !== 'undefined') {
+    return emitCClassInfoTypeName(info)
+  }
+
+  return emitCClassTypeName(className)
+}
+
+export function emitCClassDescriptorNameForClassName(context: ClassInfoLookupContext, className: string): string {
+  const info = context.classInfos.get(className)
+
+  if (info !== null && typeof info !== 'undefined') {
+    return emitCClassInfoDescriptorName(info)
+  }
+
+  return emitCClassDescriptorName(className)
 }
 
 export function emitPreparedClassInstanceRefValueExpression(
@@ -291,7 +326,7 @@ export function emitPreparedClassInstanceRefValueExpression(
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(context, className)}, &${value.expression}, &${temp})`,
       context
     )
   )
@@ -303,20 +338,20 @@ export function emitPreparedClassInstanceRefValueExpression(
   }
 }
 
-function emitCClassDescriptorFieldsName(className: string): string {
-  return `${emitCClassDescriptorName(className)}_fields`
+function emitCClassDescriptorFieldsName(info: CClassInfo): string {
+  return `${emitCClassInfoDescriptorName(info)}_fields`
 }
 
-function emitCClassDescriptorFieldReaderName(className: string): string {
-  return `${emitCClassDescriptorName(className)}_read_field`
+function emitCClassDescriptorFieldReaderName(info: CClassInfo): string {
+  return `${emitCClassInfoDescriptorName(info)}_read_field`
 }
 
-function emitCClassDescriptorCopyInstanceName(className: string): string {
-  return `${emitCClassDescriptorName(className)}_copy_instance`
+function emitCClassDescriptorCopyInstanceName(info: CClassInfo): string {
+  return `${emitCClassInfoDescriptorName(info)}_copy_instance`
 }
 
-function emitCClassDescriptorDestroyInstanceName(className: string): string {
-  return `${emitCClassDescriptorName(className)}_destroy_instance`
+function emitCClassDescriptorDestroyInstanceName(info: CClassInfo): string {
+  return `${emitCClassInfoDescriptorName(info)}_destroy_instance`
 }
 
 function classValueType(info: CClassInfo): string {
@@ -373,9 +408,9 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
   return field.valueType === 'object' || field.valueType === 'array' || field.valueType === 'map' || field.valueType === 'set'
 }
 
-function emitCClassFieldType(field: CObjectShapeField): string {
+function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupContext): string {
   if (classFieldUsesNativeClassStorage(field)) {
-    return emitCClassTypeName(field.className)
+    return emitCClassTypeNameForClassName(context, field.className)
   }
 
   if (classFieldUsesRuntimeValueStorage(field)) {
@@ -385,9 +420,9 @@ function emitCClassFieldType(field: CObjectShapeField): string {
   return emitCType(field.valueType)
 }
 
-function emitCClassFieldDefaultValue(field: CObjectShapeField): string {
+function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInfoLookupContext): string {
   if (classFieldUsesNativeClassStorage(field)) {
-    return emitCClassTypeName(field.className) + '()'
+    return emitCClassTypeNameForClassName(context, field.className) + '()'
   }
 
   if (classFieldUsesRuntimeValueStorage(field)) {
@@ -401,14 +436,14 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField): string {
   return '0'
 }
 
-function emitCClassParamType(param: CFunctionParam): string {
+function emitCClassParamType(param: CFunctionParam, context: ClassInfoLookupContext): string {
   if (
     param.className !== null &&
     typeof param.className !== 'undefined' &&
     param.nullable !== true &&
     param.ownership !== 'weak'
   ) {
-    return 'const ' + emitCClassTypeName(param.className) + '&'
+    return 'const ' + emitCClassTypeNameForClassName(context, param.className) + '&'
   }
 
   if (param.nullable === true && isNullableScalarType(param.valueType)) {
@@ -443,15 +478,15 @@ function emitCClassParamName(param: CFunctionParam): string {
   return emitCIdentifier(param.name)
 }
 
-function emitCClassParamDeclaration(param: CFunctionParam): string {
-  return `${emitCClassParamType(param)} ${emitCClassParamName(param)}`
+function emitCClassParamDeclaration(param: CFunctionParam, context: ClassInfoLookupContext): string {
+  return `${emitCClassParamType(param, context)} ${emitCClassParamName(param)}`
 }
 
-function emitCClassParamDeclarations(params: CFunctionParam[]): string {
+function emitCClassParamDeclarations(params: CFunctionParam[], context: ClassInfoLookupContext): string {
   const declarations: string[] = []
 
   for (const param of params) {
-    declarations.push(emitCClassParamDeclaration(param))
+    declarations.push(emitCClassParamDeclaration(param, context))
     pushCClassObjectShapeFunctionFieldParamDeclarations(
       declarations,
       param.name,
@@ -567,11 +602,11 @@ function emitCClassFieldWriteLines(target: string, value: string, field: CObject
   return [`inox_retain(${value});`, `inox_release(${target});`, `${target} = ${value};`]
 }
 
-function emitCClassConstructorInitializers(info: CClassInfo): string {
+function emitCClassConstructorInitializers(info: CClassInfo, context: ClassInfoLookupContext): string {
   const initializers: string[] = []
 
   for (const field of info.fields) {
-    initializers.push(`${emitCClassFieldName(field.name)}(${emitCClassFieldDefaultValue(field)})`)
+    initializers.push(`${emitCClassFieldName(field.name)}(${emitCClassFieldDefaultValue(field, context)})`)
   }
 
   if (initializers.length === 0) {
@@ -581,11 +616,11 @@ function emitCClassConstructorInitializers(info: CClassInfo): string {
   return ` : ${joinStrings(initializers, ', ')}`
 }
 
-function emitCClassDefaultConstructor(info: CClassInfo): string {
-  return `${emitCClassTypeName(info.name)}()${emitCClassConstructorInitializers(info)} {}`
+function emitCClassDefaultConstructor(info: CClassInfo, context: ClassInfoLookupContext): string {
+  return `${emitCClassInfoTypeName(info)}()${emitCClassConstructorInitializers(info, context)} {}`
 }
 
-export function emitCClassConstructorPrototype(info: CClassInfo): string | null {
+export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassInfoLookupContext): string | null {
   const constructorMethod = info.constructor
 
   if (constructorMethod === null || typeof constructorMethod === 'undefined') {
@@ -594,10 +629,10 @@ export function emitCClassConstructorPrototype(info: CClassInfo): string | null 
 
   const params: CFunctionParam[] = constructorMethod.params
 
-  return `${emitCClassTypeName(info.name)}(${emitCClassParamDeclarations(params)});`
+  return `${emitCClassInfoTypeName(info)}(${emitCClassParamDeclarations(params, context)});`
 }
 
-export function emitCClassConstructorHead(info: CClassInfo): string | null {
+export function emitCClassConstructorHead(info: CClassInfo, context: ClassInfoLookupContext): string | null {
   const constructorMethod = info.constructor
 
   if (constructorMethod === null || typeof constructorMethod === 'undefined') {
@@ -605,9 +640,9 @@ export function emitCClassConstructorHead(info: CClassInfo): string | null {
   }
 
   const params: CFunctionParam[] = constructorMethod.params
-  const typeName = emitCClassTypeName(info.name)
-  const paramDeclarations = emitCClassParamDeclarations(params)
-  const initializers = emitCClassConstructorInitializers(info)
+  const typeName = emitCClassInfoTypeName(info)
+  const paramDeclarations = emitCClassParamDeclarations(params, context)
+  const initializers = emitCClassConstructorInitializers(info, context)
 
   return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
 }
@@ -631,7 +666,8 @@ function emitCClassCopyConstructor(info: CClassInfo): string[] {
   }
 
   const suffix = initializers.length > 0 ? ` : ${joinStrings(initializers, ', ')}` : ''
-  const lines = [`${emitCClassTypeName(info.name)}(const ${emitCClassTypeName(info.name)}& other)${suffix} {`]
+  const typeName = emitCClassInfoTypeName(info)
+  const lines = [`${typeName}(const ${typeName}& other)${suffix} {`]
 
   for (const field of info.fields) {
     if (classFieldUsesRuntimeValueStorage(field)) {
@@ -645,7 +681,7 @@ function emitCClassCopyConstructor(info: CClassInfo): string[] {
 }
 
 function emitCClassAssignmentOperator(info: CClassInfo): string[] {
-  const typeName = emitCClassTypeName(info.name)
+  const typeName = emitCClassInfoTypeName(info)
   const lines = [`${typeName}& operator=(const ${typeName}& other) {`, '  if (this != &other) {']
 
   for (const field of info.fields) {
@@ -668,7 +704,7 @@ function emitCClassAssignmentOperator(info: CClassInfo): string[] {
 }
 
 function emitCClassDestructor(info: CClassInfo): string[] {
-  const lines = [`~${emitCClassTypeName(info.name)}() {`]
+  const lines = [`~${emitCClassInfoTypeName(info)}() {`]
 
   for (const field of info.fields) {
     if (classFieldUsesRuntimeValueStorage(field)) {
@@ -698,27 +734,27 @@ export function emitCNativeClassDeclarations(
       continue
     }
 
-    lines.push(`class ${emitCClassTypeName(info.name)} {`)
+    lines.push(`class ${emitCClassInfoTypeName(info)} {`)
     lines.push('public:')
 
     for (const field of info.fields) {
-      lines.push(`  ${emitCClassFieldType(field)} ${emitCClassFieldName(field.name)};`)
+      lines.push(`  ${emitCClassFieldType(field, context)} ${emitCClassFieldName(field.name)};`)
     }
 
     if (info.fields.length > 0) {
       lines.push('')
     }
 
-    const constructorPrototype = emitCClassConstructorPrototype(info)
+    const constructorPrototype = emitCClassConstructorPrototype(info, context)
 
     if (constructorPrototype !== null && typeof constructorPrototype !== 'undefined') {
       if (!classHasNoArgConstructor(info)) {
-        lines.push(`  ${emitCClassDefaultConstructor(info)}`)
+        lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
       }
 
       lines.push(`  ${constructorPrototype}`)
     } else {
-      lines.push(`  ${emitCClassDefaultConstructor(info)}`)
+      lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
     }
 
     if (classHasRuntimeValueFields(info)) {
@@ -746,14 +782,14 @@ export function emitCClassDescriptorDeclarations(context: CEmitContext): string[
   const lines: string[] = []
 
   for (const info of context.classInfos.values()) {
-    pushAllLines(lines, emitCClassDescriptorDeclaration(info))
+    pushAllLines(lines, emitCClassDescriptorDeclaration(info, context))
   }
 
   return lines
 }
 
-function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
-  const fieldsName = emitCClassDescriptorFieldsName(info.name)
+function emitCClassDescriptorDeclaration(info: CClassInfo, context: ClassInfoLookupContext): string[] {
+  const fieldsName = emitCClassDescriptorFieldsName(info)
   const lines: string[] = []
 
   if (info.fields.length > 0) {
@@ -773,10 +809,10 @@ function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
   if (info.native) {
     pushAllLines(lines, emitCClassDescriptorCopyInstanceDeclaration(info))
     pushAllLines(lines, emitCClassDescriptorDestroyInstanceDeclaration(info))
-    pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info))
+    pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info, context))
   }
 
-  lines.push(`static const inox_class_descriptor ${emitCClassDescriptorName(info.name)} = {`)
+  lines.push(`static const inox_class_descriptor ${emitCClassInfoDescriptorName(info)} = {`)
   lines.push(`  ${cStringLiteral(info.name)},`)
   lines.push(`  ${info.fields.length},`)
   if (info.fields.length === 0) {
@@ -785,9 +821,9 @@ function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
     lines.push(`  ${fieldsName},`)
   }
   if (info.native) {
-    lines.push(`  ${emitCClassDescriptorFieldReaderName(info.name)},`)
-    lines.push(`  ${emitCClassDescriptorCopyInstanceName(info.name)},`)
-    lines.push(`  ${emitCClassDescriptorDestroyInstanceName(info.name)}`)
+    lines.push(`  ${emitCClassDescriptorFieldReaderName(info)},`)
+    lines.push(`  ${emitCClassDescriptorCopyInstanceName(info)},`)
+    lines.push(`  ${emitCClassDescriptorDestroyInstanceName(info)}`)
   } else {
     lines.push('  0,')
     lines.push('  0,')
@@ -800,8 +836,8 @@ function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
 }
 
 function emitCClassDescriptorCopyInstanceDeclaration(info: CClassInfo): string[] {
-  const copyName = emitCClassDescriptorCopyInstanceName(info.name)
-  const typeName = emitCClassTypeName(info.name)
+  const copyName = emitCClassDescriptorCopyInstanceName(info)
+  const typeName = emitCClassInfoTypeName(info)
   const lines = [
     `static inox_status ${copyName}(inox_allocator* allocator, const void* instance, void** out) {`
   ]
@@ -824,8 +860,8 @@ function emitCClassDescriptorCopyInstanceDeclaration(info: CClassInfo): string[]
 }
 
 function emitCClassDescriptorDestroyInstanceDeclaration(info: CClassInfo): string[] {
-  const destroyName = emitCClassDescriptorDestroyInstanceName(info.name)
-  const typeName = emitCClassTypeName(info.name)
+  const destroyName = emitCClassDescriptorDestroyInstanceName(info)
+  const typeName = emitCClassInfoTypeName(info)
   const lines = [`static void ${destroyName}(inox_allocator* allocator, void* instance) {`]
 
   lines.push('  if (allocator == 0 || allocator->free == 0 || instance == 0) {')
@@ -839,9 +875,9 @@ function emitCClassDescriptorDestroyInstanceDeclaration(info: CClassInfo): strin
   return lines
 }
 
-function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo): string[] {
-  const readerName = emitCClassDescriptorFieldReaderName(info.name)
-  const typeName = emitCClassTypeName(info.name)
+function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: ClassInfoLookupContext): string[] {
+  const readerName = emitCClassDescriptorFieldReaderName(info)
+  const typeName = emitCClassInfoTypeName(info)
   const lines = [`static inox_status ${readerName}(const void* instance, uint32_t index, inox_value* out) {`]
 
   lines.push('  if (instance == 0 || out == 0) {')
@@ -855,7 +891,7 @@ function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo): string[] 
     for (let index = 0; index < info.fields.length; index = index + 1) {
       const field = info.fields[index]
       lines.push(`    case ${index}:`)
-      pushIndentedClassLines(lines, emitCClassDescriptorFieldReadLines(field))
+      pushIndentedClassLines(lines, emitCClassDescriptorFieldReadLines(field, context))
     }
 
     lines.push('  }')
@@ -868,7 +904,7 @@ function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo): string[] 
   return lines
 }
 
-function emitCClassDescriptorFieldReadLines(field: CObjectShapeField): string[] {
+function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: ClassInfoLookupContext): string[] {
   const reference = `value->${emitCClassFieldName(field.name)}`
 
   if (field.valueType === 'number' || field.valueType === 'date') {
@@ -885,7 +921,7 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField): string[] 
 
   if (classFieldUsesNativeClassStorage(field)) {
     return [
-      `return inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(field.className)}, &${reference}, out);`
+      `return inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorNameForClassName(context, field.className)}, &${reference}, out);`
     ]
   }
 
@@ -936,7 +972,11 @@ function classHasNoArgConstructor(info: CClassInfo): boolean {
   return params.length === 0
 }
 
-export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]): CClassInfoMap {
+export function createClassInfos(
+  classes: AnyNode[],
+  diagnostics: Diagnostic[],
+  symbolPrefix: string | null = null
+): CClassInfoMap {
   const infos = createClassInfoMap()
   const classNodes: ClassExpressionNode[] = classes
 
@@ -955,6 +995,7 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
 
     infos.set(item.name, {
       name: item.name,
+      symbolName: classSymbolName(item.name, symbolPrefix),
       node: item,
       constructor: constructorMethod,
       assignments,
@@ -968,6 +1009,14 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
   annotateClassMethodParamClassNames(infos)
 
   return infos
+}
+
+function classSymbolName(name: string, symbolPrefix: string | null | undefined): string {
+  if (symbolPrefix === null || typeof symbolPrefix === 'undefined' || symbolPrefix === '') {
+    return name
+  }
+
+  return `${symbolPrefix}_${name}`
 }
 
 function annotateClassMethodParamClassNames(infos: CClassInfoMap): void {
@@ -1807,7 +1856,7 @@ export function emitCNativeClassAssignmentLines(
   const lines: string[] = []
 
   pushAllLines(lines, prepared.lines)
-  lines.push(`${target} = ${emitCClassTypeName(info.name)}(${joinStrings(prepared.args, ', ')});`)
+  lines.push(`${target} = ${emitCClassInfoTypeName(info)}(${joinStrings(prepared.args, ', ')});`)
 
   return lines
 }
@@ -1824,9 +1873,9 @@ function emitCNativeClassVariableDeclaration(
   pushAllLines(lines, prepared.lines)
 
   if (prepared.args.length === 0) {
-    lines.push(`${emitCClassTypeName(info.name)} ${emitCIdentifier(target)};`)
+    lines.push(`${emitCClassInfoTypeName(info)} ${emitCIdentifier(target)};`)
   } else {
-    lines.push(`${emitCClassTypeName(info.name)} ${emitCIdentifier(target)}(${joinStrings(prepared.args, ', ')});`)
+    lines.push(`${emitCClassInfoTypeName(info)} ${emitCIdentifier(target)}(${joinStrings(prepared.args, ', ')});`)
   }
 
   return lines
@@ -2099,7 +2148,7 @@ function emitPreparedThrowingClassMethodCallExpression(
   )})`
 
   if (!call.native) {
-    callExpression = `${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(callArgs, ', ')})`
+    callExpression = `${emitCClassInfoMethodName(call.info, method.name)}(${joinStrings(callArgs, ', ')})`
   }
 
   lines.push(`inox_status ${status} = ${callExpression};`)
@@ -2184,7 +2233,7 @@ function emitClassMethodCallExpression(
 
   if (!call.native) {
     args.unshift(call.objectExpression)
-    return `${emitCClassMethodName(call.info.name, method.name)}(${joinStrings(args, ', ')})`
+    return `${emitCClassInfoMethodName(call.info, method.name)}(${joinStrings(args, ', ')})`
   }
 
   return `${call.objectExpression}${call.accessOperator}${emitCClassMethodIdentifier(method.name)}(${joinStrings(args, ', ')})`
@@ -2308,7 +2357,7 @@ function emitRuntimeClassInstanceRefReceiver(
 
   const ref = nextCName(context, 'inox_class_instance_ref')
   const receiver = nextCName(context, `inox_${info.name}_receiver`)
-  const typeName = emitCClassTypeName(info.name)
+  const typeName = emitCClassInfoTypeName(info)
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
@@ -2319,7 +2368,7 @@ function emitRuntimeClassInstanceRefReceiver(
   )
   lines.push(`inox_class_instance_ref* ${ref} = (inox_class_instance_ref*)${value.expression}.as.ref;`)
   lines.push(
-    `if (${ref}->descriptor != &${emitCClassDescriptorName(info.name)} || ${ref}->instance == 0) ${emitFailureStatement(
+    `if (${ref}->descriptor != &${emitCClassInfoDescriptorName(info)} || ${ref}->instance == 0) ${emitFailureStatement(
       context
     )}`
   )

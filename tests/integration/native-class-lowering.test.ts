@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 
-import { compileSource } from '../../compiler/core.ts'
+import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { cStringLiteral } from '../../compiler/c/identifiers.ts'
+import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+
+type GeneratedTextFile = {
+  path: string
+  code: string
+}
 
 export function assertNativeClassLowering(): void {
   const source = `
@@ -208,6 +214,81 @@ console.log(parent.label())
   assert.doesNotMatch(result.code, /inox_method_Child_label/)
 }
 
+export function assertNativeClassModuleUniqueSymbols(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+import { label as aLabel } from './a.ts'
+import { label as bLabel } from './b.ts'
+
+console.log(aLabel() + ':' + bLabel())
+`
+      },
+      {
+        path: '/pkg/src/a.ts',
+        source: `
+class Box {
+  name: string
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  label(): string {
+    return this.name
+  }
+}
+
+export function label(): string {
+  const box = new Box('a')
+  return box.label()
+}
+`
+      },
+      {
+        path: '/pkg/src/b.ts',
+        source: `
+class Box {
+  name: string
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  label(): string {
+    return this.name
+  }
+}
+
+export function label(): string {
+  const box = new Box('b')
+  return box.label()
+}
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host,
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const aSource = generatedTextFile(files, 'src/a.cc').code
+  const bSource = generatedTextFile(files, 'src/b.cc').code
+
+  assert.match(aSource, /class inox_mod_src_a_ts_[0-9a-f]+_Box/)
+  assert.match(bSource, /class inox_mod_src_b_ts_[0-9a-f]+_Box/)
+  assert.match(aSource, /static const inox_class_descriptor inox_class_descriptor_inox_mod_src_a_ts_[0-9a-f]+_Box/)
+  assert.match(bSource, /static const inox_class_descriptor inox_class_descriptor_inox_mod_src_b_ts_[0-9a-f]+_Box/)
+  assert.doesNotMatch(aSource, /class Box/)
+  assert.doesNotMatch(bSource, /class Box/)
+}
+
 function classDescriptorFieldPattern(name: string, valueType: string, declaredType: string, ownership: string): RegExp {
   return new RegExp(
     `\\{ ${escapeRegExp(cStringLiteral(name))}, ${escapeRegExp(cStringLiteral(valueType))}, ${escapeRegExp(
@@ -218,4 +299,14 @@ function classDescriptorFieldPattern(name: string, valueType: string, declaredTy
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
+  for (const file of files) {
+    if (file.path === path) {
+      return file
+    }
+  }
+
+  assert.fail(`missing generated file ${path}`)
 }
