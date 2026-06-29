@@ -997,10 +997,14 @@ function collectClassConstructorAssignments(
         continue
       }
 
+      if (isSupportedClassConstructorThisMethodCall(statement)) {
+        continue
+      }
+
       diagnostics.push(
         diagnostic(
           'INOX_C_CLASS',
-          `class ${classNode.name} constructor currently supports only local declarations, local assignments and this.field assignments in the C backend`,
+          `class ${classNode.name} constructor currently supports only local declarations, local assignments, this.method() calls and this.field assignments in the C backend`,
           nodeLocOrFallback(statement, constructorMethod)
         )
       )
@@ -1068,6 +1072,20 @@ function isSupportedClassConstructorLocalAssignment(
   }
 
   return localNames.has(target.path[0])
+}
+
+function isSupportedClassConstructorThisMethodCall(statement: AnyNode): boolean {
+  if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const callee = statement.expression.callee
+
+  if (callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  return isThisObjectExpression(callee.object)
 }
 
 function createClassConstructorAssignment(field: string, assignment: AnyNode): AnyNode {
