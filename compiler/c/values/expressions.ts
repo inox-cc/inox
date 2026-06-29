@@ -66,6 +66,8 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies } from './arrays.ts'
 import {
+  cClassNameFromValueType,
+  emitCClassDescriptorName,
   emitPreparedNativeClassFieldScalarExpression,
   emitPreparedNativeClassFieldValueExpression
 } from './classes.ts'
@@ -2353,7 +2355,9 @@ function appendPreparedCallArg(
     }
 
     appendLines(lines, value.lines)
-    args.push(value.expression)
+    const objectValue = emitPreparedObjectCallArgumentExpression(value, context)
+    appendLines(lines, objectValue.lines)
+    args.push(objectValue.expression)
     appendObjectFunctionFieldArguments(lines, args, arg, param, context, deps, calleeSeenTypes)
   } else if (isManagedRuntimeReturnType(paramValueType)) {
     const value = deps.emitCValueExpression(arg, context)
@@ -2378,6 +2382,39 @@ function appendPreparedCallArg(
     args.push(value.expression)
   } else {
     args.push(deps.emitCExpression(arg, context))
+  }
+}
+
+function emitPreparedObjectCallArgumentExpression(
+  value: PreparedExpression,
+  context: CFunctionContext
+): PreparedExpression {
+  const className = cClassNameFromValueType(value.valueType)
+
+  if (className === null || typeof className === 'undefined') {
+    return {
+      lines: [],
+      expression: value.expression,
+      valueType: value.valueType
+    }
+  }
+
+  const temp = nextCName(context, 'inox_class_instance')
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp,
+    valueType: 'object'
   }
 }
 
