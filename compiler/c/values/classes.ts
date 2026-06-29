@@ -254,6 +254,14 @@ export function emitCClassMethodName(className: string, methodName: string): str
   return `inox_method_${emitCIdentifier(className)}_${emitCIdentifier(methodName)}`
 }
 
+export function emitCClassDescriptorName(className: string): string {
+  return `inox_class_descriptor_${emitCIdentifier(className)}`
+}
+
+function emitCClassDescriptorFieldsName(className: string): string {
+  return `${emitCClassDescriptorName(className)}_fields`
+}
+
 function classValueType(info: CClassInfo): string {
   return cClassValueTypeName(info.name)
 }
@@ -396,8 +404,10 @@ export function emitCClassConstructorHead(info: CClassInfo): string | null {
 
   const params: CFunctionParam[] = constructorMethod.params
   const typeName = emitCClassTypeName(info.name)
+  const paramDeclarations = emitCClassParamDeclarations(params)
+  const initializers = emitCClassConstructorInitializers(info)
 
-  return `${typeName}::${typeName}(${emitCClassParamDeclarations(params)})${emitCClassConstructorInitializers(info)}`
+  return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
 }
 
 function classHasRuntimeValueFields(info: CClassInfo): boolean {
@@ -530,6 +540,80 @@ export function emitCNativeClassDeclarations(
   return lines
 }
 
+export function emitCClassDescriptorDeclarations(context: CEmitContext): string[] {
+  const lines: string[] = []
+
+  for (const info of context.classInfos.values()) {
+    pushAllLines(lines, emitCClassDescriptorDeclaration(info))
+  }
+
+  return lines
+}
+
+function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
+  const fieldsName = emitCClassDescriptorFieldsName(info.name)
+  const lines: string[] = []
+
+  if (info.fields.length > 0) {
+    lines.push(`static const inox_class_field_descriptor ${fieldsName}[] = {`)
+
+    for (const field of info.fields) {
+      lines.push(
+        `  { ${cStringLiteral(field.name)}, ${emitCClassDescriptorString(field.valueType)}, ${emitCClassDescriptorString(
+          classFieldDeclaredType(field)
+        )}, ${emitCClassDescriptorString(classFieldOwnership(field))}, ${emitCClassDescriptorFieldFlags(field)} },`
+      )
+    }
+
+    lines.push('};')
+  }
+
+  lines.push(`static const inox_class_descriptor ${emitCClassDescriptorName(info.name)} = {`)
+  lines.push(`  ${cStringLiteral(info.name)},`)
+  lines.push(`  ${info.fields.length},`)
+  if (info.fields.length === 0) {
+    lines.push('  0')
+  } else {
+    lines.push(`  ${fieldsName}`)
+  }
+  lines.push('};')
+  lines.push('')
+
+  return lines
+}
+
+function emitCClassDescriptorString(value: string | null): string {
+  if (value === null) {
+    return '0'
+  }
+
+  return cStringLiteral(value)
+}
+
+function emitCClassDescriptorFieldFlags(field: CObjectShapeField): string {
+  const flags: string[] = []
+
+  if (isReadonlyCObjectShapeField(field)) {
+    flags.push('INOX_CLASS_FIELD_READONLY')
+  }
+
+  if (field.optional === true) {
+    flags.push('INOX_CLASS_FIELD_OPTIONAL')
+  }
+
+  if (field.nullable === true) {
+    flags.push('INOX_CLASS_FIELD_NULLABLE')
+  }
+
+  if (classFieldIsWeak(field)) {
+    flags.push('INOX_CLASS_FIELD_WEAK')
+  }
+
+  flags.push('INOX_CLASS_FIELD_ENUMERABLE')
+
+  return joinStrings(flags, ' | ')
+}
+
 function classHasNoArgConstructor(info: CClassInfo): boolean {
   const constructorMethod = info.constructor
 
@@ -573,6 +657,28 @@ export function createClassInfos(classes: AnyNode[], diagnostics: Diagnostic[]):
   markClassFieldTargetsRuntimeBacked(infos)
 
   return infos
+}
+
+function classFieldDeclaredType(field: CObjectShapeField): string | null {
+  const declaredType = field.declaredType
+
+  if (declaredType !== null && typeof declaredType !== 'undefined') {
+    return declaredType
+  }
+
+  return null
+}
+
+function classFieldIsWeak(field: CObjectShapeField): boolean {
+  if (field.ownership === 'weak') {
+    return true
+  }
+
+  if (field.functionTypeOwnership === 'weak') {
+    return true
+  }
+
+  return field.shapeOwnership === 'weak'
 }
 
 function markClassFieldTargetsRuntimeBacked(infos: CClassInfoMap): void {

@@ -51,6 +51,7 @@ export function emitCPrelude(
   needsDebugMemoryRuntime: boolean,
   needsAsyncRuntime: boolean,
   needsCallbackRuntime: boolean,
+  needsClassDescriptorRuntime: boolean,
   needsStringHeader: boolean,
   needsCollectionRuntime: boolean,
   needsBinaryRuntime: boolean,
@@ -130,6 +131,9 @@ export function emitCPrelude(
     }
     if (needsCallbackRuntime) {
       lines.push('#include "inox/callback.h"')
+    }
+    if (needsClassDescriptorRuntime) {
+      lines.push('#include "inox/class_descriptor.h"')
     }
     if (needsBinaryRuntime) {
       lines.push('#include "inox/binary.h"')

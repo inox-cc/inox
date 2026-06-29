@@ -105,6 +105,7 @@ import {
   cClassValueTypeName,
   collectClassMethods,
   createClassInfos,
+  emitCClassDescriptorDeclarations,
   emitCClassTypeName,
   emitCNativeClassDeclarations
 } from './values/classes.ts'
@@ -1272,6 +1273,7 @@ export function emitCUnit(
   const needsDebugMemoryRuntime: boolean = preludeRequirements.needsDebugMemoryRuntime
   const needsAsyncRuntime: boolean = preludeRequirements.needsAsyncRuntime
   const needsCallbackRuntime: boolean = preludeRequirements.needsCallbackRuntime
+  const needsClassDescriptorRuntime: boolean = preludeRequirements.needsClassDescriptorRuntime
   const needsStringHeader: boolean = preludeRequirements.needsStringHeader
   const needsCollectionRuntime: boolean = preludeRequirements.needsCollectionRuntime
   const needsBinaryRuntime: boolean = preludeRequirements.needsBinaryRuntime
@@ -1306,6 +1308,7 @@ export function emitCUnit(
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
+    needsClassDescriptorRuntime,
     needsStringHeader,
     needsCollectionRuntime,
     needsBinaryRuntime,
@@ -1327,6 +1330,7 @@ export function emitCUnit(
     options
   )
   pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps)))
+  pushUnitLines(lines, emitCClassDescriptorDeclarations(baseContext))
   emitCUnitValueDefinitions(lines, valueDeclarations)
   emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []

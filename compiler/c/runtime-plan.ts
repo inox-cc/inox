@@ -22,6 +22,7 @@ export type CRuntimePreludeRequirements = {
   needsDebugMemoryRuntime: boolean
   needsAsyncRuntime: boolean
   needsCallbackRuntime: boolean
+  needsClassDescriptorRuntime: boolean
   needsStringHeader: boolean
   needsCollectionRuntime: boolean
   needsBinaryRuntime: boolean
@@ -102,6 +103,7 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('set')
   const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classInfoCount > 0
+  const needsClassDescriptorRuntime = needsClassRuntime
   const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
   const needsDgramRuntime = nodeRuntimeImports.dgram
   const needsObjectRuntime =
@@ -166,6 +168,7 @@ export function resolveCRuntimePreludeRequirements(
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,
+    needsClassDescriptorRuntime,
     needsStringHeader,
     needsCollectionRuntime,
     needsBinaryRuntime,

@@ -116,6 +116,7 @@ import {
   cClassValueTypeName,
   collectClassMethods,
   createClassInfos,
+  emitCClassDescriptorDeclarations,
   emitCClassTypeName,
   emitCNativeClassDeclarations
 } from './values/classes.ts'
@@ -440,6 +441,7 @@ export function emitCModuleSource(
       prelude.needsDebugMemoryRuntime,
       prelude.needsAsyncRuntime,
       prelude.needsCallbackRuntime,
+      prelude.needsClassDescriptorRuntime,
       prelude.needsStringHeader,
       prelude.needsCollectionRuntime,
       prelude.needsBinaryRuntime,
@@ -463,6 +465,7 @@ export function emitCModuleSource(
   )
 
   pushCModuleLines(lines, emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps)))
+  pushCModuleLines(lines, emitCClassDescriptorDeclarations(context))
   emitCModuleValueDefinitions(lines, moduleValues)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
 
