@@ -36,6 +36,46 @@ console.log(box.value)
   assert.doesNotMatch(result.code, /inox_object_get\(box/)
 }
 
+export function assertNativeClassRuntimeValueFieldLowering(): void {
+  const source = `
+class Parent {
+  value: number
+
+  constructor(value: number) {
+    this.value = value
+  }
+}
+
+class Box {
+  payload: object
+
+  constructor(payload: object) {
+    this.payload = payload
+  }
+}
+
+const parent = new Parent(7)
+const box = new Box(parent)
+console.log(box.payload)
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /class Box|struct Box/)
+  assert.match(result.code, /class Parent|struct Parent/)
+  assert.match(result.code, /inox_value payload/)
+  assert.match(result.code, /Box box/)
+  assert.match(result.code, classDescriptorFieldPattern('payload', 'object', 'object', 'strong'))
+  assert.match(result.code, /static inox_status inox_class_descriptor_Box_read_field\(const void\* instance, uint32_t index, inox_value\* out\)/)
+  assert.match(result.code, /\*out = value->payload/)
+  assert.match(result.code, /inox_retain\(payload\)/)
+  assert.doesNotMatch(result.code, /inox_shape_Box/)
+  assert.doesNotMatch(result.code, /inox_object_new/)
+  assert.doesNotMatch(result.code, /inox_object_get\(box/)
+}
+
 function classDescriptorFieldPattern(name: string, valueType: string, declaredType: string, ownership: string): RegExp {
   return new RegExp(
     `\\{ ${escapeRegExp(cStringLiteral(name))}, ${escapeRegExp(cStringLiteral(valueType))}, ${escapeRegExp(

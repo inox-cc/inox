@@ -59,7 +59,12 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
 import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
-import { cClassNameFromValueType, emitCClassDescriptorName, emitNativeClassFieldAssignment } from './classes.ts'
+import {
+  cClassNameFromValueType,
+  emitCClassDescriptorName,
+  emitNativeClassFieldAssignment,
+  emitPreparedClassInstanceRefValueExpression
+} from './classes.ts'
 import type { ClassLoweringDependencies } from './classes.ts'
 import type { CollectionLoweringDependencies } from './collections.ts'
 import {
@@ -4703,6 +4708,26 @@ function emitRuntimeReturnValueExpression(
 ): PreparedExpression {
   if (returnType === 'object' && argument.type === 'ObjectLiteral') {
     return statementDeps(context).emitCObjectLiteralValueExpression(argument, context, returnShape)
+  }
+
+  if (returnType === 'object') {
+    const value = statementDeps(context).emitCValueExpression(argument, context)
+    const classInstance = emitPreparedClassInstanceRefValueExpression(value, context)
+
+    if (classInstance !== null && typeof classInstance !== 'undefined') {
+      const lines: string[] = []
+
+      pushAllLines(lines, value.lines)
+      pushAllLines(lines, classInstance.lines)
+
+      return {
+        lines,
+        expression: classInstance.expression,
+        valueType: classInstance.valueType
+      }
+    }
+
+    return value
   }
 
   return statementDeps(context).emitCValueExpression(argument, context)

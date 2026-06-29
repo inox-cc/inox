@@ -352,13 +352,17 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
     return true
   }
 
-  return (
+  if (
     field.valueType === 'number' ||
     field.valueType === 'boolean' ||
     field.valueType === 'string' ||
     field.valueType === 'date' ||
     field.valueType === 'regexp'
-  )
+  ) {
+    return true
+  }
+
+  return field.valueType === 'object'
 }
 
 function emitCClassFieldType(field: CObjectShapeField): string {
