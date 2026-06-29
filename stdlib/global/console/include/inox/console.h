@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <stddef.h>
+#include "inox/class_descriptor.h"
 #include "inox/value.h"
 
 typedef enum inox_console_stream {
@@ -26,6 +27,12 @@ void inox_console_clear_adapter(void);
 inox_status inox_console_write(inox_console_stream stream, const char* bytes, size_t len);
 inox_status inox_console_write_line(inox_console_stream stream, const char* bytes, size_t len);
 inox_status inox_console_format_value(inox_allocator* allocator, inox_value value, inox_value* out);
+inox_status inox_console_format_class_instance(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+);
 int inox_console_printf(inox_console_stream stream, const char* format, ...);
 
 #ifndef INOX_CONSOLE_NO_PRINTF_MACRO

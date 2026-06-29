@@ -6,6 +6,9 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include "inox/value.h"
+
+typedef inox_status (*inox_class_field_read_fn)(const void* instance, uint32_t index, inox_value* out);
 
 enum {
   INOX_CLASS_FIELD_READONLY = 1u << 0,
@@ -27,6 +30,7 @@ typedef struct inox_class_descriptor {
   const char* name;
   uint32_t field_count;
   const inox_class_field_descriptor* fields;
+  inox_class_field_read_fn read_field;
 } inox_class_descriptor;
 
 #ifdef __cplusplus

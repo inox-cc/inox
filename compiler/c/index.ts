@@ -294,9 +294,11 @@ import {
 import type { ClassLoweringDependencies } from './values/classes.ts'
 import {
   cClassNameFromValueType,
+  emitCClassDescriptorName,
   emitCClassObjectValueExpression as emitCClassObjectValueExpressionWithDependencies,
   emitClassObjectVariableDeclaration as emitClassObjectVariableDeclarationWithDependencies,
   emitCNativeClassAssignmentLines,
+  emitPreparedNativeClassInstanceExpression,
   emitPreparedNativeClassFieldScalarExpression,
   emitPreparedNativeClassFieldValueExpression,
   emitPreparedClassMethodCallExpression as emitPreparedClassMethodCallExpressionWithDependencies,
@@ -6041,6 +6043,12 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return emitRuntimeValueLogValue(expression, context)
   }
 
+  const nativeClassInstance = emitNativeClassInstanceLogValue(expression, context)
+
+  if (nativeClassInstance !== null && typeof nativeClassInstance !== 'undefined') {
+    return nativeClassInstance
+  }
+
   if (valueType === 'string') {
     return emitStringLogValue(expression, context)
   }
@@ -6256,6 +6264,36 @@ function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(`inox_console_format_value(&inox_default_allocator, ${value.expression}, &${temp})`, context)
+  )
+  lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${temp}.as.ref;`)
+
+  return {
+    lines,
+    format: '%.*s',
+    values: [`(int)${string}->len`, `${string}->bytes`]
+  }
+}
+
+function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  const instance = emitPreparedNativeClassInstanceExpression(expression, context)
+
+  if (instance === null || typeof instance === 'undefined') {
+    return null
+  }
+
+  const temp = nextCName(context, 'inox_log_value')
+  const string = nextCName(context, 'inox_log_string')
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  pushAll(lines, instance.lines)
+  pushAll(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `inox_console_format_class_instance(&inox_default_allocator, &${emitCClassDescriptorName(instance.info.name)}, ${instance.expression}, &${temp})`,
+      context
+    )
   )
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${temp}.as.ref;`)

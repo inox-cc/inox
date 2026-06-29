@@ -113,6 +113,12 @@ type CNativeClassFieldAccess = {
   reference: string
 }
 
+export type CNativeClassInstanceExpression = {
+  expression: string
+  info: CClassInfo
+  lines: string[]
+}
+
 export type CClassMethodPrototypeMap = Map<string, string[]>
 
 function emitFallbackClassValueExpression(
@@ -260,6 +266,10 @@ export function emitCClassDescriptorName(className: string): string {
 
 function emitCClassDescriptorFieldsName(className: string): string {
   return `${emitCClassDescriptorName(className)}_fields`
+}
+
+function emitCClassDescriptorFieldReaderName(className: string): string {
+  return `${emitCClassDescriptorName(className)}_read_field`
 }
 
 function classValueType(info: CClassInfo): string {
@@ -568,18 +578,74 @@ function emitCClassDescriptorDeclaration(info: CClassInfo): string[] {
     lines.push('};')
   }
 
+  if (info.native) {
+    pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info))
+  }
+
   lines.push(`static const inox_class_descriptor ${emitCClassDescriptorName(info.name)} = {`)
   lines.push(`  ${cStringLiteral(info.name)},`)
   lines.push(`  ${info.fields.length},`)
   if (info.fields.length === 0) {
-    lines.push('  0')
+    lines.push('  0,')
   } else {
-    lines.push(`  ${fieldsName}`)
+    lines.push(`  ${fieldsName},`)
+  }
+  if (info.native) {
+    lines.push(`  ${emitCClassDescriptorFieldReaderName(info.name)}`)
+  } else {
+    lines.push('  0')
   }
   lines.push('};')
   lines.push('')
 
   return lines
+}
+
+function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo): string[] {
+  const readerName = emitCClassDescriptorFieldReaderName(info.name)
+  const typeName = emitCClassTypeName(info.name)
+  const lines = [`static inox_status ${readerName}(const void* instance, uint32_t index, inox_value* out) {`]
+
+  lines.push('  if (instance == 0 || out == 0) {')
+  lines.push('    return INOX_ERR_TYPE;')
+  lines.push('  }')
+  lines.push(`  const ${typeName}* value = (const ${typeName}*)instance;`)
+
+  if (info.fields.length > 0) {
+    lines.push('  switch (index) {')
+
+    for (let index = 0; index < info.fields.length; index = index + 1) {
+      const field = info.fields[index]
+      lines.push(`    case ${index}:`)
+      pushIndentedClassLines(lines, emitCClassDescriptorFieldReadLines(field))
+    }
+
+    lines.push('  }')
+  }
+
+  lines.push('  return INOX_ERR_FIELD;')
+  lines.push('}')
+  lines.push('')
+
+  return lines
+}
+
+function emitCClassDescriptorFieldReadLines(field: CObjectShapeField): string[] {
+  const reference = `value->${emitCClassFieldName(field.name)}`
+
+  if (field.valueType === 'number' || field.valueType === 'date') {
+    return [`*out = inox_number_value(${reference});`, 'return INOX_OK;']
+  }
+
+  if (field.valueType === 'boolean') {
+    return [`*out = inox_bool_value(${reference});`, 'return INOX_OK;']
+  }
+
+  if (classFieldUsesRuntimeValueStorage(field)) {
+    return [`*out = ${reference};`, 'inox_retain(*out);', 'return INOX_OK;']
+  }
+
+  return ['*out = inox_undefined_value();', 'return INOX_OK;']
 }
 
 function emitCClassDescriptorString(value: string | null): string {
@@ -1937,6 +2003,35 @@ export function emitPreparedNativeClassFieldValueExpression(
     lines: [],
     expression: access.reference,
     valueType: access.field.valueType
+  }
+}
+
+export function emitPreparedNativeClassInstanceExpression(
+  expression: AnyNode,
+  context: ClassLookupContext
+): CNativeClassInstanceExpression | null {
+  const receiver = resolveNativeClassReceiverExpression(expression, context)
+
+  if (receiver === null || typeof receiver === 'undefined') {
+    return null
+  }
+
+  const info = classInfoForName(context, receiver.className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return null
+  }
+
+  let instanceExpression = `&${receiver.expression}`
+
+  if (receiver.accessOperator === '->') {
+    instanceExpression = receiver.expression
+  }
+
+  return {
+    expression: instanceExpression,
+    info,
+    lines: receiver.lines
   }
 }
 
