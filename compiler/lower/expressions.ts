@@ -226,16 +226,16 @@ function applyResolvedTypeAssertion(
   declaredType: string,
   declared: LowerResolvedType
 ): LowerExpressionNode {
-  let arrayElementType = expression.arrayElementType
-  let arrayElementDeclaredType = expression.arrayElementDeclaredType
-  let arrayElementFunctionType = expression.arrayElementFunctionType
-  let mapKeyType = expression.mapKeyType
-  let mapValueType = expression.mapValueType
-  let mapValueShape = expression.mapValueShape
-  let promiseValueType = expression.promiseValueType
-  let setElementType = expression.setElementType
-  let shape = expression.shape
-  let functionType = expression.functionType
+  let arrayElementType: string | null = expression.arrayElementType
+  let arrayElementDeclaredType: string | null = expression.arrayElementDeclaredType
+  let arrayElementFunctionType: LowerExpressionNode | null = expression.arrayElementFunctionType
+  let mapKeyType: string | null = expression.mapKeyType
+  let mapValueType: string | null = expression.mapValueType
+  let mapValueShape: LowerExpressionNode | null = expression.mapValueShape
+  let promiseValueType: string | null = expression.promiseValueType
+  let setElementType: string | null = expression.setElementType
+  let shape: LowerExpressionNode | null = expression.shape
+  let functionType: LowerExpressionNode | null = expression.functionType
   let valueType = expression.valueType
 
   const declaredArrayElementType = nullableString(declared.arrayElementType)

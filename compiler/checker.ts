@@ -2530,16 +2530,17 @@ class Checker {
       }
 
       const declared = this.resolveDeclaredType(declaredType, expression.loc as SourceLocation)
-      let arrayElementType = asserted.arrayElementType
-      let arrayElementDeclaredType = asserted.arrayElementDeclaredType
-      let arrayElementFunctionType = asserted.arrayElementFunctionType
-      let mapKeyType = asserted.mapKeyType
-      let mapValueType = asserted.mapValueType
-      let promiseValueType = asserted.promiseValueType
-      let setElementType = asserted.setElementType
-      let functionType = asserted.functionType
-      let shape = asserted.shape
-      let className = asserted.className
+      let arrayElementType: ValueType | null = asserted.arrayElementType
+      let arrayElementDeclaredType: string | null = asserted.arrayElementDeclaredType
+      let arrayElementFunctionType: FunctionTypeMetadata | null = asserted.arrayElementFunctionType
+      let mapKeyType: ValueType | null = asserted.mapKeyType
+      let mapValueType: ValueType | null = asserted.mapValueType
+      let mapValueShape: ObjectShapeInfo | null = asserted.mapValueShape
+      let promiseValueType: ValueType | null = asserted.promiseValueType
+      let setElementType: ValueType | null = asserted.setElementType
+      let functionType: FunctionTypeMetadata | null = asserted.functionType
+      let shape: ObjectShapeInfo | null = asserted.shape
+      let className: string | null = asserted.className
 
       if (declared.arrayElementType !== null && typeof declared.arrayElementType !== 'undefined') {
         arrayElementType = declared.arrayElementType
@@ -2559,6 +2560,10 @@ class Checker {
 
       if (declared.mapValueType !== null && typeof declared.mapValueType !== 'undefined') {
         mapValueType = declared.mapValueType
+      }
+
+      if (declared.mapValueShape !== null && typeof declared.mapValueShape !== 'undefined') {
+        mapValueShape = declared.mapValueShape
       }
 
       if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
@@ -2585,6 +2590,7 @@ class Checker {
       expression.arrayElementFunctionType = arrayElementFunctionType
       expression.mapKeyType = mapKeyType
       expression.mapValueType = mapValueType
+      expression.mapValueShape = mapValueShape
       expression.promiseValueType = promiseValueType
       expression.setElementType = setElementType
       expression.functionType = functionType
