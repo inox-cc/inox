@@ -684,6 +684,12 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField): string[] 
     return [`*out = ${reference};`, 'inox_retain(*out);', 'return INOX_OK;']
   }
 
+  if (classFieldUsesNativeClassStorage(field)) {
+    return [
+      `return inox_class_instance_ref_new(&inox_default_allocator, &${emitCClassDescriptorName(field.className)}, &${reference}, out);`
+    ]
+  }
+
   return ['*out = inox_undefined_value();', 'return INOX_OK;']
 }
 

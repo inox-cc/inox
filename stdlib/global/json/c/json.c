@@ -894,6 +894,13 @@ inox_status inox_json_parse(inox_allocator* allocator, const char* bytes, size_t
 
 static inox_status
 inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth);
+static inox_status inox_json_stringify_class_instance_value(
+  inox_json_buffer* buffer,
+  inox_json_stringify_stack* stack,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  size_t depth
+);
 
 static bool inox_json_stringify_stack_contains(const inox_json_stringify_stack* stack, const inox_ref* ref) {
   if (stack == 0 || ref == 0) {
@@ -1114,6 +1121,12 @@ inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* s
 
   if (value.tag == INOX_TAG_OBJECT && value.as.ref != 0) {
     return inox_json_stringify_object(buffer, stack, value, depth);
+  }
+
+  if (value.tag == INOX_TAG_CLASS_INSTANCE && value.as.ref != 0) {
+    inox_class_instance_ref* instance = (inox_class_instance_ref*)value.as.ref;
+
+    return inox_json_stringify_class_instance_value(buffer, stack, instance->descriptor, instance->instance, depth);
   }
 
   return INOX_ERR_UNSUPPORTED;

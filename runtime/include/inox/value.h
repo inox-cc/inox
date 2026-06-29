@@ -33,7 +33,8 @@ typedef enum inox_tag {
   INOX_TAG_BYTES,
   INOX_TAG_FUNCTION,
   INOX_TAG_MAP,
-  INOX_TAG_SET
+  INOX_TAG_SET,
+  INOX_TAG_CLASS_INSTANCE
 } inox_tag;
 
 typedef enum inox_ref_kind {
@@ -44,6 +45,7 @@ typedef enum inox_ref_kind {
   INOX_REF_FUNCTION,
   INOX_REF_MAP,
   INOX_REF_SET,
+  INOX_REF_CLASS_INSTANCE,
   INOX_REF_KIND_COUNT
 } inox_ref_kind;
 
@@ -101,7 +103,8 @@ static inline inox_value inox_number_value(inox_number number) {
 
 static inline bool inox_is_ref_value(inox_value value) {
   return value.tag == INOX_TAG_STRING || value.tag == INOX_TAG_OBJECT || value.tag == INOX_TAG_ARRAY ||
-         value.tag == INOX_TAG_BYTES || value.tag == INOX_TAG_FUNCTION || value.tag == INOX_TAG_MAP || value.tag == INOX_TAG_SET;
+         value.tag == INOX_TAG_BYTES || value.tag == INOX_TAG_FUNCTION || value.tag == INOX_TAG_MAP ||
+         value.tag == INOX_TAG_SET || value.tag == INOX_TAG_CLASS_INSTANCE;
 }
 
 bool inox_value_truthy(inox_value value);

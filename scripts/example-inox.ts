@@ -21,6 +21,7 @@ const exampleInoxRuntimeBaseSources: string[] = [
   'runtime/src/core/value.c',
   'runtime/src/core/allocator.c',
   'runtime/src/core/callback.c',
+  'runtime/src/core/class_descriptor.c',
   'runtime/src/core/weak.c',
   'runtime/src/async/loop.c',
   'runtime/src/async/promise.c',

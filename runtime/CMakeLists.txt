@@ -50,6 +50,7 @@ set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/async/promise.c"
   "${INOX_RUNTIME_DIR}/src/core/allocator.c"
   "${INOX_RUNTIME_DIR}/src/core/callback.c"
+  "${INOX_RUNTIME_DIR}/src/core/class_descriptor.c"
   "${INOX_RUNTIME_DIR}/src/core/value.c"
   "${INOX_RUNTIME_DIR}/src/objects/object.c"
   ${INOX_STDLIB_GLOBAL_SOURCES}

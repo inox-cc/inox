@@ -33,6 +33,19 @@ typedef struct inox_class_descriptor {
   inox_class_field_read_fn read_field;
 } inox_class_descriptor;
 
+typedef struct inox_class_instance_ref {
+  inox_ref header;
+  const inox_class_descriptor* descriptor;
+  const void* instance;
+} inox_class_instance_ref;
+
+inox_status inox_class_instance_ref_new(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+);
+
 #ifdef __cplusplus
 }
 #endif

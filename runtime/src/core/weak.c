@@ -20,6 +20,8 @@ static inox_tag inox_weak_tag_from_ref_kind(inox_ref_kind kind) {
       return INOX_TAG_MAP;
     case INOX_REF_SET:
       return INOX_TAG_SET;
+    case INOX_REF_CLASS_INSTANCE:
+      return INOX_TAG_CLASS_INSTANCE;
     default:
       return INOX_TAG_UNDEFINED;
   }

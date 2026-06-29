@@ -405,6 +405,16 @@ static inox_status inox_console_format_value_into(inox_console_format_buffer* bu
     return inox_console_format_object(buffer, value, depth);
   }
 
+  if (value.tag == INOX_TAG_CLASS_INSTANCE) {
+    if (value.as.ref == 0) {
+      return INOX_ERR_TYPE;
+    }
+
+    inox_class_instance_ref* instance = (inox_class_instance_ref*)value.as.ref;
+
+    return inox_console_format_class_instance_into(buffer, instance->descriptor, instance->instance, depth);
+  }
+
   if (value.tag == INOX_TAG_MAP) {
     return inox_console_format_append_literal(buffer, "[Map]");
   }
