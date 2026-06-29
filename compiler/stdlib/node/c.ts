@@ -62,16 +62,19 @@ import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compile
 import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from '../../../stdlib/node/os/compiler/c.ts'
 import type { PathLoweringDependencies as PackagePathLoweringDependencies } from '../../../stdlib/node/path/compiler/c.ts'
 import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from '../../../stdlib/node/path/compiler/c.ts'
-import type { ProcessLoweringDependencies as PackageProcessLoweringDependencies } from '../../../stdlib/node/process/compiler/c.ts'
+import type {
+  ProcessLoweringDependencies as PackageProcessLoweringDependencies,
+  ProcessRuntimeObjectReferenceEmitterDescriptor as PackageProcessRuntimeObjectReferenceEmitterDescriptor
+} from '../../../stdlib/node/process/compiler/c.ts'
 import {
   cProcessRuntimeEnvName,
   cProcessRuntimeMethodName,
   cProcessRuntimePropertyName,
   cProcessRuntimePropertyValueType,
   cProcessRuntimeStringPropertyName,
-  emitPreparedProcessValueExpression
+  emitPreparedProcessRuntimeObjectReferenceExpression,
+  processRuntimeObjectReferenceEmitterDescriptors
 } from '../../../stdlib/node/process/compiler/c.ts'
-import { nodeProcessImportSource } from '../../../stdlib/node/process/compiler/descriptor.ts'
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
 import type { UrlLoweringDependencies as PackageUrlLoweringDependencies } from '../../../stdlib/node/url/compiler/c.ts'
 import { cUrlRuntimeMethodName } from '../../../stdlib/node/url/compiler/c.ts'
@@ -156,6 +159,33 @@ export type NodeStdlibAsyncTaskLoweringDependencies = {
 
 export type NodeStdlibRuntimeObjectReferenceDependencies = {
   process: ProcessLoweringDependencies
+}
+
+type NodeStdlibRuntimeObjectReferenceEmitter = {
+  source: string
+  name: string
+  packageName: 'process'
+}
+
+const nodeStdlibRuntimeObjectReferenceEmitters: NodeStdlibRuntimeObjectReferenceEmitter[] =
+  nodeStdlibProcessRuntimeObjectReferenceEmitters(processRuntimeObjectReferenceEmitterDescriptors)
+
+function nodeStdlibProcessRuntimeObjectReferenceEmitters(
+  descriptors: PackageProcessRuntimeObjectReferenceEmitterDescriptor[]
+): NodeStdlibRuntimeObjectReferenceEmitter[] {
+  const result: NodeStdlibRuntimeObjectReferenceEmitter[] = []
+
+  for (let index = 0; index < descriptors.length; index = index + 1) {
+    const descriptor = descriptors[index]
+
+    result.push({
+      source: descriptor.source,
+      name: descriptor.name,
+      packageName: 'process'
+    })
+  }
+
+  return result
 }
 
 type NodeCGlobalNameSet = Set<string>
@@ -405,31 +435,39 @@ export function emitPreparedNodeStdlibRuntimeObjectReferenceExpression(
   context: CFunctionContext,
   dependencies: NodeStdlibRuntimeObjectReferenceDependencies
 ): PreparedExpression | null {
-  if (!isImplicitProcessRuntimeObjectReference(expression, context)) {
-    return null
+  for (let index = 0; index < nodeStdlibRuntimeObjectReferenceEmitters.length; index = index + 1) {
+    const emitter = nodeStdlibRuntimeObjectReferenceEmitters[index]
+
+    if (nodeStdlibRuntimeObjectReferenceEmitterMatches(emitter, expression)) {
+      return emitPreparedNodeStdlibRuntimeObjectReference(emitter, expression, context, dependencies)
+    }
   }
 
-  const processExpression: AnyNode = {
-    path: expression.path,
-    type: 'Reference',
-    runtimeObjectName: 'process',
-    runtimeObjectSource: nodeProcessImportSource,
-    valueType: 'object'
-  }
-
-  if (expression.loc !== null && typeof expression.loc !== 'undefined') {
-    processExpression.loc = expression.loc
-  }
-
-  return emitPreparedProcessValueExpression(processExpression, context, dependencies.process, null)
+  return null
 }
 
-function isImplicitProcessRuntimeObjectReference(expression: AnyNode, context: CFunctionContext): boolean {
-  if (expression.type !== 'Reference' || expression.path.length !== 1 || expression.path[0] !== 'process') {
+function nodeStdlibRuntimeObjectReferenceEmitterMatches(
+  emitter: NodeStdlibRuntimeObjectReferenceEmitter,
+  expression: AnyNode
+): boolean {
+  if (expression.type !== 'Reference') {
     return false
   }
 
-  return !context.variables.has('process')
+  return expression.runtimeObjectSource === emitter.source && expression.runtimeObjectName === emitter.name
+}
+
+function emitPreparedNodeStdlibRuntimeObjectReference(
+  emitter: NodeStdlibRuntimeObjectReferenceEmitter,
+  expression: AnyNode,
+  context: CFunctionContext,
+  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
+): PreparedExpression | null {
+  if (emitter.packageName === 'process') {
+    return emitPreparedProcessRuntimeObjectReferenceExpression(expression, context, dependencies.process)
+  }
+
+  return null
 }
 
 export function nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null {

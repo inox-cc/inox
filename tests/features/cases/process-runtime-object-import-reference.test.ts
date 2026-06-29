@@ -2,5 +2,7 @@
 // @expect pass
 // @stdout 1
 
-const snapshot = process
+import proc from 'node:process'
+
+const snapshot = proc
 console.log(snapshot.versions.node === snapshot.versions.node)

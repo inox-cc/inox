@@ -34,6 +34,18 @@ export type ProcessLoweringDependencies = {
   registerObjectShape(context: ProcessCContext, name: string, shape: CObjectShape | null | undefined): void
 }
 
+export type ProcessRuntimeObjectReferenceEmitterDescriptor = {
+  source: string
+  name: string
+}
+
+export const processRuntimeObjectReferenceEmitterDescriptors: ProcessRuntimeObjectReferenceEmitterDescriptor[] = [
+  {
+    source: nodeProcessImportSource,
+    name: 'process'
+  }
+]
+
 export function cProcessRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
   if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
@@ -88,6 +100,18 @@ export function cProcessRuntimePropertyValueType(expression: AnyNode | null | un
   }
 
   return null
+}
+
+export function emitPreparedProcessRuntimeObjectReferenceExpression(
+  expression: AnyNode,
+  context: ProcessCContext,
+  dependencies: ProcessLoweringDependencies
+): PreparedExpression | null {
+  if (cProcessRuntimeObjectName(expression) !== 'process') {
+    return null
+  }
+
+  return emitPreparedProcessValueExpression(expression, context, dependencies, null)
 }
 
 export function cProcessRuntimeStringPropertyName(expression: AnyNode | null | undefined): string | null {
