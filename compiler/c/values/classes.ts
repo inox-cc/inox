@@ -98,6 +98,7 @@ type ClassFunctionContext = CFailureContext &
     functionReturnTypes: Map<string, string>
     localValueNames: Set<string>
     moduleValueNames: Map<string, string>
+    moduleValueTypes: Map<string, string>
     objectShapes: Map<string, CObjectShapeField[]>
     throwingFunctions: Set<string>
     variables: Map<string, string>
@@ -107,6 +108,7 @@ type ClassLookupContext = {
   classInstanceTypes: Map<string, string>
   localValueNames: Set<string>
   moduleValueNames: Map<string, string>
+  moduleValueTypes: Map<string, string>
   variables: Map<string, string>
 }
 type CNativeClassReceiver = {
@@ -2472,9 +2474,29 @@ function isNativeClassObjectName(context: ClassLookupContext, objectName: string
     return false
   }
 
-  const valueType = context.variables.get(objectName)
+  const valueType = classObjectValueType(context, objectName)
 
   return valueType === classValueType(info)
+}
+
+function classObjectValueType(context: ClassLookupContext, objectName: string): string | null {
+  const localValue = context.localValueNames.has(objectName)
+
+  if (!localValue) {
+    const moduleValueType = context.moduleValueTypes.get(objectName)
+
+    if (moduleValueType !== null && typeof moduleValueType !== 'undefined') {
+      return moduleValueType
+    }
+  }
+
+  const variableValueType = context.variables.get(objectName)
+
+  if (variableValueType !== null && typeof variableValueType !== 'undefined') {
+    return variableValueType
+  }
+
+  return null
 }
 
 function emitCClassObjectReference(name: string, context: ClassLookupContext): string {
@@ -2738,7 +2760,7 @@ function classNameForObject(context: ClassLookupContext, objectName: string): st
   const classInstanceTypes = context.classInstanceTypes
 
   if (classInstanceTypes === null || typeof classInstanceTypes === 'undefined') {
-    return null
+    return classNameForObjectValueType(context, objectName)
   }
 
   const className = classInstanceTypes.get(objectName)
@@ -2747,7 +2769,17 @@ function classNameForObject(context: ClassLookupContext, objectName: string): st
     return className
   }
 
-  return null
+  return classNameForObjectValueType(context, objectName)
+}
+
+function classNameForObjectValueType(context: ClassLookupContext, objectName: string): string | null {
+  const valueType = classObjectValueType(context, objectName)
+
+  if (valueType === null || typeof valueType === 'undefined') {
+    return null
+  }
+
+  return cClassNameFromValueType(valueType)
 }
 
 function classInfoForName(context: ClassLookupContext, className: string): CClassInfo | null {

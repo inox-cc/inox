@@ -117,6 +117,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
   const { assertClassSuperDiagnosticUsesInheritanceCode } = await import('./integration/class-diagnostics.test.ts')
+  const { assertNativeClassModuleMethodCallUsesNativeReceiver } =
+    await import('./integration/native-class-module-method-call.test.ts')
   const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
   const { assertNativeInoxDefaultOutput, assertNativeInoxHelp, assertNativeInoxRuntimeSmoke } =
     await import('./integration/native-inox-help.test.ts')
@@ -227,6 +229,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-module-unique-symbols', () => {
       assertNativeClassModuleUniqueSymbols()
+    })
+
+    await t.test('native-class-module-method-call', () => {
+      assertNativeClassModuleMethodCallUsesNativeReceiver()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {

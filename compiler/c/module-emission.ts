@@ -1212,15 +1212,15 @@ function createCModuleBaseContext(
 
   const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots, ir.body)
   context.processEntryPath = plan.record.path
+  const classNodes = collectIrTopLevelNodes(ir, 'class')
+
+  context.classInfos = createClassInfos(classNodes, diagnostics, plan.symbolPrefix)
 
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
 
   registerNodeStdlibRuntimeImportNames(context, irPrograms)
   context.functionNames = createCModuleFunctionNames(plan)
-  const classNodes = collectIrTopLevelNodes(ir, 'class')
-
-  context.classInfos = createClassInfos(classNodes, diagnostics, plan.symbolPrefix)
   context.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
   context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
