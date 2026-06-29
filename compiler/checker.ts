@@ -3313,6 +3313,10 @@ class Checker {
       this.reportNullableRuntimeAccess(expression.object, expression.loc)
     }
 
+    if (this.reportUnsupportedClassPrototypeAccess(expression, optionalChainReceiver)) {
+      return 'unknown'
+    }
+
     if (objectType === 'bytes' && expression.property === 'length') {
       expression.valueType = 'number'
       return 'number'
@@ -3449,6 +3453,10 @@ class Checker {
   checkOptionalMemberExpression(expression: AnyNode): ValueType {
     this.checkExpression(expression.object)
 
+    if (this.reportUnsupportedClassPrototypeAccess(expression, true)) {
+      return 'unknown'
+    }
+
     const shape = this.resolveExpressionShape(expression.object)
 
     if (shape === null || typeof shape === 'undefined') {
@@ -3503,6 +3511,10 @@ class Checker {
     const targetType = this.checkExpression(expression.target.object)
     const shape = this.resolveExpressionShape(expression.target.object)
     const valueType = this.checkExpression(expression.value)
+
+    if (this.reportUnsupportedClassPrototypeAccess(expression.target, false)) {
+      return valueType
+    }
 
     if (targetType === 'string' && expression.target.property === 'length') {
       this.report('INOX_ASSIGN_READONLY_FIELD', 'cannot assign to readonly field length', expression.target.loc)
@@ -3679,6 +3691,10 @@ class Checker {
       this.reportNullableRuntimeAccess(expression.object, expression.loc)
     }
 
+    if (this.reportUnsupportedClassPrototypeAccess(expression, optionalChainReceiver)) {
+      return 'unknown'
+    }
+
     if (objectType === 'map') {
       const mapType = this.resolveExpressionMapType(expression.object) ?? {
         key: 'unknown',
@@ -3831,6 +3847,10 @@ class Checker {
     const objectType = this.checkExpression(expression.object)
     const indexType = this.checkExpression(expression.index)
 
+    if (this.reportUnsupportedClassPrototypeAccess(expression, true)) {
+      return 'unknown'
+    }
+
     if (expression.index.type !== 'StringLiteral') {
       if (objectType === 'array') {
         this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
@@ -3902,6 +3922,10 @@ class Checker {
     const objectType = this.checkExpression(expression.target.object)
     const indexType = this.checkExpression(expression.target.index)
     const valueType = this.checkExpression(expression.value)
+
+    if (this.reportUnsupportedClassPrototypeAccess(expression.target, false)) {
+      return valueType
+    }
 
     if (this.isClassInstanceExpression(expression.target.object)) {
       this.report('INOX_C_CLASS', 'dynamic writes to class fields are not supported', expression.target.loc)
@@ -4215,6 +4239,59 @@ class Checker {
     }
 
     return false
+  }
+
+  reportUnsupportedClassPrototypeAccess(expression: AnyNode, nullable: boolean): boolean {
+    const object = this.classPrototypeAccessObject(expression)
+
+    if (object === null || typeof object === 'undefined') {
+      return false
+    }
+
+    if (!this.isClassConstructorReference(object)) {
+      return false
+    }
+
+    this.report('INOX_CLASS_PROTOTYPE', 'class prototype access is not supported', expression.loc)
+    expression.nullable = nullable
+    expression.valueType = 'unknown'
+
+    return true
+  }
+
+  classPrototypeAccessObject(expression: AnyNode): AnyNode | null {
+    if (
+      (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') &&
+      expression.property === 'prototype'
+    ) {
+      return expression.object
+    }
+
+    if (
+      (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+      expression.index.type === 'StringLiteral' &&
+      expression.index.value === 'prototype'
+    ) {
+      return expression.object
+    }
+
+    return null
+  }
+
+  isClassConstructorReference(expression: AnyNode): boolean {
+    if (expression.type !== 'Reference' || expression.path.length !== 1) {
+      return false
+    }
+
+    const name = firstPathSegment(expression.path)
+
+    if (this.classNames.has(name)) {
+      return true
+    }
+
+    const symbol = this.scope.resolve(name)
+
+    return symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'class'
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
