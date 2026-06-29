@@ -133,6 +133,38 @@ console.log(scoreBox.size())
   assert.doesNotMatch(result.code, /inox_object_get\(scoreBox/)
 }
 
+export function assertNativeClassSetRuntimeFieldLowering(): void {
+  const source = `
+class TagBox {
+  tags: Set<string>
+
+  constructor(tags: Set<string>) {
+    this.tags = tags
+  }
+
+  size(): number {
+    return this.tags.size
+  }
+}
+
+const tags: Set<string> = new Set()
+tags.add('Ada')
+const tagBox = new TagBox(tags)
+console.log(tagBox.size())
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /class TagBox|struct TagBox/)
+  assert.match(result.code, /inox_value tags/)
+  assert.match(result.code, classDescriptorFieldPattern('tags', 'set', 'set<string>', 'strong'))
+  assert.match(result.code, /inox_set_size\(this->tags/)
+  assert.doesNotMatch(result.code, /inox_shape_TagBox/)
+  assert.doesNotMatch(result.code, /inox_object_get\(tagBox/)
+}
+
 export function assertNativeClassFieldAliasLowering(): void {
   const source = `
 class Child {

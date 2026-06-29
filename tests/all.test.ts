@@ -127,7 +127,8 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassFieldAliasLowering,
     assertNativeClassLowering,
     assertNativeClassMapRuntimeFieldLowering,
-    assertNativeClassRuntimeValueFieldLowering
+    assertNativeClassRuntimeValueFieldLowering,
+    assertNativeClassSetRuntimeFieldLowering
   } =
     await import('./integration/native-class-lowering.test.ts')
   const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
@@ -208,6 +209,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-map-runtime-field-lowering', () => {
       assertNativeClassMapRuntimeFieldLowering()
+    })
+
+    await t.test('native-class-set-runtime-field-lowering', () => {
+      assertNativeClassSetRuntimeFieldLowering()
     })
 
     await t.test('native-class-field-alias-lowering', () => {

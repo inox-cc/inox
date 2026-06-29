@@ -1,6 +1,12 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { irClassMethodEffectName } from '../../ir.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
+import {
+  emitFunctionPointerParams,
+  emitFunctionPointerReturnType,
+  isPlainFunctionPointerType,
+  isRuntimeFunctionType
+} from '../async/callbacks.ts'
 import { functionTakesEventLoopParam } from '../async/promises.ts'
 import type {
   CEmitContext,
@@ -20,12 +26,14 @@ import {
   registerOwnedPromise,
   registerOwnedValue
 } from '../context.ts'
-import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import type {
   CClassInfo,
   CClassMethod,
   CFunctionParam,
+  CFunctionType,
+  CObjectShape,
   CObjectShapeField,
   CPreparedCallArgs as PreparedCallArgs,
   CPreparedCallOptions as PreparedCallOptions,
@@ -362,7 +370,7 @@ function classFieldSupportsNativeLowering(field: CObjectShapeField): boolean {
     return true
   }
 
-  return field.valueType === 'object' || field.valueType === 'array' || field.valueType === 'map'
+  return field.valueType === 'object' || field.valueType === 'array' || field.valueType === 'map' || field.valueType === 'set'
 }
 
 function emitCClassFieldType(field: CObjectShapeField): string {
@@ -444,9 +452,111 @@ function emitCClassParamDeclarations(params: CFunctionParam[]): string {
 
   for (const param of params) {
     declarations.push(emitCClassParamDeclaration(param))
+    pushCClassObjectShapeFunctionFieldParamDeclarations(
+      declarations,
+      param.name,
+      param.shape,
+      classConstructorSeenTypes()
+    )
   }
 
   return joinStrings(declarations, ', ')
+}
+
+function pushCClassObjectShapeFunctionFieldParamDeclarations(
+  declarations: string[],
+  objectName: string,
+  shape: CObjectShape | null | undefined,
+  seenTypes: string[]
+): void {
+  const fields = shape?.fields
+
+  if (fields === null || typeof fields === 'undefined') {
+    return
+  }
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      const declaration = emitCClassObjectFunctionFieldParamDeclaration(objectName, field)
+
+      if (declaration !== null) {
+        declarations.push(declaration)
+      }
+    } else if (field.valueType === 'object') {
+      if (classConstructorSeenTypesInclude(seenTypes, field.declaredType)) {
+        continue
+      }
+
+      const pushedTypes = pushClassConstructorSeenType(seenTypes, field.declaredType)
+
+      pushCClassObjectShapeFunctionFieldParamDeclarations(
+        declarations,
+        `${objectName}_${field.name}`,
+        field.shape,
+        seenTypes
+      )
+
+      popClassConstructorSeenTypes(seenTypes, pushedTypes)
+    }
+  }
+}
+
+function emitCClassObjectFunctionFieldParamDeclaration(
+  objectName: string,
+  field: CObjectShapeField
+): string | null {
+  const functionType = field.functionType
+  const name = emitCObjectFunctionFieldName(objectName, field.name)
+
+  if (!isPlainFunctionPointerType(functionType) && isRuntimeFunctionType(functionType)) {
+    return `inox_value ${emitCIdentifier(name)}`
+  }
+
+  if (isPlainFunctionPointerType(functionType) || isRuntimeFunctionType(functionType)) {
+    return emitCClassFunctionPointerParamDeclaration(name, functionType)
+  }
+
+  return null
+}
+
+function emitCClassFunctionPointerParamDeclaration(
+  name: string,
+  functionType: CFunctionType | null | undefined
+): string {
+  return `${emitFunctionPointerReturnType(functionType)} (*${emitCIdentifier(name)})(${emitFunctionPointerParams(functionType, [], [])})`
+}
+
+function classConstructorSeenTypes(): string[] {
+  return []
+}
+
+function classConstructorSeenTypesInclude(seenTypes: string[], type: string | null | undefined): boolean {
+  if (type === null || typeof type === 'undefined' || type === '') {
+    return false
+  }
+
+  for (const seen of seenTypes) {
+    if (seen === type) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function pushClassConstructorSeenType(seenTypes: string[], type: string | null | undefined): number {
+  if (type === null || typeof type === 'undefined' || type === '') {
+    return 0
+  }
+
+  seenTypes.push(type)
+  return 1
+}
+
+function popClassConstructorSeenTypes(seenTypes: string[], count: number): void {
+  for (let index = 0; index < count; index = index + 1) {
+    seenTypes.pop()
+  }
 }
 
 function emitCClassFieldWriteLines(target: string, value: string, field: CObjectShapeField): string[] {

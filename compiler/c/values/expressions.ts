@@ -3254,6 +3254,14 @@ export function emitPreparedRuntimeTruthinessExpression(
     }
   }
 
+  if (deps.isMemberAccessExpression(expression)) {
+    const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
+
+    if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
+      return nativeClassField
+    }
+  }
+
   if (deps.isNullableRuntimeExpression(expression, context)) {
     const value = deps.emitCValueExpression(expression, context)
 
@@ -3358,6 +3366,14 @@ function emitPreparedDynamicObjectStringLiteralCompareExpression(
   const leftLiteral = stringLiteralValue(expression.left)
 
   if (leftLiteral !== null && typeof leftLiteral !== 'undefined') {
+    if (deps.isMemberAccessExpression(expression.right)) {
+      const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression.right, context)
+
+      if (nativeClassField !== null && typeof nativeClassField !== 'undefined' && nativeClassField.valueType === 'string') {
+        return deps.emitPreparedStringCompareExpression(expression, context)
+      }
+    }
+
     if (isDynamicReferenceObjectFieldExpression(expression.right, context, deps)) {
       const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression.right, context, deps)
 
@@ -3370,6 +3386,14 @@ function emitPreparedDynamicObjectStringLiteralCompareExpression(
   const rightLiteral = stringLiteralValue(expression.right)
 
   if (rightLiteral !== null && typeof rightLiteral !== 'undefined') {
+    if (deps.isMemberAccessExpression(expression.left)) {
+      const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression.left, context)
+
+      if (nativeClassField !== null && typeof nativeClassField !== 'undefined' && nativeClassField.valueType === 'string') {
+        return deps.emitPreparedStringCompareExpression(expression, context)
+      }
+    }
+
     if (isDynamicReferenceObjectFieldExpression(expression.left, context, deps)) {
       const value = emitPreparedOptionalDynamicObjectFieldValueExpression(expression.left, context, deps)
 
