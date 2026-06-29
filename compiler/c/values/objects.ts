@@ -12,7 +12,7 @@ import {
 import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import {
   emitRuntimeFieldValueCheck,
-  runtimeExactObjectValueMismatchCondition,
+  runtimeObjectApiValueMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode } from '../syntax.ts'
@@ -88,6 +88,11 @@ type ObjectFunctionFieldSource = {
 
 export type ObjectVariableDeclarationDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
+  emitObjectFieldValueExpression(
+    field: CObjectShapeField,
+    value: AnyNode,
+    context: ObjectFunctionContext
+  ): PreparedExpression
   emitFunctionPointerVariable(
     name: string,
     init: AnyNode,
@@ -1135,7 +1140,7 @@ function emitDynamicRuntimeObjectFieldAssignmentLines(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context))
+  lines.push(emitRuntimeTypeCheck(runtimeObjectApiValueMismatchCondition(object.expression), context))
   appendLines(lines, value.lines)
   lines.push(
     emitStatusCheck(
@@ -1303,7 +1308,7 @@ function emitObjectFieldInitializerValue(
     return unsupportedObjectFieldValueExpression(field.valueType, property.value.loc, context)
   }
 
-  return dependencies.emitCValueExpression(property.value, context)
+  return dependencies.emitObjectFieldValueExpression(field, property.value, context)
 }
 
 function emitObjectFunctionFieldVariableDeclaration(

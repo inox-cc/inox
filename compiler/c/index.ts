@@ -131,7 +131,9 @@ import { mathRuntimeMethodName } from './runtime-methods.ts'
 import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
-  runtimeExactObjectValueMismatchCondition
+  runtimeErrorObjectValueMismatchCondition,
+  runtimeFetchAbortControllerValueMismatchCondition,
+  runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
 import type {
   BinaryLoweringDependencies,
@@ -302,6 +304,7 @@ import {
   emitCClassObjectValueExpression as emitCClassObjectValueExpressionWithDependencies,
   emitClassObjectVariableDeclaration as emitClassObjectVariableDeclarationWithDependencies,
   emitCNativeClassAssignmentLines,
+  emitPreparedClassInstanceRefValueExpression,
   emitPreparedNativeClassInstanceExpression,
   emitPreparedNativeClassFieldScalarExpression,
   emitPreparedNativeClassFieldValueExpression,
@@ -780,6 +783,8 @@ objectVariableDeclarationDependencies = {
     context
   ) => emitRuntimeCallbackValueInto(expression, functionType, out, context as CFunctionContext),
   emitCValueExpression,
+  emitObjectFieldValueExpression: (field, value, context) =>
+    emitObjectFieldValueExpression(field, value, context as CFunctionContext),
   inferExpressionType,
   resolveFunctionValueType: (expression, context) => resolveFunctionValueType(expression, context as CFunctionContext)
 }
@@ -4800,7 +4805,7 @@ function emitObjectObjectMemberVariableDeclaration(
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(emitGetCall(statement.name), context))
-  lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(emitCIdentifier(statement.name)), context))
+  lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(emitCIdentifier(statement.name)), context))
 
   context.variables.set(statement.name, 'object')
 
@@ -5178,7 +5183,36 @@ function emitObjectFieldInitializerValue(
     return unsupportedObjectFieldValueExpression(field.valueType, propertyValue.loc, context)
   }
 
-  return emitCValueExpression(propertyValue, context)
+  return emitObjectFieldValueExpression(field, propertyValue, context)
+}
+
+function emitObjectFieldValueExpression(
+  field: CObjectShapeField,
+  propertyValue: AnyNode,
+  context: CFunctionContext
+): PreparedExpression {
+  const value = emitCValueExpression(propertyValue, context)
+
+  if (field.valueType !== 'object') {
+    return value
+  }
+
+  const classInstanceValue = emitPreparedClassInstanceRefValueExpression(value, context)
+
+  if (classInstanceValue !== null && typeof classInstanceValue !== 'undefined') {
+    const lines: string[] = []
+
+    pushAll(lines, value.lines)
+    pushAll(lines, classInstanceValue.lines)
+
+    return {
+      lines,
+      expression: classInstanceValue.expression,
+      valueType: classInstanceValue.valueType
+    }
+  }
+
+  return value
 }
 
 function emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
@@ -7071,7 +7105,7 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
 
   pushAll(lines, controller.lines)
   lines.push(
-    emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(controller.expression), context)
+    emitRuntimeTypeCheck(runtimeFetchAbortControllerValueMismatchCondition(controller.expression), context)
   )
   lines.push(emitStatusCheck(`inox_fetch_abort_controller_abort(${controller.expression})`, context))
 
@@ -7587,7 +7621,7 @@ function emitAwaitRejectedPromiseLines(
   let rejectedTypeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 
   if (rejectionValueType === 'error') {
-    rejectedTypeCheck = runtimeExactObjectValueMismatchCondition('inox_error')
+    rejectedTypeCheck = runtimeErrorObjectValueMismatchCondition('inox_error')
   }
 
   if (target === '' && !context.throwingFunction) {

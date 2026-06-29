@@ -366,7 +366,7 @@ import {
 } from '../context.ts'
 import { cStringLiteral, utf8ByteLength } from '../identifiers.ts'
 import {
-  runtimeExactObjectPointerMismatchCondition,
+  runtimeNullableErrorObjectPointerMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from '../runtime-values.ts'
 import { isManagedRuntimeReturnType } from '../value-types.ts'
@@ -2478,7 +2478,7 @@ function promiseErrorObjectFieldTypeCheck(valueType: string): string {
   }
 
   if (valueType === 'object') {
-    return `(${runtimeExactObjectPointerMismatchCondition('out')}) && out->tag != INOX_TAG_NULL`
+    return runtimeNullableErrorObjectPointerMismatchCondition('out')
   }
 
   return ''

@@ -30,6 +30,26 @@ export function runtimeExactObjectPointerMismatchCondition(name: string): string
   return `${name}->tag != INOX_TAG_OBJECT || ${name}->as.ref == 0`
 }
 
+export function runtimeObjectApiValueMismatchCondition(name: string): string {
+  return runtimeExactObjectValueMismatchCondition(name)
+}
+
+export function runtimeFetchAbortControllerValueMismatchCondition(name: string): string {
+  return runtimeExactObjectValueMismatchCondition(name)
+}
+
+export function runtimeFetchResponseValueMismatchCondition(name: string): string {
+  return runtimeExactObjectValueMismatchCondition(name)
+}
+
+export function runtimeErrorObjectValueMismatchCondition(name: string): string {
+  return runtimeExactObjectValueMismatchCondition(name)
+}
+
+export function runtimeNullableErrorObjectPointerMismatchCondition(name: string): string {
+  return `(${runtimeExactObjectPointerMismatchCondition(name)}) && ${name}->tag != INOX_TAG_NULL`
+}
+
 export function emitRuntimeNullableValueCheck(
   name: string,
   expectedTag: string | null,

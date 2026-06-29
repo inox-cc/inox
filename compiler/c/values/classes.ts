@@ -113,6 +113,8 @@ type CNativeClassFieldAccess = {
   reference: string
 }
 
+type ClassInstanceRefValueContext = CFailureContext & CNameContext & COwnedValueContext
+
 export type CNativeClassInstanceExpression = {
   expression: string
   info: CClassInfo
@@ -262,6 +264,35 @@ export function emitCClassMethodName(className: string, methodName: string): str
 
 export function emitCClassDescriptorName(className: string): string {
   return `inox_class_descriptor_${emitCIdentifier(className)}`
+}
+
+export function emitPreparedClassInstanceRefValueExpression(
+  value: PreparedExpression,
+  context: ClassInstanceRefValueContext
+): PreparedExpression | null {
+  const className = cClassNameFromValueType(value.valueType)
+
+  if (className === null || typeof className === 'undefined') {
+    return null
+  }
+
+  const temp = nextCName(context, 'inox_class_instance')
+  const lines: string[] = []
+
+  registerOwnedValue(context, temp)
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp,
+    valueType: 'object'
+  }
 }
 
 function emitCClassDescriptorFieldsName(className: string): string {

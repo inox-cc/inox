@@ -21,7 +21,7 @@ import {
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeValueCheck, runtimeExactObjectValueMismatchCondition } from '../runtime-values.ts'
+import { emitRuntimeValueCheck, runtimeObjectApiValueMismatchCondition } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import type {
   CObjectFieldInfo,
@@ -1728,7 +1728,7 @@ function emitPreparedRuntimeObjectFieldValueExpression(
 
   registerOwnedValue(context, value)
   pushAllLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context))
+  lines.push(emitRuntimeTypeCheck(runtimeObjectApiValueMismatchCondition(object.expression), context))
   pushAllLines(lines, emitPrepareOwnedValueWrite(value))
   lines.push(
     emitStatusCheck(

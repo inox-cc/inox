@@ -28,7 +28,7 @@ import { mathRuntimeMethodName } from '../runtime-methods.ts'
 import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
-  runtimeExactObjectValueMismatchCondition,
+  runtimeObjectApiValueMismatchCondition,
   runtimeObjectLikeTagMatchCondition
 } from '../runtime-values.ts'
 import { cTimeRuntimeCallName } from '../../../stdlib/global/compiler/c.ts'
@@ -66,8 +66,7 @@ import {
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies } from './arrays.ts'
 import {
-  cClassNameFromValueType,
-  emitCClassDescriptorName,
+  emitPreparedClassInstanceRefValueExpression,
   emitPreparedNativeClassFieldScalarExpression,
   emitPreparedNativeClassFieldValueExpression
 } from './classes.ts'
@@ -2389,32 +2388,16 @@ function emitPreparedObjectCallArgumentExpression(
   value: PreparedExpression,
   context: CFunctionContext
 ): PreparedExpression {
-  const className = cClassNameFromValueType(value.valueType)
+  const classInstance = emitPreparedClassInstanceRefValueExpression(value, context)
 
-  if (className === null || typeof className === 'undefined') {
-    return {
-      lines: [],
-      expression: value.expression,
-      valueType: value.valueType
-    }
+  if (classInstance !== null && typeof classInstance !== 'undefined') {
+    return classInstance
   }
 
-  const temp = nextCName(context, 'inox_class_instance')
-  const lines: string[] = []
-
-  registerOwnedValue(context, temp)
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_class_instance_ref_copy(&inox_default_allocator, &${emitCClassDescriptorName(className)}, &${value.expression}, &${temp})`,
-      context
-    )
-  )
-
   return {
-    lines,
-    expression: temp,
-    valueType: 'object'
+    lines: [],
+    expression: value.expression,
+    valueType: value.valueType
   }
 }
 
@@ -4318,7 +4301,7 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
   lines.push(`if (${object.expression}.tag == INOX_TAG_ARRAY) {`)
   lines.push(`  ${value} = inox_undefined_value();`)
   lines.push('} else {')
-  lines.push(`  ${emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context)}`)
+  lines.push(`  ${emitRuntimeTypeCheck(runtimeObjectApiValueMismatchCondition(object.expression), context)}`)
   lines.push(
     `  inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
   )
@@ -4412,7 +4395,7 @@ function emitPreparedDynamicObjectArrayReceiver(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(runtimeExactObjectValueMismatchCondition(object.expression), context))
+  lines.push(emitRuntimeTypeCheck(runtimeObjectApiValueMismatchCondition(object.expression), context))
 
   return {
     lines,

@@ -507,7 +507,7 @@ class Parser {
       }
     }
 
-    this.skipStatement()
+    this.matchValue(';')
 
     return createObjectType([], baseTypes, true)
   }
