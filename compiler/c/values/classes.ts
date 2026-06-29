@@ -1001,10 +1001,14 @@ function collectClassConstructorAssignments(
         continue
       }
 
+      if (isSupportedClassConstructorIfStatement(statement, localNames)) {
+        continue
+      }
+
       diagnostics.push(
         diagnostic(
           'INOX_C_CLASS',
-          `class ${classNode.name} constructor currently supports only local declarations, local assignments, this.method() calls and this.field assignments in the C backend`,
+          `class ${classNode.name} constructor currently supports only local declarations, local assignments, if statements, this.method() calls and this.field assignments in the C backend`,
           nodeLocOrFallback(statement, constructorMethod)
         )
       )
@@ -1023,6 +1027,10 @@ type ClassConstructorFieldAssignment = {
 
 function createClassConstructorLocalNameSet(): ClassConstructorLocalNameSet {
   return new Set()
+}
+
+function copyClassConstructorLocalNameSet(source: ClassConstructorLocalNameSet): ClassConstructorLocalNameSet {
+  return new Set(source)
 }
 
 function classConstructorFieldAssignment(statement: AnyNode): ClassConstructorFieldAssignment | null {
@@ -1086,6 +1094,71 @@ function isSupportedClassConstructorThisMethodCall(statement: AnyNode): boolean 
   }
 
   return isThisObjectExpression(callee.object)
+}
+
+function isSupportedClassConstructorIfStatement(
+  statement: AnyNode,
+  localNames: ClassConstructorLocalNameSet
+): boolean {
+  if (statement.type !== 'IfStatement') {
+    return false
+  }
+
+  if (!isSupportedClassConstructorBranch(statement.consequent, localNames)) {
+    return false
+  }
+
+  if (statement.alternate === null || typeof statement.alternate === 'undefined') {
+    return true
+  }
+
+  return isSupportedClassConstructorBranch(statement.alternate, localNames)
+}
+
+function isSupportedClassConstructorBranch(
+  statement: AnyNode,
+  localNames: ClassConstructorLocalNameSet
+): boolean {
+  const branchLocalNames = copyClassConstructorLocalNameSet(localNames)
+
+  if (statement.type === 'BlockStatement') {
+    const body: AnyNode[] = statement.body
+
+    for (const item of body) {
+      if (!isSupportedClassConstructorStatement(item, branchLocalNames)) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  return isSupportedClassConstructorStatement(statement, branchLocalNames)
+}
+
+function isSupportedClassConstructorStatement(
+  statement: AnyNode,
+  localNames: ClassConstructorLocalNameSet
+): boolean {
+  const assignment = classConstructorFieldAssignment(statement)
+
+  if (assignment !== null && typeof assignment !== 'undefined') {
+    return true
+  }
+
+  if (registerSupportedClassConstructorLocalStatement(statement, localNames)) {
+    return true
+  }
+
+  if (isSupportedClassConstructorLocalAssignment(statement, localNames)) {
+    return true
+  }
+
+  if (isSupportedClassConstructorThisMethodCall(statement)) {
+    return true
+  }
+
+  return isSupportedClassConstructorIfStatement(statement, localNames)
 }
 
 function createClassConstructorAssignment(field: string, assignment: AnyNode): AnyNode {
