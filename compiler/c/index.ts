@@ -303,6 +303,7 @@ import {
   emitPreparedNativeClassFieldValueExpression,
   emitPreparedClassMethodCallExpression as emitPreparedClassMethodCallExpressionWithDependencies,
   hasNativeClassInstanceMethod,
+  hasNativeClassInstanceMethodReturnType,
   isClassConstructorExpression as isClassConstructorExpressionWithDependencies
 } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
@@ -815,6 +816,36 @@ function emitPreparedJsonClassToJsonExpression(
   )
 }
 
+function hasPreparedClassToStringExpression(expression: AnyNode, context: CFunctionContext): boolean {
+  return hasNativeClassInstanceMethodReturnType(expression, 'toString', 0, 'string', context)
+}
+
+function emitPreparedClassToStringExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (!hasPreparedClassToStringExpression(expression, context)) {
+    return null
+  }
+
+  return emitPreparedClassMethodCallExpression(
+    {
+      type: 'CallExpression',
+      callee: {
+        type: 'MemberExpression',
+        object: expression,
+        property: 'toString',
+        loc: expression.loc
+      },
+      args: [],
+      loc: expression.loc,
+      valueType: 'string'
+    },
+    context,
+    {}
+  )
+}
+
 function emitPreparedJsonClassInstanceOperand(
   expression: AnyNode,
   context: CFunctionContext
@@ -939,12 +970,14 @@ const stringLoweringDependencies: StringLoweringDependencies = {
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedNumberExpression,
   emitPreparedRuntimeArrayIndexValue,
+  emitPreparedClassToStringExpression,
   emitPreparedRuntimeObjectReferenceExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedNodeStdlibRuntimeObjectReferenceExpression(expression, context, {
       process: processLoweringDependencies
     }),
   emitReference,
   inferExpressionType,
+  hasClassToStringExpression: hasPreparedClassToStringExpression,
   isBoxedRuntimeStringName,
   isBoxedRuntimeStringReference,
   isMemberAccessExpression,

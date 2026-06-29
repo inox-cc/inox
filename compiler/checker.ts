@@ -4128,6 +4128,48 @@ class Checker {
     return className !== null && typeof className !== 'undefined'
   }
 
+  hasStringReturningClassToStringMethod(expression: AnyNode): boolean {
+    const className = this.resolveClassMethodReceiverClassName(expression)
+
+    if (className === null || typeof className === 'undefined') {
+      return false
+    }
+
+    const classSymbol = this.scope.resolve(className)
+
+    if (classSymbol === null || typeof classSymbol === 'undefined') {
+      return false
+    }
+
+    const classMethods = classSymbol.classMethods
+
+    if (classMethods === null || typeof classMethods === 'undefined') {
+      return false
+    }
+
+    for (let index = 0; index < classMethods.length; index = index + 1) {
+      const method = checkerNodeAt(classMethods, index)
+
+      if (!nodeNameEquals(method, 'toString')) {
+        continue
+      }
+
+      const params: OptionalParamInfo[] = []
+
+      for (let paramIndex = 0; paramIndex < method.params.length; paramIndex = paramIndex + 1) {
+        const param = checkerNodeAt(method.params, paramIndex)
+
+        params.push(this.resolveParam(param))
+      }
+
+      const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
+
+      return returnInfo.valueType === 'string' && this.acceptsArgumentCount(params, 0)
+    }
+
+    return false
+  }
+
   checkCallExpression(expression: AnyNode): ValueType {
     const consoleType = this.checkConsoleCall(expression)
 
@@ -8684,7 +8726,16 @@ class Checker {
       return 'string'
     }
 
-    if (argTypes[0] !== 'boolean' && argTypes[0] !== 'null' && argTypes[0] !== 'number' && argTypes[0] !== 'string') {
+    const arg = checkerNodeAt(expression.args, 0)
+    const hasClassToString = this.hasStringReturningClassToStringMethod(arg)
+
+    if (
+      argTypes[0] !== 'boolean' &&
+      argTypes[0] !== 'null' &&
+      argTypes[0] !== 'number' &&
+      argTypes[0] !== 'string' &&
+      !hasClassToString
+    ) {
       this.report('INOX_TYPE_MISMATCH', `cannot convert ${argTypes[0]} to string with String`, expression.args[0].loc)
     }
 

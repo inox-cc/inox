@@ -162,12 +162,14 @@ export type StringLoweringDependencies = {
     context: StringCContext,
     tempPrefix: string
   ): PreparedExpression
+  emitPreparedClassToStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitPreparedRuntimeObjectReferenceExpression(
     expression: AnyNode,
     context: StringCContext
   ): PreparedExpression | null
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
+  hasClassToStringExpression(expression: AnyNode, context: StringCContext): boolean
   isBoxedRuntimeStringName(name: string, context: StringCContext): boolean
   isBoxedRuntimeStringReference(expression: AnyNode, context: StringCContext): boolean
   isMemberAccessExpression(expression: AnyNode): boolean
@@ -2252,6 +2254,12 @@ function emitPreparedTemplatePlaceholderBytesOperand(
     return knownString
   }
 
+  const classString = stringDeps(context).emitPreparedClassToStringExpression(expression, context)
+
+  if (classString !== null && typeof classString !== 'undefined') {
+    return emitPreparedRuntimeStringValueBytesOperand(classString, context, 'inox_template_string')
+  }
+
   if (valueType === 'string') {
     return emitPreparedStringBytesOperand(expression, context, 'inox_template_string')
   }
@@ -2296,6 +2304,25 @@ function emitPreparedTemplatePlaceholderBytesOperand(
     lines: [],
     bytes: '""',
     length: '0'
+  }
+}
+
+function emitPreparedRuntimeStringValueBytesOperand(
+  value: PreparedExpression,
+  context: StringCContext,
+  tempPrefix: string
+): PreparedStringBytesOperand {
+  const string = nextCName(context, tempPrefix)
+  const lines: string[] = []
+
+  pushAllLines(lines, value.lines)
+  lines.push(emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context))
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    bytes: `${string}->bytes`,
+    length: `${string}->len`
   }
 }
 
@@ -2377,6 +2404,12 @@ function isTemplatePlaceholderStringifiableValueType(valueType: string): boolean
 
 export function emitCStringConversionValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   const arg = expression.args[0]
+  const classString = stringDeps(context).emitPreparedClassToStringExpression(arg, context)
+
+  if (classString !== null && typeof classString !== 'undefined') {
+    return classString
+  }
+
   const valueType = stringDeps(context).inferExpressionType(arg, context)
   const temp = nextCName(context, 'inox_value')
   registerOwnedValue(context, temp)
@@ -2761,6 +2794,11 @@ export function isStringConversionCall(expression: AnyNode | null | undefined, c
   }
 
   const arg = stringNodeAt(expression.args, 0)
+
+  if (stringDeps(context).hasClassToStringExpression(arg, context)) {
+    return true
+  }
+
   const valueType = stringDeps(context).inferExpressionType(arg, context)
 
   return valueType === 'boolean' || valueType === 'null' || valueType === 'number' || valueType === 'string'

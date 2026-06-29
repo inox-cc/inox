@@ -2062,6 +2062,34 @@ export function hasNativeClassInstanceMethod(
   return classMethodAcceptsArgumentCount(method.params, argCount)
 }
 
+export function hasNativeClassInstanceMethodReturnType(
+  expression: AnyNode,
+  methodName: string,
+  argCount: number,
+  returnType: string,
+  context: ClassLookupContext
+): boolean {
+  const receiver = resolveNativeClassReceiverExpression(expression, context)
+
+  if (receiver === null || typeof receiver === 'undefined') {
+    return false
+  }
+
+  const info = classInfoForName(context, receiver.className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return false
+  }
+
+  const method = resolveClassMethod(info, methodName)
+
+  if (method === null || typeof method === 'undefined') {
+    return false
+  }
+
+  return method.returnType === returnType && classMethodAcceptsArgumentCount(method.params, argCount)
+}
+
 export function emitNativeClassFieldAssignment(
   expression: AnyNode,
   context: ClassFunctionContext
