@@ -8,6 +8,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
+#include "inox/class_descriptor.h"
 #include "inox/value.h"
 #include "inox/weak.h"
 
@@ -43,6 +44,24 @@ inox_status inox_object_set(inox_value object, const char* name, size_t len, ino
 inox_status inox_object_entries(inox_allocator* allocator, inox_value object, inox_value* out);
 inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_value* out);
 inox_status inox_object_values(inox_allocator* allocator, inox_value object, inox_value* out);
+inox_status inox_class_instance_entries(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+);
+inox_status inox_class_instance_keys(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+);
+inox_status inox_class_instance_values(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+);
 void inox_object_dispose_fields(inox_object* object);
 
 #ifdef __cplusplus

@@ -8545,11 +8545,30 @@ function emitPreparedObjectValuesCallExpression(
     return null
   }
 
-  const object = emitCValueExpression(expression.args[0], context)
   const temp = nextCName(context, `inox_object_${method}`)
   const lines: string[] = []
+  const classInstance = emitPreparedNativeClassInstanceExpression(expression.args[0], context)
 
   registerOwnedValue(context, temp)
+
+  if (classInstance !== null && typeof classInstance !== 'undefined') {
+    pushAll(lines, classInstance.lines)
+    pushAll(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(
+      emitStatusCheck(
+        `inox_class_instance_${method}(&inox_default_allocator, &${emitCClassDescriptorName(classInstance.info.name)}, ${classInstance.expression}, &${temp})`,
+        context
+      )
+    )
+
+    return {
+      lines,
+      expression: temp
+    }
+  }
+
+  const object = emitCValueExpression(expression.args[0], context)
+
   pushAll(lines, object.lines)
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(emitStatusCheck(`inox_object_${method}(&inox_default_allocator, ${object.expression}, &${temp})`, context))

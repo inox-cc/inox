@@ -6,6 +6,7 @@
 #include "inox/debug.h"
 #endif
 #include "inox/array.h"
+#include "inox/class_descriptor.h"
 #include "inox/object.h"
 #include "inox/string.h"
 #ifdef INOX_ENABLE_WEAK
@@ -378,6 +379,191 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
       *out = inox_undefined_value();
       return status;
     }
+  }
+
+  return INOX_OK;
+}
+
+static bool inox_class_descriptor_is_valid(const inox_class_descriptor* descriptor) {
+  if (descriptor == 0 || descriptor->read_field == 0) {
+    return false;
+  }
+
+  return descriptor->field_count == 0 || descriptor->fields != 0;
+}
+
+static uint32_t inox_class_descriptor_enumerable_count(const inox_class_descriptor* descriptor) {
+  uint32_t count = 0;
+
+  for (uint32_t index = 0; index < descriptor->field_count; index += 1) {
+    if ((descriptor->fields[index].flags & INOX_CLASS_FIELD_ENUMERABLE) != 0) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+inox_status inox_class_instance_keys(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+) {
+  if (allocator == 0 || out == 0 || instance == 0 || !inox_class_descriptor_is_valid(descriptor)) {
+    return INOX_ERR_TYPE;
+  }
+
+  uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
+  inox_status status = inox_array_new(allocator, field_count, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  uint32_t output_index = 0;
+
+  for (uint32_t index = 0; index < descriptor->field_count; index += 1) {
+    const inox_class_field_descriptor* field = &descriptor->fields[index];
+
+    if ((field->flags & INOX_CLASS_FIELD_ENUMERABLE) == 0) {
+      continue;
+    }
+
+    const char* name = field->name == 0 ? "" : field->name;
+    inox_value key = inox_undefined_value();
+
+    status = inox_string_from_literal(allocator, name, strlen(name), &key);
+
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, output_index, key);
+    }
+
+    inox_release(key);
+
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
+      return status;
+    }
+
+    output_index += 1;
+  }
+
+  return INOX_OK;
+}
+
+inox_status inox_class_instance_values(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+) {
+  if (allocator == 0 || out == 0 || instance == 0 || !inox_class_descriptor_is_valid(descriptor)) {
+    return INOX_ERR_TYPE;
+  }
+
+  uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
+  inox_status status = inox_array_new(allocator, field_count, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  uint32_t output_index = 0;
+
+  for (uint32_t index = 0; index < descriptor->field_count; index += 1) {
+    const inox_class_field_descriptor* field = &descriptor->fields[index];
+
+    if ((field->flags & INOX_CLASS_FIELD_ENUMERABLE) == 0) {
+      continue;
+    }
+
+    inox_value value = inox_undefined_value();
+    status = descriptor->read_field(instance, index, &value);
+
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, output_index, value);
+    }
+
+    inox_release(value);
+
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
+      return status;
+    }
+
+    output_index += 1;
+  }
+
+  return INOX_OK;
+}
+
+inox_status inox_class_instance_entries(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+) {
+  if (allocator == 0 || out == 0 || instance == 0 || !inox_class_descriptor_is_valid(descriptor)) {
+    return INOX_ERR_TYPE;
+  }
+
+  uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
+  inox_status status = inox_array_new(allocator, field_count, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  uint32_t output_index = 0;
+
+  for (uint32_t index = 0; index < descriptor->field_count; index += 1) {
+    const inox_class_field_descriptor* field = &descriptor->fields[index];
+
+    if ((field->flags & INOX_CLASS_FIELD_ENUMERABLE) == 0) {
+      continue;
+    }
+
+    const char* name = field->name == 0 ? "" : field->name;
+    inox_value pair = inox_undefined_value();
+    inox_value key = inox_undefined_value();
+    inox_value value = inox_undefined_value();
+
+    status = inox_array_new(allocator, 2, &pair);
+
+    if (status == INOX_OK) {
+      status = inox_string_from_literal(allocator, name, strlen(name), &key);
+    }
+
+    if (status == INOX_OK) {
+      status = descriptor->read_field(instance, index, &value);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_array_set(pair, 0, key);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_array_set(pair, 1, value);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_array_set(*out, output_index, pair);
+    }
+
+    inox_release(value);
+    inox_release(key);
+    inox_release(pair);
+
+    if (status != INOX_OK) {
+      inox_release(*out);
+      *out = inox_undefined_value();
+      return status;
+    }
+
+    output_index += 1;
   }
 
   return INOX_OK;
