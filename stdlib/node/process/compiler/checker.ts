@@ -4,6 +4,7 @@ import {
   isProcessRuntimeMethod,
   isProcessRuntimeProperty,
   nodeProcessImportSource,
+  nodeProcessModuleObjectImportNames,
   isUnsupportedProcessRuntimeMethod,
   isUnsupportedProcessRuntimeProperty,
   processRuntimePropertyValueType
@@ -25,9 +26,11 @@ export type ProcessRuntimePropertyInfo = {
   shape?: ObjectShapeInfo | null
 }
 
-export type ProcessRuntimeObjectInfo = {
+export type ProcessRuntimeObjectDescriptor = {
   source: string
   name: string
+  globalName: string
+  moduleObjectImportNames: string[]
   valueType: ValueType
   shape: ObjectShapeInfo
 }
@@ -94,6 +97,17 @@ export const processObjectShape: ObjectShapeInfo = {
   ]
 }
 
+export const processRuntimeObjectDescriptors: ProcessRuntimeObjectDescriptor[] = [
+  {
+    source: nodeProcessImportSource,
+    name: 'process',
+    globalName: 'process',
+    moduleObjectImportNames: nodeProcessModuleObjectImportNames,
+    valueType: 'object',
+    shape: processObjectShape
+  }
+]
+
 export type ProcessRuntimeMemberInfo =
   | {
       kind: 'property'
@@ -152,26 +166,6 @@ export function processRuntimePropertyImportInfo(
   }
 
   return null
-}
-
-export function processRuntimeObjectInfo(
-  path: readonly string[] | null | undefined,
-  rootSymbol: SymbolInfo | null | undefined
-): ProcessRuntimeObjectInfo | null {
-  if (path === null || typeof path === 'undefined' || path.length !== 1) {
-    return null
-  }
-
-  if (!isProcessModuleObjectImportSymbol(rootSymbol) && !isProcessGlobalRoot(path, rootSymbol)) {
-    return null
-  }
-
-  return {
-    source: nodeProcessImportSource,
-    name: 'process',
-    valueType: 'object',
-    shape: processObjectShape
-  }
 }
 
 export function processRuntimeMemberInfo(
