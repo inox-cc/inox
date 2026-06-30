@@ -285,6 +285,7 @@ export type CFunctionContext = CEmitContext & {
   errorChannelUsed: boolean
   errorObjectNames: CStringSet
   errorTargets: string[]
+  errorTargetActiveFlags: boolean[]
   eventLoopUsed: boolean
   externalEventLoop: boolean
   failureStatement?: string | null
@@ -440,6 +441,7 @@ export function createFunctionContext(
     errorChannelUsed: false,
     errorObjectNames: new Set(),
     errorTargets: [],
+    errorTargetActiveFlags: [],
     functionErrorOut: null,
     functionReturnOut: null,
     functionTypes: new Map(),

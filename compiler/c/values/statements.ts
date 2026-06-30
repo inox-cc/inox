@@ -139,6 +139,7 @@ type CFunctionContext = {
   errorChannelUsed: boolean
   errorObjectNames: CStringSet
   errorTargets: string[]
+  errorTargetActiveFlags: boolean[]
   eventLoopUsed: boolean
   externalEventLoop: boolean
   externalEventLoopFunctions: CStringSet
@@ -3339,8 +3340,6 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     )
   }
 
-  registerErrorChannel(context)
-
   const id = nextCName(context, 'inox_try')
   let catchLabel: string | null = null
   let finallyLabel: string | null = null
@@ -3360,13 +3359,21 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     throwTarget = finallyLabel
   }
 
+  if (throwTarget !== null && typeof throwTarget !== 'undefined') {
+    registerErrorValue(context)
+  }
+
+  if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
+    registerErrorChannel(context)
+  }
+
   const outerReturnTarget = currentReturnTarget(context)
   const outerBreakTarget = currentBreakTarget(context)
   const outerContinueTarget = currentContinueTarget(context)
   const lines = ['{']
 
   if (throwTarget !== null && typeof throwTarget !== 'undefined') {
-    pushStringTarget(context.errorTargets, throwTarget)
+    pushErrorTarget(context, throwTarget, catchLabel === null && finallyLabel !== null)
   }
 
   if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
@@ -3384,7 +3391,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
   }
 
   if (throwTarget !== null && typeof throwTarget !== 'undefined') {
-    popStringTarget(context.errorTargets)
+    popErrorTarget(context)
   }
 
   lines.push('  {')
@@ -3449,7 +3456,9 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
     lines.push(`${catchLabel}:`)
     lines.push(`  if (${emitCatchBindingTypeCheck(catchValueType)}) ${catchFailureStatement}`)
-    lines.push('  inox_error_active = 0;')
+    if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
+      lines.push('  inox_error_active = 0;')
+    }
     lines.push('  {')
     pushIndentedLines(lines, catchBody, '    ')
     lines.push('  }')
@@ -3464,6 +3473,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     typeof finallyLabel !== 'undefined'
   ) {
     const outerThrowTarget = currentErrorTarget(context)
+    const outerThrowTargetNeedsActive = currentErrorTargetRequiresActive(context)
     let outerBreakLabel: string | null = null
     let outerBreakThroughFinally = false
     let outerContinueLabel: string | null = null
@@ -3480,7 +3490,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     }
 
     if (outerThrowTarget !== null && typeof outerThrowTarget !== 'undefined') {
-      pushStringTarget(context.errorTargets, outerThrowTarget)
+      pushErrorTarget(context, outerThrowTarget, outerThrowTargetNeedsActive)
     }
 
     if (outerReturnTarget !== null && typeof outerReturnTarget !== 'undefined') {
@@ -3516,7 +3526,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     }
 
     if (outerThrowTarget !== null && typeof outerThrowTarget !== 'undefined') {
-      popStringTarget(context.errorTargets)
+      popErrorTarget(context)
     }
 
     lines.push(`${finallyLabel}:`)
@@ -3580,7 +3590,14 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     return []
   }
 
-  registerErrorChannel(context)
+  const errorActiveNeeded =
+    currentErrorTargetRequiresActive(context) || (target === null && context.throwingFunction)
+
+  if (errorActiveNeeded) {
+    registerErrorChannel(context)
+  } else {
+    registerErrorValue(context)
+  }
 
   const value = emitThrowableObjectValueExpression(
     statementDeps(context).emitCValueExpression(statement.argument, context),
@@ -3604,7 +3621,9 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     lines.push('inox_status_result = INOX_ERR_THROW;')
   }
 
-  lines.push('inox_error_active = 1;')
+  if (errorActiveNeeded) {
+    lines.push('inox_error_active = 1;')
+  }
 
   if (target !== null && typeof target !== 'undefined') {
     lines.push(`goto ${target};`)
@@ -4934,11 +4953,33 @@ export function emitCatchBindingTypeCheck(valueType: string): string {
 
 export function registerErrorChannel(context: CFunctionContext): void {
   context.errorChannelUsed = true
+  registerErrorValue(context)
+}
+
+export function registerErrorValue(context: CFunctionContext): void {
   registerOwnedValue(context, 'inox_error')
 }
 
 export function currentErrorTarget(context: CFunctionContext): string | null {
   return lastStringOrNull(context.errorTargets)
+}
+
+export function currentErrorTargetRequiresActive(context: CFunctionContext): boolean {
+  if (context.errorTargetActiveFlags.length === 0) {
+    return false
+  }
+
+  return context.errorTargetActiveFlags[context.errorTargetActiveFlags.length - 1] === true
+}
+
+function pushErrorTarget(context: CFunctionContext, target: string, activeRequired: boolean): void {
+  pushStringTarget(context.errorTargets, target)
+  context.errorTargetActiveFlags.push(activeRequired)
+}
+
+function popErrorTarget(context: CFunctionContext): void {
+  popStringTarget(context.errorTargets)
+  context.errorTargetActiveFlags.pop()
 }
 
 export function emitBreakJump(context: CFunctionContext): string[] {

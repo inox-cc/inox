@@ -385,6 +385,7 @@ import {
 import type { StatementLoweringDependencies } from './values/statements.ts'
 import {
   currentErrorTarget,
+  currentErrorTargetRequiresActive,
   emitBreakJump,
   emitContinueJump,
   emitExpressionStatement,
@@ -404,6 +405,7 @@ import {
   emitVariableDeclarationStatement,
   emitWhileStatement,
   registerErrorChannel,
+  registerErrorValue,
   registerRuntimeValueMetadata,
   reportCCollectionHashability
 } from './values/statements.ts'
@@ -7924,14 +7926,23 @@ function emitAwaitRejectedPromiseLines(
     return []
   }
 
-  registerErrorChannel(context)
+  const errorActiveNeeded = currentErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
+
+  if (errorActiveNeeded) {
+    registerErrorChannel(context)
+  } else {
+    registerErrorValue(context)
+  }
+
   const lines: string[] = []
 
   lines.push(`if (${state} == INOX_PROMISE_REJECTED) {`)
   pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
   lines.push(`  inox_error = ${value};`)
   lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
-  lines.push('  inox_error_active = 1;')
+  if (errorActiveNeeded) {
+    lines.push('  inox_error_active = 1;')
+  }
 
   if (target === '') {
     lines.push('  inox_status_result = INOX_ERR_THROW;')

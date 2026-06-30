@@ -107,6 +107,12 @@ async function runIntegrationTests(): Promise<void> {
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
+  const {
+    assertAwaitCatchOnlyDoesNotEmitErrorActiveState,
+    assertCatchOnlyDoesNotEmitErrorActiveState,
+    assertFinallyStillEmitsErrorActiveState
+  } =
+    await import('./integration/error-flow-state-lowering.test.ts')
   const { assertModuleDeclarationImportBoundary } =
     await import('./integration/module-declaration-import-boundary.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
@@ -176,6 +182,12 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('compiler-index-node-help', async () => {
       await assertCompilerIndexNodeHelp()
+    })
+
+    await t.test('error-flow-state-lowering', () => {
+      assertCatchOnlyDoesNotEmitErrorActiveState()
+      assertAwaitCatchOnlyDoesNotEmitErrorActiveState()
+      assertFinallyStillEmitsErrorActiveState()
     })
 
     await t.test('module-declaration-contracts', () => {

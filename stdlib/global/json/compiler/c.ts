@@ -108,8 +108,27 @@ function currentJsonErrorTarget(context: CFunctionContext): string | null {
   return targets[targets.length - 1]
 }
 
+function currentJsonErrorTargetRequiresActive(context: CFunctionContext): boolean {
+  const flags = context.errorTargetActiveFlags
+
+  if (flags.length === 0) {
+    return false
+  }
+
+  return flags[flags.length - 1] === true
+}
+
 function shouldUseDetailedJsonParseError(context: CFunctionContext): boolean {
   return !!currentJsonErrorTarget(context) || context.throwingFunction === true
+}
+
+function registerJsonErrorValue(context: CFunctionContext): void {
+  registerOwnedValue(context, 'inox_error')
+}
+
+function registerJsonErrorChannel(context: CFunctionContext): void {
+  context.errorChannelUsed = true
+  registerJsonErrorValue(context)
 }
 
 function pushJsonParseStatusLines(
@@ -129,9 +148,18 @@ function pushJsonParseStatusLines(
   const message = 'JSON.parse failed'
   const messageLiteral = cStringLiteral(message)
   const messageLength = utf8ByteLength(message)
+  const errorActiveNeeded =
+    currentJsonErrorTargetRequiresActive(context) ||
+    ((errorTarget === null || typeof errorTarget === 'undefined') && context.throwingFunction === true)
   const failureStatement = emitFailureStatement(context)
   const fallbackErrorLine = `if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, &inox_error) != INOX_OK) ${failureStatement}`
   let gotoTarget = 'inox_cleanup'
+
+  if (errorActiveNeeded) {
+    registerJsonErrorChannel(context)
+  } else {
+    registerJsonErrorValue(context)
+  }
 
   if (errorTarget !== null && typeof errorTarget !== 'undefined') {
     gotoTarget = errorTarget
@@ -159,7 +187,9 @@ function pushJsonParseStatusLines(
     target.push('  inox_status_result = INOX_ERR_THROW;')
   }
 
-  target.push('  inox_error_active = 1;')
+  if (errorActiveNeeded) {
+    target.push('  inox_error_active = 1;')
+  }
   target.push(`  goto ${gotoTarget};`)
   target.push('}')
 }
