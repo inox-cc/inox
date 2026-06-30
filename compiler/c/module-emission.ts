@@ -114,9 +114,10 @@ import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './valu
 import {
   cClassNameFromValueType,
   cClassValueTypeName,
+  collectCClassDescriptorNames,
   collectClassMethods,
   createClassInfos,
-  emitCClassDescriptorDeclarations,
+  emitCClassDescriptorDeclarationsForNames,
   emitCClassTypeNameForClassName,
   emitCNativeClassDeclarations
 } from './values/classes.ts'
@@ -383,9 +384,10 @@ export function emitCModuleSource(
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
   const moduleValues = collectCModuleValueDeclarations(plan, context)
+  const classDescriptorNames = collectCClassDescriptorNames(irPrograms, context.classInfos)
   addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, context)
   const prelude = resolveCRuntimePreludeRequirements({
-    classInfoCount: context.classInfos.size,
+    classDescriptorCount: classDescriptorNames.size,
     cryptoContext: context,
     globalUsages,
     hasRuntimeCallbackWrapper: cModuleHasRuntimeCallbackWrapper(context),
@@ -464,8 +466,11 @@ export function emitCModuleSource(
     )
   )
 
-  pushCModuleLines(lines, emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps)))
-  pushCModuleLines(lines, emitCClassDescriptorDeclarations(context))
+  pushCModuleLines(
+    lines,
+    emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps), classDescriptorNames)
+  )
+  pushCModuleLines(lines, emitCClassDescriptorDeclarationsForNames(context, classDescriptorNames))
   emitCModuleValueDefinitions(lines, moduleValues, context)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
 

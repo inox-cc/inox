@@ -80,6 +80,11 @@ type ClassEmitContext = {
 export type ClassInfoLookupContext = {
   classInfos: CClassInfoMap
 }
+type ClassDescriptorScanScope = {
+  className: string | null
+  returnValueType: string | null
+  variables: Map<string, string>
+}
 
 type ClassFunctionContext = CFailureContext &
   CNameContext &
@@ -135,6 +140,7 @@ export type CNativeClassInstanceExpression = {
 }
 
 export type CClassMethodPrototypeMap = Map<string, string[]>
+export type CClassDescriptorNameSet = Set<string>
 
 function emitFallbackClassValueExpression(
   _expression: ClassExpressionNode,
@@ -237,6 +243,14 @@ function joinStrings(values: string[], separator: string): string {
   return result
 }
 
+function stringOrNull(value: string | null | undefined): string | null {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  return null
+}
+
 function classFieldOwnership(field: CObjectShapeField): string {
   const ownership = field.ownership
 
@@ -288,7 +302,7 @@ export function emitCClassDescriptorName(className: string): string {
 }
 
 export function emitCClassInfoDescriptorName(info: CClassInfo): string {
-  return emitCClassDescriptorName(info.symbolName)
+  return `${emitCClassInfoTypeName(info)}::inox_descriptor`
 }
 
 export function emitCClassTypeNameForClassName(context: ClassInfoLookupContext, className: string): string {
@@ -338,22 +352,6 @@ export function emitPreparedClassInstanceRefValueExpression(
     expression: temp,
     valueType: 'object'
   }
-}
-
-function emitCClassDescriptorFieldsName(info: CClassInfo): string {
-  return `${emitCClassInfoDescriptorName(info)}_fields`
-}
-
-function emitCClassDescriptorFieldReaderName(info: CClassInfo): string {
-  return `${emitCClassInfoDescriptorName(info)}_read_field`
-}
-
-function emitCClassDescriptorCopyInstanceName(info: CClassInfo): string {
-  return `${emitCClassInfoDescriptorName(info)}_copy_instance`
-}
-
-function emitCClassDescriptorDestroyInstanceName(info: CClassInfo): string {
-  return `${emitCClassInfoDescriptorName(info)}_destroy_instance`
 }
 
 function classValueType(info: CClassInfo): string {
@@ -727,7 +725,8 @@ function pushIndentedClassLines(target: string[], lines: string[]): void {
 
 export function emitCNativeClassDeclarations(
   context: CEmitContext,
-  methodPrototypes: CClassMethodPrototypeMap
+  methodPrototypes: CClassMethodPrototypeMap,
+  descriptorNames: CClassDescriptorNameSet
 ): string[] {
   const lines: string[] = []
 
@@ -736,8 +735,30 @@ export function emitCNativeClassDeclarations(
       continue
     }
 
-    lines.push(`class ${emitCClassInfoTypeName(info)} {`)
+    const typeName = emitCClassInfoTypeName(info)
+    const descriptorNeeded = descriptorNames.has(info.name)
+
+    if (descriptorNeeded) {
+      lines.push(`class ${typeName} : public inox::Class<${typeName}> {`)
+    } else {
+      lines.push(`class ${typeName} {`)
+    }
+
     lines.push('public:')
+
+    if (descriptorNeeded) {
+      lines.push(`  static constexpr uint32_t inox_field_count = ${info.fields.length};`)
+
+      if (info.fields.length === 0) {
+        lines.push('  static constexpr const inox_class_field_descriptor* inox_fields = nullptr;')
+      } else {
+        lines.push('  static const inox_class_field_descriptor inox_fields[];')
+      }
+
+      lines.push('  static const inox_class_descriptor inox_descriptor;')
+      lines.push(`  static inox_status inox_read_field(const ${typeName}& value, uint32_t index, inox_value* out);`)
+      lines.push('')
+    }
 
     for (const field of info.fields) {
       lines.push(`  ${emitCClassFieldType(field, context)} ${emitCClassFieldName(field.name)};`)
@@ -781,9 +802,20 @@ export function emitCNativeClassDeclarations(
 }
 
 export function emitCClassDescriptorDeclarations(context: CEmitContext): string[] {
+  return emitCClassDescriptorDeclarationsForNames(context, null)
+}
+
+export function emitCClassDescriptorDeclarationsForNames(
+  context: CEmitContext,
+  descriptorNames: CClassDescriptorNameSet | null
+): string[] {
   const lines: string[] = []
 
   for (const info of context.classInfos.values()) {
+    if (descriptorNames !== null && !descriptorNames.has(info.name)) {
+      continue
+    }
+
     pushAllLines(lines, emitCClassDescriptorDeclaration(info, context))
   }
 
@@ -791,11 +823,15 @@ export function emitCClassDescriptorDeclarations(context: CEmitContext): string[
 }
 
 function emitCClassDescriptorDeclaration(info: CClassInfo, context: ClassInfoLookupContext): string[] {
-  const fieldsName = emitCClassDescriptorFieldsName(info)
+  const typeName = emitCClassInfoTypeName(info)
   const lines: string[] = []
 
+  if (!info.native) {
+    return lines
+  }
+
   if (info.fields.length > 0) {
-    lines.push(`static const inox_class_field_descriptor ${fieldsName}[] = {`)
+    lines.push(`const inox_class_field_descriptor ${typeName}::inox_fields[] = {`)
 
     for (const field of info.fields) {
       lines.push(
@@ -806,86 +842,23 @@ function emitCClassDescriptorDeclaration(info: CClassInfo, context: ClassInfoLoo
     }
 
     lines.push('};')
+    lines.push('')
   }
 
-  if (info.native) {
-    pushAllLines(lines, emitCClassDescriptorCopyInstanceDeclaration(info))
-    pushAllLines(lines, emitCClassDescriptorDestroyInstanceDeclaration(info))
-    pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info, context))
-  }
-
-  lines.push(`static const inox_class_descriptor ${emitCClassInfoDescriptorName(info)} = {`)
-  lines.push(`  ${cStringLiteral(info.name)},`)
-  lines.push(`  ${info.fields.length},`)
-  if (info.fields.length === 0) {
-    lines.push('  0,')
-  } else {
-    lines.push(`  ${fieldsName},`)
-  }
-  if (info.native) {
-    lines.push(`  ${emitCClassDescriptorFieldReaderName(info)},`)
-    lines.push(`  ${emitCClassDescriptorCopyInstanceName(info)},`)
-    lines.push(`  ${emitCClassDescriptorDestroyInstanceName(info)}`)
-  } else {
-    lines.push('  0,')
-    lines.push('  0,')
-    lines.push('  0')
-  }
-  lines.push('};')
+  lines.push(`const inox_class_descriptor ${typeName}::inox_descriptor = inox::class_descriptor<${typeName}>(${cStringLiteral(info.name)});`)
   lines.push('')
-
-  return lines
-}
-
-function emitCClassDescriptorCopyInstanceDeclaration(info: CClassInfo): string[] {
-  const copyName = emitCClassDescriptorCopyInstanceName(info)
-  const typeName = emitCClassInfoTypeName(info)
-  const lines = [
-    `static inox_status ${copyName}(inox_allocator* allocator, const void* instance, void** out) {`
-  ]
-
-  lines.push('  if (allocator == 0 || allocator->alloc == 0 || instance == 0 || out == 0) {')
-  lines.push('    return INOX_ERR_TYPE;')
-  lines.push('  }')
-  lines.push(`  void* memory = allocator->alloc(allocator->user, sizeof(${typeName}), alignof(${typeName}));`)
-  lines.push('  if (memory == 0) {')
-  lines.push('    *out = 0;')
-  lines.push('    return INOX_ERR_OOM;')
-  lines.push('  }')
-  lines.push(`  new (memory) ${typeName}(*(const ${typeName}*)instance);`)
-  lines.push('  *out = memory;')
-  lines.push('  return INOX_OK;')
-  lines.push('}')
-  lines.push('')
-
-  return lines
-}
-
-function emitCClassDescriptorDestroyInstanceDeclaration(info: CClassInfo): string[] {
-  const destroyName = emitCClassDescriptorDestroyInstanceName(info)
-  const typeName = emitCClassInfoTypeName(info)
-  const lines = [`static void ${destroyName}(inox_allocator* allocator, void* instance) {`]
-
-  lines.push('  if (allocator == 0 || allocator->free == 0 || instance == 0) {')
-  lines.push('    return;')
-  lines.push('  }')
-  lines.push(`  ((${typeName}*)instance)->~${typeName}();`)
-  lines.push(`  allocator->free(allocator->user, instance, sizeof(${typeName}), alignof(${typeName}));`)
-  lines.push('}')
-  lines.push('')
+  pushAllLines(lines, emitCClassDescriptorFieldReaderDeclaration(info, context))
 
   return lines
 }
 
 function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: ClassInfoLookupContext): string[] {
-  const readerName = emitCClassDescriptorFieldReaderName(info)
   const typeName = emitCClassInfoTypeName(info)
-  const lines = [`static inox_status ${readerName}(const void* instance, uint32_t index, inox_value* out) {`]
+  const lines = [`inox_status ${typeName}::inox_read_field(const ${typeName}& value, uint32_t index, inox_value* out) {`]
 
-  lines.push('  if (instance == 0 || out == 0) {')
+  lines.push('  if (out == nullptr) {')
   lines.push('    return INOX_ERR_TYPE;')
   lines.push('  }')
-  lines.push(`  const ${typeName}* value = (const ${typeName}*)instance;`)
 
   if (info.fields.length > 0) {
     lines.push('  switch (index) {')
@@ -893,7 +866,7 @@ function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: C
     for (let index = 0; index < info.fields.length; index = index + 1) {
       const field = info.fields[index]
       lines.push(`    case ${index}:`)
-      pushIndentedClassLines(lines, emitCClassDescriptorFieldReadLines(field, context))
+      pushIndentedClassFieldReadLines(lines, emitCClassDescriptorFieldReadLines(field, context))
     }
 
     lines.push('  }')
@@ -906,8 +879,14 @@ function emitCClassDescriptorFieldReaderDeclaration(info: CClassInfo, context: C
   return lines
 }
 
+function pushIndentedClassFieldReadLines(target: string[], lines: string[]): void {
+  for (const line of lines) {
+    target.push(`      ${line}`)
+  }
+}
+
 function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: ClassInfoLookupContext): string[] {
-  const reference = `value->${emitCClassFieldName(field.name)}`
+  const reference = `value.${emitCClassFieldName(field.name)}`
 
   if (field.valueType === 'number' || field.valueType === 'date') {
     return [`*out = inox_number_value(${reference});`, 'return INOX_OK;']
@@ -1011,6 +990,580 @@ export function createClassInfos(
   annotateClassMethodParamClassNames(infos)
 
   return infos
+}
+
+export function collectCClassDescriptorNames(programs: AnyNode[], classInfos: CClassInfoMap): CClassDescriptorNameSet {
+  const names: CClassDescriptorNameSet = new Set()
+
+  for (const program of programs) {
+    const body = program.body
+
+    if (Array.isArray(body)) {
+      scanClassDescriptorStatements(body, classInfos, createClassDescriptorScanScope(null), names)
+    }
+  }
+
+  return names
+}
+
+function createClassDescriptorScanScope(className: string | null, returnValueType: string | null = null): ClassDescriptorScanScope {
+  return {
+    className,
+    returnValueType,
+    variables: new Map()
+  }
+}
+
+function cloneClassDescriptorScanScope(scope: ClassDescriptorScanScope): ClassDescriptorScanScope {
+  return {
+    className: scope.className,
+    returnValueType: scope.returnValueType,
+    variables: new Map(scope.variables)
+  }
+}
+
+function scanClassDescriptorStatements(
+  statements: AnyNode[],
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  if (!Array.isArray(statements)) {
+    return
+  }
+
+  for (const statement of statements) {
+    scanClassDescriptorStatement(statement, classInfos, scope, names)
+  }
+}
+
+function scanClassDescriptorStatement(
+  statement: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  if (statement.type === 'ClassDeclaration') {
+    scanClassDescriptorClassDeclaration(statement, classInfos, names)
+    return
+  }
+
+  if (statement.type === 'FunctionDeclaration') {
+    scanClassDescriptorFunctionDeclaration(statement, classInfos, names)
+    return
+  }
+
+  if (statement.type === 'VariableDeclaration') {
+    scanClassDescriptorVariableDeclaration(statement, classInfos, scope, names)
+    return
+  }
+
+  if (statement.type === 'ThrowStatement') {
+    addClassDescriptorExpressionName(statement.argument, classInfos, scope, names)
+    scanClassDescriptorExpression(statement.argument, classInfos, scope, names)
+    return
+  }
+
+  if (statement.type === 'ReturnStatement') {
+    if (classDescriptorValueTypeRequiresRuntimeBoundary(scope.returnValueType)) {
+      addClassDescriptorExpressionName(statement.argument, classInfos, scope, names)
+    }
+
+    scanClassDescriptorExpression(statement.argument, classInfos, scope, names)
+    return
+  }
+
+  if (statement.type === 'ExpressionStatement') {
+    scanClassDescriptorExpression(statement.expression, classInfos, scope, names)
+    return
+  }
+
+  scanClassDescriptorNodeChildren(statement, classInfos, scope, names)
+}
+
+function scanClassDescriptorClassDeclaration(
+  classNode: AnyNode,
+  classInfos: CClassInfoMap,
+  names: CClassDescriptorNameSet
+): void {
+  const methods: AnyNode[] = classNode.methods
+
+  if (!Array.isArray(methods)) {
+    return
+  }
+
+  for (const method of methods) {
+    const scope = createClassDescriptorScanScope(classNode.name, stringOrNull(method.returnType))
+    registerClassDescriptorParams(method.params, scope)
+    scanClassDescriptorStatements(method.body, classInfos, scope, names)
+  }
+}
+
+function scanClassDescriptorFunctionDeclaration(
+  functionNode: AnyNode,
+  classInfos: CClassInfoMap,
+  names: CClassDescriptorNameSet
+): void {
+  const scope = createClassDescriptorScanScope(null, stringOrNull(functionNode.returnType))
+
+  registerClassDescriptorParams(functionNode.params, scope)
+  scanClassDescriptorStatements(functionNode.body, classInfos, scope, names)
+}
+
+function registerClassDescriptorParams(params: AnyNode[] | null | undefined, scope: ClassDescriptorScanScope): void {
+  if (!Array.isArray(params)) {
+    return
+  }
+
+  for (const param of params) {
+    const className = stringOrNull(param.className)
+
+    if (className !== null) {
+      scope.variables.set(param.name, className)
+    }
+  }
+}
+
+function scanClassDescriptorVariableDeclaration(
+  statement: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  const initClassName = classDescriptorExpressionClassName(statement.init, classInfos, scope)
+
+  if (initClassName !== null) {
+    scope.variables.set(statement.name, initClassName)
+
+    if (statement.declaredType === 'object') {
+      addClassDescriptorName(initClassName, classInfos, names)
+    }
+  }
+
+  scanClassDescriptorExpression(statement.init, classInfos, scope, names)
+}
+
+function scanClassDescriptorExpression(
+  expression: AnyNode | null | undefined,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  if (expression === null || typeof expression === 'undefined') {
+    return
+  }
+
+  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+    scanClassDescriptorCallLikeExpression(expression, classInfos, scope, names)
+  }
+
+  if (expression.type === 'ObjectLiteral') {
+    scanClassDescriptorObjectLiteralExpression(expression, classInfos, scope, names)
+  }
+
+  if (expression.type === 'ArrayLiteral') {
+    scanClassDescriptorArrayLiteralExpression(expression, classInfos, scope, names)
+  }
+
+  scanClassDescriptorNodeChildren(expression, classInfos, scope, names)
+}
+
+function scanClassDescriptorObjectLiteralExpression(
+  expression: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  const properties: AnyNode[] = expression.properties
+
+  if (!Array.isArray(properties)) {
+    return
+  }
+
+  for (const property of properties) {
+    addClassDescriptorExpressionName(property.value, classInfos, scope, names)
+  }
+}
+
+function scanClassDescriptorArrayLiteralExpression(
+  expression: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  const elements: AnyNode[] = expression.elements
+
+  if (!Array.isArray(elements)) {
+    return
+  }
+
+  addClassDescriptorExpressionNames(elements, classInfos, scope, names)
+}
+
+function scanClassDescriptorCallLikeExpression(
+  expression: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  if (isClassDescriptorConsoleLogCall(expression)) {
+    addClassDescriptorExpressionNames(expression.args, classInfos, scope, names)
+  } else if (isClassDescriptorObjectRuntimeCall(expression)) {
+    addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
+  } else if (isClassDescriptorJsonStringifyCall(expression)) {
+    addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
+  } else if (isClassDescriptorPromiseValueCall(expression)) {
+    addClassDescriptorExpressionName(firstClassDescriptorArgument(expression), classInfos, scope, names)
+  }
+
+  addClassDescriptorRuntimeParameterNames(expression, classInfos, scope, names)
+}
+
+function isClassDescriptorConsoleLogCall(expression: AnyNode): boolean {
+  const callee = expression.callee
+
+  if (expression.type !== 'CallExpression' || callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  const object = callee.object
+
+  return (
+    object !== null &&
+    typeof object !== 'undefined' &&
+    object.type === 'Reference' &&
+    object.path.length === 1 &&
+    object.path[0] === 'console' &&
+    (callee.property === 'log' ||
+      callee.property === 'info' ||
+      callee.property === 'warn' ||
+      callee.property === 'error')
+  )
+}
+
+function isClassDescriptorObjectRuntimeCall(expression: AnyNode): boolean {
+  const callee = expression.callee
+
+  if (expression.type !== 'CallExpression' || callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  const object = callee.object
+
+  return (
+    object !== null &&
+    typeof object !== 'undefined' &&
+    object.type === 'Reference' &&
+    object.path.length === 1 &&
+    object.path[0] === 'Object' &&
+    (callee.property === 'keys' ||
+      callee.property === 'values' ||
+      callee.property === 'entries')
+  )
+}
+
+function isClassDescriptorJsonStringifyCall(expression: AnyNode): boolean {
+  const callee = expression.callee
+
+  if (expression.type !== 'CallExpression' || callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  const object = callee.object
+
+  return (
+    object !== null &&
+    typeof object !== 'undefined' &&
+    object.type === 'Reference' &&
+    object.path.length === 1 &&
+    object.path[0] === 'JSON' &&
+    callee.property === 'stringify'
+  )
+}
+
+function isClassDescriptorPromiseValueCall(expression: AnyNode): boolean {
+  const callee = expression.callee
+
+  if (expression.type !== 'CallExpression' || callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  const object = callee.object
+
+  return (
+    object !== null &&
+    typeof object !== 'undefined' &&
+    object.type === 'Reference' &&
+    object.path.length === 1 &&
+    object.path[0] === 'Promise' &&
+    (callee.property === 'resolve' || callee.property === 'reject')
+  )
+}
+
+function addClassDescriptorRuntimeParameterNames(
+  expression: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  const params = classDescriptorCallParams(expression, classInfos, scope)
+
+  if (params === null) {
+    return
+  }
+
+  const args: AnyNode[] = expression.args
+
+  for (let index = 0; index < params.length && index < args.length; index = index + 1) {
+    if (!classDescriptorParamRequiresRuntimeBoundary(params[index])) {
+      continue
+    }
+
+    addClassDescriptorExpressionName(args[index], classInfos, scope, names)
+  }
+}
+
+function classDescriptorCallParams(
+  expression: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope
+): CFunctionParam[] | null {
+  if (expression.type === 'NewExpression') {
+    const className = classDescriptorNewExpressionClassName(expression, classInfos)
+
+    if (className === null) {
+      return null
+    }
+
+    const info = classInfos.get(className)
+
+    if (info === null || typeof info === 'undefined') {
+      return []
+    }
+
+    const constructorMethod = info.constructor
+
+    if (constructorMethod === null || typeof constructorMethod === 'undefined') {
+      return []
+    }
+
+    return constructorMethod.params
+  }
+
+  const callee = expression.callee
+
+  if (
+    expression.type === 'CallExpression' &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
+    callee.type === 'MemberExpression'
+  ) {
+    const receiverClassName = classDescriptorExpressionClassName(callee.object, classInfos, scope)
+    const methodName = stringOrNull(callee.property)
+
+    if (receiverClassName === null || methodName === null) {
+      return null
+    }
+
+    const info = classInfos.get(receiverClassName)
+
+    if (info === null || typeof info === 'undefined') {
+      return null
+    }
+
+    const method = info.methods.get(methodName)
+
+    if (method === null || typeof method === 'undefined') {
+      return null
+    }
+
+    return method.params
+  }
+
+  return null
+}
+
+function classDescriptorParamRequiresRuntimeBoundary(param: CFunctionParam): boolean {
+  return classDescriptorValueTypeRequiresRuntimeBoundary(param.valueType)
+}
+
+function classDescriptorValueTypeRequiresRuntimeBoundary(valueType: string | null | undefined): boolean {
+  if (valueType === null || typeof valueType === 'undefined') {
+    return false
+  }
+
+  return valueType === 'object' || valueType === 'unknown' || isManagedRuntimeReturnType(valueType)
+}
+
+function addClassDescriptorExpressionNames(
+  expressions: AnyNode[] | null | undefined,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  if (!Array.isArray(expressions)) {
+    return
+  }
+
+  for (const expression of expressions) {
+    addClassDescriptorExpressionName(expression, classInfos, scope, names)
+  }
+}
+
+function addClassDescriptorExpressionName(
+  expression: AnyNode | null | undefined,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  const className = classDescriptorExpressionClassName(expression, classInfos, scope)
+
+  if (className !== null) {
+    addClassDescriptorName(className, classInfos, names)
+  }
+}
+
+function addClassDescriptorName(
+  className: string,
+  classInfos: CClassInfoMap,
+  names: CClassDescriptorNameSet
+): void {
+  const info = classInfos.get(className)
+
+  if (info === null || typeof info === 'undefined' || !info.native) {
+    return
+  }
+
+  names.add(className)
+}
+
+function classDescriptorExpressionClassName(
+  expression: AnyNode | null | undefined,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope
+): string | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  const directClassName = stringOrNull(expression.className)
+
+  if (directClassName !== null) {
+    return directClassName
+  }
+
+  if (expression.type === 'Reference' && Array.isArray(expression.path) && expression.path.length === 1) {
+    const className = scope.variables.get(expression.path[0])
+
+    if (className !== null && typeof className !== 'undefined') {
+      return className
+    }
+
+    return null
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return scope.className
+  }
+
+  if (expression.type === 'NewExpression') {
+    return classDescriptorNewExpressionClassName(expression, classInfos)
+  }
+
+  return null
+}
+
+function classDescriptorNewExpressionClassName(expression: AnyNode, classInfos: CClassInfoMap): string | null {
+  const callee = expression.callee
+
+  if (
+    callee === null ||
+    typeof callee === 'undefined' ||
+    callee.type !== 'Reference' ||
+    !Array.isArray(callee.path) ||
+    callee.path.length !== 1
+  ) {
+    return null
+  }
+
+  const className = stringOrNull(callee.path[0])
+
+  if (className === null) {
+    return null
+  }
+
+  if (classInfos.has(className)) {
+    return className
+  }
+
+  return null
+}
+
+function firstClassDescriptorArgument(expression: AnyNode): AnyNode | null {
+  const args: AnyNode[] = expression.args
+
+  if (!Array.isArray(args) || args.length === 0) {
+    return null
+  }
+
+  return args[0]
+}
+
+function scanClassDescriptorNodeChildren(
+  node: AnyNode | null | undefined,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  if (node === null || typeof node === 'undefined') {
+    return
+  }
+
+  for (const key of Object.keys(node)) {
+    if (key === 'loc' || key === 'shape' || key === 'functionType') {
+      continue
+    }
+
+    const value = node[key]
+
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        if (isClassDescriptorNode(child)) {
+          scanClassDescriptorNode(child as AnyNode, classInfos, cloneClassDescriptorScanScope(scope), names)
+        }
+      }
+    } else if (isClassDescriptorNode(value)) {
+      scanClassDescriptorNode(value as AnyNode, classInfos, cloneClassDescriptorScanScope(scope), names)
+    }
+  }
+}
+
+function scanClassDescriptorNode(
+  node: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  if (isClassDescriptorStatementNode(node)) {
+    scanClassDescriptorStatement(node, classInfos, scope, names)
+  } else {
+    scanClassDescriptorExpression(node, classInfos, scope, names)
+  }
+}
+
+function isClassDescriptorNode(value: AnyNode | null | undefined): boolean {
+  return value !== null && typeof value !== 'undefined' && typeof value === 'object' && typeof value.type === 'string'
+}
+
+function isClassDescriptorStatementNode(node: AnyNode): boolean {
+  return (
+    node.type === 'ClassDeclaration' ||
+    node.type === 'ExpressionStatement' ||
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'ReturnStatement' ||
+    node.type === 'ThrowStatement' ||
+    node.type === 'VariableDeclaration'
+  )
 }
 
 function classSymbolName(name: string, symbolNames: Map<string, string> | null | undefined): string {

@@ -44,7 +44,7 @@ export type CRuntimePreludeRequirements = {
 }
 
 export type CRuntimePreludeRequirementInput = {
-  classInfoCount: number
+  classDescriptorCount: number
   cryptoContext: CGlobalUsageSupportContext
   globalUsages: IrGlobalUsage[]
   hasRuntimeCallbackWrapper: boolean
@@ -102,7 +102,7 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('map') ||
     signatureRuntimeTypes.has('set')
   const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
-  const needsClassRuntime = input.classInfoCount > 0
+  const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
   const needsDgramRuntime = nodeRuntimeImports.dgram

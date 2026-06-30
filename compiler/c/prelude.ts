@@ -77,12 +77,11 @@ export function emitCPrelude(
   const random = cPreludeRandomConfig(randomOptions)
 
   if (needsConsoleRuntime) {
-    lines.push('#include <stdlib.h>')
     lines.push('#include "inox/console.h"')
   }
 
   if (needsClassDescriptorRuntime) {
-    lines.push('#include <new>')
+    lines.push('#include "inox/class_runtime.hpp"')
   }
 
   if (needsRegexpRuntime) {
@@ -122,9 +121,7 @@ export function emitCPrelude(
   }
 
   if (needsRuntime) {
-    if (!needsConsoleRuntime) {
-      lines.push('#include <stdlib.h>')
-    }
+    lines.push('#include "inox/allocator.h"')
     if (needsCollectionRuntime) {
       lines.push('#include "inox/array.h"')
       lines.push('#include "inox/hash.h"')
@@ -135,9 +132,6 @@ export function emitCPrelude(
     }
     if (needsCallbackRuntime) {
       lines.push('#include "inox/callback.h"')
-    }
-    if (needsClassDescriptorRuntime) {
-      lines.push('#include "inox/class_descriptor.h"')
     }
     if (needsBinaryRuntime) {
       lines.push('#include "inox/binary.h"')
@@ -202,45 +196,6 @@ export function emitCPrelude(
   }
 
   if (needsRuntime) {
-    lines.push('static void* inox_default_alloc(void* user, size_t size, size_t align) {')
-    lines.push('  (void)user;')
-    lines.push('  (void)align;')
-    lines.push('  return calloc(1, size);')
-    lines.push('}')
-    lines.push('')
-    lines.push(
-      'static void* inox_default_realloc(void* user, void* ptr, size_t old_size, size_t new_size, size_t align) {'
-    )
-    lines.push('  (void)user;')
-    lines.push('  (void)old_size;')
-    lines.push('  (void)align;')
-    lines.push('  return realloc(ptr, new_size);')
-    lines.push('}')
-    lines.push('')
-    lines.push('static void inox_default_free(void* user, void* ptr, size_t size, size_t align) {')
-    lines.push('  (void)user;')
-    lines.push('  (void)size;')
-    lines.push('  (void)align;')
-    lines.push('  free(ptr);')
-    lines.push('}')
-    lines.push('')
-    if (needsDebugMemoryRuntime) {
-      lines.push('static inox_allocator inox_default_base_allocator = {')
-      lines.push('  0,')
-      lines.push('  inox_default_alloc,')
-      lines.push('  inox_default_realloc,')
-      lines.push('  inox_default_free')
-      lines.push('};')
-      lines.push('')
-    }
-    lines.push('static inox_allocator inox_default_allocator = {')
-    lines.push('  0,')
-    lines.push('  inox_default_alloc,')
-    lines.push('  inox_default_realloc,')
-    lines.push('  inox_default_free')
-    lines.push('};')
-    lines.push('')
-
     if (needsDebugMemoryRuntime) {
       lines.push('static int inox_debug_memory_allocator_initialized = 0;')
       lines.push('')

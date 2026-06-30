@@ -30,16 +30,44 @@ console.log(box.value)
   assert.match(result.code, /class Box|struct Box/)
   assert.match(result.code, /double value/)
   assert.match(result.code, /Box box/)
-  assert.match(result.code, /#include "inox\/class_descriptor\.h"/)
-  assert.match(result.code, /static const inox_class_field_descriptor inox_class_descriptor_Box_fields\[\]/)
-  assert.match(result.code, classDescriptorFieldPattern('value', 'number', 'number', 'strong'))
-  assert.match(result.code, /static inox_status inox_class_descriptor_Box_read_field\(const void\* instance, uint32_t index, inox_value\* out\)/)
-  assert.match(result.code, /\*out = inox_number_value\(value->value\)/)
-  assert.match(result.code, /static const inox_class_descriptor inox_class_descriptor_Box/)
-  assert.match(result.code, /inox_class_descriptor_Box_read_field/)
+  assert.doesNotMatch(result.code, /#include "inox\/class_runtime\.hpp"/)
+  assert.doesNotMatch(result.code, /Box::inox_descriptor/)
+  assert.doesNotMatch(result.code, /Box::inox_read_field/)
   assert.doesNotMatch(result.code, /inox_shape_Box/)
   assert.doesNotMatch(result.code, /inox_object_new/)
   assert.doesNotMatch(result.code, /inox_object_get\(box/)
+}
+
+export function assertNativeClassRuntimeDescriptorLowering(): void {
+  const source = `
+class Box {
+  value: number
+
+  constructor(value: number) {
+    this.value = value
+  }
+}
+
+const box = new Box(7)
+console.log(box)
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /#include "inox\/class_runtime\.hpp"/)
+  assert.match(result.code, /class Box : public inox::Class<Box>/)
+  assert.match(result.code, /static constexpr uint32_t inox_field_count = 1/)
+  assert.match(result.code, /const inox_class_field_descriptor Box::inox_fields\[\]/)
+  assert.match(result.code, classDescriptorFieldPattern('value', 'number', 'number', 'strong'))
+  assert.match(result.code, /const inox_class_descriptor Box::inox_descriptor = inox::class_descriptor<Box>\("Box"\)/)
+  assert.match(result.code, /inox_status Box::inox_read_field\(const Box& value, uint32_t index, inox_value\* out\)/)
+  assert.match(result.code, /\*out = inox_number_value\(value\.value\)/)
+  assert.match(result.code, /inox_console_format_class_instance\(&inox_default_allocator, &Box::inox_descriptor, &box/)
+  assert.doesNotMatch(result.code, /copy_instance/)
+  assert.doesNotMatch(result.code, /destroy_instance/)
+  assert.doesNotMatch(result.code, /inox_class_descriptor_Box_read_field/)
 }
 
 export function assertNativeClassRuntimeValueFieldLowering(): void {
@@ -73,10 +101,11 @@ console.log(box.payload)
   assert.match(result.code, /class Parent|struct Parent/)
   assert.match(result.code, /inox_value payload/)
   assert.match(result.code, /Box box/)
-  assert.match(result.code, classDescriptorFieldPattern('payload', 'object', 'object', 'strong'))
-  assert.match(result.code, /static inox_status inox_class_descriptor_Box_read_field\(const void\* instance, uint32_t index, inox_value\* out\)/)
-  assert.match(result.code, /\*out = value->payload/)
+  assert.match(result.code, /class Parent : public inox::Class<Parent>/)
+  assert.match(result.code, /const inox_class_descriptor Parent::inox_descriptor = inox::class_descriptor<Parent>\("Parent"\)/)
+  assert.match(result.code, /inox_class_instance_ref_copy\(\s*&inox_default_allocator,\s*&Parent::inox_descriptor/)
   assert.match(result.code, /inox_retain\(payload\)/)
+  assert.doesNotMatch(result.code, /Box::inox_descriptor/)
   assert.doesNotMatch(result.code, /inox_shape_Box/)
   assert.doesNotMatch(result.code, /inox_object_new/)
   assert.doesNotMatch(result.code, /inox_object_get\(box/)
@@ -102,7 +131,7 @@ console.log(arrayBox.values.length)
 
   assert.match(result.code, /class ArrayBox|struct ArrayBox/)
   assert.match(result.code, /inox_value values/)
-  assert.match(result.code, classDescriptorFieldPattern('values', 'array', 'array<number>', 'strong'))
+  assert.doesNotMatch(result.code, /ArrayBox::inox_descriptor/)
   assert.doesNotMatch(result.code, /inox_shape_ArrayBox/)
   assert.doesNotMatch(result.code, /inox_object_get\(arrayBox/)
 }
@@ -133,8 +162,8 @@ console.log(scoreBox.size())
 
   assert.match(result.code, /class ScoreBox|struct ScoreBox/)
   assert.match(result.code, /inox_value scores/)
-  assert.match(result.code, classDescriptorFieldPattern('scores', 'map', 'map<string,number>', 'strong'))
   assert.match(result.code, /inox_map_size\(this->scores/)
+  assert.doesNotMatch(result.code, /ScoreBox::inox_descriptor/)
   assert.doesNotMatch(result.code, /inox_shape_ScoreBox/)
   assert.doesNotMatch(result.code, /inox_object_get\(scoreBox/)
 }
@@ -165,8 +194,8 @@ console.log(tagBox.size())
 
   assert.match(result.code, /class TagBox|struct TagBox/)
   assert.match(result.code, /inox_value tags/)
-  assert.match(result.code, classDescriptorFieldPattern('tags', 'set', 'set<string>', 'strong'))
   assert.match(result.code, /inox_set_size\(this->tags/)
+  assert.doesNotMatch(result.code, /TagBox::inox_descriptor/)
   assert.doesNotMatch(result.code, /inox_shape_TagBox/)
   assert.doesNotMatch(result.code, /inox_object_get\(tagBox/)
 }
@@ -283,8 +312,8 @@ export function label(): string {
 
   assert.match(aSource, /class inox_mod_src_a_ts_[0-9a-f]+_Box/)
   assert.match(bSource, /class inox_mod_src_b_ts_[0-9a-f]+_Box/)
-  assert.match(aSource, /static const inox_class_descriptor inox_class_descriptor_inox_mod_src_a_ts_[0-9a-f]+_Box/)
-  assert.match(bSource, /static const inox_class_descriptor inox_class_descriptor_inox_mod_src_b_ts_[0-9a-f]+_Box/)
+  assert.doesNotMatch(aSource, /inox_descriptor/)
+  assert.doesNotMatch(bSource, /inox_descriptor/)
   assert.doesNotMatch(aSource, /class Box/)
   assert.doesNotMatch(bSource, /class Box/)
 }

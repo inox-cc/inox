@@ -126,12 +126,15 @@ async function runIntegrationTests(): Promise<void> {
   const { assertNativeInoxProcessRuntimeString } =
     await import('./integration/native-inox-process-runtime-string.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
+  const { assertRuntimeAllocatorStaysInRuntime } =
+    await import('./integration/runtime-allocator-prelude.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
     assertNativeClassFieldAliasLowering,
     assertNativeClassLowering,
     assertNativeClassMapRuntimeFieldLowering,
     assertNativeClassModuleUniqueSymbols,
+    assertNativeClassRuntimeDescriptorLowering,
     assertNativeClassRuntimeValueFieldLowering,
     assertNativeClassSetRuntimeFieldLowering
   } =
@@ -208,6 +211,10 @@ async function runIntegrationTests(): Promise<void> {
       assertNativeClassLowering()
     })
 
+    await t.test('native-class-runtime-descriptor-lowering', () => {
+      assertNativeClassRuntimeDescriptorLowering()
+    })
+
     await t.test('native-class-runtime-value-field-lowering', () => {
       assertNativeClassRuntimeValueFieldLowering()
     })
@@ -238,6 +245,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('readable-c-string-literals', () => {
       assertReadableCStringLiterals()
+    })
+
+    await t.test('runtime-allocator-prelude', () => {
+      assertRuntimeAllocatorStaysInRuntime()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {

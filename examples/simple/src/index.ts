@@ -45,17 +45,17 @@ console.log(`num ${v} blabla`)
 //   console.log(e)
 // }
 
-// class Foo {
-//   name: string
-//
-//   constructor(name: string) {
-//     this.name = name
-//   }
-//
-//   test() {
-//     console.log(this.name)
-//   }
-// }
-//
-// const f = new Foo('foo 1')
-// f.test()
+class Foo {
+  name: string
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  test() {
+    console.log(this.name)
+  }
+}
+
+const f = new Foo('foo 1')
+f.test()

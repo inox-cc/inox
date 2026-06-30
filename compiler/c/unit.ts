@@ -103,9 +103,10 @@ import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './valu
 import {
   cClassNameFromValueType,
   cClassValueTypeName,
+  collectCClassDescriptorNames,
   collectClassMethods,
   createClassInfos,
-  emitCClassDescriptorDeclarations,
+  emitCClassDescriptorDeclarationsForNames,
   emitCClassTypeName,
   emitCNativeClassDeclarations
 } from './values/classes.ts'
@@ -1237,6 +1238,7 @@ export function emitCUnit(
   )
   baseContext.processEntryPath = entryPath
   baseContext.classInfos = createClassInfos(classes, diagnostics)
+  const classDescriptorNames = collectCClassDescriptorNames(irPrograms, baseContext.classInfos)
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
   registerNodeStdlibRuntimeImportNames(baseContext, irPrograms)
@@ -1257,7 +1259,7 @@ export function emitCUnit(
   addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, baseContext)
   const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)
   const preludeRequirements = resolveCRuntimePreludeRequirements({
-    classInfoCount: baseContext.classInfos.size,
+    classDescriptorCount: classDescriptorNames.size,
     cryptoContext: baseContext,
     globalUsages,
     hasRuntimeCallbackWrapper: hasCUnitRuntimeCallbackWrapper(baseContext),
@@ -1329,8 +1331,8 @@ export function emitCUnit(
     needsNetRuntime,
     options
   )
-  pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps)))
-  pushUnitLines(lines, emitCClassDescriptorDeclarations(baseContext))
+  pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps), classDescriptorNames))
+  pushUnitLines(lines, emitCClassDescriptorDeclarationsForNames(baseContext, classDescriptorNames))
   emitCUnitValueDefinitions(lines, valueDeclarations)
   emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
