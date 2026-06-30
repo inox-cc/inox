@@ -118,6 +118,7 @@ import {
   emitCFunctionName,
   emitCIdentifier,
   emitCObjectFunctionFieldName,
+  escapeCPrintfFormatText,
   escapeCString,
   utf8ByteLength
 } from './identifiers.ts'
@@ -421,6 +422,7 @@ import {
   emitCStringSliceValueExpression,
   emitCStringSplitValueExpression,
   emitCStringTrimValueExpression,
+  emitCTemplateLiteralFormatExpression,
   emitCTemplateLiteralValueExpression,
   emitPreparedStringBytesOperand,
   emitPreparedStringCharCodeAtExpression,
@@ -6189,6 +6191,11 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
 
 function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   const valueType = inferExpressionType(expression, context)
+  const directString = emitDirectStringLogValue(expression, context)
+
+  if (directString !== null && typeof directString !== 'undefined') {
+    return directString
+  }
 
   if (isRuntimeValueLogExpression(expression, context)) {
     return emitRuntimeValueLogValue(expression, context)
@@ -6237,6 +6244,28 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     lines: [],
     format: consoleLogNumberFormat,
     values: ['0']
+  }
+}
+
+function emitDirectStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (expression.type === 'StringLiteral') {
+    return {
+      lines: [],
+      format: escapeCPrintfFormatText(expression.value),
+      values: []
+    }
+  }
+
+  if (expression.type !== 'TemplateLiteral') {
+    return null
+  }
+
+  const formatted = emitCTemplateLiteralFormatExpression(expression, context)
+
+  return {
+    lines: formatted.lines,
+    format: formatted.format,
+    values: formatted.values
   }
 }
 

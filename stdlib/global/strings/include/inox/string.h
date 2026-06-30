@@ -20,6 +20,7 @@ inox_status inox_string_from_literal(inox_allocator* allocator, const char* byte
 inox_status inox_string_from_bool(inox_allocator* allocator, bool value, inox_value* out);
 inox_status inox_string_from_number(inox_allocator* allocator, double value, inox_value* out);
 inox_status inox_string_from_number_radix(inox_allocator* allocator, double value, int radix, inox_value* out);
+inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, const char* format, ...);
 inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, inox_value* out);
 inox_status inox_string_to_number(const char* value_bytes, size_t value_len, inox_value* out);
 size_t inox_string_code_unit_length_parts(const char* value_bytes, size_t value_len);

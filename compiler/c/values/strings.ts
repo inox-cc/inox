@@ -20,7 +20,7 @@ import {
   registerOwnedValue
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
-import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, escapeCPrintfFormatText, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeValueCheck, runtimeObjectApiValueMismatchCondition } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import type {
@@ -72,6 +72,12 @@ type TokenizeLocationOptions = {
 
 type PreparedStringSplitExpression = PreparedExpression & {
   elementType: string
+}
+
+export type PreparedStringFormat = {
+  lines: string[]
+  format: string
+  values: string[]
 }
 
 type TrimmedTemplatePlaceholder = {
@@ -2146,19 +2152,58 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: S
 }
 
 export function emitCTemplateLiteralValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
+  if (expression.raw.includes('${')) {
+    const formatted = emitCTemplateLiteralFormatExpression(expression, context)
+    const temp = nextCName(context, 'inox_value')
+    const args = [cStringLiteral(formatted.format)]
+    const lines: string[] = []
+
+    for (const value of formatted.values) {
+      args.push(value)
+    }
+
+    registerOwnedValue(context, temp)
+    pushAllLines(lines, formatted.lines)
+    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(
+      emitStatusCheck(`inox_string_from_format(&inox_default_allocator, &${temp}, ${joinStrings(args, ', ')})`, context)
+    )
+
+    return {
+      lines,
+      expression: temp
+    }
+  }
+
+  const value = cookTemplateLiteralText(expression.raw.slice(1, -1))
+  const lines: string[] = []
+  const temp = nextCName(context, 'inox_value')
+  registerOwnedValue(context, temp)
+
+  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(
+    emitStatusCheck(
+      `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${temp})`,
+      context
+    )
+  )
+
+  return {
+    lines,
+    expression: temp
+  }
+}
+
+export function emitCTemplateLiteralFormatExpression(expression: AnyNode, context: StringCContext): PreparedStringFormat {
   const diagnostics = context.diagnostics ?? []
   const parts = parseTemplateLiteralParts(expression.raw, { diagnostics }, expression.loc)
-  const operands: PreparedStringBytesOperand[] = []
+  const lines: string[] = []
+  const formats: string[] = []
+  const values: string[] = []
 
   for (const part of parts) {
     if (part.kind === 'text') {
-      const value = cookTemplateLiteralText(part.value)
-
-      operands.push({
-        lines: [],
-        bytes: cStringLiteral(value),
-        length: `${utf8ByteLength(value)}`
-      })
+      formats.push(escapeCPrintfFormatText(cookTemplateLiteralText(part.value)))
       continue
     }
 
@@ -2168,90 +2213,25 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
 
     const placeholder = parseTemplatePlaceholderExpression(part.value, part.loc, context)
 
-    if (placeholder !== null && typeof placeholder !== 'undefined') {
-      operands.push(emitPreparedTemplatePlaceholderBytesOperand(placeholder, context))
-    }
-  }
-
-  if (operands.length === 0) {
-    const temp = nextCName(context, 'inox_value')
-    const lines: string[] = []
-    registerOwnedValue(context, temp)
-
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`inox_string_from_literal(&inox_default_allocator, "", 0, &${temp})`, context))
-
-    return {
-      lines,
-      expression: temp
-    }
-  }
-
-  const lines: string[] = []
-
-  for (const operand of operands) {
-    pushAllLines(lines, operand.lines)
-  }
-
-  if (operands.length === 1) {
-    const operand = operands[0]
-    const temp = nextCName(context, 'inox_value')
-    registerOwnedValue(context, temp)
-
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(
-      emitStatusCheck(
-        `inox_string_from_literal(&inox_default_allocator, ${operand.bytes}, ${operand.length}, &${temp})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: temp
-    }
-  }
-
-  let current = operands[0]
-  let currentValue = ''
-
-  for (let index = 1; index < operands.length; index = index + 1) {
-    const operand = operands[index]
-    const temp = nextCName(context, 'inox_value')
-    registerOwnedValue(context, temp)
-
-    if (currentValue !== '') {
-      const string = nextCName(context, 'inox_template_string')
-
-      lines.push(`inox_string* ${string} = (inox_string*)${currentValue}.as.ref;`)
-      current = {
-        lines: [],
-        bytes: `${string}->bytes`,
-        length: `${string}->len`
-      }
+    if (placeholder === null || typeof placeholder === 'undefined') {
+      continue
     }
 
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(
-      emitStatusCheck(
-        `inox_string_concat_parts(&inox_default_allocator, ${current.bytes}, ${current.length}, ${operand.bytes}, ${operand.length}, &${temp})`,
-        context
-      )
-    )
+    const formatted = emitPreparedTemplatePlaceholderFormat(placeholder, context)
 
-    currentValue = temp
+    pushAllLines(lines, formatted.lines)
+    formats.push(formatted.format)
+    pushAllLines(values, formatted.values)
   }
 
   return {
     lines,
-    expression: currentValue
+    format: joinStrings(formats, ''),
+    values
   }
 }
 
-function emitPreparedTemplatePlaceholderBytesOperand(
-  expression: AnyNode,
-  context: StringCContext
-): PreparedStringBytesOperand {
+function emitPreparedTemplatePlaceholderFormat(expression: AnyNode, context: StringCContext): PreparedStringFormat {
   const valueType = stringDeps(context).inferExpressionType(expression, context)
   const knownString = emitPreparedKnownTemplatePlaceholderStringBytesOperand(
     expression,
@@ -2260,20 +2240,50 @@ function emitPreparedTemplatePlaceholderBytesOperand(
   )
 
   if (knownString !== null && typeof knownString !== 'undefined') {
-    return knownString
+    return emitPreparedStringBytesFormat(knownString)
   }
 
   const classString = stringDeps(context).emitPreparedClassToStringExpression(expression, context)
 
   if (classString !== null && typeof classString !== 'undefined') {
-    return emitPreparedRuntimeStringValueBytesOperand(classString, context, 'inox_template_string')
+    return emitPreparedStringBytesFormat(
+      emitPreparedRuntimeStringValueBytesOperand(classString, context, 'inox_template_string')
+    )
   }
 
   if (valueType === 'string') {
-    return emitPreparedStringBytesOperand(expression, context, 'inox_template_string')
+    return emitPreparedStringBytesFormat(emitPreparedStringBytesOperand(expression, context, 'inox_template_string'))
   }
 
-  if (isTemplatePlaceholderStringifiableValueType(valueType)) {
+  if (valueType === 'number') {
+    const value = stringDeps(context).emitPreparedNumberExpression(expression, context)
+
+    return {
+      lines: value.lines,
+      format: '%.17g',
+      values: [`((double)${value.expression})`]
+    }
+  }
+
+  if (valueType === 'boolean') {
+    const value = stringDeps(context).emitPreparedNumberExpression(expression, context)
+
+    return {
+      lines: value.lines,
+      format: '%s',
+      values: [`((${value.expression}) != 0 ? "true" : "false")`]
+    }
+  }
+
+  if (valueType === 'null') {
+    return {
+      lines: [],
+      format: 'null',
+      values: []
+    }
+  }
+
+  if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {
     const value = emitCStringConversionValueExpression(
       {
         type: 'CallExpression',
@@ -2287,17 +2297,10 @@ function emitPreparedTemplatePlaceholderBytesOperand(
       },
       context
     )
-    const string = nextCName(context, 'inox_template_string')
-    const lines: string[] = []
 
-    pushAllLines(lines, value.lines)
-    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
-
-    return {
-      lines,
-      bytes: `${string}->bytes`,
-      length: `${string}->len`
-    }
+    return emitPreparedStringBytesFormat(
+      emitPreparedRuntimeStringValueBytesOperand(value, context, 'inox_template_string')
+    )
   }
 
   pushStringDiagnostic(
@@ -2311,8 +2314,16 @@ function emitPreparedTemplatePlaceholderBytesOperand(
 
   return {
     lines: [],
-    bytes: '""',
-    length: '0'
+    format: '',
+    values: []
+  }
+}
+
+function emitPreparedStringBytesFormat(operand: PreparedStringBytesOperand): PreparedStringFormat {
+  return {
+    lines: operand.lines,
+    format: '%.*s',
+    values: [`(int)${operand.length}`, operand.bytes]
   }
 }
 
@@ -2401,14 +2412,6 @@ function runtimeObjectNameStringMemberObjectName(expression: AnyNode, context: S
   }
 
   return objectName
-}
-
-function isTemplatePlaceholderStringifiableValueType(valueType: string): boolean {
-  if (valueType === 'number' || valueType === 'boolean' || valueType === 'null' || valueType === 'unknown') {
-    return true
-  }
-
-  return isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)
 }
 
 export function emitCStringConversionValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {

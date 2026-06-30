@@ -1,4 +1,6 @@
 console.log('hello world')
+const v = 123
+console.log(`num ${v} blabla`)
 // console.log('date', Date.now())
 // console.log('performance', performance.now())
 // console.log('process.version', process.version)
@@ -43,17 +45,17 @@ console.log('hello world')
 //   console.log(e)
 // }
 
-class Foo {
-  name: string
-
-  constructor(name: string) {
-    this.name = name
-  }
-
-  test() {
-    console.log(this.name)
-  }
-}
-
-const f = new Foo('foo 1')
-f.test()
+// class Foo {
+//   name: string
+//
+//   constructor(name: string) {
+//     this.name = name
+//   }
+//
+//   test() {
+//     console.log(this.name)
+//   }
+// }
+//
+// const f = new Foo('foo 1')
+// f.test()

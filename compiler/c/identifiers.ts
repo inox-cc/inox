@@ -2,6 +2,22 @@ export function cStringLiteral(value: string): string {
   return `"${escapeCString(value)}"`
 }
 
+export function escapeCPrintfFormatText(value: string): string {
+  let result = ''
+
+  for (let index = 0; index < value.length; index = index + 1) {
+    const unit = value.slice(index, index + 1)
+
+    if (unit === '%') {
+      result = result + '%%'
+    } else {
+      result = result + unit
+    }
+  }
+
+  return result
+}
+
 export function emitCIdentifier(value: string): string {
   let result = ''
 
@@ -168,14 +184,38 @@ export function escapeCString(value: string): string {
   for (let index = 0; index < value.length; index = index + 1) {
     const code = value.charCodeAt(index)
 
-    if (code <= 127) {
+    if (code === 34) {
+      result = result + '\\"'
+    } else if (code === 92) {
+      result = result + '\\\\'
+    } else if (code === 9) {
+      result = result + '\\t'
+    } else if (code === 10) {
+      result = result + '\\n'
+    } else if (code === 13) {
+      result = result + '\\r'
+    } else if (isPrintableAsciiCode(code)) {
+      result = result + value.slice(index, index + 1)
+    } else if (code <= 127) {
       result = result + cHexByteEscape(code)
+
+      if (index + 1 < value.length && isHexDigitCode(value.charCodeAt(index + 1))) {
+        result = result + '" "'
+      }
     } else {
       result = result + value.slice(index, index + 1)
     }
   }
 
   return result
+}
+
+function isPrintableAsciiCode(code: number): boolean {
+  return code >= 32 && code <= 126
+}
+
+function isHexDigitCode(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 70) || (code >= 97 && code <= 102)
 }
 
 function cHexByteEscape(code: number): string {

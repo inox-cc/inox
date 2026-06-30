@@ -125,6 +125,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
   const { assertNativeInoxProcessRuntimeString } =
     await import('./integration/native-inox-process-runtime-string.test.ts')
+  const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
     assertNativeClassFieldAliasLowering,
@@ -233,6 +234,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-module-method-call', () => {
       assertNativeClassModuleMethodCallUsesNativeReceiver()
+    })
+
+    await t.test('readable-c-string-literals', () => {
+      assertReadableCStringLiterals()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {

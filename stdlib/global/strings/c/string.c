@@ -1,5 +1,6 @@
 #include <float.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -103,6 +104,73 @@ inox_status inox_string_from_number_radix(inox_allocator* allocator, double valu
   }
 
   return inox_string_from_literal(allocator, buffer + index, sizeof(buffer) - index - 1, out);
+}
+
+inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, const char* format, ...) {
+  if (out != 0) {
+    *out = inox_undefined_value();
+  }
+
+  if (allocator == 0 || allocator->alloc == 0 || out == 0 || format == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  va_list args;
+  va_start(args, format);
+
+  va_list length_args;
+  va_copy(length_args, args);
+  const int written_len = vsnprintf(0, 0, format, length_args);
+  va_end(length_args);
+
+  if (written_len < 0) {
+    va_end(args);
+    return INOX_ERR_TYPE;
+  }
+
+  const size_t len = (size_t)written_len;
+
+  if (len > ((size_t)-1) - sizeof(inox_string) - 1) {
+    va_end(args);
+    return INOX_ERR_OOM;
+  }
+
+  const size_t size = sizeof(inox_string) + len + 1;
+  inox_string* string = allocator->alloc(allocator->user, size, _Alignof(inox_string));
+
+  if (string == 0) {
+    va_end(args);
+    return INOX_ERR_OOM;
+  }
+
+  const int written = vsnprintf(string->bytes, len + 1, format, args);
+  va_end(args);
+
+  if (written < 0 || (size_t)written != len) {
+    if (allocator->free != 0) {
+      allocator->free(allocator->user, string, size, _Alignof(inox_string));
+    }
+
+    return INOX_ERR_TYPE;
+  }
+
+  string->header.kind = INOX_REF_STRING;
+  string->header.ref_count = 1;
+  string->header.flags = 0;
+  string->header.size = size;
+  string->header.align = _Alignof(inox_string);
+  string->header.allocator = allocator;
+  string->header.dispose = 0;
+  inox_ref_init_weak(&string->header);
+  string->len = len;
+
+  out->tag = INOX_TAG_STRING;
+  out->as.ref = &string->header;
+#ifdef INOX_DEBUG_MEMORY
+  inox_debug_memory_record_ref_created(INOX_REF_STRING);
+#endif
+
+  return INOX_OK;
 }
 
 inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, inox_value* out) {
