@@ -5430,7 +5430,8 @@ function emitPreparedNullableScalarRuntimeValueExpression(
 
     return {
       lines,
-      expression: temp
+      expression: temp,
+      owned: true
     }
   }
 
@@ -5486,7 +5487,8 @@ function emitPreparedNullableConditionalValueExpression(
 
   return {
     lines,
-    expression: temp
+    expression: temp,
+    owned: true
   }
 }
 
@@ -6139,6 +6141,15 @@ type ConsoleLogValue = {
   values: string[]
 }
 
+type ConsolePrintSegment =
+  {
+    expression: string
+    format: string
+    kind: string
+    lines: string[]
+    values: string[]
+  }
+
 const consoleLogNumberFormat = '%.17g'
 
 function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
@@ -6160,6 +6171,12 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
     }
 
     return emptyLines
+  }
+
+  const directRuntimeValue = emitDirectRuntimeValueConsoleLogStatement(args, stream, context)
+
+  if (directRuntimeValue !== null && typeof directRuntimeValue !== 'undefined') {
+    return directRuntimeValue
   }
 
   const lines: string[] = []
@@ -6193,6 +6210,155 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
   }
 
   return lines
+}
+
+function emitDirectRuntimeValueConsoleLogStatement(
+  args: AnyNode[],
+  stream: string,
+  context: CFunctionContext
+): string[] | null {
+  if (!hasDirectRuntimeConsoleLogArgument(args, context)) {
+    return null
+  }
+
+  const lines: string[] = []
+
+  if (args.length === 1) {
+    const value = emitCValueExpression(args[0], context)
+
+    pushAll(lines, value.lines)
+    lines.push(emitStatusCheck(`inox_console_print_value_line(${stream}, ${value.expression})`, context))
+
+    return lines
+  }
+
+  const segments: ConsolePrintSegment[] = []
+
+  for (const arg of args) {
+    if (isDirectRuntimeConsoleLogArgument(arg, context)) {
+      const value = emitCValueExpression(arg, context)
+
+      segments.push({
+        expression: value.expression,
+        format: '',
+        kind: 'runtime-value',
+        lines: value.lines,
+        values: []
+      })
+    } else {
+      const value = emitConsoleLogValue(arg, context)
+
+      segments.push({
+        expression: '',
+        format: value.format,
+        kind: 'printf',
+        lines: value.lines,
+        values: value.values
+      })
+    }
+  }
+
+  for (const segment of segments) {
+    pushAll(lines, segment.lines)
+  }
+
+  let separatorEmitted = false
+
+  for (let index = 0; index < segments.length; index = index + 1) {
+    const segment = segments[index]
+
+    if (segment.kind === 'runtime-value') {
+      if (index > 0 && !separatorEmitted) {
+        lines.push(emitConsolePrintfStatement(stream, ' ', [], context))
+      }
+
+      lines.push(emitStatusCheck(`inox_console_print_value(${stream}, ${segment.expression})`, context))
+      separatorEmitted = false
+    } else {
+      let format = segment.format
+      const nextIndex = index + 1
+      const nextSegment = nextIndex < segments.length ? segments[nextIndex] : null
+
+      if (index > 0 && !separatorEmitted) {
+        format = ` ${format}`
+      }
+
+      if (
+        nextSegment !== null &&
+        typeof nextSegment !== 'undefined' &&
+        nextSegment.kind === 'runtime-value'
+      ) {
+        format = `${format} `
+        separatorEmitted = true
+      } else {
+        separatorEmitted = false
+      }
+
+      lines.push(emitConsolePrintfStatement(stream, format, segment.values, context))
+    }
+  }
+
+  lines.push(emitConsolePrintfStatement(stream, '\n', [], context))
+
+  return lines
+}
+
+function hasDirectRuntimeConsoleLogArgument(args: AnyNode[], context: CFunctionContext): boolean {
+  for (const arg of args) {
+    if (isDirectRuntimeConsoleLogArgument(arg, context)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function isDirectRuntimeConsoleLogArgument(expression: AnyNode, context: CFunctionContext): boolean {
+  const valueType = inferExpressionType(expression, context)
+
+  if (valueType === 'array' && hasSupportedKnownArrayShapeLogValue(expression, context)) {
+    return false
+  }
+
+  return isDirectRuntimeConsoleValueExpression(expression, valueType, context)
+}
+
+function isDirectRuntimeConsoleValueExpression(
+  expression: AnyNode,
+  valueType: string,
+  context: CFunctionContext
+): boolean {
+  if (valueType === 'boolean' || valueType === 'number' || valueType === 'string') {
+    return false
+  }
+
+  const nativeClassInstance = emitPreparedNativeClassInstanceExpression(expression, context)
+
+  if (nativeClassInstance !== null && typeof nativeClassInstance !== 'undefined') {
+    return false
+  }
+
+  if (isRuntimeValueLogExpression(expression, context)) {
+    return true
+  }
+
+  return isRuntimeLogValueType(valueType)
+}
+
+function emitConsolePrintfStatement(
+  stream: string,
+  format: string,
+  values: string[],
+  context: CFunctionContext
+): string {
+  const escapedFormat = escapeCString(format)
+  const args = values.length === 0 ? '' : `, ${joinStrings(values, ', ')}`
+
+  if (stream === 'INOX_CONSOLE_STDOUT') {
+    return `printf("${escapedFormat}"${args});`
+  }
+
+  return `if (inox_console_printf(${stream}, "${escapedFormat}"${args}) < 0) ${emitFailureStatement(context)}`
 }
 
 function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
@@ -6351,6 +6517,16 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
     format: joinStrings(parts, ''),
     values
   }
+}
+
+function hasSupportedKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionContext): boolean {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return false
+  }
+
+  const shape = context.arrayShapes.get(expression.path[0])
+
+  return shape !== null && typeof shape !== 'undefined' && isSupportedKnownArrayShapeLogShape(shape)
 }
 
 function isSupportedKnownArrayShapeLogShape(shape: CArrayElementInfo[]): boolean {
@@ -7722,7 +7898,9 @@ function emitPreparedAwaitedPromiseValueExpression(
 
   return {
     lines,
-    expression: value
+    expression: value,
+    owned: true,
+    valueType
   }
 }
 

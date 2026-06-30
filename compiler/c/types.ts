@@ -9,6 +9,7 @@ export type CPreparedExpression = {
   lines: string[]
   expression: string
   nullable?: boolean
+  owned?: boolean
   rejectionValueType?: string
   valueType?: string
 }
@@ -21,6 +22,7 @@ export type CPreparedStringBytesOperand = {
   lines: string[]
   bytes: string
   length: string
+  literalValue?: string
 }
 
 export type CPreparedCallArgs = {

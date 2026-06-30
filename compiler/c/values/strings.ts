@@ -674,7 +674,7 @@ export function emitPreparedStringCharCodeAtExpression(
 
   return {
     lines,
-    expression: `((${offset} < ${value.length}) ? (double)((unsigned char)${value.bytes}[${offset}]) : 0)`
+    expression: `inox_string_char_code_at_parts(${value.bytes}, ${value.length}, ${offset})`
   }
 }
 
@@ -779,7 +779,7 @@ export function emitCStringIndexValueExpression(
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_string_from_literal(&inox_default_allocator, (${offset} < ${value.length}) ? ${value.bytes} + ${offset} : "", (${offset} < ${value.length}) ? 1 : 0, &${temp})`,
+      `inox_string_slice_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${offset}, ${offset} + 1, &${temp})`,
       context
     )
   )
@@ -877,7 +877,8 @@ export function emitPreparedStringBytesOperand(
     return {
       lines: [],
       bytes: cStringLiteral(expression.value),
-      length: `${utf8ByteLength(expression.value)}`
+      length: `${utf8ByteLength(expression.value)}`,
+      literalValue: expression.value
     }
   }
 
@@ -892,7 +893,8 @@ export function emitPreparedStringBytesOperand(
     return {
       lines: [],
       bytes: cStringLiteral(value),
-      length: `${utf8ByteLength(value)}`
+      length: `${utf8ByteLength(value)}`,
+      literalValue: value
     }
   }
 
@@ -902,7 +904,8 @@ export function emitPreparedStringBytesOperand(
     return {
       lines: [],
       bytes: cStringLiteral(runtimeConstant),
-      length: `${utf8ByteLength(runtimeConstant)}`
+      length: `${utf8ByteLength(runtimeConstant)}`,
+      literalValue: runtimeConstant
     }
   }
 

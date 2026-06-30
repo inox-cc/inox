@@ -26,6 +26,8 @@ inox_console_adapter inox_console_get_adapter(void);
 void inox_console_clear_adapter(void);
 inox_status inox_console_write(inox_console_stream stream, const char* bytes, size_t len);
 inox_status inox_console_write_line(inox_console_stream stream, const char* bytes, size_t len);
+inox_status inox_console_print_value(inox_console_stream stream, inox_value value);
+inox_status inox_console_print_value_line(inox_console_stream stream, inox_value value);
 inox_status inox_console_format_value(inox_allocator* allocator, inox_value value, inox_value* out);
 inox_status inox_console_format_class_instance(
   inox_allocator* allocator,

@@ -2,6 +2,8 @@
 #define INOX_FETCH_H
 
 #ifdef __cplusplus
+#include "inox/string_view.hpp"
+
 extern "C" {
 #endif
 
@@ -65,6 +67,19 @@ inox_status inox_fetch_abort_controller_abort(inox_value controller);
 inox_status inox_fetch_signal_aborted(inox_value signal, int* out);
 
 #ifdef __cplusplus
+}
+
+inline inox_status inox_fetch(inox_loop* loop, inox::StringView url, inox_promise** out) {
+  return inox_fetch(loop, url.bytes, url.len, out);
+}
+
+inline inox_status inox_fetch_with_init(
+  inox_loop* loop,
+  inox::StringView url,
+  const inox_fetch_init* init,
+  inox_promise** out
+) {
+  return inox_fetch_with_init(loop, url.bytes, url.len, init, out);
 }
 #endif
 

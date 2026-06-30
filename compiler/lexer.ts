@@ -105,7 +105,7 @@ export function tokenize(source: string, options: TokenizeOptions): Token[] {
 }
 
 function lexerCharAt(source: string, index: number): string {
-  return source[index]
+  return source.slice(index, index + 1)
 }
 
 function lexerCurrentChar(state: LexerState): string {

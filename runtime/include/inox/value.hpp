@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <string.h>
 #include "inox/allocator.h"
+#include "inox/string_view.hpp"
 #include "inox/string.h"
 #include "inox/value.h"
 
@@ -119,6 +120,10 @@ inline Value string(const char* bytes, size_t len) {
   }
 
   return adopt(value);
+}
+
+inline Value string(StringView view) {
+  return string(view.bytes, view.len);
 }
 
 inline Value string(const char* bytes) {

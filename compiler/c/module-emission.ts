@@ -143,6 +143,10 @@ type CModuleFunctionNodeEntry = {
 
 type CModuleNode = AnyNode
 
+type CModuleReferenceNode = AnyNode & {
+  path?: string[] | null
+}
+
 type CModuleFunctionEntry = {
   declaration: IrFunctionDeclaration
   node: CModuleNode
@@ -385,7 +389,7 @@ export function emitCModuleSource(
   const globalUsages = collectIrGlobalUsages(irPrograms)
   const syntaxFeatures = collectIrSyntaxFeatureUsages(irPrograms)
   const signatureRuntimeTypes = collectCModuleContextRuntimeTypes(context)
-  const moduleValues = collectCModuleValueDeclarations(plan, context)
+  const moduleValues = collectCModuleStaticValueDeclarations(plan, context)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, context.classInfos)
   addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, context)
   const prelude = resolveCRuntimePreludeRequirements({
@@ -1222,7 +1226,7 @@ function createCModuleBaseContext(
   }
 
   const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots, ir.body)
-  context.processEntryPath = plan.record.path
+  context.processEntryPath = plan.relativeSourcePath
   const classNodes = collectIrTopLevelNodes(ir, 'class')
 
   context.classInfos = createClassInfos(classNodes, diagnostics, plan.classSymbolNames)
@@ -1339,7 +1343,7 @@ function collectCModuleObjectShapeRuntimeTypes(
 }
 
 function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePlan): void {
-  const values = collectCModuleValueDeclarations(plan, context)
+  const values = collectCModuleStaticValueDeclarations(plan, context)
 
   for (let index = 0; index < values.length; index = index + 1) {
     const item = cModuleValueDeclarationAt(values, index)
@@ -1434,6 +1438,243 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
   }
 
   return values
+}
+
+function collectCModuleStaticValueDeclarations(plan: CModulePlan, context: CEmitContext): CModuleValueDeclaration[] {
+  const values = collectCModuleValueDeclarations(plan, context)
+
+  if (!plan.isEntry) {
+    return values
+  }
+
+  const nestedReferences = collectCModuleNestedReferenceNames(plan.ir)
+  const result: CModuleValueDeclaration[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    const item = cModuleValueDeclarationAt(values, index)
+
+    if (shouldEmitCModuleStaticValueDeclaration(item, nestedReferences, context)) {
+      result.push(item)
+    }
+  }
+
+  return result
+}
+
+function shouldEmitCModuleStaticValueDeclaration(
+  item: CModuleValueDeclaration,
+  nestedReferences: Set<string>,
+  context: CEmitContext
+): boolean {
+  if (item.exported === true) {
+    return true
+  }
+
+  if (nestedReferences.has(item.name)) {
+    return true
+  }
+
+  if (!isCModuleEntryLocalValueType(item.valueType)) {
+    return true
+  }
+
+  const objectShape = context.moduleObjectShapes.get(item.name)
+
+  if (
+    objectShape !== null &&
+    typeof objectShape !== 'undefined' &&
+    cModuleObjectShapeHasFunctionFields(objectShape, new Set())
+  ) {
+    return true
+  }
+
+  return false
+}
+
+function isCModuleEntryLocalValueType(valueType: string): boolean {
+  return (
+    valueType !== 'function' &&
+    valueType !== 'promise' &&
+    valueType !== 'timer' &&
+    valueType !== 'crypto-hash' &&
+    valueType !== 'crypto-hmac'
+  )
+}
+
+function cModuleObjectShapeHasFunctionFields(fields: CObjectShapeField[], seen: Set<CObjectShapeField[]>): boolean {
+  if (seen.has(fields)) {
+    return false
+  }
+
+  seen.add(fields)
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+
+    if (field.valueType === 'function') {
+      seen.delete(fields)
+      return true
+    }
+
+    if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined' &&
+      field.shape.fields !== null &&
+      typeof field.shape.fields !== 'undefined' &&
+      cModuleObjectShapeHasFunctionFields(field.shape.fields, seen)
+    ) {
+      seen.delete(fields)
+      return true
+    }
+  }
+
+  seen.delete(fields)
+
+  return false
+}
+
+function collectCModuleNestedReferenceNames(ir: IrProgram): Set<string> {
+  const names: Set<string> = new Set()
+  const functions = collectIrTopLevelNodes(ir, 'function')
+  const classes = collectIrTopLevelNodes(ir, 'class')
+  const statements = collectIrTopLevelNodes(ir, 'statement')
+
+  for (let index = 0; index < functions.length; index = index + 1) {
+    addCModuleReferenceNames(names, functions[index])
+  }
+
+  for (let index = 0; index < classes.length; index = index + 1) {
+    addCModuleReferenceNames(names, classes[index])
+  }
+
+  for (let index = 0; index < statements.length; index = index + 1) {
+    addCModuleNestedFunctionReferenceNames(names, statements[index])
+  }
+
+  return names
+}
+
+function addCModuleNestedFunctionReferenceNames(names: Set<string>, node: AnyNode | AnyNode[] | null | undefined): void {
+  if (node === null || typeof node === 'undefined') {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (let index = 0; index < node.length; index = index + 1) {
+      addCModuleNestedFunctionReferenceNames(names, node[index])
+    }
+
+    return
+  }
+
+  if (isCModuleNestedFunctionLikeNode(node)) {
+    addCModuleReferenceNames(names, node)
+    return
+  }
+
+  addCModuleNestedFunctionReferenceChildNames(names, node)
+}
+
+function addCModuleReferenceNames(names: Set<string>, node: AnyNode | AnyNode[] | null | undefined): void {
+  if (node === null || typeof node === 'undefined') {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (let index = 0; index < node.length; index = index + 1) {
+      addCModuleReferenceNames(names, node[index])
+    }
+
+    return
+  }
+
+  if (node.type === 'Reference') {
+    const item = node as CModuleReferenceNode
+    const root = firstCModuleReferencePathSegment(item.path)
+
+    if (root !== null && typeof root !== 'undefined') {
+      names.add(root)
+    }
+  }
+
+  addCModuleReferenceChildNames(names, node)
+}
+
+function firstCModuleReferencePathSegment(path: string[] | null | undefined): string | null {
+  if (path === null || typeof path === 'undefined' || path.length === 0) {
+    return null
+  }
+
+  return path[0]
+}
+
+function addCModuleNestedFunctionReferenceChildNames(names: Set<string>, item: AnyNode): void {
+  addCModuleNestedFunctionReferenceNames(names, item.body)
+  addCModuleNestedFunctionReferenceNames(names, item.params)
+  addCModuleNestedFunctionReferenceNames(names, item.fields)
+  addCModuleNestedFunctionReferenceNames(names, item.methods)
+  addCModuleNestedFunctionReferenceNames(names, item.init)
+  addCModuleNestedFunctionReferenceNames(names, item.condition)
+  addCModuleNestedFunctionReferenceNames(names, item.consequent)
+  addCModuleNestedFunctionReferenceNames(names, item.alternate)
+  addCModuleNestedFunctionReferenceNames(names, item.test)
+  addCModuleNestedFunctionReferenceNames(names, item.update)
+  addCModuleNestedFunctionReferenceNames(names, item.iterable)
+  addCModuleNestedFunctionReferenceNames(names, item.discriminant)
+  addCModuleNestedFunctionReferenceNames(names, item.cases)
+  addCModuleNestedFunctionReferenceNames(names, item.block)
+  addCModuleNestedFunctionReferenceNames(names, item.handler)
+  addCModuleNestedFunctionReferenceNames(names, item.finalizer)
+  addCModuleNestedFunctionReferenceNames(names, item.argument)
+  addCModuleNestedFunctionReferenceNames(names, item.args)
+  addCModuleNestedFunctionReferenceNames(names, item.callee)
+  addCModuleNestedFunctionReferenceNames(names, item.object)
+  addCModuleNestedFunctionReferenceNames(names, item.index)
+  addCModuleNestedFunctionReferenceNames(names, item.target)
+  addCModuleNestedFunctionReferenceNames(names, item.value)
+  addCModuleNestedFunctionReferenceNames(names, item.left)
+  addCModuleNestedFunctionReferenceNames(names, item.right)
+  addCModuleNestedFunctionReferenceNames(names, item.elements)
+  addCModuleNestedFunctionReferenceNames(names, item.properties)
+  addCModuleNestedFunctionReferenceNames(names, item.expression)
+}
+
+function addCModuleReferenceChildNames(names: Set<string>, item: AnyNode): void {
+  addCModuleReferenceNames(names, item.body)
+  addCModuleReferenceNames(names, item.params)
+  addCModuleReferenceNames(names, item.fields)
+  addCModuleReferenceNames(names, item.methods)
+  addCModuleReferenceNames(names, item.init)
+  addCModuleReferenceNames(names, item.condition)
+  addCModuleReferenceNames(names, item.consequent)
+  addCModuleReferenceNames(names, item.alternate)
+  addCModuleReferenceNames(names, item.test)
+  addCModuleReferenceNames(names, item.update)
+  addCModuleReferenceNames(names, item.iterable)
+  addCModuleReferenceNames(names, item.discriminant)
+  addCModuleReferenceNames(names, item.cases)
+  addCModuleReferenceNames(names, item.block)
+  addCModuleReferenceNames(names, item.handler)
+  addCModuleReferenceNames(names, item.finalizer)
+  addCModuleReferenceNames(names, item.argument)
+  addCModuleReferenceNames(names, item.args)
+  addCModuleReferenceNames(names, item.callee)
+  addCModuleReferenceNames(names, item.object)
+  addCModuleReferenceNames(names, item.index)
+  addCModuleReferenceNames(names, item.target)
+  addCModuleReferenceNames(names, item.value)
+  addCModuleReferenceNames(names, item.left)
+  addCModuleReferenceNames(names, item.right)
+  addCModuleReferenceNames(names, item.elements)
+  addCModuleReferenceNames(names, item.properties)
+  addCModuleReferenceNames(names, item.expression)
+}
+
+function isCModuleNestedFunctionLikeNode(node: AnyNode): boolean {
+  const nodeType = node.type
+
+  return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionExpression' || nodeType === 'MethodDefinition'
 }
 
 function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclaration[], context: CEmitContext): void {
@@ -1894,7 +2135,7 @@ function emitCModuleMainFunction(
   }
 
   if (context.processRuntime) {
-    lines.push(`  inox_process_init_with_entry(argc, argv, ${cStringLiteral(plan.record.path)});`)
+    lines.push(`  inox_process_init_with_entry(argc, argv, ${cStringLiteral(plan.relativeSourcePath)});`)
   }
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))

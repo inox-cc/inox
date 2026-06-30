@@ -23,7 +23,7 @@ try {
   console.error('Error', e)
 }
 
-const foo = JSON.parse('{"v":[{"1":2},{"3":4,"5":6}]}')
+const foo = JSON.parse('{"v":[{"1":2},{"3":4,"5":"блаблабла"}]}')
 
 console.log(Array.isArray(foo))
 
@@ -57,5 +57,5 @@ class Foo {
   }
 }
 
-const f = new Foo('foo 1')
+const f = new Foo('foo 1 ололо')
 f.test()

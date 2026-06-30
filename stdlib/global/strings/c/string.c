@@ -352,6 +352,9 @@ static size_t inox_string_utf16_code_units(uint32_t code_point) {
   return code_point > 0xffffu ? 2 : 1;
 }
 
+static size_t inox_string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset);
+static size_t inox_string_code_unit_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset);
+
 static void inox_string_trim_span(const char* bytes, size_t len, size_t* start_out, size_t* end_out) {
   size_t start = 0;
   size_t end = 0;
@@ -406,6 +409,35 @@ size_t inox_string_code_unit_length_parts(const char* value_bytes, size_t value_
   }
 
   return length;
+}
+
+double inox_string_char_code_at_parts(const char* value_bytes, size_t value_len, size_t offset) {
+  if (value_bytes == 0 && value_len != 0) {
+    return 0;
+  }
+
+  const char* bytes = value_bytes == 0 ? "" : value_bytes;
+  const size_t byte_offset = inox_string_code_unit_to_byte_offset_floor(bytes, value_len, offset);
+
+  if (byte_offset >= value_len) {
+    return 0;
+  }
+
+  size_t step = 0;
+  const uint32_t code_point = inox_utf8_code_point_at(bytes, value_len, byte_offset, &step);
+
+  if (code_point <= 0xffffu) {
+    return (double)code_point;
+  }
+
+  const size_t code_unit_offset = inox_string_code_unit_index_of_byte_offset(bytes, value_len, byte_offset);
+  const uint32_t surrogate = code_point - 0x10000u;
+
+  if (offset > code_unit_offset) {
+    return (double)(0xdc00u + (surrogate & 0x3ffu));
+  }
+
+  return (double)(0xd800u + (surrogate >> 10));
 }
 
 static size_t inox_string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset) {

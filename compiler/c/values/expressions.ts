@@ -3351,7 +3351,8 @@ function emitPreparedOptionalRuntimeObjectFieldValueExpression(
 
   return {
     lines,
-    expression: value
+    expression: value,
+    owned: true
   }
 }
 
@@ -4339,7 +4340,8 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
 
   return {
     lines,
-    expression: value
+    expression: value,
+    owned: true
   }
 }
 

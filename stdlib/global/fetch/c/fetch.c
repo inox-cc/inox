@@ -74,9 +74,26 @@ enum {
 #define INOX_FETCH_MAX_REDIRECTS 20
 
 static inox_status
-inox_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len);
+inox_fetch_parse_url(
+  const char* url,
+  size_t url_len,
+  int* secure,
+  char* host,
+  size_t host_len,
+  int* port,
+  char* path,
+  size_t path_len
+);
 static inox_status inox_fetch_copy_url(inox_allocator* allocator, const char* url, size_t url_len, char** out);
-static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url);
+static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url, size_t url_len);
+static inox_status inox_fetch_request_view(
+  inox_loop* loop,
+  const char* url,
+  size_t url_len,
+  const inox_fetch_init* init,
+  inox_fetch_done_fn done,
+  void* user
+);
 static inox_status inox_fetch_build_request(inox_fetch_operation* request, const inox_fetch_init* init);
 static inox_status inox_fetch_start_connection(inox_fetch_operation* request);
 static inox_status inox_fetch_operation_is_aborted(inox_fetch_operation* request, int* out);
@@ -159,6 +176,21 @@ inox_status inox_fetch_get(inox_loop* loop, const char* url, inox_fetch_done_fn 
 }
 
 inox_status inox_fetch_request(inox_loop* loop, const char* url, const inox_fetch_init* init, inox_fetch_done_fn done, void* user) {
+  if (url == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  return inox_fetch_request_view(loop, url, strlen(url), init, done, user);
+}
+
+static inox_status inox_fetch_request_view(
+  inox_loop* loop,
+  const char* url,
+  size_t url_len,
+  const inox_fetch_init* init,
+  inox_fetch_done_fn done,
+  void* user
+) {
   if (loop == 0 || loop->allocator == 0 || url == 0 || done == 0) {
     return INOX_ERR_TYPE;
   }
@@ -180,7 +212,7 @@ inox_status inox_fetch_request(inox_loop* loop, const char* url, const inox_fetc
   request->redirect_mode = INOX_FETCH_REDIRECT_FOLLOW;
   request->replayable = 1;
 
-  inox_status status = inox_fetch_set_url(request, url);
+  inox_status status = inox_fetch_set_url(request, url, url_len);
 
   if (status != INOX_OK) {
     inox_fetch_operation_free(request);
@@ -277,7 +309,7 @@ inox_status inox_fetch_with_init(
   status = inox_fetch_copy_url(allocator, url, url_len, &request->url);
 
   if (status == INOX_OK) {
-    status = inox_fetch_request(loop, request->url, init, inox_fetch_promise_done, request);
+    status = inox_fetch_request_view(loop, request->url, request->url_len, init, inox_fetch_promise_done, request);
   }
 
   if (status != INOX_OK) {
@@ -460,8 +492,16 @@ inox_status inox_fetch_signal_aborted(inox_value signal, int* out) {
   return INOX_OK;
 }
 
-static inox_status
-inox_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, int* port, char* path, size_t path_len) {
+static inox_status inox_fetch_parse_url(
+  const char* url,
+  size_t url_len,
+  int* secure,
+  char* host,
+  size_t host_len,
+  int* port,
+  char* path,
+  size_t path_len
+) {
   const char* http_prefix = "http://";
   const char* https_prefix = "https://";
   size_t http_prefix_len = strlen(http_prefix);
@@ -472,45 +512,45 @@ inox_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
     return INOX_ERR_UNSUPPORTED;
   }
 
-  if (strncmp(url, http_prefix, http_prefix_len) == 0) {
+  if (url_len >= http_prefix_len && memcmp(url, http_prefix, http_prefix_len) == 0) {
     *secure = 0;
     prefix_len = http_prefix_len;
-  } else if (strncmp(url, https_prefix, https_prefix_len) == 0) {
+  } else if (url_len >= https_prefix_len && memcmp(url, https_prefix, https_prefix_len) == 0) {
     *secure = 1;
     prefix_len = https_prefix_len;
   } else {
     return INOX_ERR_UNSUPPORTED;
   }
 
-  const char* cursor = url + prefix_len;
-  const char* host_start = cursor;
+  size_t offset = prefix_len;
+  const size_t host_start = offset;
 
-  while (*cursor != '\0' && *cursor != ':' && *cursor != '/' && *cursor != '?' && *cursor != '#') {
-    cursor += 1;
+  while (offset < url_len && url[offset] != ':' && url[offset] != '/' && url[offset] != '?' && url[offset] != '#') {
+    offset += 1;
   }
 
-  size_t parsed_host_len = (size_t)(cursor - host_start);
+  size_t parsed_host_len = offset - host_start;
 
   if (parsed_host_len == 0 || parsed_host_len >= host_len) {
     return INOX_ERR_UNSUPPORTED;
   }
 
-  memcpy(host, host_start, parsed_host_len);
+  memcpy(host, url + host_start, parsed_host_len);
   host[parsed_host_len] = '\0';
 
   *port = *secure ? 443 : 80;
 
-  if (*cursor == ':') {
-    cursor += 1;
+  if (offset < url_len && url[offset] == ':') {
+    offset += 1;
     int parsed_port = 0;
 
-    if (!isdigit((unsigned char)*cursor)) {
+    if (offset >= url_len || !isdigit((unsigned char)url[offset])) {
       return INOX_ERR_UNSUPPORTED;
     }
 
-    while (isdigit((unsigned char)*cursor)) {
-      parsed_port = parsed_port * 10 + (*cursor - '0');
-      cursor += 1;
+    while (offset < url_len && isdigit((unsigned char)url[offset])) {
+      parsed_port = parsed_port * 10 + (url[offset] - '0');
+      offset += 1;
     }
 
     if (parsed_port <= 0 || parsed_port > 65535) {
@@ -521,25 +561,29 @@ inox_fetch_parse_url(const char* url, int* secure, char* host, size_t host_len, 
   }
 
   const char* parsed_path = "/";
+  size_t parsed_path_available = 1;
   char query_path[512];
 
-  if (*cursor == '/') {
-    parsed_path = cursor;
-  } else if (*cursor == '?') {
-    size_t query_len = strlen(cursor);
+  if (offset < url_len && url[offset] == '/') {
+    parsed_path = url + offset;
+    parsed_path_available = url_len - offset;
+  } else if (offset < url_len && url[offset] == '?') {
+    size_t query_len = url_len - offset;
 
     if (query_len + 2 > sizeof(query_path)) {
       return INOX_ERR_UNSUPPORTED;
     }
 
     query_path[0] = '/';
-    memcpy(query_path + 1, cursor, query_len + 1);
+    memcpy(query_path + 1, url + offset, query_len);
+    query_path[query_len + 1] = '\0';
     parsed_path = query_path;
+    parsed_path_available = query_len + 1;
   }
 
   size_t parsed_path_len = 0;
 
-  while (parsed_path[parsed_path_len] != '\0' && parsed_path[parsed_path_len] != '#') {
+  while (parsed_path_len < parsed_path_available && parsed_path[parsed_path_len] != '#') {
     parsed_path_len += 1;
   }
 
@@ -569,22 +613,22 @@ static inox_status inox_fetch_copy_url(inox_allocator* allocator, const char* ur
   return INOX_OK;
 }
 
-static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url) {
+static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url, size_t url_len) {
   if (request == 0 || url == 0) {
     return INOX_ERR_TYPE;
   }
-
-  size_t url_len = strlen(url);
 
   if (url_len == 0 || url_len >= sizeof(request->url)) {
     return INOX_ERR_UNSUPPORTED;
   }
 
-  memcpy(request->url, url, url_len + 1);
+  memcpy(request->url, url, url_len);
+  request->url[url_len] = '\0';
   request->url_len = url_len;
 
   return inox_fetch_parse_url(
     request->url,
+    request->url_len,
     &request->secure,
     request->host,
     sizeof(request->host),
@@ -1469,7 +1513,7 @@ static inox_status inox_fetch_follow_redirect(inox_fetch_operation* request, con
     return inox_fetch_finish(request, status, 0);
   }
 
-  status = inox_fetch_set_url(request, next_url);
+  status = inox_fetch_set_url(request, next_url, strlen(next_url));
 
   if (status == INOX_OK) {
     status = inox_fetch_build_request(request, 0);

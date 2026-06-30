@@ -478,6 +478,32 @@ inox_status inox_console_write_line(inox_console_stream stream, const char* byte
   return inox_console_write(stream, "\n", 1);
 }
 
+inox_status inox_console_print_value(inox_console_stream stream, inox_value value) {
+  inox_console_format_buffer buffer = { 0 };
+  inox_status status = inox_console_format_value_into(&buffer, value, 0);
+
+  if (status == INOX_OK) {
+    status = inox_console_write(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
+  }
+
+  inox_console_format_buffer_dispose(&buffer);
+
+  return status;
+}
+
+inox_status inox_console_print_value_line(inox_console_stream stream, inox_value value) {
+  inox_console_format_buffer buffer = { 0 };
+  inox_status status = inox_console_format_value_into(&buffer, value, 0);
+
+  if (status == INOX_OK) {
+    status = inox_console_write_line(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
+  }
+
+  inox_console_format_buffer_dispose(&buffer);
+
+  return status;
+}
+
 inox_status inox_console_format_value(inox_allocator* allocator, inox_value value, inox_value* out) {
   if (allocator == 0 || out == 0) {
     return INOX_ERR_TYPE;

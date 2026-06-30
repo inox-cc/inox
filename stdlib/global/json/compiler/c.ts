@@ -8,11 +8,7 @@ import {
   registerOwnedValue
 } from '../../../../compiler/c/context.ts'
 import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
-import {
-  emitRuntimeNullableValueCheck,
-  emitRuntimeValueCheck,
-  emitRuntimeValueCheckLines
-} from '../../../../compiler/c/runtime-values.ts'
+import { emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../../../../compiler/c/runtime-values.ts'
 import type {
   CObjectShape,
   CObjectShapeField,
@@ -192,59 +188,21 @@ export function emitJsonParseVariableDeclaration(
     return null
   }
 
-  const fields: CObjectShapeField[] = statement.shape.fields
-  const shapeName = nextCName(context, `inox_shape_${statement.name}`)
-  const fieldsName = `${shapeName}_fields`
-  const parsed = nextCName(context, 'inox_json_object')
-  const parseCall = emitPreparedJsonCallExpression(statement.init, context, dependencies, {
-    out: parsed
-  })
-  const lines = [`static const inox_field_info ${fieldsName}[] = {`]
-
-  for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field.name)}, ${dependencies.emitCFieldFlags(field)} },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${fields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-
+  const target = emitCIdentifier(statement.name)
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'object')
   dependencies.registerObjectShape(context, statement.name, statement.shape)
 
-  if (parseCall !== null && typeof parseCall !== 'undefined') {
-    pushJsonLines(lines, parseCall.lines)
-  } else {
+  const parseCall = emitPreparedJsonCallExpression(statement.init, context, dependencies, {
+    out: target,
+    owned: false
+  })
+
+  if (parseCall === null || typeof parseCall === 'undefined') {
     return null
   }
-  pushJsonLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${statement.name})`, context))
 
-  for (let index = 0; index < fields.length; index++) {
-    const field = fields[index]
-    const value = nextCName(context, `inox_json_${emitCIdentifier(field.name)}`)
-    const tag = cRuntimeValueTag(field.valueType)
-
-    registerOwnedValue(context, value)
-    pushJsonLines(lines, emitPrepareOwnedValueWrite(value))
-    lines.push(
-      emitStatusCheck(
-        `inox_object_get(${parsed}, ${cStringLiteral(field.name)}, ${utf8ByteLength(field.name)}, &${value})`,
-        context
-      )
-    )
-    if (field.nullable === true) {
-      pushJsonLines(lines, emitRuntimeNullableValueCheck(value, tag, context))
-    } else {
-      pushJsonLines(lines, emitRuntimeValueCheckLines(value, tag, context))
-    }
-    lines.push(emitStatusCheck(`inox_object_init_known(${statement.name}, ${index}, ${value})`, context))
-  }
-
-  return lines
+  return parseCall.lines
 }
 
 export function emitPreparedJsonCallExpression(
@@ -270,7 +228,9 @@ export function emitPreparedJsonCallExpression(
     out = options.out
   }
 
-  if (options === null || typeof options === 'undefined' || options.owned !== false) {
+  const ownsOut = options === null || typeof options === 'undefined' || options.owned !== false
+
+  if (ownsOut) {
     registerOwnedValue(context, out)
   }
 
@@ -302,7 +262,8 @@ export function emitPreparedJsonCallExpression(
 
     return {
       lines: lines,
-      expression: out
+      expression: out,
+      owned: ownsOut
     }
   }
 
@@ -317,7 +278,8 @@ export function emitPreparedJsonCallExpression(
 
     return {
       lines: lines,
-      expression: out
+      expression: out,
+      owned: ownsOut
     }
   }
 
@@ -336,7 +298,8 @@ export function emitPreparedJsonCallExpression(
 
     return {
       lines: lines,
-      expression: out
+      expression: out,
+      owned: ownsOut
     }
   }
 
@@ -348,7 +311,8 @@ export function emitPreparedJsonCallExpression(
 
   return {
     lines: lines,
-    expression: out
+    expression: out,
+    owned: ownsOut
   }
 }
 

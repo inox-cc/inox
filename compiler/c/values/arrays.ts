@@ -930,7 +930,8 @@ export function emitPreparedRuntimeArrayIndexValue(
 
   return {
     lines,
-    expression: value
+    expression: value,
+    owned: true
   }
 }
 
@@ -1001,7 +1002,8 @@ export function emitPreparedKnownArrayIndexValueExpression(
 
     return {
       lines,
-      expression: temp
+      expression: temp,
+      owned: true
     }
   }
 
@@ -1025,7 +1027,8 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
 
       return {
         lines,
-        expression: value.expression
+        expression: value.expression,
+        owned: value.owned
       }
     }
 
@@ -1042,7 +1045,8 @@ export function emitPreparedRuntimeArrayIndexValueExpression(
 
     return {
       lines: checkedLines,
-      expression: value.expression
+      expression: value.expression,
+      owned: value.owned
     }
   }
 

@@ -132,6 +132,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertNativeInoxModuleGraph } = await import('./integration/native-inox-module-graph.test.ts')
   const { assertNativeInoxProcessRuntimeString } =
     await import('./integration/native-inox-process-runtime-string.test.ts')
+  const { assertNativeInoxUnicodeStringLiteral } =
+    await import('./integration/native-inox-unicode-string-literal.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRuntimeAllocatorStaysInRuntime } =
     await import('./integration/runtime-allocator-prelude.test.ts')
@@ -219,6 +221,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-inox-process-runtime-string', async () => {
       await assertNativeInoxProcessRuntimeString()
+    })
+
+    await t.test('native-inox-unicode-string-literal', async () => {
+      await assertNativeInoxUnicodeStringLiteral()
     })
 
     await t.test('native-class-lowering', () => {

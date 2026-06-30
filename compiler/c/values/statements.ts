@@ -1264,8 +1264,8 @@ export function emitRuntimeStringVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
-  lines.push(`inox_retain(${value.expression});`)
   lines.push(`${storage} = ${value.expression};`)
+  pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
   lines.push(emitRuntimeValueCheck(storage, 'INOX_TAG_STRING', context))
   lines.push(
     `${constPrefix(statement.kind === 'const')}inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${storage}.as.ref;`
@@ -1566,6 +1566,10 @@ export function emitRuntimeValueVariableDeclaration(
     value = statementDeps(context).emitCObjectLiteralValueExpression(expression, context, statement.shape)
   }
 
+  if (isOwnedObjectRuntimeArrayCallExpression(expression)) {
+    value.owned = true
+  }
+
   registerOwnedValue(context, statement.name)
   registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
 
@@ -1573,6 +1577,7 @@ export function emitRuntimeValueVariableDeclaration(
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
+  pushPreparedRuntimeValueOwnershipLines(lines, emitCIdentifier(statement.name), value)
 
   if (statement.nullable === true && isRuntimeNullableType(valueType)) {
     pushAllLines(lines, emitRuntimeNullableValueCheck(emitCIdentifier(statement.name), expectedTag, context))
@@ -1584,9 +1589,55 @@ export function emitRuntimeValueVariableDeclaration(
     }
   }
 
-  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
-
   return lines
+}
+
+function pushPreparedRuntimeValueOwnershipLines(
+  lines: string[],
+  target: string,
+  value: PreparedExpression
+): void {
+  if (value.owned === true) {
+    if (value.expression !== target) {
+      lines.push(`${value.expression} = inox_undefined_value();`)
+    }
+
+    return
+  }
+
+  lines.push(`inox_retain(${target});`)
+}
+
+function isOwnedObjectRuntimeArrayCallExpression(expression: StatementNode): boolean {
+  if (expression.type !== 'CallExpression') {
+    return false
+  }
+
+  const objectRuntimeMethod = expression.objectRuntimeMethod
+
+  if (objectRuntimeMethod === 'values' || objectRuntimeMethod === 'entries' || objectRuntimeMethod === 'keys') {
+    return true
+  }
+
+  const callee = expression.callee
+
+  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
+    return false
+  }
+
+  if (callee.property !== 'values' && callee.property !== 'entries' && callee.property !== 'keys') {
+    return false
+  }
+
+  const object = callee.object
+
+  return (
+    object !== null &&
+    typeof object !== 'undefined' &&
+    object.type === 'Reference' &&
+    object.path.length === 1 &&
+    object.path[0] === 'Object'
+  )
 }
 
 export function registerRuntimeValueMetadata(

@@ -24,6 +24,7 @@ inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, 
 inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, inox_value* out);
 inox_status inox_string_to_number(const char* value_bytes, size_t value_len, inox_value* out);
 size_t inox_string_code_unit_length_parts(const char* value_bytes, size_t value_len);
+double inox_string_char_code_at_parts(const char* value_bytes, size_t value_len, size_t offset);
 inox_status inox_string_concat_parts(
   inox_allocator* allocator,
   const char* left_bytes,
