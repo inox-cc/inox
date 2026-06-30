@@ -1,5 +1,6 @@
 import { diagnostic } from '../diagnostics.ts'
 import { collectIrTopLevelNodesFromPrograms, irClassMethodEffectName } from '../ir.ts'
+import { nodeStringListIncludes } from '../stdlib/node/string-list.ts'
 import type { AnyNode as CNode, IrProgram, SourceLocation } from '../types.ts'
 import {
   emitFunctionPointerParams,
@@ -60,6 +61,8 @@ import {
   emitCClassConstructorHead,
   emitCClassInfoMethodName,
   emitCClassInfoTypeName,
+  emitCClassStringLiteralConstructorHead,
+  emitCClassStringLiteralParamName,
   registerClassObjectShape
 } from './values/classes.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
@@ -341,6 +344,7 @@ function registerFunctionParamsInContext(
 
       if (param.nullable !== true) {
         context.runtimeStrings.add(param.name)
+        context.runtimeStringValues.set(param.name, emitCStringParamName(param.name))
       }
     } else if (param.valueType === 'object') {
       context.variables.set(param.name, 'object')
@@ -561,7 +565,11 @@ function pushObjectShapeFunctionFieldParams(
   loc: CSourceLocation,
   seenTypes: string[]
 ): void {
-  const fields = shape?.fields
+  if (shape === null || typeof shape === 'undefined') {
+    return
+  }
+
+  const fields = shape.fields
 
   if (fields === null || typeof fields === 'undefined') {
     return
@@ -586,7 +594,7 @@ function pushObjectShapeFunctionFieldParams(
         `${objectName}_${field.name}`,
         field.shape,
         context,
-        field.loc ?? loc,
+        loc,
         seenTypes
       )
 
@@ -606,7 +614,7 @@ function emitObjectFunctionFieldParam(
     emitCObjectFunctionFieldName(objectName, field.name),
     field.functionType,
     context,
-    field.loc ?? loc,
+    loc,
     seenTypes
   )
 }
@@ -745,6 +753,28 @@ export function emitClassConstructorDeclaration(
     return []
   }
 
+  const lines = emitNativeClassConstructorDeclaration(info, constructorMethod, head, false, baseContext, deps)
+  const stringLiteralHead = emitCClassStringLiteralConstructorHead(info, baseContext)
+
+  if (stringLiteralHead !== null && typeof stringLiteralHead !== 'undefined') {
+    lines.push('')
+    pushDeclarationLines(
+      lines,
+      emitNativeClassConstructorDeclaration(info, constructorMethod, stringLiteralHead, true, baseContext, deps)
+    )
+  }
+
+  return lines
+}
+
+function emitNativeClassConstructorDeclaration(
+  info: CClassInfo,
+  constructorMethod: CNode,
+  head: string,
+  stringLiteralOverload: boolean,
+  baseContext: CEmitContext,
+  deps: CDeclarationEmissionDependencies
+): string[] {
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, 'void', false)
   const params: CFunctionParam[] = constructorMethod.params
 
@@ -760,7 +790,11 @@ export function emitClassConstructorDeclaration(
   const bodyLines: string[] = []
   const lines: string[] = []
 
-  pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(constructorMethod, params, context))
+  if (stringLiteralOverload) {
+    pushIndentedDeclarationLines(bodyLines, emitStringLiteralConstructorParamMaterialization(params, context))
+  }
+
+  pushIndentedDeclarationLines(bodyLines, emitConstructorRuntimeParamPreludeForParams(info, constructorMethod, params, context))
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(constructorMethod.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
 
@@ -789,6 +823,190 @@ export function emitClassConstructorDeclaration(
   lines.push('}')
 
   return lines
+}
+
+function emitStringLiteralConstructorParamMaterialization(
+  params: CFunctionParam[],
+  context: CDeclarationFunctionContext
+): string[] {
+  const lines: string[] = []
+
+  for (const param of params) {
+    const valueName = emitCStringParamName(param.name)
+    const literalName = emitCClassStringLiteralParamName(param)
+
+    registerOwnedValue(context, valueName)
+    pushDeclarationLines(lines, emitPrepareStringLiteralConstructorParam(valueName, literalName))
+  }
+
+  return lines
+}
+
+function emitPrepareStringLiteralConstructorParam(valueName: string, literalName: string): string[] {
+  return [
+    `if (inox_string_from_literal(&inox_default_allocator, ${literalName}, strlen(${literalName}), &${valueName}) != INOX_OK) {`,
+    '  goto inox_cleanup;',
+    '}'
+  ]
+}
+
+function emitConstructorRuntimeParamPreludeForParams(
+  info: CClassInfo,
+  statement: CNode,
+  params: CFunctionParam[],
+  context: CDeclarationFunctionContext
+): string[] {
+  const lines: string[] = []
+
+  for (let index = 0; index < params.length; index = index + 1) {
+    pushDeclarationLines(
+      lines,
+      emitConstructorRuntimeParamPreludeForParam(info, statement, params[index], index, context)
+    )
+  }
+
+  return lines
+}
+
+function emitConstructorRuntimeParamPreludeForParam(
+  info: CClassInfo,
+  statement: CNode,
+  param: CFunctionParam,
+  index: number,
+  context: CDeclarationFunctionContext
+): string[] {
+  if (canOmitConstructorStringParamLocal(info, statement, param)) {
+    const paramName = emitCStringParamName(param.name)
+
+    return [emitRuntimeTypeCheck(`${paramName}.tag != INOX_TAG_STRING || ${paramName}.as.ref == 0`, context)]
+  }
+
+  return emitRuntimeParamPreludeForParam(statement, param, index, context)
+}
+
+function canOmitConstructorStringParamLocal(info: CClassInfo, statement: CNode, param: CFunctionParam): boolean {
+  if (param.valueType !== 'string' || param.nullable === true || param.optional === true) {
+    return false
+  }
+
+  if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
+    return false
+  }
+
+  return !constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(info, statement.body, param.name)
+}
+
+function constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(
+  info: CClassInfo,
+  node: unknown,
+  name: string
+): boolean {
+  if (node === null || typeof node === 'undefined') {
+    return false
+  }
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      if (constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(info, item, name)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if (typeof node !== 'object') {
+    return false
+  }
+
+  if (isDirectRuntimeStringFieldAssignmentNode(info, node, name)) {
+    return false
+  }
+
+  const astNode = node as CNode
+
+  if (isReferenceToName(astNode, name)) {
+    return true
+  }
+
+  const record = node as CNode
+
+  for (const key of Object.keys(record)) {
+    if (key === 'loc' || key === 'shape' || key === 'functionType') {
+      continue
+    }
+
+    if (constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(info, record[key], name)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function isDirectRuntimeStringFieldAssignmentNode(info: CClassInfo, node: unknown, name: string): boolean {
+  if (node === null || typeof node === 'undefined' || typeof node !== 'object') {
+    return false
+  }
+
+  const astNode = node as CNode
+  let assignment = astNode
+
+  if (astNode.type === 'ExpressionStatement') {
+    assignment = astNode.expression
+  }
+
+  if (assignment.type !== 'AssignmentExpression' || !isReferenceToName(assignment.value, name)) {
+    return false
+  }
+
+  const fieldName = constructorThisFieldName(assignment.target)
+
+  if (fieldName === null) {
+    return false
+  }
+
+  const field = constructorFieldForName(info, fieldName)
+
+  if (field === null) {
+    return false
+  }
+
+  return field.valueType === 'string'
+}
+
+function isReferenceToName(node: CNode, name: string): boolean {
+  return node.type === 'Reference' && node.path.length === 1 && nodeStringListIncludes(node.path, name)
+}
+
+function constructorThisFieldName(node: CNode): string | null {
+  if (node.type !== 'MemberExpression') {
+    return null
+  }
+
+  if (!isConstructorThisExpression(node.object)) {
+    return null
+  }
+
+  return node.property
+}
+
+function isConstructorThisExpression(node: CNode): boolean {
+  if (node.type === 'ThisExpression') {
+    return true
+  }
+
+  return node.type === 'Reference' && node.path.length === 1 && node.path[0] === 'this'
+}
+
+function constructorFieldForName(info: CClassInfo, name: string): CObjectShapeField | null {
+  for (const field of info.fields) {
+    if (field.name === name) {
+      return field
+    }
+  }
+
+  return null
 }
 
 export function emitClassMethodPrototype(info: CClassInfo, method: CNode, context: CEmitContext): string {

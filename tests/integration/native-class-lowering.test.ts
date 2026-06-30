@@ -243,6 +243,37 @@ console.log(parent.label())
   assert.doesNotMatch(result.code, /inox_method_Child_label/)
 }
 
+export function assertNativeClassStringLiteralConstructorOverload(): void {
+  const source = `
+class Foo {
+  name: string
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  test(): string {
+    return this.name
+  }
+}
+
+const f = new Foo('foo 1')
+console.log(f.test())
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /Foo\(const char\* inox_literal_name\);/)
+  assert.match(result.code, /Foo::Foo\(const char\* inox_literal_name\)/)
+  assert.match(result.code, /Foo f\("foo 1"\);|f = Foo\("foo 1"\);/)
+  assert.match(result.code, /this->name = inox_param_name;/)
+  assert.doesNotMatch(result.code, /as\.ref = \(inox_ref\*\)&name->header/)
+  assert.doesNotMatch(result.code, /Foo f\(inox_/)
+  assert.doesNotMatch(result.code, /f = Foo\(inox_/)
+}
+
 export function assertNativeClassModuleUniqueSymbols(): void {
   const host = createMemoryCompilerHost(
     [

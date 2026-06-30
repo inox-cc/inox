@@ -136,6 +136,7 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassModuleUniqueSymbols,
     assertNativeClassRuntimeDescriptorLowering,
     assertNativeClassRuntimeValueFieldLowering,
+    assertNativeClassStringLiteralConstructorOverload,
     assertNativeClassSetRuntimeFieldLowering
   } =
     await import('./integration/native-class-lowering.test.ts')
@@ -233,6 +234,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-field-alias-lowering', () => {
       assertNativeClassFieldAliasLowering()
+    })
+
+    await t.test('native-class-string-literal-constructor-overload', () => {
+      assertNativeClassStringLiteralConstructorOverload()
     })
 
     await t.test('native-class-module-unique-symbols', () => {

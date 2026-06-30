@@ -482,6 +482,14 @@ function emitCClassParamDeclaration(param: CFunctionParam, context: ClassInfoLoo
   return `${emitCClassParamType(param, context)} ${emitCClassParamName(param)}`
 }
 
+export function emitCClassStringLiteralParamName(param: CFunctionParam): string {
+  return `inox_literal_${emitCIdentifier(param.name)}`
+}
+
+function emitCClassStringLiteralParamDeclaration(param: CFunctionParam): string {
+  return `const char* ${emitCClassStringLiteralParamName(param)}`
+}
+
 function emitCClassParamDeclarations(params: CFunctionParam[], context: ClassInfoLookupContext): string {
   const declarations: string[] = []
 
@@ -504,7 +512,11 @@ function pushCClassObjectShapeFunctionFieldParamDeclarations(
   shape: CObjectShape | null | undefined,
   seenTypes: string[]
 ): void {
-  const fields = shape?.fields
+  if (shape === null || typeof shape === 'undefined') {
+    return
+  }
+
+  const fields = shape.fields
 
   if (fields === null || typeof fields === 'undefined') {
     return
@@ -632,6 +644,22 @@ export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassI
   return `${emitCClassInfoTypeName(info)}(${emitCClassParamDeclarations(params, context)});`
 }
 
+export function emitCClassStringLiteralConstructorPrototype(info: CClassInfo): string | null {
+  const constructorMethod = info.constructor
+
+  if (
+    constructorMethod === null ||
+    typeof constructorMethod === 'undefined' ||
+    !classHasStringLiteralConstructorOverload(info)
+  ) {
+    return null
+  }
+
+  const params: CFunctionParam[] = constructorMethod.params
+
+  return `${emitCClassInfoTypeName(info)}(${emitCClassStringLiteralParamDeclarations(params)});`
+}
+
 export function emitCClassConstructorHead(info: CClassInfo, context: ClassInfoLookupContext): string | null {
   const constructorMethod = info.constructor
 
@@ -645,6 +673,57 @@ export function emitCClassConstructorHead(info: CClassInfo, context: ClassInfoLo
   const initializers = emitCClassConstructorInitializers(info, context)
 
   return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
+}
+
+export function emitCClassStringLiteralConstructorHead(info: CClassInfo, context: ClassInfoLookupContext): string | null {
+  const constructorMethod = info.constructor
+
+  if (
+    constructorMethod === null ||
+    typeof constructorMethod === 'undefined' ||
+    !classHasStringLiteralConstructorOverload(info)
+  ) {
+    return null
+  }
+
+  const params: CFunctionParam[] = constructorMethod.params
+  const typeName = emitCClassInfoTypeName(info)
+  const paramDeclarations = emitCClassStringLiteralParamDeclarations(params)
+  const initializers = emitCClassConstructorInitializers(info, context)
+
+  return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
+}
+
+export function classHasStringLiteralConstructorOverload(info: CClassInfo): boolean {
+  const constructorMethod = info.constructor
+
+  if (constructorMethod === null || typeof constructorMethod === 'undefined') {
+    return false
+  }
+
+  const params: CFunctionParam[] = constructorMethod.params
+
+  if (params.length === 0) {
+    return false
+  }
+
+  for (const param of params) {
+    if (param.valueType !== 'string' || param.nullable === true || param.optional === true) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function emitCClassStringLiteralParamDeclarations(params: CFunctionParam[]): string {
+  const declarations: string[] = []
+
+  for (const param of params) {
+    declarations.push(emitCClassStringLiteralParamDeclaration(param))
+  }
+
+  return joinStrings(declarations, ', ')
 }
 
 function classHasRuntimeValueFields(info: CClassInfo): boolean {
@@ -776,6 +855,12 @@ export function emitCNativeClassDeclarations(
       }
 
       lines.push(`  ${constructorPrototype}`)
+
+      const stringLiteralConstructorPrototype = emitCClassStringLiteralConstructorPrototype(info)
+
+      if (stringLiteralConstructorPrototype !== null && typeof stringLiteralConstructorPrototype !== 'undefined') {
+        lines.push(`  ${stringLiteralConstructorPrototype}`)
+      }
     } else {
       lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
     }
@@ -2411,7 +2496,7 @@ export function emitCNativeClassAssignmentLines(
   info: CClassInfo,
   context: ClassFunctionContext
 ): string[] {
-  const prepared = emitPreparedClassCallArgs(context, expression, classConstructorParams(info))
+  const prepared = emitPreparedNativeClassConstructorArgs(context, expression, info)
   const lines: string[] = []
 
   pushAllLines(lines, prepared.lines)
@@ -2426,7 +2511,7 @@ function emitCNativeClassVariableDeclaration(
   info: CClassInfo,
   context: ClassFunctionContext
 ): string[] {
-  const prepared = emitPreparedClassCallArgs(context, expression, classConstructorParams(info))
+  const prepared = emitPreparedNativeClassConstructorArgs(context, expression, info)
   const lines: string[] = []
 
   pushAllLines(lines, prepared.lines)
@@ -2438,6 +2523,55 @@ function emitCNativeClassVariableDeclaration(
   }
 
   return lines
+}
+
+function emitPreparedNativeClassConstructorArgs(
+  context: ClassFunctionContext,
+  expression: AnyNode,
+  info: CClassInfo
+): PreparedCallArgs {
+  if (!canUseStringLiteralConstructorOverload(info, expression)) {
+    return emitPreparedClassCallArgs(context, expression, classConstructorParams(info))
+  }
+
+  const args: string[] = []
+
+  for (const arg of expression.args) {
+    args.push(cStringLiteral(arg.value))
+  }
+
+  return {
+    lines: [],
+    args
+  }
+}
+
+function canUseStringLiteralConstructorOverload(info: CClassInfo, expression: AnyNode): boolean {
+  if (!classHasStringLiteralConstructorOverload(info)) {
+    return false
+  }
+
+  const params = classConstructorParams(info)
+
+  if (params.length !== expression.args.length) {
+    return false
+  }
+
+  for (const arg of expression.args) {
+    if (arg.type !== 'StringLiteral') {
+      return false
+    }
+
+    if (stringContainsNul(arg.value)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function stringContainsNul(value: string): boolean {
+  return value.indexOf('\0') !== -1
 }
 
 function classFieldForName(info: CClassInfo, name: string): CObjectShapeField | null {

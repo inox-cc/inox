@@ -200,6 +200,7 @@ type CFunctionContext = CEmitContext & {
   runtimeFunctionParams: CFunctionTypeMap
   runtimeArrayElementTypes: CStringMap
   runtimeCallbacks: CStringSet
+  runtimeStringValues: CStringMap
   runtimeStrings: CStringSet
   setElementTypes: CStringMap
   statusReturn: boolean
@@ -5418,6 +5419,15 @@ export function emitCValueExpression(
     }
 
     if (valueType === 'string' && context.runtimeStrings.has(name)) {
+      const runtimeValue = context.runtimeStringValues.get(name)
+
+      if (runtimeValue !== null && typeof runtimeValue !== 'undefined') {
+        return {
+          lines: [],
+          expression: runtimeValue
+        }
+      }
+
       const temp = nextCName(context, 'inox_value')
 
       return {
