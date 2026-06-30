@@ -1,12 +1,12 @@
 #ifndef INOX_HTTP_H
 #define INOX_HTTP_H
 
+#include <stddef.h>
+#include "inox/loop.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include "inox/loop.h"
 
 typedef struct inox_http_server inox_http_server;
 typedef struct inox_http_response inox_http_response;

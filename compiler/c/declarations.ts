@@ -40,7 +40,13 @@ import {
   registerOwnedValue,
   shouldEmitCleanupLabel
 } from './context.ts'
-import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
+import {
+  cStringLiteral,
+  emitCFunctionName,
+  emitCIdentifier,
+  emitCObjectFunctionFieldName,
+  utf8ByteLength
+} from './identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from './runtime-values.ts'
 import type { CClassInfo, CFunctionParam, CFunctionType, CObjectShape, CObjectShapeField } from './types.ts'
 import {
@@ -1272,6 +1278,24 @@ function nativeClassParamName(param: CFunctionParam, context: CFunctionContext):
 function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: CFunctionContext): string[] {
   const value = param.defaultValue
   const localName = emitCLocalName(param.name)
+
+  if (
+    param.valueType === 'string' &&
+    value !== null &&
+    typeof value !== 'undefined' &&
+    value.type === 'StringLiteral'
+  ) {
+    const paramName = emitCStringParamName(param.name)
+    const temp = nextCName(context, `${param.name}_default`)
+    registerOwnedValue(context, temp)
+
+    return [
+      `if (${paramName}.tag == INOX_TAG_UNDEFINED) {`,
+      `  if (inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value.value)}, ${utf8ByteLength(value.value)}, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
+      `  ${paramName} = ${temp};`,
+      '}'
+    ]
+  }
 
   if (
     param.valueType === 'object' &&

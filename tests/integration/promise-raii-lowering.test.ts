@@ -34,9 +34,10 @@ run()
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /#include "inox\/promise\.hpp"/)
+  assert.match(source, /#include "inox\/promise\.h"/)
   assert.match(source, /inox::Promise promise;/)
   assert.match(source, /if \(promise\.has_unhandled_rejection\(\)\) \{/)
+  assert.match(source, /promise\.reset\(\);/)
   assert.doesNotMatch(source, /\n\s+inox_promise\* promise = 0;/)
   assert.doesNotMatch(source, /inox_promise_release\(promise\);/)
 }

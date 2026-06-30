@@ -1,12 +1,12 @@
 #ifndef INOX_OS_H
 #define INOX_OS_H
 
+#include "inox/allocator.h"
+#include "inox/value.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "inox/allocator.h"
-#include "inox/value.h"
 
 inox_status inox_os_arch(inox_allocator* allocator, inox_value* out);
 inox_status inox_os_homedir(inox_allocator* allocator, inox_value* out);

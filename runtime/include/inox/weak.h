@@ -1,13 +1,13 @@
 #ifndef INOX_WEAK_H
 #define INOX_WEAK_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct inox_weak_cell {
   inox_ref* target;

@@ -1,12 +1,12 @@
 #ifndef INOX_NET_H
 #define INOX_NET_H
 
+#include <stddef.h>
+#include "inox/loop.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include "inox/loop.h"
 
 typedef struct inox_net_server inox_net_server;
 typedef struct inox_net_socket inox_net_socket;

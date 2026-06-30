@@ -1,13 +1,13 @@
 #ifndef INOX_DEBUG_H
 #define INOX_DEBUG_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct inox_debug_memory_stats {
   size_t alloc_count;

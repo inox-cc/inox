@@ -1,14 +1,14 @@
 #ifndef INOX_STRING_H
 #define INOX_STRING_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct inox_string {
   inox_ref header;

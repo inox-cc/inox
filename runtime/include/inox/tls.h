@@ -1,12 +1,12 @@
 #ifndef INOX_TLS_H
 #define INOX_TLS_H
 
+#include <stddef.h>
+#include "inox/loop.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include "inox/loop.h"
 
 typedef struct inox_tls_client inox_tls_client;
 

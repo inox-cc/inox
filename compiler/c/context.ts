@@ -846,14 +846,14 @@ export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
     const name = context.ownedPromises[index]
     const localName = emitCLocalName(name)
 
-    if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
-      continue
+    if (context.unhandledRejectionFlag !== null && typeof context.unhandledRejectionFlag !== 'undefined') {
+      lines.push(`if (${localName}.has_unhandled_rejection()) {`)
+      lines.push('  fprintf(stderr, "Unhandled Promise rejection\\n");')
+      lines.push(`  ${context.unhandledRejectionFlag} = 1;`)
+      lines.push('}')
     }
 
-    lines.push(`if (${localName}.has_unhandled_rejection()) {`)
-    lines.push('  fprintf(stderr, "Unhandled Promise rejection\\n");')
-    lines.push(`  ${context.unhandledRejectionFlag} = 1;`)
-    lines.push('}')
+    lines.push(`${localName}.reset();`)
   }
 
   return lines
@@ -983,8 +983,7 @@ export function emitThrowingFunctionErrorTransfer(context: CFunctionContext): st
 
   return [
     'if (inox_error_active) {',
-    `  *${context.functionErrorOut} = inox_error;`,
-    '  inox_error = inox_undefined_value();',
+    `  *${context.functionErrorOut} = inox_error.release();`,
     '}'
   ]
 }

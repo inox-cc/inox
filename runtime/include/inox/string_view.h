@@ -1,5 +1,5 @@
-#ifndef INOX_STRING_VIEW_HPP
-#define INOX_STRING_VIEW_HPP
+#ifndef INOX_STRING_VIEW_H
+#define INOX_STRING_VIEW_H
 
 #include <stddef.h>
 #include <string.h>

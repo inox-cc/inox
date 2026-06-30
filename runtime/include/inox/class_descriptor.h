@@ -1,12 +1,12 @@
 #ifndef INOX_CLASS_DESCRIPTOR_H
 #define INOX_CLASS_DESCRIPTOR_H
 
+#include <stdint.h>
+#include "inox/value.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdint.h>
-#include "inox/value.h"
 
 typedef inox_status (*inox_class_field_read_fn)(const void* instance, uint32_t index, inox_value* out);
 typedef inox_status (*inox_class_instance_copy_fn)(inox_allocator* allocator, const void* instance, void** out);

@@ -1,13 +1,13 @@
 #ifndef INOX_PROCESS_H
 #define INOX_PROCESS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void inox_process_init(int argc, char** argv);
 void inox_process_init_with_entry(int argc, char** argv, const char* entry_path);

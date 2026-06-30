@@ -1,15 +1,15 @@
 #ifndef INOX_MAP_H
 #define INOX_MAP_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum inox_map_slot_state { INOX_MAP_SLOT_EMPTY, INOX_MAP_SLOT_OCCUPIED, INOX_MAP_SLOT_TOMBSTONE } inox_map_slot_state;
 

@@ -1,13 +1,13 @@
 #ifndef INOX_CALLBACK_H
 #define INOX_CALLBACK_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef inox_status (*inox_callback_call_fn)(void* context, const inox_value* args, size_t arg_count, inox_value* out);
 typedef void (*inox_callback_finalizer_fn)(void* context);

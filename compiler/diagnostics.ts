@@ -11,8 +11,8 @@ export class CompileError {
 
   constructor(diagnostics: Diagnostic[]) {
     this.name = 'CompileError'
-    this.message = formatDiagnostics(diagnostics)
     this.diagnostics = diagnostics
+    this.message = formatDiagnostics(diagnostics)
   }
 }
 

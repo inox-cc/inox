@@ -1,14 +1,14 @@
 #ifndef INOX_PATH_H
 #define INOX_PATH_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/object.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 inox_status inox_path_basename(inox_allocator* allocator, inox_value path, inox_value suffix, int has_suffix, inox_value* out);
 inox_status inox_path_dirname(inox_allocator* allocator, inox_value path, inox_value* out);

@@ -1,16 +1,16 @@
 #ifndef INOX_OBJECT_H
 #define INOX_OBJECT_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
 #include "inox/class_descriptor.h"
 #include "inox/value.h"
 #include "inox/weak.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum { INOX_FIELD_READONLY = 1u << 0, INOX_OBJECT_OWNED_SHAPE = 1u << 1, INOX_FIELD_WEAK = 1u << 2 };
 

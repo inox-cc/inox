@@ -1,14 +1,14 @@
 #ifndef INOX_LOOP_H
 #define INOX_LOOP_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct inox_loop inox_loop;
 typedef struct inox_timer_handle inox_timer_handle;

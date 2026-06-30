@@ -1,17 +1,17 @@
 #ifndef INOX_FETCH_H
 #define INOX_FETCH_H
 
-#ifdef __cplusplus
-#include "inox/string_view.hpp"
-
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stddef.h>
 #include "inox/loop.h"
 #include "inox/promise.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+#include "inox/string_view.h"
+
+extern "C" {
+#endif
 
 typedef struct inox_fetch_response {
   int status;

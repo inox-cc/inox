@@ -1,14 +1,14 @@
 #ifndef INOX_JSON_H
 #define INOX_JSON_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/class_descriptor.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 inox_status inox_json_parse(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out);
 inox_status inox_json_parse_with_error(

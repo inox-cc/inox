@@ -1,15 +1,15 @@
 #ifndef INOX_SET_H
 #define INOX_SET_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum inox_set_slot_state { INOX_SET_SLOT_EMPTY, INOX_SET_SLOT_OCCUPIED, INOX_SET_SLOT_TOMBSTONE } inox_set_slot_state;
 

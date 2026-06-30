@@ -162,6 +162,8 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/native-class-lowering.test.ts')
   const { assertRuntimeValueCoreDoesNotReferenceFeatureDisposers } =
     await import('./integration/runtime-value-core-dependencies.test.ts')
+  const { assertThrowingErrorTransferUsesValueRelease } =
+    await import('./integration/throwing-error-transfer-lowering.test.ts')
 
   await test('compiler integration checks', async (t) => {
     await t.test('no-example-dependencies', async () => {
@@ -313,6 +315,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('promise-raii-lowering', () => {
       assertPromiseVariablesUseCppRaii()
+    })
+
+    await t.test('throwing-error-transfer-lowering', () => {
+      assertThrowingErrorTransferUsesValueRelease()
     })
 
     await t.test('runtime-allocator-prelude', () => {

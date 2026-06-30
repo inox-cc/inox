@@ -1,13 +1,13 @@
 #ifndef INOX_CONSOLE_H
 #define INOX_CONSOLE_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/class_descriptor.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum inox_console_stream {
   INOX_CONSOLE_STDOUT = 1,

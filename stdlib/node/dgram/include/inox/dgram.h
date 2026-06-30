@@ -1,12 +1,12 @@
 #ifndef INOX_DGRAM_H
 #define INOX_DGRAM_H
 
+#include <stddef.h>
+#include "inox/loop.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include "inox/loop.h"
 
 typedef struct inox_dgram_socket inox_dgram_socket;
 

@@ -1,11 +1,11 @@
 #ifndef INOX_ALLOCATOR_H
 #define INOX_ALLOCATOR_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
 
 typedef struct inox_allocator {
   void* user;

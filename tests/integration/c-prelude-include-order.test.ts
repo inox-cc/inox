@@ -33,7 +33,7 @@ console.log(label)
 
   assert.match(
     source,
-    /^#include "index\.h"\n#include <stdio\.h>\n#include <string\.h>\n#include "inox\/console\.h"\n#include "inox\/value\.hpp"\n#include "inox\/allocator\.h"/
+    /^#include "index\.h"\n#include <stdio\.h>\n#include <string\.h>\n#include "inox\/console\.h"\n#include "inox\/value\.h"\n#include "inox\/allocator\.h"/
   )
   assert.doesNotMatch(source, /^#include "index\.h"\n\n#include /)
 

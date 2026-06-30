@@ -1,14 +1,14 @@
 #ifndef INOX_CHILD_PROCESS_H
 #define INOX_CHILD_PROCESS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/object.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 inox_status inox_child_process_exec_sync(inox_allocator* allocator, inox_value command, inox_value options, inox_value* out);
 inox_status inox_child_process_exec_file_sync(

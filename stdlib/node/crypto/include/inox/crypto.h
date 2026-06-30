@@ -1,13 +1,13 @@
 #ifndef INOX_CRYPTO_H
 #define INOX_CRYPTO_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct inox_crypto_hash inox_crypto_hash;
 typedef struct inox_crypto_hmac inox_crypto_hmac;

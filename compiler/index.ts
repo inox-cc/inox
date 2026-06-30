@@ -11,6 +11,10 @@ type DiagnosticError = {
   diagnostics: Diagnostic[]
 }
 
+type MessageError = {
+  message: string | null | undefined
+}
+
 type CliPlan = {
   emitCc: boolean
   entryMode: boolean
@@ -326,6 +330,20 @@ function errorDiagnostics(error: unknown): Diagnostic[] | null {
   return null
 }
 
+function errorMessage(error: unknown): string | null {
+  if (error === null || typeof error === 'undefined' || typeof error !== 'object') {
+    return null
+  }
+
+  const message = (error as MessageError).message ?? ''
+
+  if (message.length > 0) {
+    return message
+  }
+
+  return null
+}
+
 try {
   const parsed = parseCliArgs(userArgs())
 
@@ -347,7 +365,13 @@ try {
   if (diagnostics !== null && typeof diagnostics !== 'undefined') {
     console.error(formatDiagnostics(diagnostics))
   } else {
-    console.error('INOX BUILD ERROR')
+    const message = errorMessage(error)
+
+    if (message !== null) {
+      console.error(message)
+    } else {
+      console.error('INOX BUILD ERROR')
+    }
   }
   process.exitCode = 1
 }

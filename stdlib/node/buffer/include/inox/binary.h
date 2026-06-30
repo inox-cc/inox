@@ -1,14 +1,14 @@
 #ifndef INOX_BINARY_H
 #define INOX_BINARY_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stddef.h>
 #include <stdint.h>
 #include "inox/allocator.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct inox_bytes {
   inox_ref header;

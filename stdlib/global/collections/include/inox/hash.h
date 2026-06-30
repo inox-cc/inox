@@ -1,14 +1,14 @@
 #ifndef INOX_HASH_H
 #define INOX_HASH_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdint.h>
 #include <string.h>
 #include "inox/string.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 static inline uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len) {
   const unsigned char* data = (const unsigned char*)bytes;

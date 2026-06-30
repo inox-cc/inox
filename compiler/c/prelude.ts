@@ -124,11 +124,11 @@ export function emitCPrelude(
   }
 
   if (needsCppValueRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/value.hpp"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/value.h"')
   }
 
   if (needsClassDescriptorRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/class_runtime.hpp"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/class_runtime.h"')
   }
 
   if (needsRegexpRuntime) {
@@ -178,7 +178,6 @@ export function emitCPrelude(
     if (needsAsyncRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/promise.h"')
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/promise.hpp"')
     }
     if (needsCallbackRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/callback.h"')

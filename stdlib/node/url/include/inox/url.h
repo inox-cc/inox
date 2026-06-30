@@ -1,13 +1,13 @@
 #ifndef INOX_URL_H
 #define INOX_URL_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "inox/allocator.h"
 #include "inox/object.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 inox_status inox_url_file_url_to_path(inox_allocator* allocator, inox_value url, inox_value* out);
 inox_status inox_url_path_to_file_url(inox_allocator* allocator, inox_value path, const inox_shape* shape, inox_value* out);

@@ -1,11 +1,11 @@
 #ifndef INOX_TIME_H
 #define INOX_TIME_H
 
+#include "inox/value.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "inox/value.h"
 
 typedef struct inox_time_adapter {
   void* user;

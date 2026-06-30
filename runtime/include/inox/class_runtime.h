@@ -1,5 +1,5 @@
-#ifndef INOX_CLASS_RUNTIME_HPP
-#define INOX_CLASS_RUNTIME_HPP
+#ifndef INOX_CLASS_RUNTIME_H
+#define INOX_CLASS_RUNTIME_H
 
 #include <new>
 #include <stdint.h>

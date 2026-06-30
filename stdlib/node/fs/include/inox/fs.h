@@ -1,15 +1,15 @@
 #ifndef INOX_FS_H
 #define INOX_FS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 #include <stddef.h>
 #include "inox/loop.h"
 #include "inox/promise.h"
 #include "inox/value.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum {
   INOX_FS_F_OK = 0,
