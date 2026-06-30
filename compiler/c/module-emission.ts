@@ -114,6 +114,7 @@ import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './valu
 import {
   cClassNameFromValueType,
   cClassValueTypeName,
+  classInfosUseCppValueRuntime,
   collectCClassDescriptorNames,
   collectClassMethods,
   createClassInfos,
@@ -388,6 +389,7 @@ export function emitCModuleSource(
   addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, context)
   const prelude = resolveCRuntimePreludeRequirements({
     classDescriptorCount: classDescriptorNames.size,
+    cppValueRuntime: classInfosUseCppValueRuntime(context),
     cryptoContext: context,
     globalUsages,
     hasRuntimeCallbackWrapper: cModuleHasRuntimeCallbackWrapper(context),
@@ -442,6 +444,7 @@ export function emitCModuleSource(
       prelude.needsAsyncRuntime,
       prelude.needsCallbackRuntime,
       prelude.needsClassDescriptorRuntime,
+      prelude.needsCppValueRuntime,
       prelude.needsStringHeader,
       prelude.needsCollectionRuntime,
       prelude.needsBinaryRuntime,

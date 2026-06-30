@@ -90,6 +90,7 @@ export function emitCPrelude(
   needsAsyncRuntime: boolean,
   needsCallbackRuntime: boolean,
   needsClassDescriptorRuntime: boolean,
+  needsCppValueRuntime: boolean,
   needsStringHeader: boolean,
   needsCollectionRuntime: boolean,
   needsBinaryRuntime: boolean,
@@ -117,6 +118,10 @@ export function emitCPrelude(
 
   if (needsConsoleRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/console.h"')
+  }
+
+  if (needsCppValueRuntime) {
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/value.hpp"')
   }
 
   if (needsClassDescriptorRuntime) {

@@ -103,6 +103,7 @@ import type { CClassMethodPrototypeMap, ClassLoweringDependencies } from './valu
 import {
   cClassNameFromValueType,
   cClassValueTypeName,
+  classInfosUseCppValueRuntime,
   collectCClassDescriptorNames,
   collectClassMethods,
   createClassInfos,
@@ -1260,6 +1261,7 @@ export function emitCUnit(
   const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)
   const preludeRequirements = resolveCRuntimePreludeRequirements({
     classDescriptorCount: classDescriptorNames.size,
+    cppValueRuntime: classInfosUseCppValueRuntime(baseContext),
     cryptoContext: baseContext,
     globalUsages,
     hasRuntimeCallbackWrapper: hasCUnitRuntimeCallbackWrapper(baseContext),
@@ -1276,6 +1278,7 @@ export function emitCUnit(
   const needsAsyncRuntime: boolean = preludeRequirements.needsAsyncRuntime
   const needsCallbackRuntime: boolean = preludeRequirements.needsCallbackRuntime
   const needsClassDescriptorRuntime: boolean = preludeRequirements.needsClassDescriptorRuntime
+  const needsCppValueRuntime: boolean = preludeRequirements.needsCppValueRuntime
   const needsStringHeader: boolean = preludeRequirements.needsStringHeader
   const needsCollectionRuntime: boolean = preludeRequirements.needsCollectionRuntime
   const needsBinaryRuntime: boolean = preludeRequirements.needsBinaryRuntime
@@ -1311,6 +1314,7 @@ export function emitCUnit(
     needsAsyncRuntime,
     needsCallbackRuntime,
     needsClassDescriptorRuntime,
+    needsCppValueRuntime,
     needsStringHeader,
     needsCollectionRuntime,
     needsBinaryRuntime,

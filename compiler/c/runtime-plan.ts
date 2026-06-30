@@ -23,6 +23,7 @@ export type CRuntimePreludeRequirements = {
   needsAsyncRuntime: boolean
   needsCallbackRuntime: boolean
   needsClassDescriptorRuntime: boolean
+  needsCppValueRuntime: boolean
   needsStringHeader: boolean
   needsCollectionRuntime: boolean
   needsBinaryRuntime: boolean
@@ -45,6 +46,7 @@ export type CRuntimePreludeRequirements = {
 
 export type CRuntimePreludeRequirementInput = {
   classDescriptorCount: number
+  cppValueRuntime: boolean
   cryptoContext: CGlobalUsageSupportContext
   globalUsages: IrGlobalUsage[]
   hasRuntimeCallbackWrapper: boolean
@@ -104,6 +106,7 @@ export function resolveCRuntimePreludeRequirements(
   const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
+  const needsCppValueRuntime = input.cppValueRuntime
   const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
   const needsDgramRuntime = nodeRuntimeImports.dgram
   const needsObjectRuntime =
@@ -132,6 +135,7 @@ export function resolveCRuntimePreludeRequirements(
     needsProcessRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
+    needsCppValueRuntime ||
     needsJsonRuntime ||
     signatureRuntimeTypes.size > 0 ||
     input.runtimeRequirements.has('managed-values')
@@ -169,6 +173,7 @@ export function resolveCRuntimePreludeRequirements(
     needsAsyncRuntime,
     needsCallbackRuntime,
     needsClassDescriptorRuntime,
+    needsCppValueRuntime,
     needsStringHeader,
     needsCollectionRuntime,
     needsBinaryRuntime,

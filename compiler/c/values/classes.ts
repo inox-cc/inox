@@ -371,6 +371,22 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
   )
 }
 
+export function classInfosUseCppValueRuntime(context: ClassInfoLookupContext): boolean {
+  for (const info of context.classInfos.values()) {
+    if (!info.native) {
+      continue
+    }
+
+    for (const field of info.fields) {
+      if (classFieldUsesRuntimeValueStorage(field)) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
 function classFieldUsesNativeClassStorage(field: CObjectShapeField): boolean {
   return (
     field.className !== null &&
@@ -414,7 +430,7 @@ function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupC
   }
 
   if (classFieldUsesRuntimeValueStorage(field)) {
-    return 'inox_value'
+    return 'inox::Value'
   }
 
   return emitCType(field.valueType)
@@ -426,7 +442,7 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInf
   }
 
   if (classFieldUsesRuntimeValueStorage(field)) {
-    return 'inox_undefined_value()'
+    return 'inox::Value()'
   }
 
   if (field.valueType === 'regexp') {
@@ -611,13 +627,17 @@ function emitCClassFieldWriteLines(target: string, value: string, field: CObject
     return [`${target} = ${value};`]
   }
 
-  return [`inox_retain(${value});`, `inox_release(${target});`, `${target} = ${value};`]
+  return [`${target} = ${value};`]
 }
 
 function emitCClassConstructorInitializers(info: CClassInfo, context: ClassInfoLookupContext): string {
   const initializers: string[] = []
 
   for (const field of info.fields) {
+    if (classFieldUsesRuntimeValueStorage(field)) {
+      continue
+    }
+
     initializers.push(`${emitCClassFieldName(field.name)}(${emitCClassFieldDefaultValue(field, context)})`)
   }
 
@@ -726,82 +746,6 @@ function emitCClassStringLiteralParamDeclarations(params: CFunctionParam[]): str
   return joinStrings(declarations, ', ')
 }
 
-function classHasRuntimeValueFields(info: CClassInfo): boolean {
-  for (const field of info.fields) {
-    if (classFieldUsesRuntimeValueStorage(field)) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function emitCClassCopyConstructor(info: CClassInfo): string[] {
-  const initializers: string[] = []
-
-  for (const field of info.fields) {
-    const name = emitCClassFieldName(field.name)
-    initializers.push(`${name}(other.${name})`)
-  }
-
-  const suffix = initializers.length > 0 ? ` : ${joinStrings(initializers, ', ')}` : ''
-  const typeName = emitCClassInfoTypeName(info)
-  const lines = [`${typeName}(const ${typeName}& other)${suffix} {`]
-
-  for (const field of info.fields) {
-    if (classFieldUsesRuntimeValueStorage(field)) {
-      lines.push(`  inox_retain(${emitCClassFieldName(field.name)});`)
-    }
-  }
-
-  lines.push('}')
-
-  return lines
-}
-
-function emitCClassAssignmentOperator(info: CClassInfo): string[] {
-  const typeName = emitCClassInfoTypeName(info)
-  const lines = [`${typeName}& operator=(const ${typeName}& other) {`, '  if (this != &other) {']
-
-  for (const field of info.fields) {
-    const name = emitCClassFieldName(field.name)
-
-    if (classFieldUsesRuntimeValueStorage(field)) {
-      lines.push(`    inox_retain(other.${name});`)
-      lines.push(`    inox_release(${name});`)
-      lines.push(`    ${name} = other.${name};`)
-    } else {
-      lines.push(`    ${name} = other.${name};`)
-    }
-  }
-
-  lines.push('  }')
-  lines.push('  return *this;')
-  lines.push('}')
-
-  return lines
-}
-
-function emitCClassDestructor(info: CClassInfo): string[] {
-  const lines = [`~${emitCClassInfoTypeName(info)}() {`]
-
-  for (const field of info.fields) {
-    if (classFieldUsesRuntimeValueStorage(field)) {
-      lines.push(`  inox_release(${emitCClassFieldName(field.name)});`)
-    }
-  }
-
-  lines.push('}')
-
-  return lines
-}
-
-function pushIndentedClassLines(target: string[], lines: string[]): void {
-  for (const line of lines) {
-    target.push(`  ${line}`)
-  }
-}
-
 export function emitCNativeClassDeclarations(
   context: CEmitContext,
   methodPrototypes: CClassMethodPrototypeMap,
@@ -863,12 +807,6 @@ export function emitCNativeClassDeclarations(
       }
     } else {
       lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
-    }
-
-    if (classHasRuntimeValueFields(info)) {
-      pushIndentedClassLines(lines, emitCClassCopyConstructor(info))
-      pushIndentedClassLines(lines, emitCClassAssignmentOperator(info))
-      pushIndentedClassLines(lines, emitCClassDestructor(info))
     }
 
     const prototypes = methodPrototypes.get(info.name)
@@ -982,7 +920,7 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: C
   }
 
   if (classFieldUsesRuntimeValueStorage(field)) {
-    return [`*out = ${reference};`, 'inox_retain(*out);', 'return INOX_OK;']
+    return [`return ${reference}.copy_to(out);`]
   }
 
   if (classFieldUsesNativeClassStorage(field)) {
@@ -3315,7 +3253,7 @@ export function emitPreparedNativeClassFieldValueExpression(
 
   return {
     lines: [],
-    expression: access.reference,
+    expression: classFieldUsesRuntimeValueStorage(access.field) ? `${access.reference}.raw()` : access.reference,
     valueType: access.field.valueType
   }
 }

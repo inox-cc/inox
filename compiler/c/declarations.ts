@@ -975,7 +975,7 @@ function emitCompactStringLiteralConstructorAssignment(assignment: CStringLitera
   const fieldName = emitCIdentifier(assignment.fieldName)
 
   return [
-    `if (inox_string_from_literal(&inox_default_allocator, ${literalName}, strlen(${literalName}), &this->${fieldName}) != INOX_OK) {`,
+    `if (inox_string_from_literal(&inox_default_allocator, ${literalName}, strlen(${literalName}), this->${fieldName}.out()) != INOX_OK) {`,
     '  return;',
     '}'
   ]
