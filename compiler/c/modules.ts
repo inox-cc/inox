@@ -1,11 +1,11 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
 import type { CompilerHost } from '../host.ts'
-import { lowerHirToIr } from '../ir.ts'
+import { collectIrTopLevelNodes, lowerHirToIr } from '../ir.ts'
 import { emitModuleDeclarationContractResult } from '../modules/declarations.ts'
 import { isRuntimeBuiltinImportSource } from '../runtime-builtins.ts'
 import type { AnyNode, Diagnostic, IrProgram, ModuleGraph, ModuleRecord } from '../types.ts'
 import { formatGeneratedC } from './format.ts'
-import { emitCIdentifier } from './identifiers.ts'
+import { emitCFunctionName, emitCIdentifier } from './identifiers.ts'
 import type { CModuleEmitOptions, CModuleImportPlan, CModuleOutputFile, CModulePlan } from './types.ts'
 
 const cModuleSourceExtensions = ['', '.ts', '.js']
@@ -102,11 +102,16 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
       headerPath,
       declarationPath,
       symbolPrefix,
+      classSymbolNames: new Map(),
+      functionSymbolNames: new Map(),
+      valueSymbolNames: new Map(),
       headerGuard: `${symbolPrefix.toUpperCase()}_H`,
       initName,
       imports: []
     })
   }
+
+  assignCModuleSymbolNames(plans)
 
   for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
     const plan = plans[planIndex]
@@ -156,6 +161,102 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
   }
 
   return plans
+}
+
+function assignCModuleSymbolNames(plans: CModulePlan[]): void {
+  const classCounts = countCModuleClassSymbolCandidates(plans)
+
+  for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
+    const plan = plans[planIndex]
+
+    assignCModuleFunctionSymbolNames(plan)
+    assignCModuleValueSymbolNames(plan)
+    assignCModuleClassSymbolNames(plan, classCounts)
+  }
+}
+
+function assignCModuleFunctionSymbolNames(plan: CModulePlan): void {
+  for (
+    let declarationIndex = 0;
+    declarationIndex < plan.ir.functionDeclarations.length;
+    declarationIndex = declarationIndex + 1
+  ) {
+    const declaration = plan.ir.functionDeclarations[declarationIndex]
+
+    plan.functionSymbolNames.set(
+      declaration.name,
+      cModuleFunctionSymbolName(plan, declaration.name, declaration.exported === true)
+    )
+  }
+}
+
+function assignCModuleValueSymbolNames(plan: CModulePlan): void {
+  const statements = collectIrTopLevelNodes(plan.ir, 'statement')
+
+  for (let index = 0; index < statements.length; index = index + 1) {
+    const item = statements[index]
+
+    if (item.type !== 'VariableDeclaration') {
+      continue
+    }
+
+    plan.valueSymbolNames.set(item.name, cModuleValueSymbolName(plan, item.name, item.exported === true))
+  }
+}
+
+function assignCModuleClassSymbolNames(plan: CModulePlan, classCounts: Map<string, number>): void {
+  const classes = collectIrTopLevelNodes(plan.ir, 'class')
+
+  for (let index = 0; index < classes.length; index = index + 1) {
+    const item = classes[index]
+    const candidate = emitCIdentifier(item.name)
+    const count = classCounts.get(candidate) ?? 0
+
+    if (count === 1) {
+      plan.classSymbolNames.set(item.name, candidate)
+    } else {
+      plan.classSymbolNames.set(item.name, cModuleValueSymbolName(plan, item.name, true))
+    }
+  }
+}
+
+function countCModuleClassSymbolCandidates(plans: CModulePlan[]): Map<string, number> {
+  const counts: Map<string, number> = new Map()
+
+  for (let planIndex = 0; planIndex < plans.length; planIndex = planIndex + 1) {
+    const plan = plans[planIndex]
+
+    if (plan.external === true) {
+      continue
+    }
+
+    const classes = collectIrTopLevelNodes(plan.ir, 'class')
+
+    for (let classIndex = 0; classIndex < classes.length; classIndex = classIndex + 1) {
+      const item = classes[classIndex]
+      const candidate = emitCIdentifier(item.name)
+
+      counts.set(candidate, (counts.get(candidate) ?? 0) + 1)
+    }
+  }
+
+  return counts
+}
+
+function cModuleFunctionSymbolName(plan: CModulePlan, name: string, exported: boolean): string {
+  if (exported) {
+    return `${plan.symbolPrefix}_${emitCFunctionName(name)}`
+  }
+
+  return emitCFunctionName(name)
+}
+
+function cModuleValueSymbolName(plan: CModulePlan, name: string, exported: boolean): string {
+  if (exported) {
+    return `${plan.symbolPrefix}_${emitCIdentifier(name)}`
+  }
+
+  return emitCIdentifier(name)
 }
 
 function collectCModuleImportDeclarations(record: ModuleRecord): CModuleNode[] {

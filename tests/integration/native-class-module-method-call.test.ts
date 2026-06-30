@@ -42,9 +42,13 @@ f.test()
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /inox_mod_src_index_ts_[0-9a-f]+_f\.test\(\)/)
-  assert.doesNotMatch(source, /inox_mod_src_index_ts_[0-9a-f]+_f\.tag/)
-  assert.doesNotMatch(source, /inox_mod_src_index_ts_[0-9a-f]+_f\.as\.ref/)
+  assert.match(source, /class Foo/)
+  assert.match(source, /static Foo f/)
+  assert.match(source, /f\.test\(\)/)
+  assert.doesNotMatch(source, /inox_mod_src_index_ts_[0-9a-f]+_Foo/)
+  assert.doesNotMatch(source, /inox_mod_src_index_ts_[0-9a-f]+_f/)
+  assert.doesNotMatch(source, /f\.tag/)
+  assert.doesNotMatch(source, /f\.as\.ref/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

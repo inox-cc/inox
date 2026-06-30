@@ -379,6 +379,9 @@ export type CModulePlan = {
   headerPath: string
   declarationPath: string
   symbolPrefix: string
+  classSymbolNames: Map<string, string>
+  functionSymbolNames: Map<string, string>
+  valueSymbolNames: Map<string, string>
   headerGuard: string
   initName: string | null
   imports: CModuleImportPlan[]

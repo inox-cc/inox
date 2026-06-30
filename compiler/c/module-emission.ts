@@ -837,7 +837,7 @@ function functionPointerAdapterTargetSeenTypes(adapter: CFunctionPointerAdapter,
     return []
   }
 
-  if (adapter.target.startsWith('inox_mod_')) {
+  if (cFunctionPointerAdapterTargetSourceNames(adapter, context).length > 0) {
     return []
   }
 
@@ -1214,7 +1214,7 @@ function createCModuleBaseContext(
   context.processEntryPath = plan.record.path
   const classNodes = collectIrTopLevelNodes(ir, 'class')
 
-  context.classInfos = createClassInfos(classNodes, diagnostics, plan.symbolPrefix)
+  context.classInfos = createClassInfos(classNodes, diagnostics, plan.classSymbolNames)
 
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
@@ -2294,6 +2294,12 @@ function createCModuleFunctionNames(plan: CModulePlan): Map<string, string> {
 }
 
 function emitCModuleFunctionName(plan: CModulePlan, name: string): string {
+  const symbolName = plan.functionSymbolNames.get(name)
+
+  if (symbolName !== null && typeof symbolName !== 'undefined') {
+    return symbolName
+  }
+
   return `${plan.symbolPrefix}_${emitCFunctionName(name)}`
 }
 
@@ -2306,5 +2312,11 @@ function cModuleImportedBindingName(declaration: AnyNode, specifier: AnyNode): s
 }
 
 function emitCModuleValueName(plan: CModulePlan, name: string): string {
+  const symbolName = plan.valueSymbolNames.get(name)
+
+  if (symbolName !== null && typeof symbolName !== 'undefined') {
+    return symbolName
+  }
+
   return `${plan.symbolPrefix}_${emitCIdentifier(name)}`
 }

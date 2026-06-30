@@ -977,7 +977,7 @@ function classHasNoArgConstructor(info: CClassInfo): boolean {
 export function createClassInfos(
   classes: AnyNode[],
   diagnostics: Diagnostic[],
-  symbolPrefix: string | null = null
+  symbolNames: Map<string, string> | null = null
 ): CClassInfoMap {
   const infos = createClassInfoMap()
   const classNodes: ClassExpressionNode[] = classes
@@ -997,7 +997,7 @@ export function createClassInfos(
 
     infos.set(item.name, {
       name: item.name,
-      symbolName: classSymbolName(item.name, symbolPrefix),
+      symbolName: classSymbolName(item.name, symbolNames),
       node: item,
       constructor: constructorMethod,
       assignments,
@@ -1013,12 +1013,16 @@ export function createClassInfos(
   return infos
 }
 
-function classSymbolName(name: string, symbolPrefix: string | null | undefined): string {
-  if (symbolPrefix === null || typeof symbolPrefix === 'undefined' || symbolPrefix === '') {
-    return name
+function classSymbolName(name: string, symbolNames: Map<string, string> | null | undefined): string {
+  if (symbolNames !== null && typeof symbolNames !== 'undefined') {
+    const symbolName = symbolNames.get(name)
+
+    if (symbolName !== null && typeof symbolName !== 'undefined') {
+      return symbolName
+    }
   }
 
-  return `${symbolPrefix}_${name}`
+  return name
 }
 
 function annotateClassMethodParamClassNames(infos: CClassInfoMap): void {
