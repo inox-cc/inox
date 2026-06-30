@@ -139,12 +139,13 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeClassArrayRuntimeFieldLowering,
     assertNativeClassDefinitionsPrecedeModuleValues,
     assertNativeClassFieldAliasLowering,
+    assertNativeClassFieldRestoreFromObjectLowering,
     assertNativeClassLowering,
     assertNativeClassMapRuntimeFieldLowering,
     assertNativeClassModuleUniqueSymbols,
     assertNativeClassRuntimeDescriptorLowering,
     assertNativeClassRuntimeValueFieldLowering,
-    assertNativeClassStringLiteralConstructorOverload,
+    assertNativeClassStringLiteralConstructorUsesCppValue,
     assertNativeClassSetRuntimeFieldLowering
   } =
     await import('./integration/native-class-lowering.test.ts')
@@ -248,6 +249,10 @@ async function runIntegrationTests(): Promise<void> {
       assertNativeClassFieldAliasLowering()
     })
 
+    await t.test('native-class-field-restore-from-object-lowering', () => {
+      assertNativeClassFieldRestoreFromObjectLowering()
+    })
+
     await t.test('native-class-void-string-field-log-method', () => {
       assertNativeClassVoidStringFieldLogMethod()
     })
@@ -260,8 +265,8 @@ async function runIntegrationTests(): Promise<void> {
       assertNativeClassExplicitUnknownReturnIsPreserved()
     })
 
-    await t.test('native-class-string-literal-constructor-overload', () => {
-      assertNativeClassStringLiteralConstructorOverload()
+    await t.test('native-class-string-literal-constructor-uses-cpp-value', () => {
+      assertNativeClassStringLiteralConstructorUsesCppValue()
     })
 
     await t.test('native-class-definitions-precede-module-values', () => {

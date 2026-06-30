@@ -35,6 +35,26 @@ public:
     ((T*)instance)->~T();
     allocator->free(allocator->user, instance, sizeof(T), alignof(T));
   }
+
+  static inox_status assign_from_value(inox_value value, const inox_class_descriptor* descriptor, T* out) {
+    if (
+      descriptor == nullptr ||
+      out == nullptr ||
+      value.tag != INOX_TAG_CLASS_INSTANCE ||
+      value.as.ref == nullptr
+    ) {
+      return INOX_ERR_TYPE;
+    }
+
+    inox_class_instance_ref* ref = (inox_class_instance_ref*)value.as.ref;
+
+    if (ref->descriptor != descriptor || ref->instance == nullptr) {
+      return INOX_ERR_TYPE;
+    }
+
+    *out = *(const T*)ref->instance;
+    return INOX_OK;
+  }
 };
 
 template <typename T>
@@ -58,6 +78,11 @@ static inox_class_descriptor class_descriptor(const char* name) {
   };
 
   return descriptor;
+}
+
+template <typename T>
+static inox_status class_assign_from_value(inox_value value, const inox_class_descriptor* descriptor, T* out) {
+  return Class<T>::assign_from_value(value, descriptor, out);
 }
 
 } // namespace inox

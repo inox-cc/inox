@@ -244,7 +244,61 @@ console.log(parent.label())
   assert.doesNotMatch(result.code, /inox_method_Child_label/)
 }
 
-export function assertNativeClassStringLiteralConstructorOverload(): void {
+export function assertNativeClassFieldRestoreFromObjectLowering(): void {
+  const source = `
+class Scope {
+  name: string
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  label(): string {
+    return this.name
+  }
+}
+
+type ScopeState = {
+  scope: Scope
+}
+
+class Holder {
+  scope: Scope
+
+  constructor() {
+    this.scope = new Scope('Ada')
+  }
+
+  save(): ScopeState {
+    return {
+      scope: this.scope
+    }
+  }
+
+  restore(previous: ScopeState): void {
+    this.scope = previous.scope
+  }
+
+  label(): string {
+    return this.scope.label()
+  }
+}
+
+const holder = new Holder()
+const previous = holder.save()
+holder.restore(previous)
+console.log(holder.label())
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+
+  assert.match(result.code, /inox::class_assign_from_value\(\s*inox_value_\d+,\s*&Scope::inox_descriptor,\s*&this->scope\s*\)/)
+  assert.doesNotMatch(result.code, /this->scope = inox_value_\d+;/)
+}
+
+export function assertNativeClassStringLiteralConstructorUsesCppValue(): void {
   const source = `
 class Foo {
   name: string
@@ -266,27 +320,27 @@ console.log(f.test())
     target: 'cc'
   })
 
-  assert.match(result.code, /Foo\(const char\* name\);/)
-  assert.match(result.code, /Foo::Foo\(const char\* name\)/)
-  assert.match(result.code, /Foo f\("foo 1"\);|f = Foo\("foo 1"\);/)
+  assert.match(result.code, /Foo\(const inox::Value& name\);/)
+  assert.match(result.code, /Foo::Foo\(const inox::Value& name\)/)
+  assert.match(result.code, /Foo f\(inox::string\("foo 1", 5\)\);|f = Foo\(inox::string\("foo 1", 5\)\);/)
+  assert.doesNotMatch(result.code, /Foo\(const char\* name\)/)
+  assert.doesNotMatch(result.code, /Foo::Foo\(const char\* name\)/)
 
-  const literalConstructor = generatedBlock(result.code, 'Foo::Foo(const char* name)')
+  const constructor = generatedBlock(result.code, 'Foo::Foo(const inox::Value& name)')
 
-  assert.match(
-    literalConstructor,
-    /inox_string_from_literal\(\s*&inox_default_allocator,\s*name,\s*strlen\(name\),\s*this->name\.out\(\)\s*\)/
-  )
-  assert.doesNotMatch(literalConstructor, /inox_param_name/)
-  assert.doesNotMatch(literalConstructor, /this->name = inox_param_name;/)
-  assert.doesNotMatch(literalConstructor, /cleanup:/)
-  assert.doesNotMatch(literalConstructor, /goto cleanup;/)
-  assert.doesNotMatch(literalConstructor, /inox_retain/)
-  assert.doesNotMatch(literalConstructor, /inox_release/)
-  assert.doesNotMatch(literalConstructor, /tag != INOX_TAG_STRING/)
+  assert.match(constructor, /this->name = name;/)
+  assert.doesNotMatch(constructor, /inox_param_name/)
+  assert.doesNotMatch(constructor, /this->name = inox_param_name;/)
+  assert.doesNotMatch(constructor, /cleanup:/)
+  assert.doesNotMatch(constructor, /goto cleanup;/)
+  assert.doesNotMatch(constructor, /inox_retain/)
+  assert.doesNotMatch(constructor, /inox_release/)
+  assert.doesNotMatch(constructor, /tag != INOX_TAG_STRING/)
+  assert.doesNotMatch(constructor, /inox_string_from_literal/)
   assert.doesNotMatch(result.code, /as\.ref = \(inox_ref\*\)&name->header/)
   assert.doesNotMatch(result.code, /inox_cleanup/)
   assert.doesNotMatch(result.code, /Foo f\(inox_/)
-  assert.doesNotMatch(result.code, /f = Foo\(inox_/)
+  assert.doesNotMatch(result.code, /f = Foo\(inox_value/)
 }
 
 export function assertNativeClassDefinitionsPrecedeModuleValues(): void {

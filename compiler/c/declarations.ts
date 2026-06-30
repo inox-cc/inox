@@ -1,6 +1,5 @@
 import { diagnostic } from '../diagnostics.ts'
 import { collectIrTopLevelNodesFromPrograms, irClassMethodEffectName } from '../ir.ts'
-import { nodeStringListIncludes } from '../stdlib/node/string-list.ts'
 import type { AnyNode as CNode, IrProgram, SourceLocation } from '../types.ts'
 import {
   emitFunctionPointerParams,
@@ -57,12 +56,11 @@ import {
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
 import {
+  classParamUsesCppValueStorage,
   cClassValueTypeName,
   emitCClassConstructorHead,
   emitCClassInfoMethodName,
   emitCClassInfoTypeName,
-  emitCClassStringLiteralConstructorHead,
-  emitCClassStringLiteralParamName,
   registerClassObjectShape
 } from './values/classes.ts'
 import { isThrowingFunctionName } from './values/expressions.ts'
@@ -85,11 +83,6 @@ type CFunctionReturnInfo = {
 
 type CBoxedFunctionParamContext = {
   boxedMutableCaptureDeclarations: Set<CNode>
-}
-
-type CStringLiteralConstructorAssignment = {
-  fieldName: string
-  param: CFunctionParam
 }
 
 export type CDeclarationEmissionDependencies = {
@@ -764,36 +757,16 @@ export function emitClassConstructorDeclaration(
     return []
   }
 
-  const lines = emitNativeClassConstructorDeclaration(info, constructorMethod, head, false, baseContext, deps)
-  const stringLiteralHead = emitCClassStringLiteralConstructorHead(info, baseContext)
-
-  if (stringLiteralHead !== null && typeof stringLiteralHead !== 'undefined') {
-    lines.push('')
-    pushDeclarationLines(
-      lines,
-      emitNativeClassConstructorDeclaration(info, constructorMethod, stringLiteralHead, true, baseContext, deps)
-    )
-  }
-
-  return lines
+  return emitNativeClassConstructorDeclaration(info, constructorMethod, head, baseContext, deps)
 }
 
 function emitNativeClassConstructorDeclaration(
   info: CClassInfo,
   constructorMethod: CNode,
   head: string,
-  stringLiteralOverload: boolean,
   baseContext: CEmitContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
-  if (stringLiteralOverload) {
-    const compactLines = emitCompactStringLiteralConstructorDeclaration(info, constructorMethod, head)
-
-    if (compactLines !== null && typeof compactLines !== 'undefined') {
-      return compactLines
-    }
-  }
-
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, 'void', false)
   const params: CFunctionParam[] = constructorMethod.params
 
@@ -805,17 +778,15 @@ function emitNativeClassConstructorDeclaration(
   context.variables.set('this', cClassValueTypeName(info.name))
   context.classInstanceTypes.set('this', info.name)
   registerFunctionParamsInContext(constructorMethod, params, context)
+  registerNativeClassConstructorCppValueParams(params, context)
 
   const bodyLines: string[] = []
   const lines: string[] = []
 
-  if (stringLiteralOverload) {
-    pushIndentedDeclarationLines(bodyLines, emitStringLiteralConstructorParamMaterialization(params, context))
-  }
-
-  pushIndentedDeclarationLines(bodyLines, emitConstructorRuntimeParamPreludeForParams(info, constructorMethod, params, context))
+  pushIndentedDeclarationLines(bodyLines, emitConstructorRuntimeParamPreludeForParams(constructorMethod, params, context))
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(constructorMethod.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
+  const needsCleanup = shouldEmitCleanupLabel(context)
 
   lines.push(`${head} {`)
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
@@ -828,186 +799,25 @@ function emitNativeClassConstructorDeclaration(
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
-  pushScopedDeclarationBody(lines, bodyLines)
 
-  if (shouldEmitCleanupLabel(context)) {
+  if (needsCleanup) {
+    pushScopedDeclarationBody(lines, bodyLines)
     lines.push('cleanup:')
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
+  } else {
+    pushDeclarationLines(lines, bodyLines)
   }
 
   lines.push('}')
 
   return lines
-}
-
-function emitCompactStringLiteralConstructorDeclaration(
-  info: CClassInfo,
-  constructorMethod: CNode,
-  head: string
-): string[] | null {
-  const assignments = compactStringLiteralConstructorAssignments(info, constructorMethod)
-
-  if (assignments === null || typeof assignments === 'undefined') {
-    return null
-  }
-
-  const lines = [`${head} {`]
-
-  for (let index = 0; index < assignments.length; index = index + 1) {
-    const assignment = assignments[index]
-
-    if (index > 0) {
-      lines.push('')
-    }
-
-    pushIndentedDeclarationLines(lines, emitCompactStringLiteralConstructorAssignment(assignment))
-  }
-
-  lines.push('}')
-
-  return lines
-}
-
-function compactStringLiteralConstructorAssignments(
-  info: CClassInfo,
-  constructorMethod: CNode
-): CStringLiteralConstructorAssignment[] | null {
-  const params: CFunctionParam[] = constructorMethod.params
-
-  if (constructorMethod.body.length !== params.length) {
-    return null
-  }
-
-  const assignments: CStringLiteralConstructorAssignment[] = []
-  const usedParams: Set<string> = new Set()
-  const usedFields: Set<string> = new Set()
-
-  for (const statement of constructorMethod.body) {
-    const assignment = compactStringLiteralConstructorAssignment(info, statement, params)
-
-    if (assignment === null || typeof assignment === 'undefined') {
-      return null
-    }
-
-    if (usedParams.has(assignment.param.name) || usedFields.has(assignment.fieldName)) {
-      return null
-    }
-
-    usedParams.add(assignment.param.name)
-    usedFields.add(assignment.fieldName)
-    assignments.push(assignment)
-  }
-
-  if (usedParams.size !== params.length) {
-    return null
-  }
-
-  return assignments
-}
-
-function compactStringLiteralConstructorAssignment(
-  info: CClassInfo,
-  statement: CNode,
-  params: CFunctionParam[]
-): CStringLiteralConstructorAssignment | null {
-  if (statement.type !== 'ExpressionStatement') {
-    return null
-  }
-
-  const expression = statement.expression
-
-  if (expression.type !== 'AssignmentExpression' || expression.value.type !== 'Reference') {
-    return null
-  }
-
-  const fieldName = constructorThisFieldName(expression.target)
-
-  if (fieldName === null) {
-    return null
-  }
-
-  const field = constructorFieldForName(info, fieldName)
-
-  if (field === null || field.valueType !== 'string' || field.nullable === true) {
-    return null
-  }
-
-  const path: string[] = expression.value.path
-
-  if (path.length !== 1) {
-    return null
-  }
-
-  const param = constructorParamForName(params, path[0])
-
-  if (
-    param === null ||
-    param.valueType !== 'string' ||
-    param.nullable === true ||
-    param.optional === true ||
-    (param.defaultValue !== null && typeof param.defaultValue !== 'undefined')
-  ) {
-    return null
-  }
-
-  return {
-    fieldName,
-    param
-  }
-}
-
-function constructorParamForName(params: CFunctionParam[], name: string): CFunctionParam | null {
-  for (const param of params) {
-    if (param.name === name) {
-      return param
-    }
-  }
-
-  return null
-}
-
-function emitCompactStringLiteralConstructorAssignment(assignment: CStringLiteralConstructorAssignment): string[] {
-  const literalName = emitCClassStringLiteralParamName(assignment.param)
-  const fieldName = emitCIdentifier(assignment.fieldName)
-
-  return [
-    `if (inox_string_from_literal(&inox_default_allocator, ${literalName}, strlen(${literalName}), this->${fieldName}.out()) != INOX_OK) {`,
-    '  return;',
-    '}'
-  ]
-}
-
-function emitStringLiteralConstructorParamMaterialization(
-  params: CFunctionParam[],
-  context: CDeclarationFunctionContext
-): string[] {
-  const lines: string[] = []
-
-  for (const param of params) {
-    const valueName = emitCStringParamName(param.name)
-    const literalName = emitCClassStringLiteralParamName(param)
-
-    registerOwnedValue(context, valueName)
-    pushDeclarationLines(lines, emitPrepareStringLiteralConstructorParam(valueName, literalName))
-  }
-
-  return lines
-}
-
-function emitPrepareStringLiteralConstructorParam(valueName: string, literalName: string): string[] {
-  return [
-    `if (inox_string_from_literal(&inox_default_allocator, ${literalName}, strlen(${literalName}), &${valueName}) != INOX_OK) {`,
-    '  goto cleanup;',
-    '}'
-  ]
 }
 
 function emitConstructorRuntimeParamPreludeForParams(
-  info: CClassInfo,
   statement: CNode,
   params: CFunctionParam[],
   context: CDeclarationFunctionContext
@@ -1017,7 +827,7 @@ function emitConstructorRuntimeParamPreludeForParams(
   for (let index = 0; index < params.length; index = index + 1) {
     pushDeclarationLines(
       lines,
-      emitConstructorRuntimeParamPreludeForParam(info, statement, params[index], index, context)
+      emitConstructorRuntimeParamPreludeForParam(statement, params[index], index, context)
     )
   }
 
@@ -1025,144 +835,32 @@ function emitConstructorRuntimeParamPreludeForParams(
 }
 
 function emitConstructorRuntimeParamPreludeForParam(
-  info: CClassInfo,
   statement: CNode,
   param: CFunctionParam,
   index: number,
   context: CDeclarationFunctionContext
 ): string[] {
-  if (canOmitConstructorStringParamLocal(info, statement, param)) {
-    const paramName = emitCStringParamName(param.name)
-
-    return [emitRuntimeTypeCheck(`${paramName}.tag != INOX_TAG_STRING || ${paramName}.as.ref == 0`, context)]
+  if (classParamUsesCppValueStorage(param)) {
+    return []
   }
 
   return emitRuntimeParamPreludeForParam(statement, param, index, context)
 }
 
-function canOmitConstructorStringParamLocal(info: CClassInfo, statement: CNode, param: CFunctionParam): boolean {
-  if (param.valueType !== 'string' || param.nullable === true || param.optional === true) {
-    return false
-  }
-
-  if (param.defaultValue !== null && typeof param.defaultValue !== 'undefined') {
-    return false
-  }
-
-  return !constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(info, statement.body, param.name)
-}
-
-function constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(
-  info: CClassInfo,
-  node: unknown,
-  name: string
-): boolean {
-  if (node === null || typeof node === 'undefined') {
-    return false
-  }
-
-  if (Array.isArray(node)) {
-    for (const item of node) {
-      if (constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(info, item, name)) {
-        return true
-      }
-    }
-
-    return false
-  }
-
-  if (typeof node !== 'object') {
-    return false
-  }
-
-  if (isDirectRuntimeStringFieldAssignmentNode(info, node, name)) {
-    return false
-  }
-
-  const astNode = node as CNode
-
-  if (isReferenceToName(astNode, name)) {
-    return true
-  }
-
-  const record = node as CNode
-
-  for (const key of Object.keys(record)) {
-    if (key === 'loc' || key === 'shape' || key === 'functionType') {
+function registerNativeClassConstructorCppValueParams(
+  params: CFunctionParam[],
+  context: CDeclarationFunctionContext
+): void {
+  for (const param of params) {
+    if (!classParamUsesCppValueStorage(param)) {
       continue
     }
 
-    if (constructorNodeReferencesNameOutsideDirectRuntimeFieldAssignment(info, record[key], name)) {
-      return true
+    if (param.valueType === 'string' && param.nullable !== true) {
+      context.runtimeStrings.add(param.name)
+      context.runtimeStringValues.set(param.name, emitCIdentifier(param.name))
     }
   }
-
-  return false
-}
-
-function isDirectRuntimeStringFieldAssignmentNode(info: CClassInfo, node: unknown, name: string): boolean {
-  if (node === null || typeof node === 'undefined' || typeof node !== 'object') {
-    return false
-  }
-
-  const astNode = node as CNode
-  let assignment = astNode
-
-  if (astNode.type === 'ExpressionStatement') {
-    assignment = astNode.expression
-  }
-
-  if (assignment.type !== 'AssignmentExpression' || !isReferenceToName(assignment.value, name)) {
-    return false
-  }
-
-  const fieldName = constructorThisFieldName(assignment.target)
-
-  if (fieldName === null) {
-    return false
-  }
-
-  const field = constructorFieldForName(info, fieldName)
-
-  if (field === null) {
-    return false
-  }
-
-  return field.valueType === 'string'
-}
-
-function isReferenceToName(node: CNode, name: string): boolean {
-  return node.type === 'Reference' && node.path.length === 1 && nodeStringListIncludes(node.path, name)
-}
-
-function constructorThisFieldName(node: CNode): string | null {
-  if (node.type !== 'MemberExpression') {
-    return null
-  }
-
-  if (!isConstructorThisExpression(node.object)) {
-    return null
-  }
-
-  return node.property
-}
-
-function isConstructorThisExpression(node: CNode): boolean {
-  if (node.type === 'ThisExpression') {
-    return true
-  }
-
-  return node.type === 'Reference' && node.path.length === 1 && node.path[0] === 'this'
-}
-
-function constructorFieldForName(info: CClassInfo, name: string): CObjectShapeField | null {
-  for (const field of info.fields) {
-    if (field.name === name) {
-      return field
-    }
-  }
-
-  return null
 }
 
 export function emitClassMethodPrototype(info: CClassInfo, method: CNode, context: CEmitContext): string {

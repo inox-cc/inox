@@ -1,6 +1,10 @@
 #ifndef INOX_VALUE_HPP
 #define INOX_VALUE_HPP
 
+#include <stddef.h>
+#include <string.h>
+#include "inox/allocator.h"
+#include "inox/string.h"
 #include "inox/value.h"
 
 namespace inox {
@@ -101,6 +105,28 @@ private:
 
 inline Value adopt(inox_value value) {
   return Value(adopt_value, value);
+}
+
+inline Value string(const char* bytes, size_t len) {
+  inox_value value = inox_undefined_value();
+
+  if (bytes == nullptr) {
+    return Value();
+  }
+
+  if (inox_string_from_literal(&inox_default_allocator, bytes, len, &value) != INOX_OK) {
+    return Value();
+  }
+
+  return adopt(value);
+}
+
+inline Value string(const char* bytes) {
+  if (bytes == nullptr) {
+    return Value();
+  }
+
+  return string(bytes, strlen(bytes));
 }
 
 } // namespace inox

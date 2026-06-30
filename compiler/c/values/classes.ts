@@ -1,5 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { irClassMethodEffectName } from '../../ir.ts'
+import { nodeStringListIncludes } from '../../stdlib/node/string-list.ts'
 import type { AnyNode, Diagnostic, SourceLocation } from '../../types.ts'
 import {
   emitFunctionPointerParams,
@@ -26,7 +27,7 @@ import {
   registerOwnedPromise,
   registerOwnedValue
 } from '../context.ts'
-import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier, emitCObjectFunctionFieldName, utf8ByteLength } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, emitRuntimeValueCheck } from '../runtime-values.ts'
 import type {
   CClassInfo,
@@ -41,8 +42,6 @@ import type {
 } from '../types.ts'
 import { isReadonlyCObjectShapeField } from '../types.ts'
 import {
-  emitCScalarParamName,
-  emitCStringParamName,
   emitCType,
   cRuntimeValueTag,
   isManagedRuntimeReturnType,
@@ -371,6 +370,64 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
   )
 }
 
+export function classParamUsesCppValueStorage(param: CFunctionParam): boolean {
+  if (
+    param.className !== null &&
+    typeof param.className !== 'undefined'
+  ) {
+    return false
+  }
+
+  return (
+    param.valueType === 'unknown' ||
+    isManagedRuntimeReturnType(param.valueType) ||
+    isOpaqueRuntimeValueType(param.valueType)
+  )
+}
+
+function classParamNeedsGenericConstructorArgLowering(param: CFunctionParam): boolean {
+  return classObjectShapeHasFunctionFields(param.shape, classConstructorSeenTypes())
+}
+
+function classObjectShapeHasFunctionFields(shape: CObjectShape | null | undefined, seenTypes: string[]): boolean {
+  if (shape === null || typeof shape === 'undefined') {
+    return false
+  }
+
+  const fields = shape.fields
+
+  if (fields === null || typeof fields === 'undefined') {
+    return false
+  }
+
+  for (const field of fields) {
+    if (field.valueType === 'function') {
+      return true
+    }
+
+    if (
+      field.valueType === 'object' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined'
+    ) {
+      if (classConstructorSeenTypesInclude(seenTypes, field.declaredType)) {
+        continue
+      }
+
+      const pushedTypes = pushClassConstructorSeenType(seenTypes, field.declaredType)
+      const hasFunctionFields = classObjectShapeHasFunctionFields(field.shape, seenTypes)
+
+      popClassConstructorSeenTypes(seenTypes, pushedTypes)
+
+      if (hasFunctionFields) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
 export function classInfosUseCppValueRuntime(context: ClassInfoLookupContext): boolean {
   for (const info of context.classInfos.values()) {
     if (!info.native) {
@@ -462,12 +519,8 @@ function emitCClassParamType(param: CFunctionParam, context: ClassInfoLookupCont
     return 'const ' + emitCClassTypeNameForClassName(context, param.className) + '&'
   }
 
-  if (param.nullable === true && isNullableScalarType(param.valueType)) {
-    return 'inox_value'
-  }
-
-  if (param.valueType === 'string') {
-    return 'inox_value'
+  if (classParamUsesCppValueStorage(param)) {
+    return 'const inox::Value&'
   }
 
   return emitCType(param.valueType)
@@ -483,12 +536,8 @@ function emitCClassParamName(param: CFunctionParam): string {
     return emitCIdentifier(param.name)
   }
 
-  if (param.nullable === true && isNullableScalarType(param.valueType)) {
-    return emitCScalarParamName(param.name)
-  }
-
-  if (param.valueType === 'string') {
-    return emitCStringParamName(param.name)
+  if (classParamUsesCppValueStorage(param)) {
+    return emitCIdentifier(param.name)
   }
 
   return emitCIdentifier(param.name)
@@ -496,14 +545,6 @@ function emitCClassParamName(param: CFunctionParam): string {
 
 function emitCClassParamDeclaration(param: CFunctionParam, context: ClassInfoLookupContext): string {
   return `${emitCClassParamType(param, context)} ${emitCClassParamName(param)}`
-}
-
-export function emitCClassStringLiteralParamName(param: CFunctionParam): string {
-  return emitCIdentifier(param.name)
-}
-
-function emitCClassStringLiteralParamDeclaration(param: CFunctionParam): string {
-  return `const char* ${emitCClassStringLiteralParamName(param)}`
 }
 
 function emitCClassParamDeclarations(params: CFunctionParam[], context: ClassInfoLookupContext): string {
@@ -664,22 +705,6 @@ export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassI
   return `${emitCClassInfoTypeName(info)}(${emitCClassParamDeclarations(params, context)});`
 }
 
-export function emitCClassStringLiteralConstructorPrototype(info: CClassInfo): string | null {
-  const constructorMethod = info.constructor
-
-  if (
-    constructorMethod === null ||
-    typeof constructorMethod === 'undefined' ||
-    !classHasStringLiteralConstructorOverload(info)
-  ) {
-    return null
-  }
-
-  const params: CFunctionParam[] = constructorMethod.params
-
-  return `${emitCClassInfoTypeName(info)}(${emitCClassStringLiteralParamDeclarations(params)});`
-}
-
 export function emitCClassConstructorHead(info: CClassInfo, context: ClassInfoLookupContext): string | null {
   const constructorMethod = info.constructor
 
@@ -693,57 +718,6 @@ export function emitCClassConstructorHead(info: CClassInfo, context: ClassInfoLo
   const initializers = emitCClassConstructorInitializers(info, context)
 
   return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
-}
-
-export function emitCClassStringLiteralConstructorHead(info: CClassInfo, context: ClassInfoLookupContext): string | null {
-  const constructorMethod = info.constructor
-
-  if (
-    constructorMethod === null ||
-    typeof constructorMethod === 'undefined' ||
-    !classHasStringLiteralConstructorOverload(info)
-  ) {
-    return null
-  }
-
-  const params: CFunctionParam[] = constructorMethod.params
-  const typeName = emitCClassInfoTypeName(info)
-  const paramDeclarations = emitCClassStringLiteralParamDeclarations(params)
-  const initializers = emitCClassConstructorInitializers(info, context)
-
-  return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
-}
-
-export function classHasStringLiteralConstructorOverload(info: CClassInfo): boolean {
-  const constructorMethod = info.constructor
-
-  if (constructorMethod === null || typeof constructorMethod === 'undefined') {
-    return false
-  }
-
-  const params: CFunctionParam[] = constructorMethod.params
-
-  if (params.length === 0) {
-    return false
-  }
-
-  for (const param of params) {
-    if (param.valueType !== 'string' || param.nullable === true || param.optional === true) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function emitCClassStringLiteralParamDeclarations(params: CFunctionParam[]): string {
-  const declarations: string[] = []
-
-  for (const param of params) {
-    declarations.push(emitCClassStringLiteralParamDeclaration(param))
-  }
-
-  return joinStrings(declarations, ', ')
 }
 
 export function emitCNativeClassDeclarations(
@@ -799,12 +773,6 @@ export function emitCNativeClassDeclarations(
       }
 
       lines.push(`  ${constructorPrototype}`)
-
-      const stringLiteralConstructorPrototype = emitCClassStringLiteralConstructorPrototype(info)
-
-      if (stringLiteralConstructorPrototype !== null && typeof stringLiteralConstructorPrototype !== 'undefined') {
-        lines.push(`  ${stringLiteralConstructorPrototype}`)
-      }
     } else {
       lines.push(`  ${emitCClassDefaultConstructor(info, context)}`)
     }
@@ -2457,7 +2425,7 @@ function emitCNativeClassVariableDeclaration(
   if (prepared.args.length === 0) {
     lines.push(`${emitCClassInfoTypeName(info)} ${emitCIdentifier(target)};`)
   } else {
-    lines.push(`${emitCClassInfoTypeName(info)} ${emitCIdentifier(target)}(${joinStrings(prepared.args, ', ')});`)
+    lines.push(`${emitCClassInfoTypeName(info)} ${emitCIdentifier(target)}{${joinStrings(prepared.args, ', ')}};`)
   }
 
   return lines
@@ -2468,39 +2436,45 @@ function emitPreparedNativeClassConstructorArgs(
   expression: AnyNode,
   info: CClassInfo
 ): PreparedCallArgs {
-  if (!canUseStringLiteralConstructorOverload(info, expression)) {
-    return emitPreparedClassCallArgs(context, expression, classConstructorParams(info))
+  const params = classConstructorParams(info)
+
+  if (canUseCppValueConstructorArgFastPath(params, expression)) {
+    return emitPreparedCppValueConstructorArgs(context, expression, params)
   }
 
+  const prepared = emitPreparedClassCallArgs(context, expression, params)
   const args: string[] = []
 
-  for (const arg of expression.args) {
-    args.push(cStringLiteral(arg.value))
+  for (let index = 0; index < prepared.args.length; index = index + 1) {
+    const arg = prepared.args[index]
+    const param = index < params.length ? params[index] : null
+
+    if (param !== null && classParamUsesCppValueStorage(param)) {
+      args.push('inox::Value(' + arg + ')')
+    } else {
+      args.push(arg)
+    }
   }
 
   return {
-    lines: [],
+    lines: prepared.lines,
     args
   }
 }
 
-function canUseStringLiteralConstructorOverload(info: CClassInfo, expression: AnyNode): boolean {
-  if (!classHasStringLiteralConstructorOverload(info)) {
+function canUseCppValueConstructorArgFastPath(params: CFunctionParam[], expression: AnyNode): boolean {
+  if (params.length === 0 || params.length !== expression.args.length) {
     return false
   }
 
-  const params = classConstructorParams(info)
-
-  if (params.length !== expression.args.length) {
-    return false
+  for (const param of params) {
+    if (!classParamUsesCppValueStorage(param) || classParamNeedsGenericConstructorArgLowering(param)) {
+      return false
+    }
   }
 
   for (const arg of expression.args) {
     if (arg.type !== 'StringLiteral') {
-      return false
-    }
-
-    if (stringContainsNul(arg.value)) {
       return false
     }
   }
@@ -2508,8 +2482,33 @@ function canUseStringLiteralConstructorOverload(info: CClassInfo, expression: An
   return true
 }
 
-function stringContainsNul(value: string): boolean {
-  return value.indexOf('\0') !== -1
+function emitPreparedCppValueConstructorArgs(
+  context: ClassFunctionContext,
+  expression: AnyNode,
+  params: CFunctionParam[]
+): PreparedCallArgs {
+  const lines: string[] = []
+  const args: string[] = []
+
+  for (let index = 0; index < params.length; index = index + 1) {
+    const param = params[index]
+    const arg = expression.args[index]
+
+    if (param.valueType === 'string' && arg.type === 'StringLiteral') {
+      args.push(`inox::string(${cStringLiteral(arg.value)}, ${utf8ByteLength(arg.value)})`)
+      continue
+    }
+
+    const value = emitClassValueExpression(context, arg)
+
+    pushAllLines(lines, value.lines)
+    args.push(`inox::Value(${value.expression})`)
+  }
+
+  return {
+    lines,
+    args
+  }
 }
 
 function classFieldForName(info: CClassInfo, name: string): CObjectShapeField | null {
@@ -3377,6 +3376,36 @@ export function emitNativeClassFieldAssignment(
 
   if (access.field.valueType === 'boolean') {
     lines.push(`${access.reference} = ${value.expression}.as.boolean;`)
+    return lines
+  }
+
+  if (classFieldUsesNativeClassStorage(access.field)) {
+    const className = access.field.className
+
+    if (className === null || typeof className === 'undefined') {
+      return lines
+    }
+
+    const valueClassName = cClassNameFromValueType(value.valueType)
+
+    if (
+      valueClassName !== null &&
+      typeof valueClassName !== 'undefined' &&
+      nodeStringListIncludes([className], valueClassName)
+    ) {
+      lines.push(`${access.reference} = ${value.expression};`)
+      return lines
+    }
+
+    lines.push(
+      emitStatusCheck(
+        `inox::class_assign_from_value(${value.expression}, &${emitCClassDescriptorNameForClassName(
+          context,
+          className
+        )}, &${access.reference})`,
+        context
+      )
+    )
     return lines
   }
 
