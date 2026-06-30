@@ -431,8 +431,6 @@ export function emitCModuleSource(
     }
   }
 
-  lines.push('')
-
   pushCModuleLines(
     lines,
     emitCPrelude(
@@ -1852,7 +1850,7 @@ function emitCModuleInitFunction(
   pushScopedCModuleBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('inox_cleanup:')
+    lines.push('cleanup:')
     pushIndentedCModuleLines(lines, emitOwnedValueCleanup(context))
     pushIndentedCModuleLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedCModuleLines(lines, emitEventLoopCleanup(context))
@@ -1902,7 +1900,7 @@ function emitCModuleMainFunction(
   pushScopedCModuleBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('inox_cleanup:')
+    lines.push('cleanup:')
     pushIndentedCModuleLines(lines, emitOwnedValueCleanup(context))
     pushIndentedCModuleLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedCModuleLines(lines, emitEventLoopCleanup(context))

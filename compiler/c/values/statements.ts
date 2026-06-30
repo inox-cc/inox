@@ -3558,7 +3558,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   if (target !== null && typeof target !== 'undefined') {
     lines.push(`goto ${target};`)
   } else {
-    lines.push('goto inox_cleanup;')
+    lines.push('goto cleanup;')
   }
 
   return lines
@@ -4990,7 +4990,7 @@ export function emitReturnCleanupStatement(context: CFunctionContext): string {
   if (context.cleanupEnabled) {
     context.usedCleanupGoto = true
 
-    return 'goto inox_cleanup;'
+    return 'goto cleanup;'
   }
 
   if (context.returnType === 'void') {

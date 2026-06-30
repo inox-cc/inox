@@ -28,6 +28,44 @@ function pushCPreludeLines(target: string[], source: string[]): void {
   }
 }
 
+function pushUniqueCPreludeLine(target: string[], line: string): void {
+  for (let index = 0; index < target.length; index = index + 1) {
+    if (target[index] === line) {
+      return
+    }
+  }
+
+  target.push(line)
+}
+
+function isCSystemIncludeLine(line: string): boolean {
+  return line.slice(0, 10) === '#include <'
+}
+
+function pushCPreludeInclude(systemIncludes: string[], localIncludes: string[], line: string): void {
+  if (isCSystemIncludeLine(line)) {
+    pushUniqueCPreludeLine(systemIncludes, line)
+    return
+  }
+
+  pushUniqueCPreludeLine(localIncludes, line)
+}
+
+function pushCPreludeIncludes(systemIncludes: string[], localIncludes: string[], lines: string[]): void {
+  for (let index = 0; index < lines.length; index = index + 1) {
+    pushCPreludeInclude(systemIncludes, localIncludes, lines[index])
+  }
+}
+
+function emitCPreludeIncludeLines(systemIncludes: string[], localIncludes: string[]): string[] {
+  const lines: string[] = []
+
+  pushCPreludeLines(lines, systemIncludes)
+  pushCPreludeLines(lines, localIncludes)
+
+  return lines
+}
+
 function cPreludeRandomOptions(options: CEmitOptions): RandomOptions {
   const emitOptions = options as CPreludeEmitOptions
   const random = emitOptions.random
@@ -72,111 +110,114 @@ export function emitCPrelude(
   needsNetRuntime: boolean,
   options: CEmitOptions = {}
 ): string[] {
-  const lines = ['#include <stdio.h>']
+  const systemIncludes = ['#include <stdio.h>']
+  const localIncludes: string[] = []
   const randomOptions = cPreludeRandomOptions(options)
   const random = cPreludeRandomConfig(randomOptions)
 
   if (needsConsoleRuntime) {
-    lines.push('#include "inox/console.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/console.h"')
   }
 
   if (needsClassDescriptorRuntime) {
-    lines.push('#include "inox/class_runtime.hpp"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/class_runtime.hpp"')
   }
 
   if (needsRegexpRuntime) {
-    pushCPreludeLines(lines, emitCompilerFeatureCPreludeIncludes('regexp'))
+    pushCPreludeIncludes(systemIncludes, localIncludes, emitCompilerFeatureCPreludeIncludes('regexp'))
   }
 
   if (needsDgramRuntime) {
-    lines.push('#include "inox/dgram.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/dgram.h"')
   }
 
   if (needsDebugMemoryRuntime) {
-    lines.push('#include "inox/debug.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/debug.h"')
   }
 
   if (needsFetchRuntime) {
-    lines.push('#include "inox/fetch.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/fetch.h"')
   }
 
   if (needsHttpRuntime) {
-    lines.push('#include "inox/http.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/http.h"')
   }
 
   if (needsNetRuntime) {
-    lines.push('#include "inox/net.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/net.h"')
   }
 
   if (needsMathRuntime || needsCryptoRuntime) {
-    lines.push('#include <stdint.h>')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include <stdint.h>')
   }
 
   if (needsMathRuntime && cPreludeUsesOsRandom(random)) {
-    pushCPreludeLines(lines, emitOsEntropyHeaders())
+    pushCPreludeIncludes(systemIncludes, localIncludes, emitOsEntropyHeaders())
   }
 
   if (needsStringHeader) {
-    lines.push('#include <string.h>')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include <string.h>')
   }
 
   if (needsRuntime) {
-    lines.push('#include "inox/allocator.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/allocator.h"')
     if (needsCollectionRuntime) {
-      lines.push('#include "inox/array.h"')
-      lines.push('#include "inox/hash.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/array.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/hash.h"')
     }
     if (needsAsyncRuntime) {
-      lines.push('#include "inox/loop.h"')
-      lines.push('#include "inox/promise.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/promise.h"')
     }
     if (needsCallbackRuntime) {
-      lines.push('#include "inox/callback.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/callback.h"')
     }
     if (needsBinaryRuntime) {
-      lines.push('#include "inox/binary.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/binary.h"')
     }
     if (needsChildProcessRuntime) {
-      lines.push('#include "inox/child_process.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/child_process.h"')
     }
     if (needsCryptoRuntime) {
-      lines.push('#include "inox/crypto.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/crypto.h"')
     }
     if (needsFsRuntime) {
-      lines.push('#include "inox/fs.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/fs.h"')
     }
     if (needsJsonRuntime) {
-      lines.push('#include "inox/json.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/json.h"')
     }
     if (needsOsRuntime) {
-      lines.push('#include "inox/os.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/os.h"')
     }
     if (needsPathRuntime) {
-      lines.push('#include "inox/path.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/path.h"')
     }
     if (needsUrlRuntime) {
-      lines.push('#include "inox/url.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/url.h"')
     }
     if (needsProcessRuntime) {
-      lines.push('#include "inox/process.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/process.h"')
     }
     if (needsCollectionRuntime) {
-      lines.push('#include "inox/map.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/map.h"')
     }
     if (needsObjectRuntime) {
-      lines.push('#include "inox/object.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/object.h"')
     }
     if (needsCollectionRuntime) {
-      lines.push('#include "inox/set.h"')
+      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/set.h"')
     }
-    lines.push('#include "inox/string.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/string.h"')
   } else if (needsStringHeader) {
-    lines.push('#include "inox/string.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/string.h"')
   }
 
   if (needsTimeRuntime) {
-    lines.push('#include "inox/time.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/time.h"')
   }
+
+  const lines = emitCPreludeIncludeLines(systemIncludes, localIncludes)
 
   lines.push('')
 

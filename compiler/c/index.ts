@@ -7700,7 +7700,7 @@ function emitAwaitRejectedPromiseLines(
 
   if (target === '') {
     lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto inox_cleanup;')
+    lines.push('  goto cleanup;')
   } else {
     lines.push(`  goto ${target};`)
   }

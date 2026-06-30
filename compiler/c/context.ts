@@ -495,7 +495,7 @@ export function emitFailureStatement(context: CFailureContext): string {
 
   if (context.throwingFunction && context.cleanupEnabled) {
     context.usedCleanupGoto = true
-    return 'do { inox_status_result = INOX_ERR_TYPE; goto inox_cleanup; } while (0);'
+    return 'do { inox_status_result = INOX_ERR_TYPE; goto cleanup; } while (0);'
   }
 
   if (context.statusReturn) {
@@ -504,7 +504,7 @@ export function emitFailureStatement(context: CFailureContext): string {
 
   if (context.cleanupEnabled) {
     context.usedCleanupGoto = true
-    return 'goto inox_cleanup;'
+    return 'goto cleanup;'
   }
 
   if (context.returnType === 'void') {

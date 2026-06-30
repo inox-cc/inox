@@ -3092,7 +3092,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   pushIndentedLines(lines, statementLines)
 
   if (deps.shouldEmitCleanupLabel(context)) {
-    lines.push('inox_cleanup:')
+    lines.push('cleanup:')
     pushIndentedLines(lines, deps.emitOwnedValueCleanup(context))
     pushIndentedLines(lines, deps.emitBoxedValueCleanup(context))
     lines.push(`  ${deps.emitCleanupReturn(context)}`)

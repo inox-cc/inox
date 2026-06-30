@@ -284,7 +284,7 @@ export function emitFunctionDeclaration(
   pushScopedDeclarationBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('inox_cleanup:')
+    lines.push('cleanup:')
     pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
@@ -710,7 +710,7 @@ export function emitClassMethodDeclaration(
   pushScopedDeclarationBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('inox_cleanup:')
+    lines.push('cleanup:')
     pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
@@ -812,7 +812,7 @@ function emitNativeClassConstructorDeclaration(
   pushScopedDeclarationBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('inox_cleanup:')
+    lines.push('cleanup:')
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
@@ -845,7 +845,7 @@ function emitStringLiteralConstructorParamMaterialization(
 function emitPrepareStringLiteralConstructorParam(valueName: string, literalName: string): string[] {
   return [
     `if (inox_string_from_literal(&inox_default_allocator, ${literalName}, strlen(${literalName}), &${valueName}) != INOX_OK) {`,
-    '  goto inox_cleanup;',
+    '  goto cleanup;',
     '}'
   ]
 }
@@ -1255,7 +1255,7 @@ export function emitMainWrapper(
   pushScopedDeclarationBody(lines, bodyLines)
 
   if (shouldEmitCleanupLabel(context)) {
-    lines.push('inox_cleanup:')
+    lines.push('cleanup:')
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
     pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))

@@ -104,6 +104,7 @@ function shouldRunIntegrationTests(options: RunnerOptions): boolean {
 
 async function runIntegrationTests(): Promise<void> {
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
+  const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
   const { assertModuleDeclarationImportBoundary } =
@@ -150,6 +151,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('build-cmake-log-level', () => {
       assertBuildCMakeConfigureIsQuiet()
+    })
+
+    await t.test('c-prelude-include-order', () => {
+      assertCPreludeIncludeOrder()
     })
 
     await t.test('cli-entry-module-main', async () => {

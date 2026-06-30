@@ -2870,7 +2870,7 @@ function emitThrowingClassMethodStatusCheck(status: string, context: ClassFuncti
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
     lines.push('  inox_status_result = INOX_ERR_THROW;')
-    lines.push('  goto inox_cleanup;')
+    lines.push('  goto cleanup;')
   } else {
     lines.push(`  ${emitFailureStatement(context)}`)
   }
