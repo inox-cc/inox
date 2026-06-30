@@ -469,10 +469,25 @@ export function emitCModuleSource(
     emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps), classDescriptorNames)
   )
   pushCModuleLines(lines, emitCClassDescriptorDeclarationsForNames(context, classDescriptorNames))
-  emitCModuleValueDefinitions(lines, moduleValues, context)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
 
   const bodyLines: string[] = []
+
+  for (const classInfo of context.classInfos.values()) {
+    pushCModuleLines(bodyLines, deps.emitClassConstructorDeclaration(classInfo, context))
+    bodyLines.push('')
+  }
+
+  for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
+    const item = cModuleClassMethodAt(classMethods, methodIndex)
+    const info = item.info
+    const method = item.method
+
+    pushCModuleLines(bodyLines, deps.emitClassMethodDeclaration(info, method, context))
+    bodyLines.push('')
+  }
+
+  emitCModuleValueDefinitions(bodyLines, moduleValues, context)
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
     pushCModuleLines(bodyLines, emitAsyncTaskWrapperDeclaration(wrapper, context, deps.asyncTaskLoweringDependencies))
@@ -515,20 +530,6 @@ export function emitCModuleSource(
     const item = cModuleNodeAt(functions, functionIndex)
 
     pushCModuleLines(bodyLines, emitCModuleFunctionDeclaration(plan, item, context, deps))
-    bodyLines.push('')
-  }
-
-  for (const classInfo of context.classInfos.values()) {
-    pushCModuleLines(bodyLines, deps.emitClassConstructorDeclaration(classInfo, context))
-    bodyLines.push('')
-  }
-
-  for (let methodIndex = 0; methodIndex < classMethods.length; methodIndex = methodIndex + 1) {
-    const item = cModuleClassMethodAt(classMethods, methodIndex)
-    const info = item.info
-    const method = item.method
-
-    pushCModuleLines(bodyLines, deps.emitClassMethodDeclaration(info, method, context))
     bodyLines.push('')
   }
 

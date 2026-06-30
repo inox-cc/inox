@@ -87,6 +87,11 @@ type CBoxedFunctionParamContext = {
   boxedMutableCaptureDeclarations: Set<CNode>
 }
 
+type CStringLiteralConstructorAssignment = {
+  fieldName: string
+  param: CFunctionParam
+}
+
 export type CDeclarationEmissionDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   emitStatementList: (statements: CNode[], context: CFunctionContext) => string[]
@@ -781,6 +786,14 @@ function emitNativeClassConstructorDeclaration(
   baseContext: CEmitContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
+  if (stringLiteralOverload) {
+    const compactLines = emitCompactStringLiteralConstructorDeclaration(info, constructorMethod, head)
+
+    if (compactLines !== null && typeof compactLines !== 'undefined') {
+      return compactLines
+    }
+  }
+
   const context: CDeclarationFunctionContext = createFunctionContext(baseContext, 'void', false)
   const params: CFunctionParam[] = constructorMethod.params
 
@@ -829,6 +842,143 @@ function emitNativeClassConstructorDeclaration(
   lines.push('}')
 
   return lines
+}
+
+function emitCompactStringLiteralConstructorDeclaration(
+  info: CClassInfo,
+  constructorMethod: CNode,
+  head: string
+): string[] | null {
+  const assignments = compactStringLiteralConstructorAssignments(info, constructorMethod)
+
+  if (assignments === null || typeof assignments === 'undefined') {
+    return null
+  }
+
+  const lines = [`${head} {`]
+
+  for (let index = 0; index < assignments.length; index = index + 1) {
+    const assignment = assignments[index]
+
+    if (index > 0) {
+      lines.push('')
+    }
+
+    pushIndentedDeclarationLines(lines, emitCompactStringLiteralConstructorAssignment(assignment))
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function compactStringLiteralConstructorAssignments(
+  info: CClassInfo,
+  constructorMethod: CNode
+): CStringLiteralConstructorAssignment[] | null {
+  const params: CFunctionParam[] = constructorMethod.params
+
+  if (constructorMethod.body.length !== params.length) {
+    return null
+  }
+
+  const assignments: CStringLiteralConstructorAssignment[] = []
+  const usedParams: Set<string> = new Set()
+  const usedFields: Set<string> = new Set()
+
+  for (const statement of constructorMethod.body) {
+    const assignment = compactStringLiteralConstructorAssignment(info, statement, params)
+
+    if (assignment === null || typeof assignment === 'undefined') {
+      return null
+    }
+
+    if (usedParams.has(assignment.param.name) || usedFields.has(assignment.fieldName)) {
+      return null
+    }
+
+    usedParams.add(assignment.param.name)
+    usedFields.add(assignment.fieldName)
+    assignments.push(assignment)
+  }
+
+  if (usedParams.size !== params.length) {
+    return null
+  }
+
+  return assignments
+}
+
+function compactStringLiteralConstructorAssignment(
+  info: CClassInfo,
+  statement: CNode,
+  params: CFunctionParam[]
+): CStringLiteralConstructorAssignment | null {
+  if (statement.type !== 'ExpressionStatement') {
+    return null
+  }
+
+  const expression = statement.expression
+
+  if (expression.type !== 'AssignmentExpression' || expression.value.type !== 'Reference') {
+    return null
+  }
+
+  const fieldName = constructorThisFieldName(expression.target)
+
+  if (fieldName === null) {
+    return null
+  }
+
+  const field = constructorFieldForName(info, fieldName)
+
+  if (field === null || field.valueType !== 'string' || field.nullable === true) {
+    return null
+  }
+
+  const path: string[] = expression.value.path
+
+  if (path.length !== 1) {
+    return null
+  }
+
+  const param = constructorParamForName(params, path[0])
+
+  if (
+    param === null ||
+    param.valueType !== 'string' ||
+    param.nullable === true ||
+    param.optional === true ||
+    (param.defaultValue !== null && typeof param.defaultValue !== 'undefined')
+  ) {
+    return null
+  }
+
+  return {
+    fieldName,
+    param
+  }
+}
+
+function constructorParamForName(params: CFunctionParam[], name: string): CFunctionParam | null {
+  for (const param of params) {
+    if (param.name === name) {
+      return param
+    }
+  }
+
+  return null
+}
+
+function emitCompactStringLiteralConstructorAssignment(assignment: CStringLiteralConstructorAssignment): string[] {
+  const literalName = emitCClassStringLiteralParamName(assignment.param)
+  const fieldName = emitCIdentifier(assignment.fieldName)
+
+  return [
+    `if (inox_string_from_literal(&inox_default_allocator, ${literalName}, strlen(${literalName}), &this->${fieldName}) != INOX_OK) {`,
+    '  return;',
+    '}'
+  ]
 }
 
 function emitStringLiteralConstructorParamMaterialization(

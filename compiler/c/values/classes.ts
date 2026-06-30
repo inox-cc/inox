@@ -483,7 +483,7 @@ function emitCClassParamDeclaration(param: CFunctionParam, context: ClassInfoLoo
 }
 
 export function emitCClassStringLiteralParamName(param: CFunctionParam): string {
-  return `inox_literal_${emitCIdentifier(param.name)}`
+  return emitCIdentifier(param.name)
 }
 
 function emitCClassStringLiteralParamDeclaration(param: CFunctionParam): string {

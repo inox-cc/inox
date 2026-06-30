@@ -137,6 +137,7 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/runtime-allocator-prelude.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
+    assertNativeClassDefinitionsPrecedeModuleValues,
     assertNativeClassFieldAliasLowering,
     assertNativeClassLowering,
     assertNativeClassMapRuntimeFieldLowering,
@@ -261,6 +262,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-string-literal-constructor-overload', () => {
       assertNativeClassStringLiteralConstructorOverload()
+    })
+
+    await t.test('native-class-definitions-precede-module-values', () => {
+      assertNativeClassDefinitionsPrecedeModuleValues()
     })
 
     await t.test('native-class-module-unique-symbols', () => {

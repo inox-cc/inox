@@ -1333,7 +1333,6 @@ export function emitCUnit(
   )
   pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps), classDescriptorNames))
   pushUnitLines(lines, emitCClassDescriptorDeclarationsForNames(baseContext, classDescriptorNames))
-  emitCUnitValueDefinitions(lines, valueDeclarations)
   emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
@@ -1434,6 +1433,18 @@ export function emitCUnit(
     lines.push('')
   }
 
+  for (const classInfo of baseContext.classInfos.values()) {
+    pushUnitLines(lines, deps.emitClassConstructorDeclaration(classInfo, baseContext))
+    lines.push('')
+  }
+
+  for (const classMethod of classMethods) {
+    pushUnitLines(lines, deps.emitClassMethodDeclaration(classMethod.info, classMethod.method, baseContext))
+    lines.push('')
+  }
+
+  emitCUnitValueDefinitions(lines, valueDeclarations)
+
   if (asyncTaskWrappers.size > 0) {
     for (const wrapper of asyncTaskWrappers.values()) {
       pushUnitLines(lines, emitAsyncTaskWrapperDeclaration(wrapper, baseContext, deps.asyncTaskLoweringDependencies))
@@ -1480,16 +1491,6 @@ export function emitCUnit(
 
   for (const item of functions) {
     pushUnitLines(lines, deps.emitFunctionDeclaration(item, baseContext))
-    lines.push('')
-  }
-
-  for (const classInfo of baseContext.classInfos.values()) {
-    pushUnitLines(lines, deps.emitClassConstructorDeclaration(classInfo, baseContext))
-    lines.push('')
-  }
-
-  for (const classMethod of classMethods) {
-    pushUnitLines(lines, deps.emitClassMethodDeclaration(classMethod.info, classMethod.method, baseContext))
     lines.push('')
   }
 

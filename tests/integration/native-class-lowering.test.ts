@@ -265,16 +265,63 @@ console.log(f.test())
     target: 'cc'
   })
 
-  assert.match(result.code, /Foo\(const char\* inox_literal_name\);/)
-  assert.match(result.code, /Foo::Foo\(const char\* inox_literal_name\)/)
+  assert.match(result.code, /Foo\(const char\* name\);/)
+  assert.match(result.code, /Foo::Foo\(const char\* name\)/)
   assert.match(result.code, /Foo f\("foo 1"\);|f = Foo\("foo 1"\);/)
-  assert.match(result.code, /this->name = inox_param_name;/)
-  assert.match(result.code, /^cleanup:$/m)
-  assert.match(result.code, /goto cleanup;/)
+
+  const literalConstructor = generatedBlock(result.code, 'Foo::Foo(const char* name)')
+
+  assert.match(
+    literalConstructor,
+    /inox_string_from_literal\(\s*&inox_default_allocator,\s*name,\s*strlen\(name\),\s*&this->name\s*\)/
+  )
+  assert.doesNotMatch(literalConstructor, /inox_param_name/)
+  assert.doesNotMatch(literalConstructor, /this->name = inox_param_name;/)
+  assert.doesNotMatch(literalConstructor, /cleanup:/)
+  assert.doesNotMatch(literalConstructor, /goto cleanup;/)
+  assert.doesNotMatch(literalConstructor, /inox_retain/)
+  assert.doesNotMatch(literalConstructor, /inox_release/)
+  assert.doesNotMatch(literalConstructor, /tag != INOX_TAG_STRING/)
   assert.doesNotMatch(result.code, /as\.ref = \(inox_ref\*\)&name->header/)
   assert.doesNotMatch(result.code, /inox_cleanup/)
   assert.doesNotMatch(result.code, /Foo f\(inox_/)
   assert.doesNotMatch(result.code, /f = Foo\(inox_/)
+}
+
+export function assertNativeClassDefinitionsPrecedeModuleValues(): void {
+  const source = `
+class Foo {
+  name: string
+
+  constructor(name: string) {
+    this.name = name
+  }
+
+  test() {
+    console.log(this.name)
+  }
+}
+
+const v = 123
+const f = new Foo('foo 1')
+f.test()
+`
+
+  const result = compileSource(source, {
+    target: 'cc'
+  })
+  const methodIndex = result.code.indexOf('void Foo::test()')
+  const numberValueIndex = result.code.indexOf('static double v = 0;')
+  const classValueIndex = result.code.indexOf('static Foo f;')
+  const mainIndex = result.code.indexOf('int main(void)')
+
+  assert.notEqual(methodIndex, -1, 'missing Foo::test definition')
+  assert.notEqual(numberValueIndex, -1, 'missing number module value')
+  assert.notEqual(classValueIndex, -1, 'missing class module value')
+  assert.notEqual(mainIndex, -1, 'missing main')
+  assert.ok(methodIndex < numberValueIndex, 'class methods should be emitted before module values')
+  assert.ok(numberValueIndex < classValueIndex, 'module values should preserve declaration order')
+  assert.ok(classValueIndex < mainIndex, 'module values should be emitted before main')
 }
 
 export function assertNativeClassModuleUniqueSymbols(): void {
@@ -362,6 +409,34 @@ function classDescriptorFieldPattern(name: string, valueType: string, declaredTy
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function generatedBlock(source: string, signature: string): string {
+  const start = source.indexOf(signature)
+
+  assert.notEqual(start, -1, `missing generated block ${signature}`)
+
+  const bodyStart = source.indexOf('{', start)
+
+  assert.notEqual(bodyStart, -1, `missing generated block body ${signature}`)
+
+  let depth = 0
+
+  for (let index = bodyStart; index < source.length; index = index + 1) {
+    const char = source[index]
+
+    if (char === '{') {
+      depth = depth + 1
+    } else if (char === '}') {
+      depth = depth - 1
+
+      if (depth === 0) {
+        return source.slice(start, index + 1)
+      }
+    }
+  }
+
+  assert.fail(`missing generated block end ${signature}`)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
