@@ -34,6 +34,10 @@ export function runtimeObjectApiValueMismatchCondition(name: string): string {
   return runtimeExactObjectValueMismatchCondition(name)
 }
 
+export function runtimeObjectReadValueMismatchCondition(name: string): string {
+  return runtimeObjectLikeValueMismatchCondition(name)
+}
+
 export function runtimeFetchAbortControllerValueMismatchCondition(name: string): string {
   return runtimeExactObjectValueMismatchCondition(name)
 }

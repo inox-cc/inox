@@ -61,7 +61,8 @@ export async function assertCliEntryModuleMain(): Promise<void> {
 
     assert.match(generated, /int main\(void\)/)
     assert.match(generatedDependency, /inox_mod_src_lib_value_ts_.*_init/)
-    assert.match(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_localValue\(void\);/)
+    assert.match(generatedDependency, /static [^\n]* localValue\(void\);/)
+    assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_localValue\(void\);/)
     assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)
     assert.doesNotMatch(generatedDependencyHeader, /localValue/)
     assert.match(generatedDependencyHeader, /inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)

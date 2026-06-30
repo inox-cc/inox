@@ -21,7 +21,7 @@ import {
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, emitCIdentifier, escapeCPrintfFormatText, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeValueCheck, runtimeObjectApiValueMismatchCondition } from '../runtime-values.ts'
+import { emitRuntimeValueCheck, runtimeObjectReadValueMismatchCondition } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import type {
   CObjectFieldInfo,
@@ -172,6 +172,10 @@ export type StringLoweringDependencies = {
   emitPreparedClassToStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
   emitPreparedRuntimeObjectReferenceExpression(
     expression: AnyNode,
+    context: StringCContext
+  ): PreparedExpression | null
+  emitPreparedRuntimeObjectRootReferenceExpression(
+    name: string,
     context: StringCContext
   ): PreparedExpression | null
   emitReference(expression: AnyNode, context: StringCContext): string
@@ -1073,6 +1077,12 @@ export function emitPreparedStringBytesOperand(
     return stringValueCall
   }
 
+  const runtimeObjectFieldString = emitPreparedRuntimeObjectStringFieldBytesOperand(expression, context, tempPrefix)
+
+  if (runtimeObjectFieldString !== null && typeof runtimeObjectFieldString !== 'undefined') {
+    return runtimeObjectFieldString
+  }
+
   const typedStringValue = emitPreparedTypedStringValueBytesOperand(expression, context, tempPrefix)
 
   if (typedStringValue !== null && typeof typedStringValue !== 'undefined') {
@@ -1095,12 +1105,6 @@ export function emitPreparedStringBytesOperand(
       bytes: `${string}->bytes`,
       length: `${string}->len`
     }
-  }
-
-  const runtimeObjectFieldString = emitPreparedRuntimeObjectStringFieldBytesOperand(expression, context, tempPrefix)
-
-  if (runtimeObjectFieldString !== null && typeof runtimeObjectFieldString !== 'undefined') {
-    return runtimeObjectFieldString
   }
 
   const runtimeArrayString = emitPreparedRuntimeArrayStringBytesOperand(expression, context, tempPrefix)
@@ -1734,7 +1738,7 @@ function emitPreparedRuntimeObjectFieldValueExpression(
 
   registerOwnedValue(context, value)
   pushAllLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(runtimeObjectApiValueMismatchCondition(object.expression), context))
+  lines.push(emitRuntimeTypeCheck(runtimeObjectReadValueMismatchCondition(object.expression), context))
   pushAllLines(lines, emitPrepareOwnedValueWrite(value))
   lines.push(
     emitStatusCheck(
@@ -1765,9 +1769,19 @@ function emitPreparedRuntimeObjectReceiverExpression(
   }
 
   if (expression.type === 'Reference' && expression.path.length === 1) {
+    const name = expression.path[0]
+
+    if (!hasRuntimeObjectStorageReference(name, context)) {
+      const runtimeObjectRoot = stringDeps(context).emitPreparedRuntimeObjectRootReferenceExpression(name, context)
+
+      if (runtimeObjectRoot !== null && typeof runtimeObjectRoot !== 'undefined') {
+        return runtimeObjectRoot
+      }
+    }
+
     return {
       lines: [],
-      expression: stringDeps(context).emitObjectValueReference(expression.path[0], context),
+      expression: stringDeps(context).emitObjectValueReference(name, context),
       valueType: 'object'
     }
   }
@@ -1787,6 +1801,24 @@ function emitPreparedRuntimeObjectReceiverExpression(
   }
 
   return stringDeps(context).emitCValueExpression(expression, context)
+}
+
+function hasRuntimeObjectStorageReference(name: string, context: StringCContext): boolean {
+  const localValueNames = context.localValueNames
+
+  if (localValueNames !== null && typeof localValueNames !== 'undefined' && localValueNames.has(name)) {
+    return true
+  }
+
+  const variables = context.variables
+
+  if (variables !== null && typeof variables !== 'undefined' && variables.has(name)) {
+    return true
+  }
+
+  const moduleValueNames = context.moduleValueNames
+
+  return moduleValueNames !== null && typeof moduleValueNames !== 'undefined' && moduleValueNames.has(name)
 }
 
 function isDynamicRuntimeStringFieldExpression(expression: AnyNode, context: StringCContext): boolean {

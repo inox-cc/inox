@@ -173,6 +173,7 @@ import {
   emitPreparedFsSyncValueExpression,
   emitPreparedNodeStdlibAsyncTaskSourceExpression,
   emitPreparedNodeStdlibRuntimeObjectReferenceExpression,
+  emitPreparedNodeStdlibRuntimeObjectRootReferenceExpression,
   emitNodeNetworkCallStatement,
   emitNodeNetworkVariableDeclaration,
   emitPreparedNodeNetworkAddressPortExpression,
@@ -998,6 +999,10 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   emitPreparedClassToStringExpression,
   emitPreparedRuntimeObjectReferenceExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedNodeStdlibRuntimeObjectReferenceExpression(expression, context, {
+      process: processLoweringDependencies
+    }),
+  emitPreparedRuntimeObjectRootReferenceExpression: (name: string, context: CFunctionContext) =>
+    emitPreparedNodeStdlibRuntimeObjectRootReferenceExpression(name, context, {
       process: processLoweringDependencies
     }),
   emitReference,

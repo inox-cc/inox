@@ -72,6 +72,7 @@ import {
   cProcessRuntimePropertyName,
   cProcessRuntimePropertyValueType,
   cProcessRuntimeStringPropertyName,
+  emitPreparedProcessRuntimeObjectRootReferenceExpression,
   emitPreparedProcessRuntimeObjectReferenceExpression,
   processRuntimeObjectReferenceEmitterDescriptors
 } from '../../../stdlib/node/process/compiler/c.ts'
@@ -446,6 +447,22 @@ export function emitPreparedNodeStdlibRuntimeObjectReferenceExpression(
   return null
 }
 
+export function emitPreparedNodeStdlibRuntimeObjectRootReferenceExpression(
+  name: string,
+  context: CFunctionContext,
+  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
+): PreparedExpression | null {
+  for (let index = 0; index < nodeStdlibRuntimeObjectReferenceEmitters.length; index = index + 1) {
+    const emitter = nodeStdlibRuntimeObjectReferenceEmitters[index]
+
+    if (emitter.name === name) {
+      return emitPreparedNodeStdlibRuntimeObjectRootReference(emitter, name, context, dependencies)
+    }
+  }
+
+  return null
+}
+
 function nodeStdlibRuntimeObjectReferenceEmitterMatches(
   emitter: NodeStdlibRuntimeObjectReferenceEmitter,
   expression: AnyNode
@@ -455,6 +472,19 @@ function nodeStdlibRuntimeObjectReferenceEmitterMatches(
   }
 
   return expression.runtimeObjectSource === emitter.source && expression.runtimeObjectName === emitter.name
+}
+
+function emitPreparedNodeStdlibRuntimeObjectRootReference(
+  emitter: NodeStdlibRuntimeObjectReferenceEmitter,
+  name: string,
+  context: CFunctionContext,
+  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
+): PreparedExpression | null {
+  if (emitter.packageName === 'process') {
+    return emitPreparedProcessRuntimeObjectRootReferenceExpression(name, context, dependencies.process)
+  }
+
+  return null
 }
 
 function emitPreparedNodeStdlibRuntimeObjectReference(

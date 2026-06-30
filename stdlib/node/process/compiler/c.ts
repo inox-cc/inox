@@ -114,6 +114,27 @@ export function emitPreparedProcessRuntimeObjectReferenceExpression(
   return emitPreparedProcessValueExpression(expression, context, dependencies, null)
 }
 
+export function emitPreparedProcessRuntimeObjectRootReferenceExpression(
+  name: string,
+  context: ProcessCContext,
+  dependencies: ProcessLoweringDependencies
+): PreparedExpression | null {
+  if (name !== 'process') {
+    return null
+  }
+
+  return emitPreparedProcessRuntimeObjectReferenceExpression(
+    {
+      path: [name],
+      runtimeObjectName: 'process',
+      runtimeObjectSource: nodeProcessImportSource,
+      type: 'Reference'
+    },
+    context,
+    dependencies
+  )
+}
+
 export function cProcessRuntimeStringPropertyName(expression: AnyNode | null | undefined): string | null {
   const property = cProcessRuntimePropertyName(expression)
 
