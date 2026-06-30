@@ -136,6 +136,7 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/native-inox-unicode-string-literal.test.ts')
   const { assertPromiseAwaitCatchReadsRejectedValue, assertPromiseAwaitUsesRuntimeHelper } =
     await import('./integration/promise-await-helper-lowering.test.ts')
+  const { assertPromiseVariablesUseCppRaii } = await import('./integration/promise-raii-lowering.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRuntimeAllocatorStaysInRuntime } =
     await import('./integration/runtime-allocator-prelude.test.ts')
@@ -296,6 +297,10 @@ async function runIntegrationTests(): Promise<void> {
     await t.test('promise-await-helper-lowering', () => {
       assertPromiseAwaitUsesRuntimeHelper()
       assertPromiseAwaitCatchReadsRejectedValue()
+    })
+
+    await t.test('promise-raii-lowering', () => {
+      assertPromiseVariablesUseCppRaii()
     })
 
     await t.test('runtime-allocator-prelude', () => {

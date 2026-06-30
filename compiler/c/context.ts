@@ -775,7 +775,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
   }
 
   for (const name of ownedPromises) {
-    lines.push(`inox_promise* ${emitCLocalName(name)} = 0;`)
+    lines.push(`inox::Promise ${emitCLocalName(name)};`)
   }
 
   return lines
@@ -843,18 +843,15 @@ export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
   for (let index = context.ownedPromises.length - 1; index >= 0; index--) {
     const name = context.ownedPromises[index]
     const localName = emitCLocalName(name)
-    const release = `if (${localName} != 0) inox_promise_release(${localName});`
 
     if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
-      lines.push(release)
       continue
     }
 
-    lines.push(`if (${localName} != 0 && inox_promise_is_unhandled_rejection(${localName})) {`)
+    lines.push(`if (${localName}.has_unhandled_rejection()) {`)
     lines.push('  fprintf(stderr, "Unhandled Promise rejection\\n");')
     lines.push(`  ${context.unhandledRejectionFlag} = 1;`)
     lines.push('}')
-    lines.push(release)
   }
 
   return lines
