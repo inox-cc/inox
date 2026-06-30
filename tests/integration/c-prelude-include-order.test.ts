@@ -15,7 +15,8 @@ export function assertCPreludeIncludeOrder(): void {
         path: '/pkg/src/index.ts',
         source: `
 const value = 'hello'
-console.log(value)
+const label: string = \`value \${value}\`
+console.log(label)
 `
       }
     ],
@@ -32,7 +33,7 @@ console.log(value)
 
   assert.match(
     source,
-    /^#include "index\.h"\n#include <stdio\.h>\n#include <string\.h>\n#include "inox\/console\.h"/
+    /^#include "index\.h"\n#include <stdio\.h>\n#include <string\.h>\n#include "inox\/console\.h"\n#include "inox\/value\.hpp"\n#include "inox\/allocator\.h"/
   )
   assert.doesNotMatch(source, /^#include "index\.h"\n\n#include /)
 

@@ -46,9 +46,9 @@ console.log('label', text)
   assert.match(source, /inox_string_from_format\(&inox_default_allocator, &inox_value_\d+, "value %.17g%%", \(\(double\)v\)\)/)
   assert.match(
     source,
-    /inox_string\* (inox_log_string_\d+) = \(inox_string\*\)text\.as\.ref;\n    printf\("%\.\*s\\n", \(int\)\1->len, \1->bytes\);/
+    /inox_string\* text = \(inox_string\*\)text_value_\d+\.as\.ref;\n    printf\("%\.\*s\\n", \(int\)text->len, text->bytes\);/
   )
-  assert.match(source, /printf\("label %\.\*s\\n", \(int\)inox_log_string_\d+->len, inox_log_string_\d+->bytes\);/)
+  assert.match(source, /printf\("label %\.\*s\\n", \(int\)text->len, text->bytes\);/)
   assert.doesNotMatch(source, /\\x25/)
   assert.doesNotMatch(source, /\\x73/)
   assert.doesNotMatch(source, /\\x68/)

@@ -1,6 +1,7 @@
 #ifndef INOX_VALUE_HPP
 #define INOX_VALUE_HPP
 
+#include <memory>
 #include <stddef.h>
 #include <string.h>
 #include "inox/allocator.h"
@@ -16,25 +17,33 @@ struct AdoptValue {
 inline constexpr AdoptValue adopt_value = {};
 
 class Value {
+private:
+  inox_value value_;
+
 public:
-  Value() : value_(inox_undefined_value()) {}
+  using Storage = decltype(((inox_value*)0)->as);
 
-  Value(inox_value value) : value_(value) {
+  inox_tag& tag;
+  Storage& as;
+
+  Value() : value_(inox_undefined_value()), tag(value_.tag), as(value_.as) {}
+
+  Value(inox_value value) : value_(value), tag(value_.tag), as(value_.as) {
     inox_retain(value_);
   }
 
-  Value(AdoptValue, inox_value value) : value_(value) {}
+  Value(AdoptValue, inox_value value) : value_(value), tag(value_.tag), as(value_.as) {}
 
-  Value(const Value& other) : value_(other.value_) {
+  Value(const Value& other) : value_(other.value_), tag(value_.tag), as(value_.as) {
     inox_retain(value_);
   }
 
-  Value(Value&& other) noexcept : value_(other.value_) {
+  Value(Value&& other) noexcept : value_(other.value_), tag(value_.tag), as(value_.as) {
     other.value_ = inox_undefined_value();
   }
 
   Value& operator=(const Value& other) {
-    if (this != &other) {
+    if (this != std::addressof(other)) {
       inox_retain(other.value_);
       inox_release(value_);
       value_ = other.value_;
@@ -44,7 +53,7 @@ public:
   }
 
   Value& operator=(Value&& other) noexcept {
-    if (this != &other) {
+    if (this != std::addressof(other)) {
       inox_release(value_);
       value_ = other.value_;
       other.value_ = inox_undefined_value();
@@ -73,6 +82,14 @@ public:
     return value_;
   }
 
+  inox_value* operator&() {
+    return &value_;
+  }
+
+  const inox_value* operator&() const {
+    return &value_;
+  }
+
   inox_value* out() {
     reset();
     return &value_;
@@ -99,9 +116,6 @@ public:
     inox_retain(*out);
     return INOX_OK;
   }
-
-private:
-  inox_value value_;
 };
 
 inline Value adopt(inox_value value) {
@@ -135,5 +149,9 @@ inline Value string(const char* bytes) {
 }
 
 } // namespace inox
+
+inline void inox_release(inox::Value& value) {
+  value.reset();
+}
 
 #endif

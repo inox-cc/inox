@@ -582,10 +582,24 @@ function stringArrayHas(values: string[], needle: string): boolean {
   return false
 }
 
-export function emitPrepareOwnedValueWrite(name: string): string[] {
-  const reference = emitCIdentifier(name)
+type COwnedValueWriteStorage = 'local' | 'raw'
 
-  return [`inox_release(${reference});`, `${reference} = inox_undefined_value();`]
+export function emitPrepareOwnedValueWrite(name: string, storage: COwnedValueWriteStorage = 'local'): string[] {
+  const reference = emitOwnedValueReference(name, storage)
+
+  if (storage === 'raw') {
+    return [`inox_release(${reference});`, `${reference} = inox_undefined_value();`]
+  }
+
+  return [`${reference} = inox_undefined_value();`]
+}
+
+function emitOwnedValueReference(name: string, storage: COwnedValueWriteStorage): string {
+  if (storage === 'raw') {
+    return name
+  }
+
+  return emitCIdentifier(name)
 }
 
 type CReturnValueDeclarationContext = {
@@ -738,7 +752,7 @@ export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContex
   }
 
   for (const name of ownedValues) {
-    lines.push(`inox_value ${emitCLocalName(name)} = inox_undefined_value();`)
+    lines.push(`inox::Value ${emitCLocalName(name)};`)
   }
 
   for (const name of ownedCryptoHashes) {
@@ -818,11 +832,6 @@ export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
   for (let index = context.ownedCryptoHashes.length - 1; index >= 0; index--) {
     const name = context.ownedCryptoHashes[index]
     lines.push(`inox_crypto_hash_free(${emitCLocalName(name)});`)
-  }
-
-  for (let index = context.ownedValues.length - 1; index >= 0; index--) {
-    const name = context.ownedValues[index]
-    lines.push(`inox_release(${emitCLocalName(name)});`)
   }
 
   return lines

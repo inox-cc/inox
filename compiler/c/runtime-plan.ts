@@ -119,7 +119,12 @@ export function resolveCRuntimePreludeRequirements(
   const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
-  const needsCppValueRuntime = input.cppValueRuntime
+  const needsCppValueRuntime =
+    input.cppValueRuntime ||
+    input.runtimeRequirements.has('managed-values') ||
+    input.runtimeRequirements.has('string-bytes') ||
+    needsAsyncRuntime ||
+    signatureRuntimeTypes.size > 0
   const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
   const needsDgramRuntime = nodeRuntimeImports.dgram
   const needsObjectRuntime =

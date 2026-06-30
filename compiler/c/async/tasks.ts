@@ -2766,7 +2766,7 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[
     const local = asyncTaskPrefixFrameLocalAt(locals, index)
 
     if (local.type === 'string') {
-      appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`))
+      appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`, 'raw'))
       lines.push(`frame->${local.fieldName}.tag = INOX_TAG_STRING;`)
       lines.push(`frame->${local.fieldName}.as.ref = (inox_ref*)&${local.name}->header;`)
       lines.push(`inox_retain(frame->${local.fieldName});`)
@@ -2774,7 +2774,7 @@ function emitAsyncTaskStorePrefixLocalLines(wrapper: CAsyncTaskWrapper): string[
     }
 
     if (isManagedRuntimeReturnType(local.type)) {
-      appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`))
+      appendAsyncTaskLines(lines, emitPrepareOwnedValueWrite(`frame->${local.fieldName}`, 'raw'))
       lines.push(`frame->${local.fieldName} = ${local.name};`)
       lines.push(`inox_retain(frame->${local.fieldName});`)
       continue

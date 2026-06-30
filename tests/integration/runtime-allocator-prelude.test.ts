@@ -15,7 +15,8 @@ export function assertRuntimeAllocatorStaysInRuntime(): void {
         path: '/pkg/src/index.ts',
         source: `
 const value = 'hello'
-console.log(value)
+const label: string = \`value \${value}\`
+console.log(label)
 `
       }
     ],
