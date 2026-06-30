@@ -106,6 +106,7 @@ type ClassFunctionContext = CFailureContext &
     moduleValueNames: Map<string, string>
     moduleValueTypes: Map<string, string>
     objectShapes: Map<string, CObjectShapeField[]>
+    runtimeStringValues: Map<string, string>
     throwingFunctions: Set<string>
     variables: Map<string, string>
   }
@@ -685,6 +686,22 @@ function emitCClassFieldWriteLines(target: string, value: string, field: CObject
   }
 
   return [`${target} = ${value};`]
+}
+
+function cppValueRuntimeStringReference(expression: AnyNode, context: ClassFunctionContext): string | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+  const reference = emitCIdentifier(name)
+  const runtimeValue = context.runtimeStringValues.get(name)
+
+  if (runtimeValue !== `${reference}.raw()`) {
+    return null
+  }
+
+  return reference
 }
 
 function emitCClassConstructorInitializers(info: CClassInfo, context: ClassInfoLookupContext): string {
@@ -3451,6 +3468,13 @@ export function emitNativeClassFieldAssignment(
   const lines: string[] = []
 
   if (classFieldUsesRuntimeValueStorage(access.field)) {
+    const cppValueReference = cppValueRuntimeStringReference(expression.value, context)
+
+    if (cppValueReference !== null) {
+      pushAllLines(lines, emitCClassFieldWriteLines(access.reference, cppValueReference, access.field))
+      return lines
+    }
+
     const value = emitClassValueExpression(context, expression.value)
 
     pushAllLines(lines, value.lines)
