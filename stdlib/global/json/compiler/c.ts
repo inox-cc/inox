@@ -80,6 +80,25 @@ export type JsonClassInstanceOperand = {
   lines: string[]
 }
 
+function jsonParseVariableDeclarationShape(statement: AnyNode): CObjectShape | null {
+  if (statement.shape !== null && typeof statement.shape !== 'undefined') {
+    return statement.shape
+  }
+
+  const init = statement.init
+
+  if (
+    init !== null &&
+    typeof init !== 'undefined' &&
+    init.shape !== null &&
+    typeof init.shape !== 'undefined'
+  ) {
+    return init.shape
+  }
+
+  return null
+}
+
 function pushJsonLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
@@ -208,12 +227,13 @@ export function emitJsonParseVariableDeclaration(
     return null
   }
 
+  const shape = jsonParseVariableDeclarationShape(statement)
+
   if (
     statement.valueType !== 'object' ||
-    statement.shape === null ||
-    typeof statement.shape === 'undefined' ||
-    statement.shape.fields === null ||
-    typeof statement.shape.fields === 'undefined'
+    shape === null ||
+    shape.fields === null ||
+    typeof shape.fields === 'undefined'
   ) {
     return null
   }
@@ -221,7 +241,7 @@ export function emitJsonParseVariableDeclaration(
   const target = emitCIdentifier(statement.name)
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'object')
-  dependencies.registerObjectShape(context, statement.name, statement.shape)
+  dependencies.registerObjectShape(context, statement.name, shape)
 
   const parseCall = emitPreparedJsonCallExpression(statement.init, context, dependencies, {
     out: target,

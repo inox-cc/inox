@@ -123,6 +123,11 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
+  const {
+    assertJsonParseLiteralShapeUsesDirectVariableTarget,
+    assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget
+  } =
+    await import('./integration/json-parse-shape-lowering.test.ts')
   const { assertClassSuperDiagnosticUsesInheritanceCode } = await import('./integration/class-diagnostics.test.ts')
   const {
     assertNativeClassExplicitUnknownReturnIsPreserved,
@@ -214,6 +219,14 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-weak-type-marker', () => {
       assertModuleDeclarationWeakTypeMarker()
+    })
+
+    await t.test('json-parse-shape-lowering', () => {
+      assertJsonParseLiteralShapeUsesDirectVariableTarget()
+    })
+
+    await t.test('native-json-parse-unicode-shape-lowering', async () => {
+      await assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget()
     })
 
     await t.test('class-super-diagnostic-uses-inheritance-code', () => {

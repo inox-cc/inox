@@ -7185,15 +7185,16 @@ class Checker {
       return null
     }
 
-    const result = this.parseJsonLiteralType(arg.value, 0)
+    const source: string = arg.value
+    const result = this.parseJsonLiteralType(source, 0)
 
     if (result === null || typeof result === 'undefined') {
       return null
     }
 
-    const end = this.skipJsonWhitespace(arg.value, result.index)
+    const end = this.skipJsonWhitespace(source, result.index)
 
-    if (end !== arg.value.length) {
+    if (end !== source.length) {
       return null
     }
 
