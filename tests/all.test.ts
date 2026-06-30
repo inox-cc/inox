@@ -118,6 +118,12 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
   const { assertClassSuperDiagnosticUsesInheritanceCode } = await import('./integration/class-diagnostics.test.ts')
+  const {
+    assertNativeClassExplicitUnknownReturnIsPreserved,
+    assertNativeClassLoopReturnKeepsRuntimeReturn,
+    assertNativeClassVoidStringFieldLogMethod
+  } =
+    await import('./integration/native-class-method-log-lowering.test.ts')
   const { assertNativeClassModuleMethodCallUsesNativeReceiver } =
     await import('./integration/native-class-module-method-call.test.ts')
   const { assertTestsDoNotReferenceExamples } = await import('./integration/no-example-dependencies.test.ts')
@@ -239,6 +245,18 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-field-alias-lowering', () => {
       assertNativeClassFieldAliasLowering()
+    })
+
+    await t.test('native-class-void-string-field-log-method', () => {
+      assertNativeClassVoidStringFieldLogMethod()
+    })
+
+    await t.test('native-class-loop-return-keeps-runtime-return', () => {
+      assertNativeClassLoopReturnKeepsRuntimeReturn()
+    })
+
+    await t.test('native-class-explicit-unknown-return-is-preserved', () => {
+      assertNativeClassExplicitUnknownReturnIsPreserved()
     })
 
     await t.test('native-class-string-literal-constructor-overload', () => {

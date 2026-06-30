@@ -313,7 +313,8 @@ import {
   emitPreparedClassMethodCallExpression as emitPreparedClassMethodCallExpressionWithDependencies,
   hasNativeClassInstanceMethod,
   hasNativeClassInstanceMethodReturnType,
-  isClassConstructorExpression as isClassConstructorExpressionWithDependencies
+  isClassConstructorExpression as isClassConstructorExpressionWithDependencies,
+  resolveNativeClassFieldMetadata
 } from './values/classes.ts'
 import type { CollectionLoweringDependencies } from './values/collections.ts'
 import {
@@ -6570,6 +6571,12 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       }
     }
 
+    const nativeClassStringField = emitNativeClassStringFieldLogValue(expression, context)
+
+    if (nativeClassStringField !== null && typeof nativeClassStringField !== 'undefined') {
+      return nativeClassStringField
+    }
+
     const nativeClassField = emitPreparedNativeClassFieldValueExpression(expression, context)
 
     if (
@@ -6708,6 +6715,49 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     format: '%s',
     values: [emitStringExpression(expression, context)]
   }
+}
+
+function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  const field = resolveNativeClassFieldMetadata(expression, context)
+
+  if (
+    field === null ||
+    typeof field === 'undefined' ||
+    field.valueType !== 'string' ||
+    field.nullable === true
+  ) {
+    return null
+  }
+
+  const value = emitPreparedNativeClassFieldValueExpression(expression, context)
+
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  const string = nativeClassStringFieldLogName(expression, context)
+  const lines: string[] = []
+
+  pushAll(lines, value.lines)
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    format: '%.*s',
+    values: [`(int)${string}->len`, `${string}->bytes`]
+  }
+}
+
+function nativeClassStringFieldLogName(expression: AnyNode, context: CFunctionContext): string {
+  if (expression.type === 'MemberExpression') {
+    const fieldName = emitCIdentifier(expression.property)
+
+    if (!context.localValueNames.has(expression.property) && !context.localValueNames.has(fieldName)) {
+      return fieldName
+    }
+  }
+
+  return nextCName(context, 'inox_log_string')
 }
 
 function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {

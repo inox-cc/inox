@@ -695,6 +695,8 @@ export function emitClassMethodDeclaration(
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(method.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
 
+  const needsCleanup = shouldEmitCleanupLabel(context)
+
   lines.push(`${emitClassMethodHead(info, method, context)} {`)
   pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
   pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
@@ -707,9 +709,9 @@ export function emitClassMethodDeclaration(
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
-  pushScopedDeclarationBody(lines, bodyLines)
 
-  if (shouldEmitCleanupLabel(context)) {
+  if (needsCleanup) {
+    pushScopedDeclarationBody(lines, bodyLines)
     lines.push('cleanup:')
     pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
@@ -718,6 +720,8 @@ export function emitClassMethodDeclaration(
     pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
     pushIndentedDeclarationLines(lines, emitCleanupReturn(context))
   } else if (context.returnType !== 'void') {
+    pushDeclarationLines(lines, bodyLines)
+
     let returnValue = '0'
 
     if (context.returnType === 'string') {
@@ -725,6 +729,8 @@ export function emitClassMethodDeclaration(
     }
 
     lines.push(`  return ${returnValue};`)
+  } else {
+    pushDeclarationLines(lines, bodyLines)
   }
 
   lines.push('}')

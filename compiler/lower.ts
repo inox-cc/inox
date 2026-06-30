@@ -163,7 +163,7 @@ function lowerClassMethods(methods: AnyNode[] | null | undefined, context: Lower
 }
 
 function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
-  const returnTypeName = lowerNodeReturnTypeName(method)
+  const returnTypeName = lowerClassMethodReturnTypeName(method)
   const returnType = resolveDeclaredType(returnTypeName, context)
 
   return {
@@ -171,7 +171,7 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     name: method.name,
     loc: method.loc,
     params: lowerParamList(method.params, context),
-    declaredReturnType: method.returnType,
+    declaredReturnType: nullableString(method.declaredReturnType),
     returnType: resolvedValueType(returnType.valueType, returnTypeName),
     returnNullable: returnType.nullable,
     returnArrayElementType: returnType.arrayElementType,
@@ -182,6 +182,96 @@ function lowerClassMethod(method: AnyNode, context: LowerContext): AnyNode {
     returnSetElementType: returnType.setElementType,
     body: lowerStatementList(method.body, context)
   }
+}
+
+function lowerClassMethodReturnTypeName(method: AnyNode): string {
+  if (method.declaredReturnType !== null && typeof method.declaredReturnType !== 'undefined') {
+    return method.declaredReturnType
+  }
+
+  if (
+    method.returnType !== null &&
+    typeof method.returnType !== 'undefined' &&
+    method.returnType !== 'unknown'
+  ) {
+    return method.returnType
+  }
+
+  if (!statementListHasValueReturn(method.body)) {
+    return 'void'
+  }
+
+  return 'unknown'
+}
+
+function statementListHasValueReturn(statements: AnyNode[]): boolean {
+  for (let index = 0; index < statements.length; index = index + 1) {
+    if (statementHasValueReturn(statements[index])) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function statementHasValueReturn(statement: AnyNode): boolean {
+  if (statement.type === 'ReturnStatement') {
+    return statement.argument !== null && typeof statement.argument !== 'undefined'
+  }
+
+  if (statement.type === 'BlockStatement') {
+    return statementListHasValueReturn(statement.body)
+  }
+
+  if (statement.type === 'IfStatement') {
+    if (statementHasValueReturn(statement.consequent)) {
+      return true
+    }
+
+    if (statement.alternate !== null && typeof statement.alternate !== 'undefined') {
+      return statementHasValueReturn(statement.alternate)
+    }
+  }
+
+  if (statement.type === 'WhileStatement') {
+    return statementHasValueReturn(statement.body)
+  }
+
+  if (statement.type === 'ForStatement') {
+    return statementHasValueReturn(statement.body)
+  }
+
+  if (statement.type === 'ForOfStatement') {
+    return statementHasValueReturn(statement.body)
+  }
+
+  if (statement.type === 'SwitchStatement') {
+    for (let index = 0; index < statement.cases.length; index = index + 1) {
+      const item = statement.cases[index]
+
+      if (statementListHasValueReturn(item.consequent)) {
+        return true
+      }
+    }
+  }
+
+  if (statement.type === 'TryStatement') {
+    if (statementHasValueReturn(statement.block)) {
+      return true
+    }
+
+    if (statement.handler !== null && typeof statement.handler !== 'undefined') {
+      if (statementHasValueReturn(statement.handler.body)) {
+        return true
+      }
+    }
+
+    if (statement.finalizer !== null && typeof statement.finalizer !== 'undefined') {
+      return statementHasValueReturn(statement.finalizer)
+    }
+  }
+
+  return false
 }
 
 function lowerNodeReturnTypeName(node: AnyNode): string {

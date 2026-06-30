@@ -31,6 +31,7 @@ type MethodDefinitionOptions = {
   name: Token
   staticToken: Token | null
   params: AnyNode[]
+  declaredReturnType: string | null
   returnType: string
   body: AnyNode[]
 }
@@ -213,6 +214,7 @@ export function createMethodDefinition(options: MethodDefinitionOptions): AnyNod
     staticLoc: nullableTokenLocation(options.staticToken),
     loc: locFromToken(options.name),
     params: options.params,
+    declaredReturnType: options.declaredReturnType,
     returnType: options.returnType,
     body: options.body
   }

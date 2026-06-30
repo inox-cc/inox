@@ -759,19 +759,22 @@ class Parser {
 
     this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after method parameters')
     let returnType = 'unknown'
+    let declaredReturnType: string | null = null
 
     if (name.value === 'constructor') {
       returnType = 'void'
     }
 
     if (this.matchValue(':')) {
-      returnType = this.parseTypeAnnotation(['{'], null)
+      declaredReturnType = this.parseTypeAnnotation(['{'], null)
+      returnType = declaredReturnType
     }
 
     return createMethodDefinition({
       name,
       staticToken,
       params,
+      declaredReturnType,
       returnType,
       body: this.parseBlock()
     })
