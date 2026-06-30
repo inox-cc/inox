@@ -858,7 +858,7 @@ function registerNativeClassConstructorCppValueParams(
 
     if (param.valueType === 'string' && param.nullable !== true) {
       context.runtimeStrings.add(param.name)
-      context.runtimeStringValues.set(param.name, emitCIdentifier(param.name))
+      context.runtimeStringValues.set(param.name, emitCIdentifier(param.name) + '.raw()')
     }
   }
 }

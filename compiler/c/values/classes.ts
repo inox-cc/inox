@@ -49,6 +49,7 @@ import {
   isOpaqueRuntimeValueType
 } from '../value-types.ts'
 import { emitObjectValueReference, resolveCObjectExpressionName } from './objects.ts'
+import { collectTemplatePlaceholderExpressions } from './strings.ts'
 
 export type ClassLoweringDependencies = {
   emitCFieldFlags(field: CObjectShapeField): string
@@ -81,6 +82,7 @@ export type ClassInfoLookupContext = {
 }
 type ClassDescriptorScanScope = {
   className: string | null
+  functions: Map<string, CFunctionParam[]>
   returnValueType: string | null
   variables: Map<string, string>
 }
@@ -362,6 +364,13 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
     return false
   }
 
+  if (
+    field.className !== null &&
+    typeof field.className !== 'undefined'
+  ) {
+    return false
+  }
+
   return (
     field.valueType === 'unknown' ||
     isManagedRuntimeReturnType(field.valueType) ||
@@ -500,6 +509,13 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInf
 
   if (classFieldUsesRuntimeValueStorage(field)) {
     return 'inox::Value()'
+  }
+
+  if (
+    field.className !== null &&
+    typeof field.className !== 'undefined'
+  ) {
+    return 'inox_undefined_value()'
   }
 
   if (field.valueType === 'regexp') {
@@ -897,6 +913,13 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: C
     ]
   }
 
+  if (
+    field.className !== null &&
+    typeof field.className !== 'undefined'
+  ) {
+    return [`*out = ${reference};`, 'inox_retain(*out);', 'return INOX_OK;']
+  }
+
   return ['*out = inox_undefined_value();', 'return INOX_OK;']
 }
 
@@ -1000,6 +1023,7 @@ export function collectCClassDescriptorNames(programs: AnyNode[], classInfos: CC
 function createClassDescriptorScanScope(className: string | null, returnValueType: string | null = null): ClassDescriptorScanScope {
   return {
     className,
+    functions: new Map(),
     returnValueType,
     variables: new Map()
   }
@@ -1008,6 +1032,7 @@ function createClassDescriptorScanScope(className: string | null, returnValueTyp
 function cloneClassDescriptorScanScope(scope: ClassDescriptorScanScope): ClassDescriptorScanScope {
   return {
     className: scope.className,
+    functions: new Map(scope.functions),
     returnValueType: scope.returnValueType,
     variables: new Map(scope.variables)
   }
@@ -1023,8 +1048,27 @@ function scanClassDescriptorStatements(
     return
   }
 
+  registerClassDescriptorFunctionDeclarations(statements, scope)
+
   for (const statement of statements) {
     scanClassDescriptorStatement(statement, classInfos, scope, names)
+  }
+}
+
+function registerClassDescriptorFunctionDeclarations(statements: AnyNode[], scope: ClassDescriptorScanScope): void {
+  for (const statement of statements) {
+    if (statement.type !== 'FunctionDeclaration') {
+      continue
+    }
+
+    const name = stringOrNull(statement.name)
+
+    if (name === null || !Array.isArray(statement.params)) {
+      continue
+    }
+
+    const params: CFunctionParam[] = statement.params
+    scope.functions.set(name, params)
   }
 }
 
@@ -1035,12 +1079,12 @@ function scanClassDescriptorStatement(
   names: CClassDescriptorNameSet
 ): void {
   if (statement.type === 'ClassDeclaration') {
-    scanClassDescriptorClassDeclaration(statement, classInfos, names)
+    scanClassDescriptorClassDeclaration(statement, classInfos, scope, names)
     return
   }
 
   if (statement.type === 'FunctionDeclaration') {
-    scanClassDescriptorFunctionDeclaration(statement, classInfos, names)
+    scanClassDescriptorFunctionDeclaration(statement, classInfos, scope, names)
     return
   }
 
@@ -1075,6 +1119,7 @@ function scanClassDescriptorStatement(
 function scanClassDescriptorClassDeclaration(
   classNode: AnyNode,
   classInfos: CClassInfoMap,
+  parentScope: ClassDescriptorScanScope,
   names: CClassDescriptorNameSet
 ): void {
   const methods: AnyNode[] = classNode.methods
@@ -1085,6 +1130,7 @@ function scanClassDescriptorClassDeclaration(
 
   for (const method of methods) {
     const scope = createClassDescriptorScanScope(classNode.name, stringOrNull(method.returnType))
+    scope.functions = new Map(parentScope.functions)
     registerClassDescriptorParams(method.params, scope)
     scanClassDescriptorStatements(method.body, classInfos, scope, names)
   }
@@ -1093,10 +1139,12 @@ function scanClassDescriptorClassDeclaration(
 function scanClassDescriptorFunctionDeclaration(
   functionNode: AnyNode,
   classInfos: CClassInfoMap,
+  parentScope: ClassDescriptorScanScope,
   names: CClassDescriptorNameSet
 ): void {
   const scope = createClassDescriptorScanScope(null, stringOrNull(functionNode.returnType))
 
+  scope.functions = new Map(parentScope.functions)
   registerClassDescriptorParams(functionNode.params, scope)
   scanClassDescriptorStatements(functionNode.body, classInfos, scope, names)
 }
@@ -1156,7 +1204,24 @@ function scanClassDescriptorExpression(
     scanClassDescriptorArrayLiteralExpression(expression, classInfos, scope, names)
   }
 
+  if (expression.type === 'TemplateLiteral') {
+    scanClassDescriptorTemplateLiteralExpression(expression, classInfos, scope, names)
+  }
+
   scanClassDescriptorNodeChildren(expression, classInfos, scope, names)
+}
+
+function scanClassDescriptorTemplateLiteralExpression(
+  expression: AnyNode,
+  classInfos: CClassInfoMap,
+  scope: ClassDescriptorScanScope,
+  names: CClassDescriptorNameSet
+): void {
+  const placeholders = collectTemplatePlaceholderExpressions(expression)
+
+  for (const placeholder of placeholders) {
+    scanClassDescriptorExpression(placeholder, classInfos, scope, names)
+  }
 }
 
 function scanClassDescriptorObjectLiteralExpression(
@@ -1347,6 +1412,27 @@ function classDescriptorCallParams(
     expression.type === 'CallExpression' &&
     callee !== null &&
     typeof callee !== 'undefined' &&
+    callee.type === 'Reference' &&
+    Array.isArray(callee.path) &&
+    callee.path.length === 1
+  ) {
+    const functionName = stringOrNull(callee.path[0])
+
+    if (functionName === null) {
+      return null
+    }
+
+    const params = scope.functions.get(functionName)
+
+    if (params !== null && typeof params !== 'undefined') {
+      return params
+    }
+  }
+
+  if (
+    expression.type === 'CallExpression' &&
+    callee !== null &&
+    typeof callee !== 'undefined' &&
     callee.type === 'MemberExpression'
   ) {
     const receiverClassName = classDescriptorExpressionClassName(callee.object, classInfos, scope)
@@ -1375,6 +1461,13 @@ function classDescriptorCallParams(
 }
 
 function classDescriptorParamRequiresRuntimeBoundary(param: CFunctionParam): boolean {
+  if (
+    param.className !== null &&
+    typeof param.className !== 'undefined'
+  ) {
+    return true
+  }
+
   return classDescriptorValueTypeRequiresRuntimeBoundary(param.valueType)
 }
 

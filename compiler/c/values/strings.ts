@@ -51,6 +51,7 @@ type StringCContext = {
   nextId: number
   ownedValues: string[]
   returnType?: string
+  runtimeStringValues?: Map<string, string>
   runtimeStrings?: Set<string>
   statusReturn: boolean
   stringLoweringDependencies?: StringLoweringDependencies
@@ -1005,6 +1006,29 @@ export function emitPreparedStringBytesOperand(
       const runtimeStrings = context.runtimeStrings
 
       if (runtimeStrings !== null && typeof runtimeStrings !== 'undefined' && runtimeStrings.has(name)) {
+        const runtimeStringValues = context.runtimeStringValues
+        let runtimeValue = ''
+        let hasRuntimeValue = false
+
+        if (runtimeStringValues !== null && typeof runtimeStringValues !== 'undefined') {
+          const currentRuntimeValue = runtimeStringValues.get(name)
+
+          if (currentRuntimeValue !== null && typeof currentRuntimeValue !== 'undefined') {
+            runtimeValue = currentRuntimeValue
+            hasRuntimeValue = true
+          }
+        }
+
+        if (hasRuntimeValue) {
+          const string = nextCName(context, tempPrefix)
+
+          return {
+            lines: [`inox_string* ${string} = (inox_string*)${runtimeValue}.as.ref;`],
+            bytes: `${string}->bytes`,
+            length: `${string}->len`
+          }
+        }
+
         return {
           lines: [],
           bytes: `${reference}->bytes`,
