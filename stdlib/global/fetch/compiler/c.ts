@@ -271,15 +271,14 @@ export function emitPreparedFetchInitOperand(
   context: FetchFunctionContext,
   dependencies: FetchLoweringDependencies
 ): PreparedExpression {
-  const init = expression.args[1]
-
-  if (init === null || typeof init === 'undefined' || init.type !== 'ObjectLiteral') {
+  if (expression.args.length < 2 || expression.args[1].type !== 'ObjectLiteral') {
     return {
       lines: [],
       expression: '0'
     }
   }
 
+  const init = expression.args[1]
   const lines: string[] = []
   const methodValue = dependencies.findObjectLiteralPropertyValue(init, 'method')
   const headersValue = dependencies.findObjectLiteralPropertyValue(init, 'headers')

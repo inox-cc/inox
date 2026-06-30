@@ -69,6 +69,7 @@ import {
   emitEventLoopDrain,
   emitEventLoopInit,
   emitLoopFlowDeclarations,
+  emitMainReturnValueDeclarations,
   emitOwnedPromiseCleanup,
   emitOwnedPromiseDeclarations,
   emitOwnedValueCleanup,
@@ -447,6 +448,9 @@ export function emitCModuleSource(
       prelude.needsCppValueRuntime,
       prelude.needsStringHeader,
       prelude.needsCollectionRuntime,
+      prelude.needsHashRuntime,
+      prelude.needsMapRuntime,
+      prelude.needsSetRuntime,
       prelude.needsBinaryRuntime,
       prelude.needsObjectRuntime,
       prelude.needsChildProcessRuntime,
@@ -1893,7 +1897,7 @@ function emitCModuleMainFunction(
     lines.push(`  inox_process_init_with_entry(argc, argv, ${cStringLiteral(plan.record.path)});`)
   }
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
-  pushIndentedCModuleLines(lines, emitReturnValueDeclarations(context))
+  pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitEventLoopDeclarations(context))
   pushIndentedCModuleLines(lines, emitOwnedValueDeclarations(context))

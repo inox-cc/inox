@@ -1281,6 +1281,9 @@ export function emitCUnit(
   const needsCppValueRuntime: boolean = preludeRequirements.needsCppValueRuntime
   const needsStringHeader: boolean = preludeRequirements.needsStringHeader
   const needsCollectionRuntime: boolean = preludeRequirements.needsCollectionRuntime
+  const needsHashRuntime: boolean = preludeRequirements.needsHashRuntime
+  const needsMapRuntime: boolean = preludeRequirements.needsMapRuntime
+  const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
   const needsBinaryRuntime: boolean = preludeRequirements.needsBinaryRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   const needsChildProcessRuntime: boolean = preludeRequirements.needsChildProcessRuntime
@@ -1317,6 +1320,9 @@ export function emitCUnit(
     needsCppValueRuntime,
     needsStringHeader,
     needsCollectionRuntime,
+    needsHashRuntime,
+    needsMapRuntime,
+    needsSetRuntime,
     needsBinaryRuntime,
     needsObjectRuntime,
     needsChildProcessRuntime,

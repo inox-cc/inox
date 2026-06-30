@@ -35,6 +35,58 @@ console.log(value)
     /^#include "index\.h"\n#include <stdio\.h>\n#include <string\.h>\n#include "inox\/console\.h"/
   )
   assert.doesNotMatch(source, /^#include "index\.h"\n\n#include /)
+
+  const arrayHost = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+const values = [1, 2]
+console.log(values.length)
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+  const arrayFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host: arrayHost,
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const arraySource = generatedTextFile(arrayFiles, 'src/index.cc').code
+
+  assert.match(arraySource, /#include "inox\/array\.h"/)
+  assert.doesNotMatch(arraySource, /#include "inox\/hash\.h"/)
+  assert.doesNotMatch(arraySource, /#include "inox\/map\.h"/)
+  assert.doesNotMatch(arraySource, /#include "inox\/set\.h"/)
+
+  const includesHost = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+const values = [1, 2]
+console.log(values.includes(2))
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+  const includesFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host: includesHost,
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const includesSource = generatedTextFile(includesFiles, 'src/index.cc').code
+
+  assert.match(includesSource, /#include "inox\/array\.h"/)
+  assert.match(includesSource, /#include "inox\/hash\.h"/)
+  assert.doesNotMatch(includesSource, /#include "inox\/map\.h"/)
+  assert.doesNotMatch(includesSource, /#include "inox\/set\.h"/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

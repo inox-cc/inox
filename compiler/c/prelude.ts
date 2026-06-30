@@ -93,6 +93,9 @@ export function emitCPrelude(
   needsCppValueRuntime: boolean,
   needsStringHeader: boolean,
   needsCollectionRuntime: boolean,
+  needsHashRuntime: boolean,
+  needsMapRuntime: boolean,
+  needsSetRuntime: boolean,
   needsBinaryRuntime: boolean,
   needsObjectRuntime: boolean,
   needsChildProcessRuntime: boolean,
@@ -168,6 +171,8 @@ export function emitCPrelude(
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/allocator.h"')
     if (needsCollectionRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/array.h"')
+    }
+    if (needsHashRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/hash.h"')
     }
     if (needsAsyncRuntime) {
@@ -204,13 +209,13 @@ export function emitCPrelude(
     if (needsProcessRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/process.h"')
     }
-    if (needsCollectionRuntime) {
+    if (needsMapRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/map.h"')
     }
     if (needsObjectRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/object.h"')
     }
-    if (needsCollectionRuntime) {
+    if (needsSetRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/set.h"')
     }
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/string.h"')

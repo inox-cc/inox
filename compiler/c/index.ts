@@ -6203,6 +6203,10 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return directString
   }
 
+  if (valueType === 'string') {
+    return emitStringLogValue(expression, context)
+  }
+
   if (isRuntimeValueLogExpression(expression, context)) {
     return emitRuntimeValueLogValue(expression, context)
   }
@@ -6211,10 +6215,6 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
 
   if (nativeClassInstance !== null && typeof nativeClassInstance !== 'undefined') {
     return nativeClassInstance
-  }
-
-  if (valueType === 'string') {
-    return emitStringLogValue(expression, context)
   }
 
   if (valueType === 'number' || valueType === 'boolean') {
@@ -6517,11 +6517,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     const reference = emitReference(expression, context)
 
-    if (
-      context.variables.get(name) === 'string' &&
-      context.nullableVariables.has(name) &&
-      context.narrowedNullableScalars.has(name)
-    ) {
+    if (context.variables.get(name) === 'string' && context.nullableVariables.has(name)) {
       const string = nextCName(context, 'inox_log_string')
 
       return {
@@ -7646,6 +7642,12 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
     return asyncCall
   }
 
+  const fetchPromise = emitPreparedFetchCallExpression(expression.argument, context, fetchLoweringDependencies)
+
+  if (fetchPromise !== null && typeof fetchPromise !== 'undefined') {
+    return emitPreparedAwaitedPromiseValueExpression(expression, fetchPromise, context)
+  }
+
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
 
   if (promise === null || typeof promise === 'undefined') {
@@ -7668,6 +7670,14 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
     }
   }
 
+  return emitPreparedAwaitedPromiseValueExpression(expression, promise, context)
+}
+
+function emitPreparedAwaitedPromiseValueExpression(
+  expression: AnyNode,
+  promise: PreparedExpression,
+  context: CFunctionContext
+): PreparedExpression {
   const preparedPromise = preparedExpressionOrEmpty(promise)
 
   registerEventLoop(context)

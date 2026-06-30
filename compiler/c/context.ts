@@ -590,6 +590,7 @@ export function emitPrepareOwnedValueWrite(name: string): string[] {
 
 type CReturnValueDeclarationContext = {
   cleanupEnabled?: boolean | null
+  returnFlowUsed?: boolean | null
   returnNullable?: boolean | null
   returnType?: string | null
 }
@@ -675,6 +676,14 @@ export function emitReturnValueDeclarations(context: CReturnValueDeclarationCont
 
   if (returnType !== 'void') {
     return ['double inox_return = 0;']
+  }
+
+  return []
+}
+
+export function emitMainReturnValueDeclarations(context: CReturnValueDeclarationContext): string[] {
+  if (context.returnFlowUsed === true) {
+    return emitReturnValueDeclarations(context)
   }
 
   return []

@@ -25,6 +25,7 @@ import {
   emitEventLoopInit,
   emitFailureStatement,
   emitLoopFlowDeclarations,
+  emitMainReturnValueDeclarations,
   emitOwnedPromiseCleanup,
   emitOwnedPromiseDeclarations,
   emitOwnedValueCleanup,
@@ -1098,7 +1099,7 @@ export function emitMainWrapper(
     }
   }
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
-  pushIndentedDeclarationLines(lines, emitReturnValueDeclarations(context))
+  pushIndentedDeclarationLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopDeclarations(context))
   pushIndentedDeclarationLines(lines, emitOwnedValueDeclarations(context))
@@ -1127,7 +1128,7 @@ export function emitMainReturnExpression(context: CFunctionContext): string {
 
   if (context.processRuntime) {
     successReturn = 'inox_process_get_exit_code()'
-  } else if (context.returnType === 'number') {
+  } else if (context.returnType === 'number' && context.returnFlowUsed) {
     successReturn = '(int)inox_return'
   }
 
