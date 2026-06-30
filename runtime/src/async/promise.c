@@ -2,6 +2,7 @@
 #include "inox/debug.h"
 #endif
 #include "inox/promise.h"
+#include "inox/time.h"
 
 typedef enum inox_promise_reaction_kind {
   INOX_PROMISE_REACTION_OBSERVER,
@@ -123,6 +124,46 @@ inox_status inox_promise_get_result(inox_promise* promise, inox_value* out) {
 
   *out = promise->result;
   inox_retain(*out);
+
+  return INOX_OK;
+}
+
+inox_status inox_promise_await(
+  inox_loop* loop,
+  inox_promise* promise,
+  bool read_rejection,
+  inox_value* out,
+  inox_promise_state* out_state
+) {
+  if (loop == 0 || promise == 0 || out == 0 || out_state == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  while (promise->state == INOX_PROMISE_PENDING && inox_loop_has_work(loop)) {
+#if !defined(INOX_LOOP_BACKEND_LIBUV)
+    inox_number next_due_ms = 0;
+    inox_number now_ms = inox_performance_now();
+
+    if (
+      inox_loop_pending_microtasks(loop) == 0 && inox_loop_pending_immediates(loop) == 0 &&
+      inox_loop_next_timer_due_ms(loop, &next_due_ms) && next_due_ms > now_ms
+    ) {
+      inox_time_sleep_ms(next_due_ms - now_ms);
+    }
+#endif
+
+    inox_status status = inox_loop_poll(loop, inox_performance_now());
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  *out_state = promise->state;
+
+  if (promise->state == INOX_PROMISE_FULFILLED || (promise->state == INOX_PROMISE_REJECTED && read_rejection)) {
+    return inox_promise_get_result(promise, out);
+  }
 
   return INOX_OK;
 }

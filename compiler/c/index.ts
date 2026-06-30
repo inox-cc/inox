@@ -76,9 +76,7 @@ import {
   emitBoxedValueDeclarations,
   emitCleanupReturn,
   emitErrorChannelDeclarations,
-  emitEventLoopNextTimeExpression,
   emitEventLoopReference,
-  emitEventLoopSleepUntilNextTimerLines,
   emitFailureStatement,
   emitLoopFlowDeclarations,
   emitOwnedValueCleanup,
@@ -7865,9 +7863,10 @@ function emitPreparedAwaitedPromiseValueExpression(
   )
 
   const value = nextCName(context, 'inox_await_value')
+  const state = nextCName(context, 'inox_await_state')
   const valueTag = cRuntimeValueTag(valueType)
   const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
-  const pollCall = `inox_loop_poll(${emitEventLoopReference(context)}, ${emitEventLoopNextTimeExpression()})`
+  const readRejection = shouldAwaitReadRejectedPromise(context) ? 'true' : 'false'
   let rejectionValueType = 'unknown'
   const promiseRejectionValueType = preparedPromise.rejectionValueType ?? ''
   const lines: string[] = []
@@ -7880,17 +7879,15 @@ function emitPreparedAwaitedPromiseValueExpression(
 
   pushAll(lines, preparedPromise.lines)
   pushAll(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(`inox_promise_state ${state} = INOX_PROMISE_PENDING;`)
   lines.push(
-    `while (inox_promise_get_state(${preparedPromise.expression}) == INOX_PROMISE_PENDING && inox_loop_has_work(${emitEventLoopReference(context)})) {`
+    emitStatusCheck(
+      `inox_promise_await(${emitEventLoopReference(context)}, ${preparedPromise.expression}, ${readRejection}, &${value}, &${state})`,
+      context
+    )
   )
-  pushAll(lines, emitEventLoopSleepUntilNextTimerLines(context, '  '))
-  lines.push(`  ${emitStatusCheck(pollCall, context)}`)
-  lines.push('}')
-  pushAll(lines, emitAwaitRejectedPromiseLines(preparedPromise.expression, rejectionValueType, context))
-  lines.push(
-    `if (inox_promise_get_state(${preparedPromise.expression}) != INOX_PROMISE_FULFILLED) ${emitFailureStatement(context)}`
-  )
-  lines.push(emitStatusCheck(`inox_promise_get_result(${preparedPromise.expression}, &${value})`, context))
+  pushAll(lines, emitAwaitRejectedPromiseLines(state, value, rejectionValueType, context))
+  lines.push(`if (${state} != INOX_PROMISE_FULFILLED) ${emitFailureStatement(context)}`)
 
   if (valueCheck !== '') {
     lines.push(valueCheck)
@@ -7904,8 +7901,15 @@ function emitPreparedAwaitedPromiseValueExpression(
   }
 }
 
+function shouldAwaitReadRejectedPromise(context: CFunctionContext): boolean {
+  const target = currentErrorTarget(context) ?? ''
+
+  return target !== '' || context.throwingFunction
+}
+
 function emitAwaitRejectedPromiseLines(
-  promiseExpression: string,
+  state: string,
+  value: string,
   rejectionValueType: string,
   context: CFunctionContext
 ): string[] {
@@ -7917,22 +7921,15 @@ function emitAwaitRejectedPromiseLines(
   }
 
   if (target === '' && !context.throwingFunction) {
-    const failureLines: string[] = []
-
-    failureLines.push(
-      `if (inox_promise_get_state(${promiseExpression}) == INOX_PROMISE_REJECTED) ${emitFailureStatement(context)}`
-    )
-
-    return failureLines
+    return []
   }
 
   registerErrorChannel(context)
-  const resultCall = `inox_promise_get_result(${promiseExpression}, &inox_error)`
   const lines: string[] = []
 
-  lines.push(`if (inox_promise_get_state(${promiseExpression}) == INOX_PROMISE_REJECTED) {`)
+  lines.push(`if (${state} == INOX_PROMISE_REJECTED) {`)
   pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
-  lines.push(`  ${emitStatusCheck(resultCall, context)}`)
+  lines.push(`  inox_error = ${value};`)
   lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
   lines.push('  inox_error_active = 1;')
 
