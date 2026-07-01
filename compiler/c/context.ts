@@ -840,6 +840,10 @@ export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
 }
 
 export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
+  return emitPromiseUnhandledRejectionChecks(context)
+}
+
+export function emitPromiseUnhandledRejectionChecks(context: CFunctionContext): string[] {
   const lines: string[] = []
 
   for (let index = context.ownedPromises.length - 1; index >= 0; index--) {

@@ -30,6 +30,7 @@ import {
   emitOwnedPromiseDeclarations,
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
+  emitPromiseUnhandledRejectionChecks,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
   emitRuntimeTypeCheck,
@@ -1087,6 +1088,8 @@ export function emitMainWrapper(
   const lines: string[] = []
 
   context.moduleValueDeclarationScope = true
+  context.cleanupEnabled = false
+  context.failureStatement = 'return 1;'
 
   if (context.processRuntime) {
     lines.push('int main(int argc, char** argv) {')
@@ -1115,14 +1118,7 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
   pushScopedDeclarationBody(lines, bodyLines)
 
-  if (shouldEmitCleanupLabel(context)) {
-    lines.push('cleanup:')
-    pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
-    pushIndentedDeclarationLines(lines, emitOwnedPromiseCleanup(context))
-    pushIndentedDeclarationLines(lines, emitEventLoopCleanup(context))
-    pushIndentedDeclarationLines(lines, emitBoxedValueCleanup(context))
-  }
-
+  pushIndentedDeclarationLines(lines, emitPromiseUnhandledRejectionChecks(context))
   lines.push(`  return ${emitMainReturnExpression(context)};`)
   lines.push('}')
 

@@ -74,6 +74,7 @@ import {
   emitOwnedPromiseDeclarations,
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
+  emitPromiseUnhandledRejectionChecks,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
   shouldEmitCleanupLabel
@@ -2127,6 +2128,8 @@ function emitCModuleMainFunction(
   const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   context.moduleValueDeclarationScope = true
+  context.cleanupEnabled = false
+  context.failureStatement = 'return 1;'
   const bodyLines: string[] = []
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
@@ -2153,14 +2156,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitEventLoopInit(context))
   pushScopedCModuleBody(lines, bodyLines)
 
-  if (shouldEmitCleanupLabel(context)) {
-    lines.push('cleanup:')
-    pushIndentedCModuleLines(lines, emitOwnedValueCleanup(context))
-    pushIndentedCModuleLines(lines, emitOwnedPromiseCleanup(context))
-    pushIndentedCModuleLines(lines, emitEventLoopCleanup(context))
-    pushIndentedCModuleLines(lines, emitBoxedValueCleanup(context))
-  }
-
+  pushIndentedCModuleLines(lines, emitPromiseUnhandledRejectionChecks(context))
   lines.push(`  return ${deps.emitMainReturnExpression(context)};`)
   lines.push('}')
 

@@ -54,7 +54,7 @@ try {
 
   assert.match(source, /int inox_error_active = 0;/)
   assert.match(source, /inox_error_active = 1;/)
-  assert.match(source, /if \(inox_error_active\) \{\n\s+goto cleanup;\n\s+\}/)
+  assert.match(source, /if \(inox_error_active\) \{\n\s+return 1;\n\s+\}/)
 }
 
 function compileSource(source: string): string {
