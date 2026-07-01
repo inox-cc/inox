@@ -41,6 +41,36 @@ console.log(Object.entries(foo.v)[0][0])
   assert.doesNotMatch(source, /inox_field_status_\d+ = inox_object_get\(foo, "v", 1,/)
 }
 
+export function assertJsonParseCatchUsesRaiiErrorReset(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+try {
+  JSON.parse('{')
+} catch (error) {
+  console.log(error)
+}
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host,
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const source = generatedTextFile(files, 'src/index.cc').code
+
+  assert.match(source, /inox_error = inox_undefined_value\(\);/)
+  assert.doesNotMatch(source, /inox_release\(inox_error\);/)
+  assert.doesNotMatch(source, /inox_release\(inox_json_error_\d+\);/)
+}
+
 export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget(): Promise<void> {
   const workspace = join(rootDir, 'dist/test-tmp/native-json-parse-shape-lowering')
   const input = join(workspace, 'index.ts')
@@ -104,5 +134,6 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertJsonParseLiteralShapeUsesDirectVariableTarget()
+  assertJsonParseCatchUsesRaiiErrorReset()
   await assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget()
 }

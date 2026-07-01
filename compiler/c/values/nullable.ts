@@ -630,10 +630,8 @@ export function emitNullableRuntimeValueVariableDeclaration(
   const lines: string[] = []
 
   appendLines(lines, value.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
   appendLines(lines, emitRuntimeNullableValueCheck(emitCIdentifier(statement.name), expectedTag, context))
-  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
 
   return lines
 }

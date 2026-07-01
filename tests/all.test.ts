@@ -126,6 +126,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertObjectRuntimeIndexUsesDirectHelpers } =
     await import('./integration/object-runtime-index-lowering.test.ts')
   const {
+    assertJsonParseCatchUsesRaiiErrorReset,
     assertJsonParseLiteralShapeUsesDirectVariableTarget,
     assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget
   } =
@@ -231,6 +232,7 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('json-parse-shape-lowering', () => {
       assertJsonParseLiteralShapeUsesDirectVariableTarget()
+      assertJsonParseCatchUsesRaiiErrorReset()
     })
 
     await t.test('object-runtime-index-lowering', () => {

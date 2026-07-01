@@ -1264,7 +1264,6 @@ export function emitRuntimeStringVariableDeclaration(
   const storage = registerRuntimeStringStorage(statement.name, context)
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
   lines.push(`${storage} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
 
@@ -1404,10 +1403,9 @@ function emitRuntimeArrayFunctionValueVariableDeclaration(
   context.runtimeCallbacks.add(statement.name)
 
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
   lines.push(emitRuntimeValueCheck(emitCIdentifier(statement.name), 'INOX_TAG_FUNCTION', context))
-  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
+  pushPreparedRuntimeValueOwnershipLines(lines, emitCIdentifier(statement.name), value)
 
   return lines
 }
@@ -1632,8 +1630,6 @@ function pushPreparedRuntimeValueOwnershipLines(
 
     return
   }
-
-  lines.push(`inox_retain(${target});`)
 }
 
 function isOwnedObjectRuntimeArrayCallExpression(expression: StatementNode): boolean {
@@ -2328,10 +2324,9 @@ function emitCollectionVariableCopyConstructor(statement: StatementNode, context
   const value = statementDeps(context).emitCValueExpression(statement.init, context)
   const lines: string[] = []
 
-  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   pushAllLines(lines, value.lines)
   lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
-  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
+  pushPreparedRuntimeValueOwnershipLines(lines, emitCIdentifier(statement.name), value)
 
   return lines
 }
@@ -2472,7 +2467,6 @@ function emitDirentArrayIndexVariableDeclaration(statement: StatementNode, conte
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(emitStatusCheck(`inox_array_get(${array.expression}, ${index}, &${emitCIdentifier(statement.name)})`, context))
   lines.push(emitRuntimeValueCheck(emitCIdentifier(statement.name), 'INOX_TAG_OBJECT', context))
-  lines.push(`inox_retain(${emitCIdentifier(statement.name)});`)
 
   return lines
 }
@@ -3270,7 +3264,6 @@ function emitRuntimeCollectionValueForOfStatement(
     } else {
       lines.push(`    ${value} = ${collection}->entries[${index}].value;`)
     }
-    lines.push(`    inox_retain(${value});`)
     pushIndentedLines(lines, element.lines, '    ')
     lines.push(`    ${element.expression}`)
     pushIndentedLines(lines, body, '    ')
@@ -3489,8 +3482,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     lines.push('  {')
     pushIndentedLines(lines, catchBody, '    ')
     lines.push('  }')
-    lines.push('  inox_release(inox_error);')
-    lines.push('  inox_error = inox_undefined_value();')
+    pushIndentedLines(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
   }
 
   if (
@@ -3642,7 +3634,7 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
   }
 
   lines.push(emitRuntimeTypeCheck(typeCheck, context))
-  lines.push('inox_retain(inox_error);')
+  pushPreparedRuntimeValueOwnershipLines(lines, 'inox_error', value)
 
   if (target === null || typeof target === 'undefined') {
     lines.push('inox_status_result = INOX_ERR_THROW;')
@@ -4150,9 +4142,8 @@ function emitRuntimeStringAssignment(expression: StatementNode, context: CFuncti
 
   pushAllLines(lines, value.lines)
   lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_STRING', context))
-  lines.push(`inox_retain(${value.expression});`)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
   lines.push(`${storage} = ${value.expression};`)
+  pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
   lines.push(`${emitCIdentifier(target)} = (inox_string*)${storage}.as.ref;`)
 
   return lines
@@ -4287,9 +4278,8 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
     lines.push(valueCheck)
   }
 
-  lines.push(`inox_retain(${value.expression});`)
-  lines.push(`inox_release(${reference});`)
   lines.push(`${reference} = ${value.expression};`)
+  pushPreparedRuntimeValueOwnershipLines(lines, reference, value)
 
   if (targetType === 'bytes') {
     const byteKind = statementDeps(context).resolveBytesExpressionKind(expression.value, context)

@@ -785,7 +785,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
 
 export function emitEventLoopDeclarations(context: CEventLoopDeclarationContext): string[] {
   if (context.eventLoopUsed === true && context.externalEventLoop !== true) {
-    return ['inox_loop inox_loop;', 'int inox_loop_active = 0;']
+    return ['inox::Loop inox_loop;']
   }
 
   return []
@@ -853,7 +853,6 @@ export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
       lines.push('}')
     }
 
-    lines.push(`${localName}.reset();`)
   }
 
   return lines
@@ -869,9 +868,8 @@ export function emitEventLoopInit(context: CFunctionContext): string[] {
   }
 
   return [
-    `if (inox_loop_init(&inox_loop, &inox_default_allocator) != INOX_OK) ${emitFailureStatement(context)}`,
-    'inox_loop_active = 1;',
-    `inox_loop.now_ms = ${emitEventLoopCurrentTimeExpression()};`
+    `if (inox_loop.init(&inox_default_allocator) != INOX_OK) ${emitFailureStatement(context)}`,
+    `inox_loop->now_ms = ${emitEventLoopCurrentTimeExpression()};`
   ]
 }
 
@@ -897,10 +895,6 @@ export function emitEventLoopDrain(context: CFunctionContext): string[] {
 }
 
 export function emitEventLoopCleanup(context: CFunctionContext): string[] {
-  if (context.eventLoopUsed && !context.externalEventLoop) {
-    return ['if (inox_loop_active) inox_loop_dispose(&inox_loop);']
-  }
-
   return []
 }
 
@@ -909,7 +903,7 @@ export function emitEventLoopReference(context: CEventLoopContext): string {
     return 'inox_loop'
   }
 
-  return '&inox_loop'
+  return 'inox_loop.raw()'
 }
 
 export function emitEventLoopNextTimeExpression(): string {

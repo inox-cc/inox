@@ -1534,9 +1534,7 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
     const sourceName = emitCObjectFunctionFieldName(source.pathName, field.name)
     const lines: string[] = []
 
-    appendLines(lines, emitPrepareOwnedValueWrite(name))
     lines.push(`${name} = ${sourceName};`)
-    lines.push(`inox_retain(${name});`)
 
     return lines
   }

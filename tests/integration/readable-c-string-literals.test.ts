@@ -203,8 +203,11 @@ console.log(response.status)
   }) as GeneratedTextFile[]
   const fetchSource = generatedTextFile(fetchFiles, 'src/index.cc').code
 
-  assert.match(fetchSource, /inox_fetch\(&inox_loop, inox::string_view\("http:\/\/127\.0\.0\.1"\), &inox_promise_\d+\)/)
-  assert.doesNotMatch(fetchSource, /inox_fetch\(&inox_loop, "http:\/\/127\.0\.0\.1", 16,/)
+  assert.match(
+    fetchSource,
+    /inox_fetch\(inox_loop\.raw\(\), inox::string_view\("http:\/\/127\.0\.0\.1"\), &inox_promise_\d+\)/
+  )
+  assert.doesNotMatch(fetchSource, /inox_fetch\(inox_loop\.raw\(\), "http:\/\/127\.0\.0\.1", 16,/)
 
   const processEntryHost = createMemoryCompilerHost(
     [

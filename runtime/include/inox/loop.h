@@ -74,4 +74,76 @@ int inox_loop_next_timer_due_ms(const inox_loop* loop, inox_number* out);
 }
 #endif
 
+#ifdef __cplusplus
+
+namespace inox {
+
+class Loop {
+private:
+  inox_loop loop_;
+  bool active_;
+
+public:
+  Loop() : loop_(), active_(false) {}
+
+  Loop(const Loop&) = delete;
+  Loop& operator=(const Loop&) = delete;
+  Loop(Loop&&) = delete;
+  Loop& operator=(Loop&&) = delete;
+
+  ~Loop() {
+    reset();
+  }
+
+  inox_status init(inox_allocator* allocator) {
+    reset();
+    inox_status status = inox_loop_init(&loop_, allocator);
+
+    if (status == INOX_OK) {
+      active_ = true;
+    }
+
+    return status;
+  }
+
+  void reset() {
+    if (active_) {
+      inox_loop_dispose(&loop_);
+      active_ = false;
+    }
+  }
+
+  bool active() const {
+    return active_;
+  }
+
+  inox_loop* raw() {
+    return &loop_;
+  }
+
+  const inox_loop* raw() const {
+    return &loop_;
+  }
+
+  inox_loop* operator->() {
+    return &loop_;
+  }
+
+  const inox_loop* operator->() const {
+    return &loop_;
+  }
+
+  operator inox_loop*() {
+    return &loop_;
+  }
+
+  operator const inox_loop*() const {
+    return &loop_;
+  }
+};
+
+} // namespace inox
+
+#endif
+
 #endif

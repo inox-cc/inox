@@ -21,6 +21,8 @@ try {
   assert.doesNotMatch(source, /int inox_error_active = 0;/)
   assert.doesNotMatch(source, /inox_error_active = 1;/)
   assert.doesNotMatch(source, /inox_error_active = 0;/)
+  assert.doesNotMatch(source, /inox_retain\(inox_error\);/)
+  assert.doesNotMatch(source, /inox_release\(inox_error\);/)
 }
 
 export function assertAwaitCatchOnlyDoesNotEmitErrorActiveState(): void {
@@ -32,7 +34,10 @@ try {
 }
 `)
 
-  assert.match(source, /inox_promise_await\(&inox_loop, inox_promise_\d+, true, &inox_await_value_\d+, &inox_await_state_\d+\)/)
+  assert.match(
+    source,
+    /inox_promise_await\(inox_loop\.raw\(\), inox_promise_\d+, true, &inox_await_value_\d+, &inox_await_state_\d+\)/
+  )
   assert.doesNotMatch(source, /int inox_error_active = 0;/)
   assert.doesNotMatch(source, /inox_error_active = 1;/)
   assert.doesNotMatch(source, /inox_error_active = 0;/)

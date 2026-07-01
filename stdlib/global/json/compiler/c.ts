@@ -105,6 +105,12 @@ function pushJsonLines(target: string[], lines: string[]): void {
   }
 }
 
+function pushIndentedJsonLines(target: string[], lines: string[], indent: string): void {
+  for (const line of lines) {
+    target.push(`${indent}${line}`)
+  }
+}
+
 function singleStringPathName(path: string[] | null | undefined): string | null {
   if (path === null || typeof path === 'undefined' || path.length !== 1) {
     return null
@@ -186,8 +192,7 @@ function pushJsonParseStatusLines(
 
   target.push(`inox_status ${status} = ${call};`)
   target.push(`if (${status} != INOX_OK) {`)
-  target.push('  inox_release(inox_error);')
-  target.push('  inox_error = inox_undefined_value();')
+  pushIndentedJsonLines(target, emitPrepareOwnedValueWrite('inox_error'), '  ')
 
   if (detailedError !== null && typeof detailedError !== 'undefined') {
     target.push(`  if (${detailedError}.tag == INOX_TAG_STRING && ${detailedError}.as.ref != 0) {`)
@@ -195,8 +200,7 @@ function pushJsonParseStatusLines(
     target.push(`    ${detailedError} = inox_undefined_value();`)
     target.push('  } else {')
     target.push(`    ${fallbackErrorLine}`)
-    target.push(`    inox_release(${detailedError});`)
-    target.push(`    ${detailedError} = inox_undefined_value();`)
+    pushIndentedJsonLines(target, emitPrepareOwnedValueWrite(detailedError), '    ')
     target.push('  }')
   } else {
     target.push(`  ${fallbackErrorLine}`)

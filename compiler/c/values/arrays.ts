@@ -1710,9 +1710,7 @@ export function emitArraySortVariableDeclaration(
   const lines: string[] = []
 
   appendLines(lines, sorted.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${sorted.expression};`)
-  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1736,9 +1734,7 @@ export function emitArrayFilterVariableDeclaration(
   const lines: string[] = []
 
   appendLines(lines, filtered.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${filtered.expression};`)
-  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1762,9 +1758,7 @@ export function emitArrayMapVariableDeclaration(
   const lines: string[] = []
 
   appendLines(lines, mapped.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${mapped.expression};`)
-  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }
@@ -1788,9 +1782,7 @@ export function emitArraySliceVariableDeclaration(
   const lines: string[] = []
 
   appendLines(lines, sliced.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${statement.name} = ${sliced.expression};`)
-  lines.push(`inox_retain(${statement.name});`)
 
   return lines
 }

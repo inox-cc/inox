@@ -7742,8 +7742,7 @@ function emitPreparedThrowingAsyncFunctionPromiseCallExpression(
   lines.push(`inox_status ${status} = ${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')});`)
   lines.push(`if (${status} == INOX_ERR_THROW) {`)
   lines.push(`  ${emitStatusCheck(rejectedCall, context)}`)
-  lines.push('  inox_release(inox_error);')
-  lines.push('  inox_error = inox_undefined_value();')
+  pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
   lines.push('} else {')
   lines.push(`  if (${status} != INOX_OK) ${emitFailureStatement(context)}`)
 

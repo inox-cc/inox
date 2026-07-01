@@ -30,7 +30,10 @@ console.log(value)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /inox_promise_await\(&inox_loop, inox_promise_\d+, false, &inox_await_value_\d+, &inox_await_state_\d+\)/)
+  assert.match(
+    source,
+    /inox_promise_await\(inox_loop\.raw\(\), inox_promise_\d+, false, &inox_await_value_\d+, &inox_await_state_\d+\)/
+  )
   assert.doesNotMatch(source, /while \(inox_promise_get_state/)
 }
 
@@ -60,7 +63,10 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /inox_promise_await\(&inox_loop, inox_promise_\d+, true, &inox_await_value_\d+, &inox_await_state_\d+\)/)
+  assert.match(
+    source,
+    /inox_promise_await\(inox_loop\.raw\(\), inox_promise_\d+, true, &inox_await_value_\d+, &inox_await_state_\d+\)/
+  )
   assert.match(
     source,
     /if \(inox_await_state_\d+ == INOX_PROMISE_REJECTED\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_await_value_\d+;/
