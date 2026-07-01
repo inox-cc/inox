@@ -800,18 +800,27 @@ function isGeneratedCControlStart(line: string): boolean {
 
 function isGeneratedCGotoLabel(line: string): boolean {
   const trimmed = line.trim()
+  const labelPrefixes = ['inox_', 'catch_', 'finally_', 'end_']
+  let prefix = ''
 
-  if (!generatedCStringStartsWithAt(trimmed, 'inox_', 0)) {
+  for (const candidate of labelPrefixes) {
+    if (generatedCStringStartsWithAt(trimmed, candidate, 0)) {
+      prefix = candidate
+      break
+    }
+  }
+
+  if (prefix === '') {
     return false
   }
 
   const colon = trimmed.indexOf(':')
 
-  if (colon <= 5) {
+  if (colon <= prefix.length) {
     return false
   }
 
-  for (let index = 5; index < colon; index = index + 1) {
+  for (let index = prefix.length; index < colon; index = index + 1) {
     if (!isGeneratedCIdentifierPart(trimmed[index])) {
       return false
     }

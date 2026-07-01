@@ -8009,14 +8009,19 @@ function emitPreparedAwaitResultExpression(
     lines.push(valueInfo.valueCheck)
   }
 
-  return {
+  const preparedExpression: PreparedExpression = {
     lines,
     expression: valueExpression,
-    cppType: valueInfo.cppType === 'inox::Value' ? undefined : valueInfo.cppType,
     owned: false,
     runtimeTypeChecked: valueInfo.runtimeTypeChecked,
     valueType
   }
+
+  if (valueInfo.cppType !== 'inox::Value') {
+    preparedExpression.cppType = valueInfo.cppType
+  }
+
+  return preparedExpression
 }
 
 type AwaitResultCppValueInfo = {

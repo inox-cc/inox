@@ -114,6 +114,8 @@ async function runIntegrationTests(): Promise<void> {
   } =
     await import('./integration/error-flow-state-lowering.test.ts')
   const { assertFetchAwaitUsesCppWrappers } = await import('./integration/fetch-await-cpp-lowering.test.ts')
+  const { assertGeneratedLabelsHaveLeadingBlankOnly } =
+    await import('./integration/generated-label-spacing.test.ts')
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
     assertModuleMainUsesRaiiReturns,
@@ -214,6 +216,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('fetch-await-cpp-lowering', () => {
       assertFetchAwaitUsesCppWrappers()
+    })
+
+    await t.test('generated-label-spacing', () => {
+      assertGeneratedLabelsHaveLeadingBlankOnly()
     })
 
     await t.test('main-raii-lowering', () => {

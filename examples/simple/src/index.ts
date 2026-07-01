@@ -7,13 +7,15 @@ console.log('process.version', process.version)
 console.log('process.versions', process.versions)
 console.log('process', process)
 
-try {
-  const res = await fetch('https://example.com/')
-  console.log('Status', res.status)
-  const txt = await res.text()
-  console.log('Text', txt)
-} catch (error) {
-  console.log('#error:', error)
+async function checkFetch() {
+  try {
+    const res = await fetch('https://example.com/')
+    console.log('Status', res.status)
+    const txt = await res.text()
+    console.log('Text', txt)
+  } catch (error) {
+    console.log('#error:', error)
+  }
 }
 
 try {
@@ -44,6 +46,8 @@ for (const a of foo.v) {
   const e = Object.entries(a)[0]
   console.log(e)
 }
+
+await checkFetch()
 
 class Foo {
   name: string
