@@ -498,6 +498,7 @@ export function emitCModuleSource(
     bodyLines.push('')
   }
 
+  emitCModuleUnhandledRejectionFlagDefinition(bodyLines, context)
   emitCModuleValueDefinitions(bodyLines, moduleValues, context)
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
@@ -668,11 +669,6 @@ function emitCModuleDeclarations(
     lines.push('')
   }
 
-  if (context.unhandledRejectionFlag !== null && typeof context.unhandledRejectionFlag !== 'undefined') {
-    lines.push(`static int ${context.unhandledRejectionFlag} = 0;`)
-    lines.push('')
-  }
-
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
 
@@ -724,6 +720,15 @@ function emitCModuleDeclarations(
   ) {
     lines.push('')
   }
+}
+
+function emitCModuleUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {
+  if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
+    return
+  }
+
+  lines.push(`static int ${context.unhandledRejectionFlag} = 0;`)
+  lines.push('')
 }
 
 function emitCModuleFunctionPrototype(

@@ -1383,11 +1383,6 @@ export function emitCUnit(
     lines.push('')
   }
 
-  if (baseContext.unhandledRejectionFlag !== null && typeof baseContext.unhandledRejectionFlag !== 'undefined') {
-    lines.push(`static int ${baseContext.unhandledRejectionFlag} = 0;`)
-    lines.push('')
-  }
-
   for (const item of functions) {
     lines.push(`${deps.emitFunctionHead(item, baseContext)};`)
   }
@@ -1453,6 +1448,7 @@ export function emitCUnit(
     lines.push('')
   }
 
+  emitCUnitUnhandledRejectionFlagDefinition(lines, baseContext)
   emitCUnitValueDefinitions(lines, valueDeclarations)
 
   if (asyncTaskWrappers.size > 0) {
@@ -1514,6 +1510,15 @@ export function emitCUnit(
   const code = joinCUnitLines(lines)
 
   return code
+}
+
+function emitCUnitUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {
+  if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
+    return
+  }
+
+  lines.push(`static int ${context.unhandledRejectionFlag} = 0;`)
+  lines.push('')
 }
 
 function emitCallbackFinalizerPrototype(finalizerName: string): string {

@@ -131,6 +131,8 @@ async function runIntegrationTests(): Promise<void> {
   } =
     await import('./integration/json-parse-shape-lowering.test.ts')
   const { assertClassSuperDiagnosticUsesInheritanceCode } = await import('./integration/class-diagnostics.test.ts')
+  const { assertNativeClassAsyncStateDoesNotSplitMethods } =
+    await import('./integration/native-class-async-state-order.test.ts')
   const {
     assertNativeClassExplicitUnknownReturnIsPreserved,
     assertNativeClassLoopReturnKeepsRuntimeReturn,
@@ -301,6 +303,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('native-class-void-string-field-log-method', () => {
       assertNativeClassVoidStringFieldLogMethod()
+    })
+
+    await t.test('native-class-async-state-order', () => {
+      assertNativeClassAsyncStateDoesNotSplitMethods()
     })
 
     await t.test('native-class-loop-return-keeps-runtime-return', () => {
