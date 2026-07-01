@@ -239,20 +239,23 @@ export function emitJsonParseVariableDeclaration(
   }
 
   const target = emitCIdentifier(statement.name)
-  registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'object')
   dependencies.registerObjectShape(context, statement.name, shape)
 
   const parseCall = emitPreparedJsonCallExpression(statement.init, context, dependencies, {
     out: target,
-    owned: false
+    owned: false,
+    prepareOut: false
   })
 
   if (parseCall === null || typeof parseCall === 'undefined') {
     return null
   }
 
-  return parseCall.lines
+  const lines: string[] = [`inox::Value ${target};`]
+  pushJsonLines(lines, parseCall.lines)
+
+  return lines
 }
 
 export function emitPreparedJsonCallExpression(
@@ -279,6 +282,7 @@ export function emitPreparedJsonCallExpression(
   }
 
   const ownsOut = options === null || typeof options === 'undefined' || options.owned !== false
+  const preparesOut = options === null || typeof options === 'undefined' || options.prepareOut !== false
 
   if (ownsOut) {
     registerOwnedValue(context, out)
@@ -293,7 +297,9 @@ export function emitPreparedJsonCallExpression(
     const lines: string[] = []
 
     pushJsonLines(lines, text.lines)
-    pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
+    if (preparesOut) {
+      pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
+    }
 
     if (shouldUseDetailedJsonParseError(context)) {
       detailedError = nextCName(context, 'inox_json_error')

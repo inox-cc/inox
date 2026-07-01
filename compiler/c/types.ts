@@ -36,6 +36,7 @@ export type CPreparedCallOptions = {
   discard?: boolean
   out?: string
   owned?: boolean
+  prepareOut?: boolean
 }
 
 export type CShapeValueMetadata = {

@@ -1575,14 +1575,11 @@ export function emitRuntimeValueVariableDeclaration(
     value.owned = true
   }
 
-  registerOwnedValue(context, statement.name)
   registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
-  pushPreparedRuntimeValueOwnershipLines(lines, emitCIdentifier(statement.name), value)
+  lines.push(emitLocalRuntimeValueDeclaration(statement, value))
 
   if (shouldSkipRuntimeValueDeclarationCheck(statement, value, valueType)) {
     return lines
@@ -1599,6 +1596,16 @@ export function emitRuntimeValueVariableDeclaration(
   }
 
   return lines
+}
+
+function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: PreparedExpression): string {
+  const name = emitCIdentifier(statement.name)
+
+  if (value.owned === true) {
+    return `${constPrefix(statement.kind === 'const')}inox::Value ${name} = inox::adopt(${value.expression}.release());`
+  }
+
+  return `${constPrefix(statement.kind === 'const')}inox::Value ${name} = ${value.expression};`
 }
 
 function shouldSkipRuntimeValueDeclarationCheck(
