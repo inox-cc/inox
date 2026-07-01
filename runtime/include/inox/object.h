@@ -41,6 +41,8 @@ inox_status inox_object_init_known(inox_value object, uint32_t index, inox_value
 inox_status inox_object_set_known(inox_value object, uint32_t index, inox_value value);
 inox_status inox_object_get(inox_value object, const char* name, size_t len, inox_value* out);
 inox_status inox_object_set(inox_value object, const char* name, size_t len, inox_value value);
+inox_status inox_object_value_at(inox_value object, size_t index, inox_value* out);
+inox_status inox_object_entry_at(inox_allocator* allocator, inox_value object, size_t index, inox_value* out);
 inox_status inox_object_entries(inox_allocator* allocator, inox_value object, inox_value* out);
 inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_value* out);
 inox_status inox_object_values(inox_allocator* allocator, inox_value object, inox_value* out);

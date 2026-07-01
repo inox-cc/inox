@@ -1794,6 +1794,10 @@ export type CScalarExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext
   ): PreparedExpression | null
+  emitPreparedObjectRuntimeArrayIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedPathBooleanCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessNumberExpression(expression: CValueNode): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
@@ -3168,6 +3172,22 @@ export function emitPreparedNumberExpression(
       return {
         lines: objectField.lines,
         expression: scalarRuntimeValueExpression(objectField.expression, objectField.valueType ?? 'number')
+      }
+    }
+
+    const objectRuntimeArrayValue = deps.emitPreparedObjectRuntimeArrayIndexValueExpression(expression, context)
+
+    if (
+      objectRuntimeArrayValue !== null &&
+      typeof objectRuntimeArrayValue !== 'undefined' &&
+      isNumberOrBooleanValueType(objectRuntimeArrayValue.valueType ?? 'unknown')
+    ) {
+      return {
+        lines: objectRuntimeArrayValue.lines,
+        expression: scalarRuntimeValueExpression(
+          objectRuntimeArrayValue.expression,
+          objectRuntimeArrayValue.valueType ?? 'number'
+        )
       }
     }
 
@@ -4969,6 +4989,10 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression
   emitPreparedObjectValuesCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedObjectRuntimeArrayIndexValueExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedDynamicObjectIndexValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -5549,6 +5573,12 @@ export function emitCValueExpression(
 
     if (arrayValue !== null && typeof arrayValue !== 'undefined') {
       return arrayValue
+    }
+
+    const objectRuntimeArrayValue = deps.emitPreparedObjectRuntimeArrayIndexValueExpression(expression, context)
+
+    if (objectRuntimeArrayValue !== null && typeof objectRuntimeArrayValue !== 'undefined') {
+      return objectRuntimeArrayValue
     }
 
     const runtimeArrayValue = deps.emitPreparedRuntimeArrayIndexValueExpression(expression, context)

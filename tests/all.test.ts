@@ -123,6 +123,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
+  const { assertObjectRuntimeIndexUsesDirectHelpers } =
+    await import('./integration/object-runtime-index-lowering.test.ts')
   const {
     assertJsonParseLiteralShapeUsesDirectVariableTarget,
     assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget
@@ -223,6 +225,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('json-parse-shape-lowering', () => {
       assertJsonParseLiteralShapeUsesDirectVariableTarget()
+    })
+
+    await t.test('object-runtime-index-lowering', () => {
+      assertObjectRuntimeIndexUsesDirectHelpers()
     })
 
     await t.test('native-json-parse-unicode-shape-lowering', async () => {

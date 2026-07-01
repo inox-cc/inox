@@ -895,6 +895,38 @@ function objectRuntimeArrayCallName(expression: ArrayMaybeNode): string | null {
   return null
 }
 
+function isNativeClassObjectRuntimeArgument(expression: ArrayMaybeNode, context: ArrayFunctionContext): boolean {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  if (
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType.startsWith('class:')
+  ) {
+    return true
+  }
+
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return false
+  }
+
+  const path: string[] = expression.path
+  const name = path[0]
+  const variableType = context.variables.get(name)
+
+  if (
+    variableType !== null &&
+    typeof variableType !== 'undefined' &&
+    variableType.startsWith('class:')
+  ) {
+    return true
+  }
+
+  return context.classInstanceTypes.has(name)
+}
+
 function resolveFunctionReturnNameFromCall(expression: ArrayMaybeNode): string | null {
   if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
     return null
@@ -945,6 +977,28 @@ function emitRuntimeArrayGetAllowMissing(
 
   return [
     `inox_status ${status} = inox_array_get(${arrayExpression}, ${indexExpression}, &${out});`,
+    `if (${status} == INOX_ERR_FIELD) {`,
+    `  ${out} = inox_undefined_value();`,
+    '}',
+    `if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`
+  ]
+}
+
+function emitObjectRuntimeArrayIndexGetAllowMissing(
+  method: string,
+  objectExpression: string,
+  indexExpression: string,
+  out: string,
+  context: ArrayFunctionContext
+): string[] {
+  const status = nextCName(context, `inox_object_${method}_status`)
+  const call =
+    method === 'values'
+      ? `inox_object_value_at(${objectExpression}, ${indexExpression}, &${out})`
+      : `inox_object_entry_at(&inox_default_allocator, ${objectExpression}, ${indexExpression}, &${out})`
+
+  return [
+    `inox_status ${status} = ${call};`,
     `if (${status} == INOX_ERR_FIELD) {`,
     `  ${out} = inox_undefined_value();`,
     '}',
@@ -1008,6 +1062,60 @@ export function emitPreparedKnownArrayIndexValueExpression(
   }
 
   return null
+}
+
+export function emitPreparedObjectRuntimeArrayIndexValueExpression(
+  expression: AnyNode,
+  context: ArrayFunctionContext
+): PreparedExpression | null {
+  if (expression.type !== 'IndexExpression' || expression.object.type !== 'CallExpression') {
+    return null
+  }
+
+  const method = objectRuntimeArrayCallName(expression.object)
+
+  if (method !== 'values' && method !== 'entries') {
+    return null
+  }
+
+  const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+  if (runtimeElement === null || typeof runtimeElement === 'undefined') {
+    return null
+  }
+
+  const source = expression.object.args[0]
+
+  if (isNativeClassObjectRuntimeArgument(source, context)) {
+    return null
+  }
+
+  const object = arrayDeps(context).emitCValueExpression(source, context)
+  const index = emitPreparedRuntimeArrayIndexExpression(runtimeElement, context)
+  const value = nextCName(context, method === 'values' ? 'inox_object_value' : 'inox_object_entry')
+  registerOwnedValue(context, value)
+  const lines: string[] = []
+
+  appendLines(lines, object.lines)
+  appendLines(lines, index.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  appendLines(
+    lines,
+    emitObjectRuntimeArrayIndexGetAllowMissing(method, object.expression, index.expression, value, context)
+  )
+
+  const tag = cRuntimeValueTag(runtimeElement.valueType) ?? ''
+
+  if (tag !== '') {
+    appendLines(lines, emitRuntimeArrayIndexValueCheck(value, tag, expression, context))
+  }
+
+  return {
+    lines,
+    expression: value,
+    owned: true,
+    valueType: runtimeElement.valueType
+  }
 }
 
 export function emitPreparedRuntimeArrayIndexValueExpression(

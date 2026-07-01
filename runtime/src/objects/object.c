@@ -410,6 +410,46 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
   return INOX_OK;
 }
 
+static inox_status inox_object_entry_from_key_value(
+  inox_allocator* allocator,
+  const char* key_bytes,
+  size_t key_len,
+  inox_value value,
+  inox_value* out
+) {
+  if (allocator == 0 || key_bytes == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_value pair = inox_undefined_value();
+  inox_value key = inox_undefined_value();
+  inox_status status = inox_array_new(allocator, 2, &pair);
+
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, key_bytes, key_len, &key);
+  }
+
+  if (status == INOX_OK) {
+    status = inox_array_set(pair, 0, key);
+  }
+
+  if (status == INOX_OK) {
+    status = inox_array_set(pair, 1, value);
+  }
+
+  inox_release(key);
+
+  if (status != INOX_OK) {
+    inox_release(pair);
+    *out = inox_undefined_value();
+    return status;
+  }
+
+  *out = pair;
+
+  return INOX_OK;
+}
+
 static bool inox_class_descriptor_is_valid(const inox_class_descriptor* descriptor) {
   if (descriptor == 0 || descriptor->read_field == 0) {
     return false;
@@ -593,6 +633,89 @@ inox_status inox_class_instance_entries(
   }
 
   return INOX_OK;
+}
+
+inox_status inox_object_value_at(inox_value object, size_t index, inox_value* out) {
+  if (out == 0 || object.as.ref == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (object.tag == INOX_TAG_ARRAY) {
+    return inox_array_get(object, index, out);
+  }
+
+  if (object.tag != INOX_TAG_OBJECT) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (index > UINT32_MAX) {
+    *out = inox_undefined_value();
+    return INOX_ERR_FIELD;
+  }
+
+  return inox_object_get_known(object, (uint32_t)index, out);
+}
+
+inox_status inox_object_entry_at(inox_allocator* allocator, inox_value object, size_t index, inox_value* out) {
+  if (allocator == 0 || out == 0 || object.as.ref == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (object.tag == INOX_TAG_ARRAY) {
+    inox_array* instance = (inox_array*)object.as.ref;
+
+    if (index >= instance->len) {
+      *out = inox_undefined_value();
+      return INOX_ERR_FIELD;
+    }
+
+    char key_bytes[64];
+    int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
+    inox_value value = inox_undefined_value();
+    inox_status status = INOX_OK;
+
+    if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
+      status = INOX_ERR_TYPE;
+    } else {
+      status = inox_array_get(object, index, &value);
+    }
+
+    if (status == INOX_OK) {
+      status = inox_object_entry_from_key_value(allocator, key_bytes, (size_t)key_len, value, out);
+    }
+
+    inox_release(value);
+
+    return status;
+  }
+
+  if (object.tag != INOX_TAG_OBJECT) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (index > UINT32_MAX) {
+    *out = inox_undefined_value();
+    return INOX_ERR_FIELD;
+  }
+
+  inox_object* instance = (inox_object*)object.as.ref;
+
+  if (index >= instance->shape->field_count) {
+    *out = inox_undefined_value();
+    return INOX_ERR_FIELD;
+  }
+
+  const char* name = instance->shape->fields[index].name == 0 ? "" : instance->shape->fields[index].name;
+  inox_value value = inox_undefined_value();
+  inox_status status = inox_object_get_known(object, (uint32_t)index, &value);
+
+  if (status == INOX_OK) {
+    status = inox_object_entry_from_key_value(allocator, name, strlen(name), value, out);
+  }
+
+  inox_release(value);
+
+  return status;
 }
 
 inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_value* out) {

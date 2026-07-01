@@ -281,6 +281,7 @@ import {
   emitPreparedArraySortCallExpression,
   emitPreparedArrayUnshiftCallExpression,
   emitPreparedKnownArrayIndexValueExpression,
+  emitPreparedObjectRuntimeArrayIndexValueExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedRuntimeArrayIndexValueExpression,
   isArrayIncludesCall,
@@ -1301,6 +1302,7 @@ const cScalarExpressionDependencies = {
     emitPreparedObjectExpressionScalarIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionScalarMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionScalarMemberValueExpression(expression, context, objectExpressionFieldDependencies),
+  emitPreparedObjectRuntimeArrayIndexValueExpression,
   emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
   emitPreparedNumberExpression,
@@ -1394,6 +1396,7 @@ const cValueExpressionDependencies = {
   emitPreparedMapIndexGetExpression,
   emitPreparedNullableScalarRuntimeValueExpression,
   emitPreparedObjectValuesCallExpression,
+  emitPreparedObjectRuntimeArrayIndexValueExpression,
   emitPreparedNumberExpression,
   emitPreparedDynamicObjectIndexValueExpression: (expression: CDynamicObjectFieldNode, context: CFunctionContext) =>
     emitPreparedDynamicObjectIndexValueExpression(expression, context, objectExpressionFieldDependencies),
