@@ -2,7 +2,8 @@
 #include "inox/debug.h"
 #endif
 #include "inox/promise.h"
-#include "inox/time.h"
+
+#include <stdio.h>
 
 typedef enum inox_promise_reaction_kind {
   INOX_PROMISE_REACTION_OBSERVER,
@@ -26,6 +27,7 @@ struct inox_promise {
   unsigned int ref_count;
   inox_promise_state state;
   bool handled;
+  bool unhandled_reported;
   inox_value result;
   inox_promise_reaction* head;
   inox_promise_reaction* tail;
@@ -39,12 +41,17 @@ typedef struct inox_promise_reaction_task {
 static inox_status inox_promise_settle(inox_promise* promise, inox_promise_state state, inox_value value);
 static inox_status inox_promise_add_reaction(inox_promise* promise, inox_promise_reaction* reaction);
 static inox_status inox_promise_schedule_reaction(inox_promise* promise, inox_promise_reaction* reaction);
+static inox_status inox_promise_schedule_unhandled_rejection_check(inox_promise* promise);
 static bool inox_promise_reaction_tracks_rejection(const inox_promise_reaction* reaction);
+static inox_status inox_promise_run_unhandled_rejection_check(void* context);
+static void inox_promise_unhandled_rejection_check_finalizer(void* context);
 static inox_status inox_promise_run_observer_reaction(inox_promise_reaction_task* task);
 static inox_status inox_promise_run_chain_reaction(inox_promise_reaction_task* task);
 static inox_status inox_promise_run_reaction(void* context);
 static void inox_promise_reaction_task_finalizer(void* context);
 static void inox_promise_free_reaction(inox_promise* promise, inox_promise_reaction* reaction);
+
+static int inox_promise_unhandled_rejection_seen = 0;
 
 inox_status inox_promise_new(inox_loop* loop, inox_promise** out) {
   if (loop == 0 || loop->allocator == 0 || loop->allocator->alloc == 0 || out == 0) {
@@ -62,6 +69,7 @@ inox_status inox_promise_new(inox_loop* loop, inox_promise** out) {
   promise->ref_count = 1;
   promise->state = INOX_PROMISE_PENDING;
   promise->handled = false;
+  promise->unhandled_reported = false;
   promise->result = inox_undefined_value();
   promise->head = 0;
   promise->tail = 0;
@@ -113,6 +121,14 @@ bool inox_promise_is_unhandled_rejection(const inox_promise* promise) {
   return promise != 0 && promise->state == INOX_PROMISE_REJECTED && !promise->handled;
 }
 
+bool inox_promise_has_unhandled_rejection(void) {
+  return inox_promise_unhandled_rejection_seen != 0;
+}
+
+void inox_promise_clear_unhandled_rejection(void) {
+  inox_promise_unhandled_rejection_seen = 0;
+}
+
 inox_status inox_promise_get_result(inox_promise* promise, inox_value* out) {
   if (promise == 0 || out == 0 || promise->state == INOX_PROMISE_PENDING) {
     return INOX_ERR_TYPE;
@@ -140,19 +156,7 @@ inox_status inox_promise_await(
   }
 
   while (promise->state == INOX_PROMISE_PENDING && inox_loop_has_work(loop)) {
-#if !defined(INOX_LOOP_BACKEND_LIBUV)
-    inox_number next_due_ms = 0;
-    inox_number now_ms = inox_performance_now();
-
-    if (
-      inox_loop_pending_microtasks(loop) == 0 && inox_loop_pending_immediates(loop) == 0 &&
-      inox_loop_next_timer_due_ms(loop, &next_due_ms) && next_due_ms > now_ms
-    ) {
-      inox_time_sleep_ms(next_due_ms - now_ms);
-    }
-#endif
-
-    inox_status status = inox_loop_poll(loop, inox_performance_now());
+    inox_status status = inox_loop_run_once(loop);
 
     if (status != INOX_OK) {
       return status;
@@ -341,6 +345,14 @@ static inox_status inox_promise_settle(inox_promise* promise, inox_promise_state
     reaction = next;
   }
 
+  if (state == INOX_PROMISE_REJECTED) {
+    inox_status status = inox_promise_schedule_unhandled_rejection_check(promise);
+
+    if (first_error == INOX_OK && status != INOX_OK) {
+      first_error = status;
+    }
+  }
+
   return first_error;
 }
 
@@ -410,6 +422,46 @@ static bool inox_promise_reaction_tracks_rejection(const inox_promise_reaction* 
   }
 
   return reaction->on_rejected != 0;
+}
+
+static inox_status inox_promise_schedule_unhandled_rejection_check(inox_promise* promise) {
+  if (promise == 0 || promise->loop == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_promise_retain(promise);
+  inox_status status = inox_loop_queue_microtask(
+    promise->loop,
+    inox_promise_run_unhandled_rejection_check,
+    promise,
+    inox_promise_unhandled_rejection_check_finalizer
+  );
+
+  if (status != INOX_OK) {
+    inox_promise_release(promise);
+  }
+
+  return status;
+}
+
+static inox_status inox_promise_run_unhandled_rejection_check(void* context) {
+  inox_promise* promise = (inox_promise*)context;
+
+  if (promise == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (promise->state == INOX_PROMISE_REJECTED && !promise->handled && !promise->unhandled_reported) {
+    promise->unhandled_reported = true;
+    inox_promise_unhandled_rejection_seen = 1;
+    fprintf(stderr, "Unhandled Promise rejection\n");
+  }
+
+  return INOX_OK;
+}
+
+static void inox_promise_unhandled_rejection_check_finalizer(void* context) {
+  inox_promise_release((inox_promise*)context);
 }
 
 static inox_status inox_promise_run_reaction(void* context) {

@@ -162,8 +162,19 @@ export function isPlainPromiseReturningFunctionName(name: string, context: Promi
   )
 }
 
+export function isAsyncPromiseFunctionName(name: string, context: PromiseEventLoopFunctionContext): boolean {
+  return (
+    context.functionReturnTypes.get(name) === 'promise' &&
+    promiseBooleanValueIsTrue(context.functionAsyncFlags.get(name))
+  )
+}
+
 export function functionTakesEventLoopParam(name: string, context: PromiseEventLoopFunctionContext): boolean {
-  return isPlainPromiseReturningFunctionName(name, context) || context.externalEventLoopFunctions.has(name)
+  return (
+    isPlainPromiseReturningFunctionName(name, context) ||
+    isAsyncPromiseFunctionName(name, context) ||
+    context.externalEventLoopFunctions.has(name)
+  )
 }
 
 export function isPromiseReturningFunctionCallee(
@@ -181,7 +192,7 @@ export function isExternalEventLoopFunctionCallee(
 ): boolean {
   const name = promiseReferenceName(callee)
 
-  return name !== null && typeof name !== 'undefined' && context.externalEventLoopFunctions.has(name)
+  return name !== null && typeof name !== 'undefined' && functionTakesEventLoopParam(name, context)
 }
 
 export function resolvePromiseReturningFunctionValueType(

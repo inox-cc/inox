@@ -671,7 +671,12 @@ function visitExternalEventLoopChildren(current: AnyNode, state: ExternalEventLo
     return
   }
 
-  if (current.type === 'UnaryExpression' || current.type === 'UpdateExpression' || current.type === 'AwaitExpression') {
+  if (current.type === 'AwaitExpression') {
+    state.found = true
+    return
+  }
+
+  if (current.type === 'UnaryExpression' || current.type === 'UpdateExpression') {
     visitExternalEventLoopNode(current.argument, state)
     return
   }

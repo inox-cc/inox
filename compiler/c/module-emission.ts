@@ -74,7 +74,6 @@ import {
   emitOwnedPromiseDeclarations,
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
-  emitPromiseUnhandledRejectionChecks,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
   shouldEmitCleanupLabel
@@ -349,7 +348,7 @@ export type CModuleEmissionDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
-  collectExternalEventLoopFunctions(functions: AnyNode[]): Set<string>
+  collectExternalEventLoopFunctions(functions: AnyNode[], seedNames?: Set<string>): Set<string>
   collectionLoweringDependencies: CollectionLoweringDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
@@ -727,9 +726,6 @@ function emitCModuleUnhandledRejectionFlagDefinition(lines: string[], context: C
   if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
     return
   }
-
-  lines.push(`static int ${context.unhandledRejectionFlag} = 0;`)
-  lines.push('')
 }
 
 function emitCModuleFunctionPrototype(
@@ -1242,7 +1238,12 @@ function createCModuleBaseContext(
 
   registerNodeStdlibRuntimeImportNames(context, irPrograms)
   context.functionNames = createCModuleFunctionNames(plan)
-  context.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
+  context.externalEventLoopFunctions = collectCModuleExternalEventLoopFunctionNames(
+    plan,
+    deps,
+    new Map(),
+    new Set()
+  )
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
   context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
   context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
@@ -2156,7 +2157,6 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitEventLoopInit(context))
   pushScopedCModuleBody(lines, bodyLines)
 
-  pushIndentedCModuleLines(lines, emitPromiseUnhandledRejectionChecks(context))
   lines.push(`  return ${deps.emitMainReturnExpression(context)};`)
   lines.push('}')
 
@@ -2180,6 +2180,90 @@ function emitCModuleImportInitCalls(plan: CModulePlan): string[] {
   }
 
   return calls
+}
+
+function collectCModuleExternalEventLoopFunctionNames(
+  plan: CModulePlan,
+  deps: CModuleEmissionDependencies,
+  cache: Map<string, Set<string>>,
+  visiting: Set<string>
+): Set<string> {
+  const cached = cache.get(plan.record.path)
+
+  if (cached !== null && typeof cached !== 'undefined') {
+    return new Set(cached)
+  }
+
+  if (visiting.has(plan.record.path)) {
+    return new Set()
+  }
+
+  visiting.add(plan.record.path)
+
+  const seedNames = collectCModuleImportedExternalEventLoopFunctionNames(plan, deps, cache, visiting)
+  const entries = collectCModuleFunctionNodeEntries(plan, [plan.ir])
+  const functions: AnyNode[] = []
+
+  for (let index = 0; index < entries.length; index = index + 1) {
+    functions.push(cModuleFunctionEntryAt(entries, index).node)
+  }
+
+  const names = deps.collectExternalEventLoopFunctions(functions, seedNames)
+
+  visiting.delete(plan.record.path)
+  cache.set(plan.record.path, names)
+
+  return new Set(names)
+}
+
+function collectCModuleImportedExternalEventLoopFunctionNames(
+  plan: CModulePlan,
+  deps: CModuleEmissionDependencies,
+  cache: Map<string, Set<string>>,
+  visiting: Set<string>
+): Set<string> {
+  const names: Set<string> = new Set()
+
+  for (let importIndex = 0; importIndex < plan.imports.length; importIndex = importIndex + 1) {
+    const item = cModuleImportPlanAt(plan.imports, importIndex)
+    const importedModule = item.module
+
+    if (importedModule === null || typeof importedModule === 'undefined') {
+      continue
+    }
+
+    const importDeclaration = item.declaration
+
+    if (importDeclaration === null || typeof importDeclaration === 'undefined') {
+      continue
+    }
+
+    const specifiersValue = importDeclaration.specifiers
+
+    if (specifiersValue === null || typeof specifiersValue === 'undefined') {
+      continue
+    }
+
+    const importedNames = collectCModuleExternalEventLoopFunctionNames(importedModule, deps, cache, visiting)
+    const specifiers: CModuleNode[] = specifiersValue
+
+    for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+      const specifier = cModuleNodeAt(specifiers, specifierIndex)
+
+      if (!importedNames.has(specifier.imported)) {
+        continue
+      }
+
+      names.add(cModuleImportedBindingName(importDeclaration, specifier))
+
+      if (importDeclaration.type !== 'ExportDeclaration') {
+        names.add(specifier.imported)
+        names.add(specifier.local)
+      }
+    }
+  }
+
+  return names
 }
 
 function collectCModuleFunctionNodeEntries(plan: CModulePlan, programs: IrProgram[]): CModuleFunctionNodeEntry[] {

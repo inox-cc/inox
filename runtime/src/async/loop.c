@@ -1,4 +1,5 @@
 #include "inox/loop.h"
+#include "inox/time.h"
 
 typedef struct inox_microtask {
   inox_microtask_fn run;
@@ -229,6 +230,40 @@ inox_status inox_loop_poll(inox_loop* loop, inox_number now_ms) {
   first_error = inox_loop_keep_first_error(first_error, inox_loop_run_timers(loop, turn, now_ms));
 
   return first_error;
+}
+
+inox_status inox_loop_run_once(inox_loop* loop) {
+  if (loop == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_number next_due_ms = 0;
+  inox_number now_ms = inox_performance_now();
+
+  if (
+    inox_loop_pending_microtasks(loop) == 0 && inox_loop_pending_immediates(loop) == 0 &&
+    inox_loop_next_timer_due_ms(loop, &next_due_ms) && next_due_ms > now_ms
+  ) {
+    inox_time_sleep_ms(next_due_ms - now_ms);
+  }
+
+  return inox_loop_poll(loop, inox_performance_now());
+}
+
+inox_status inox_loop_run(inox_loop* loop) {
+  if (loop == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  while (inox_loop_has_work(loop)) {
+    inox_status status = inox_loop_run_once(loop);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  return INOX_OK;
 }
 
 int inox_loop_has_work(const inox_loop* loop) {

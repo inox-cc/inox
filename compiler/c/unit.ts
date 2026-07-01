@@ -121,7 +121,7 @@ export type CUnitDependencies = {
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   callbackLoweringDependencies: CallbackLoweringDependencies
   classLoweringDependencies: ClassLoweringDependencies
-  collectExternalEventLoopFunctions: (functions: AnyNode[]) => Set<string>
+  collectExternalEventLoopFunctions: (functions: AnyNode[], seedNames?: Set<string>) => Set<string>
   collectionLoweringDependencies: CollectionLoweringDependencies
   createBaseContext(
     diagnostics: Diagnostic[],
@@ -1516,9 +1516,6 @@ function emitCUnitUnhandledRejectionFlagDefinition(lines: string[], context: CEm
   if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
     return
   }
-
-  lines.push(`static int ${context.unhandledRejectionFlag} = 0;`)
-  lines.push('')
 }
 
 function emitCallbackFinalizerPrototype(finalizerName: string): string {

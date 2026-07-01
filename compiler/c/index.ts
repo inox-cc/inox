@@ -2519,10 +2519,16 @@ function objectAccessorExpressionReturnPathPrefix(
   return null
 }
 
-function collectExternalEventLoopFunctions(functions: AnyNode[]): CNameSet {
+function collectExternalEventLoopFunctions(functions: AnyNode[], seedNames?: CNameSet): CNameSet {
   const functionsByName: Map<string, AnyNode> = new Map()
   const names: CNameSet = new Set()
   let changed = true
+
+  if (seedNames !== null && typeof seedNames !== 'undefined') {
+    for (const name of seedNames) {
+      names.add(name)
+    }
+  }
 
   for (const item of functions) {
     if (item.name === null || typeof item.name === 'undefined') {

@@ -23,8 +23,11 @@ console.log(value)
 
   assert.doesNotMatch(main, /\ncleanup:/)
   assert.doesNotMatch(main, /goto cleanup;/)
+  assert.doesNotMatch(main, /while \(inox_loop_has_work/)
+  assert.match(main, /inox_loop\.run\(\)/)
   assert.match(main, /return 1;/)
-  assert.match(main, /if \(inox_promise_\d+\.has_unhandled_rejection\(\)\) \{/)
+  assert.doesNotMatch(main, /\.has_unhandled_rejection\(\)/)
+  assert.match(main, /return !inox_promise_has_unhandled_rejection\(\) \? 0 : 1;/)
 }
 
 export function assertModuleMainUsesRaiiReturns(): void {
@@ -36,8 +39,36 @@ console.log(value)
 
   assert.doesNotMatch(main, /\ncleanup:/)
   assert.doesNotMatch(main, /goto cleanup;/)
+  assert.doesNotMatch(main, /while \(inox_loop_has_work/)
+  assert.match(main, /inox_loop\.run\(\)/)
   assert.match(main, /return 1;/)
-  assert.match(main, /if \(inox_promise_\d+\.has_unhandled_rejection\(\)\) \{/)
+  assert.doesNotMatch(main, /\.has_unhandled_rejection\(\)/)
+  assert.match(main, /return !inox_promise_has_unhandled_rejection\(\) \? 0 : 1;/)
+}
+
+export function assertAwaitFunctionUsesExternalLoopRuntime(): void {
+  const source = compileModuleMainSource(`
+async function checkFetch() {
+  try {
+    const value = await Promise.resolve('ok')
+    console.log(value)
+  } catch (error) {
+    console.log(error)
+  }
+}
+
+await checkFetch()
+`)
+  const checkFetch = functionSource(source, 'static void checkFetch(inox_loop* inox_loop) {')
+  const main = mainFunctionSource(source)
+
+  assert.match(source, /static void checkFetch\(inox_loop\* inox_loop\)/)
+  assert.doesNotMatch(checkFetch, /inox::Loop/)
+  assert.doesNotMatch(checkFetch, /while \(inox_loop_has_work/)
+  assert.doesNotMatch(checkFetch, /\ncleanup:/)
+  assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
+  assert.match(main, /checkFetch\(inox_loop\.raw\(\)\);/)
+  assert.match(main, /inox_loop\.run\(\)/)
 }
 
 function compileModuleMainSource(source: string): string {
@@ -69,6 +100,18 @@ function mainFunctionSource(source: string): string {
   return source.slice(start)
 }
 
+function functionSource(source: string, signatureStart: string): string {
+  const start = source.indexOf(signatureStart)
+
+  assert.notEqual(start, -1, `missing generated function ${signatureStart}`)
+
+  const nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)
+
+  assert.notEqual(nextFunction, -1, `missing generated function end ${signatureStart}`)
+
+  return source.slice(start, nextFunction)
+}
+
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
   for (const file of files) {
     if (file.path === path) {
@@ -82,4 +125,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertUnitMainUsesRaiiReturns()
   assertModuleMainUsesRaiiReturns()
+  assertAwaitFunctionUsesExternalLoopRuntime()
 }

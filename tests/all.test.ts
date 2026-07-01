@@ -113,8 +113,11 @@ async function runIntegrationTests(): Promise<void> {
     assertFinallyStillEmitsErrorActiveState
   } =
     await import('./integration/error-flow-state-lowering.test.ts')
-  const { assertModuleMainUsesRaiiReturns, assertUnitMainUsesRaiiReturns } =
-    await import('./integration/main-raii-lowering.test.ts')
+  const {
+    assertAwaitFunctionUsesExternalLoopRuntime,
+    assertModuleMainUsesRaiiReturns,
+    assertUnitMainUsesRaiiReturns
+  } = await import('./integration/main-raii-lowering.test.ts')
   const { assertModuleDeclarationImportBoundary } =
     await import('./integration/module-declaration-import-boundary.test.ts')
   const { assertModuleDeclarationContracts } = await import('./integration/module-declaration-contracts.test.ts')
@@ -211,6 +214,7 @@ async function runIntegrationTests(): Promise<void> {
     await t.test('main-raii-lowering', () => {
       assertUnitMainUsesRaiiReturns()
       assertModuleMainUsesRaiiReturns()
+      assertAwaitFunctionUsesExternalLoopRuntime()
     })
 
     await t.test('module-declaration-contracts', () => {

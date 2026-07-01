@@ -22,6 +22,8 @@ void inox_promise_retain(inox_promise* promise);
 void inox_promise_release(inox_promise* promise);
 inox_promise_state inox_promise_get_state(const inox_promise* promise);
 bool inox_promise_is_unhandled_rejection(const inox_promise* promise);
+bool inox_promise_has_unhandled_rejection(void);
+void inox_promise_clear_unhandled_rejection(void);
 inox_status inox_promise_get_result(inox_promise* promise, inox_value* out);
 inox_status inox_promise_await(
   inox_loop* loop,

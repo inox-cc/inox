@@ -30,7 +30,6 @@ import {
   emitOwnedPromiseDeclarations,
   emitOwnedValueCleanup,
   emitOwnedValueDeclarations,
-  emitPromiseUnhandledRejectionChecks,
   emitReturnFlowDeclarations,
   emitReturnValueDeclarations,
   emitRuntimeTypeCheck,
@@ -255,6 +254,9 @@ export function emitFunctionDeclaration(
 
   context.throwingFunction = isThrowingFunctionName(statement.name, context)
   context.externalEventLoop = functionTakesEventLoopParam(statement.name, context)
+  if (returnType === 'void' && !context.throwingFunction && context.externalEventLoop) {
+    context.cleanupEnabled = false
+  }
   context.functionReturnOut = 'inox_out'
   context.functionErrorOut = 'inox_error_out'
 
@@ -1118,7 +1120,6 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
   pushScopedDeclarationBody(lines, bodyLines)
 
-  pushIndentedDeclarationLines(lines, emitPromiseUnhandledRejectionChecks(context))
   lines.push(`  return ${emitMainReturnExpression(context)};`)
   lines.push('}')
 
@@ -1138,7 +1139,7 @@ export function emitMainReturnExpression(context: CFunctionContext): string {
     return successReturn
   }
 
-  return `${context.unhandledRejectionFlag} == 0 ? ${successReturn} : 1`
+  return `!inox_promise_has_unhandled_rejection() ? ${successReturn} : 1`
 }
 
 function emitRuntimeParamPreludeForParams(

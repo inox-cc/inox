@@ -657,16 +657,18 @@ type CBoxedValueDeclarationContext = {
 }
 
 export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
+  if (!context.cleanupEnabled) {
+    return false
+  }
+
   return (
     context.throwingFunction ||
     context.returnType !== 'void' ||
     (context.returnType === 'void' &&
       (context.ownedValues.length > 0 ||
-        context.ownedPromises.length > 0 ||
         context.ownedCryptoHashes.length > 0 ||
         context.ownedCryptoHmacs.length > 0 ||
         context.boxedValues.length > 0 ||
-        context.eventLoopUsed ||
         context.usedCleanupGoto))
   )
 }
@@ -840,26 +842,7 @@ export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
 }
 
 export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {
-  return emitPromiseUnhandledRejectionChecks(context)
-}
-
-export function emitPromiseUnhandledRejectionChecks(context: CFunctionContext): string[] {
-  const lines: string[] = []
-
-  for (let index = context.ownedPromises.length - 1; index >= 0; index--) {
-    const name = context.ownedPromises[index]
-    const localName = emitCLocalName(name)
-
-    if (context.unhandledRejectionFlag !== null && typeof context.unhandledRejectionFlag !== 'undefined') {
-      lines.push(`if (${localName}.has_unhandled_rejection()) {`)
-      lines.push('  fprintf(stderr, "Unhandled Promise rejection\\n");')
-      lines.push(`  ${context.unhandledRejectionFlag} = 1;`)
-      lines.push('}')
-    }
-
-  }
-
-  return lines
+  return []
 }
 
 export function emitEventLoopInit(context: CFunctionContext): string[] {
@@ -882,20 +865,7 @@ export function emitEventLoopDrain(context: CFunctionContext): string[] {
     return []
   }
 
-  const loop = emitEventLoopReference(context)
-  const statusCheck = emitStatusCheck(`inox_loop_poll(${loop}, ${emitEventLoopCurrentTimeExpression()})`, context)
-  const lines: string[] = []
-
-  lines.push(`while (inox_loop_has_work(${loop})) {`)
-
-  for (const line of emitEventLoopSleepUntilNextTimerLines(context, '  ')) {
-    lines.push(line)
-  }
-
-  lines.push(`  ${statusCheck}`)
-  lines.push('}')
-
-  return lines
+  return [emitStatusCheck('inox_loop.run()', context)]
 }
 
 export function emitEventLoopCleanup(context: CFunctionContext): string[] {
@@ -910,28 +880,8 @@ export function emitEventLoopReference(context: CEventLoopContext): string {
   return 'inox_loop.raw()'
 }
 
-export function emitEventLoopNextTimeExpression(): string {
-  return emitEventLoopCurrentTimeExpression()
-}
-
 export function emitEventLoopCurrentTimeExpression(): string {
   return 'inox_performance_now()'
-}
-
-export function emitEventLoopSleepUntilNextTimerLines(context: CFunctionContext, indent: string): string[] {
-  const loop = emitEventLoopReference(context)
-
-  return [
-    `${indent}#if !defined(INOX_LOOP_BACKEND_LIBUV)`,
-    `${indent}{`,
-    `${indent}  inox_number inox_next_due_ms = 0;`,
-    `${indent}  inox_number inox_now_ms = ${emitEventLoopCurrentTimeExpression()};`,
-    `${indent}  if (inox_loop_pending_microtasks(${loop}) == 0 && inox_loop_pending_immediates(${loop}) == 0 && inox_loop_next_timer_due_ms(${loop}, &inox_next_due_ms) && inox_next_due_ms > inox_now_ms) {`,
-    `${indent}    inox_time_sleep_ms(inox_next_due_ms - inox_now_ms);`,
-    `${indent}  }`,
-    `${indent}}`,
-    `${indent}#endif`
-  ]
 }
 
 export function emitBoxedValueCleanup(context: CFunctionContext): string[] {

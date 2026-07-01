@@ -2469,6 +2469,11 @@ function emitPreparedThrowingCallExpression(
   const lines: string[] = []
   let result = ''
 
+  if (deps.isExternalEventLoopFunctionCallee(expression.callee, context)) {
+    registerEventLoop(context)
+    callArgs.push(emitEventLoopReference(context))
+  }
+
   appendLines(callArgs, args)
   appendLines(lines, preparedLines)
 

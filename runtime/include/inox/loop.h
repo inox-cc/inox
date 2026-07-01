@@ -64,6 +64,8 @@ inox_status inox_loop_set_interval(
 );
 void inox_loop_clear_timer(inox_timer_handle* handle);
 inox_status inox_loop_poll(inox_loop* loop, inox_number now_ms);
+inox_status inox_loop_run_once(inox_loop* loop);
+inox_status inox_loop_run(inox_loop* loop);
 int inox_loop_has_work(const inox_loop* loop);
 size_t inox_loop_pending_microtasks(const inox_loop* loop);
 size_t inox_loop_pending_immediates(const inox_loop* loop);
@@ -104,6 +106,14 @@ public:
     }
 
     return status;
+  }
+
+  inox_status run_once() {
+    return inox_loop_run_once(&loop_);
+  }
+
+  inox_status run() {
+    return inox_loop_run(&loop_);
   }
 
   void reset() {
