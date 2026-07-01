@@ -153,6 +153,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRuntimeAllocatorStaysInRuntime } =
     await import('./integration/runtime-allocator-prelude.test.ts')
+  const { assertRuntimeValueDeclarationsReuseTypedHelperContracts } =
+    await import('./integration/runtime-value-type-check-lowering.test.ts')
   const {
     assertNativeClassArrayRuntimeFieldLowering,
     assertNativeClassDefinitionsPrecedeModuleValues,
@@ -342,6 +344,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('runtime-allocator-prelude', () => {
       assertRuntimeAllocatorStaysInRuntime()
+    })
+
+    await t.test('runtime-value-type-check-lowering', () => {
+      assertRuntimeValueDeclarationsReuseTypedHelperContracts()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {

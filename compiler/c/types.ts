@@ -11,6 +11,7 @@ export type CPreparedExpression = {
   nullable?: boolean
   owned?: boolean
   rejectionValueType?: string
+  runtimeTypeChecked?: boolean
   valueType?: string
 }
 

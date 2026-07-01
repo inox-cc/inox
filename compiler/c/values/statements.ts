@@ -1267,7 +1267,11 @@ export function emitRuntimeStringVariableDeclaration(
   pushAllLines(lines, emitPrepareOwnedValueWrite(storage))
   lines.push(`${storage} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
-  lines.push(emitRuntimeValueCheck(storage, 'INOX_TAG_STRING', context))
+
+  if (!shouldSkipRuntimeValueDeclarationCheck(statement, value, 'string')) {
+    lines.push(emitRuntimeValueCheck(storage, 'INOX_TAG_STRING', context))
+  }
+
   lines.push(
     `${constPrefix(statement.kind === 'const')}inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${storage}.as.ref;`
   )
@@ -1580,6 +1584,10 @@ export function emitRuntimeValueVariableDeclaration(
   lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, emitCIdentifier(statement.name), value)
 
+  if (shouldSkipRuntimeValueDeclarationCheck(statement, value, valueType)) {
+    return lines
+  }
+
   if (statement.nullable === true && isRuntimeNullableType(valueType)) {
     pushAllLines(lines, emitRuntimeNullableValueCheck(emitCIdentifier(statement.name), expectedTag, context))
   } else {
@@ -1591,6 +1599,18 @@ export function emitRuntimeValueVariableDeclaration(
   }
 
   return lines
+}
+
+function shouldSkipRuntimeValueDeclarationCheck(
+  statement: StatementNode,
+  value: PreparedExpression,
+  valueType: string
+): boolean {
+  if (statement.nullable === true) {
+    return false
+  }
+
+  return value.runtimeTypeChecked === true && value.valueType === valueType
 }
 
 function pushPreparedRuntimeValueOwnershipLines(

@@ -7902,6 +7902,7 @@ function emitPreparedAwaitedPromiseValueExpression(
     lines,
     expression: value,
     owned: true,
+    runtimeTypeChecked: valueCheck !== '',
     valueType
   }
 }
@@ -8976,7 +8977,9 @@ function emitPreparedObjectValuesCallExpression(
 
     return {
       lines,
-      expression: temp
+      expression: temp,
+      runtimeTypeChecked: true,
+      valueType: 'array'
     }
   }
 
@@ -8988,7 +8991,9 @@ function emitPreparedObjectValuesCallExpression(
 
   return {
     lines,
-    expression: temp
+    expression: temp,
+    runtimeTypeChecked: true,
+    valueType: 'array'
   }
 }
 

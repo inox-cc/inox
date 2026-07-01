@@ -286,7 +286,8 @@ export function emitPreparedJsonCallExpression(
 
   if (method === 'parse') {
     const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_json_text')
-    const expectedTag = cRuntimeValueTag(dependencies.inferExpressionType(expression, context))
+    const valueType = dependencies.inferExpressionType(expression, context)
+    const expectedTag = cRuntimeValueTag(valueType)
     let detailedError: string | null = null
 
     const lines: string[] = []
@@ -313,7 +314,9 @@ export function emitPreparedJsonCallExpression(
     return {
       lines: lines,
       expression: out,
-      owned: ownsOut
+      owned: ownsOut,
+      runtimeTypeChecked: expectedTag !== null && typeof expectedTag !== 'undefined',
+      valueType
     }
   }
 
@@ -329,7 +332,9 @@ export function emitPreparedJsonCallExpression(
     return {
       lines: lines,
       expression: out,
-      owned: ownsOut
+      owned: ownsOut,
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
@@ -349,7 +354,9 @@ export function emitPreparedJsonCallExpression(
     return {
       lines: lines,
       expression: out,
-      owned: ownsOut
+      owned: ownsOut,
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
@@ -362,7 +369,9 @@ export function emitPreparedJsonCallExpression(
   return {
     lines: lines,
     expression: out,
-    owned: ownsOut
+    owned: ownsOut,
+    runtimeTypeChecked: true,
+    valueType: 'string'
   }
 }
 
