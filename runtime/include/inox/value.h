@@ -129,6 +129,7 @@ void inox_release(inox_value value);
 #ifdef __cplusplus
 
 #include <memory>
+#include <utility>
 #include <string.h>
 #include "inox/string_view.h"
 #include "inox/string.h"
@@ -245,6 +246,46 @@ public:
 inline Value adopt(inox_value value) {
   return Value(adopt_value, value);
 }
+
+class String {
+private:
+  Value value_;
+
+public:
+  String() : value_() {}
+
+  explicit String(Value value) : value_(std::move(value)) {}
+
+  bool valid() const {
+    inox_value value = value_.raw();
+
+    return value.tag == INOX_TAG_STRING && value.as.ref != nullptr;
+  }
+
+  size_t len() const {
+    if (!valid()) {
+      return 0;
+    }
+
+    return ((inox_string*)value_.raw().as.ref)->len;
+  }
+
+  const char* bytes() const {
+    if (!valid()) {
+      return "";
+    }
+
+    return ((inox_string*)value_.raw().as.ref)->bytes;
+  }
+
+  inox_value raw() const {
+    return value_.raw();
+  }
+
+  operator inox_value() const {
+    return value_.raw();
+  }
+};
 
 inline Value string(const char* bytes, size_t len) {
   inox_value value = inox_undefined_value();

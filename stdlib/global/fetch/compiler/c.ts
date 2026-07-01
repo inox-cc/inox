@@ -9,7 +9,7 @@ import {
   registerOwnedPromise,
   registerOwnedValue
 } from '../../../../compiler/c/context.ts'
-import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
+import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
 import { emitRuntimeValueCheck } from '../../../../compiler/c/runtime-values.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
@@ -27,6 +27,7 @@ type FetchFunctionContext = {
   nextId: number
   ownedPromises: string[]
   ownedValues: string[]
+  objectDeclaredTypes: Map<string, string | null>
   promiseRejectionValueTypes: Map<string, string>
   promiseValueTypes: Map<string, string>
   returnType?: string
@@ -77,6 +78,20 @@ function resolveFetchPromiseValueType(expression: AnyNode, method: string): stri
 
 function emptyStringBytesOperand(): PreparedStringBytesOperand {
   return { lines: [], bytes: '0', length: '0' }
+}
+
+function fetchResponseCppReference(expression: AnyNode, context: FetchFunctionContext): string | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  const name = expression.path[0]
+
+  if (context.objectDeclaredTypes.get(name) !== 'fetch.Response') {
+    return null
+  }
+
+  return emitCIdentifier(name)
 }
 
 export function emitFetchStringView(operand: PreparedStringBytesOperand): string {
@@ -154,7 +169,7 @@ export function emitPreparedFetchCallExpression(
     const out = preparedCallOut(options, context, 'inox_promise')
     const valueType = resolveFetchPromiseValueType(expression, method)
 
-    if (options.owned !== false) {
+    if (options.cppExpression !== true && options.owned !== false) {
       registerOwnedPromise(context, out, valueType, 'error')
     }
 
@@ -173,6 +188,19 @@ export function emitPreparedFetchCallExpression(
 
       appendLines(lines, url.lines)
       appendLines(lines, init.lines)
+
+      if (options.cppExpression === true) {
+        return {
+          lines,
+          expression:
+            init.expression === '0'
+              ? `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringView(url)})`
+              : `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringView(url)}, ${init.expression})`,
+          valueType,
+          rejectionValueType: 'error'
+        }
+      }
+
       lines.push(emitStatusCheck(call, context))
 
       return {
@@ -184,6 +212,19 @@ export function emitPreparedFetchCallExpression(
     }
 
     if (method === 'text') {
+      if (options.cppExpression === true) {
+        const reference = fetchResponseCppReference(expression.callee.object, context)
+
+        if (reference !== null && typeof reference !== 'undefined') {
+          return {
+            lines: [],
+            expression: `${reference}.text(${emitEventLoopReference(context)})`,
+            valueType: 'string',
+            rejectionValueType: 'error'
+          }
+        }
+      }
+
       const response = dependencies.emitCValueExpression(expression.callee.object, context)
       const lines: string[] = []
 

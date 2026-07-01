@@ -6702,6 +6702,14 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     const reference = emitReference(expression, context)
 
+    if (context.cppStringValues.has(name)) {
+      return {
+        lines: [],
+        format: '%.*s',
+        values: [`(int)${reference}.len()`, `${reference}.bytes()`]
+      }
+    }
+
     if (context.variables.get(name) === 'string' && context.nullableVariables.has(name)) {
       const string = nextCName(context, 'inox_log_string')
 
@@ -7023,6 +7031,12 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
       }
     }
 
+    const fetchResponseMember = emitFetchResponseScalarMemberLogValue(expression, context)
+
+    if (fetchResponseMember !== null && typeof fetchResponseMember !== 'undefined') {
+      return fetchResponseMember
+    }
+
     const member = resolveKnownObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && isNullableScalarType(member.valueType)) {
@@ -7072,6 +7086,50 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
     format: consoleLogNumberFormat,
     values: [`((double)${value.expression})`]
   }
+}
+
+function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
+    return null
+  }
+
+  if (expression.object.path.length !== 1) {
+    return null
+  }
+
+  const objectName = expression.object.path[0]
+
+  if (context.objectDeclaredTypes.get(objectName) !== 'fetch.Response') {
+    return null
+  }
+
+  const reference = emitCIdentifier(objectName)
+
+  if (expression.property === 'status') {
+    return {
+      lines: [],
+      format: consoleLogNumberFormat,
+      values: [`${reference}.status()`]
+    }
+  }
+
+  if (expression.property === 'ok') {
+    return {
+      lines: [],
+      format: consoleLogNumberFormat,
+      values: [`((double)(${reference}.ok() ? 1 : 0))`]
+    }
+  }
+
+  if (expression.property === 'redirected') {
+    return {
+      lines: [],
+      format: consoleLogNumberFormat,
+      values: [`((double)(${reference}.redirected() ? 1 : 0))`]
+    }
+  }
+
+  return null
 }
 
 function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
@@ -7826,7 +7884,9 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
     return asyncCall
   }
 
-  const fetchPromise = emitPreparedFetchCallExpression(expression.argument, context, fetchLoweringDependencies)
+  const fetchPromise = emitPreparedFetchCallExpression(expression.argument, context, fetchLoweringDependencies, {
+    cppExpression: true
+  })
 
   if (fetchPromise !== null && typeof fetchPromise !== 'undefined') {
     return emitPreparedAwaitedPromiseValueExpression(expression, fetchPromise, context)
@@ -7872,10 +7932,8 @@ function emitPreparedAwaitedPromiseValueExpression(
     resolvePromiseExpressionValueType(expression.argument, context)
   )
 
-  const value = nextCName(context, 'inox_await_value')
-  const state = nextCName(context, 'inox_await_state')
   const valueTag = cRuntimeValueTag(valueType)
-  const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
+  const valueCheckNeeded = emitRuntimeValueCheck('inox_await_value', valueTag, context) !== ''
   const readRejection = shouldAwaitReadRejectedPromise(context) ? 'true' : 'false'
   let rejectionValueType = 'unknown'
   const promiseRejectionValueType = preparedPromise.rejectionValueType ?? ''
@@ -7884,6 +7942,22 @@ function emitPreparedAwaitedPromiseValueExpression(
   if (promiseRejectionValueType !== '') {
     rejectionValueType = promiseRejectionValueType
   }
+
+  if (shouldAwaitReadRejectedPromise(context)) {
+    return emitPreparedAwaitResultExpression(
+      expression,
+      preparedPromise,
+      valueType,
+      valueTag,
+      valueCheckNeeded,
+      rejectionValueType,
+      context
+    )
+  }
+
+  const value = nextCName(context, 'inox_await_value')
+  const state = nextCName(context, 'inox_await_state')
+  const valueCheck = emitRuntimeValueCheck(value, valueTag, context)
 
   registerOwnedValue(context, value)
 
@@ -7910,6 +7984,148 @@ function emitPreparedAwaitedPromiseValueExpression(
     runtimeTypeChecked: valueCheck !== '',
     valueType
   }
+}
+
+function emitPreparedAwaitResultExpression(
+  expression: AnyNode,
+  preparedPromise: PreparedExpression,
+  valueType: string,
+  valueTag: string | null,
+  valueCheckNeeded: boolean,
+  rejectionValueType: string,
+  context: CFunctionContext
+): PreparedExpression {
+  const result = nextCName(context, 'inox_await_result')
+  const valueExpression = `${result}.value()`
+  const valueInfo = resolveAwaitResultCppValueInfo(expression, result, valueType, valueTag, valueCheckNeeded, context)
+  const lines: string[] = []
+
+  pushAll(lines, preparedPromise.lines)
+  lines.push(`auto ${result} = inox::await_result<${valueInfo.cppType}>(${emitEventLoopReference(context)}, ${preparedPromise.expression});`)
+  lines.push(emitStatusCheck(`${result}.status()`, context))
+  pushAll(lines, emitAwaitResultRejectedPromiseLines(result, rejectionValueType, context))
+
+  if (valueInfo.valueCheck !== '') {
+    lines.push(valueInfo.valueCheck)
+  }
+
+  return {
+    lines,
+    expression: valueExpression,
+    cppType: valueInfo.cppType === 'inox::Value' ? undefined : valueInfo.cppType,
+    owned: false,
+    runtimeTypeChecked: valueInfo.runtimeTypeChecked,
+    valueType
+  }
+}
+
+type AwaitResultCppValueInfo = {
+  cppType: string
+  runtimeTypeChecked: boolean
+  valueCheck: string
+}
+
+function resolveAwaitResultCppValueInfo(
+  expression: AnyNode,
+  result: string,
+  valueType: string,
+  valueTag: string | null,
+  valueCheckNeeded: boolean,
+  context: CFunctionContext
+): AwaitResultCppValueInfo {
+  const valueExpression = `${result}.value()`
+
+  if (isFetchResponseAwaitExpression(expression)) {
+    return {
+      cppType: 'inox::FetchResponse',
+      runtimeTypeChecked: true,
+      valueCheck: emitRuntimeTypeCheck(`!${valueExpression}.valid()`, context)
+    }
+  }
+
+  if (valueType === 'string') {
+    return {
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueCheck: emitRuntimeTypeCheck(`!${valueExpression}.valid()`, context)
+    }
+  }
+
+  if (!valueCheckNeeded) {
+    return {
+      cppType: 'inox::Value',
+      runtimeTypeChecked: false,
+      valueCheck: ''
+    }
+  }
+
+  return {
+    cppType: 'inox::Value',
+    runtimeTypeChecked: true,
+    valueCheck: emitRuntimeValueCheck(valueExpression, valueTag, context)
+  }
+}
+
+function isFetchResponseAwaitExpression(expression: AnyNode): boolean {
+  if (expression.shape !== null && typeof expression.shape !== 'undefined' && expression.shape.builtin === 'fetch.Response') {
+    return true
+  }
+
+  const argument = expression.argument
+
+  return (
+    argument !== null &&
+    typeof argument !== 'undefined' &&
+    argument.shape !== null &&
+    typeof argument.shape !== 'undefined' &&
+    argument.shape.builtin === 'fetch.Response'
+  )
+}
+
+function emitAwaitResultRejectedPromiseLines(
+  result: string,
+  rejectionValueType: string,
+  context: CFunctionContext
+): string[] {
+  const target = currentErrorTarget(context) ?? ''
+  let rejectedTypeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
+
+  if (rejectionValueType === 'error') {
+    rejectedTypeCheck = runtimeErrorObjectValueMismatchCondition('inox_error')
+  }
+
+  if (target === '' && !context.throwingFunction) {
+    return []
+  }
+
+  const errorActiveNeeded = currentErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
+
+  if (errorActiveNeeded) {
+    registerErrorChannel(context)
+  } else {
+    registerErrorValue(context)
+  }
+
+  const lines: string[] = []
+
+  lines.push(`if (!${result}.ok()) {`)
+  pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
+  lines.push(`  inox_error = ${result}.error();`)
+  lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
+  if (errorActiveNeeded) {
+    lines.push('  inox_error_active = 1;')
+  }
+
+  if (target === '') {
+    lines.push('  inox_status_result = INOX_ERR_THROW;')
+    lines.push('  goto cleanup;')
+  } else {
+    lines.push(`  goto ${target};`)
+  }
+
+  lines.push('}')
+
+  return lines
 }
 
 function shouldAwaitReadRejectedPromise(context: CFunctionContext): boolean {

@@ -205,7 +205,7 @@ console.log(response.status)
 
   assert.match(
     fetchSource,
-    /inox_fetch\(inox_loop\.raw\(\), inox::string_view\("http:\/\/127\.0\.0\.1"\), &inox_promise_\d+\)/
+    /inox::fetch\(inox_loop\.raw\(\), inox::string_view\("http:\/\/127\.0\.0\.1"\)\)/
   )
   assert.doesNotMatch(fetchSource, /inox_fetch\(inox_loop\.raw\(\), "http:\/\/127\.0\.0\.1", 16,/)
 

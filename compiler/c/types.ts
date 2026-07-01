@@ -13,6 +13,7 @@ export type CPreparedExpression = {
   rejectionValueType?: string
   runtimeTypeChecked?: boolean
   valueType?: string
+  cppType?: string
 }
 
 export type CPreparedStatement = {
@@ -33,6 +34,7 @@ export type CPreparedCallArgs = {
 
 export type CPreparedCallOptions = {
   asValue?: boolean
+  cppExpression?: boolean
   discard?: boolean
   out?: string
   owned?: boolean

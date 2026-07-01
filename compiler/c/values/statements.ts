@@ -128,6 +128,7 @@ type CFunctionContext = {
   collectionLoweringDependencies: CollectionLoweringDependencies
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
+  cppStringValues: CStringSet
   cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
   dgramBoundSockets: CStringSet
@@ -1261,9 +1262,27 @@ export function emitRuntimeStringVariableDeclaration(
   context: CFunctionContext
 ): string[] {
   const value = statementDeps(context).emitCValueExpression(expression, context)
-  const storage = registerRuntimeStringStorage(statement.name, context)
   const lines: string[] = []
+
   pushAllLines(lines, value.lines)
+
+  if (statement.kind === 'const' && value.cppType === 'inox::String') {
+    const name = emitCIdentifier(statement.name)
+
+    lines.push(`${constPrefix(true)}inox::String ${name} = ${value.expression};`)
+
+    if (!shouldSkipRuntimeValueDeclarationCheck(statement, value, 'string')) {
+      lines.push(emitRuntimeTypeCheck(`!${name}.valid()`, context))
+    }
+
+    context.variables.set(statement.name, 'string')
+    context.cppStringValues.add(statement.name)
+
+    return lines
+  }
+
+  const storage = registerRuntimeStringStorage(statement.name, context)
+
   lines.push(`${storage} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
 
@@ -1598,12 +1617,13 @@ export function emitRuntimeValueVariableDeclaration(
 
 function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: PreparedExpression): string {
   const name = emitCIdentifier(statement.name)
+  const cppType = value.cppType ?? 'inox::Value'
 
   if (value.owned === true) {
-    return `${constPrefix(statement.kind === 'const')}inox::Value ${name} = inox::adopt(${value.expression}.release());`
+    return `${constPrefix(statement.kind === 'const')}${cppType} ${name} = inox::adopt(${value.expression}.release());`
   }
 
-  return `${constPrefix(statement.kind === 'const')}inox::Value ${name} = ${value.expression};`
+  return `${constPrefix(statement.kind === 'const')}${cppType} ${name} = ${value.expression};`
 }
 
 function shouldSkipRuntimeValueDeclarationCheck(
@@ -1732,6 +1752,12 @@ function resolveRuntimeObjectDeclaredType(
     return declarationType
   }
 
+  const declarationBuiltin = knownRuntimeObjectBuiltin(declaration.shape)
+
+  if (declarationBuiltin !== null && typeof declarationBuiltin !== 'undefined') {
+    return declarationBuiltin
+  }
+
   if (expression !== null && typeof expression !== 'undefined') {
     const expressionType = knownDeclaredType(expression.declaredType)
 
@@ -1739,10 +1765,31 @@ function resolveRuntimeObjectDeclaredType(
       return expressionType
     }
 
+    const expressionBuiltin = knownRuntimeObjectBuiltin(expression.shape)
+
+    if (expressionBuiltin !== null && typeof expressionBuiltin !== 'undefined') {
+      return expressionBuiltin
+    }
+
     return anyNodeLikeObjectAccessDeclaredType(expression, context)
   }
 
   return null
+}
+
+function knownRuntimeObjectBuiltin(shape: CObjectShape | null | undefined): string | null {
+  const builtin = shape?.builtin
+
+  if (
+    builtin === null ||
+    typeof builtin === 'undefined' ||
+    builtin === '' ||
+    builtin === 'compiler.AnyNode'
+  ) {
+    return null
+  }
+
+  return builtin
 }
 
 function knownDeclaredType(value: string | null | undefined): string | null {
@@ -3360,19 +3407,20 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     )
   }
 
-  const id = nextCName(context, 'inox_try')
+  const id = context.nextId
+  context.nextId = context.nextId + 1
   let catchLabel: string | null = null
   let finallyLabel: string | null = null
 
   if (statement.handler !== null && typeof statement.handler !== 'undefined') {
-    catchLabel = `${id}_catch`
+    catchLabel = `catch_${id}`
   }
 
   if (statement.finalizer !== null && typeof statement.finalizer !== 'undefined') {
-    finallyLabel = `${id}_finally`
+    finallyLabel = `finally_${id}`
   }
 
-  const endLabel = `${id}_end`
+  const endLabel = `end_${id}`
   let throwTarget = catchLabel
 
   if (throwTarget === null || typeof throwTarget === 'undefined') {

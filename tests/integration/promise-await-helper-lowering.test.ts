@@ -63,14 +63,12 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
+  assert.match(source, /auto inox_await_result_\d+ = inox::await_result<inox::Value>\(inox_loop\.raw\(\), inox_promise_\d+\);/)
   assert.match(
     source,
-    /inox_promise_await\(inox_loop\.raw\(\), inox_promise_\d+, true, &inox_await_value_\d+, &inox_await_state_\d+\)/
+    /if \(!inox_await_result_\d+\.ok\(\)\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_await_result_\d+\.error\(\);/
   )
-  assert.match(
-    source,
-    /if \(inox_await_state_\d+ == INOX_PROMISE_REJECTED\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_await_value_\d+;/
-  )
+  assert.doesNotMatch(source, /INOX_PROMISE_REJECTED/)
   assert.doesNotMatch(source, /while \(inox_promise_get_state/)
 }
 

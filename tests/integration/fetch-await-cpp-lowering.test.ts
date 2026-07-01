@@ -1,0 +1,89 @@
+import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
+
+import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+
+type GeneratedTextFile = {
+  path: string
+  code: string
+}
+
+export function assertFetchAwaitUsesCppWrappers(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+async function checkFetch() {
+  try {
+    const res = await fetch('http://example.com/')
+    console.log('Status', res.status)
+    const txt = await res.text()
+    console.log('Text', txt)
+  } catch (error) {
+    console.log('#error:', error)
+  }
+}
+
+await checkFetch()
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host,
+    loopBackend: 'libuv',
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const source = generatedTextFile(files, 'src/index.cc').code
+  const checkFetch = functionSource(source, 'static void checkFetch(inox_loop* inox_loop) {')
+
+  assert.match(
+    checkFetch,
+    /auto inox_await_result_\d+ = inox::await_result<inox::FetchResponse>\(inox_loop, inox::fetch\(inox_loop, inox::string_view\("http:\/\/example.com\/"\)\)\);/
+  )
+  assert.match(checkFetch, /printf\("Status %\.17g\\n", res\.status\(\)\);/)
+  assert.match(
+    checkFetch,
+    /auto inox_await_result_\d+ = inox::await_result<inox::String>\(inox_loop, res\.text\(inox_loop\)\);/
+  )
+  assert.match(checkFetch, /inox::String txt = inox_await_result_\d+\.value\(\);/)
+  assert.match(checkFetch, /printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);/)
+  assert.doesNotMatch(checkFetch, /inox_object_get\(res/)
+  assert.doesNotMatch(checkFetch, /inox_fetch_response_text\(inox_loop, res/)
+  assert.doesNotMatch(checkFetch, /INOX_PROMISE_REJECTED/)
+  assert.doesNotMatch(checkFetch, /inox_promise_state/)
+  assert.doesNotMatch(checkFetch, /txt_value_\d+/)
+  assert.doesNotMatch(checkFetch, /inox_string\* txt/)
+}
+
+function functionSource(source: string, signatureStart: string): string {
+  const start = source.indexOf(signatureStart)
+
+  assert.notEqual(start, -1, `missing generated function ${signatureStart}`)
+
+  const nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)
+
+  assert.notEqual(nextFunction, -1, `missing generated function end ${signatureStart}`)
+
+  return source.slice(start, nextFunction)
+}
+
+function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
+  for (const file of files) {
+    if (file.path === path) {
+      return file
+    }
+  }
+
+  assert.fail(`missing generated file ${path}`)
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  assertFetchAwaitUsesCppWrappers()
+}

@@ -66,6 +66,7 @@ inox_status inox_promise_reject(inox_promise* promise, inox_value error);
 #ifdef __cplusplus
 
 #include <memory>
+#include <utility>
 
 namespace inox {
 
@@ -167,6 +168,97 @@ public:
 
 inline Promise adopt(inox_promise* promise) {
   return Promise(adopt_promise, promise);
+}
+
+template <typename T>
+class AwaitResult {
+private:
+  inox_status status_;
+  bool fulfilled_;
+  T value_;
+  Value error_;
+
+  AwaitResult(inox_status status, bool fulfilled, T value, Value error)
+    : status_(status), fulfilled_(fulfilled), value_(std::move(value)), error_(std::move(error)) {}
+
+public:
+  static AwaitResult fulfilled(T value) {
+    return AwaitResult(INOX_OK, true, std::move(value), Value());
+  }
+
+  static AwaitResult rejected(Value error) {
+    return AwaitResult(INOX_OK, false, T(), std::move(error));
+  }
+
+  static AwaitResult failed(inox_status status) {
+    return AwaitResult(status, false, T(), Value());
+  }
+
+  inox_status status() const {
+    return status_;
+  }
+
+  bool ok() const {
+    return status_ == INOX_OK && fulfilled_;
+  }
+
+  bool rejected() const {
+    return status_ == INOX_OK && !fulfilled_;
+  }
+
+  T& value() {
+    return value_;
+  }
+
+  const T& value() const {
+    return value_;
+  }
+
+  T* operator->() {
+    return &value_;
+  }
+
+  const T* operator->() const {
+    return &value_;
+  }
+
+  T& operator*() {
+    return value_;
+  }
+
+  const T& operator*() const {
+    return value_;
+  }
+
+  const Value& error() const {
+    return error_;
+  }
+};
+
+template <typename T>
+AwaitResult<T> await_result(inox_loop* loop, inox_promise* promise) {
+  Value value;
+  inox_promise_state state = INOX_PROMISE_PENDING;
+  inox_status status = inox_promise_await(loop, promise, true, value.out(), &state);
+
+  if (status != INOX_OK) {
+    return AwaitResult<T>::failed(status);
+  }
+
+  if (state == INOX_PROMISE_FULFILLED) {
+    return AwaitResult<T>::fulfilled(T(std::move(value)));
+  }
+
+  if (state == INOX_PROMISE_REJECTED) {
+    return AwaitResult<T>::rejected(std::move(value));
+  }
+
+  return AwaitResult<T>::failed(INOX_ERR_TYPE);
+}
+
+template <typename T>
+AwaitResult<T> await_result(inox_loop* loop, const Promise& promise) {
+  return await_result<T>(loop, promise.raw());
 }
 
 } // namespace inox

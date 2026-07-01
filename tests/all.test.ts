@@ -113,6 +113,7 @@ async function runIntegrationTests(): Promise<void> {
     assertFinallyStillEmitsErrorActiveState
   } =
     await import('./integration/error-flow-state-lowering.test.ts')
+  const { assertFetchAwaitUsesCppWrappers } = await import('./integration/fetch-await-cpp-lowering.test.ts')
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
     assertModuleMainUsesRaiiReturns,
@@ -209,6 +210,10 @@ async function runIntegrationTests(): Promise<void> {
       assertCatchOnlyDoesNotEmitErrorActiveState()
       assertAwaitCatchOnlyDoesNotEmitErrorActiveState()
       assertFinallyStillEmitsErrorActiveState()
+    })
+
+    await t.test('fetch-await-cpp-lowering', () => {
+      assertFetchAwaitUsesCppWrappers()
     })
 
     await t.test('main-raii-lowering', () => {

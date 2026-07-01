@@ -195,6 +195,7 @@ type CFunctionContext = CEmitContext & {
   objectDeclaredTypes: CStringNullableMap
   objectShapes: CObjectShapeFieldMap
   ownedValues: string[]
+  cppStringValues: CStringSet
   regexpLiterals: Map<string, CValueNode>
   returnType?: string
   runtimeFunctionParams: CFunctionTypeMap
@@ -3130,6 +3131,12 @@ export function emitPreparedNumberExpression(
       return nativeClassField
     }
 
+    const fetchResponseMember = emitPreparedFetchResponseScalarMemberExpression(expression, context)
+
+    if (fetchResponseMember !== null && typeof fetchResponseMember !== 'undefined') {
+      return fetchResponseMember
+    }
+
     const member = deps.resolveKnownObjectMember(expression, context)
 
     if (member !== null && typeof member !== 'undefined' && isNumberOrBooleanValueType(member.valueType)) {
@@ -4877,6 +4884,50 @@ function numericIntegerCastLimits(cast: string): NumericIntegerCastLimits | null
   return null
 }
 
+function emitPreparedFetchResponseScalarMemberExpression(
+  expression: CValueNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
+    return null
+  }
+
+  if (expression.object.path.length !== 1) {
+    return null
+  }
+
+  const objectName = expression.object.path[0]
+
+  if (context.objectDeclaredTypes.get(objectName) !== 'fetch.Response') {
+    return null
+  }
+
+  const reference = emitCIdentifier(objectName)
+
+  if (expression.property === 'status') {
+    return {
+      lines: [],
+      expression: `${reference}.status()`
+    }
+  }
+
+  if (expression.property === 'ok') {
+    return {
+      lines: [],
+      expression: `(${reference}.ok() ? 1 : 0)`
+    }
+  }
+
+  if (expression.property === 'redirected') {
+    return {
+      lines: [],
+      expression: `(${reference}.redirected() ? 1 : 0)`
+    }
+  }
+
+  return null
+}
+
 export function emitPreparedUpdateExpression(
   expression: CValueNode,
   context: CFunctionContext,
@@ -5468,6 +5519,13 @@ export function emitCValueExpression(
           `${temp}.as.ref = (inox_ref*)&${reference}->header;`
         ],
         expression: temp
+      }
+    }
+
+    if (valueType === 'string' && context.cppStringValues.has(name)) {
+      return {
+        lines: [],
+        expression: reference
       }
     }
 
