@@ -1231,7 +1231,7 @@ export function emitMainWrapper(
   baseContext: CEmitContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'number', false)
+  const context = createFunctionContext(baseContext, 'void', false)
   const body = collectIrTopLevelNodesFromPrograms(irPrograms, 'statement')
   const bodyLines: string[] = []
   const lines: string[] = []
@@ -1239,11 +1239,11 @@ export function emitMainWrapper(
   context.moduleValueDeclarationScope = true
   context.cleanupEnabled = false
   context.externalEventLoop = true
-  context.failureStatement = 'return 1;'
+  context.statusReturn = true
 
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
-  lines.push('static int inox_app_main(void) {')
+  lines.push('static inox_status inox_app_main(void) {')
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
@@ -1276,6 +1276,10 @@ export function emitMainWrapper(
 }
 
 export function emitMainReturnExpression(context: CFunctionContext): string {
+  if (context.statusReturn) {
+    return 'INOX_OK'
+  }
+
   let successReturn = '0'
 
   if (!context.processRuntime && context.returnType === 'number' && context.returnFlowUsed) {

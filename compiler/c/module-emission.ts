@@ -2126,20 +2126,20 @@ function emitCModuleMainFunction(
   baseContext: CEmitContext,
   deps: CModuleEmissionDependencies
 ): string[] {
-  const context = createFunctionContext(baseContext, 'number', false)
+  const context = createFunctionContext(baseContext, 'void', false)
   const ir = plan.ir
   const body = collectIrTopLevelNodes(ir, 'statement')
   const initCalls = emitCModuleImportInitCalls(plan)
   context.moduleValueDeclarationScope = true
   context.cleanupEnabled = false
   context.externalEventLoop = true
-  context.failureStatement = 'return 1;'
+  context.statusReturn = true
   const bodyLines: string[] = []
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   const lines: string[] = []
 
-  lines.push('static int inox_app_main(void) {')
+  lines.push('static inox_status inox_app_main(void) {')
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))

@@ -38,7 +38,7 @@ for (const a of foo.v) {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.doesNotMatch(source, /static int inox_app_main\(void\) \{\n  \{/)
+  assert.doesNotMatch(source, /static inox_status inox_app_main\(void\) \{\n  \{/)
   assert.match(source, /\n  inox::Value foo;/)
   assert.doesNotMatch(source, /\n  inox::Value b;/)
   assert.doesNotMatch(source, /\n  inox::Value c;/)

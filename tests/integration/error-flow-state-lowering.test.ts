@@ -62,7 +62,7 @@ try {
 
   assert.match(source, /int inox_error_active = 0;/)
   assert.match(source, /inox_error_active = 1;/)
-  assert.match(source, /if \(inox_error_active\) return 1;/)
+  assert.match(source, /if \(inox_error_active\) return INOX_ERR_TYPE;/)
 }
 
 function compileSource(source: string): string {
