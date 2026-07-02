@@ -2147,7 +2147,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitOwnedPromiseDeclarations(context))
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
-  pushScopedCModuleBody(lines, bodyLines)
+  pushCModuleLines(lines, bodyLines)
 
   lines.push('')
   lines.push(`  return ${deps.emitMainReturnExpression(context)};`)

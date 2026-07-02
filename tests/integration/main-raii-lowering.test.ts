@@ -35,7 +35,8 @@ console.log(value)
   assert.doesNotMatch(result.code, /\.has_unhandled_rejection\(\)/)
   assert.doesNotMatch(result.code, /inox_promise_has_unhandled_rejection\(\)/)
   assert.match(appMain, /return 0;/)
-  assert.match(appMain, /\n  }\n\n  return 0;\n}/)
+  assert.doesNotMatch(appMain, /\n  \{\n/)
+  assert.match(appMain, /\n  return 0;\n}/)
   assert.match(main, /return inox::main\(inox_app_main\);/)
 }
 
@@ -60,7 +61,8 @@ console.log(value)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
   assert.doesNotMatch(source, /inox_promise_has_unhandled_rejection\(\)/)
   assert.match(appMain, /return 0;/)
-  assert.match(appMain, /\n  }\n\n  return 0;\n}/)
+  assert.doesNotMatch(appMain, /\n  \{\n/)
+  assert.match(appMain, /\n  return 0;\n}/)
   assert.match(main, /return inox::main\(inox_app_main\);/)
 }
 

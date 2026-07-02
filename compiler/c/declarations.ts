@@ -1251,7 +1251,7 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(lines, emitOwnedPromiseDeclarations(context))
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
-  pushScopedDeclarationBody(lines, bodyLines)
+  pushDeclarationLines(lines, bodyLines)
 
   lines.push('')
   lines.push(`  return ${emitMainReturnExpression(context)};`)

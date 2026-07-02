@@ -129,7 +129,6 @@ import { mathRuntimeMethodName } from './runtime-methods.ts'
 import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
-  runtimeErrorObjectValueMismatchCondition,
   runtimeFetchAbortControllerValueMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
@@ -8106,15 +8105,10 @@ function isFetchResponseAwaitExpression(expression: AnyNode): boolean {
 
 function emitAwaitResultRejectedPromiseLines(
   result: string,
-  rejectionValueType: string,
+  _rejectionValueType: string,
   context: CFunctionContext
 ): string[] {
   const target = currentErrorTarget(context) ?? ''
-  let rejectedTypeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
-
-  if (rejectionValueType === 'error') {
-    rejectedTypeCheck = runtimeErrorObjectValueMismatchCondition('inox_error')
-  }
 
   if (target === '' && !context.throwingFunction) {
     return []
@@ -8131,9 +8125,7 @@ function emitAwaitResultRejectedPromiseLines(
   const lines: string[] = []
 
   lines.push(`if (!${result}) {`)
-  pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
   lines.push(`  inox_error = ${result}.error_value();`)
-  lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
   if (errorActiveNeeded) {
     lines.push('  inox_error_active = 1;')
   }
@@ -8159,15 +8151,10 @@ function shouldAwaitReadRejectedPromise(context: CFunctionContext): boolean {
 function emitAwaitRejectedPromiseLines(
   state: string,
   value: string,
-  rejectionValueType: string,
+  _rejectionValueType: string,
   context: CFunctionContext
 ): string[] {
   const target = currentErrorTarget(context) ?? ''
-  let rejectedTypeCheck = 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
-
-  if (rejectionValueType === 'error') {
-    rejectedTypeCheck = runtimeErrorObjectValueMismatchCondition('inox_error')
-  }
 
   if (target === '' && !context.throwingFunction) {
     return []
@@ -8184,9 +8171,7 @@ function emitAwaitRejectedPromiseLines(
   const lines: string[] = []
 
   lines.push(`if (${state} == INOX_PROMISE_REJECTED) {`)
-  pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
   lines.push(`  inox_error = ${value};`)
-  lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
   if (errorActiveNeeded) {
     lines.push('  inox_error_active = 1;')
   }

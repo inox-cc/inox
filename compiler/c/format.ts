@@ -60,6 +60,11 @@ function braceGeneratedCSingleLineControls(code: string): string {
       continue
     }
 
+    if (shouldKeepGeneratedCSingleLineControl(control)) {
+      mapped.push(line)
+      continue
+    }
+
     mapped.push(`${control.indent}${control.keyword} ${control.condition} {`)
     mapped.push(`${control.indent}  ${control.statement}`)
     mapped.push(`${control.indent}}`)
@@ -106,6 +111,10 @@ function spaceGeneratedCControlFlow(code: string): string {
       markBlankBefore(lines, index, blankBefore)
     }
 
+    if (shouldKeepGeneratedCSingleLineControlLine(lines[index])) {
+      continue
+    }
+
     if (!isGeneratedCControlStart(lines[index])) {
       continue
     }
@@ -134,6 +143,16 @@ function spaceGeneratedCControlFlow(code: string): string {
   }
 
   return joinGeneratedCLines(spaced, source.hasTrailingNewline)
+}
+
+function shouldKeepGeneratedCSingleLineControlLine(line: string): boolean {
+  const control = parseGeneratedCSingleLineControl(line)
+
+  if (control === null || typeof control === 'undefined') {
+    return false
+  }
+
+  return shouldKeepGeneratedCSingleLineControl(control)
 }
 
 type GeneratedCLineSet = {
@@ -548,6 +567,22 @@ function parseGeneratedCSingleLineControl(line: string): GeneratedCSingleLineCon
   }
 
   return null
+}
+
+function shouldKeepGeneratedCSingleLineControl(control: GeneratedCSingleLineControl): boolean {
+  if (control.keyword !== 'if') {
+    return false
+  }
+
+  const statement = control.statement.trim()
+
+  return (
+    statement === 'return;' ||
+    generatedCStringStartsWithAt(statement, 'return ', 0) ||
+    generatedCStringStartsWithAt(statement, 'goto ', 0) ||
+    statement === 'break;' ||
+    statement === 'continue;'
+  )
 }
 
 function parseGeneratedCControlBlockStart(line: string): GeneratedCControlBlockStart | null {

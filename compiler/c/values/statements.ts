@@ -1311,7 +1311,7 @@ export function emitRuntimeStringVariableDeclaration(
   if (statement.kind === 'const' && value.cppType === 'inox::String') {
     const name = emitCIdentifier(statement.name)
 
-    lines.push(`${constPrefix(true)}inox::String ${name} = ${value.expression};`)
+    lines.push(`auto ${name} = ${value.expression};`)
 
     if (!shouldSkipRuntimeValueDeclarationCheck(statement, value, 'string')) {
       lines.push(emitRuntimeTypeCheck(`!${name}.valid()`, context))
@@ -1660,12 +1660,17 @@ export function emitRuntimeValueVariableDeclaration(
 function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: PreparedExpression): string {
   const name = emitCIdentifier(statement.name)
   const cppType = value.cppType ?? 'inox::Value'
+  let declarationType = `${constPrefix(statement.kind === 'const')}${cppType}`
 
-  if (value.owned === true) {
-    return `${constPrefix(statement.kind === 'const')}${cppType} ${name} = inox::adopt(${value.expression}.release());`
+  if (cppType !== 'inox::Value') {
+    declarationType = 'auto'
   }
 
-  return `${constPrefix(statement.kind === 'const')}${cppType} ${name} = ${value.expression};`
+  if (value.owned === true) {
+    return `${declarationType} ${name} = inox::adopt(${value.expression}.release());`
+  }
+
+  return `${declarationType} ${name} = ${value.expression};`
 }
 
 function shouldSkipRuntimeValueDeclarationCheck(

@@ -55,10 +55,18 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /if \(!inox_res_0\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_0\.error_value\(\);/
+    /if \(!inox_res_0\) \{\n\s+inox_error = inox_res_0\.error_value\(\);\n\s+goto catch_0;/
   )
-  assert.match(checkFetch, /inox::String txt = inox_res_1\.value\(\);/)
+  assert.match(
+    checkFetch,
+    /if \(!inox_res_1\) \{\n\s+inox_error = inox_res_1\.error_value\(\);\n\s+goto catch_0;/
+  )
+  assert.match(checkFetch, /auto res = inox_res_0\.value\(\);/)
+  assert.match(checkFetch, /auto txt = inox_res_1\.value\(\);/)
   assert.match(checkFetch, /printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);/)
+  assert.doesNotMatch(checkFetch, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
+  assert.doesNotMatch(checkFetch, /inox::FetchResponse res =/)
+  assert.doesNotMatch(checkFetch, /inox::String txt =/)
   assert.doesNotMatch(checkFetch, /inox_await_result_\d+/)
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.status\(\)/)
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.valid\(\)/)

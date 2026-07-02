@@ -40,8 +40,9 @@ try {
   )
   assert.match(
     source,
-    /if \(!inox_res_\d+\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/
+    /if \(!inox_res_\d+\) \{\n\s+inox_error = inox_res_\d+\.error_value\(\);\n\s+goto catch_\d+;/
   )
+  assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
   assert.doesNotMatch(source, /inox_res_\d+\.ok\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.error\(\)/)
@@ -61,7 +62,7 @@ try {
 
   assert.match(source, /int inox_error_active = 0;/)
   assert.match(source, /inox_error_active = 1;/)
-  assert.match(source, /if \(inox_error_active\) \{\n\s+return 1;\n\s+\}/)
+  assert.match(source, /if \(inox_error_active\) return 1;/)
 }
 
 function compileSource(source: string): string {
