@@ -1249,6 +1249,7 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushScopedDeclarationBody(lines, bodyLines)
 
+  lines.push('')
   lines.push(`  return ${emitMainReturnExpression(context)};`)
   lines.push('}')
   lines.push('')

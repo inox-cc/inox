@@ -439,7 +439,6 @@ export function emitCModuleSource(
     }
   }
 
-  lines.push('')
   pushCModuleLines(
     lines,
     emitCPrelude(
@@ -2150,6 +2149,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
   pushScopedCModuleBody(lines, bodyLines)
 
+  lines.push('')
   lines.push(`  return ${deps.emitMainReturnExpression(context)};`)
   lines.push('}')
   lines.push('')
