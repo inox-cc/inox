@@ -32,7 +32,8 @@ console.log(value)
   assert.match(main, /inox::run\(\)/)
   assert.match(main, /return 1;/)
   assert.doesNotMatch(main, /\.has_unhandled_rejection\(\)/)
-  assert.match(main, /return !inox_promise_has_unhandled_rejection\(\) \? 0 : 1;/)
+  assert.doesNotMatch(main, /inox_promise_has_unhandled_rejection\(\)/)
+  assert.match(main, /return inox::return_code\(0\);/)
 }
 
 export function assertModuleMainUsesRaiiReturns(): void {
@@ -53,7 +54,22 @@ console.log(value)
   assert.match(main, /inox::run\(\)/)
   assert.match(main, /return 1;/)
   assert.doesNotMatch(main, /\.has_unhandled_rejection\(\)/)
-  assert.match(main, /return !inox_promise_has_unhandled_rejection\(\) \? 0 : 1;/)
+  assert.doesNotMatch(main, /inox_promise_has_unhandled_rejection\(\)/)
+  assert.match(main, /return inox::return_code\(0\);/)
+}
+
+export function assertProcessMainUsesReturnCodeHelper(): void {
+  const source = compileModuleMainSource(`
+const value = await Promise.resolve('ok')
+console.log(process.version)
+console.log(value)
+`)
+  const main = mainFunctionSource(source)
+
+  assert.match(source, /#include "inox\/process\.h"/)
+  assert.doesNotMatch(main, /return !inox_promise_has_unhandled_rejection/)
+  assert.doesNotMatch(main, /return inox_process_get_exit_code\(\)/)
+  assert.match(main, /return inox::return_code\(\);/)
 }
 
 export function assertAwaitFunctionUsesExternalLoopRuntime(): void {
@@ -137,4 +153,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertUnitMainUsesRaiiReturns()
   assertModuleMainUsesRaiiReturns()
   assertAwaitFunctionUsesExternalLoopRuntime()
+  assertProcessMainUsesReturnCodeHelper()
 }

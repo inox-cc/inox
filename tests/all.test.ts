@@ -119,6 +119,7 @@ async function runIntegrationTests(): Promise<void> {
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
     assertModuleMainUsesRaiiReturns,
+    assertProcessMainUsesReturnCodeHelper,
     assertUnitMainUsesRaiiReturns
   } = await import('./integration/main-raii-lowering.test.ts')
   const { assertModuleDeclarationImportBoundary } =
@@ -226,6 +227,7 @@ async function runIntegrationTests(): Promise<void> {
       assertUnitMainUsesRaiiReturns()
       assertModuleMainUsesRaiiReturns()
       assertAwaitFunctionUsesExternalLoopRuntime()
+      assertProcessMainUsesReturnCodeHelper()
     })
 
     await t.test('module-declaration-contracts', () => {

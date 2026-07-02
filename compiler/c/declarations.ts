@@ -1282,7 +1282,11 @@ export function emitMainReturnExpression(context: CFunctionContext): string {
     return successReturn
   }
 
-  return `!inox_promise_has_unhandled_rejection() ? ${successReturn} : 1`
+  if (context.processRuntime) {
+    return 'inox::return_code()'
+  }
+
+  return `inox::return_code(${successReturn})`
 }
 
 function emitRuntimeParamPreludeForParams(

@@ -34,4 +34,18 @@ void inox_process_exit(int code);
 }
 #endif
 
+#ifdef __cplusplus
+
+#include "inox/promise.h"
+
+namespace inox {
+
+inline int return_code() {
+  return inox::return_code(inox_process_get_exit_code());
+}
+
+} // namespace inox
+
+#endif
+
 #endif

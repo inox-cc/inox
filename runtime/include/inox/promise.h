@@ -293,6 +293,10 @@ AwaitResult<T> await_result(const Promise& promise) {
   return await_result<T>(loop(), promise.raw());
 }
 
+inline int return_code(int success_code) {
+  return !inox_promise_has_unhandled_rejection() ? success_code : 1;
+}
+
 } // namespace inox
 
 #endif
