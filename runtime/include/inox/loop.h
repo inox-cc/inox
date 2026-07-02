@@ -224,6 +224,46 @@ public:
   }
 };
 
+class RuntimeContext {
+private:
+  Runtime runtime_;
+  RuntimeScope scope_;
+  inox_status status_;
+
+public:
+  RuntimeContext(inox_allocator* allocator, inox_number now_ms)
+    : runtime_(), scope_(runtime_), status_(runtime_.init(allocator)) {
+    if (status_ == INOX_OK) {
+      runtime_.raw_loop()->now_ms = now_ms;
+    }
+  }
+
+  RuntimeContext(const RuntimeContext&) = delete;
+  RuntimeContext& operator=(const RuntimeContext&) = delete;
+  RuntimeContext(RuntimeContext&&) = delete;
+  RuntimeContext& operator=(RuntimeContext&&) = delete;
+
+  inox_status status() const {
+    return status_;
+  }
+
+  bool ok() const {
+    return status_ == INOX_OK;
+  }
+
+  explicit operator bool() const {
+    return ok();
+  }
+
+  Runtime& runtime() {
+    return runtime_;
+  }
+
+  const Runtime& runtime() const {
+    return runtime_;
+  }
+};
+
 inline Runtime* current_runtime() {
   return current_runtime_slot();
 }

@@ -35,8 +35,11 @@ run()
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /#include "inox\/promise\.h"/)
-  assert.match(source, /inox::Runtime inox_runtime;/)
-  assert.match(source, /inox::RuntimeScope inox_runtime_scope\(inox_runtime\);/)
+  assert.match(source, /inox::RuntimeContext inox_runtime\(&inox_default_allocator, inox_performance_now\(\)\);/)
+  assert.doesNotMatch(source, /inox::Runtime inox_runtime;/)
+  assert.doesNotMatch(source, /inox::RuntimeScope inox_runtime_scope/)
+  assert.doesNotMatch(source, /inox_runtime\.init/)
+  assert.doesNotMatch(source, /inox::loop\(\)->now_ms/)
   assert.match(source, /inox::Promise promise;/)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
   assert.match(source, /return !inox_promise_has_unhandled_rejection\(\) \? 0 : 1;/)

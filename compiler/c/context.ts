@@ -797,10 +797,7 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
 
 export function emitEventLoopDeclarations(context: CEventLoopDeclarationContext): string[] {
   if (context.eventLoopUsed === true && context.externalEventLoop !== true) {
-    return [
-      'inox::Runtime inox_runtime;',
-      'inox::RuntimeScope inox_runtime_scope(inox_runtime);'
-    ]
+    return [`inox::RuntimeContext inox_runtime(&inox_default_allocator, ${emitEventLoopCurrentTimeExpression()});`]
   }
 
   return []
@@ -872,8 +869,7 @@ export function emitEventLoopInit(context: CFunctionContext): string[] {
   }
 
   return [
-    `if (inox_runtime.init(&inox_default_allocator) != INOX_OK) ${emitFailureStatement(context)}`,
-    `inox::loop()->now_ms = ${emitEventLoopCurrentTimeExpression()};`
+    `if (!inox_runtime) ${emitFailureStatement(context)}`
   ]
 }
 
