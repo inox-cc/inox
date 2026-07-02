@@ -59,7 +59,6 @@ import {
   emitPreparedPromiseReturningCallExpression,
   emitPreparedPromiseStaticExpression,
   emitPromiseConstructorSettlementCall,
-  functionTakesEventLoopParam,
   isAsyncFunctionCallee,
   isExternalEventLoopFunctionCallee,
   isPromiseConstructorExpression,
@@ -6236,7 +6235,16 @@ function emitDirectRuntimeValueConsoleLogStatement(
     const value = emitCValueExpression(args[0], context)
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_console_print_value_line(${stream}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`inox::console_log(${stream}, ${value.expression})`, context))
+
+    return lines
+  }
+
+  if (args.length === 2 && args[0].type === 'StringLiteral' && isDirectRuntimeConsoleLogArgument(args[1], context)) {
+    const value = emitCValueExpression(args[1], context)
+
+    pushAll(lines, value.lines)
+    lines.push(emitStatusCheck(`inox::console_log(${stream}, ${cStringLiteral(args[0].value)}, ${value.expression})`, context))
 
     return lines
   }
@@ -6928,6 +6936,15 @@ function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunct
   const lines: string[] = []
 
   pushAll(lines, value.lines)
+
+  if (value.cppType === 'inox::String') {
+    return {
+      lines,
+      format: '%.*s',
+      values: [`(int)${value.expression}.len()`, `${value.expression}.bytes()`]
+    }
+  }
+
   lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
   return {
@@ -8001,8 +8018,7 @@ function emitPreparedAwaitResultExpression(
   const lines: string[] = []
 
   pushAll(lines, preparedPromise.lines)
-  lines.push(`auto ${result} = inox::await_result<${valueInfo.cppType}>(${emitEventLoopReference(context)}, ${preparedPromise.expression});`)
-  lines.push(emitStatusCheck(`${result}.status()`, context))
+  lines.push(`auto ${result} = inox::await_result<${valueInfo.cppType}>(${preparedPromise.expression});`)
   pushAll(lines, emitAwaitResultRejectedPromiseLines(result, rejectionValueType, context))
 
   if (valueInfo.valueCheck !== '') {
@@ -8044,7 +8060,7 @@ function resolveAwaitResultCppValueInfo(
     return {
       cppType: 'inox::FetchResponse',
       runtimeTypeChecked: true,
-      valueCheck: emitRuntimeTypeCheck(`!${valueExpression}.valid()`, context)
+      valueCheck: ''
     }
   }
 
@@ -8052,7 +8068,7 @@ function resolveAwaitResultCppValueInfo(
     return {
       cppType: 'inox::String',
       runtimeTypeChecked: true,
-      valueCheck: emitRuntimeTypeCheck(`!${valueExpression}.valid()`, context)
+      valueCheck: ''
     }
   }
 
@@ -8113,9 +8129,9 @@ function emitAwaitResultRejectedPromiseLines(
 
   const lines: string[] = []
 
-  lines.push(`if (!${result}.ok()) {`)
+  lines.push(`if (!${result}) {`)
   pushIndented(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
-  lines.push(`  inox_error = ${result}.error();`)
+  lines.push(`  inox_error = ${result}.error_value();`)
   lines.push(`  ${emitRuntimeTypeCheck(rejectedTypeCheck, context)}`)
   if (errorActiveNeeded) {
     lines.push('  inox_error_active = 1;')
@@ -8480,15 +8496,7 @@ function emitRuntimeCallbackValueInto(
     return emitUndefinedRuntimeCallbackValueInto(out)
   }
 
-  let callbackContext = '0'
-
-  if (functionTakesEventLoopParam(functionName, context)) {
-    callbackContext = emitEventLoopReference(context)
-  }
-
-  if (callbackContext !== '0') {
-    registerEventLoop(context)
-  }
+  const callbackContext = '0'
 
   const lines: string[] = []
 
@@ -9189,14 +9197,12 @@ function emitPreparedObjectValuesCallExpression(
   const lines: string[] = []
   const classInstance = emitPreparedNativeClassInstanceExpression(expression.args[0], context)
 
-  registerOwnedValue(context, temp)
-
   if (classInstance !== null && typeof classInstance !== 'undefined') {
     pushAll(lines, classInstance.lines)
-    pushAll(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(`inox::Value ${temp};`)
     lines.push(
       emitStatusCheck(
-        `inox_class_instance_${method}(&inox_default_allocator, &${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression}, &${temp})`,
+        `inox_class_instance_${method}(&inox_default_allocator, &${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression}, ${temp}.out())`,
         context
       )
     )
@@ -9204,6 +9210,7 @@ function emitPreparedObjectValuesCallExpression(
     return {
       lines,
       expression: temp,
+      cppType: 'inox::Value',
       runtimeTypeChecked: true,
       valueType: 'array'
     }
@@ -9212,12 +9219,13 @@ function emitPreparedObjectValuesCallExpression(
   const object = emitCValueExpression(expression.args[0], context)
 
   pushAll(lines, object.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_object_${method}(&inox_default_allocator, ${object.expression}, &${temp})`, context))
+  lines.push(`inox::Value ${temp};`)
+  lines.push(emitStatusCheck(`inox::object_${method}(${object.expression}, ${temp})`, context))
 
   return {
     lines,
     expression: temp,
+    cppType: 'inox::Value',
     runtimeTypeChecked: true,
     valueType: 'array'
   }

@@ -194,8 +194,8 @@ export function emitPreparedFetchCallExpression(
           lines,
           expression:
             init.expression === '0'
-              ? `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringView(url)})`
-              : `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringView(url)}, ${init.expression})`,
+              ? `inox::fetch(${emitFetchStringView(url)})`
+              : `inox::fetch(${emitFetchStringView(url)}, ${init.expression})`,
           valueType,
           rejectionValueType: 'error'
         }
@@ -218,7 +218,7 @@ export function emitPreparedFetchCallExpression(
         if (reference !== null && typeof reference !== 'undefined') {
           return {
             lines: [],
-            expression: `${reference}.text(${emitEventLoopReference(context)})`,
+            expression: `${reference}.text()`,
             valueType: 'string',
             rejectionValueType: 'error'
           }

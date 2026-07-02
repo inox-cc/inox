@@ -288,10 +288,6 @@ export function emitPreparedJsonCallExpression(
   const ownsOut = options === null || typeof options === 'undefined' || options.owned !== false
   const preparesOut = options === null || typeof options === 'undefined' || options.prepareOut !== false
 
-  if (ownsOut) {
-    registerOwnedValue(context, out)
-  }
-
   if (method === 'parse') {
     const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_json_text')
     const valueType = dependencies.inferExpressionType(expression, context)
@@ -301,20 +297,21 @@ export function emitPreparedJsonCallExpression(
     const lines: string[] = []
 
     pushJsonLines(lines, text.lines)
-    if (preparesOut) {
+    if (ownsOut) {
+      lines.push(`inox::Value ${out};`)
+    } else if (preparesOut) {
       pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
     }
 
     if (shouldUseDetailedJsonParseError(context)) {
       detailedError = nextCName(context, 'inox_json_error')
-      registerOwnedValue(context, detailedError)
-      pushJsonLines(lines, emitPrepareOwnedValueWrite(detailedError))
+      lines.push(`inox::Value ${detailedError};`)
     }
 
-    let parseCall = `inox_json_parse(&inox_default_allocator, ${text.bytes}, ${text.length}, &${out})`
+    let parseCall = `inox::json_parse(inox::string_view(${text.bytes}, ${text.length}), ${out})`
 
     if (detailedError !== null && typeof detailedError !== 'undefined') {
-      parseCall = `inox_json_parse_with_error(&inox_default_allocator, ${text.bytes}, ${text.length}, &${out}, &${detailedError})`
+      parseCall = `inox::json_parse_with_error(inox::string_view(${text.bytes}, ${text.length}), ${out}, ${detailedError})`
     }
 
     pushJsonParseStatusLines(lines, parseCall, context, detailedError)
@@ -324,10 +321,14 @@ export function emitPreparedJsonCallExpression(
     return {
       lines: lines,
       expression: out,
-      owned: ownsOut,
+      owned: false,
       runtimeTypeChecked: expectedTag !== null && typeof expectedTag !== 'undefined',
       valueType
     }
+  }
+
+  if (ownsOut) {
+    registerOwnedValue(context, out)
   }
 
   const lines: string[] = []

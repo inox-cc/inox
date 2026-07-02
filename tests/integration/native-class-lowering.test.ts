@@ -310,25 +310,40 @@ class Foo {
   test(): string {
     return this.name
   }
+
+  isPromise(): boolean {
+    return this.name === 'promise'
+  }
 }
 
 const f = new Foo('foo 1')
 console.log(f.test())
+console.log(f.isPromise())
 `
 
   const result = compileSource(source, {
     target: 'cc'
   })
 
-  assert.match(result.code, /Foo\(const inox::Value& name\);/)
-  assert.match(result.code, /Foo::Foo\(const inox::Value& name\)/)
-  assert.match(result.code, /Foo f\(inox::string\("foo 1", 5\)\);|f = Foo\(inox::string\("foo 1", 5\)\);/)
+  assert.match(result.code, /inox::String name/)
+  assert.match(result.code, /Foo\(const inox::String& name\);/)
+  assert.match(result.code, /Foo::Foo\(const inox::String& name\) : name\(name\) \{\n\}/)
+  assert.match(
+    result.code,
+    /Foo f\{inox::String\(inox::string\("foo 1", 5\)\)\};|f = Foo\(inox::String\(inox::string\("foo 1", 5\)\)\);/
+  )
+  assert.doesNotMatch(result.code, /Foo\(const inox::Value& name\)/)
+  assert.doesNotMatch(result.code, /Foo::Foo\(const inox::Value& name\)/)
   assert.doesNotMatch(result.code, /Foo\(const char\* name\)/)
   assert.doesNotMatch(result.code, /Foo::Foo\(const char\* name\)/)
 
-  const constructor = generatedBlock(result.code, 'Foo::Foo(const inox::Value& name)')
+  const constructor = generatedBlock(result.code, 'Foo::Foo(const inox::String& name)')
 
-  assert.match(constructor, /this->name = name;/)
+  assert.match(constructor, /: name\(name\) \{\n\}/)
+  assert.match(result.code, /!this->name\.valid\(\)/)
+  assert.match(result.code, /this->name\.len\(\) == 7 && memcmp\(this->name\.bytes\(\), "promise", this->name\.len\(\)\) == 0/)
+  assert.doesNotMatch(constructor, /this->name/)
+  assert.doesNotMatch(constructor, /inox::Value/)
   assert.doesNotMatch(constructor, /inox_param_name/)
   assert.doesNotMatch(constructor, /this->name = inox_param_name;/)
   assert.doesNotMatch(constructor, /cleanup:/)
@@ -338,6 +353,8 @@ console.log(f.test())
   assert.doesNotMatch(constructor, /tag != INOX_TAG_STRING/)
   assert.doesNotMatch(constructor, /inox_string_from_literal/)
   assert.doesNotMatch(result.code, /as\.ref = \(inox_ref\*\)&name->header/)
+  assert.doesNotMatch(result.code, /this->name\.tag/)
+  assert.doesNotMatch(result.code, /this->name\.as\.ref/)
   assert.doesNotMatch(result.code, /inox_cleanup/)
   assert.doesNotMatch(result.code, /Foo f\(inox_/)
   assert.doesNotMatch(result.code, /f = Foo\(inox_value/)

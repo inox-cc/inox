@@ -438,6 +438,7 @@ export function emitCModuleSource(
     }
   }
 
+  lines.push('')
   pushCModuleLines(
     lines,
     emitCPrelude(

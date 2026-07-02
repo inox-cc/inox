@@ -1005,15 +1005,14 @@ function emitPreparedKnownObjectFieldValueExpression(
   const tag = cRuntimeValueTag(field.valueType)
   const lines: string[] = []
 
-  registerOwnedValue(context, temp)
-
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(`inox::Value ${temp};`)
   appendKnownObjectFieldReadLines(lines, access, field, temp, context)
   appendLines(lines, emitKnownObjectFieldValueCheck(temp, tag, field, expression, context))
 
   return {
     lines,
-    expression: temp
+    expression: temp,
+    cppType: 'inox::Value'
   }
 }
 
@@ -1037,13 +1036,11 @@ function emitPreparedObjectExpressionFieldValueExpression(
   const tag = cRuntimeValueTag(field.valueType)
   const lines: string[] = []
 
-  registerOwnedValue(context, temp)
-
   appendLines(lines, object.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(`inox::Value ${temp};`)
   appendObjectFieldReadLines(
     lines,
-    `inox_object_get(${object.expression}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${temp})`,
+    `inox::object_get(${object.expression}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, ${temp})`,
     temp,
     context,
     field.optional === true
@@ -1057,6 +1054,7 @@ function emitPreparedObjectExpressionFieldValueExpression(
   return {
     lines,
     expression: temp,
+    cppType: 'inox::Value',
     valueType: field.valueType
   }
 }
@@ -1077,13 +1075,11 @@ function emitPreparedDynamicObjectFieldValueExpression(
   const tag = cRuntimeValueTag(expression.valueType)
   const lines: string[] = []
 
-  registerOwnedValue(context, temp)
-
   appendLines(lines, object.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
+  lines.push(`inox::Value ${temp};`)
   appendObjectFieldReadLines(
     lines,
-    `inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`,
+    `inox::object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${temp})`,
     temp,
     context,
     true
@@ -1093,6 +1089,7 @@ function emitPreparedDynamicObjectFieldValueExpression(
   return {
     lines,
     expression: temp,
+    cppType: 'inox::Value',
     valueType: expression.valueType
   }
 }
@@ -1566,10 +1563,10 @@ function knownObjectFieldReadCall(
   const object = emitObjectValueReference(access.objectName, context)
 
   if (access.kind === 'known') {
-    return `inox_object_get_known(${object}, ${access.index}, &${temp})`
+    return `inox::object_get_known(${object}, ${access.index}, ${temp})`
   }
 
-  return `inox_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
+  return `inox::object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, ${temp})`
 }
 
 function optionalKnownObjectFieldReadCall(
@@ -1579,7 +1576,7 @@ function optionalKnownObjectFieldReadCall(
 ): string {
   const object = emitObjectValueReference(access.objectName, context)
 
-  return `inox_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
+  return `inox::object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, ${temp})`
 }
 
 function appendKnownObjectFieldReadLines(

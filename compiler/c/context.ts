@@ -30,6 +30,7 @@ import type { StringLoweringDependencies } from './values/strings.ts'
 export type CLoopFlowTarget = {
   label: string
   throughFinally: boolean
+  used?: boolean
 }
 
 export type CArrayShapeMap = Map<string, CArrayElementInfo[]>
@@ -155,6 +156,7 @@ export type CEmitContext = {
   dgramCreateSocketNames: CStringSet
   dgramImportNames: CStringSet
   dgramMessageHandlers: CDgramMessageHandlerMap
+  explicitEventLoop?: boolean | null
   externalEventLoopFunctions: CStringSet
   functionAsyncFlags: CBooleanMap
   functionNames: CStringMap
@@ -214,6 +216,7 @@ export type CNameContext = {
 
 export type CEventLoopContext = {
   eventLoopUsed: boolean
+  explicitEventLoop?: boolean | null
   externalEventLoop: boolean
   usedCleanupGoto: boolean
 }
@@ -289,6 +292,7 @@ export type CFunctionContext = CEmitContext & {
   errorTargets: string[]
   errorTargetActiveFlags: boolean[]
   eventLoopUsed: boolean
+  explicitEventLoop: boolean
   externalEventLoop: boolean
   failureStatement?: string | null
   failureStatementUsed?: boolean
@@ -451,6 +455,7 @@ export function createFunctionContext(
     functionTypes: new Map(),
     localValueNames: new Set(),
     eventLoopUsed: false,
+    explicitEventLoop: false,
     externalEventLoop: false,
     mapTypes: new Map(),
     moduleValueDeclarationScope: false,
@@ -645,6 +650,7 @@ type COwnedPromiseDeclarationContext = {
 
 type CEventLoopDeclarationContext = {
   cleanupEnabled?: boolean | null
+  explicitEventLoop?: boolean | null
   eventLoopUsed?: boolean | null
   externalEventLoop?: boolean | null
 }
@@ -791,7 +797,10 @@ export function emitOwnedPromiseDeclarations(context: COwnedPromiseDeclarationCo
 
 export function emitEventLoopDeclarations(context: CEventLoopDeclarationContext): string[] {
   if (context.eventLoopUsed === true && context.externalEventLoop !== true) {
-    return ['inox::Loop inox_loop;']
+    return [
+      'inox::Runtime inox_runtime;',
+      'inox::RuntimeScope inox_runtime_scope(inox_runtime);'
+    ]
   }
 
   return []
@@ -855,12 +864,16 @@ export function emitEventLoopInit(context: CFunctionContext): string[] {
   }
 
   if (context.externalEventLoop) {
-    return [`if (inox_loop == 0) ${emitFailureStatement(context)}`]
+    if (context.explicitEventLoop) {
+      return [`if (inox_loop == 0) ${emitFailureStatement(context)}`]
+    }
+
+    return []
   }
 
   return [
-    `if (inox_loop.init(&inox_default_allocator) != INOX_OK) ${emitFailureStatement(context)}`,
-    `inox_loop->now_ms = ${emitEventLoopCurrentTimeExpression()};`
+    `if (inox_runtime.init(&inox_default_allocator) != INOX_OK) ${emitFailureStatement(context)}`,
+    `inox::loop()->now_ms = ${emitEventLoopCurrentTimeExpression()};`
   ]
 }
 
@@ -869,7 +882,7 @@ export function emitEventLoopDrain(context: CFunctionContext): string[] {
     return []
   }
 
-  return [emitStatusCheck('inox_loop.run()', context)]
+  return [emitStatusCheck('inox::run()', context)]
 }
 
 export function emitEventLoopCleanup(context: CFunctionContext): string[] {
@@ -878,10 +891,14 @@ export function emitEventLoopCleanup(context: CFunctionContext): string[] {
 
 export function emitEventLoopReference(context: CEventLoopContext): string {
   if (context.externalEventLoop) {
+    if (!context.explicitEventLoop) {
+      return 'inox::loop()'
+    }
+
     return 'inox_loop'
   }
 
-  return 'inox_loop.raw()'
+  return 'inox::loop()'
 }
 
 export function emitEventLoopCurrentTimeExpression(): string {

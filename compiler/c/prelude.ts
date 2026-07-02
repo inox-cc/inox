@@ -61,6 +61,9 @@ function emitCPreludeIncludeLines(systemIncludes: string[], localIncludes: strin
   const lines: string[] = []
 
   pushCPreludeLines(lines, systemIncludes)
+  if (systemIncludes.length > 0 && localIncludes.length > 0) {
+    lines.push('')
+  }
   pushCPreludeLines(lines, localIncludes)
 
   return lines

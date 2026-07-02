@@ -952,18 +952,18 @@ export function emitPreparedRuntimeArrayIndexValue(
   const array = arrayDeps(context).emitCValueExpression(expression.object, context)
   const index = emitPreparedRuntimeArrayIndexExpression(element, context)
   const value = nextCName(context, prefix)
-  registerOwnedValue(context, value)
   const lines: string[] = []
 
   appendLines(lines, array.lines)
   appendLines(lines, index.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(`inox::Value ${value};`)
   appendLines(lines, emitRuntimeArrayGetAllowMissing(array.expression, index.expression, value, context))
 
   return {
     lines,
     expression: value,
-    owned: true
+    cppType: 'inox::Value',
+    owned: false
   }
 }
 
@@ -976,7 +976,7 @@ function emitRuntimeArrayGetAllowMissing(
   const status = nextCName(context, 'inox_array_status')
 
   return [
-    `inox_status ${status} = inox_array_get(${arrayExpression}, ${indexExpression}, &${out});`,
+    `inox_status ${status} = inox_array_get(${arrayExpression}, ${indexExpression}, ${out}.out());`,
     `if (${status} == INOX_ERR_FIELD) {`,
     `  ${out} = inox_undefined_value();`,
     '}',
@@ -994,8 +994,8 @@ function emitObjectRuntimeArrayIndexGetAllowMissing(
   const status = nextCName(context, `inox_object_${method}_status`)
   const call =
     method === 'values'
-      ? `inox_object_value_at(${objectExpression}, ${indexExpression}, &${out})`
-      : `inox_object_entry_at(&inox_default_allocator, ${objectExpression}, ${indexExpression}, &${out})`
+      ? `inox::object_value_at(${objectExpression}, ${indexExpression}, ${out})`
+      : `inox::object_entry_at(${objectExpression}, ${indexExpression}, ${out})`
 
   return [
     `inox_status ${status} = ${call};`,
@@ -1093,12 +1093,11 @@ export function emitPreparedObjectRuntimeArrayIndexValueExpression(
   const object = arrayDeps(context).emitCValueExpression(source, context)
   const index = emitPreparedRuntimeArrayIndexExpression(runtimeElement, context)
   const value = nextCName(context, method === 'values' ? 'inox_object_value' : 'inox_object_entry')
-  registerOwnedValue(context, value)
   const lines: string[] = []
 
   appendLines(lines, object.lines)
   appendLines(lines, index.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(`inox::Value ${value};`)
   appendLines(
     lines,
     emitObjectRuntimeArrayIndexGetAllowMissing(method, object.expression, index.expression, value, context)
@@ -1113,7 +1112,8 @@ export function emitPreparedObjectRuntimeArrayIndexValueExpression(
   return {
     lines,
     expression: value,
-    owned: true,
+    cppType: 'inox::Value',
+    owned: false,
     valueType: runtimeElement.valueType
   }
 }

@@ -47,9 +47,11 @@ for (const a of foo.v) {
   assert.match(source, /\n    inox::Value foo;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
   assert.match(source, /\n        inox::Value b = inox::adopt\(inox_object_values_\d+\.release\(\)\);/)
-  assert.match(source, /\n        inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
+  assert.match(source, /\n        inox::Value c = inox_object_value_\d+;/)
+  assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
   assert.match(source, /\n        inox::Value d = inox::adopt\(inox_object_entries_\d+\.release\(\)\);/)
-  assert.match(source, /\n        inox::Value e = inox::adopt\(inox_object_entry_\d+\.release\(\)\);/)
+  assert.match(source, /\n        inox::Value e = inox_object_entry_\d+;/)
+  assert.doesNotMatch(source, /inox::Value e = inox::adopt\(inox_object_entry_\d+\.release\(\)\);/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

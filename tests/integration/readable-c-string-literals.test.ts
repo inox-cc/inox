@@ -80,10 +80,11 @@ console.error('bad', user)
   }) as GeneratedTextFile[]
   const runtimeValueSource = generatedTextFile(runtimeValueFiles, 'src/index.cc').code
 
-  assert.match(runtimeValueSource, /inox_console_print_value_line\(INOX_CONSOLE_STDOUT, user\)/)
-  assert.match(runtimeValueSource, /printf\("user "\);\n\s+if \(inox_console_print_value\(INOX_CONSOLE_STDOUT, user\) != INOX_OK\)/)
-  assert.match(runtimeValueSource, /inox_console_printf\(INOX_CONSOLE_STDERR, "bad "\)/)
-  assert.match(runtimeValueSource, /inox_console_print_value\(INOX_CONSOLE_STDERR, user\)/)
+  assert.match(runtimeValueSource, /inox::console_log\(INOX_CONSOLE_STDOUT, user\)/)
+  assert.match(runtimeValueSource, /inox::console_log\(INOX_CONSOLE_STDOUT, "user", user\)/)
+  assert.match(runtimeValueSource, /inox::console_log\(INOX_CONSOLE_STDERR, "bad", user\)/)
+  assert.doesNotMatch(runtimeValueSource, /inox_console_print_value_line\(INOX_CONSOLE_STDOUT, user\)/)
+  assert.doesNotMatch(runtimeValueSource, /inox_console_printf\(INOX_CONSOLE_STDERR, "bad "\)/)
   assert.doesNotMatch(runtimeValueSource, /inox_console_format_value/)
 
   const entryLocalHost = createMemoryCompilerHost(
@@ -123,7 +124,7 @@ f.test()
   const entryLocalSource = generatedTextFile(entryLocalFiles, 'src/index.cc').code
 
   assert.match(entryLocalSource, /double v = 123;/)
-  assert.match(entryLocalSource, /Foo f\{inox::string\("x", 1\)\};/)
+  assert.match(entryLocalSource, /Foo f\{inox::String\(inox::string\("x", 1\)\)\};/)
   assert.doesNotMatch(entryLocalSource, /static double v/)
   assert.doesNotMatch(entryLocalSource, /static Foo f/)
 
@@ -177,7 +178,7 @@ console.log(data.v)
   }) as GeneratedTextFile[]
   const jsonLocalSource = generatedTextFile(jsonLocalFiles, 'src/index.cc').code
 
-  assert.match(jsonLocalSource, /inox_json_parse\(&inox_default_allocator, "\{\\"v\\":\[1\]\}", 9, &data\)/)
+  assert.match(jsonLocalSource, /inox::json_parse\(inox::string_view\("\{\\"v\\":\[1\]\}", 9\), data\)/)
   assert.doesNotMatch(jsonLocalSource, /inox_object_new/)
   assert.doesNotMatch(jsonLocalSource, /inox_shape_data/)
 
@@ -205,9 +206,9 @@ console.log(response.status)
 
   assert.match(
     fetchSource,
-    /inox::fetch\(inox_loop\.raw\(\), inox::string_view\("http:\/\/127\.0\.0\.1"\)\)/
+    /inox::fetch\(inox::string_view\("http:\/\/127\.0\.0\.1"\)\)/
   )
-  assert.doesNotMatch(fetchSource, /inox_fetch\(inox_loop\.raw\(\), "http:\/\/127\.0\.0\.1", 16,/)
+  assert.doesNotMatch(fetchSource, /inox_fetch\(inox::loop\(\), "http:\/\/127\.0\.0\.1", 16,/)
 
   const processEntryHost = createMemoryCompilerHost(
     [

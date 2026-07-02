@@ -26,7 +26,7 @@ import {
   isNullableScalarType,
   isOpaqueRuntimeValueType
 } from '../value-types.ts'
-import { functionTakesEventLoopParam, isPromiseConstructorExpression } from './promises.ts'
+import { isPromiseConstructorExpression } from './promises.ts'
 
 type CallbackNode = AnyNode
 type CallbackArrowWrapperMap = Map<AnyNode, CCallbackWrapper>
@@ -75,6 +75,7 @@ type CallbackFunctionContext = CallbackEmitContext & {
   boxedVariables: CallbackStringSet
   cleanupEnabled: boolean
   eventLoopUsed: boolean
+  explicitEventLoop: boolean
   externalEventLoop: boolean
   objectShapes: CallbackObjectShapeMap
   promiseConstructorHandlers: CallbackPromiseConstructorHandlerMap
@@ -3198,7 +3199,7 @@ export function emitRuntimeCallbackWrapperDeclaration(
     return emitRuntimeArrowCallbackWrapperDeclaration(wrapper, context, deps)
   }
 
-  const targetTakesEventLoop = functionTakesEventLoopParam(wrapper.target, context)
+  const targetTakesEventLoop = false
   const lines: string[] = [emitRuntimeCallbackWrapperHead(wrapper) + ' {']
 
   if (targetTakesEventLoop) {
@@ -3618,6 +3619,7 @@ export function emitRuntimeArrowCallbackContextLocals(
   if (callbackContextWrapperNeedsEventLoop(wrapper)) {
     context.eventLoopUsed = true
     context.externalEventLoop = true
+    context.explicitEventLoop = true
     lines.push('if (captured->inox_loop == 0) return INOX_ERR_TYPE;')
     lines.push('inox_loop* inox_loop = captured->inox_loop;')
   }

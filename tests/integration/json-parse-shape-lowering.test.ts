@@ -35,8 +35,11 @@ console.log(Object.entries(foo.v)[0][0])
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /inox_json_parse\(&inox_default_allocator, "\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}", 34, &foo\)/)
-  assert.match(source, /inox_object_get\(foo, "v", 1, &inox_value_\d+\)/)
+  assert.match(
+    source,
+    /inox::json_parse\(inox::string_view\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}", 34\), foo\)/
+  )
+  assert.match(source, /inox::object_get\(foo, "v", 1, inox_value_\d+\)/)
   assert.doesNotMatch(source, /inox_json_value_\d+ = inox_undefined_value\(\);\n\s+if \(\n\s+inox_json_parse/)
   assert.doesNotMatch(source, /inox_field_status_\d+ = inox_object_get\(foo, "v", 1,/)
 }
@@ -109,9 +112,9 @@ export async function assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariable
 
     assert.match(
       source,
-      /inox_json_parse\(&inox_default_allocator, "\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"блаблабла\\"\}\]\}", 48, &foo\)/
+      /inox::json_parse\(inox::string_view\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"блаблабла\\"\}\]\}", 48\), foo\)/
     )
-    assert.match(source, /inox_object_get\(foo, "v", 1, &inox_value_\d+\)/)
+    assert.match(source, /inox::object_get\(foo, "v", 1, inox_value_\d+\)/)
     assert.doesNotMatch(source, /inox_json_value_\d+ = inox_undefined_value\(\);\n\s+if \(\n\s+inox_json_parse/)
     assert.doesNotMatch(source, /inox_field_status_\d+ = inox_object_get\(foo, "v", 1,/)
   } finally {

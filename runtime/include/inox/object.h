@@ -70,4 +70,38 @@ void inox_object_dispose_fields(inox_object* object);
 }
 #endif
 
+#ifdef __cplusplus
+namespace inox {
+
+inline inox_status object_get(inox_value object, const char* name, size_t len, Value& out) {
+  return inox_object_get(object, name, len, out.out());
+}
+
+inline inox_status object_get_known(inox_value object, uint32_t index, Value& out) {
+  return inox_object_get_known(object, index, out.out());
+}
+
+inline inox_status object_value_at(inox_value object, size_t index, Value& out) {
+  return inox_object_value_at(object, index, out.out());
+}
+
+inline inox_status object_entry_at(inox_value object, size_t index, Value& out) {
+  return inox_object_entry_at(&inox_default_allocator, object, index, out.out());
+}
+
+inline inox_status object_entries(inox_value object, Value& out) {
+  return inox_object_entries(&inox_default_allocator, object, out.out());
+}
+
+inline inox_status object_keys(inox_value object, Value& out) {
+  return inox_object_keys(&inox_default_allocator, object, out.out());
+}
+
+inline inox_status object_values(inox_value object, Value& out) {
+  return inox_object_values(&inox_default_allocator, object, out.out());
+}
+
+} // namespace inox
+#endif
+
 #endif

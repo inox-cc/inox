@@ -2,6 +2,7 @@
 #define INOX_CONSOLE_H
 
 #include <stddef.h>
+#include <string.h>
 #include "inox/class_descriptor.h"
 #include "inox/value.h"
 
@@ -43,6 +44,64 @@ int inox_console_printf(inox_console_stream stream, const char* format, ...);
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+namespace inox {
+
+inline inox_status console_newline(inox_console_stream stream) {
+  return inox_console_write(stream, "\n", 1);
+}
+
+inline inox_status console_log(inox_console_stream stream) {
+  return console_newline(stream);
+}
+
+inline inox_status console_log(inox_console_stream stream, inox_value value) {
+  return inox_console_print_value_line(stream, value);
+}
+
+inline inox_status console_log(inox_console_stream stream, const Value& value) {
+  return console_log(stream, value.raw());
+}
+
+inline inox_status console_log(inox_console_stream stream, const char* text) {
+  if (text == nullptr) {
+    return console_newline(stream);
+  }
+
+  return inox_console_write_line(stream, text, strlen(text));
+}
+
+inline inox_status console_log(inox_console_stream stream, const char* prefix, inox_value value) {
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox_console_write(stream, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox_console_write(stream, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox_console_print_value(stream, value);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return console_newline(stream);
+}
+
+inline inox_status console_log(inox_console_stream stream, const char* prefix, const Value& value) {
+  return console_log(stream, prefix, value.raw());
+}
+
+} // namespace inox
 #endif
 
 #endif

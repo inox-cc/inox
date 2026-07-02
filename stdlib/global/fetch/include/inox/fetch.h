@@ -137,6 +137,10 @@ public:
     return adopt(promise);
   }
 
+  Promise text() const {
+    return text(loop());
+  }
+
   inox_value raw() const {
     return value_.raw();
   }
@@ -169,6 +173,10 @@ inline Promise fetch(inox_loop* loop, StringView url) {
   return adopt(promise);
 }
 
+inline Promise fetch(StringView url) {
+  return fetch(loop(), url);
+}
+
 inline Promise fetch(inox_loop* loop, StringView url, const inox_fetch_init* init) {
   inox_promise* promise = nullptr;
 
@@ -177,6 +185,10 @@ inline Promise fetch(inox_loop* loop, StringView url, const inox_fetch_init* ini
   }
 
   return adopt(promise);
+}
+
+inline Promise fetch(StringView url, const inox_fetch_init* init) {
+  return fetch(loop(), url, init);
 }
 
 } // namespace inox

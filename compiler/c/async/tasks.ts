@@ -124,6 +124,7 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   errorObjectNames: AsyncTaskStringSet
   errorTargets: string[]
   eventLoopUsed: boolean
+  explicitEventLoop: boolean
   externalEventLoop: boolean
   failureStatement?: string | null
   failureStatementUsed?: boolean
@@ -2953,6 +2954,7 @@ function createAsyncTaskEmitContext(
   const context = asyncTaskDeps(baseContext).createFunctionContext(baseContext, returnType, false)
   context.statusReturn = true
   context.externalEventLoop = true
+  context.explicitEventLoop = true
   context.eventLoopUsed = true
   registerAsyncTaskParams(wrapper, context)
   registerAsyncTaskPrefixLocals(wrapper, context)

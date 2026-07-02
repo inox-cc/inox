@@ -56,6 +56,7 @@ type PromiseFunctionContext = PromiseEmitContext & {
   boxedVariables: PromiseStringSet
   cleanupEnabled: boolean
   eventLoopUsed: boolean
+  explicitEventLoop: boolean
   externalEventLoop: boolean
   failureStatement?: string | null
   failureStatementUsed?: boolean

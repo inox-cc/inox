@@ -80,6 +80,14 @@ int inox_loop_next_timer_due_ms(const inox_loop* loop, inox_number* out);
 
 namespace inox {
 
+class Runtime;
+
+inline Runtime*& current_runtime_slot() {
+  static thread_local Runtime* current = nullptr;
+
+  return current;
+}
+
 class Loop {
 private:
   inox_loop loop_;
@@ -151,6 +159,94 @@ public:
     return &loop_;
   }
 };
+
+class Runtime {
+private:
+  Loop loop_;
+
+public:
+  Runtime() : loop_() {}
+
+  Runtime(const Runtime&) = delete;
+  Runtime& operator=(const Runtime&) = delete;
+  Runtime(Runtime&&) = delete;
+  Runtime& operator=(Runtime&&) = delete;
+
+  inox_status init(inox_allocator* allocator) {
+    return loop_.init(allocator);
+  }
+
+  inox_status run() {
+    return loop_.run();
+  }
+
+  void reset() {
+    loop_.reset();
+  }
+
+  bool active() const {
+    return loop_.active();
+  }
+
+  Loop& loop() {
+    return loop_;
+  }
+
+  const Loop& loop() const {
+    return loop_;
+  }
+
+  inox_loop* raw_loop() {
+    return loop_.raw();
+  }
+
+  const inox_loop* raw_loop() const {
+    return loop_.raw();
+  }
+};
+
+class RuntimeScope {
+private:
+  Runtime* previous_;
+
+public:
+  explicit RuntimeScope(Runtime& runtime) : previous_(current_runtime_slot()) {
+    current_runtime_slot() = &runtime;
+  }
+
+  RuntimeScope(const RuntimeScope&) = delete;
+  RuntimeScope& operator=(const RuntimeScope&) = delete;
+  RuntimeScope(RuntimeScope&&) = delete;
+  RuntimeScope& operator=(RuntimeScope&&) = delete;
+
+  ~RuntimeScope() {
+    current_runtime_slot() = previous_;
+  }
+};
+
+inline Runtime* current_runtime() {
+  return current_runtime_slot();
+}
+
+inline inox_loop* loop() {
+  Runtime* runtime = current_runtime_slot();
+
+  if (runtime == nullptr || !runtime->active()) {
+    return nullptr;
+  }
+
+  return runtime->raw_loop();
+}
+
+inline inox_status run() {
+  Runtime* runtime = current_runtime_slot();
+
+  if (runtime == nullptr || !runtime->active()) {
+    return INOX_ERR_TYPE;
+  }
+
+  return runtime->run();
+}
 
 } // namespace inox
 

@@ -90,6 +90,7 @@ type StatementNode = AnyNode
 type CLoopFlowTarget = {
   label: string
   throughFinally: boolean
+  used?: boolean
 }
 
 type CStringMap = Map<string, string>
@@ -142,6 +143,7 @@ type CFunctionContext = {
   errorTargets: string[]
   errorTargetActiveFlags: boolean[]
   eventLoopUsed: boolean
+  explicitEventLoop: boolean
   externalEventLoop: boolean
   externalEventLoopFunctions: CStringSet
   failureStatement?: string | null
@@ -1139,10 +1141,10 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.condition)
   const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.condition)
   const typeNarrowing = resolveTypeofConditionNarrowing(statement.condition)
-  const breakLabel = nextCName(context, 'inox_break')
-  const continueLabel = nextCName(context, 'inox_continue')
-  pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
-  pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
+  const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
+  pushFlowTarget(context.breakTargets, breakTarget)
+  pushFlowTarget(context.continueTargets, continueTarget)
   const body = emitScopedStatementBody(
     statement.body,
     context,
@@ -1160,9 +1162,13 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
     lines.push('  {')
     pushIndentedLines(lines, body, '    ')
     lines.push('  }')
-    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    if (shouldEmitFlowTargetLabel(continueTarget)) {
+      pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+    }
     lines.push('}')
-    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+    if (shouldEmitFlowTargetLabel(breakTarget)) {
+      pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+    }
 
     return lines
   }
@@ -1174,9 +1180,13 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   lines.push('  {')
   pushIndentedLines(lines, body, '    ')
   lines.push('  }')
-  pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+  if (shouldEmitFlowTargetLabel(continueTarget)) {
+    pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+  }
   lines.push('}')
-  pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+  if (shouldEmitFlowTargetLabel(breakTarget)) {
+    pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+  }
 
   return lines
 }
@@ -1192,10 +1202,10 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     const arrayNarrowing = resolveRuntimeArrayConditionNarrowing(statement.test)
     const objectNarrowing = resolveRuntimeObjectConditionNarrowing(statement.test)
     const typeNarrowing = resolveTypeofConditionNarrowing(statement.test)
-    const breakLabel = nextCName(context, 'inox_break')
-    const continueLabel = nextCName(context, 'inox_continue')
-    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
-    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
+    const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
+    pushFlowTarget(context.breakTargets, breakTarget)
+    pushFlowTarget(context.continueTargets, continueTarget)
     const body = emitScopedStatementBody(
       statement.body,
       context,
@@ -1214,9 +1224,13 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
       lines.push('  {')
       pushIndentedLines(lines, body, '    ')
       lines.push('  }')
-      pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+      if (shouldEmitFlowTargetLabel(continueTarget)) {
+        pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+      }
       lines.push('}')
-      pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+      if (shouldEmitFlowTargetLabel(breakTarget)) {
+        pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+      }
 
       return lines
     }
@@ -1239,7 +1253,9 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     lines.push('    {')
     pushIndentedLines(lines, body, '      ')
     lines.push('    }')
-    pushIndentedLines(lines, emitContinueTargetLabel(continueLabel, context), '  ')
+    if (shouldEmitFlowTargetLabel(continueTarget)) {
+      pushIndentedLines(lines, emitContinueTargetLabel(continueTarget.label, context), '  ')
+    }
     pushIndentedLines(lines, update.lines, '    ')
 
     if (update.expression !== '') {
@@ -1247,7 +1263,9 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
     }
 
     lines.push('  }')
-    pushIndentedLines(lines, emitBreakTargetLabel(breakLabel, context), '  ')
+    if (shouldEmitFlowTargetLabel(breakTarget)) {
+      pushIndentedLines(lines, emitBreakTargetLabel(breakTarget.label, context), '  ')
+    }
     lines.push('}')
 
     return lines
@@ -3078,17 +3096,15 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     arrayName = array.name
   }
 
-  const breakLabel = nextCName(context, 'inox_break')
-  const continueLabel = nextCName(context, 'inox_continue')
-
-  registerOwnedValue(context, value)
+  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
+  const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
 
   const variableScope = pushVariableScope(context)
 
   try {
     registerForOfElementMetadata(context, statement.name, elementType, statement)
-    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
-    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    pushFlowTarget(context.breakTargets, breakTarget)
+    pushFlowTarget(context.continueTargets, continueTarget)
     const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
@@ -3106,16 +3122,19 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
     lines.push('  {')
-    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '    ')
+    lines.push(`    inox::Value ${value};`)
     lines.push(`    ${getElementStatus}`)
     pushIndentedLines(lines, element.lines, '    ')
     lines.push(`    ${element.expression}`)
     pushIndentedLines(lines, body, '    ')
     lines.push('  }')
-    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    if (shouldEmitFlowTargetLabel(continueTarget)) {
+      pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+    }
     lines.push('}')
-    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
-    pushAllLines(lines, emitPrepareOwnedValueWrite(value))
+    if (shouldEmitFlowTargetLabel(breakTarget)) {
+      pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+    }
 
     return lines
   } finally {
@@ -3157,8 +3176,8 @@ function emitRuntimeMapForOfStatement(
 
   const index = nextCName(context, 'inox_for_map_index')
   const map = nextCName(context, 'inox_for_map')
-  const breakLabel = nextCName(context, 'inox_break')
-  const continueLabel = nextCName(context, 'inox_continue')
+  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
+  const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
   const fields = [{ valueType: keyType }, { valueType }]
 
   registerOwnedValue(context, statement.name)
@@ -3169,8 +3188,8 @@ function emitRuntimeMapForOfStatement(
     context.variables.set(statement.name, 'array')
     context.arrayShapes.set(statement.name, fields)
     context.arrayLengths.set(statement.name, fields.length)
-    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
-    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    pushFlowTarget(context.breakTargets, breakTarget)
+    pushFlowTarget(context.continueTargets, continueTarget)
     const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
@@ -3196,9 +3215,13 @@ function emitRuntimeMapForOfStatement(
     lines.push(`    ${initValueStatus}`)
     pushIndentedLines(lines, body, '    ')
     lines.push('  }')
-    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    if (shouldEmitFlowTargetLabel(continueTarget)) {
+      pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+    }
     lines.push('}')
-    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+    if (shouldEmitFlowTargetLabel(breakTarget)) {
+      pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+    }
     pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
 
     return lines
@@ -3283,8 +3306,8 @@ function emitRuntimeCollectionValueForOfStatement(
   const index = nextCName(context, indexPrefix)
   const collection = nextCName(context, collectionPrefix)
   const value = nextCName(context, 'inox_for_value')
-  const breakLabel = nextCName(context, 'inox_break')
-  const continueLabel = nextCName(context, 'inox_continue')
+  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
+  const continueTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_continue'), throughFinally: false }
 
   registerOwnedValue(context, value)
 
@@ -3292,8 +3315,8 @@ function emitRuntimeCollectionValueForOfStatement(
 
   try {
     registerForOfElementMetadata(context, statement.name, elementType, statement)
-    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
-    pushFlowTarget(context.continueTargets, { label: continueLabel, throughFinally: false })
+    pushFlowTarget(context.breakTargets, breakTarget)
+    pushFlowTarget(context.continueTargets, continueTarget)
     const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
@@ -3315,9 +3338,13 @@ function emitRuntimeCollectionValueForOfStatement(
     lines.push(`    ${element.expression}`)
     pushIndentedLines(lines, body, '    ')
     lines.push('  }')
-    pushAllLines(lines, emitContinueTargetLabel(continueLabel, context))
+    if (shouldEmitFlowTargetLabel(continueTarget)) {
+      pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
+    }
     lines.push('}')
-    pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+    if (shouldEmitFlowTargetLabel(breakTarget)) {
+      pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+    }
     pushAllLines(lines, emitPrepareOwnedValueWrite(value))
 
     return lines
@@ -3328,7 +3355,7 @@ function emitRuntimeCollectionValueForOfStatement(
 
 export function emitSwitchStatement(statement: StatementNode, context: CFunctionContext): string[] {
   const discriminant = statementDeps(context).emitPreparedNumberExpression(statement.discriminant, context)
-  const breakLabel = nextCName(context, 'inox_break')
+  const breakTarget: CLoopFlowTarget = { label: nextCName(context, 'inox_break'), throughFinally: false }
   const lines: string[] = []
   pushAllLines(lines, discriminant.lines)
   lines.push(`switch ((int)${discriminant.expression}) {`)
@@ -3340,7 +3367,7 @@ export function emitSwitchStatement(statement: StatementNode, context: CFunction
       lines.push(`  case ${emitSwitchCaseLabel(item.test, context)}: {`)
     }
 
-    pushFlowTarget(context.breakTargets, { label: breakLabel, throughFinally: false })
+    pushFlowTarget(context.breakTargets, breakTarget)
     const body = emitScopedStatementList(item.consequent, context)
     popFlowTarget(context.breakTargets)
     pushIndentedLines(lines, body, '    ')
@@ -3348,7 +3375,9 @@ export function emitSwitchStatement(statement: StatementNode, context: CFunction
   }
 
   lines.push('}')
-  pushAllLines(lines, emitBreakTargetLabel(breakLabel, context))
+  if (shouldEmitFlowTargetLabel(breakTarget)) {
+    pushAllLines(lines, emitBreakTargetLabel(breakTarget.label, context))
+  }
 
   return lines
 }
@@ -3522,8 +3551,12 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
     const catchFailureStatement: string = statementDeps(context).emitFailureStatement(context)
 
+    const catchTypeCheck = emitCatchBindingTypeCheck(catchValueType)
+
     lines.push(`${catchLabel}:`)
-    lines.push(`  if (${emitCatchBindingTypeCheck(catchValueType)}) ${catchFailureStatement}`)
+    if (catchTypeCheck !== '0') {
+      lines.push(`  if (${catchTypeCheck}) ${catchFailureStatement}`)
+    }
     if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
       lines.push('  inox_error_active = 0;')
     }
@@ -3617,10 +3650,12 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     }
 
     if (context.breakFlowUsed && outerBreakTarget !== null && typeof outerBreakTarget !== 'undefined') {
+      outerBreakTarget.used = true
       lines.push(`  if (inox_break_active) goto ${outerBreakTarget.label};`)
     }
 
     if (context.continueFlowUsed && outerContinueTarget !== null && typeof outerContinueTarget !== 'undefined') {
+      outerContinueTarget.used = true
       lines.push(`  if (inox_continue_active) goto ${outerContinueTarget.label};`)
     }
   }
@@ -5053,6 +5088,7 @@ export function emitBreakJump(context: CFunctionContext): string[] {
   if (target === null || typeof target === 'undefined') {
     return ['break;']
   } else {
+    target.used = true
     const label = target.label
 
     if (target.throughFinally) {
@@ -5071,6 +5107,7 @@ export function emitContinueJump(context: CFunctionContext): string[] {
   if (target === null || typeof target === 'undefined') {
     return ['continue;']
   } else {
+    target.used = true
     const label = target.label
 
     if (target.throughFinally) {
@@ -5103,6 +5140,10 @@ export function emitContinueTargetLabel(label: string, context: CFunctionContext
 
   lines.push('  ;')
   return lines
+}
+
+function shouldEmitFlowTargetLabel(target: CLoopFlowTarget): boolean {
+  return target.used === true
 }
 
 function registerBreakFlow(context: CFunctionContext): void {

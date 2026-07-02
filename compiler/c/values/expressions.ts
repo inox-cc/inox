@@ -11,7 +11,6 @@ import {
 import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
 import {
   cloneCStringSet,
-  emitEventLoopReference,
   emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
@@ -161,6 +160,7 @@ type CFunctionContext = CEmitContext & {
   cleanupEnabled: boolean
   diagnostics: Diagnostic[]
   eventLoopUsed: boolean
+  explicitEventLoop: boolean
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   classInfos: Map<string, CClassInfo>
   classInstanceTypes: CStringMap
@@ -2132,27 +2132,19 @@ export function emitPreparedCallExpression(
 
   if (deps.isPromiseReturningFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
-    const callArgs: string[] = []
-
-    callArgs.push(emitEventLoopReference(context))
-    appendLines(callArgs, args)
 
     return {
       lines,
-      expression: `${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')})`
+      expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
     }
   }
 
   if (deps.isExternalEventLoopFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
-    const callArgs: string[] = []
-
-    callArgs.push(emitEventLoopReference(context))
-    appendLines(callArgs, args)
 
     return {
       lines,
-      expression: `${emitCallee(expression.callee, context)}(${joinStrings(callArgs, ', ')})`
+      expression: `${emitCallee(expression.callee, context)}(${joinStrings(args, ', ')})`
     }
   }
 
@@ -2472,7 +2464,6 @@ function emitPreparedThrowingCallExpression(
 
   if (deps.isExternalEventLoopFunctionCallee(expression.callee, context)) {
     registerEventLoop(context)
-    callArgs.push(emitEventLoopReference(context))
   }
 
   appendLines(callArgs, args)

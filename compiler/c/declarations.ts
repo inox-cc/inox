@@ -63,6 +63,8 @@ import {
   isThrowingFunctionRuntimeOut
 } from './value-types.ts'
 import {
+  classFieldUsesCppStringStorage,
+  classParamUsesCppStringStorage,
   classParamUsesCppValueStorage,
   cClassValueTypeName,
   emitCClassConstructorHead,
@@ -90,6 +92,16 @@ type CFunctionReturnInfo = {
 
 type CBoxedFunctionParamContext = {
   boxedMutableCaptureDeclarations: Set<CNode>
+}
+
+type NativeClassConstructorInitializerPlan = {
+  body: CNode[]
+  initializers: Map<string, string>
+}
+
+type NativeClassConstructorInitializer = {
+  field: string
+  expression: string
 }
 
 export type CDeclarationEmissionDependencies = {
@@ -419,7 +431,7 @@ export function emitFunctionHead(statement: CNode, context: CEmitContext): strin
     pushFunctionHeadParam(params, functionParams[index], index, statement, context)
   }
 
-  if (functionTakesEventLoopParam(statement.name, context)) {
+  if (functionTakesEventLoopParam(statement.name, context) && context.explicitEventLoop === true) {
     params.unshift('inox_loop* inox_loop')
   }
 
@@ -756,24 +768,154 @@ export function emitClassConstructorDeclaration(
   }
 
   const constructorMethod = info.constructor
-  const head = emitCClassConstructorHead(info, baseContext)
 
   if (
     constructorMethod === null ||
-    typeof constructorMethod === 'undefined' ||
-    head === null ||
-    typeof head === 'undefined'
+    typeof constructorMethod === 'undefined'
   ) {
     return []
   }
 
-  return emitNativeClassConstructorDeclaration(info, constructorMethod, head, baseContext, deps)
+  const initializerPlan = createNativeClassConstructorInitializerPlan(info, constructorMethod)
+  const head = emitCClassConstructorHead(info, baseContext, initializerPlan.initializers)
+
+  if (head === null || typeof head === 'undefined') {
+    return []
+  }
+
+  return emitNativeClassConstructorDeclaration(info, constructorMethod, head, initializerPlan.body, baseContext, deps)
+}
+
+function createNativeClassConstructorInitializerPlan(
+  info: CClassInfo,
+  constructorMethod: CNode
+): NativeClassConstructorInitializerPlan {
+  const body: CNode[] = []
+  const initializers = new Map<string, string>()
+  const params: CFunctionParam[] = constructorMethod.params
+  let canMoveInitializer = true
+
+  for (const statement of constructorMethod.body) {
+    if (canMoveInitializer) {
+      const initializer = nativeClassConstructorInitializerForStatement(info, params, statement)
+
+      if (initializer !== null && typeof initializer !== 'undefined' && !initializers.has(initializer.field)) {
+        initializers.set(initializer.field, initializer.expression)
+        continue
+      }
+    }
+
+    canMoveInitializer = false
+    body.push(statement)
+  }
+
+  return {
+    body,
+    initializers
+  }
+}
+
+function nativeClassConstructorInitializerForStatement(
+  info: CClassInfo,
+  params: CFunctionParam[],
+  statement: CNode
+): NativeClassConstructorInitializer | null {
+  if (statement.type !== 'ExpressionStatement' || statement.expression.type !== 'AssignmentExpression') {
+    return null
+  }
+
+  const fieldName = nativeClassThisFieldName(statement.expression.target)
+
+  if (fieldName === null || typeof fieldName === 'undefined') {
+    return null
+  }
+
+  const paramName = nativeClassReferenceName(statement.expression.value)
+
+  if (paramName === null || typeof paramName === 'undefined') {
+    return null
+  }
+
+  const field = nativeClassFieldForName(info, fieldName)
+  const param = nativeClassParamForName(params, paramName)
+
+  if (
+    field === null ||
+    typeof field === 'undefined' ||
+    param === null ||
+    typeof param === 'undefined' ||
+    !nativeClassConstructorParamCanInitializeField(field, param)
+  ) {
+    return null
+  }
+
+  return {
+    field: field.name,
+    expression: emitCIdentifier(param.name)
+  }
+}
+
+function nativeClassConstructorParamCanInitializeField(field: CObjectShapeField, param: CFunctionParam): boolean {
+  return classFieldUsesCppStringStorage(field) && classParamUsesCppStringStorage(param)
+}
+
+function nativeClassFieldForName(info: CClassInfo, name: string): CObjectShapeField | null {
+  for (const field of info.fields) {
+    if (field.name === name) {
+      return field
+    }
+  }
+
+  return null
+}
+
+function nativeClassParamForName(params: CFunctionParam[], name: string): CFunctionParam | null {
+  for (const param of params) {
+    if (param.name === name) {
+      return param
+    }
+  }
+
+  return null
+}
+
+function nativeClassThisFieldName(expression: CNode): string | null {
+  if (expression.type !== 'MemberExpression' || typeof expression.property !== 'string') {
+    return null
+  }
+
+  if (!nativeClassIsThisExpression(expression.object)) {
+    return null
+  }
+
+  return expression.property
+}
+
+function nativeClassIsThisExpression(expression: CNode | null | undefined): boolean {
+  if (expression === null || typeof expression === 'undefined') {
+    return false
+  }
+
+  if (expression.type === 'ThisExpression') {
+    return true
+  }
+
+  return expression.type === 'Reference' && expression.path.length === 1 && expression.path[0] === 'this'
+}
+
+function nativeClassReferenceName(expression: CNode): string | null {
+  if (expression.type !== 'Reference' || expression.path.length !== 1) {
+    return null
+  }
+
+  return expression.path[0]
 }
 
 function emitNativeClassConstructorDeclaration(
   info: CClassInfo,
   constructorMethod: CNode,
   head: string,
+  body: CNode[],
   baseContext: CEmitContext,
   deps: CDeclarationEmissionDependencies
 ): string[] {
@@ -794,7 +936,7 @@ function emitNativeClassConstructorDeclaration(
   const lines: string[] = []
 
   pushIndentedDeclarationLines(bodyLines, emitConstructorRuntimeParamPreludeForParams(constructorMethod, params, context))
-  pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(constructorMethod.body, context))
+  pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
   const needsCleanup = shouldEmitCleanupLabel(context)
 
@@ -850,7 +992,7 @@ function emitConstructorRuntimeParamPreludeForParam(
   index: number,
   context: CDeclarationFunctionContext
 ): string[] {
-  if (classParamUsesCppValueStorage(param)) {
+  if (classParamUsesCppValueStorage(param) || classParamUsesCppStringStorage(param)) {
     return []
   }
 
@@ -862,11 +1004,12 @@ function registerNativeClassConstructorCppValueParams(
   context: CDeclarationFunctionContext
 ): void {
   for (const param of params) {
-    if (!classParamUsesCppValueStorage(param)) {
+    if (!classParamUsesCppValueStorage(param) && !classParamUsesCppStringStorage(param)) {
       continue
     }
 
     if (param.valueType === 'string' && param.nullable !== true) {
+      context.cppStringValues.add(param.name)
       context.runtimeStrings.add(param.name)
       context.runtimeStringValues.set(param.name, emitCIdentifier(param.name) + '.raw()')
     }
@@ -919,7 +1062,7 @@ function emitRuntimeClassMethodParams(info: CClassInfo, method: CNode, context: 
   const params: string[] = []
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
-  if (functionTakesEventLoopParam(methodEffectName, context)) {
+  if (functionTakesEventLoopParam(methodEffectName, context) && context.explicitEventLoop === true) {
     params.push('inox_loop* inox_loop')
   }
 
@@ -945,7 +1088,7 @@ function emitClassMethodParams(info: CClassInfo, method: CNode, context: CEmitCo
   const params: string[] = []
   const methodEffectName = irClassMethodEffectName(info.name, method.name)
 
-  if (functionTakesEventLoopParam(methodEffectName, context)) {
+  if (functionTakesEventLoopParam(methodEffectName, context) && context.explicitEventLoop === true) {
     params.push('inox_loop* inox_loop')
   }
 

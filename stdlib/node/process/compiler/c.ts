@@ -5,7 +5,7 @@ import {
   processRuntimePropertyValueType
 } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
+import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName } from '../../../../compiler/c/context.ts'
 import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
 import type {
   CObjectShape,
@@ -213,20 +213,27 @@ export function emitPreparedProcessStringExpression(
     out = options.out
   }
 
-  if (options === null || typeof options === 'undefined' || options.owned !== false) {
-    registerOwnedValue(context, out)
+  const ownsOut = options === null || typeof options === 'undefined' || options.owned !== false
+  const outRef = ownsOut ? `${out}.out()` : `&${out}`
+
+  if (ownsOut) {
+    lines.push(`inox::Value ${out};`)
   }
 
   if (method === 'cwd') {
-    pushLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_process_cwd(&inox_default_allocator, &${out})`, context))
+    if (!ownsOut) {
+      pushLines(lines, emitPrepareOwnedValueWrite(out))
+    }
+    lines.push(emitStatusCheck(`inox_process_cwd(&inox_default_allocator, ${outRef})`, context))
   } else if (property === 'argv') {
     const index = dependencies.emitPreparedNumberExpression(expression.index, context)
 
     pushLines(lines, index.lines)
-    pushLines(lines, emitPrepareOwnedValueWrite(out))
+    if (!ownsOut) {
+      pushLines(lines, emitPrepareOwnedValueWrite(out))
+    }
     lines.push(
-      emitStatusCheck(`inox_process_argv(&inox_default_allocator, (int)(${index.expression}), &${out})`, context)
+      emitStatusCheck(`inox_process_argv(&inox_default_allocator, (int)(${index.expression}), ${outRef})`, context)
     )
   } else if (stringProperty !== null && typeof stringProperty !== 'undefined') {
     const functionName = cProcessRuntimeStringFunctionName(stringProperty)
@@ -235,10 +242,12 @@ export function emitPreparedProcessStringExpression(
       return null
     }
 
-    pushLines(lines, emitPrepareOwnedValueWrite(out))
+    if (!ownsOut) {
+      pushLines(lines, emitPrepareOwnedValueWrite(out))
+    }
     const callName = functionName === 'process' ? 'inox_process' : `inox_process_${functionName}`
 
-    lines.push(emitStatusCheck(`${callName}(&inox_default_allocator, &${out})`, context))
+    lines.push(emitStatusCheck(`${callName}(&inox_default_allocator, ${outRef})`, context))
   } else {
     let name = ''
 
@@ -246,10 +255,12 @@ export function emitPreparedProcessStringExpression(
       name = envName
     }
 
-    pushLines(lines, emitPrepareOwnedValueWrite(out))
+    if (!ownsOut) {
+      pushLines(lines, emitPrepareOwnedValueWrite(out))
+    }
     lines.push(
       emitStatusCheck(
-        `inox_process_env(&inox_default_allocator, ${cStringLiteral(name)}, ${utf8ByteLength(name)}, &${out})`,
+        `inox_process_env(&inox_default_allocator, ${cStringLiteral(name)}, ${utf8ByteLength(name)}, ${outRef})`,
         context
       )
     )
@@ -257,7 +268,9 @@ export function emitPreparedProcessStringExpression(
 
   return {
     lines,
-    expression: out
+    expression: out,
+    cppType: 'inox::Value',
+    owned: false
   }
 }
 
@@ -314,11 +327,14 @@ export function emitPreparedProcessValueExpression(
     out = options.out
   }
 
-  if (options === null || typeof options === 'undefined' || options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
+  const ownsOut = options === null || typeof options === 'undefined' || options.owned !== false
+  const outRef = ownsOut ? `${out}.out()` : `&${out}`
 
-  pushLines(lines, emitPrepareOwnedValueWrite(out))
+  if (ownsOut) {
+    lines.push(`inox::Value ${out};`)
+  } else {
+    pushLines(lines, emitPrepareOwnedValueWrite(out))
+  }
 
   if (method === 'memoryUsage' || object === 'process' || property === 'versions') {
     let functionName = 'process'
@@ -334,11 +350,13 @@ export function emitPreparedProcessValueExpression(
 
     const callName = functionName === 'process' ? 'inox_process' : `inox_process_${functionName}`
 
-    lines.push(emitStatusCheck(`${callName}(&inox_default_allocator, &${out})`, context))
+    lines.push(emitStatusCheck(`${callName}(&inox_default_allocator, ${outRef})`, context))
 
     return {
       lines,
-      expression: out
+      expression: out,
+      cppType: 'inox::Value',
+      owned: false
     }
   }
 
@@ -356,14 +374,16 @@ export function emitPreparedProcessValueExpression(
   pushLines(lines, previous.lines)
   lines.push(
     emitStatusCheck(
-      `inox_process_hrtime(&inox_default_allocator, ${previous.expression}, ${hasPrevious}, &${out})`,
+      `inox_process_hrtime(&inox_default_allocator, ${previous.expression}, ${hasPrevious}, ${outRef})`,
       context
     )
   )
 
   return {
     lines,
-    expression: out
+    expression: out,
+    cppType: 'inox::Value',
+    owned: false
   }
 }
 

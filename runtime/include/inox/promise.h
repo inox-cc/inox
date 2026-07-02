@@ -181,6 +181,16 @@ private:
   AwaitResult(inox_status status, bool fulfilled, T value, Value error)
     : status_(status), fulfilled_(fulfilled), value_(std::move(value)), error_(std::move(error)) {}
 
+  template <typename U>
+  static auto value_valid(const U& value, int) -> decltype(value.valid(), bool()) {
+    return value.valid();
+  }
+
+  template <typename U>
+  static bool value_valid(const U&, long) {
+    return true;
+  }
+
 public:
   static AwaitResult fulfilled(T value) {
     return AwaitResult(INOX_OK, true, std::move(value), Value());
@@ -199,7 +209,7 @@ public:
   }
 
   bool ok() const {
-    return status_ == INOX_OK && fulfilled_;
+    return status_ == INOX_OK && fulfilled_ && value_valid(value_, 0);
   }
 
   bool rejected() const {
@@ -233,6 +243,18 @@ public:
   const Value& error() const {
     return error_;
   }
+
+  Value error_value() const {
+    if (rejected()) {
+      return error_;
+    }
+
+    return Value();
+  }
+
+  explicit operator bool() const {
+    return ok();
+  }
 };
 
 template <typename T>
@@ -259,6 +281,16 @@ AwaitResult<T> await_result(inox_loop* loop, inox_promise* promise) {
 template <typename T>
 AwaitResult<T> await_result(inox_loop* loop, const Promise& promise) {
   return await_result<T>(loop, promise.raw());
+}
+
+template <typename T>
+AwaitResult<T> await_result(inox_promise* promise) {
+  return await_result<T>(loop(), promise);
+}
+
+template <typename T>
+AwaitResult<T> await_result(const Promise& promise) {
+  return await_result<T>(loop(), promise.raw());
 }
 
 } // namespace inox

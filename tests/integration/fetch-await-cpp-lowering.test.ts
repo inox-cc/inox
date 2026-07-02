@@ -41,21 +41,30 @@ await checkFetch()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const checkFetch = functionSource(source, 'static void checkFetch(inox_loop* inox_loop) {')
+  const checkFetch = functionSource(source, 'static void checkFetch(void) {')
 
   assert.match(
     checkFetch,
-    /auto inox_await_result_\d+ = inox::await_result<inox::FetchResponse>\(inox_loop, inox::fetch\(inox_loop, inox::string_view\("http:\/\/example.com\/"\)\)\);/
+    /auto inox_await_result_\d+ = inox::await_result<inox::FetchResponse>\(inox::fetch\(inox::string_view\("http:\/\/example.com\/"\)\)\);/
   )
   assert.match(checkFetch, /printf\("Status %\.17g\\n", res\.status\(\)\);/)
   assert.match(
     checkFetch,
-    /auto inox_await_result_\d+ = inox::await_result<inox::String>\(inox_loop, res\.text\(inox_loop\)\);/
+    /auto inox_await_result_\d+ = inox::await_result<inox::String>\(res\.text\(\)\);/
+  )
+  assert.match(
+    checkFetch,
+    /if \(!inox_await_result_\d+\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_await_result_\d+\.error_value\(\);/
   )
   assert.match(checkFetch, /inox::String txt = inox_await_result_\d+\.value\(\);/)
   assert.match(checkFetch, /printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);/)
+  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.status\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.valid\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.ok\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.error\(\)/)
   assert.doesNotMatch(checkFetch, /inox_object_get\(res/)
   assert.doesNotMatch(checkFetch, /inox_fetch_response_text\(inox_loop, res/)
+  assert.doesNotMatch(checkFetch, /inox_loop/)
   assert.doesNotMatch(checkFetch, /INOX_PROMISE_REJECTED/)
   assert.doesNotMatch(checkFetch, /inox_promise_state/)
   assert.doesNotMatch(checkFetch, /txt_value_\d+/)

@@ -55,14 +55,17 @@ for (const a of foo.v) {
 
   assert.match(source, /auto inox_await_result_\d+ = inox::await_result<inox::FetchResponse>/)
   assert.match(source, /auto inox_await_result_\d+ = inox::await_result<inox::String>/)
-  assert.match(source, /if \(!inox_await_result_\d+\.value\(\)\.valid\(\)\) \{\n\s+return 1;\n\s+\}/)
+  assert.match(source, /if \(!inox_await_result_\d+\) \{/)
+  assert.doesNotMatch(source, /inox_await_result_\d+\.value\(\)\.valid\(\)/)
   assert.match(source, /inox::String txt = inox_await_result_\d+\.value\(\);/)
   assert.doesNotMatch(source, /if \(txt_value_\d+\.tag != INOX_TAG_STRING/)
   assert.match(source, /if \(\s+\(inox_json_value_\d+\.tag != INOX_TAG_OBJECT/)
   assert.doesNotMatch(source, /if \(\(bad\.tag != INOX_TAG_OBJECT/)
-  assert.match(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
+  assert.match(source, /inox::object_values\(a, inox_object_values_\d+\)/)
+  assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /if \(b\.tag != INOX_TAG_ARRAY/)
-  assert.match(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
+  assert.match(source, /inox::object_entries\(a, inox_object_entries_\d+\)/)
+  assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /if \(d\.tag != INOX_TAG_ARRAY/)
 }
 

@@ -43,7 +43,7 @@ f.test()
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /class Foo/)
-  assert.match(source, /Foo f\{inox::string\("foo 1", 5\)\}/)
+  assert.match(source, /Foo f\{inox::String\(inox::string\("foo 1", 5\)\)\}/)
   assert.match(source, /f\.test\(\)/)
   assert.doesNotMatch(source, /inox_mod_src_index_ts_[0-9a-f]+_Foo/)
   assert.doesNotMatch(source, /inox_mod_src_index_ts_[0-9a-f]+_f/)

@@ -35,10 +35,14 @@ for (const a of foo.v) {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /inox_object_value_at\(a, 0, &inox_object_value_\d+\)/)
-  assert.match(source, /inox_object_entry_at\(&inox_default_allocator, a, 0, &inox_object_entry_\d+\)/)
+  assert.match(source, /inox::Value inox_object_value_\d+;/)
+  assert.match(source, /inox::object_value_at\(a, 0, inox_object_value_\d+\)/)
+  assert.match(source, /inox::Value inox_object_entry_\d+;/)
+  assert.match(source, /inox::object_entry_at\(a, 0, inox_object_entry_\d+\)/)
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
+  assert.doesNotMatch(source, /int main\(void\) \{\n\s+inox::Value inox_object_value_\d+;/)
+  assert.doesNotMatch(source, /int main\(void\) \{\n\s+inox::Value inox_object_entry_\d+;/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

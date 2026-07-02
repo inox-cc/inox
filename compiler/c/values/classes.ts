@@ -18,7 +18,6 @@ import type {
   COwnedValueContext
 } from '../context.ts'
 import {
-  emitEventLoopReference,
   emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitStatusCheck,
@@ -365,6 +364,10 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
     return false
   }
 
+  if (classFieldUsesCppStringStorage(field)) {
+    return false
+  }
+
   if (
     field.className !== null &&
     typeof field.className !== 'undefined'
@@ -380,6 +383,14 @@ function classFieldUsesRuntimeValueStorage(field: CObjectShapeField): boolean {
   )
 }
 
+export function classFieldUsesCppStringStorage(field: CObjectShapeField): boolean {
+  return (
+    field.valueType === 'string' &&
+    field.nullable !== true &&
+    (field.className === null || typeof field.className === 'undefined')
+  )
+}
+
 export function classParamUsesCppValueStorage(param: CFunctionParam): boolean {
   if (
     param.className !== null &&
@@ -388,10 +399,22 @@ export function classParamUsesCppValueStorage(param: CFunctionParam): boolean {
     return false
   }
 
+  if (classParamUsesCppStringStorage(param)) {
+    return false
+  }
+
   return (
     param.valueType === 'unknown' ||
     isManagedRuntimeReturnType(param.valueType) ||
     isOpaqueRuntimeValueType(param.valueType)
+  )
+}
+
+export function classParamUsesCppStringStorage(param: CFunctionParam): boolean {
+  return (
+    param.valueType === 'string' &&
+    param.nullable !== true &&
+    (param.className === null || typeof param.className === 'undefined')
   )
 }
 
@@ -445,7 +468,7 @@ export function classInfosUseCppValueRuntime(context: ClassInfoLookupContext): b
     }
 
     for (const field of info.fields) {
-      if (classFieldUsesRuntimeValueStorage(field)) {
+      if (classFieldUsesRuntimeValueStorage(field) || classFieldUsesCppStringStorage(field)) {
         return true
       }
     }
@@ -496,6 +519,10 @@ function emitCClassFieldType(field: CObjectShapeField, context: ClassInfoLookupC
     return emitCClassTypeNameForClassName(context, field.className)
   }
 
+  if (classFieldUsesCppStringStorage(field)) {
+    return 'inox::String'
+  }
+
   if (classFieldUsesRuntimeValueStorage(field)) {
     return 'inox::Value'
   }
@@ -510,6 +537,10 @@ function emitCClassFieldDefaultValue(field: CObjectShapeField, context: ClassInf
 
   if (classFieldUsesRuntimeValueStorage(field)) {
     return 'inox::Value()'
+  }
+
+  if (classFieldUsesCppStringStorage(field)) {
+    return 'inox::String()'
   }
 
   if (
@@ -540,6 +571,10 @@ function emitCClassParamType(param: CFunctionParam, context: ClassInfoLookupCont
     return 'const inox::Value&'
   }
 
+  if (classParamUsesCppStringStorage(param)) {
+    return 'const inox::String&'
+  }
+
   return emitCType(param.valueType)
 }
 
@@ -554,6 +589,10 @@ function emitCClassParamName(param: CFunctionParam): string {
   }
 
   if (classParamUsesCppValueStorage(param)) {
+    return emitCIdentifier(param.name)
+  }
+
+  if (classParamUsesCppStringStorage(param)) {
     return emitCIdentifier(param.name)
   }
 
@@ -704,7 +743,11 @@ function cppValueRuntimeStringReference(expression: AnyNode, context: ClassFunct
   return reference
 }
 
-function emitCClassConstructorInitializers(info: CClassInfo, context: ClassInfoLookupContext): string {
+function emitCClassConstructorInitializers(
+  info: CClassInfo,
+  context: ClassInfoLookupContext,
+  fieldInitializers?: Map<string, string> | null
+): string {
   const initializers: string[] = []
 
   for (const field of info.fields) {
@@ -712,7 +755,17 @@ function emitCClassConstructorInitializers(info: CClassInfo, context: ClassInfoL
       continue
     }
 
-    initializers.push(`${emitCClassFieldName(field.name)}(${emitCClassFieldDefaultValue(field, context)})`)
+    let initializer = emitCClassFieldDefaultValue(field, context)
+
+    if (fieldInitializers !== null && typeof fieldInitializers !== 'undefined') {
+      const fieldInitializer = fieldInitializers.get(field.name)
+
+      if (fieldInitializer !== null && typeof fieldInitializer !== 'undefined') {
+        initializer = fieldInitializer
+      }
+    }
+
+    initializers.push(`${emitCClassFieldName(field.name)}(${initializer})`)
   }
 
   if (initializers.length === 0) {
@@ -738,7 +791,11 @@ export function emitCClassConstructorPrototype(info: CClassInfo, context: ClassI
   return `${emitCClassInfoTypeName(info)}(${emitCClassParamDeclarations(params, context)});`
 }
 
-export function emitCClassConstructorHead(info: CClassInfo, context: ClassInfoLookupContext): string | null {
+export function emitCClassConstructorHead(
+  info: CClassInfo,
+  context: ClassInfoLookupContext,
+  fieldInitializers?: Map<string, string> | null
+): string | null {
   const constructorMethod = info.constructor
 
   if (constructorMethod === null || typeof constructorMethod === 'undefined') {
@@ -748,7 +805,7 @@ export function emitCClassConstructorHead(info: CClassInfo, context: ClassInfoLo
   const params: CFunctionParam[] = constructorMethod.params
   const typeName = emitCClassInfoTypeName(info)
   const paramDeclarations = emitCClassParamDeclarations(params, context)
-  const initializers = emitCClassConstructorInitializers(info, context)
+  const initializers = emitCClassConstructorInitializers(info, context, fieldInitializers)
 
   return typeName + '::' + typeName + '(' + paramDeclarations + ')' + initializers
 }
@@ -922,6 +979,10 @@ function emitCClassDescriptorFieldReadLines(field: CObjectShapeField, context: C
 
   if (classFieldUsesRuntimeValueStorage(field)) {
     return [`return ${reference}.copy_to(out);`]
+  }
+
+  if (classFieldUsesCppStringStorage(field)) {
+    return [`*out = ${reference}.raw();`, 'inox_retain(*out);', 'return INOX_OK;']
   }
 
   if (classFieldUsesNativeClassStorage(field)) {
@@ -2559,7 +2620,9 @@ function emitPreparedNativeClassConstructorArgs(
     const arg = prepared.args[index]
     const param = index < params.length ? params[index] : null
 
-    if (param !== null && classParamUsesCppValueStorage(param)) {
+    if (param !== null && classParamUsesCppStringStorage(param)) {
+      args.push('inox::String(inox::Value(' + arg + '))')
+    } else if (param !== null && classParamUsesCppValueStorage(param)) {
       args.push('inox::Value(' + arg + ')')
     } else {
       args.push(arg)
@@ -2578,7 +2641,10 @@ function canUseCppValueConstructorArgFastPath(params: CFunctionParam[], expressi
   }
 
   for (const param of params) {
-    if (!classParamUsesCppValueStorage(param) || classParamNeedsGenericConstructorArgLowering(param)) {
+    if (
+      (!classParamUsesCppValueStorage(param) && !classParamUsesCppStringStorage(param)) ||
+      classParamNeedsGenericConstructorArgLowering(param)
+    ) {
       return false
     }
   }
@@ -2605,14 +2671,24 @@ function emitPreparedCppValueConstructorArgs(
     const arg = expression.args[index]
 
     if (param.valueType === 'string' && arg.type === 'StringLiteral') {
-      args.push(`inox::string(${cStringLiteral(arg.value)}, ${utf8ByteLength(arg.value)})`)
+      const value = `inox::string(${cStringLiteral(arg.value)}, ${utf8ByteLength(arg.value)})`
+
+      if (classParamUsesCppStringStorage(param)) {
+        args.push(`inox::String(${value})`)
+      } else {
+        args.push(value)
+      }
       continue
     }
 
     const value = emitClassValueExpression(context, arg)
 
     pushAllLines(lines, value.lines)
-    args.push(`inox::Value(${value.expression})`)
+    if (classParamUsesCppStringStorage(param)) {
+      args.push(`inox::String(inox::Value(${value.expression}))`)
+    } else {
+      args.push(`inox::Value(${value.expression})`)
+    }
   }
 
   return {
@@ -2852,7 +2928,6 @@ function emitPreparedThrowingClassMethodCallExpression(
 
   if (classMethodTakesEventLoopParam(call.info, method, context)) {
     registerEventLoop(context)
-    callArgs.push(emitEventLoopReference(context))
   }
 
   if (!call.native) {
@@ -2964,7 +3039,6 @@ function emitClassMethodCallExpression(
 
   if (classMethodTakesEventLoopParam(call.info, method, context)) {
     registerEventLoop(context)
-    args.push(emitEventLoopReference(context))
   }
 
   for (const arg of prepared.args) {
@@ -3343,6 +3417,15 @@ export function emitPreparedNativeClassFieldValueExpression(
     }
   }
 
+  if (classFieldUsesCppStringStorage(access.field)) {
+    return {
+      lines: [],
+      expression: access.reference,
+      cppType: 'inox::String',
+      valueType: 'string'
+    }
+  }
+
   if (
     access.field.className !== null &&
     typeof access.field.className !== 'undefined'
@@ -3493,6 +3576,15 @@ export function emitNativeClassFieldAssignment(
 
   if (access.field.valueType === 'boolean') {
     lines.push(`${access.reference} = ${value.expression}.as.boolean;`)
+    return lines
+  }
+
+  if (classFieldUsesCppStringStorage(access.field)) {
+    if (value.cppType === 'inox::String') {
+      lines.push(`${access.reference} = ${value.expression};`)
+    } else {
+      lines.push(`${access.reference} = inox::String(inox::Value(${value.expression}));`)
+    }
     return lines
   }
 
