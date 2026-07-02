@@ -42,13 +42,14 @@ try {
   )
   assert.match(
     source,
-    /if \(!inox_res_\d+\) \{\n\s+inox::throw_value\(inox_res_\d+\.error_value\(\)\);\n\s+goto catch_\d+;/
+    /if \(inox::thrown\(\)\) \{\n\s+goto catch_\d+;/
   )
   assert.match(source, /auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
   assert.doesNotMatch(source, /inox_res_\d+\.ok\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.error\(\)/)
+  assert.doesNotMatch(source, /inox_res_\d+\.error_value\(\)/)
   assert.doesNotMatch(source, /int inox_error_active = 0;/)
   assert.doesNotMatch(source, /inox_error_active = 1;/)
   assert.doesNotMatch(source, /inox_error_active = 0;/)

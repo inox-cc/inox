@@ -264,6 +264,7 @@ AwaitResult<T> await_result(inox_loop* loop, inox_promise* promise) {
   inox_status status = inox_promise_await(loop, promise, true, value.out(), &state);
 
   if (status != INOX_OK) {
+    throw_value(Value());
     return AwaitResult<T>::failed(status);
   }
 
@@ -272,9 +273,11 @@ AwaitResult<T> await_result(inox_loop* loop, inox_promise* promise) {
   }
 
   if (state == INOX_PROMISE_REJECTED) {
+    throw_value(value);
     return AwaitResult<T>::rejected(std::move(value));
   }
 
+  throw_value(Value());
   return AwaitResult<T>::failed(INOX_ERR_TYPE);
 }
 

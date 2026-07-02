@@ -55,7 +55,7 @@ for (const a of foo.v) {
 
   assert.match(source, /auto inox_res_\d+ = inox::await_result<inox::FetchResponse>/)
   assert.match(source, /auto inox_res_\d+ = inox::await_result<inox::String>/)
-  assert.match(source, /if \(!inox_res_\d+\) \{/)
+  assert.match(source, /if \(inox::thrown\(\)\) \{/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
   assert.doesNotMatch(source, /inox_res_\d+\.value\(\)\.valid\(\)/)
   assert.match(source, /auto txt = inox_res_\d+\.value\(\);/)

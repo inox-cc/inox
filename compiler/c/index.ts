@@ -8125,11 +8125,9 @@ function emitAwaitResultRejectedPromiseLines(
 
   const lines: string[] = []
 
-  lines.push(`if (!${result}) {`)
+  lines.push('if (inox::thrown()) {')
   if (target === '') {
-    lines.push(`  inox_error = ${result}.error_value();`)
-  } else {
-    lines.push(`  inox::throw_value(${result}.error_value());`)
+    lines.push('  inox_error = inox::take_exception();')
   }
   if (errorActiveNeeded) {
     lines.push('  inox_error_active = 1;')

@@ -55,11 +55,11 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /if \(!inox_res_0\) \{\n\s+inox::throw_value\(inox_res_0\.error_value\(\)\);\n\s+goto catch_0;/
+    /if \(inox::thrown\(\)\) \{\n\s+goto catch_0;/
   )
   assert.match(
     checkFetch,
-    /if \(!inox_res_1\) \{\n\s+inox::throw_value\(inox_res_1\.error_value\(\)\);\n\s+goto catch_0;/
+    /if \(inox::thrown\(\)\) \{\n\s+goto catch_0;/
   )
   assert.match(checkFetch, /auto inox_error = inox::take_exception\(\);/)
   assert.match(checkFetch, /auto res = inox_res_0\.value\(\);/)
@@ -73,6 +73,7 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.valid\(\)/)
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.ok\(\)/)
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.error\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_res_\d+\.error_value\(\)/)
   assert.doesNotMatch(checkFetch, /inox_object_get\(res/)
   assert.doesNotMatch(checkFetch, /inox_fetch_response_text\(inox_loop, res/)
   assert.doesNotMatch(checkFetch, /inox_loop/)
