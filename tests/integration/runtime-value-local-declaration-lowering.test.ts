@@ -47,11 +47,14 @@ for (const a of foo.v) {
   assert.doesNotMatch(appMainPrelude, /inox::Value e;/)
   assert.match(source, /\n    inox::Value foo;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
-  assert.match(source, /\n        inox::Value b = inox::adopt\(inox_object_values_\d+\.release\(\)\);/)
-  assert.match(source, /\n        inox::Value c = inox_object_value_\d+;/)
+  assert.match(source, /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_length_\d+; \+\+inox_for_index_\d+\) \{\n      inox::Value inox_for_value_\d+;/)
+  assert.doesNotMatch(source, /for \(size_t [^)]+\) \{\n\s+\{/)
+  assert.doesNotMatch(source, /for \(size_t [^)]+; [^)]+ \+= 1\)/)
+  assert.match(source, /\n      inox::Value b = inox::adopt\(inox_object_values_\d+\.release\(\)\);/)
+  assert.match(source, /\n      inox::Value c = inox_object_value_\d+;/)
   assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
-  assert.match(source, /\n        inox::Value d = inox::adopt\(inox_object_entries_\d+\.release\(\)\);/)
-  assert.match(source, /\n        inox::Value e = inox_object_entry_\d+;/)
+  assert.match(source, /\n      inox::Value d = inox::adopt\(inox_object_entries_\d+\.release\(\)\);/)
+  assert.match(source, /\n      inox::Value e = inox_object_entry_\d+;/)
   assert.doesNotMatch(source, /inox::Value e = inox::adopt\(inox_object_entry_\d+\.release\(\)\);/)
 }
 

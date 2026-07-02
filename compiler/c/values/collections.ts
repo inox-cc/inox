@@ -561,7 +561,7 @@ function emitMapConstructorCopiedEntries(
 
   pushAllLines(lines, source.lines)
   lines.push(`inox_map* ${sourceMap} = (inox_map*)${sourceExpression}.as.ref;`)
-  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceMap}->cap; ${index} += 1) {`)
+  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceMap}->cap; ++${index}) {`)
   lines.push(`  if (${sourceMap}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) {`)
   lines.push('    continue;')
   lines.push('  }')
@@ -630,7 +630,7 @@ function emitSetConstructorCopiedElements(
 
   pushAllLines(lines, source.lines)
   lines.push(`inox_set* ${sourceSet} = (inox_set*)${sourceExpression}.as.ref;`)
-  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->cap; ${index} += 1) {`)
+  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->cap; ++${index}) {`)
   lines.push(`  if (${sourceSet}->entries[${index}].state != INOX_SET_SLOT_OCCUPIED) {`)
   lines.push('    continue;')
   lines.push('  }')

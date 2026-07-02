@@ -43,25 +43,27 @@ await checkFetch()
   const source = generatedTextFile(files, 'src/index.cc').code
   const checkFetch = functionSource(source, 'static void checkFetch(void) {')
 
+  assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)
   assert.match(
     checkFetch,
-    /auto inox_await_result_\d+ = inox::await_result<inox::FetchResponse>\(inox::fetch\(inox::string_view\("http:\/\/example.com\/"\)\)\);/
+    /auto inox_res_0 = inox::await_result<inox::FetchResponse>\(inox::fetch\(inox::string_view\("http:\/\/example.com\/"\)\)\);/
   )
   assert.match(checkFetch, /printf\("Status %\.17g\\n", res\.status\(\)\);/)
   assert.match(
     checkFetch,
-    /auto inox_await_result_\d+ = inox::await_result<inox::String>\(res\.text\(\)\);/
+    /auto inox_res_1 = inox::await_result<inox::String>\(res\.text\(\)\);/
   )
   assert.match(
     checkFetch,
-    /if \(!inox_await_result_\d+\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_await_result_\d+\.error_value\(\);/
+    /if \(!inox_res_0\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_0\.error_value\(\);/
   )
-  assert.match(checkFetch, /inox::String txt = inox_await_result_\d+\.value\(\);/)
+  assert.match(checkFetch, /inox::String txt = inox_res_1\.value\(\);/)
   assert.match(checkFetch, /printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);/)
-  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.status\(\)/)
-  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.valid\(\)/)
-  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.ok\(\)/)
-  assert.doesNotMatch(checkFetch, /inox_await_result_\d+\.error\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_await_result_\d+/)
+  assert.doesNotMatch(checkFetch, /inox_res_\d+\.status\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_res_\d+\.valid\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_res_\d+\.ok\(\)/)
+  assert.doesNotMatch(checkFetch, /inox_res_\d+\.error\(\)/)
   assert.doesNotMatch(checkFetch, /inox_object_get\(res/)
   assert.doesNotMatch(checkFetch, /inox_fetch_response_text\(inox_loop, res/)
   assert.doesNotMatch(checkFetch, /inox_loop/)

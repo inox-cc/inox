@@ -183,6 +183,7 @@ type CFunctionContext = {
   netImportNames: CStringSet
   netReadingSockets: CStringSet
   narrowedNullableScalars: CStringSet
+  nextAwaitResultId: number
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet
@@ -569,6 +570,33 @@ function pushIndentedLines(target: string[], source: string[], indent: string): 
   for (const line of source) {
     target.push(`${indent}${line}`)
   }
+}
+
+function stripOuterGeneratedScope(lines: string[]): string[] {
+  const stripped: string[] = []
+
+  for (let index = 1; index < lines.length - 1; index = index + 1) {
+    const line = lines[index]
+
+    if (line.slice(0, 2) === '  ') {
+      stripped.push(line.slice(2))
+    } else {
+      stripped.push(line)
+    }
+  }
+
+  return stripped
+}
+
+function pushLoopBodyLines(target: string[], body: string[], indent: string, scoped: boolean): void {
+  if (!scoped) {
+    pushIndentedLines(target, body, indent)
+    return
+  }
+
+  target.push(`${indent}{`)
+  pushIndentedLines(target, body, `${indent}  `)
+  target.push(`${indent}}`)
 }
 
 function constPrefix(_isConst: boolean): string {
@@ -1158,11 +1186,10 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
 
   if (condition.lines.length === 0) {
     const lines: string[] = []
+    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
     lines.push(`while ${emitCConditionClause(condition.expression)} {`)
-    lines.push('  {')
-    pushIndentedLines(lines, body, '    ')
-    lines.push('  }')
-    if (shouldEmitFlowTargetLabel(continueTarget)) {
+    pushLoopBodyLines(lines, body, '  ', hasContinueLabel)
+    if (hasContinueLabel) {
       pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
     }
     lines.push('}')
@@ -1174,13 +1201,12 @@ export function emitWhileStatement(statement: StatementNode, context: CFunctionC
   }
 
   const lines: string[] = []
+  const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
   lines.push('while (1) {')
   pushIndentedLines(lines, condition.lines, '  ')
   lines.push(`  if ${emitCNegatedConditionClause(condition.expression)} break;`)
-  lines.push('  {')
-  pushIndentedLines(lines, body, '    ')
-  lines.push('  }')
-  if (shouldEmitFlowTargetLabel(continueTarget)) {
+  pushLoopBodyLines(lines, body, '  ', hasContinueLabel)
+  if (hasContinueLabel) {
     pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
   }
   lines.push('}')
@@ -1220,11 +1246,10 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
 
     if (!needsPreparedLowering) {
       const lines: string[] = []
+      const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
       lines.push(`for (${init.expression}; ${test.expression}; ${update.expression}) {`)
-      lines.push('  {')
-      pushIndentedLines(lines, body, '    ')
-      lines.push('  }')
-      if (shouldEmitFlowTargetLabel(continueTarget)) {
+      pushLoopBodyLines(lines, body, '  ', hasContinueLabel)
+      if (hasContinueLabel) {
         pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
       }
       lines.push('}')
@@ -1250,10 +1275,9 @@ export function emitForStatement(statement: StatementNode, context: CFunctionCon
       lines.push(`    if ${emitCNegatedConditionClause(test.expression)} break;`)
     }
 
-    lines.push('    {')
-    pushIndentedLines(lines, body, '      ')
-    lines.push('    }')
-    if (shouldEmitFlowTargetLabel(continueTarget)) {
+    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
+    pushLoopBodyLines(lines, body, '    ', hasContinueLabel)
+    if (hasContinueLabel) {
       pushIndentedLines(lines, emitContinueTargetLabel(continueTarget.label, context), '  ')
     }
     pushIndentedLines(lines, update.lines, '    ')
@@ -3120,15 +3144,14 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
       lines.push(emitStatusCheck(`inox_array_len(${arrayName}, &${length})`, context))
     }
 
-    lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ${index} += 1) {`)
-    lines.push('  {')
-    lines.push(`    inox::Value ${value};`)
-    lines.push(`    ${getElementStatus}`)
-    pushIndentedLines(lines, element.lines, '    ')
-    lines.push(`    ${element.expression}`)
-    pushIndentedLines(lines, body, '    ')
-    lines.push('  }')
-    if (shouldEmitFlowTargetLabel(continueTarget)) {
+    lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
+    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
+    const loopBody = [`inox::Value ${value};`, `${getElementStatus}`]
+    pushAllLines(loopBody, element.lines)
+    loopBody.push(element.expression)
+    pushAllLines(loopBody, body)
+    pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
+    if (hasContinueLabel) {
       pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
     }
     lines.push('}')
@@ -3206,16 +3229,17 @@ function emitRuntimeMapForOfStatement(
     const lines: string[] = []
     pushAllLines(lines, runtimeMap.lines)
     lines.push(`inox_map* ${map} = (inox_map*)${runtimeMap.name}.as.ref;`)
-    lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ${index} += 1) {`)
+    lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ++${index}) {`)
     lines.push(`  if (${map}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) continue;`)
-    lines.push('  {')
-    pushIndentedLines(lines, emitPrepareOwnedValueWrite(statement.name), '    ')
-    lines.push(`    ${createEntryStatus}`)
-    lines.push(`    ${initKeyStatus}`)
-    lines.push(`    ${initValueStatus}`)
-    pushIndentedLines(lines, body, '    ')
-    lines.push('  }')
-    if (shouldEmitFlowTargetLabel(continueTarget)) {
+    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
+    const loopBody: string[] = []
+    pushAllLines(loopBody, emitPrepareOwnedValueWrite(statement.name))
+    loopBody.push(createEntryStatus)
+    loopBody.push(initKeyStatus)
+    loopBody.push(initValueStatus)
+    pushAllLines(loopBody, body)
+    pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
+    if (hasContinueLabel) {
       pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
     }
     lines.push('}')
@@ -3325,20 +3349,21 @@ function emitRuntimeCollectionValueForOfStatement(
     const lines: string[] = []
     pushAllLines(lines, setupLines)
     lines.push(`${collectionType}* ${collection} = (${collectionType}*)${collectionName}.as.ref;`)
-    lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->cap; ${index} += 1) {`)
+    lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->cap; ++${index}) {`)
     lines.push(`  if (${collection}->entries[${index}].state != ${slotState}) continue;`)
-    lines.push('  {')
-    pushIndentedLines(lines, emitPrepareOwnedValueWrite(value), '    ')
+    const loopBody: string[] = []
+    pushAllLines(loopBody, emitPrepareOwnedValueWrite(value))
     if (isMap && useKey) {
-      lines.push(`    ${value} = ${collection}->entries[${index}].key;`)
+      loopBody.push(`${value} = ${collection}->entries[${index}].key;`)
     } else {
-      lines.push(`    ${value} = ${collection}->entries[${index}].value;`)
+      loopBody.push(`${value} = ${collection}->entries[${index}].value;`)
     }
-    pushIndentedLines(lines, element.lines, '    ')
-    lines.push(`    ${element.expression}`)
-    pushIndentedLines(lines, body, '    ')
-    lines.push('  }')
-    if (shouldEmitFlowTargetLabel(continueTarget)) {
+    pushAllLines(loopBody, element.lines)
+    loopBody.push(element.expression)
+    pushAllLines(loopBody, body)
+    const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
+    pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
+    if (hasContinueLabel) {
       pushAllLines(lines, emitContinueTargetLabel(continueTarget.label, context))
     }
     lines.push('}')
@@ -3664,7 +3689,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
   lines.push('  ;')
   lines.push('}')
 
-  return lines
+  return stripOuterGeneratedScope(lines)
 }
 
 export function emitThrowStatement(statement: StatementNode, context: CFunctionContext): string[] {

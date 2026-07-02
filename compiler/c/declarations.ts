@@ -288,6 +288,7 @@ export function emitFunctionDeclaration(
   pushIndentedDeclarationLines(bodyLines, emitRuntimeParamPreludeForParams(statement, params, context))
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(statement.body, context))
   pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
+  const needsCleanup = shouldEmitCleanupLabel(context)
 
   lines.push(`${emitFunctionHead(statement, context)} {`)
   pushIndentedDeclarationLines(lines, emitThrowingFunctionPrelude(context))
@@ -301,9 +302,9 @@ export function emitFunctionDeclaration(
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
-  pushScopedDeclarationBody(lines, bodyLines)
 
-  if (shouldEmitCleanupLabel(context)) {
+  if (needsCleanup) {
+    pushScopedDeclarationBody(lines, bodyLines)
     lines.push('cleanup:')
     pushIndentedDeclarationLines(lines, emitThrowingFunctionErrorTransfer(context))
     pushIndentedDeclarationLines(lines, emitOwnedValueCleanup(context))
@@ -318,7 +319,10 @@ export function emitFunctionDeclaration(
       returnValue = '""'
     }
 
+    pushDeclarationLines(lines, bodyLines)
     lines.push(`  return ${returnValue};`)
+  } else {
+    pushDeclarationLines(lines, bodyLines)
   }
 
   lines.push('}')

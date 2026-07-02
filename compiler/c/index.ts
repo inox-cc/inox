@@ -8012,7 +8012,8 @@ function emitPreparedAwaitResultExpression(
   rejectionValueType: string,
   context: CFunctionContext
 ): PreparedExpression {
-  const result = nextCName(context, 'inox_await_result')
+  const result = `inox_res_${context.nextAwaitResultId}`
+  context.nextAwaitResultId = context.nextAwaitResultId + 1
   const valueExpression = `${result}.value()`
   const valueInfo = resolveAwaitResultCppValueInfo(expression, result, valueType, valueTag, valueCheckNeeded, context)
   const lines: string[] = []

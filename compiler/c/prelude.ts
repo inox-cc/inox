@@ -329,7 +329,7 @@ function emitMathHelpers(random: CPreludeRandomConfig): string[] {
   lines.push('  if (value < 0) return 0.0/0.0;')
   lines.push('  if (value == 0) return 0;')
   lines.push('  double estimate = value < 1 ? 1 : value;')
-  lines.push('  for (int index = 0; index < 24; index += 1) {')
+  lines.push('  for (int index = 0; index < 24; ++index) {')
   lines.push('    estimate = 0.5 * (estimate + value/estimate);')
   lines.push('  }')
   lines.push('  return estimate;')
@@ -390,7 +390,7 @@ function emitOsEntropyHelper(): string[] {
     '  while (filled < len) {',
     '    unsigned int value = 0;',
     '    if (rand_s(&value) != 0) return 0;',
-    '    for (size_t index = 0; index < sizeof(value) && filled < len; index += 1) {',
+    '    for (size_t index = 0; index < sizeof(value) && filled < len; ++index) {',
     '      out[filled] = (uint8_t)(value >> (index * 8));',
     '      filled += 1;',
     '    }',

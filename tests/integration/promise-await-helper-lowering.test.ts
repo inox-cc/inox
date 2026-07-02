@@ -63,14 +63,15 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_await_result_\d+ = inox::await_result<inox::Value>\(inox_promise_\d+\);/)
+  assert.match(source, /auto inox_res_\d+ = inox::await_result<inox::Value>\(inox_promise_\d+\);/)
   assert.match(
     source,
-    /if \(!inox_await_result_\d+\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_await_result_\d+\.error_value\(\);/
+    /if \(!inox_res_\d+\) \{\n\s+inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/
   )
-  assert.doesNotMatch(source, /inox_await_result_\d+\.ok\(\)/)
-  assert.doesNotMatch(source, /inox_await_result_\d+\.error\(\)/)
-  assert.doesNotMatch(source, /inox_await_result_\d+\.status\(\)/)
+  assert.doesNotMatch(source, /inox_await_result_\d+/)
+  assert.doesNotMatch(source, /inox_res_\d+\.ok\(\)/)
+  assert.doesNotMatch(source, /inox_res_\d+\.error\(\)/)
+  assert.doesNotMatch(source, /inox_res_\d+\.status\(\)/)
   assert.doesNotMatch(source, /INOX_PROMISE_REJECTED/)
   assert.doesNotMatch(source, /while \(inox_promise_get_state/)
 }

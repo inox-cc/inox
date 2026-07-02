@@ -188,6 +188,7 @@ type CFunctionContext = CEmitContext & {
   moduleValueNames: CStringMap
   moduleValueTypes: CStringMap
   narrowedNullableScalars: CStringSet
+  nextAwaitResultId: number
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet
