@@ -61,15 +61,15 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /auto inox_res_1 = inox::await_result<inox::String>\(res\.text\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto txt = inox_res_1\.value\(\);\n\n\s+printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);/
+    /auto inox_res_1 = inox::await_result<inox::String>\(res\.text\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto txt = inox_res_1\.value\(\);\n\n\s+printf\("Text %\.\*s\\n", \(int\)txt\.length\(\), txt\.bytes\(\)\);/
   )
   assert.match(checkFetch, /auto inox_error = inox::take_exception\(\);/)
   assert.match(checkFetch, /auto res = inox_res_0\.value\(\);/)
   assert.match(checkFetch, /auto txt = inox_res_1\.value\(\);/)
-  assert.match(checkFetch, /printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);/)
+  assert.match(checkFetch, /printf\("Text %\.\*s\\n", \(int\)txt\.length\(\), txt\.bytes\(\)\);/)
   assert.match(
     checkFetch,
-    /printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);\n    goto end_0;\n  \} catch_0: \{/
+    /printf\("Text %\.\*s\\n", \(int\)txt\.length\(\), txt\.bytes\(\)\);\n    goto end_0;\n  \} catch_0: \{/
   )
   assert.match(checkFetch, /\} end_0:;/)
   assert.match(checkFetch, /\} end_0:;\n\}/)

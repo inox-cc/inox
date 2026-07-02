@@ -2401,7 +2401,7 @@ function emitPreparedRuntimeStringValueBytesOperand(
     return {
       lines,
       bytes: `${value.expression}.bytes()`,
-      length: `${value.expression}.len()`
+      length: `${value.expression}.length()`
     }
   }
 

@@ -262,7 +262,7 @@ public:
     return value.tag == INOX_TAG_STRING && value.as.ref != nullptr;
   }
 
-  size_t len() const {
+  size_t length() const {
     if (!valid()) {
       return 0;
     }

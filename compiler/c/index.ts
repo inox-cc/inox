@@ -6714,7 +6714,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines: [],
         format: '%.*s',
-        values: [`(int)${reference}.len()`, `${reference}.bytes()`]
+        values: [`(int)${reference}.length()`, `${reference}.bytes()`]
       }
     }
 
@@ -6941,7 +6941,7 @@ function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunct
     return {
       lines,
       format: '%.*s',
-      values: [`(int)${value.expression}.len()`, `${value.expression}.bytes()`]
+      values: [`(int)${value.expression}.length()`, `${value.expression}.bytes()`]
     }
   }
 
