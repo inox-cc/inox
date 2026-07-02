@@ -76,7 +76,11 @@ function functionSource(source: string, signatureStart: string): string {
 
   assert.notEqual(start, -1, `missing generated function ${signatureStart}`)
 
-  const nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)
+  let nextFunction = source.indexOf('\n\nstatic int inox_app_main', start + signatureStart.length)
+
+  if (nextFunction === -1) {
+    nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)
+  }
 
   assert.notEqual(nextFunction, -1, `missing generated function end ${signatureStart}`)
 

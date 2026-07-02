@@ -86,6 +86,7 @@ function cPreludeUsesOsRandom(random: CPreludeRandomConfig): boolean {
 
 export function emitCPrelude(
   needsRuntime: boolean,
+  needsMainRuntime: boolean,
   needsTimeRuntime: boolean,
   needsMathRuntime: boolean,
   needsCryptoRuntime: boolean,
@@ -124,6 +125,10 @@ export function emitCPrelude(
 
   if (needsConsoleRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/console.h"')
+  }
+
+  if (needsMainRuntime) {
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/main.h"')
   }
 
   if (needsCppValueRuntime) {

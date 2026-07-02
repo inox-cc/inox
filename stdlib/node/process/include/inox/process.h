@@ -36,12 +36,34 @@ void inox_process_exit(int code);
 
 #ifdef __cplusplus
 
-#include "inox/promise.h"
+#include "inox/main.h"
 
 namespace inox {
 
 inline int return_code() {
   return inox::return_code(inox_process_get_exit_code());
+}
+
+inline int main(int argc, char** argv, AppMain app_main) {
+  inox_process_init(argc, argv);
+  const int code = run_app(app_main);
+
+  if (code != 0) {
+    return return_code(code);
+  }
+
+  return return_code();
+}
+
+inline int main(int argc, char** argv, const char* entry_path, AppMain app_main) {
+  inox_process_init_with_entry(argc, argv, entry_path);
+  const int code = run_app(app_main);
+
+  if (code != 0) {
+    return return_code(code);
+  }
+
+  return return_code();
 }
 
 } // namespace inox

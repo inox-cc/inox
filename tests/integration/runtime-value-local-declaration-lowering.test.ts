@@ -37,13 +37,14 @@ for (const a of foo.v) {
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const mainPrelude = source.slice(source.indexOf('int main('), source.indexOf('  {', source.indexOf('int main(')))
+  const appMainStart = source.indexOf('static int inox_app_main(void)')
+  const appMainPrelude = source.slice(appMainStart, source.indexOf('  {', appMainStart))
 
-  assert.doesNotMatch(mainPrelude, /inox::Value foo;/)
-  assert.doesNotMatch(mainPrelude, /inox::Value b;/)
-  assert.doesNotMatch(mainPrelude, /inox::Value c;/)
-  assert.doesNotMatch(mainPrelude, /inox::Value d;/)
-  assert.doesNotMatch(mainPrelude, /inox::Value e;/)
+  assert.doesNotMatch(appMainPrelude, /inox::Value foo;/)
+  assert.doesNotMatch(appMainPrelude, /inox::Value b;/)
+  assert.doesNotMatch(appMainPrelude, /inox::Value c;/)
+  assert.doesNotMatch(appMainPrelude, /inox::Value d;/)
+  assert.doesNotMatch(appMainPrelude, /inox::Value e;/)
   assert.match(source, /\n    inox::Value foo;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
   assert.match(source, /\n        inox::Value b = inox::adopt\(inox_object_values_\d+\.release\(\)\);/)

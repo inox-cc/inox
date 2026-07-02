@@ -33,9 +33,14 @@ run()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
+  const appMain = functionSource(source, 'static int inox_app_main(void) {')
+  const main = functionSource(source, 'int main(void) {')
 
   assert.match(source, /#include "inox\/promise\.h"/)
-  assert.match(source, /inox::RuntimeContext inox_runtime\(&inox_default_allocator, inox_performance_now\(\)\);/)
+  assert.match(source, /#include "inox\/main\.h"/)
+  assert.match(source, /static int inox_app_main\(void\)/)
+  assert.doesNotMatch(appMain, /inox::RuntimeContext inox_runtime/)
+  assert.doesNotMatch(main, /inox::RuntimeContext inox_runtime/)
   assert.doesNotMatch(source, /inox::Runtime inox_runtime;/)
   assert.doesNotMatch(source, /inox::RuntimeScope inox_runtime_scope/)
   assert.doesNotMatch(source, /inox_runtime\.init/)
@@ -43,12 +48,26 @@ run()
   assert.match(source, /inox::Promise promise;/)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
   assert.doesNotMatch(source, /return !inox_promise_has_unhandled_rejection/)
-  assert.match(source, /return inox::return_code\(0\);/)
+  assert.match(source, /return inox::main\(inox_app_main\);/)
   assert.doesNotMatch(source, /int inox_loop_active = 0;/)
   assert.doesNotMatch(source, /inox_loop_dispose/)
   assert.doesNotMatch(source, /promise\.reset\(\);/)
   assert.doesNotMatch(source, /\n\s+inox_promise\* promise = 0;/)
   assert.doesNotMatch(source, /inox_promise_release\(promise\);/)
+}
+
+function functionSource(source: string, signatureStart: string): string {
+  const start = source.indexOf(signatureStart)
+
+  assert.notEqual(start, -1, `missing generated function ${signatureStart}`)
+
+  const nextFunction = source.indexOf('\n\n', start + signatureStart.length)
+
+  if (nextFunction === -1) {
+    return source.slice(start)
+  }
+
+  return source.slice(start, nextFunction)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

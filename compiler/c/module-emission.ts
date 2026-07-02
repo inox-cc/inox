@@ -420,6 +420,7 @@ export function emitCModuleSource(
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, context)
 
+  const emitsMain = plan.isEntry || plan.initName === null || typeof plan.initName === 'undefined'
   const lines: string[] = []
   lines.push(`#include "${relativeCIncludePath(plan.sourcePath, plan.headerPath, options.host)}"`)
 
@@ -443,6 +444,7 @@ export function emitCModuleSource(
     lines,
     emitCPrelude(
       prelude.needsRuntime,
+      emitsMain,
       prelude.needsTimeRuntime,
       prelude.needsMathRuntime,
       prelude.needsCryptoRuntime,
@@ -2131,34 +2133,35 @@ function emitCModuleMainFunction(
   const initCalls = emitCModuleImportInitCalls(plan)
   context.moduleValueDeclarationScope = true
   context.cleanupEnabled = false
+  context.externalEventLoop = true
   context.failureStatement = 'return 1;'
   const bodyLines: string[] = []
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
-  pushIndentedCModuleLines(bodyLines, emitEventLoopDrain(context))
   const lines: string[] = []
 
-  if (context.processRuntime) {
-    lines.push('int main(int argc, char** argv) {')
-  } else {
-    lines.push('int main(void) {')
-  }
-
-  if (context.processRuntime) {
-    lines.push(`  inox_process_init_with_entry(argc, argv, ${cStringLiteral(plan.relativeSourcePath)});`)
-  }
+  lines.push('static int inox_app_main(void) {')
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
-  pushIndentedCModuleLines(lines, emitEventLoopDeclarations(context))
   pushIndentedCModuleLines(lines, emitOwnedValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitOwnedPromiseDeclarations(context))
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
-  pushIndentedCModuleLines(lines, emitEventLoopInit(context))
   pushScopedCModuleBody(lines, bodyLines)
 
   lines.push(`  return ${deps.emitMainReturnExpression(context)};`)
+  lines.push('}')
+  lines.push('')
+
+  if (context.processRuntime) {
+    lines.push('int main(int argc, char** argv) {')
+    lines.push(`  return inox::main(argc, argv, ${cStringLiteral(plan.relativeSourcePath)}, inox_app_main);`)
+  } else {
+    lines.push('int main(void) {')
+    lines.push('  return inox::main(inox_app_main);')
+  }
+
   lines.push('}')
 
   return lines

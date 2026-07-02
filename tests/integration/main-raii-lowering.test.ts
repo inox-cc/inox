@@ -19,21 +19,23 @@ console.log(value)
       target: 'cc'
     }
   )
+  const appMain = appMainFunctionSource(result.code)
   const main = mainFunctionSource(result.code)
 
-  assert.doesNotMatch(main, /\ncleanup:/)
-  assert.doesNotMatch(main, /goto cleanup;/)
-  assert.doesNotMatch(main, /while \(inox_loop_has_work/)
-  assert.match(main, /inox::RuntimeContext inox_runtime\(&inox_default_allocator, inox_performance_now\(\)\);/)
-  assert.doesNotMatch(main, /inox::Runtime inox_runtime;/)
-  assert.doesNotMatch(main, /inox::RuntimeScope inox_runtime_scope/)
-  assert.doesNotMatch(main, /inox_runtime\.init/)
-  assert.doesNotMatch(main, /inox::loop\(\)->now_ms/)
-  assert.match(main, /inox::run\(\)/)
-  assert.match(main, /return 1;/)
-  assert.doesNotMatch(main, /\.has_unhandled_rejection\(\)/)
-  assert.doesNotMatch(main, /inox_promise_has_unhandled_rejection\(\)/)
-  assert.match(main, /return inox::return_code\(0\);/)
+  assert.match(result.code, /#include "inox\/main\.h"/)
+  assert.match(result.code, /static int inox_app_main\(void\)/)
+  assert.doesNotMatch(appMain, /\ncleanup:/)
+  assert.doesNotMatch(appMain, /goto cleanup;/)
+  assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
+  assert.doesNotMatch(result.code, /inox::RuntimeContext inox_runtime/)
+  assert.doesNotMatch(result.code, /inox::Runtime inox_runtime;/)
+  assert.doesNotMatch(result.code, /inox::RuntimeScope inox_runtime_scope/)
+  assert.doesNotMatch(result.code, /inox_runtime\.init/)
+  assert.doesNotMatch(result.code, /inox::loop\(\)->now_ms/)
+  assert.doesNotMatch(result.code, /\.has_unhandled_rejection\(\)/)
+  assert.doesNotMatch(result.code, /inox_promise_has_unhandled_rejection\(\)/)
+  assert.match(appMain, /return 0;/)
+  assert.match(main, /return inox::main\(inox_app_main\);/)
 }
 
 export function assertModuleMainUsesRaiiReturns(): void {
@@ -41,21 +43,23 @@ export function assertModuleMainUsesRaiiReturns(): void {
 const value = await Promise.resolve('ok')
 console.log(value)
 `)
+  const appMain = appMainFunctionSource(source)
   const main = mainFunctionSource(source)
 
-  assert.doesNotMatch(main, /\ncleanup:/)
-  assert.doesNotMatch(main, /goto cleanup;/)
-  assert.doesNotMatch(main, /while \(inox_loop_has_work/)
-  assert.match(main, /inox::RuntimeContext inox_runtime\(&inox_default_allocator, inox_performance_now\(\)\);/)
-  assert.doesNotMatch(main, /inox::Runtime inox_runtime;/)
-  assert.doesNotMatch(main, /inox::RuntimeScope inox_runtime_scope/)
-  assert.doesNotMatch(main, /inox_runtime\.init/)
-  assert.doesNotMatch(main, /inox::loop\(\)->now_ms/)
-  assert.match(main, /inox::run\(\)/)
-  assert.match(main, /return 1;/)
-  assert.doesNotMatch(main, /\.has_unhandled_rejection\(\)/)
-  assert.doesNotMatch(main, /inox_promise_has_unhandled_rejection\(\)/)
-  assert.match(main, /return inox::return_code\(0\);/)
+  assert.match(source, /#include "inox\/main\.h"/)
+  assert.match(source, /static int inox_app_main\(void\)/)
+  assert.doesNotMatch(appMain, /\ncleanup:/)
+  assert.doesNotMatch(appMain, /goto cleanup;/)
+  assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
+  assert.doesNotMatch(source, /inox::RuntimeContext inox_runtime/)
+  assert.doesNotMatch(source, /inox::Runtime inox_runtime;/)
+  assert.doesNotMatch(source, /inox::RuntimeScope inox_runtime_scope/)
+  assert.doesNotMatch(source, /inox_runtime\.init/)
+  assert.doesNotMatch(source, /inox::loop\(\)->now_ms/)
+  assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
+  assert.doesNotMatch(source, /inox_promise_has_unhandled_rejection\(\)/)
+  assert.match(appMain, /return 0;/)
+  assert.match(main, /return inox::main\(inox_app_main\);/)
 }
 
 export function assertProcessMainUsesReturnCodeHelper(): void {
@@ -69,7 +73,7 @@ console.log(value)
   assert.match(source, /#include "inox\/process\.h"/)
   assert.doesNotMatch(main, /return !inox_promise_has_unhandled_rejection/)
   assert.doesNotMatch(main, /return inox_process_get_exit_code\(\)/)
-  assert.match(main, /return inox::return_code\(\);/)
+  assert.match(main, /return inox::main\(argc, argv, "src\/index\.ts", inox_app_main\);/)
 }
 
 export function assertAwaitFunctionUsesExternalLoopRuntime(): void {
@@ -94,8 +98,8 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /\ncleanup:/)
   assert.doesNotMatch(checkFetch, /inox_loop/)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
-  assert.match(main, /checkFetch\(\);/)
-  assert.match(main, /inox::run\(\)/)
+  assert.match(appMainFunctionSource(source), /checkFetch\(\);/)
+  assert.match(main, /return inox::main\(inox_app_main\);/)
 }
 
 function compileModuleMainSource(source: string): string {
@@ -127,12 +131,20 @@ function mainFunctionSource(source: string): string {
   return source.slice(start)
 }
 
+function appMainFunctionSource(source: string): string {
+  return functionSource(source, 'static int inox_app_main(void) {')
+}
+
 function functionSource(source: string, signatureStart: string): string {
   const start = source.indexOf(signatureStart)
 
   assert.notEqual(start, -1, `missing generated function ${signatureStart}`)
 
-  const nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)
+  let nextFunction = source.indexOf('\n\nstatic int inox_app_main', start + signatureStart.length)
+
+  if (nextFunction === -1) {
+    nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)
+  }
 
   assert.notEqual(nextFunction, -1, `missing generated function end ${signatureStart}`)
 

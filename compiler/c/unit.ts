@@ -1310,6 +1310,7 @@ export function emitCUnit(
   reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
   const lines = emitCPrelude(
     needsRuntime,
+    true,
     needsTimeRuntime,
     needsMathRuntime,
     needsCryptoRuntime,

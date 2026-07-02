@@ -1234,36 +1234,37 @@ export function emitMainWrapper(
 
   context.moduleValueDeclarationScope = true
   context.cleanupEnabled = false
+  context.externalEventLoop = true
   context.failureStatement = 'return 1;'
 
-  if (context.processRuntime) {
-    lines.push('int main(int argc, char** argv) {')
-  } else {
-    lines.push('int main(void) {')
-  }
-
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
-  pushIndentedDeclarationLines(bodyLines, emitEventLoopDrain(context))
 
-  if (context.processRuntime) {
-    if (baseContext.processEntryPath !== null) {
-      lines.push(`  inox_process_init_with_entry(argc, argv, ${cStringLiteral(baseContext.processEntryPath)});`)
-    } else {
-      lines.push('  inox_process_init(argc, argv);')
-    }
-  }
+  lines.push('static int inox_app_main(void) {')
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
-  pushIndentedDeclarationLines(lines, emitEventLoopDeclarations(context))
   pushIndentedDeclarationLines(lines, emitOwnedValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitOwnedPromiseDeclarations(context))
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
-  pushIndentedDeclarationLines(lines, emitEventLoopInit(context))
   pushScopedDeclarationBody(lines, bodyLines)
 
   lines.push(`  return ${emitMainReturnExpression(context)};`)
+  lines.push('}')
+  lines.push('')
+
+  if (context.processRuntime) {
+    lines.push('int main(int argc, char** argv) {')
+    if (baseContext.processEntryPath !== null) {
+      lines.push(`  return inox::main(argc, argv, ${cStringLiteral(baseContext.processEntryPath)}, inox_app_main);`)
+    } else {
+      lines.push('  return inox::main(argc, argv, inox_app_main);')
+    }
+  } else {
+    lines.push('int main(void) {')
+    lines.push('  return inox::main(inox_app_main);')
+  }
+
   lines.push('}')
 
   return lines
@@ -1272,21 +1273,11 @@ export function emitMainWrapper(
 export function emitMainReturnExpression(context: CFunctionContext): string {
   let successReturn = '0'
 
-  if (context.processRuntime) {
-    successReturn = 'inox_process_get_exit_code()'
-  } else if (context.returnType === 'number' && context.returnFlowUsed) {
+  if (!context.processRuntime && context.returnType === 'number' && context.returnFlowUsed) {
     successReturn = '(int)inox_return'
   }
 
-  if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
-    return successReturn
-  }
-
-  if (context.processRuntime) {
-    return 'inox::return_code()'
-  }
-
-  return `inox::return_code(${successReturn})`
+  return successReturn
 }
 
 function emitRuntimeParamPreludeForParams(
