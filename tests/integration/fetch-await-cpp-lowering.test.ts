@@ -55,12 +55,13 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /if \(!inox_res_0\) \{\n\s+inox_error = inox_res_0\.error_value\(\);\n\s+goto catch_0;/
+    /if \(!inox_res_0\) \{\n\s+inox::throw_value\(inox_res_0\.error_value\(\)\);\n\s+goto catch_0;/
   )
   assert.match(
     checkFetch,
-    /if \(!inox_res_1\) \{\n\s+inox_error = inox_res_1\.error_value\(\);\n\s+goto catch_0;/
+    /if \(!inox_res_1\) \{\n\s+inox::throw_value\(inox_res_1\.error_value\(\)\);\n\s+goto catch_0;/
   )
+  assert.match(checkFetch, /auto inox_error = inox::take_exception\(\);/)
   assert.match(checkFetch, /auto res = inox_res_0\.value\(\);/)
   assert.match(checkFetch, /auto txt = inox_res_1\.value\(\);/)
   assert.match(checkFetch, /printf\("Text %\.\*s\\n", \(int\)txt\.len\(\), txt\.bytes\(\)\);/)

@@ -2939,7 +2939,11 @@ function emitPreparedThrowingClassMethodCallExpression(
   }
 
   pushAllLines(lines, callLines)
-  registerClassMethodErrorChannel(context)
+  if (currentClassErrorTarget(context) !== null) {
+    registerOwnedValue(context, 'inox_error')
+  } else {
+    registerClassMethodErrorChannel(context)
+  }
   pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
 
   if (method.returnType !== 'void') {
@@ -2986,11 +2990,13 @@ function isThrowingClassMethodRuntimeOut(method: AnyNode): boolean {
 
 function emitThrowingClassMethodStatusCheck(status: string, context: ClassFunctionContext): string[] {
   const target = currentClassErrorTarget(context)
-  const lines = [`if (${status} == INOX_ERR_THROW) {`, '  inox_error_active = 1;']
+  const lines = [`if (${status} == INOX_ERR_THROW) {`]
 
   if (target !== null && typeof target !== 'undefined') {
+    lines.push('  inox::throw_value(inox_error);')
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
+    lines.push('  inox_error_active = 1;')
     lines.push('  inox_status_result = INOX_ERR_THROW;')
     lines.push('  goto cleanup;')
   } else {

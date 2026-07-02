@@ -31,7 +31,15 @@ inline int run_app(AppMain app_main) {
     return code;
   }
 
+  if (thrown()) {
+    return 1;
+  }
+
   if (run() != INOX_OK) {
+    return 1;
+  }
+
+  if (thrown()) {
     return 1;
   }
 
@@ -55,7 +63,21 @@ inline inox_status run_status_app(AppStatusMain app_main) {
     return status;
   }
 
-  return run();
+  if (thrown()) {
+    return INOX_ERR_TYPE;
+  }
+
+  const inox_status run_status = run();
+
+  if (run_status != INOX_OK) {
+    return run_status;
+  }
+
+  if (thrown()) {
+    return INOX_ERR_TYPE;
+  }
+
+  return INOX_OK;
 }
 
 inline int main(AppStatusMain app_main) {

@@ -34,9 +34,9 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /goto end_\d+;\n\n\s+catch_\d+:\n\s+if /)
-  assert.doesNotMatch(source, /catch_\d+:\n\n\s+if /)
-  assert.match(source, /inox_error = inox_undefined_value\(\);\n\s+end_\d+:\n\s+;/)
+  assert.match(source, /goto end_\d+;\n\s+catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
+  assert.doesNotMatch(source, /goto end_\d+;\n\n\s+catch_\d+:/)
+  assert.match(source, /\}\n\n\s+end_\d+:\n\s+;/)
   assert.doesNotMatch(source, /end_\d+:\n\n\s+;/)
 }
 

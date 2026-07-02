@@ -78,9 +78,41 @@ int inox_loop_next_timer_due_ms(const inox_loop* loop, inox_number* out);
 
 #ifdef __cplusplus
 
+#include <stdio.h>
+#include <stdlib.h>
+
 namespace inox {
 
 class Runtime;
+
+struct FatalInfo {
+  const char* message;
+};
+
+using FatalHandler = void (*)(const FatalInfo& info);
+
+inline FatalHandler& fatal_handler_slot() {
+  static FatalHandler handler = nullptr;
+
+  return handler;
+}
+
+inline void set_fatal_handler(FatalHandler handler) {
+  fatal_handler_slot() = handler;
+}
+
+[[noreturn]] inline void fatal(const char* message) {
+  FatalInfo info = { message == nullptr ? "fatal runtime error" : message };
+  FatalHandler handler = fatal_handler_slot();
+
+  if (handler != nullptr) {
+    handler(info);
+  } else {
+    fprintf(stderr, "Inox fatal: %s\n", info.message);
+  }
+
+  abort();
+}
 
 inline Runtime*& current_runtime_slot() {
   static thread_local Runtime* current = nullptr;
@@ -163,9 +195,11 @@ public:
 class Runtime {
 private:
   Loop loop_;
+  Value exception_;
+  bool thrown_;
 
 public:
-  Runtime() : loop_() {}
+  Runtime() : loop_(), exception_(), thrown_(false) {}
 
   Runtime(const Runtime&) = delete;
   Runtime& operator=(const Runtime&) = delete;
@@ -182,6 +216,7 @@ public:
 
   void reset() {
     loop_.reset();
+    clear_exception();
   }
 
   bool active() const {
@@ -194,6 +229,29 @@ public:
 
   const Loop& loop() const {
     return loop_;
+  }
+
+  bool thrown() const {
+    return thrown_;
+  }
+
+  void throw_value(inox_value value) {
+    exception_ = value;
+    thrown_ = true;
+  }
+
+  void throw_value(const Value& value) {
+    throw_value(value.raw());
+  }
+
+  Value take_exception() {
+    thrown_ = false;
+    return std::move(exception_);
+  }
+
+  void clear_exception() {
+    thrown_ = false;
+    exception_.reset();
   }
 
   inox_loop* raw_loop() {
@@ -266,6 +324,46 @@ public:
 
 inline Runtime* current_runtime() {
   return current_runtime_slot();
+}
+
+inline bool thrown() {
+  Runtime* runtime = current_runtime_slot();
+
+  return runtime != nullptr && runtime->thrown();
+}
+
+inline void throw_value(inox_value value) {
+  Runtime* runtime = current_runtime_slot();
+
+  if (runtime != nullptr) {
+    runtime->throw_value(value);
+  }
+}
+
+inline void throw_value(const Value& value) {
+  Runtime* runtime = current_runtime_slot();
+
+  if (runtime != nullptr) {
+    runtime->throw_value(value);
+  }
+}
+
+inline Value take_exception() {
+  Runtime* runtime = current_runtime_slot();
+
+  if (runtime == nullptr) {
+    return Value();
+  }
+
+  return runtime->take_exception();
+}
+
+inline void clear_exception() {
+  Runtime* runtime = current_runtime_slot();
+
+  if (runtime != nullptr) {
+    runtime->clear_exception();
+  }
 }
 
 inline inox_loop* loop() {

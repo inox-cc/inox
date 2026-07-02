@@ -1262,6 +1262,7 @@ const cCallExpressionDependencies = {
   isNullableFunctionType,
   isPromiseReturningFunctionCallee,
   registerErrorChannel,
+  registerErrorValue,
   resolveFunctionValueType,
   resolveFunctionParams,
   resolveRuntimeArrayIndex,
@@ -8118,14 +8119,18 @@ function emitAwaitResultRejectedPromiseLines(
 
   if (errorActiveNeeded) {
     registerErrorChannel(context)
-  } else {
+  } else if (target === '') {
     registerErrorValue(context)
   }
 
   const lines: string[] = []
 
   lines.push(`if (!${result}) {`)
-  lines.push(`  inox_error = ${result}.error_value();`)
+  if (target === '') {
+    lines.push(`  inox_error = ${result}.error_value();`)
+  } else {
+    lines.push(`  inox::throw_value(${result}.error_value());`)
+  }
   if (errorActiveNeeded) {
     lines.push('  inox_error_active = 1;')
   }
@@ -8164,14 +8169,18 @@ function emitAwaitRejectedPromiseLines(
 
   if (errorActiveNeeded) {
     registerErrorChannel(context)
-  } else {
+  } else if (target === '') {
     registerErrorValue(context)
   }
 
   const lines: string[] = []
 
   lines.push(`if (${state} == INOX_PROMISE_REJECTED) {`)
-  lines.push(`  inox_error = ${value};`)
+  if (target === '') {
+    lines.push(`  inox_error = ${value};`)
+  } else {
+    lines.push(`  inox::throw_value(${value});`)
+  }
   if (errorActiveNeeded) {
     lines.push('  inox_error_active = 1;')
   }

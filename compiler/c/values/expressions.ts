@@ -1922,6 +1922,7 @@ export type CCallExpressionDependencies = {
   isNullableFunctionType(valueType: string | null | undefined, nullable: boolean | null | undefined): boolean
   isPromiseReturningFunctionCallee(callee: CValueNode, context: CFunctionContext): boolean
   registerErrorChannel(context: CFunctionContext): void
+  registerErrorValue(context: CFunctionContext): void
   resolveFunctionValueType(expression: CValueNode, context: CFunctionContext): CFunctionType | null
   resolveFunctionParams(callee: CValueNode, context: CFunctionContext): CFunctionParam[] | null
   resolveRuntimeArrayIndex(expression: CValueNode, context: CFunctionContext): CRuntimeArrayElement | null
@@ -2482,7 +2483,11 @@ function emitPreparedThrowingCallExpression(
     )
   }
 
-  deps.registerErrorChannel(context)
+  if (target !== '') {
+    deps.registerErrorValue(context)
+  } else {
+    deps.registerErrorChannel(context)
+  }
   appendLines(lines, emitPrepareOwnedValueWrite('inox_error'))
 
   if (returnType !== 'void') {
@@ -2548,11 +2553,13 @@ function emitThrowingCallStatusCheck(
   target: string,
   context: CFunctionContext
 ): string[] {
-  const lines = [`if (${status} == INOX_ERR_THROW) {`, '  inox_error_active = 1;']
+  const lines = [`if (${status} == INOX_ERR_THROW) {`]
 
   if (target !== '') {
+    lines.push('  inox::throw_value(inox_error);')
     lines.push(`  goto ${target};`)
   } else if (context.throwingFunction) {
+    lines.push('  inox_error_active = 1;')
     lines.push('  inox_status_result = INOX_ERR_THROW;')
     lines.push('  goto cleanup;')
   } else {

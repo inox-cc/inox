@@ -169,6 +169,52 @@ function pushJsonParseStatusLines(
     return
   }
 
+  if (errorTarget !== null && typeof errorTarget !== 'undefined') {
+    const status = nextCName(context, 'inox_json_status')
+    const message = 'JSON.parse failed'
+    const messageLiteral = cStringLiteral(message)
+    const messageLength = utf8ByteLength(message)
+    const errorActiveNeeded = currentJsonErrorTargetRequiresActive(context)
+    const failureStatement = emitFailureStatement(context)
+
+    if (errorActiveNeeded) {
+      registerJsonErrorChannel(context)
+    }
+
+    target.push(`inox_status ${status} = ${call};`)
+    target.push(`if (${status} != INOX_OK) {`)
+
+    if (detailedError !== null && typeof detailedError !== 'undefined') {
+      const fallbackError = nextCName(context, 'inox_json_fallback_error')
+      registerOwnedValue(context, fallbackError)
+      target.push(`  if (${detailedError}.tag == INOX_TAG_STRING && ${detailedError}.as.ref != 0) {`)
+      target.push(`    inox::throw_value(${detailedError});`)
+      target.push('  } else {')
+      pushIndentedJsonLines(target, emitPrepareOwnedValueWrite(fallbackError), '    ')
+      target.push(
+        `    if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, ${fallbackError}.out()) != INOX_OK) ${failureStatement}`
+      )
+      target.push(`    inox::throw_value(${fallbackError});`)
+      target.push('  }')
+    } else {
+      const fallbackError = nextCName(context, 'inox_json_fallback_error')
+      registerOwnedValue(context, fallbackError)
+      pushIndentedJsonLines(target, emitPrepareOwnedValueWrite(fallbackError), '  ')
+      target.push(
+        `  if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, ${fallbackError}.out()) != INOX_OK) ${failureStatement}`
+      )
+      target.push(`  inox::throw_value(${fallbackError});`)
+    }
+
+    if (errorActiveNeeded) {
+      target.push('  inox_error_active = 1;')
+    }
+
+    target.push(`  goto ${errorTarget};`)
+    target.push('}')
+    return
+  }
+
   const status = nextCName(context, 'inox_json_status')
   const message = 'JSON.parse failed'
   const messageLiteral = cStringLiteral(message)

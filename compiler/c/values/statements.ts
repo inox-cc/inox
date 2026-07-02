@@ -3486,10 +3486,6 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     throwTarget = finallyLabel
   }
 
-  if (throwTarget !== null && typeof throwTarget !== 'undefined') {
-    registerErrorValue(context)
-  }
-
   if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
     registerErrorChannel(context)
   }
@@ -3583,17 +3579,18 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
     const catchTypeCheck = emitCatchBindingTypeCheck(catchValueType)
 
-    lines.push(`${catchLabel}:`)
+    lines.push(`${catchLabel}: {`)
+    lines.push('    auto inox_error = inox::take_exception();')
     if (catchTypeCheck !== '0') {
-      lines.push(`  if (${catchTypeCheck}) ${catchFailureStatement}`)
+      lines.push(`    if (${catchTypeCheck}) ${catchFailureStatement}`)
     }
     if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
-      lines.push('  inox_error_active = 0;')
+      lines.push('    inox_error_active = 0;')
     }
-    lines.push('  {')
-    pushIndentedLines(lines, catchBody, '    ')
-    lines.push('  }')
-    pushIndentedLines(lines, emitPrepareOwnedValueWrite('inox_error'), '  ')
+    lines.push('    {')
+    pushIndentedLines(lines, catchBody, '      ')
+    lines.push('    }')
+    lines.push('}')
   }
 
   if (
@@ -3722,8 +3719,45 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     return []
   }
 
-  const errorActiveNeeded =
-    currentErrorTargetRequiresActive(context) || (target === null && context.throwingFunction)
+  const value = emitThrowableObjectValueExpression(
+    statementDeps(context).emitCValueExpression(statement.argument, context),
+    context
+  )
+
+  if (target !== null && typeof target !== 'undefined') {
+    const errorActiveNeeded = currentErrorTargetRequiresActive(context)
+    const errorValue = nextCName(context, 'inox_throw_error')
+    const lines: string[] = []
+
+    if (errorActiveNeeded) {
+      registerErrorChannel(context)
+    }
+
+    registerOwnedValue(context, errorValue)
+    pushAllLines(lines, value.lines)
+    pushAllLines(lines, emitPrepareOwnedValueWrite(errorValue))
+    lines.push(`${errorValue} = ${value.expression};`)
+
+    let typeCheck = `${errorValue}.tag != INOX_TAG_STRING || ${errorValue}.as.ref == 0`
+
+    if (isErrorObject) {
+      typeCheck = runtimeObjectLikeValueMismatchCondition(errorValue)
+    }
+
+    lines.push(emitRuntimeTypeCheck(typeCheck, context))
+    pushPreparedRuntimeValueOwnershipLines(lines, errorValue, value)
+    lines.push(`inox::throw_value(${errorValue});`)
+
+    if (errorActiveNeeded) {
+      lines.push('inox_error_active = 1;')
+    }
+
+    lines.push(`goto ${target};`)
+
+    return lines
+  }
+
+  const errorActiveNeeded = context.throwingFunction
 
   if (errorActiveNeeded) {
     registerErrorChannel(context)
@@ -3731,10 +3765,6 @@ export function emitThrowStatement(statement: StatementNode, context: CFunctionC
     registerErrorValue(context)
   }
 
-  const value = emitThrowableObjectValueExpression(
-    statementDeps(context).emitCValueExpression(statement.argument, context),
-    context
-  )
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite('inox_error'))
