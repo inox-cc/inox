@@ -161,6 +161,11 @@ function pushDeclarationLines(target: string[], lines: string[]): void {
 
 function pushIndentedDeclarationLines(target: string[], lines: string[]): void {
   for (const line of lines) {
+    if (line === '') {
+      target.push('')
+      continue
+    }
+
     target.push(`  ${line}`)
   }
 }

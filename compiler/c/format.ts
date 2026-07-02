@@ -182,6 +182,10 @@ function joinGeneratedCLines(lines: string[], hasTrailingNewline: boolean): stri
   for (let index = 0; index < lines.length; index = index + 1) {
     let part = lines[index]
 
+    if (part.trim() === '') {
+      part = ''
+    }
+
     if (index > 0) {
       part = `\n${part}`
     }

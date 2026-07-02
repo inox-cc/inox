@@ -568,6 +568,11 @@ function joinStrings(values: string[], separator: string): string {
 
 function pushIndentedLines(target: string[], source: string[], indent: string): void {
   for (const line of source) {
+    if (line === '') {
+      target.push('')
+      continue
+    }
+
     target.push(`${indent}${line}`)
   }
 }
@@ -577,6 +582,11 @@ function stripOuterGeneratedScope(lines: string[]): string[] {
 
   for (let index = 1; index < lines.length - 1; index = index + 1) {
     const line = lines[index]
+
+    if (line.trim() === '') {
+      stripped.push('')
+      continue
+    }
 
     if (line.slice(0, 2) === '  ') {
       stripped.push(line.slice(2))
@@ -772,8 +782,17 @@ export function emitStatementList(statements: StatementNode[], context: CFunctio
 
   for (let index = 0; index < statements.length; index = index + 1) {
     const statement: StatementNode = statements[index]
+
+    if (statement.type === 'TryStatement' && index > 0) {
+      pushStatementListBlankLine(result)
+    }
+
     const lines = emitStatementListItem(statement, context)
     pushAllLines(result, lines)
+
+    if (statement.type === 'TryStatement' && index < statements.length - 1) {
+      pushStatementListBlankLine(result)
+    }
 
     applyNullableScalarEarlyReturnNarrowing(statement, context)
   }
@@ -781,6 +800,14 @@ export function emitStatementList(statements: StatementNode[], context: CFunctio
   const output = result
 
   return output
+}
+
+function pushStatementListBlankLine(lines: string[]): void {
+  if (lines.length === 0 || lines[lines.length - 1].trim() === '') {
+    return
+  }
+
+  lines.push('')
 }
 
 function emitStatementListItem(statement: StatementNode, context: CFunctionContext): string[] {
@@ -1316,6 +1343,7 @@ export function emitRuntimeStringVariableDeclaration(
     if (!shouldSkipRuntimeValueDeclarationCheck(statement, value, 'string')) {
       lines.push(emitRuntimeTypeCheck(`!${name}.valid()`, context))
     }
+    pushAwaitVariableDeclarationSpacing(lines, expression)
 
     context.variables.set(statement.name, 'string')
     context.cppStringValues.add(statement.name)
@@ -1539,6 +1567,7 @@ export function emitNumberBooleanScalarVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(`${constPrefix(statement.kind === 'const')}double ${emitCIdentifier(statement.name)} = ${value.expression};`)
+  pushAwaitVariableDeclarationSpacing(lines, statement.init)
 
   return lines
 }
@@ -1641,6 +1670,7 @@ export function emitRuntimeValueVariableDeclaration(
   lines.push(emitLocalRuntimeValueDeclaration(statement, value))
 
   if (shouldSkipRuntimeValueDeclarationCheck(statement, value, valueType)) {
+    pushAwaitVariableDeclarationSpacing(lines, expression)
     return lines
   }
 
@@ -1654,7 +1684,15 @@ export function emitRuntimeValueVariableDeclaration(
     }
   }
 
+  pushAwaitVariableDeclarationSpacing(lines, expression)
+
   return lines
+}
+
+function pushAwaitVariableDeclarationSpacing(lines: string[], expression: StatementNode): void {
+  if (expression.type === 'AwaitExpression') {
+    lines.push('')
+  }
 }
 
 function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: PreparedExpression): string {
@@ -3519,11 +3557,13 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
   lines.push('  {')
   pushIndentedLines(lines, tryBody, '    ')
-  lines.push('  }')
   if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
-    lines.push(`  goto ${finallyLabel};`)
+    lines.push(`    goto ${finallyLabel};`)
   } else {
-    lines.push(`  goto ${endLabel};`)
+    lines.push(`    goto ${endLabel};`)
+  }
+  if (catchLabel === null || typeof catchLabel === 'undefined') {
+    lines.push('  }')
   }
 
   if (
@@ -3579,7 +3619,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
     const catchTypeCheck = emitCatchBindingTypeCheck(catchValueType)
 
-    lines.push(`${catchLabel}: {`)
+    lines.push(`  } ${catchLabel}: {`)
     lines.push('    auto inox_error = inox::take_exception();')
     if (catchTypeCheck !== '0') {
       lines.push(`    if (${catchTypeCheck}) ${catchFailureStatement}`)
@@ -3687,11 +3727,21 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     }
   }
 
-  lines.push(`${endLabel}:`)
-  lines.push('  ;')
+  pushEndLabel(lines, endLabel)
   lines.push('}')
 
   return stripOuterGeneratedScope(lines)
+}
+
+function pushEndLabel(lines: string[], endLabel: string): void {
+  const previousLineIndex = lines.length - 1
+
+  if (previousLineIndex >= 0 && lines[previousLineIndex].trim() === '}') {
+    lines[previousLineIndex] = `${lines[previousLineIndex]} ${endLabel}:;`
+    return
+  }
+
+  lines.push(`${endLabel}:;`)
 }
 
 export function emitThrowStatement(statement: StatementNode, context: CFunctionContext): string[] {

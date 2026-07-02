@@ -15,11 +15,13 @@ export function assertGeneratedLabelsHaveLeadingBlankOnly(): void {
       {
         path: '/pkg/src/index.ts',
         source: `
+console.log('before')
 try {
   throw 'bad'
 } catch (error) {
   console.log(error)
 }
+console.log('after')
 `
       }
     ],
@@ -34,10 +36,14 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /goto end_\d+;\n\s+catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
-  assert.doesNotMatch(source, /goto end_\d+;\n\n\s+catch_\d+:/)
-  assert.match(source, /\}\n\n\s+end_\d+:\n\s+;/)
-  assert.doesNotMatch(source, /end_\d+:\n\n\s+;/)
+  assert.match(source, /printf\("before\\n"\);\n\n  \{/)
+  assert.match(source, /goto end_\d+;\n\s+\} catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
+  assert.doesNotMatch(source, /\}\n\s+catch_\d+:/)
+  assert.match(source, /\} end_\d+:;/)
+  assert.match(source, /\} end_\d+:;\n\n  printf\("after\\n"\);/)
+  assert.doesNotMatch(source, /end_\d+: ;/)
+  assert.doesNotMatch(source, /end_\d+:\n\s+;/)
+  assert.doesNotMatch(source, /else catch_\d+:/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
