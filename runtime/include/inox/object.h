@@ -103,6 +103,41 @@ inline inox_status object_values(inox_value object, Value& out) {
   return inox_object_values(&inox_default_allocator, object, out.out());
 }
 
+inline Value get(inox_value object, StringView name) {
+  if (thrown()) {
+    return Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_object_get(object, name.bytes, name.len, &out);
+
+  if (status == INOX_OK) {
+    return adopt(out);
+  }
+
+  inox_release(out);
+
+  if (status == INOX_ERR_FIELD) {
+    return Value();
+  }
+
+  throw_value(string("object field read failed"));
+
+  return Value();
+}
+
+inline Value get(const Value& object, StringView name) {
+  return get(object.raw(), name);
+}
+
+inline Value get(inox_value object, const char* name) {
+  return get(object, string_view(name));
+}
+
+inline Value get(const Value& object, const char* name) {
+  return get(object.raw(), name);
+}
+
 } // namespace inox
 
 class Object {
@@ -127,6 +162,10 @@ private:
   }
 
   static inox::Value collect(inox_value value, RuntimeObjectMethod method, const char* message) {
+    if (inox::thrown()) {
+      return inox::Value();
+    }
+
     inox_value out = inox_undefined_value();
 
     return finish(method(&inox_default_allocator, value, &out), out, message);
@@ -138,6 +177,10 @@ private:
     ClassInstanceMethod method,
     const char* message
   ) {
+    if (inox::thrown()) {
+      return inox::Value();
+    }
+
     inox_value out = inox_undefined_value();
 
     return finish(method(&inox_default_allocator, descriptor, instance, &out), out, message);

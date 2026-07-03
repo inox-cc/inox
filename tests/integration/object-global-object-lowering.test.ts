@@ -35,16 +35,18 @@ console.log(Object.keys(foo.v))
 
   assert.match(
     source,
-    /auto inox_entries_\d+ = Object\.entries\(inox_value_\d+\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n  console\.log\(inox_entries_\d+\);/
+    /auto inox_entries_\d+ = Object\.entries\(inox::get\(foo, "v"\)\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n  console\.log\(inox_entries_\d+\);/
   )
   assert.match(
     source,
-    /auto inox_values_\d+ = Object\.values\(inox_value_\d+\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n  console\.log\(inox_values_\d+\);/
+    /auto inox_values_\d+ = Object\.values\(inox::get\(foo, "v"\)\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n  console\.log\(inox_values_\d+\);/
   )
   assert.match(
     source,
-    /auto inox_keys_\d+ = Object\.keys\(inox_value_\d+\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n  console\.log\(inox_keys_\d+\);/
+    /auto inox_keys_\d+ = Object\.keys\(inox::get\(foo, "v"\)\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n  console\.log\(inox_keys_\d+\);/
   )
+  assert.doesNotMatch(source, /inox::object_get\(foo, "v", 1, inox_value_\d+\)/)
+  assert.doesNotMatch(source, /inox_value_\d+\.tag != INOX_TAG_ARRAY/)
   assert.doesNotMatch(source, /inox::object_entries\(.*inox_entries_\d+\)/)
   assert.doesNotMatch(source, /inox::object_values\(.*inox_values_\d+\)/)
   assert.doesNotMatch(source, /inox::object_keys\(.*inox_keys_\d+\)/)

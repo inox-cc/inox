@@ -9161,7 +9161,8 @@ function emitPreparedObjectValuesCallExpression(
     }
   }
 
-  const object = emitCValueExpression(expression.args[0], context)
+  const object = emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
+    emitCValueExpression(expression.args[0], context)
 
   pushAll(lines, object.lines)
   lines.push(`auto ${temp} = Object.${method}(${object.expression});`)
@@ -9173,6 +9174,37 @@ function emitPreparedObjectValuesCallExpression(
     cppType: 'inox::Value',
     runtimeTypeChecked: true,
     valueType: 'array'
+  }
+}
+
+function emitPreparedObjectRuntimeCallArgumentExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'MemberExpression' ||
+    typeof expression.property !== 'string'
+  ) {
+    return null
+  }
+
+  const objectType = inferExpressionType(expression.object, context)
+
+  if (objectType !== 'object') {
+    return null
+  }
+
+  const object = emitPreparedObjectRuntimeCallArgumentExpression(expression.object, context) ??
+    emitCValueExpression(expression.object, context)
+
+  return {
+    lines: object.lines,
+    expression: `inox::get(${object.expression}, ${cStringLiteral(expression.property)})`,
+    cppType: 'inox::Value',
+    runtimeTypeChecked: true,
+    valueType: expression.valueType ?? 'unknown'
   }
 }
 
