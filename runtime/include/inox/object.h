@@ -71,6 +71,7 @@ void inox_object_dispose_fields(inox_object* object);
 #endif
 
 #ifdef __cplusplus
+#include <stdio.h>
 #include "inox/loop.h"
 
 namespace inox {
@@ -103,8 +104,36 @@ inline inox_status object_values(inox_value object, Value& out) {
   return inox_object_values(&inox_default_allocator, object, out.out());
 }
 
+inline void throw_property_read_type_error(StringView name, const char* receiver) {
+  char message[192];
+  int written = snprintf(
+    message,
+    sizeof(message),
+    "TypeError: Cannot read properties of %s (reading '%.*s')",
+    receiver,
+    (int)name.len,
+    name.bytes
+  );
+
+  if (written > 0) {
+    throw_value(string(message));
+    return;
+  }
+
+  throw_value(string("TypeError: Cannot read property"));
+}
+
 inline Value get(inox_value object, StringView name) {
   if (thrown()) {
+    return Value();
+  }
+
+  if (object.tag == INOX_TAG_NULL) {
+    throw_property_read_type_error(name, "null");
+    return Value();
+  }
+
+  if (object.tag == INOX_TAG_ARRAY) {
     return Value();
   }
 
@@ -120,8 +149,6 @@ inline Value get(inox_value object, StringView name) {
   if (status == INOX_ERR_FIELD) {
     return Value();
   }
-
-  throw_value(string("object field read failed"));
 
   return Value();
 }

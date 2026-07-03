@@ -63,6 +63,9 @@ type ObjectFunctionContext = ObjectShapeContext &
   ObjectNameContext & {
     cleanupEnabled: boolean
     diagnostics: Diagnostic[]
+    errorChannelUsed?: boolean
+    errorTargetActiveFlags?: boolean[]
+    errorTargets?: string[]
     failureStatement?: string | null
     failureStatementUsed?: boolean
     nextId: number
@@ -148,6 +151,74 @@ function appendLines(out: string[], lines: string[]): void {
   for (const line of lines) {
     out.push(line)
   }
+}
+
+function currentObjectErrorTarget(context: ObjectFunctionContext): string {
+  const targets = context.errorTargets
+
+  if (targets === null || typeof targets === 'undefined' || targets.length === 0) {
+    return ''
+  }
+
+  return targets[targets.length - 1]
+}
+
+function currentObjectErrorTargetRequiresActive(context: ObjectFunctionContext): boolean {
+  const flags = context.errorTargetActiveFlags
+
+  if (flags === null || typeof flags === 'undefined' || flags.length === 0) {
+    return false
+  }
+
+  return flags[flags.length - 1]
+}
+
+function registerObjectErrorValue(context: ObjectFunctionContext): void {
+  registerOwnedValue(context, 'inox_error')
+}
+
+function registerObjectErrorChannel(context: ObjectFunctionContext): void {
+  context.errorChannelUsed = true
+  registerObjectErrorValue(context)
+}
+
+function emitObjectThrownCheckLines(context: ObjectFunctionContext): string[] {
+  const target = currentObjectErrorTarget(context)
+
+  if (target === '' && !context.throwingFunction) {
+    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
+  }
+
+  const errorActiveNeeded = currentObjectErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
+
+  if (errorActiveNeeded) {
+    registerObjectErrorChannel(context)
+  } else if (target === '') {
+    registerObjectErrorValue(context)
+  }
+
+  if (target !== '' && !errorActiveNeeded) {
+    return [`if (inox::thrown()) goto ${target};`]
+  }
+
+  const lines: string[] = ['if (inox::thrown()) {']
+
+  if (target === '') {
+    lines.push('  inox_error = inox::take_exception();')
+  }
+  if (errorActiveNeeded) {
+    lines.push('  inox_error_active = 1;')
+  }
+  if (target === '') {
+    lines.push('  inox_status_result = INOX_ERR_THROW;')
+    lines.push('  goto cleanup;')
+  } else {
+    lines.push(`  goto ${target};`)
+  }
+
+  lines.push('}')
+
+  return lines
 }
 
 function findObjectShapeFieldIndex(fields: CObjectShapeField[], key: string): number {
@@ -898,23 +969,16 @@ function emitPreparedDynamicObjectIndexExpressionValueExpression(
   const tag = cRuntimeValueTag(expression.valueType)
   const lines: string[] = []
 
-  registerOwnedValue(context, temp)
-
   appendLines(lines, object.lines)
   appendLines(lines, key.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(temp))
-  appendObjectFieldReadLines(
-    lines,
-    `inox_object_get(${object.expression}, ${key.bytes}, ${key.length}, &${temp})`,
-    temp,
-    context,
-    true
-  )
+  lines.push(`auto ${temp} = inox::get(${object.expression}, inox::string_view(${key.bytes}, ${key.length}));`)
+  appendLines(lines, emitObjectThrownCheckLines(context))
   appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
 
   return {
     lines,
     expression: temp,
+    cppType: 'inox::Value',
     valueType: expression.valueType
   }
 }
@@ -1003,10 +1067,11 @@ function emitPreparedKnownObjectFieldValueExpression(
 
   const temp = nextCName(context, 'inox_value')
   const tag = cRuntimeValueTag(field.valueType)
+  const object = emitObjectValueReference(access.objectName, context)
   const lines: string[] = []
 
-  lines.push(`inox::Value ${temp};`)
-  appendKnownObjectFieldReadLines(lines, access, field, temp, context)
+  lines.push(`auto ${temp} = inox::get(${object}, ${cStringLiteral(access.key)});`)
+  appendLines(lines, emitObjectThrownCheckLines(context))
   appendLines(lines, emitKnownObjectFieldValueCheck(temp, tag, field, expression, context))
 
   return {
@@ -1037,14 +1102,8 @@ function emitPreparedObjectExpressionFieldValueExpression(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(`inox::Value ${temp};`)
-  appendObjectFieldReadLines(
-    lines,
-    `inox::object_get(${object.expression}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, ${temp})`,
-    temp,
-    context,
-    field.optional === true
-  )
+  lines.push(`auto ${temp} = inox::get(${object.expression}, ${cStringLiteral(field.key)});`)
+  appendLines(lines, emitObjectThrownCheckLines(context))
   if (objectFieldValueMayBeNullish(field)) {
     appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
   } else {
@@ -1076,14 +1135,8 @@ function emitPreparedDynamicObjectFieldValueExpression(
   const lines: string[] = []
 
   appendLines(lines, object.lines)
-  lines.push(`inox::Value ${temp};`)
-  appendObjectFieldReadLines(
-    lines,
-    `inox::object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, ${temp})`,
-    temp,
-    context,
-    true
-  )
+  lines.push(`auto ${temp} = inox::get(${object.expression}, ${cStringLiteral(key)});`)
+  appendLines(lines, emitObjectThrownCheckLines(context))
   appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
 
   return {
@@ -1553,72 +1606,6 @@ function emitRuntimeObjectShapeFunctionFieldVariableDeclaration(
   lines.push(`${name} = inox_undefined_value();`)
 
   return lines
-}
-
-function knownObjectFieldReadCall(
-  access: KnownObjectFieldReadAccess,
-  temp: string,
-  context: ObjectFunctionContext
-): string {
-  const object = emitObjectValueReference(access.objectName, context)
-
-  if (access.kind === 'known') {
-    return `inox::object_get_known(${object}, ${access.index}, ${temp})`
-  }
-
-  return `inox::object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, ${temp})`
-}
-
-function optionalKnownObjectFieldReadCall(
-  access: KnownObjectFieldReadAccess,
-  temp: string,
-  context: ObjectFunctionContext
-): string {
-  const object = emitObjectValueReference(access.objectName, context)
-
-  return `inox::object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, ${temp})`
-}
-
-function appendKnownObjectFieldReadLines(
-  lines: string[],
-  access: KnownObjectFieldReadAccess,
-  field: CKnownObjectField,
-  temp: string,
-  context: ObjectFunctionContext
-): void {
-  if (field.optional !== true) {
-    lines.push(emitStatusCheck(knownObjectFieldReadCall(access, temp, context), context))
-    return
-  }
-
-  const status = nextCName(context, 'inox_field_status')
-
-  lines.push(`inox_status ${status} = ${optionalKnownObjectFieldReadCall(access, temp, context)};`)
-  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
-  lines.push(`  ${temp} = inox_undefined_value();`)
-  lines.push('}')
-  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
-}
-
-function appendObjectFieldReadLines(
-  lines: string[],
-  getCall: string,
-  temp: string,
-  context: ObjectFunctionContext,
-  allowMissing: boolean
-): void {
-  if (!allowMissing) {
-    lines.push(emitStatusCheck(getCall, context))
-    return
-  }
-
-  const status = nextCName(context, 'inox_field_status')
-
-  lines.push(`inox_status ${status} = ${getCall};`)
-  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
-  lines.push(`  ${temp} = inox_undefined_value();`)
-  lines.push('}')
-  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
 }
 
 function emitKnownObjectFieldValueCheck(

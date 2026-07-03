@@ -168,6 +168,7 @@ type CFunctionContext = CEmitContext & {
   collectionLoweringDependencies: CollectionLoweringDependencies
   externalEventLoop: boolean
   externalEventLoopFunctions: CStringSet
+  errorChannelUsed: boolean
   errorTargets: string[]
   failureStatement?: string | null
   failureStatementUsed?: boolean
@@ -261,6 +262,59 @@ function appendLines(out: string[], lines: string[]): void {
   for (const line of lines) {
     out.push(line)
   }
+}
+
+function currentRuntimeErrorTarget(context: CFunctionContext): string {
+  if (context.errorTargets.length === 0) {
+    return ''
+  }
+
+  return context.errorTargets[context.errorTargets.length - 1]
+}
+
+function registerRuntimeErrorChannel(context: CFunctionContext): void {
+  context.errorChannelUsed = true
+  registerRuntimeErrorValue(context)
+}
+
+function registerRuntimeErrorValue(context: CFunctionContext): void {
+  registerOwnedValue(context, 'inox_error')
+}
+
+function emitRuntimeThrownCheckLines(context: CFunctionContext): string[] {
+  const target = currentRuntimeErrorTarget(context)
+
+  if (target !== '') {
+    return [`if (inox::thrown()) goto ${target};`]
+  }
+
+  if (!context.throwingFunction) {
+    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
+  }
+
+  registerRuntimeErrorChannel(context)
+
+  return [
+    'if (inox::thrown()) {',
+    '  inox_error = inox::take_exception();',
+    '  inox_error_active = 1;',
+    '  inox_status_result = INOX_ERR_THROW;',
+    '  goto cleanup;',
+    '}'
+  ]
+}
+
+function emitRuntimeObjectGetValueLines(
+  object: string,
+  key: string,
+  value: string,
+  context: CFunctionContext
+): string[] {
+  const lines = [`${value} = inox::get(${object}, ${cStringLiteral(key)});`]
+
+  appendLines(lines, emitRuntimeThrownCheckLines(context))
+
+  return lines
 }
 
 function appendPrefixedLines(out: string[], lines: string[], prefix: string): void {
@@ -3142,9 +3196,9 @@ export function emitPreparedNumberExpression(
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(member.objectName ?? '', context)
       const key = member.key ?? ''
-      const getCall = `inox_object_get(${objectReference}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value})`
+      const getLines = emitRuntimeObjectGetValueLines(objectReference, key, value, context)
 
-      return emitPreparedRuntimeNumberValue(member.valueType, value, getCall, context)
+      return emitPreparedRuntimeNumberValue(member.valueType, value, getLines, context)
     }
 
     const objectMember = deps.emitPreparedObjectExpressionScalarMemberValueExpression(expression, context)
@@ -3164,7 +3218,7 @@ export function emitPreparedNumberExpression(
       const value = nextCName(context, 'inox_expr_value')
       const getCall = `inox_array_get(${element.arrayName}, ${element.index}, &${value})`
 
-      return emitPreparedRuntimeNumberValue(element.valueType, value, getCall, context)
+      return emitPreparedRuntimeNumberValue(element.valueType, value, [emitStatusCheck(getCall, context)], context)
     }
 
     const field = deps.resolveKnownObjectIndex(expression, context)
@@ -3172,9 +3226,9 @@ export function emitPreparedNumberExpression(
     if (field !== null && typeof field !== 'undefined' && isNumberOrBooleanValueType(field.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
       const objectReference = deps.emitObjectValueReference(field.objectName ?? '', context)
-      const getCall = `inox_object_get(${objectReference}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
+      const getLines = emitRuntimeObjectGetValueLines(objectReference, field.key, value, context)
 
-      return emitPreparedRuntimeNumberValue(field.valueType, value, getCall, context)
+      return emitPreparedRuntimeNumberValue(field.valueType, value, getLines, context)
     }
 
     const objectField = deps.emitPreparedObjectExpressionScalarIndexValueExpression(expression, context)
@@ -3366,19 +3420,12 @@ function emitPreparedOptionalRuntimeObjectFieldValueExpression(
 
   const object = deps.emitCValueExpression(objectExpression, context)
   const value = nextCName(context, 'inox_value')
-  const status = nextCName(context, 'inox_field_status')
   const lines: string[] = []
 
   registerOwnedValue(context, value)
   appendLines(lines, object.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(
-    `inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value});`
-  )
-  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
-  lines.push(`  ${value} = inox_undefined_value();`)
-  lines.push('}')
-  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
+  appendLines(lines, emitRuntimeObjectGetValueLines(object.expression, key, value, context))
 
   return {
     lines,
@@ -4350,29 +4397,22 @@ function emitPreparedDynamicRuntimeObjectFieldValueExpression(
   }
 
   const value = nextCName(context, 'inox_value')
-  const status = nextCName(context, 'inox_field_status')
   const lines: string[] = []
 
-  registerOwnedValue(context, value)
   appendLines(lines, object.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(`inox::Value ${value};`)
   lines.push(`if (${object.expression}.tag == INOX_TAG_ARRAY) {`)
-  lines.push(`  ${value} = inox_undefined_value();`)
+  lines.push(`  ${value} = inox::Value();`)
   lines.push('} else {')
-  lines.push(`  ${emitRuntimeTypeCheck(runtimeObjectApiValueMismatchCondition(object.expression), context)}`)
-  lines.push(
-    `  inox_status ${status} = inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value});`
-  )
-  lines.push(`  if (${status} == INOX_ERR_FIELD) {`)
-  lines.push(`    ${value} = inox_undefined_value();`)
-  lines.push('  }')
-  lines.push(`  if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
+  lines.push(`  ${value} = inox::get(${object.expression}, ${cStringLiteral(access.key)});`)
   lines.push('}')
+  appendLines(lines, emitRuntimeThrownCheckLines(context))
 
   return {
     lines,
     expression: value,
-    owned: true
+    cppType: 'inox::Value',
+    owned: false
   }
 }
 
@@ -4402,12 +4442,7 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
   appendLines(lines, receiver.lines)
   appendLines(lines, index.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(array))
-  lines.push(
-    emitStatusCheck(
-      `inox_object_get(${receiver.expression}, ${cStringLiteral(receiver.key)}, ${utf8ByteLength(receiver.key)}, &${array})`,
-      context
-    )
-  )
+  appendLines(lines, emitRuntimeObjectGetValueLines(receiver.expression, receiver.key, array, context))
   lines.push(emitRuntimeTypeCheck(`${array}.tag != INOX_TAG_ARRAY || ${array}.as.ref == 0`, context))
   appendLines(lines, emitPrepareOwnedValueWrite(value))
   lines.push(`inox_status ${status} = inox_array_get(${array}, ${index.expression}, &${value});`)
@@ -4957,14 +4992,14 @@ export function emitPreparedUpdateExpression(
 function emitPreparedRuntimeNumberValue(
   valueType: string,
   value: string,
-  getCall: string,
+  getLines: string[],
   context: CFunctionContext
 ): PreparedExpression {
   registerOwnedValue(context, value)
   const lines: string[] = []
 
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(getCall, context))
+  appendLines(lines, getLines)
 
   return {
     lines,

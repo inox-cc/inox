@@ -470,7 +470,6 @@ type CKnownArrayIndexDeclaration = {
   mapValueType?: string | null
   setElementType?: string | null
 }
-type TempValueEmitter = (temp: string) => string
 type RuntimeLogGetSource =
   | {
       kind: 'known-array'
@@ -4638,8 +4637,8 @@ function emitKnownObjectMemberVariableDeclaration(
     statement,
     member,
     context,
-    (temp: string) =>
-      `inox_object_get(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`
+    member.objectName,
+    key
   )
 }
 
@@ -4652,35 +4651,50 @@ function emitDynamicObjectMemberVariableDeclaration(
     statement,
     member,
     context,
-    (temp: string) =>
-      `inox_object_get(${emitObjectValueReference(member.objectName, context)}, ${cStringLiteral(member.key)}, ${utf8ByteLength(member.key)}, &${temp})`
+    member.objectName,
+    member.key
   )
+}
+
+function emitObjectMemberGetLines(
+  objectName: string,
+  key: string,
+  temp: string,
+  context: CFunctionContext
+): string[] {
+  const object = emitObjectValueReference(objectName, context)
+  const lines = [`${temp} = inox::get(${object}, ${cStringLiteral(key)});`]
+
+  pushAll(lines, emitThrownCheckLines(context))
+
+  return lines
 }
 
 function emitObjectMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: TempValueEmitter
+  objectName: string,
+  key: string
 ): string[] {
   if (member.valueType === 'array') {
-    return emitObjectArrayMemberVariableDeclaration(statement, member, context, emitGetCall)
+    return emitObjectArrayMemberVariableDeclaration(statement, member, context, objectName, key)
   }
 
   if (member.valueType === 'map' || member.valueType === 'set') {
-    return emitObjectCollectionMemberVariableDeclaration(statement, member, context, emitGetCall)
+    return emitObjectCollectionMemberVariableDeclaration(statement, member, context, objectName, key)
   }
 
   if (member.valueType === 'bytes') {
-    return emitObjectBytesMemberVariableDeclaration(statement, member, context, emitGetCall)
+    return emitObjectBytesMemberVariableDeclaration(statement, member, context, objectName, key)
   }
 
   if (member.valueType === 'object') {
-    return emitObjectObjectMemberVariableDeclaration(statement, member, context, emitGetCall)
+    return emitObjectObjectMemberVariableDeclaration(statement, member, context, objectName, key)
   }
 
   if (member.valueType === 'string') {
-    return emitObjectStringMemberVariableDeclaration(statement, context, emitGetCall)
+    return emitObjectStringMemberVariableDeclaration(statement, context, objectName, key)
   }
 
   if (!isNullableScalarType(member.valueType)) {
@@ -4705,7 +4719,7 @@ function emitObjectMemberVariableDeclaration(
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(emitGetCall(temp), context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, key, temp, context))
   lines.push(`double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, member.valueType)
@@ -4717,14 +4731,15 @@ function emitObjectArrayMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: TempValueEmitter
+  objectName: string,
+  key: string
 ): string[] {
   registerOwnedValue(context, statement.name)
 
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
   lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_ARRAY || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
 
   context.variables.set(statement.name, 'array')
@@ -4744,7 +4759,8 @@ function emitObjectCollectionMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: TempValueEmitter
+  objectName: string,
+  key: string
 ): string[] {
   registerOwnedValue(context, statement.name)
 
@@ -4756,7 +4772,7 @@ function emitObjectCollectionMemberVariableDeclaration(
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
   lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != ${tag} || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
 
   context.variables.set(statement.name, member.valueType)
@@ -4798,13 +4814,14 @@ function emitObjectBytesMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: TempValueEmitter
+  objectName: string,
+  key: string
 ): string[] {
   registerOwnedValue(context, statement.name)
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
   lines.push(emitRuntimeTypeCheck(`${emitCIdentifier(statement.name)}.tag != INOX_TAG_BYTES || ${emitCIdentifier(statement.name)}.as.ref == 0`, context))
 
   context.variables.set(statement.name, member.valueType)
@@ -4816,13 +4833,14 @@ function emitObjectObjectMemberVariableDeclaration(
   statement: AnyNode,
   member: CKnownObjectField,
   context: CFunctionContext,
-  emitGetCall: TempValueEmitter
+  objectName: string,
+  key: string
 ): string[] {
   registerOwnedValue(context, statement.name)
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(emitGetCall(statement.name), context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, key, statement.name, context))
   lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(emitCIdentifier(statement.name)), context))
 
   context.variables.set(statement.name, 'object')
@@ -4849,7 +4867,8 @@ function emitObjectObjectMemberVariableDeclaration(
 function emitObjectStringMemberVariableDeclaration(
   statement: AnyNode,
   context: CFunctionContext,
-  emitGetCall: TempValueEmitter
+  objectName: string,
+  key: string
 ): string[] {
   const temp = nextCName(context, 'inox_field')
   const lines: string[] = []
@@ -4857,7 +4876,7 @@ function emitObjectStringMemberVariableDeclaration(
   registerOwnedValue(context, temp)
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(emitGetCall(temp), context))
+  pushAll(lines, emitObjectMemberGetLines(objectName, key, temp, context))
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
   lines.push(`inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${temp}.as.ref;`)
 
@@ -7167,7 +7186,7 @@ function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFuncti
   registerOwnedValue(context, value)
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(emitRuntimeLogGetCall(source, value, context), context))
+  pushAll(lines, emitRuntimeLogGetLines(source, value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
 
@@ -7185,16 +7204,19 @@ function emitRuntimeNumberLogValue(
 ): ConsoleLogValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
+  let tag = 'INOX_TAG_NUMBER'
   let formattedValue = `${value}.as.number`
 
   registerOwnedValue(context, value)
 
   if (valueType === 'boolean') {
+    tag = 'INOX_TAG_BOOL'
     formattedValue = `((double)(${value}.as.boolean ? 1 : 0))`
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(emitRuntimeLogGetCall(source, value, context), context))
+  pushAll(lines, emitRuntimeLogGetLines(source, value, context))
+  lines.push(emitRuntimeValueCheck(value, tag, context))
 
   return {
     lines,
@@ -7231,41 +7253,46 @@ function emitKnownArrayScalarLogValue(
   }
 }
 
-function emitRuntimeLogGetCall(source: RuntimeLogGetSource, temp: string, context: CFunctionContext): string {
+function emitRuntimeLogGetLines(source: RuntimeLogGetSource, temp: string, context: CFunctionContext): string[] {
   if (source.kind === 'known-array') {
     const element = source.element
 
     if (element === null || typeof element === 'undefined') {
-      return 'INOX_ERR_FIELD'
+      return [emitStatusCheck('INOX_ERR_FIELD', context)]
     }
 
-    return `inox_array_get(${element.arrayName}, ${element.index}, &${temp})`
+    return [emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context)]
   }
 
   if (source.kind === 'known-object-index') {
     const field = source.field
 
     if (field === null || typeof field === 'undefined') {
-      return 'INOX_ERR_FIELD'
+      return [emitStatusCheck('INOX_ERR_FIELD', context)]
     }
 
     const object = emitObjectValueReference(field.objectName, context)
     const key = cStringLiteral(field.key)
-    const keyLength = utf8ByteLength(field.key)
 
-    return `inox_object_get(${object}, ${key}, ${keyLength}, &${temp})`
+    const lines = [`${temp} = inox::get(${object}, ${key});`]
+    pushAll(lines, emitThrownCheckLines(context))
+
+    return lines
   }
 
   const member = source.member
 
   if (member === null || typeof member === 'undefined') {
-    return 'INOX_ERR_FIELD'
+    return [emitStatusCheck('INOX_ERR_FIELD', context)]
   }
 
   const object = emitObjectValueReference(member.objectName, context)
   const key = knownObjectMemberKey(member)
 
-  return `inox_object_get(${object}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${temp})`
+  const lines = [`${temp} = inox::get(${object}, ${cStringLiteral(key)});`]
+  pushAll(lines, emitThrownCheckLines(context))
+
+  return lines
 }
 
 function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {

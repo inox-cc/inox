@@ -3,13 +3,14 @@ import { memberExpressionPath } from '../../member-paths.ts'
 import type { AnyNode, Diagnostic } from '../../types.ts'
 import {
   cloneCStringSet,
+  emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
   registerOwnedValue
 } from '../context.ts'
-import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.ts'
+import { cStringLiteral, emitCIdentifier } from '../identifiers.ts'
 import { emitRuntimeNullableValueCheck, runtimeObjectReadValueMismatchCondition } from '../runtime-values.ts'
 import { isCoalesceExpression } from '../syntax.ts'
 import type {
@@ -49,6 +50,9 @@ type NullableFunctionContext = {
   boxedVariables: CStringSet
   cleanupEnabled: boolean
   diagnostics: Diagnostic[]
+  errorChannelUsed?: boolean
+  errorTargetActiveFlags?: boolean[]
+  errorTargets?: string[]
   failureStatement?: string | null
   failureStatementUsed?: boolean
   functionReturnArrayElementTypes: CStringNullableMap
@@ -99,6 +103,87 @@ function joinNullablePath(values: string[], separator: string): string {
   }
 
   return result
+}
+
+function currentNullableErrorTarget(context: NullableFunctionContext): string {
+  const targets = context.errorTargets
+
+  if (targets === null || typeof targets === 'undefined' || targets.length === 0) {
+    return ''
+  }
+
+  return targets[targets.length - 1]
+}
+
+function currentNullableErrorTargetRequiresActive(context: NullableFunctionContext): boolean {
+  const flags = context.errorTargetActiveFlags
+
+  if (flags === null || typeof flags === 'undefined' || flags.length === 0) {
+    return false
+  }
+
+  return flags[flags.length - 1]
+}
+
+function registerNullableErrorValue(context: NullableFunctionContext): void {
+  registerOwnedValue(context, 'inox_error')
+}
+
+function registerNullableErrorChannel(context: NullableFunctionContext): void {
+  context.errorChannelUsed = true
+  registerNullableErrorValue(context)
+}
+
+function emitNullableThrownCheckLines(context: NullableFunctionContext): string[] {
+  const target = currentNullableErrorTarget(context)
+
+  if (target === '' && !context.throwingFunction) {
+    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
+  }
+
+  const errorActiveNeeded = currentNullableErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
+
+  if (errorActiveNeeded) {
+    registerNullableErrorChannel(context)
+  } else if (target === '') {
+    registerNullableErrorValue(context)
+  }
+
+  if (target !== '' && !errorActiveNeeded) {
+    return [`if (inox::thrown()) goto ${target};`]
+  }
+
+  const lines: string[] = ['if (inox::thrown()) {']
+
+  if (target === '') {
+    lines.push('  inox_error = inox::take_exception();')
+  }
+  if (errorActiveNeeded) {
+    lines.push('  inox_error_active = 1;')
+  }
+  if (target === '') {
+    lines.push('  inox_status_result = INOX_ERR_THROW;')
+    lines.push('  goto cleanup;')
+  } else {
+    lines.push(`  goto ${target};`)
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function emitNullableObjectGetValueLines(
+  object: string,
+  key: string,
+  temp: string,
+  context: NullableFunctionContext
+): string[] {
+  const lines = [`${temp} = inox::get(${object}, ${cStringLiteral(key)});`]
+
+  appendLines(lines, emitNullableThrownCheckLines(context))
+
+  return lines
 }
 
 export type NullableLoweringDependencies = {
@@ -776,8 +861,7 @@ function emitCOptionalObjectReadValueExpression(
   const temp = nextCName(context, 'inox_optional_value')
   const expectedTag = cRuntimeValueTag(valueType)
   const typeCheck = emitRuntimeTypeCheck(runtimeObjectReadValueMismatchCondition(object.expression), context)
-  const getCall = optionalObjectReadGetCall(access, object.expression, temp, context)
-  const statusCheck = emitStatusCheck(getCall, context)
+  const getLines = optionalObjectReadGetLines(access, object.expression, temp, context)
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
@@ -788,7 +872,7 @@ function emitCOptionalObjectReadValueExpression(
   lines.push(`  ${temp} = inox_null_value();`)
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
-  lines.push(`  ${statusCheck}`)
+  appendPrefixedLines(lines, getLines, '  ')
   appendPrefixedLines(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
   lines.push('}')
 
@@ -798,23 +882,19 @@ function emitCOptionalObjectReadValueExpression(
   }
 }
 
-function optionalObjectReadGetCall(
+function optionalObjectReadGetLines(
   access: OptionalObjectReadAccess,
   objectExpression: string,
   temp: string,
   context: NullableFunctionContext
-): string {
+): string[] {
   let object = objectExpression
 
   if (access.objectName !== null && typeof access.objectName !== 'undefined') {
     object = emitObjectValueReference(access.objectName, context)
   }
 
-  if (access.kind === 'known') {
-    return `inox_object_get_known(${object}, ${access.index}, &${temp})`
-  }
-
-  return `inox_object_get(${object}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${temp})`
+  return emitNullableObjectGetValueLines(object, access.key, temp, context)
 }
 
 function emitCOptionalArrayIndexValueExpression(

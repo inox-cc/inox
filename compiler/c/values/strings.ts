@@ -21,7 +21,7 @@ import {
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, emitCIdentifier, escapeCPrintfFormatText, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeValueCheck, runtimeObjectReadValueMismatchCondition } from '../runtime-values.ts'
+import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import type {
   CObjectFieldInfo,
@@ -39,6 +39,9 @@ type StringDiagnosticContext = {
 type StringCContext = {
   cleanupEnabled: boolean
   diagnostics?: Diagnostic[]
+  errorChannelUsed?: boolean
+  errorTargetActiveFlags?: boolean[]
+  errorTargets?: string[]
   failureStatement?: string | null
   failureStatementUsed?: boolean
   functionNames?: Map<string, string>
@@ -213,6 +216,87 @@ function pushAllLines(target: string[], source: string[]): void {
   for (const line of source) {
     target.push(line)
   }
+}
+
+function currentStringErrorTarget(context: StringCContext): string {
+  const targets = context.errorTargets
+
+  if (targets === null || typeof targets === 'undefined' || targets.length === 0) {
+    return ''
+  }
+
+  return targets[targets.length - 1]
+}
+
+function currentStringErrorTargetRequiresActive(context: StringCContext): boolean {
+  const flags = context.errorTargetActiveFlags
+
+  if (flags === null || typeof flags === 'undefined' || flags.length === 0) {
+    return false
+  }
+
+  return flags[flags.length - 1]
+}
+
+function registerStringErrorValue(context: StringCContext): void {
+  registerOwnedValue(context, 'inox_error')
+}
+
+function registerStringErrorChannel(context: StringCContext): void {
+  context.errorChannelUsed = true
+  registerStringErrorValue(context)
+}
+
+function emitStringThrownCheckLines(context: StringCContext): string[] {
+  const target = currentStringErrorTarget(context)
+
+  if (target === '' && !context.throwingFunction) {
+    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
+  }
+
+  const errorActiveNeeded = currentStringErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
+
+  if (errorActiveNeeded) {
+    registerStringErrorChannel(context)
+  } else if (target === '') {
+    registerStringErrorValue(context)
+  }
+
+  if (target !== '' && !errorActiveNeeded) {
+    return [`if (inox::thrown()) goto ${target};`]
+  }
+
+  const lines: string[] = ['if (inox::thrown()) {']
+
+  if (target === '') {
+    lines.push('  inox_error = inox::take_exception();')
+  }
+  if (errorActiveNeeded) {
+    lines.push('  inox_error_active = 1;')
+  }
+  if (target === '') {
+    lines.push('  inox_status_result = INOX_ERR_THROW;')
+    lines.push('  goto cleanup;')
+  } else {
+    lines.push(`  goto ${target};`)
+  }
+
+  lines.push('}')
+
+  return lines
+}
+
+function emitStringObjectGetValueLines(
+  object: string,
+  key: string,
+  value: string,
+  context: StringCContext
+): string[] {
+  const lines = [`${value} = inox::get(${object}, ${cStringLiteral(key)});`]
+
+  pushAllLines(lines, emitStringThrownCheckLines(context))
+
+  return lines
 }
 
 function sourceLocationWithFile(loc: SourceLocation | undefined, line: number, column: number): SourceLocation {
@@ -1468,17 +1552,17 @@ function emitPreparedKnownObjectStringBytesOperand(
   const value = nextCName(context, 'inox_expr_value')
   const string = nextCName(context, tempPrefix)
   const object = stringDeps(context).emitObjectValueReference(objectName, context)
+  const key = knownObjectStringFieldReadKey(field, expression)
   const lines: string[] = []
-  let getCall = `inox_object_get_known(${object}, ${field.index}, &${value})`
 
-  if (field.key !== null && typeof field.key !== 'undefined') {
-    getCall = `inox_object_get(${object}, ${cStringLiteral(field.key)}, ${utf8ByteLength(field.key)}, &${value})`
+  if (key === null || typeof key === 'undefined') {
+    return null
   }
 
   registerOwnedValue(context, value)
 
   pushAllLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(getCall, context))
+  pushAllLines(lines, emitStringObjectGetValueLines(object, key, value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
 
@@ -1604,20 +1688,13 @@ function emitPreparedKnownOptionalObjectStringBytesOperand(
 
   const value = nextCName(context, 'inox_expr_value')
   const string = nextCName(context, tempPrefix)
-  const status = nextCName(context, 'inox_field_status')
   const object = stringDeps(context).emitObjectValueReference(objectName, context)
   const lines: string[] = []
 
   registerOwnedValue(context, value)
 
   pushAllLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(
-    `inox_status ${status} = inox_object_get(${object}, ${cStringLiteral(key)}, ${utf8ByteLength(key)}, &${value});`
-  )
-  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
-  lines.push(`  ${value} = inox_undefined_value();`)
-  lines.push('}')
-  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
+  pushAllLines(lines, emitStringObjectGetValueLines(object, key, value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
 
@@ -1755,14 +1832,8 @@ function emitPreparedRuntimeObjectFieldValueExpression(
 
   registerOwnedValue(context, value)
   pushAllLines(lines, object.lines)
-  lines.push(emitRuntimeTypeCheck(runtimeObjectReadValueMismatchCondition(object.expression), context))
   pushAllLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(
-    emitStatusCheck(
-      `inox_object_get(${object.expression}, ${cStringLiteral(access.key)}, ${utf8ByteLength(access.key)}, &${value})`,
-      context
-    )
-  )
+  pushAllLines(lines, emitStringObjectGetValueLines(object.expression, access.key, value, context))
 
   return {
     lines,
@@ -2439,7 +2510,7 @@ function emitPreparedRuntimeObjectNameStringBytesOperand(
 
   registerOwnedValue(context, value)
   pushAllLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`inox_object_get(${object}, "name", 4, &${value})`, context))
+  pushAllLines(lines, emitStringObjectGetValueLines(object, 'name', value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
   lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
 
