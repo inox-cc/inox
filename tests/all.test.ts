@@ -106,6 +106,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
+  const { assertConsoleLowersToGlobalObject } =
+    await import('./integration/console-global-object-lowering.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
   const {
     assertAwaitCatchOnlyDoesNotEmitErrorActiveState,
@@ -203,6 +205,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('cli-entry-module-main', async () => {
       await assertCliEntryModuleMain()
+    })
+
+    await t.test('console-global-object-lowering', () => {
+      assertConsoleLowersToGlobalObject()
     })
 
     await t.test('compiler-index-node-help', async () => {

@@ -341,7 +341,10 @@ console.log(f.isPromise())
 
   assert.match(constructor, /: name\(name\) \{\n\}/)
   assert.match(result.code, /!this->name\.valid\(\)/)
-  assert.match(result.code, /this->name\.len\(\) == 7 && memcmp\(this->name\.bytes\(\), "promise", this->name\.len\(\)\) == 0/)
+  assert.match(
+    result.code,
+    /this->name\.length\(\) == 7 && memcmp\(this->name\.bytes\(\), "promise", this->name\.length\(\)\) == 0/
+  )
   assert.doesNotMatch(constructor, /this->name/)
   assert.doesNotMatch(constructor, /inox::Value/)
   assert.doesNotMatch(constructor, /inox_param_name/)

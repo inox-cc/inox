@@ -27,7 +27,7 @@ f.test()
 
   assert.match(result.code, /void test\(\);/)
   assert.doesNotMatch(result.code, /inox_value test\(\);/)
-  assert.match(method, /printf\("%\.\*s\\n", \(int\)this->name\.len\(\), this->name\.bytes\(\)\);/)
+  assert.match(method, /console\.log\("%\.\*s", \(int\)this->name\.length\(\), this->name\.bytes\(\)\);/)
   assert.doesNotMatch(method, /inox_string\* name/)
   assert.doesNotMatch(method, /this->name\.raw\(\)\.as\.ref/)
   assert.doesNotMatch(method, /void Foo::test\(\) \{\n  \{/)

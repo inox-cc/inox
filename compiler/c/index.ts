@@ -116,7 +116,6 @@ import {
   emitCIdentifier,
   emitCObjectFunctionFieldName,
   escapeCPrintfFormatText,
-  escapeCString,
   utf8ByteLength
 } from './identifiers.ts'
 import {
@@ -6149,39 +6148,14 @@ type ConsoleLogValue = {
   values: string[]
 }
 
-type ConsolePrintSegment =
-  {
-    expression: string
-    format: string
-    kind: string
-    lines: string[]
-    values: string[]
-  }
-
 const consoleLogNumberFormat = '%.17g'
 
 function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
-  let stream = 'INOX_CONSOLE_STDOUT'
-
-  if (method === 'warn' || method === 'error') {
-    stream = 'INOX_CONSOLE_STDERR'
-  }
-
-  const isStdout = stream === 'INOX_CONSOLE_STDOUT'
-
   if (args.length === 0) {
-    const emptyLines: string[] = []
-
-    if (isStdout) {
-      emptyLines.push('printf("\\n");')
-    } else {
-      emptyLines.push(`if (inox_console_printf(${stream}, "\\n") < 0) ${emitFailureStatement(context)}`)
-    }
-
-    return emptyLines
+    return [`console.${method}();`]
   }
 
-  const directRuntimeValue = emitDirectRuntimeValueConsoleLogStatement(args, stream, context)
+  const directRuntimeValue = emitDirectRuntimeValueConsoleLogStatement(args, method, context)
 
   if (directRuntimeValue !== null && typeof directRuntimeValue !== 'undefined') {
     return directRuntimeValue
@@ -6199,30 +6173,16 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
     pushAll(values, value.values)
   }
 
-  const format = escapeCString(joinStrings(parts, ' '))
+  const format = joinStrings(parts, ' ')
 
-  if (values.length === 0) {
-    if (isStdout) {
-      lines.push(`printf("${format}\\n");`)
-    } else {
-      lines.push(`if (inox_console_printf(${stream}, "${format}\\n") < 0) ${emitFailureStatement(context)}`)
-    }
-  } else {
-    if (isStdout) {
-      lines.push(`printf("${format}\\n", ${joinStrings(values, ', ')});`)
-    } else {
-      lines.push(
-        `if (inox_console_printf(${stream}, "${format}\\n", ${joinStrings(values, ', ')}) < 0) ${emitFailureStatement(context)}`
-      )
-    }
-  }
+  lines.push(emitConsoleMethodCallStatement(method, format, values))
 
   return lines
 }
 
 function emitDirectRuntimeValueConsoleLogStatement(
   args: AnyNode[],
-  stream: string,
+  method: string,
   context: CFunctionContext
 ): string[] | null {
   if (!hasDirectRuntimeConsoleLogArgument(args, context)) {
@@ -6235,7 +6195,7 @@ function emitDirectRuntimeValueConsoleLogStatement(
     const value = emitCValueExpression(args[0], context)
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox::console_log(${stream}, ${value.expression})`, context))
+    lines.push(`console.${method}(${value.expression});`)
 
     return lines
   }
@@ -6244,80 +6204,12 @@ function emitDirectRuntimeValueConsoleLogStatement(
     const value = emitCValueExpression(args[1], context)
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox::console_log(${stream}, ${cStringLiteral(args[0].value)}, ${value.expression})`, context))
+    lines.push(`console.${method}(${cStringLiteral(args[0].value)}, ${value.expression});`)
 
     return lines
   }
 
-  const segments: ConsolePrintSegment[] = []
-
-  for (const arg of args) {
-    if (isDirectRuntimeConsoleLogArgument(arg, context)) {
-      const value = emitCValueExpression(arg, context)
-
-      segments.push({
-        expression: value.expression,
-        format: '',
-        kind: 'runtime-value',
-        lines: value.lines,
-        values: []
-      })
-    } else {
-      const value = emitConsoleLogValue(arg, context)
-
-      segments.push({
-        expression: '',
-        format: value.format,
-        kind: 'printf',
-        lines: value.lines,
-        values: value.values
-      })
-    }
-  }
-
-  for (const segment of segments) {
-    pushAll(lines, segment.lines)
-  }
-
-  let separatorEmitted = false
-
-  for (let index = 0; index < segments.length; index = index + 1) {
-    const segment = segments[index]
-
-    if (segment.kind === 'runtime-value') {
-      if (index > 0 && !separatorEmitted) {
-        lines.push(emitConsolePrintfStatement(stream, ' ', [], context))
-      }
-
-      lines.push(emitStatusCheck(`inox_console_print_value(${stream}, ${segment.expression})`, context))
-      separatorEmitted = false
-    } else {
-      let format = segment.format
-      const nextIndex = index + 1
-      const nextSegment = nextIndex < segments.length ? segments[nextIndex] : null
-
-      if (index > 0 && !separatorEmitted) {
-        format = ` ${format}`
-      }
-
-      if (
-        nextSegment !== null &&
-        typeof nextSegment !== 'undefined' &&
-        nextSegment.kind === 'runtime-value'
-      ) {
-        format = `${format} `
-        separatorEmitted = true
-      } else {
-        separatorEmitted = false
-      }
-
-      lines.push(emitConsolePrintfStatement(stream, format, segment.values, context))
-    }
-  }
-
-  lines.push(emitConsolePrintfStatement(stream, '\n', [], context))
-
-  return lines
+  return null
 }
 
 function hasDirectRuntimeConsoleLogArgument(args: AnyNode[], context: CFunctionContext): boolean {
@@ -6362,20 +6254,33 @@ function isDirectRuntimeConsoleValueExpression(
   return isRuntimeLogValueType(valueType)
 }
 
-function emitConsolePrintfStatement(
-  stream: string,
+function emitConsoleMethodCallStatement(
+  method: string,
   format: string,
-  values: string[],
-  context: CFunctionContext
+  values: string[]
 ): string {
-  const escapedFormat = escapeCString(format)
-  const args = values.length === 0 ? '' : `, ${joinStrings(values, ', ')}`
-
-  if (stream === 'INOX_CONSOLE_STDOUT') {
-    return `printf("${escapedFormat}"${args});`
+  if (values.length === 0) {
+    return `console.${method}(${cStringLiteral(unescapeCPrintfFormatText(format))});`
   }
 
-  return `if (inox_console_printf(${stream}, "${escapedFormat}"${args}) < 0) ${emitFailureStatement(context)}`
+  return `console.${method}(${cStringLiteral(format)}, ${joinStrings(values, ', ')});`
+}
+
+function unescapeCPrintfFormatText(value: string): string {
+  let result = ''
+
+  for (let index = 0; index < value.length; index = index + 1) {
+    const unit = value.slice(index, index + 1)
+
+    if (unit === '%' && index + 1 < value.length && value.slice(index + 1, index + 2) === '%') {
+      result = result + '%'
+      index = index + 1
+    } else {
+      result = result + unit
+    }
+  }
+
+  return result
 }
 
 function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {

@@ -9,19 +9,16 @@ type GeneratedTextFile = {
   code: string
 }
 
-export function assertGeneratedLabelsHaveLeadingBlankOnly(): void {
+export function assertConsoleLowersToGlobalObject(): void {
   const host = createMemoryCompilerHost(
     [
       {
         path: '/pkg/src/index.ts',
         source: `
-console.log('before')
-try {
-  throw 'bad'
-} catch (error) {
-  console.log(error)
-}
-console.log('after')
+const user = { name: 'Ada' }
+console.log('hello')
+console.log('user', user)
+console.error('bad', user)
 `
       }
     ],
@@ -36,14 +33,11 @@ console.log('after')
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /console\.log\("before"\);\n\n  \{/)
-  assert.match(source, /goto end_\d+;\n\s+\} catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
-  assert.doesNotMatch(source, /\}\n\s+catch_\d+:/)
-  assert.match(source, /\} end_\d+:;/)
-  assert.match(source, /\} end_\d+:;\n\n  console\.log\("after"\);/)
-  assert.doesNotMatch(source, /end_\d+: ;/)
-  assert.doesNotMatch(source, /end_\d+:\n\s+;/)
-  assert.doesNotMatch(source, /else catch_\d+:/)
+  assert.match(source, /console\.log\("hello"\);/)
+  assert.match(source, /console\.log\("user", user\);/)
+  assert.match(source, /console\.error\("bad", user\);/)
+  assert.doesNotMatch(source, /inox::console_log/)
+  assert.doesNotMatch(source, /if \(console\.(?:log|error)\(/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
@@ -57,5 +51,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  assertGeneratedLabelsHaveLeadingBlankOnly()
+  assertConsoleLowersToGlobalObject()
 }

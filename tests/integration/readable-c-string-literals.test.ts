@@ -41,18 +41,19 @@ console.log('label', text)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /printf\("hello world\\n"\);/)
-  assert.match(source, /printf\("num %.17g blabla\\n", \(\(double\)v\)\);/)
+  assert.match(source, /console\.log\("hello world"\);/)
+  assert.match(source, /console\.log\("num %.17g blabla", \(\(double\)v\)\);/)
   assert.match(source, /inox_string_from_format\(&inox_default_allocator, &inox_value_\d+, "value %.17g%%", \(\(double\)v\)\)/)
   assert.match(
     source,
-    /inox_string\* text = \(inox_string\*\)text_value_\d+\.as\.ref;\n  printf\("%\.\*s\\n", \(int\)text->len, text->bytes\);/
+    /inox_string\* text = \(inox_string\*\)text_value_\d+\.as\.ref;\n  console\.log\("%\.\*s", \(int\)text->len, text->bytes\);/
   )
-  assert.match(source, /printf\("label %\.\*s\\n", \(int\)text->len, text->bytes\);/)
+  assert.match(source, /console\.log\("label %\.\*s", \(int\)text->len, text->bytes\);/)
   assert.doesNotMatch(source, /\\x25/)
   assert.doesNotMatch(source, /\\x73/)
   assert.doesNotMatch(source, /\\x68/)
   assert.doesNotMatch(source, /printf\("%s\\n", "hello world"\);/)
+  assert.doesNotMatch(source, /printf\(/)
   assert.doesNotMatch(source, /double inox_return = 0;/)
   assert.doesNotMatch(source, /inox_console_format_value/)
   assert.doesNotMatch(source, /inox_string_concat_parts/)
@@ -80,9 +81,10 @@ console.error('bad', user)
   }) as GeneratedTextFile[]
   const runtimeValueSource = generatedTextFile(runtimeValueFiles, 'src/index.cc').code
 
-  assert.match(runtimeValueSource, /inox::console_log\(INOX_CONSOLE_STDOUT, user\)/)
-  assert.match(runtimeValueSource, /inox::console_log\(INOX_CONSOLE_STDOUT, "user", user\)/)
-  assert.match(runtimeValueSource, /inox::console_log\(INOX_CONSOLE_STDERR, "bad", user\)/)
+  assert.match(runtimeValueSource, /console\.log\(user\);/)
+  assert.match(runtimeValueSource, /console\.log\("user", user\);/)
+  assert.match(runtimeValueSource, /console\.error\("bad", user\);/)
+  assert.doesNotMatch(runtimeValueSource, /inox::console_log/)
   assert.doesNotMatch(runtimeValueSource, /inox_console_print_value_line\(INOX_CONSOLE_STDOUT, user\)/)
   assert.doesNotMatch(runtimeValueSource, /inox_console_printf\(INOX_CONSOLE_STDERR, "bad "\)/)
   assert.doesNotMatch(runtimeValueSource, /inox_console_format_value/)
