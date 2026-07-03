@@ -71,6 +71,8 @@ void inox_object_dispose_fields(inox_object* object);
 #endif
 
 #ifdef __cplusplus
+#include "inox/loop.h"
+
 namespace inox {
 
 inline inox_status object_get(inox_value object, const char* name, size_t len, Value& out) {
@@ -102,6 +104,84 @@ inline inox_status object_values(inox_value object, Value& out) {
 }
 
 } // namespace inox
+
+class Object {
+private:
+  using RuntimeObjectMethod = inox_status (*)(inox_allocator*, inox_value, inox_value*);
+  using ClassInstanceMethod = inox_status (*)(
+    inox_allocator*,
+    const inox_class_descriptor*,
+    const void*,
+    inox_value*
+  );
+
+  static inox::Value finish(inox_status status, inox_value out, const char* message) {
+    if (status == INOX_OK) {
+      return inox::adopt(out);
+    }
+
+    inox_release(out);
+    inox::throw_value(inox::string(message));
+
+    return inox::Value();
+  }
+
+  static inox::Value collect(inox_value value, RuntimeObjectMethod method, const char* message) {
+    inox_value out = inox_undefined_value();
+
+    return finish(method(&inox_default_allocator, value, &out), out, message);
+  }
+
+  static inox::Value collect(
+    const inox_class_descriptor* descriptor,
+    const void* instance,
+    ClassInstanceMethod method,
+    const char* message
+  ) {
+    inox_value out = inox_undefined_value();
+
+    return finish(method(&inox_default_allocator, descriptor, instance, &out), out, message);
+  }
+
+public:
+  inox::Value keys(inox_value value) const {
+    return collect(value, inox_object_keys, "Object.keys failed");
+  }
+
+  inox::Value keys(const inox::Value& value) const {
+    return keys(value.raw());
+  }
+
+  inox::Value keys(const inox_class_descriptor& descriptor, const void* instance) const {
+    return collect(&descriptor, instance, inox_class_instance_keys, "Object.keys failed");
+  }
+
+  inox::Value values(inox_value value) const {
+    return collect(value, inox_object_values, "Object.values failed");
+  }
+
+  inox::Value values(const inox::Value& value) const {
+    return values(value.raw());
+  }
+
+  inox::Value values(const inox_class_descriptor& descriptor, const void* instance) const {
+    return collect(&descriptor, instance, inox_class_instance_values, "Object.values failed");
+  }
+
+  inox::Value entries(inox_value value) const {
+    return collect(value, inox_object_entries, "Object.entries failed");
+  }
+
+  inox::Value entries(const inox::Value& value) const {
+    return entries(value.raw());
+  }
+
+  inox::Value entries(const inox_class_descriptor& descriptor, const void* instance) const {
+    return collect(&descriptor, instance, inox_class_instance_entries, "Object.entries failed");
+  }
+};
+
+inline Object Object;
 #endif
 
 #endif

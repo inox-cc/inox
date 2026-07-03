@@ -8054,14 +8054,18 @@ function isFetchResponseAwaitExpression(expression: AnyNode): boolean {
 }
 
 function emitAwaitResultRejectedPromiseLines(
-  result: string,
+  _result: string,
   _rejectionValueType: string,
   context: CFunctionContext
 ): string[] {
+  return emitThrownCheckLines(context)
+}
+
+function emitThrownCheckLines(context: CFunctionContext): string[] {
   const target = currentErrorTarget(context) ?? ''
 
   if (target === '' && !context.throwingFunction) {
-    return []
+    return [`if (inox::thrown()) ${emitFailureStatement(context)}`]
   }
 
   const errorActiveNeeded = currentErrorTargetRequiresActive(context) || (target === '' && context.throwingFunction)
@@ -9139,19 +9143,14 @@ function emitPreparedObjectValuesCallExpression(
     return null
   }
 
-  const temp = nextCName(context, `inox_object_${method}`)
   const lines: string[] = []
   const classInstance = emitPreparedNativeClassInstanceExpression(expression.args[0], context)
+  const temp = nextCName(context, `inox_${method}`)
 
   if (classInstance !== null && typeof classInstance !== 'undefined') {
     pushAll(lines, classInstance.lines)
-    lines.push(`inox::Value ${temp};`)
-    lines.push(
-      emitStatusCheck(
-        `inox_class_instance_${method}(&inox_default_allocator, &${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression}, ${temp}.out())`,
-        context
-      )
-    )
+    lines.push(`auto ${temp} = Object.${method}(${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression});`)
+    pushAll(lines, emitThrownCheckLines(context))
 
     return {
       lines,
@@ -9165,8 +9164,8 @@ function emitPreparedObjectValuesCallExpression(
   const object = emitCValueExpression(expression.args[0], context)
 
   pushAll(lines, object.lines)
-  lines.push(`inox::Value ${temp};`)
-  lines.push(emitStatusCheck(`inox::object_${method}(${object.expression}, ${temp})`, context))
+  lines.push(`auto ${temp} = Object.${method}(${object.expression});`)
+  pushAll(lines, emitThrownCheckLines(context))
 
   return {
     lines,

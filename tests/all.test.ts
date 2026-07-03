@@ -139,6 +139,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
+  const { assertObjectLowersToGlobalObject } =
+    await import('./integration/object-global-object-lowering.test.ts')
   const { assertObjectRuntimeIndexUsesDirectHelpers } =
     await import('./integration/object-runtime-index-lowering.test.ts')
   const {
@@ -285,6 +287,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('json-global-object-lowering', () => {
       assertJsonLowersToGlobalObject()
+    })
+
+    await t.test('object-global-object-lowering', () => {
+      assertObjectLowersToGlobalObject()
     })
 
     await t.test('object-runtime-index-lowering', () => {

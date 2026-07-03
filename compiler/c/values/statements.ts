@@ -1659,10 +1659,6 @@ export function emitRuntimeValueVariableDeclaration(
     value = statementDeps(context).emitCObjectLiteralValueExpression(expression, context, statement.shape)
   }
 
-  if (isOwnedObjectRuntimeArrayCallExpression(expression)) {
-    value.owned = true
-  }
-
   registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
 
   const lines: string[] = []
@@ -1735,38 +1731,6 @@ function pushPreparedRuntimeValueOwnershipLines(
 
     return
   }
-}
-
-function isOwnedObjectRuntimeArrayCallExpression(expression: StatementNode): boolean {
-  if (expression.type !== 'CallExpression') {
-    return false
-  }
-
-  const objectRuntimeMethod = expression.objectRuntimeMethod
-
-  if (objectRuntimeMethod === 'values' || objectRuntimeMethod === 'entries' || objectRuntimeMethod === 'keys') {
-    return true
-  }
-
-  const callee = expression.callee
-
-  if (callee === null || typeof callee === 'undefined' || callee.type !== 'MemberExpression') {
-    return false
-  }
-
-  if (callee.property !== 'values' && callee.property !== 'entries' && callee.property !== 'keys') {
-    return false
-  }
-
-  const object = callee.object
-
-  return (
-    object !== null &&
-    typeof object !== 'undefined' &&
-    object.type === 'Reference' &&
-    object.path.length === 1 &&
-    object.path[0] === 'Object'
-  )
 }
 
 export function registerRuntimeValueMetadata(

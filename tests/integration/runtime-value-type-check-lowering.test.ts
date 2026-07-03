@@ -65,12 +65,15 @@ for (const a of foo.v) {
   assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
   assert.match(source, /if \(\(foo\.tag != INOX_TAG_OBJECT/)
   assert.doesNotMatch(source, /if \(\(bad\.tag != INOX_TAG_OBJECT/)
-  assert.match(source, /inox::object_values\(a, inox_object_values_\d+\)/)
+  assert.match(source, /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
+  assert.doesNotMatch(source, /inox::object_values\(a, inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /if \(b\.tag != INOX_TAG_ARRAY/)
-  assert.match(source, /inox::object_entries\(a, inox_object_entries_\d+\)/)
+  assert.match(source, /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
+  assert.doesNotMatch(source, /inox::object_entries\(a, inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
   assert.doesNotMatch(source, /if \(d\.tag != INOX_TAG_ARRAY/)
+  assert.doesNotMatch(source, /inox::adopt\(inox_(?:values|entries)_\d+\.release\(\)\)/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
