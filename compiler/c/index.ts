@@ -6209,6 +6209,15 @@ function emitDirectRuntimeValueConsoleLogStatement(
       return [`console.${method}(${objectExpression});`]
     }
 
+    const objectRuntimeCall = emitPreparedInlineObjectRuntimeCallExpression(args[0], context)
+
+    if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
+      pushAll(lines, objectRuntimeCall.lines)
+      lines.push(`console.${method}(${objectRuntimeCall.expression});`)
+      pushAll(lines, emitThrownCheckLines(context))
+      return lines
+    }
+
     const value = emitCValueExpression(args[0], context)
 
     pushAll(lines, value.lines)
@@ -6222,6 +6231,15 @@ function emitDirectRuntimeValueConsoleLogStatement(
 
     if (objectExpression !== null && typeof objectExpression !== 'undefined') {
       return [`console.${method}(${cStringLiteral(args[0].value)}, ${objectExpression});`]
+    }
+
+    const objectRuntimeCall = emitPreparedInlineObjectRuntimeCallExpression(args[1], context)
+
+    if (objectRuntimeCall !== null && typeof objectRuntimeCall !== 'undefined') {
+      pushAll(lines, objectRuntimeCall.lines)
+      lines.push(`console.${method}(${cStringLiteral(args[0].value)}, ${objectRuntimeCall.expression});`)
+      pushAll(lines, emitThrownCheckLines(context))
+      return lines
     }
 
     const value = emitCValueExpression(args[1], context)
@@ -9131,6 +9149,40 @@ function cObjectRuntimeCallName(expression: AnyNode): string | null {
 
 function isObjectRuntimeCallExpression(expression: AnyNode): boolean {
   return cObjectRuntimeCallName(expression) !== null
+}
+
+function emitPreparedInlineObjectRuntimeCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  const method = cObjectRuntimeCallName(expression)
+
+  if (method === null || typeof method === 'undefined') {
+    return null
+  }
+
+  const classInstance = emitPreparedNativeClassInstanceExpression(expression.args[0], context)
+
+  if (classInstance !== null && typeof classInstance !== 'undefined') {
+    return {
+      lines: classInstance.lines,
+      expression: `Object.${method}(${emitCClassInfoDescriptorName(classInstance.info)}, ${classInstance.expression})`,
+      cppType: 'inox::Value',
+      runtimeTypeChecked: true,
+      valueType: 'array'
+    }
+  }
+
+  const object = emitPreparedObjectRuntimeCallArgumentExpression(expression.args[0], context) ??
+    emitCValueExpression(expression.args[0], context)
+
+  return {
+    lines: object.lines,
+    expression: `Object.${method}(${object.expression})`,
+    cppType: 'inox::Value',
+    runtimeTypeChecked: true,
+    valueType: 'array'
+  }
 }
 
 function emitPreparedObjectValuesCallExpression(

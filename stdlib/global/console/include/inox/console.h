@@ -9,6 +9,7 @@
 #ifdef __cplusplus
 #include <type_traits>
 #include <utility>
+#include "inox/loop.h"
 #endif
 
 #ifdef __cplusplus
@@ -75,6 +76,10 @@ private:
 
 public:
   inox_status log() const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox::console_newline(INOX_CONSOLE_STDOUT);
   }
 
@@ -83,14 +88,26 @@ public:
   }
 
   inox_status log(inox::StringView text) const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox_console_write_line(INOX_CONSOLE_STDOUT, text.bytes, text.len);
   }
 
   inox_status log(const inox::String& value) const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox_console_write_line(INOX_CONSOLE_STDOUT, value.bytes(), value.length());
   }
 
   inox_status log(inox_value value) const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox_console_print_value_line(INOX_CONSOLE_STDOUT, value);
   }
 
@@ -175,6 +192,10 @@ public:
   }
 
   inox_status warn() const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox::console_newline(INOX_CONSOLE_STDERR);
   }
 
@@ -183,14 +204,26 @@ public:
   }
 
   inox_status warn(inox::StringView text) const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox_console_write_line(INOX_CONSOLE_STDERR, text.bytes, text.len);
   }
 
   inox_status warn(const inox::String& value) const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox_console_write_line(INOX_CONSOLE_STDERR, value.bytes(), value.length());
   }
 
   inox_status warn(inox_value value) const {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     return inox_console_print_value_line(INOX_CONSOLE_STDERR, value);
   }
 
@@ -275,7 +308,15 @@ public:
   }
 
 private:
+  static bool skip_write() {
+    return inox::thrown();
+  }
+
   static inox_status write_text_line(inox_console_stream stream, const char* text) {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     if (text == nullptr) {
       return inox::console_newline(stream);
     }
@@ -284,6 +325,10 @@ private:
   }
 
   static inox_status write_prefixed_value_line(inox_console_stream stream, const char* prefix, inox_value value) {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     if (prefix != nullptr && prefix[0] != '\0') {
       inox_status status = inox_console_write(stream, prefix, strlen(prefix));
 
@@ -309,18 +354,30 @@ private:
 
   template <typename T>
   static inox_status write_value_object_line(inox_console_stream stream, const T& object) {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     inox::Value value = object.value();
     return inox_console_print_value_line(stream, value.raw());
   }
 
   template <typename T>
   static inox_status write_prefixed_value_object_line(inox_console_stream stream, const char* prefix, const T& object) {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     inox::Value value = object.value();
     return write_prefixed_value_line(stream, prefix, value.raw());
   }
 
   template <typename... Args>
   static inox_status printf_line(inox_console_stream stream, const char* format, Args... args) {
+    if (skip_write()) {
+      return INOX_OK;
+    }
+
     if constexpr (has_formatted_string_arg<Args...>::value) {
       inox_status status = write_formatted(stream, format == nullptr ? "" : format, args...);
 
