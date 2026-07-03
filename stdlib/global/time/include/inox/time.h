@@ -79,6 +79,15 @@ public:
 
 inline Date Date;
 
+class Performance {
+public:
+  inox_number now() const {
+    return inox_performance_now();
+  }
+};
+
+inline Performance performance;
+
 #endif
 
 #endif

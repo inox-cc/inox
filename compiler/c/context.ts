@@ -900,7 +900,7 @@ export function emitEventLoopReference(context: CEventLoopContext): string {
 }
 
 export function emitEventLoopCurrentTimeExpression(): string {
-  return 'inox_performance_now()'
+  return 'performance.now()'
 }
 
 export function emitBoxedValueCleanup(context: CFunctionContext): string[] {

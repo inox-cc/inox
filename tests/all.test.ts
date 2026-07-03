@@ -110,6 +110,8 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/console-global-object-lowering.test.ts')
   const { assertCompilerIndexNodeHelp } = await import('./integration/compiler-index-node-help.test.ts')
   const { assertDateLowersToGlobalObject } = await import('./integration/date-global-object-lowering.test.ts')
+  const { assertPerformanceLowersToGlobalObject } =
+    await import('./integration/performance-global-object-lowering.test.ts')
   const {
     assertAwaitCatchOnlyDoesNotEmitErrorActiveState,
     assertCatchOnlyDoesNotEmitErrorActiveState,
@@ -218,6 +220,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('date-global-object-lowering', () => {
       assertDateLowersToGlobalObject()
+    })
+
+    await t.test('performance-global-object-lowering', () => {
+      assertPerformanceLowersToGlobalObject()
     })
 
     await t.test('error-flow-state-lowering', () => {

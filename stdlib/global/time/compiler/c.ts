@@ -101,7 +101,7 @@ export function emitPreparedDateNumberExpression(
   if (method === 'performanceNow') {
     return {
       lines: [],
-      expression: 'inox_performance_now()'
+      expression: 'performance.now()'
     }
   }
 
