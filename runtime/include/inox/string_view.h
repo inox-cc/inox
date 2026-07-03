@@ -9,20 +9,16 @@ namespace inox {
 struct StringView {
   const char* bytes;
   size_t len;
+
+  constexpr StringView() : bytes(""), len(0) {}
+
+  constexpr StringView(const char* bytes, size_t len) : bytes(bytes == nullptr ? "" : bytes), len(bytes == nullptr ? 0 : len) {}
+
+  StringView(const char* bytes) : bytes(bytes == nullptr ? "" : bytes), len(bytes == nullptr ? 0 : strlen(bytes)) {}
+
+  template <size_t N>
+  constexpr StringView(const char (&bytes)[N]) : bytes(bytes), len(N > 0 ? N - 1 : 0) {}
 };
-
-inline StringView string_view(const char* bytes, size_t len) {
-  return { bytes == nullptr ? "" : bytes, bytes == nullptr ? 0 : len };
-}
-
-inline StringView string_view(const char* bytes) {
-  return string_view(bytes, bytes == nullptr ? 0 : strlen(bytes));
-}
-
-template <size_t N>
-constexpr StringView string_view(const char (&bytes)[N]) {
-  return { bytes, N > 0 ? N - 1 : 0 };
-}
 
 } // namespace inox
 

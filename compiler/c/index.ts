@@ -6173,7 +6173,7 @@ type ConsoleLogValue = {
 const consoleLogNumberFormat = '%.17g'
 
 function emitConsoleStringView(bytes: string, length: string): string {
-  return `inox::string_view(${bytes}, ${length})`
+  return `inox::StringView(${bytes}, ${length})`
 }
 
 function emitConsoleRuntimeStringView(name: string): string {

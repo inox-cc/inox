@@ -49,7 +49,7 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)
   assert.match(
     checkFetch,
-    /auto inox_res_0 = inox::await<inox::FetchResponse>\(inox::fetch\(inox::string_view\("http:\/\/example.com\/"\)\)\);/
+    /auto inox_res_0 = inox::await<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/"\)\);/
   )
   assert.match(checkFetch, /console\.log\("Status %\.17g", res\.status\(\)\);/)
   assert.match(
@@ -58,7 +58,7 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /auto inox_res_0 = inox::await<inox::FetchResponse>\(inox::fetch\(inox::string_view\("http:\/\/example.com\/"\)\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto res = inox_res_0\.value\(\);\n\n\s+console\.log\("Status %\.17g", res\.status\(\)\);/
+    /auto inox_res_0 = inox::await<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/"\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto res = inox_res_0\.value\(\);\n\n\s+console\.log\("Status %\.17g", res\.status\(\)\);/
   )
   assert.match(
     checkFetch,

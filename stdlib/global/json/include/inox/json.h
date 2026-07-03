@@ -58,6 +58,15 @@ public:
     return inox::adopt(out);
   }
 
+  inox::Value parse(const char* text) const {
+    return parse(inox::StringView(text));
+  }
+
+  template <size_t N>
+  inox::Value parse(const char (&text)[N]) const {
+    return parse(inox::StringView(text));
+  }
+
   inox_status stringify(inox_value value, inox::Value& out) const {
     return inox_json_stringify(&inox_default_allocator, value, out.out());
   }

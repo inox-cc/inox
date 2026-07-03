@@ -75,6 +75,15 @@ inline inox_status inox_fetch(inox_loop* loop, inox::StringView url, inox_promis
   return inox_fetch(loop, url.bytes, url.len, out);
 }
 
+inline inox_status inox_fetch(inox_loop* loop, const char* url, inox_promise** out) {
+  return inox_fetch(loop, inox::StringView(url), out);
+}
+
+template <size_t N>
+inline inox_status inox_fetch(inox_loop* loop, const char (&url)[N], inox_promise** out) {
+  return inox_fetch(loop, inox::StringView(url), out);
+}
+
 inline inox_status inox_fetch_with_init(
   inox_loop* loop,
   inox::StringView url,
@@ -82,6 +91,25 @@ inline inox_status inox_fetch_with_init(
   inox_promise** out
 ) {
   return inox_fetch_with_init(loop, url.bytes, url.len, init, out);
+}
+
+inline inox_status inox_fetch_with_init(
+  inox_loop* loop,
+  const char* url,
+  const inox_fetch_init* init,
+  inox_promise** out
+) {
+  return inox_fetch_with_init(loop, inox::StringView(url), init, out);
+}
+
+template <size_t N>
+inline inox_status inox_fetch_with_init(
+  inox_loop* loop,
+  const char (&url)[N],
+  const inox_fetch_init* init,
+  inox_promise** out
+) {
+  return inox_fetch_with_init(loop, inox::StringView(url), init, out);
 }
 
 namespace inox {
@@ -177,6 +205,15 @@ inline Promise fetch(StringView url) {
   return fetch(loop(), url);
 }
 
+inline Promise fetch(const char* url) {
+  return fetch(StringView(url));
+}
+
+template <size_t N>
+inline Promise fetch(const char (&url)[N]) {
+  return fetch(StringView(url));
+}
+
 inline Promise fetch(inox_loop* loop, StringView url, const inox_fetch_init* init) {
   inox_promise* promise = nullptr;
 
@@ -189,6 +226,15 @@ inline Promise fetch(inox_loop* loop, StringView url, const inox_fetch_init* ini
 
 inline Promise fetch(StringView url, const inox_fetch_init* init) {
   return fetch(loop(), url, init);
+}
+
+inline Promise fetch(const char* url, const inox_fetch_init* init) {
+  return fetch(StringView(url), init);
+}
+
+template <size_t N>
+inline Promise fetch(const char (&url)[N], const inox_fetch_init* init) {
+  return fetch(StringView(url), init);
 }
 
 } // namespace inox

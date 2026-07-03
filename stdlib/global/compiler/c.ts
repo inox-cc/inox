@@ -4,7 +4,7 @@ export type { TimeLoweringDependencies } from '../time/compiler/c.ts'
 export { cDebugRuntimeMethodName } from '../debug/compiler/c.ts'
 export {
   cFetchRuntimeExpressionMethod,
-  emitFetchStringView,
+  emitFetchStringArgument,
   emitFetchHeadersBooleanVariableDeclaration,
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,

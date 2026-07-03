@@ -971,7 +971,7 @@ function emitPreparedDynamicObjectIndexExpressionValueExpression(
 
   appendLines(lines, object.lines)
   appendLines(lines, key.lines)
-  lines.push(`auto ${temp} = inox::get(${object.expression}, inox::string_view(${key.bytes}, ${key.length}));`)
+  lines.push(`auto ${temp} = inox::get(${object.expression}, inox::StringView(${key.bytes}, ${key.length}));`)
   appendLines(lines, emitObjectThrownCheckLines(context))
   appendLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context))
 

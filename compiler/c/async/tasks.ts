@@ -5,7 +5,7 @@ import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../identifiers.
 import { emitRuntimeValueCheck, runtimeFetchResponseValueMismatchCondition } from '../runtime-values.ts'
 import {
   cFetchRuntimeExpressionMethod,
-  emitFetchStringView,
+  emitFetchStringArgument,
   isAsyncFetchRuntimeCallExpression
 } from '../../../stdlib/global/compiler/c.ts'
 import type {
@@ -3299,9 +3299,9 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     appendAsyncTaskLines(lines, init.lines)
 
     if (init.expression === '0') {
-      lines.push(`status = inox_fetch(inox_loop, ${emitFetchStringView(url)}, &frame->awaited);`)
+      lines.push(`status = inox_fetch(inox_loop, ${emitFetchStringArgument(url)}, &frame->awaited);`)
     } else {
-      lines.push(`status = inox_fetch_with_init(inox_loop, ${emitFetchStringView(url)}, ${init.expression}, &frame->awaited);`)
+      lines.push(`status = inox_fetch_with_init(inox_loop, ${emitFetchStringArgument(url)}, ${init.expression}, &frame->awaited);`)
     }
   } else {
     const response = asyncTaskDeps(context).emitCValueExpression(expression.callee.object, context)

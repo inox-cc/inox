@@ -1,6 +1,6 @@
 console.log('hello world')
 const v = 123
-console.log(`num ${v} blabla`)
+console.log(`num ${v} блаблабла`)
 console.log('date', Date.now())
 console.log('performance', performance.now())
 console.log('process.version', process.version)

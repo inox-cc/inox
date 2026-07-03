@@ -158,7 +158,7 @@ inline Value get(const Value& object, StringView name) {
 }
 
 inline Value get(inox_value object, const char* name) {
-  return get(object, string_view(name));
+  return get(object, StringView(name));
 }
 
 inline Value get(const Value& object, const char* name) {

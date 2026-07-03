@@ -94,12 +94,12 @@ function fetchResponseCppReference(expression: AnyNode, context: FetchFunctionCo
   return emitCIdentifier(name)
 }
 
-export function emitFetchStringView(operand: PreparedStringBytesOperand): string {
+export function emitFetchStringArgument(operand: PreparedStringBytesOperand): string {
   if (operand.literalValue !== null && typeof operand.literalValue !== 'undefined') {
-    return `inox::string_view(${cStringLiteral(operand.literalValue)})`
+    return cStringLiteral(operand.literalValue)
   }
 
-  return `inox::string_view(${operand.bytes}, ${operand.length})`
+  return `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
 export function cFetchRuntimeExpressionMethod(expression: AnyNode | null | undefined): string | null {
@@ -179,9 +179,9 @@ export function emitPreparedFetchCallExpression(
       let call = ''
 
       if (init.expression === '0') {
-        call = `inox_fetch(${emitEventLoopReference(context)}, ${emitFetchStringView(url)}, &${out})`
+        call = `inox_fetch(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)}, &${out})`
       } else {
-        call = `inox_fetch_with_init(${emitEventLoopReference(context)}, ${emitFetchStringView(url)}, ${init.expression}, &${out})`
+        call = `inox_fetch_with_init(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)}, ${init.expression}, &${out})`
       }
 
       const lines: string[] = []
@@ -194,8 +194,8 @@ export function emitPreparedFetchCallExpression(
           lines,
           expression:
             init.expression === '0'
-              ? `inox::fetch(${emitFetchStringView(url)})`
-              : `inox::fetch(${emitFetchStringView(url)}, ${init.expression})`,
+              ? `inox::fetch(${emitFetchStringArgument(url)})`
+              : `inox::fetch(${emitFetchStringArgument(url)}, ${init.expression})`,
           valueType,
           rejectionValueType: 'error'
         }

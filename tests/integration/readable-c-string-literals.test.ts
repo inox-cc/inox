@@ -180,9 +180,9 @@ console.log(data.v)
   }) as GeneratedTextFile[]
   const jsonLocalSource = generatedTextFile(jsonLocalFiles, 'src/index.cc').code
 
-  assert.match(jsonLocalSource, /auto data = JSON\.parse\(inox::string_view\("\{\\"v\\":\[1\]\}", 9\)\);/)
+  assert.match(jsonLocalSource, /auto data = JSON\.parse\("\{\\"v\\":\[1\]\}"\);/)
   assert.match(jsonLocalSource, /if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
-  assert.doesNotMatch(jsonLocalSource, /JSON\.parse\(inox::string_view\("\{\\"v\\":\[1\]\}", 9\), data\)/)
+  assert.doesNotMatch(jsonLocalSource, /JSON\.parse\(inox::string_view/)
   assert.doesNotMatch(jsonLocalSource, /inox_object_new/)
   assert.doesNotMatch(jsonLocalSource, /inox_shape_data/)
 
@@ -210,9 +210,9 @@ console.log(response.status)
 
   assert.match(
     fetchSource,
-    /inox::fetch\(inox::string_view\("http:\/\/127\.0\.0\.1"\)\)/
+    /inox::fetch\("http:\/\/127\.0\.0\.1"\)/
   )
-  assert.doesNotMatch(fetchSource, /inox_fetch\(inox::loop\(\), "http:\/\/127\.0\.0\.1", 16,/)
+  assert.doesNotMatch(fetchSource, /inox::fetch\(inox::string_view/)
 
   const processEntryHost = createMemoryCompilerHost(
     [

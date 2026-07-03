@@ -7,7 +7,7 @@ import {
   nextCName,
   registerOwnedValue
 } from '../../../../compiler/c/context.ts'
-import { emitCIdentifier } from '../../../../compiler/c/identifiers.ts'
+import { cStringLiteral, emitCIdentifier } from '../../../../compiler/c/identifiers.ts'
 import { emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../../../../compiler/c/runtime-values.ts'
 import type {
   CObjectShape,
@@ -110,6 +110,14 @@ function pushJsonLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
   }
+}
+
+function emitJsonStringArgument(operand: PreparedStringBytesOperand): string {
+  if (operand.literalValue !== null && typeof operand.literalValue !== 'undefined') {
+    return cStringLiteral(operand.literalValue)
+  }
+
+  return `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
 function singleStringPathName(path: string[] | null | undefined): string | null {
@@ -234,7 +242,7 @@ export function emitJsonParseVariableDeclaration(
   }
 
   pushJsonLines(lines, text.lines)
-  lines.push(`auto ${target} = JSON.parse(inox::string_view(${text.bytes}, ${text.length}));`)
+  lines.push(`auto ${target} = JSON.parse(${emitJsonStringArgument(text)});`)
   pushJsonThrownCheckLines(lines, context)
   pushJsonLines(lines, emitRuntimeValueCheckLines(target, expectedTag, context))
   lines.push('')
@@ -275,7 +283,7 @@ export function emitPreparedJsonCallExpression(
     const lines: string[] = []
 
     pushJsonLines(lines, text.lines)
-    lines.push(`auto ${out} = JSON.parse(inox::string_view(${text.bytes}, ${text.length}));`)
+    lines.push(`auto ${out} = JSON.parse(${emitJsonStringArgument(text)});`)
     pushJsonThrownCheckLines(lines, context)
 
     pushJsonLines(lines, emitRuntimeValueCheckLines(out, expectedTag, context))
