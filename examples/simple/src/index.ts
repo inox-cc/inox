@@ -14,7 +14,7 @@ async function checkFetch() {
     const txt = await res.text()
     console.log('Text', txt)
   } catch (error) {
-    console.log('#error:', error)
+    console.error('#error:', error)
   }
 }
 

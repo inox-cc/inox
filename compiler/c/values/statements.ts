@@ -3585,22 +3585,26 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
 
     const variableScope = pushVariableScope(context)
     const catchBody: string[] = []
+    let catchExceptionName = 'inox_error'
+    let catchNeedsStringBinding = false
 
     try {
       if (statement.handler.param !== null && typeof statement.handler.param !== 'undefined') {
         context.localValueNames.add(statement.handler.param)
+        const catchParamName = emitCIdentifier(statement.handler.param)
 
         if (catchValueType === 'object') {
           context.variables.set(statement.handler.param, 'object')
           statementDeps(context).registerErrorObjectShape(context, statement.handler.param)
-          catchBody.push(`inox_value ${statement.handler.param} = inox_error;`)
+          catchExceptionName = catchParamName
         } else if (catchValueType === 'string') {
           context.variables.set(statement.handler.param, 'string')
           context.runtimeStrings.add(statement.handler.param)
-          catchBody.push(`inox_string* ${statement.handler.param} = (inox_string*)inox_error.as.ref;`)
+          catchNeedsStringBinding = true
+          catchBody.push(`inox_string* ${catchParamName} = (inox_string*)inox_error.as.ref;`)
         } else {
           context.variables.set(statement.handler.param, 'unknown')
-          catchBody.push(`inox_value ${statement.handler.param} = inox_error;`)
+          catchExceptionName = catchParamName
         }
       }
 
@@ -3615,21 +3619,18 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
       popStringTarget(context.returnTargets)
     }
 
-    const catchFailureStatement: string = statementDeps(context).emitFailureStatement(context)
-
-    const catchTypeCheck = emitCatchBindingTypeCheck(catchValueType)
-
     lines.push(`  } ${catchLabel}: {`)
-    lines.push('    auto inox_error = inox::take_exception();')
-    if (catchTypeCheck !== '0') {
-      lines.push(`    if (${catchTypeCheck}) ${catchFailureStatement}`)
+    if (statement.handler.param === null || typeof statement.handler.param === 'undefined') {
+      lines.push('    inox::take_exception();')
+    } else if (catchNeedsStringBinding) {
+      lines.push('    auto inox_error = inox::take_exception();')
+    } else {
+      lines.push(`    auto ${catchExceptionName} = inox::take_exception();`)
     }
     if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
       lines.push('    inox_error_active = 0;')
     }
-    lines.push('    {')
-    pushIndentedLines(lines, catchBody, '      ')
-    lines.push('    }')
+    pushIndentedLines(lines, catchBody, '    ')
     lines.push('}')
   }
 
@@ -5147,18 +5148,6 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
   }
   pushAllLines(lines, emitReturnJump(context))
   return lines
-}
-
-export function emitCatchBindingTypeCheck(valueType: string): string {
-  if (valueType === 'object') {
-    return runtimeObjectLikeValueMismatchCondition('inox_error')
-  }
-
-  if (valueType === 'unknown') {
-    return '0'
-  }
-
-  return 'inox_error.tag != INOX_TAG_STRING || inox_error.as.ref == 0'
 }
 
 export function registerErrorChannel(context: CFunctionContext): void {
