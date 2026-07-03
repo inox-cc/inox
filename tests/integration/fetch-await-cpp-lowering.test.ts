@@ -44,7 +44,7 @@ await checkFetch()
   const checkFetch = functionSource(source, 'static void checkFetch(void) {')
 
   assert.doesNotMatch(source, /^static void checkFetch\(void\);$/m)
-  assert.match(checkFetch, /static void checkFetch\(void\) \{\n  \{\n    auto inox_res_0/)
+  assert.match(checkFetch, /static void checkFetch\(void\) \{\n  \{ \/\/ try_0\n    auto inox_res_0/)
   assert.doesNotMatch(checkFetch, /static void checkFetch\(void\) \{\n\n  \{/)
   assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)
   assert.match(

@@ -3555,7 +3555,7 @@ export function emitTryStatement(statement: StatementNode, context: CFunctionCon
     popErrorTarget(context)
   }
 
-  lines.push('  {')
+  lines.push(`  { // try_${id}`)
   pushIndentedLines(lines, tryBody, '    ')
   if (finallyLabel !== null && typeof finallyLabel !== 'undefined') {
     lines.push(`    goto ${finallyLabel};`)

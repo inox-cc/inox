@@ -36,7 +36,7 @@ console.log('after')
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /console\.log\("before"\);\n\n  \{/)
+  assert.match(source, /console\.log\("before"\);\n\n  \{ \/\/ try_\d+/)
   assert.match(source, /goto end_\d+;\n\s+\} catch_\d+: \{\n\s+auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /\}\n\s+catch_\d+:/)
   assert.match(source, /\} end_\d+:;/)
