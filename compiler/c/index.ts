@@ -6861,10 +6861,20 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
   if (isRuntimeProducedStringExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
-    const string = nextCName(context, 'inox_log_string')
     const lines: string[] = []
 
     pushAll(lines, value.lines)
+
+    if (value.cppType === 'inox::String') {
+      return {
+        lines,
+        format: '%.*s',
+        values: [`(int)${value.expression}.length()`, `${value.expression}.bytes()`]
+      }
+    }
+
+    const string = nextCName(context, 'inox_log_string')
+
     lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
     return {

@@ -533,6 +533,10 @@ export function isNodeRuntimeProducedStringExpression(expression: AnyNode | null
     return true
   }
 
+  if (cProcessRuntimeMethodName(expression) === 'cwd') {
+    return true
+  }
+
   if (cProcessRuntimeEnvName(expression)) {
     return true
   }
