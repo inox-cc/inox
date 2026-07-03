@@ -194,7 +194,7 @@ function pushJsonThrownCheckLines(target: string[], context: CFunctionContext): 
 }
 
 function jsonParseExpectedTag(valueType: string, shape: CObjectShape | null): string | null {
-  if (valueType === 'object' && (shape === null || typeof shape.fields === 'undefined' || shape.fields === null)) {
+  if (valueType === 'object') {
     return null
   }
 

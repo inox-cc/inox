@@ -63,7 +63,7 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /if \(txt_value_\d+\.tag != INOX_TAG_STRING/)
   assert.match(source, /auto bad = JSON\.parse\(inox::string_view\(/)
   assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
-  assert.match(source, /if \(\(foo\.tag != INOX_TAG_OBJECT/)
+  assert.doesNotMatch(source, /if \(\(foo\.tag != INOX_TAG_OBJECT/)
   assert.doesNotMatch(source, /if \(\(bad\.tag != INOX_TAG_OBJECT/)
   assert.match(source, /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
   assert.doesNotMatch(source, /inox::object_values\(a, inox_object_values_\d+\)/)
