@@ -1086,7 +1086,7 @@ function emitHttpDateNowStringBytesOperand(
   return {
     lines: [
       `char ${buffer}[32];`,
-      `int ${length} = snprintf(${buffer}, sizeof(${buffer}), "%.0f", (double)inox_date_now());`,
+      `int ${length} = snprintf(${buffer}, sizeof(${buffer}), "%.0f", (double)Date.now());`,
       `if (${length} < 0) return INOX_ERR_TYPE;`,
       `if ((size_t)${length} >= sizeof(${buffer})) ${length} = (int)(sizeof(${buffer}) - 1);`
     ],

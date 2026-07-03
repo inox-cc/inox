@@ -61,9 +61,15 @@ export async function assertCliEntryModuleMain(): Promise<void> {
 
     assert.match(generated, /int main\(void\)/)
     assert.match(generatedDependency, /inox_mod_src_lib_value_ts_.*_init/)
-    assert.match(generatedDependency, /static [^\n]* localValue\(void\);/)
+    assert.doesNotMatch(generatedDependency, /static [^\n]* localValue\(void\);/)
     assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_localValue\(void\);/)
     assert.doesNotMatch(generatedDependency, /static [^\n]* inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)
+    const localValueDefinition = generatedDependency.search(/\nstatic [^\n]* localValue\(void\) \{/)
+    const exportedValueDefinition = generatedDependency.search(/\ninox_value [^\n]*_exportedValue\(void\) \{/)
+
+    assert.ok(localValueDefinition >= 0, 'missing localValue definition')
+    assert.ok(exportedValueDefinition >= 0, 'missing exportedValue definition')
+    assert.ok(localValueDefinition < exportedValueDefinition, 'localValue should be defined before exportedValue')
     assert.doesNotMatch(generatedDependencyHeader, /localValue/)
     assert.match(generatedDependencyHeader, /inox_mod_src_lib_value_ts_.*_exportedValue\(void\);/)
     assert.match(generatedDeclaration, /export const value: string;/)

@@ -1584,12 +1584,7 @@ function cUnitLineReferencesName(line: string, name: string): boolean {
 }
 
 function cUnitIdentifierChar(value: string): boolean {
-  return (
-    (value >= 'a' && value <= 'z') ||
-    (value >= 'A' && value <= 'Z') ||
-    (value >= '0' && value <= '9') ||
-    value === '_'
-  )
+  return 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'.indexOf(value) >= 0
 }
 
 function collectCUnitNeededFunctionPrototypeNames(
@@ -1678,25 +1673,143 @@ function collectCUnitReferencedFunctionPrototypeNamesFromValue(
     return
   }
 
-  if (value.type === 'Reference' && Array.isArray(value.path) && typeof value.path[0] === 'string') {
-    const name = value.path[0]
+  const node = value as AnyNode
+
+  if (node.type === 'Reference' && Array.isArray(node.path) && typeof node.path[0] === 'string') {
+    const name = node.path[0]
 
     if (functionNames.has(name)) {
       target.add(name)
     }
   }
 
-  for (const key of Object.keys(value)) {
+  if (
+    node.type === 'TemplateLiteral' &&
+    typeof node.raw === 'string'
+  ) {
+    collectCUnitTemplateReferencedFunctionNames(node.raw, functionNames, target)
+  }
+
+  for (const key of Object.keys(node)) {
     if (key === 'loc') {
       continue
     }
 
-    collectCUnitReferencedFunctionPrototypeNamesFromValue(value[key], functionNames, target)
+    collectCUnitReferencedFunctionPrototypeNamesFromValue(node[key], functionNames, target)
   }
 }
 
-function cUnitIsRecord(value: unknown): value is AnyNode {
+function cUnitIsRecord(value: unknown): boolean {
   return typeof value === 'object' && value !== null
+}
+
+function collectCUnitTemplateReferencedFunctionNames(raw: string, functionNames: Set<string>, target: Set<string>): void {
+  if (!raw.includes('${')) {
+    return
+  }
+
+  let start = raw.indexOf('${')
+
+  while (start >= 0) {
+    const end = cUnitTemplatePlaceholderEnd(raw, start + 2)
+
+    if (end < 0) {
+      return
+    }
+
+    collectCUnitTextReferencedFunctionNames(raw.slice(start + 2, end), functionNames, target)
+    start = raw.indexOf('${', end + 1)
+  }
+}
+
+function collectCUnitTextReferencedFunctionNames(text: string, functionNames: Set<string>, target: Set<string>): void {
+  let index = 0
+  let quote = ''
+
+  while (index < text.length) {
+    const char = text[index]
+
+    if (quote !== '') {
+      if (char === '\\') {
+        index = index + 2
+        continue
+      }
+
+      if (char === quote) {
+        quote = ''
+      }
+
+      index = index + 1
+      continue
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char
+      index = index + 1
+      continue
+    }
+
+    if (!cUnitIdentifierChar(char)) {
+      index = index + 1
+      continue
+    }
+
+    const start = index
+
+    while (index < text.length && cUnitIdentifierChar(text[index])) {
+      index = index + 1
+    }
+
+    const name = text.slice(start, index)
+
+    if (functionNames.has(name)) {
+      target.add(name)
+    }
+  }
+}
+
+function cUnitTemplatePlaceholderEnd(raw: string, start: number): number {
+  let depth = 1
+  let quote = ''
+  let index = start
+
+  while (index < raw.length) {
+    const char = raw[index]
+
+    if (quote !== '') {
+      if (char === '\\') {
+        index = index + 2
+        continue
+      }
+
+      if (char === quote) {
+        quote = ''
+      }
+
+      index = index + 1
+      continue
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char
+      index = index + 1
+      continue
+    }
+
+    if (char === '{') {
+      depth = depth + 1
+    } else if (char === '}') {
+      depth = depth - 1
+
+      if (depth === 0) {
+        return index
+      }
+    }
+
+    index = index + 1
+  }
+
+  return -1
 }
 
 function emitCallbackFinalizerPrototype(finalizerName: string): string {

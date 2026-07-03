@@ -94,7 +94,7 @@ export function emitPreparedDateNumberExpression(
   if (method === 'dateNow') {
     return {
       lines: [],
-      expression: 'inox_date_now()'
+      expression: 'Date.now()'
     }
   }
 
@@ -190,7 +190,7 @@ function emitPreparedDateParseExpression(
 
   return {
     lines: text.lines,
-    expression: `inox_date_parse(${text.bytes}, ${text.length})`
+    expression: `Date.parse(${text.bytes}, ${text.length})`
   }
 }
 
@@ -203,7 +203,7 @@ function emitPreparedDateUTCExpression(
 
   return {
     lines: prepared.lines,
-    expression: `inox_date_utc(${joinTimeStrings(prepared.args, ', ')})`
+    expression: `Date.UTC(${joinTimeStrings(prepared.args, ', ')})`
   }
 }
 
@@ -215,7 +215,7 @@ function emitPreparedDateConstructorExpression(
   if (expression.args.length === 0) {
     return {
       lines: [],
-      expression: 'inox_date_now()'
+      expression: 'Date.now()'
     }
   }
 
@@ -228,7 +228,7 @@ function emitPreparedDateConstructorExpression(
 
       return {
         lines: text.lines,
-        expression: `inox_date_parse(${text.bytes}, ${text.length})`
+        expression: `Date.parse(${text.bytes}, ${text.length})`
       }
     }
 

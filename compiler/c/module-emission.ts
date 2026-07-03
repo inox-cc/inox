@@ -477,16 +477,6 @@ export function emitCModuleSource(
     )
   )
 
-  const declarationLines: string[] = []
-  emitCModuleDeclarations(declarationLines, plan, functions, classMethods, context, deps)
-  emitCModuleNativeClassForwardDeclarations(lines, context, declarationLines)
-  pushCModuleLines(lines, declarationLines)
-  emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
-  pushCModuleLines(
-    lines,
-    emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps), classDescriptorNames)
-  )
-
   const bodyLines: string[] = []
 
   for (const classInfo of context.classInfos.values()) {
@@ -557,6 +547,15 @@ export function emitCModuleSource(
     pushCModuleLines(bodyLines, emitCModuleMainFunction(plan, context, deps))
   }
 
+  const declarationLines: string[] = []
+  emitCModuleDeclarations(declarationLines, plan, functions, classMethods, context, deps)
+  emitCModuleNativeClassForwardDeclarations(lines, context, declarationLines)
+  pushCModuleLines(lines, declarationLines)
+  emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
+  pushCModuleLines(
+    lines,
+    emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps), classDescriptorNames)
+  )
   emitCModuleFunctionPointerAdapterDefinitions(lines, context)
   pushCModuleLines(lines, bodyLines)
 
@@ -615,12 +614,7 @@ function cModuleLineReferencesName(line: string, name: string): boolean {
 }
 
 function cModuleIdentifierChar(value: string): boolean {
-  return (
-    (value >= 'a' && value <= 'z') ||
-    (value >= 'A' && value <= 'Z') ||
-    (value >= '0' && value <= '9') ||
-    value === '_'
-  )
+  return 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'.indexOf(value) >= 0
 }
 
 export function emitCModuleHeader(
@@ -804,6 +798,30 @@ function collectCModuleNeededFunctionPrototypeNames(
   const functionNames = collectCModuleFunctionNames(functions)
   const functionIndexes = collectCModuleFunctionIndexes(functions)
 
+  for (const adapter of context.functionPointerAdapters) {
+    for (const name of cFunctionPointerAdapterTargetSourceNames(adapter, context)) {
+      if (functionNames.has(name)) {
+        prototypeNames.add(name)
+      }
+    }
+  }
+
+  for (const wrapper of context.asyncTaskWrappers.values()) {
+    collectCModuleReferencedFunctionPrototypeNamesFromValue(wrapper, functionNames, prototypeNames)
+  }
+
+  for (const wrapper of context.callbackWrappers.values()) {
+    if (wrapper.kind === 'named' && functionNames.has(wrapper.target)) {
+      prototypeNames.add(wrapper.target)
+    }
+
+    collectCModuleReferencedFunctionPrototypeNamesFromValue(wrapper, functionNames, prototypeNames)
+  }
+
+  for (const wrapper of context.promiseChainWrappers.values()) {
+    collectCModuleReferencedFunctionPrototypeNamesFromValue(wrapper, functionNames, prototypeNames)
+  }
+
   for (const info of context.classInfos.values()) {
     if (info.constructor !== null && typeof info.constructor !== 'undefined') {
       collectCModuleReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
@@ -883,25 +901,151 @@ function collectCModuleReferencedFunctionPrototypeNamesFromValue(
     return
   }
 
-  if (value.type === 'Reference' && Array.isArray(value.path) && typeof value.path[0] === 'string') {
-    const name = value.path[0]
+  const node = value as AnyNode
+
+  if (node.type === 'Reference' && Array.isArray(node.path) && typeof node.path[0] === 'string') {
+    const name = node.path[0]
 
     if (functionNames.has(name)) {
       target.add(name)
     }
   }
 
-  for (const key of Object.keys(value)) {
+  if (
+    node.type === 'TemplateLiteral' &&
+    typeof node.raw === 'string'
+  ) {
+    collectCModuleTemplateReferencedFunctionNames(node.raw, functionNames, target)
+  }
+
+  for (const key of Object.keys(node)) {
     if (key === 'loc') {
       continue
     }
 
-    collectCModuleReferencedFunctionPrototypeNamesFromValue(value[key], functionNames, target)
+    collectCModuleReferencedFunctionPrototypeNamesFromValue(node[key], functionNames, target)
   }
 }
 
-function cModuleIsRecord(value: unknown): value is AnyNode {
+function cModuleIsRecord(value: unknown): boolean {
   return typeof value === 'object' && value !== null
+}
+
+function collectCModuleTemplateReferencedFunctionNames(
+  raw: string,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  if (!raw.includes('${')) {
+    return
+  }
+
+  let start = raw.indexOf('${')
+
+  while (start >= 0) {
+    const end = cModuleTemplatePlaceholderEnd(raw, start + 2)
+
+    if (end < 0) {
+      return
+    }
+
+    collectCModuleTextReferencedFunctionNames(raw.slice(start + 2, end), functionNames, target)
+    start = raw.indexOf('${', end + 1)
+  }
+}
+
+function collectCModuleTextReferencedFunctionNames(
+  text: string,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  let index = 0
+  let quote = ''
+
+  while (index < text.length) {
+    const char = text[index]
+
+    if (quote !== '') {
+      if (char === '\\') {
+        index = index + 2
+        continue
+      }
+
+      if (char === quote) {
+        quote = ''
+      }
+
+      index = index + 1
+      continue
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char
+      index = index + 1
+      continue
+    }
+
+    if (!cModuleIdentifierChar(char)) {
+      index = index + 1
+      continue
+    }
+
+    const start = index
+
+    while (index < text.length && cModuleIdentifierChar(text[index])) {
+      index = index + 1
+    }
+
+    const name = text.slice(start, index)
+
+    if (functionNames.has(name)) {
+      target.add(name)
+    }
+  }
+}
+
+function cModuleTemplatePlaceholderEnd(raw: string, start: number): number {
+  let depth = 1
+  let quote = ''
+  let index = start
+
+  while (index < raw.length) {
+    const char = raw[index]
+
+    if (quote !== '') {
+      if (char === '\\') {
+        index = index + 2
+        continue
+      }
+
+      if (char === quote) {
+        quote = ''
+      }
+
+      index = index + 1
+      continue
+    }
+
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char
+      index = index + 1
+      continue
+    }
+
+    if (char === '{') {
+      depth = depth + 1
+    } else if (char === '}') {
+      depth = depth - 1
+
+      if (depth === 0) {
+        return index
+      }
+    }
+
+    index = index + 1
+  }
+
+  return -1
 }
 
 function emitCModuleUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {

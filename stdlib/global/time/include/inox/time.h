@@ -46,4 +46,39 @@ void inox_time_sleep_ms(inox_number delay_ms);
 }
 #endif
 
+#ifdef __cplusplus
+
+#include "inox/string_view.h"
+
+class Date {
+public:
+  inox_number now() const {
+    return inox_date_now();
+  }
+
+  inox_number parse(const char* bytes, size_t len) const {
+    return inox_date_parse(bytes, len);
+  }
+
+  inox_number parse(inox::StringView text) const {
+    return parse(text.bytes, text.len);
+  }
+
+  inox_number UTC(
+    inox_number year,
+    inox_number month = 0,
+    inox_number day = 1,
+    inox_number hour = 0,
+    inox_number minute = 0,
+    inox_number second = 0,
+    inox_number millisecond = 0
+  ) const {
+    return inox_date_utc(year, month, day, hour, minute, second, millisecond);
+  }
+};
+
+inline Date Date;
+
+#endif
+
 #endif
