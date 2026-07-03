@@ -5,7 +5,7 @@ import {
   processRuntimePropertyValueType
 } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
-import { emitPrepareOwnedValueWrite, nextCName } from '../../../../compiler/c/context.ts'
+import { emitFailureStatement, emitPrepareOwnedValueWrite, nextCName } from '../../../../compiler/c/context.ts'
 import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
 import type {
   CObjectShape,
@@ -293,6 +293,7 @@ export function emitPreparedProcessValueExpression(
     dependencies.registerObjectShape(context, out, expression.shape)
 
     lines.push(`${out} = ${call};`)
+    lines.push(`if (inox::thrown()) ${emitFailureStatement(context)}`)
 
     return {
       lines,

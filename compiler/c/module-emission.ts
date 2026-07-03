@@ -477,12 +477,13 @@ export function emitCModuleSource(
     )
   )
 
+  emitCModuleNativeClassForwardDeclarations(lines, context)
+  emitCModuleDeclarations(lines, plan, functions, classMethods, context, deps)
+  emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
   pushCModuleLines(
     lines,
     emitCNativeClassDeclarations(context, collectCModuleClassMethodPrototypes(context, deps), classDescriptorNames)
   )
-  pushCModuleLines(lines, emitCClassDescriptorDeclarationsForNames(context, classDescriptorNames))
-  emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
 
   const bodyLines: string[] = []
 
@@ -500,6 +501,7 @@ export function emitCModuleSource(
     bodyLines.push('')
   }
 
+  pushCModuleLines(bodyLines, emitCClassDescriptorDeclarationsForNames(context, classDescriptorNames))
   emitCModuleUnhandledRejectionFlagDefinition(bodyLines, context)
   emitCModuleValueDefinitions(bodyLines, moduleValues, context)
 
@@ -553,11 +555,27 @@ export function emitCModuleSource(
     pushCModuleLines(bodyLines, emitCModuleMainFunction(plan, context, deps))
   }
 
-  emitCModuleDeclarations(lines, plan, functions, classMethods, context, deps)
   emitCModuleFunctionPointerAdapterDefinitions(lines, context)
   pushCModuleLines(lines, bodyLines)
 
   return joinCModuleLines(lines)
+}
+
+function emitCModuleNativeClassForwardDeclarations(lines: string[], context: CEmitContext): void {
+  let emitted = false
+
+  for (const info of context.classInfos.values()) {
+    if (!info.native) {
+      continue
+    }
+
+    lines.push(`class ${emitCClassTypeNameForClassName(context, info.name)};`)
+    emitted = true
+  }
+
+  if (emitted) {
+    lines.push('')
+  }
 }
 
 export function emitCModuleHeader(

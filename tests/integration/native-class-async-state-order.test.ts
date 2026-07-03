@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 
-import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
+import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
 
 type GeneratedTextFile = {
@@ -10,11 +10,7 @@ type GeneratedTextFile = {
 }
 
 export function assertNativeClassAsyncStateDoesNotSplitMethods(): void {
-  const host = createMemoryCompilerHost(
-    [
-      {
-        path: '/pkg/src/index.ts',
-        source: `
+  const sourceText = `
 class Foo {
   name: string
 
@@ -34,8 +30,14 @@ function run(): void {
 
 const f = new Foo('foo 1')
 f.test()
+console.log(f)
 run()
 `
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: sourceText
       }
     ],
     {
@@ -48,23 +50,43 @@ run()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const classIndex = source.indexOf('class Foo')
+  assertNativeClassMethodOrder(source)
+
+  const unitResult = compileSource(sourceText, {
+    target: 'cc'
+  })
+
+  assertNativeClassMethodOrder(unitResult.code)
+}
+
+function assertNativeClassMethodOrder(source: string): void {
+  const classMatch = /class [^\n]*Foo[^\n]*\{\n/.exec(source)
+  const classIndex = classMatch !== null ? classMatch.index : -1
+  const classEndIndex = source.indexOf('};', classIndex)
   const constructorIndex = source.indexOf('Foo::Foo(')
   const methodIndex = source.indexOf('void Foo::test()')
+  const runPrototypeMatch = /\b(?:static )?[A-Za-z_][A-Za-z0-9_:*<>, ]* run\([^)]*\);/.exec(source)
+  const runPrototypeIndex = runPrototypeMatch !== null ? runPrototypeMatch.index : -1
   const flagIndex = source.indexOf('static int inox_mod_src_index_ts_')
-  const runDefinitionIndex = Math.max(
-    source.indexOf('static void run(void) {'),
-    source.indexOf('static void run(inox_loop* inox_loop) {')
-  )
+  const runDefinitionMatch = /\b(?:static )?[A-Za-z_][A-Za-z0-9_:*<>, ]* run\([^)]*\) \{/.exec(source)
+  const runDefinitionIndex = runDefinitionMatch !== null ? runDefinitionMatch.index : -1
   const mainIndex = source.indexOf('int main(')
 
   assert.notEqual(classIndex, -1, 'missing Foo class declaration')
+  assert.notEqual(classEndIndex, -1, 'missing Foo class declaration end')
   assert.notEqual(constructorIndex, -1, 'missing Foo constructor definition')
   assert.notEqual(methodIndex, -1, 'missing Foo::test definition')
+  assert.notEqual(runPrototypeIndex, -1, 'missing run function prototype')
   assert.equal(flagIndex, -1, 'unhandled rejection state should live in runtime')
   assert.notEqual(runDefinitionIndex, -1, 'missing run function definition')
   assert.notEqual(mainIndex, -1, 'missing module main')
+  assert.ok(runPrototypeIndex < classIndex, 'function prototypes should not split class declarations from methods')
   assert.ok(classIndex < constructorIndex, 'class declaration should precede constructor definition')
+  assert.equal(
+    source.slice(classEndIndex + 2, constructorIndex).trim(),
+    '',
+    'class declaration should stay directly next to constructor definition'
+  )
   assert.ok(constructorIndex < methodIndex, 'constructor definition should stay with class method definitions')
   assert.ok(methodIndex < runDefinitionIndex, 'function definitions should not split class method definitions')
   assert.ok(runDefinitionIndex < mainIndex, 'function definitions should stay before main')

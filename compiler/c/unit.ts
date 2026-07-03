@@ -1342,9 +1342,17 @@ export function emitCUnit(
     needsNetRuntime,
     options
   )
+  emitCUnitNativeClassForwardDeclarations(lines, baseContext)
+
+  for (const item of functions) {
+    lines.push(`${deps.emitFunctionHead(item, baseContext)};`)
+  }
+
+  if (baseContext.classInfos.size > 0 && functions.length > 0) {
+    lines.push('')
+  }
+
   pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps), classDescriptorNames))
-  pushUnitLines(lines, emitCClassDescriptorDeclarationsForNames(baseContext, classDescriptorNames))
-  emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
   const callbackWrappers: CCallbackWrapperMap = baseContext.callbackWrappers
@@ -1382,10 +1390,6 @@ export function emitCUnit(
   for (const wrapper of promiseChainCallbackWrappers) {
     pushUnitLines(lines, emitRuntimeArrowCallbackContextType(wrapper))
     lines.push('')
-  }
-
-  for (const item of functions) {
-    lines.push(`${deps.emitFunctionHead(item, baseContext)};`)
   }
 
   for (const classMethod of classMethods) {
@@ -1449,6 +1453,8 @@ export function emitCUnit(
     lines.push('')
   }
 
+  pushUnitLines(lines, emitCClassDescriptorDeclarationsForNames(baseContext, classDescriptorNames))
+  emitCUnitValueFunctionFieldDefinitions(lines, valueDeclarations, baseContext)
   emitCUnitUnhandledRejectionFlagDefinition(lines, baseContext)
   emitCUnitValueDefinitions(lines, valueDeclarations)
 
@@ -1516,6 +1522,23 @@ export function emitCUnit(
 function emitCUnitUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {
   if (context.unhandledRejectionFlag === null || typeof context.unhandledRejectionFlag === 'undefined') {
     return
+  }
+}
+
+function emitCUnitNativeClassForwardDeclarations(lines: string[], context: CEmitContext): void {
+  let emitted = false
+
+  for (const info of context.classInfos.values()) {
+    if (!info.native) {
+      continue
+    }
+
+    lines.push(`class ${emitCClassTypeName(info.symbolName)};`)
+    emitted = true
+  }
+
+  if (emitted) {
+    lines.push('')
   }
 }
 
