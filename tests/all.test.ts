@@ -145,6 +145,7 @@ async function runIntegrationTests(): Promise<void> {
     assertNativeJsonParseUnicodeLiteralShapeUsesDirectVariableTarget
   } =
     await import('./integration/json-parse-shape-lowering.test.ts')
+  const { assertJsonLowersToGlobalObject } = await import('./integration/json-global-object-lowering.test.ts')
   const { assertClassSuperDiagnosticUsesInheritanceCode } = await import('./integration/class-diagnostics.test.ts')
   const { assertNativeClassAsyncStateDoesNotSplitMethods } =
     await import('./integration/native-class-async-state-order.test.ts')
@@ -274,6 +275,10 @@ async function runIntegrationTests(): Promise<void> {
     await t.test('json-parse-shape-lowering', () => {
       assertJsonParseLiteralShapeUsesDirectVariableTarget()
       assertJsonParseCatchUsesRaiiErrorReset()
+    })
+
+    await t.test('json-global-object-lowering', () => {
+      assertJsonLowersToGlobalObject()
     })
 
     await t.test('object-runtime-index-lowering', () => {

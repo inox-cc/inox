@@ -35,21 +35,30 @@ inox_status inox_json_stringify_class_instance(
 #endif
 
 #ifdef __cplusplus
-namespace inox {
+class Json {
+public:
+  inox_status parse(inox::StringView text, inox::Value& out) const {
+    return inox_json_parse(&inox_default_allocator, text.bytes, text.len, out.out());
+  }
 
-inline inox_status json_parse(StringView text, Value& out) {
-  return inox_json_parse(&inox_default_allocator, text.bytes, text.len, out.out());
-}
+  inox_status parse(inox::StringView text, inox::Value& out, inox::Value& error_out) const {
+    return inox_json_parse_with_error(&inox_default_allocator, text.bytes, text.len, out.out(), error_out.out());
+  }
 
-inline inox_status json_parse_with_error(StringView text, Value& out, Value& error_out) {
-  return inox_json_parse_with_error(&inox_default_allocator, text.bytes, text.len, out.out(), error_out.out());
-}
+  inox_status stringify(inox_value value, inox::Value& out) const {
+    return inox_json_stringify(&inox_default_allocator, value, out.out());
+  }
 
-inline inox_status json_stringify(inox_value value, Value& out) {
-  return inox_json_stringify(&inox_default_allocator, value, out.out());
-}
+  inox_status stringify(const inox_class_descriptor& descriptor, const void* instance, inox::Value& out) const {
+    return stringify(&descriptor, instance, out);
+  }
 
-} // namespace inox
+  inox_status stringify(const inox_class_descriptor* descriptor, const void* instance, inox::Value& out) const {
+    return inox_json_stringify_class_instance(&inox_default_allocator, descriptor, instance, out.out());
+  }
+};
+
+inline Json JSON;
 #endif
 
 #endif

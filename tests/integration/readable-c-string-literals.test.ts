@@ -180,7 +180,7 @@ console.log(data.v)
   }) as GeneratedTextFile[]
   const jsonLocalSource = generatedTextFile(jsonLocalFiles, 'src/index.cc').code
 
-  assert.match(jsonLocalSource, /inox::json_parse\(inox::string_view\("\{\\"v\\":\[1\]\}", 9\), data\)/)
+  assert.match(jsonLocalSource, /JSON\.parse\(inox::string_view\("\{\\"v\\":\[1\]\}", 9\), data\)/)
   assert.doesNotMatch(jsonLocalSource, /inox_object_new/)
   assert.doesNotMatch(jsonLocalSource, /inox_shape_data/)
 

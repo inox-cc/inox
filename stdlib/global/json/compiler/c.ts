@@ -354,10 +354,10 @@ export function emitPreparedJsonCallExpression(
       lines.push(`inox::Value ${detailedError};`)
     }
 
-    let parseCall = `inox::json_parse(inox::string_view(${text.bytes}, ${text.length}), ${out})`
+    let parseCall = `JSON.parse(inox::string_view(${text.bytes}, ${text.length}), ${out})`
 
     if (detailedError !== null && typeof detailedError !== 'undefined') {
-      parseCall = `inox::json_parse_with_error(inox::string_view(${text.bytes}, ${text.length}), ${out}, ${detailedError})`
+      parseCall = `JSON.parse(inox::string_view(${text.bytes}, ${text.length}), ${out}, ${detailedError})`
     }
 
     pushJsonParseStatusLines(lines, parseCall, context, detailedError)
@@ -383,7 +383,7 @@ export function emitPreparedJsonCallExpression(
   if (classToJson !== null && typeof classToJson !== 'undefined') {
     pushJsonLines(lines, classToJson.lines)
     pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_json_stringify(&inox_default_allocator, ${classToJson.expression}, &${out})`, context))
+    lines.push(emitStatusCheck(`JSON.stringify(${classToJson.expression}, ${out})`, context))
     lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
 
     return {
@@ -402,7 +402,7 @@ export function emitPreparedJsonCallExpression(
     pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
     lines.push(
       emitStatusCheck(
-        `inox_json_stringify_class_instance(&inox_default_allocator, &${classInstance.descriptor}, ${classInstance.instance}, &${out})`,
+        `JSON.stringify(${classInstance.descriptor}, ${classInstance.instance}, ${out})`,
         context
       )
     )
@@ -420,7 +420,7 @@ export function emitPreparedJsonCallExpression(
   const value = dependencies.emitCValueExpression(expression.args[0], context)
   pushJsonLines(lines, value.lines)
   pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`inox_json_stringify(&inox_default_allocator, ${value.expression}, &${out})`, context))
+  lines.push(emitStatusCheck(`JSON.stringify(${value.expression}, ${out})`, context))
   lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
 
   return {
