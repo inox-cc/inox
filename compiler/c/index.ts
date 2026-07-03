@@ -9084,7 +9084,7 @@ function emitPreparedArrayIsArrayCallExpression(
 
   return {
     lines: value.lines,
-    expression: `(${value.expression}.tag == INOX_TAG_ARRAY)`
+    expression: `Array.isArray(${value.expression})`
   }
 }
 

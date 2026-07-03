@@ -103,6 +103,8 @@ function shouldRunIntegrationTests(options: RunnerOptions): boolean {
 }
 
 async function runIntegrationTests(): Promise<void> {
+  const { assertArrayLowersToGlobalObject } =
+    await import('./integration/array-global-object-lowering.test.ts')
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
@@ -201,6 +203,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('build-cmake-log-level', () => {
       assertBuildCMakeConfigureIsQuiet()
+    })
+
+    await t.test('array-global-object-lowering', () => {
+      assertArrayLowersToGlobalObject()
     })
 
     await t.test('c-prelude-include-order', () => {

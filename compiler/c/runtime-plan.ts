@@ -103,6 +103,7 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('promise')
   const needsCollectionRuntime =
     input.runtimeRequirements.has('collections') ||
+    irProgramsUseArrayIsArray(input.irPrograms) ||
     signatureRuntimeTypes.has('array') ||
     signatureRuntimeTypes.has('map') ||
     signatureRuntimeTypes.has('set')
@@ -218,6 +219,10 @@ export function resolveCRuntimePreludeRequirements(
 
 function irProgramsUseArrayIncludes(programs: IrProgram[]): boolean {
   return irProgramsUseNode(programs, 'array-includes', '', null)
+}
+
+function irProgramsUseArrayIsArray(programs: IrProgram[]): boolean {
+  return irProgramsUseNode(programs, 'array-is-array', '', null)
 }
 
 function nodeIsArrayIncludesCall(node: AnyNode): boolean {
@@ -383,6 +388,10 @@ function nodeMatchesRuntimePlanKind(
 ): boolean {
   if (kind === 'array-includes') {
     return nodeIsArrayIncludesCall(node)
+  }
+
+  if (kind === 'array-is-array') {
+    return node.arrayIsArrayCall === true
   }
 
   if (kind === 'collection') {

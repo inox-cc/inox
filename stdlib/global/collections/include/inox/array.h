@@ -37,4 +37,21 @@ inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out);
 }
 #endif
 
+#ifdef __cplusplus
+
+class Array {
+public:
+  bool isArray(inox_value value) const {
+    return value.tag == INOX_TAG_ARRAY;
+  }
+
+  bool isArray(const inox::Value& value) const {
+    return isArray(value.raw());
+  }
+};
+
+inline Array Array;
+
+#endif
+
 #endif
