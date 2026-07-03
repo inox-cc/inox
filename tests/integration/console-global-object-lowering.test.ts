@@ -19,6 +19,7 @@ const user = { name: 'Ada' }
 console.log('hello')
 console.log('user', user)
 console.error('bad', user)
+console.log('process.version', process.version)
 `
       }
     ],
@@ -36,6 +37,9 @@ console.error('bad', user)
   assert.match(source, /console\.log\("hello"\);/)
   assert.match(source, /console\.log\("user", user\);/)
   assert.match(source, /console\.error\("bad", user\);/)
+  assert.match(source, /console\.log\("process\.version %\.\*s", process\.version\);/)
+  assert.doesNotMatch(source, /process\.version\.length\(\)/)
+  assert.doesNotMatch(source, /process\.version\.bytes\(\)/)
   assert.doesNotMatch(source, /inox::console_log/)
   assert.doesNotMatch(source, /if \(console\.(?:log|error)\(/)
 }

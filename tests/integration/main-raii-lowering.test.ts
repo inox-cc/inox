@@ -76,7 +76,7 @@ console.log(value)
   const main = mainFunctionSource(source)
 
   assert.match(source, /#include "inox\/process\.h"/)
-  assert.match(appMain, /console\.log\("%\.\*s", \(int\)process\.version\.length\(\), process\.version\.bytes\(\)\);/)
+  assert.match(appMain, /console\.log\("%\.\*s", process\.version\);/)
   assert.doesNotMatch(appMain, /inox_process_version\(/)
   assert.doesNotMatch(appMain, /inox_process_string/)
   assert.doesNotMatch(main, /return !inox_promise_has_unhandled_rejection/)

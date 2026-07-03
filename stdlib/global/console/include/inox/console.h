@@ -7,6 +7,10 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
+#include <type_traits>
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -240,11 +244,177 @@ private:
 
   template <typename... Args>
   static inox_status printf_line(inox_console_stream stream, const char* format, Args... args) {
-    if (inox_console_printf(stream, format == nullptr ? "" : format, args...) < 0) {
-      return INOX_ERR_TYPE;
+    if constexpr (has_formatted_string_arg<Args...>::value) {
+      inox_status status = write_formatted(stream, format == nullptr ? "" : format, args...);
+
+      if (status != INOX_OK) {
+        return status;
+      }
+    } else {
+      if (inox_console_printf(stream, format == nullptr ? "" : format, args...) < 0) {
+        return INOX_ERR_TYPE;
+      }
     }
 
     return inox::console_newline(stream);
+  }
+
+  template <typename T>
+  struct is_formatted_string_arg {
+    using Decayed = typename std::decay<T>::type;
+    static constexpr bool value =
+      std::is_same<Decayed, inox::String>::value ||
+      std::is_same<Decayed, inox::StringView>::value;
+  };
+
+  template <typename... Args>
+  struct has_formatted_string_arg : std::integral_constant<bool, (is_formatted_string_arg<Args>::value || ...)> {};
+
+  static bool is_format_conversion(char value) {
+    return strchr("diuoxXfFeEgGaAcsp", value) != nullptr;
+  }
+
+  static const char* next_format_spec(const char* format, const char** spec_end) {
+    const char* current = format;
+
+    while (*current != '\0') {
+      if (*current != '%') {
+        current += 1;
+        continue;
+      }
+
+      if (*(current + 1) == '%') {
+        current += 2;
+        continue;
+      }
+
+      const char* end = current + 1;
+
+      while (*end != '\0' && !is_format_conversion(*end)) {
+        end += 1;
+      }
+
+      if (*end == '\0') {
+        return nullptr;
+      }
+
+      *spec_end = end + 1;
+      return current;
+    }
+
+    return nullptr;
+  }
+
+  static inox_status write_format_literal(inox_console_stream stream, const char* begin, const char* end) {
+    const char* chunk = begin;
+    const char* current = begin;
+
+    while (current < end) {
+      if (*current == '%' && current + 1 < end && *(current + 1) == '%') {
+        inox_status status = inox_console_write(stream, chunk, (size_t)(current - chunk));
+
+        if (status != INOX_OK) {
+          return status;
+        }
+
+        status = inox_console_write(stream, "%", 1);
+
+        if (status != INOX_OK) {
+          return status;
+        }
+
+        current += 2;
+        chunk = current;
+        continue;
+      }
+
+      current += 1;
+    }
+
+    return inox_console_write(stream, chunk, (size_t)(end - chunk));
+  }
+
+  static bool is_string_format_spec(const char* spec, size_t len) {
+    return len > 0 && spec[len - 1] == 's';
+  }
+
+  static inox_status write_format_arg(
+    inox_console_stream stream,
+    const char* spec,
+    size_t spec_len,
+    const inox::String& value
+  ) {
+    if (!is_string_format_spec(spec, spec_len)) {
+      return INOX_ERR_TYPE;
+    }
+
+    return inox_console_write(stream, value.bytes(), value.length());
+  }
+
+  static inox_status write_format_arg(
+    inox_console_stream stream,
+    const char* spec,
+    size_t spec_len,
+    inox::StringView value
+  ) {
+    if (!is_string_format_spec(spec, spec_len)) {
+      return INOX_ERR_TYPE;
+    }
+
+    return inox_console_write(stream, value.bytes, value.len);
+  }
+
+  template <typename T>
+  static inox_status write_format_arg(inox_console_stream stream, const char* spec, size_t spec_len, T value) {
+    char format[64];
+
+    if (spec_len >= sizeof(format)) {
+      return INOX_ERR_TYPE;
+    }
+
+    memcpy(format, spec, spec_len);
+    format[spec_len] = '\0';
+
+    if (inox_console_printf(stream, format, value) < 0) {
+      return INOX_ERR_TYPE;
+    }
+
+    return INOX_OK;
+  }
+
+  static inox_status write_formatted(inox_console_stream stream, const char* format) {
+    const char* spec_end = nullptr;
+    const char* spec = next_format_spec(format, &spec_end);
+
+    if (spec != nullptr) {
+      return INOX_ERR_TYPE;
+    }
+
+    return write_format_literal(stream, format, format + strlen(format));
+  }
+
+  template <typename T, typename... Rest>
+  static inox_status write_formatted(inox_console_stream stream, const char* format, T value, Rest... rest) {
+    const char* spec_end = nullptr;
+    const char* spec = next_format_spec(format, &spec_end);
+
+    if (spec == nullptr) {
+      return INOX_ERR_TYPE;
+    }
+
+    inox_status status = write_format_literal(stream, format, spec);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = write_format_arg(stream, spec, (size_t)(spec_end - spec), value);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    return write_formatted(stream, spec_end, rest...);
   }
 };
 

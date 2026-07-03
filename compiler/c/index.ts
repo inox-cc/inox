@@ -6150,6 +6150,14 @@ type ConsoleLogValue = {
 
 const consoleLogNumberFormat = '%.17g'
 
+function emitConsoleStringView(bytes: string, length: string): string {
+  return `inox::string_view(${bytes}, ${length})`
+}
+
+function emitConsoleRuntimeStringView(name: string): string {
+  return emitConsoleStringView(`${name}->bytes`, `${name}->len`)
+}
+
 function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
   if (args.length === 0) {
     return [`console.${method}();`]
@@ -6407,8 +6415,7 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_STRING', context))
       lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
       parts.push("'%.*s'")
-      values.push(`(int)${string}->len`)
-      values.push(`${string}->bytes`)
+      values.push(emitConsoleRuntimeStringView(string))
     } else if (field.valueType === 'number') {
       const value = nextCName(context, 'inox_log_value')
 
@@ -6555,7 +6562,7 @@ function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext
   return {
     lines,
     format: '%.*s',
-    values: [`(int)${string}->len`, `${string}->bytes`]
+    values: [emitConsoleRuntimeStringView(string)]
   }
 }
 
@@ -6585,7 +6592,7 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
   return {
     lines,
     format: '%.*s',
-    values: [`(int)${string}->len`, `${string}->bytes`]
+    values: [emitConsoleRuntimeStringView(string)]
   }
 }
 
@@ -6603,7 +6610,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
           `inox_string* ${string} = (inox_string*)(*${emittedName}).as.ref;`
         ],
         format: '%.*s',
-        values: [`(int)${string}->len`, `${string}->bytes`]
+        values: [emitConsoleRuntimeStringView(string)]
       }
     }
 
@@ -6619,7 +6626,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines: [],
         format: '%.*s',
-        values: [`(int)${reference}.length()`, `${reference}.bytes()`]
+        values: [reference]
       }
     }
 
@@ -6632,7 +6639,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
           `inox_string* ${string} = (inox_string*)${reference}.as.ref;`
         ],
         format: '%.*s',
-        values: [`(int)${string}->len`, `${string}->bytes`]
+        values: [emitConsoleRuntimeStringView(string)]
       }
     }
 
@@ -6640,7 +6647,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines: [],
         format: '%.*s',
-        values: [`(int)${reference}->len`, `${reference}->bytes`]
+        values: [emitConsoleRuntimeStringView(reference)]
       }
     }
   }
@@ -6657,7 +6664,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines,
         format: '%.*s',
-        values: [`(int)${string}->len`, `${string}->bytes`]
+        values: [emitConsoleRuntimeStringView(string)]
       }
     }
   }
@@ -6701,7 +6708,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines,
         format: '%.*s',
-        values: [`(int)${string}->len`, `${string}->bytes`]
+        values: [emitConsoleRuntimeStringView(string)]
       }
     }
 
@@ -6741,7 +6748,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines,
         format: '%.*s',
-        values: [`(int)${string}->len`, `${string}->bytes`]
+        values: [emitConsoleRuntimeStringView(string)]
       }
     }
   }
@@ -6759,7 +6766,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines,
         format: '%.*s',
-        values: [`(int)${string}->len`, `${string}->bytes`]
+        values: [emitConsoleRuntimeStringView(string)]
       }
     }
   }
@@ -6774,7 +6781,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       return {
         lines,
         format: '%.*s',
-        values: [`(int)${value.expression}.length()`, `${value.expression}.bytes()`]
+        values: [value.expression]
       }
     }
 
@@ -6785,7 +6792,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     return {
       lines,
       format: '%.*s',
-      values: [`(int)${string}->len`, `${string}->bytes`]
+      values: [emitConsoleRuntimeStringView(string)]
     }
   }
 
@@ -6800,7 +6807,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     return {
       lines,
       format: '%.*s',
-      values: [`(int)${string}->len`, `${string}->bytes`]
+      values: [emitConsoleRuntimeStringView(string)]
     }
   }
 
@@ -6818,7 +6825,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     return {
       lines,
       format: '%.*s',
-      values: [`(int)${string}->len`, `${string}->bytes`]
+      values: [emitConsoleRuntimeStringView(string)]
     }
   }
 
@@ -6856,7 +6863,7 @@ function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunct
     return {
       lines,
       format: '%.*s',
-      values: [`(int)${value.expression}.length()`, `${value.expression}.bytes()`]
+      values: [value.expression]
     }
   }
 
@@ -6865,7 +6872,7 @@ function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunct
   return {
     lines,
     format: '%.*s',
-    values: [`(int)${string}->len`, `${string}->bytes`]
+    values: [emitConsoleRuntimeStringView(string)]
   }
 }
 
@@ -6917,7 +6924,7 @@ function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunction
       `inox_string* ${string} = (inox_string*)${storage}.as.ref;`
     ],
     format: '%.*s',
-    values: [`(int)${string}->len`, `${string}->bytes`]
+    values: [emitConsoleRuntimeStringView(string)]
   }
 }
 
@@ -7122,7 +7129,7 @@ function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFuncti
   return {
     lines,
     format: '%.*s',
-    values: [`(int)${string}->len`, `${string}->bytes`]
+    values: [emitConsoleRuntimeStringView(string)]
   }
 }
 
@@ -7240,7 +7247,7 @@ function emitRuntimeErrorLogValue(expression: AnyNode, context: CFunctionContext
   return {
     lines,
     format: '%.*s: %.*s',
-    values: [`(int)${nameString}->len`, `${nameString}->bytes`, `(int)${messageString}->len`, `${messageString}->bytes`]
+    values: [emitConsoleRuntimeStringView(nameString), emitConsoleRuntimeStringView(messageString)]
   }
 }
 

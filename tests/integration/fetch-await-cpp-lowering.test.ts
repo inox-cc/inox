@@ -62,17 +62,17 @@ await checkFetch()
   )
   assert.match(
     checkFetch,
-    /auto inox_res_1 = inox::await<inox::String>\(res\.text\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto txt = inox_res_1\.value\(\);\n\n\s+console\.log\("Text %\.\*s", \(int\)txt\.length\(\), txt\.bytes\(\)\);/
+    /auto inox_res_1 = inox::await<inox::String>\(res\.text\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto txt = inox_res_1\.value\(\);\n\n\s+console\.log\("Text %\.\*s", txt\);/
   )
   assert.match(checkFetch, /auto error = inox::take_exception\(\);\n\s+console\.log\("#error:", error\);/)
   assert.doesNotMatch(checkFetch, /auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(checkFetch, /auto \w+ = inox::take_exception\(\);\n\s+if \(\(\w+\.tag/)
   assert.match(checkFetch, /auto res = inox_res_0\.value\(\);/)
   assert.match(checkFetch, /auto txt = inox_res_1\.value\(\);/)
-  assert.match(checkFetch, /console\.log\("Text %\.\*s", \(int\)txt\.length\(\), txt\.bytes\(\)\);/)
+  assert.match(checkFetch, /console\.log\("Text %\.\*s", txt\);/)
   assert.match(
     checkFetch,
-    /console\.log\("Text %\.\*s", \(int\)txt\.length\(\), txt\.bytes\(\)\);\n    goto end_0;\n  \} catch_0: \{/
+    /console\.log\("Text %\.\*s", txt\);\n    goto end_0;\n  \} catch_0: \{/
   )
   assert.match(checkFetch, /\} end_0:;/)
   assert.match(checkFetch, /\} end_0:;\n\}/)
