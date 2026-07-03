@@ -7,7 +7,7 @@ import {
   nextCName,
   registerOwnedValue
 } from '../../../../compiler/c/context.ts'
-import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
+import { emitCIdentifier } from '../../../../compiler/c/identifiers.ts'
 import { emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../../../../compiler/c/runtime-values.ts'
 import type {
   CObjectShape,
@@ -72,6 +72,13 @@ export type JsonDeclarationDependencies = {
   ) => PreparedStringBytesOperand
   inferExpressionType: (expression: AnyNode, context: CFunctionContext) => string
   registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
+  registerRuntimeValueMetadata: (
+    name: string,
+    valueType: string,
+    declaration: AnyNode,
+    expression: AnyNode | null | undefined,
+    context: CFunctionContext
+  ) => void
 }
 
 export type JsonClassInstanceOperand = {
@@ -102,12 +109,6 @@ function jsonParseVariableDeclarationShape(statement: AnyNode): CObjectShape | n
 function pushJsonLines(target: string[], lines: string[]): void {
   for (const line of lines) {
     target.push(line)
-  }
-}
-
-function pushIndentedJsonLines(target: string[], lines: string[], indent: string): void {
-  for (const line of lines) {
-    target.push(`${indent}${line}`)
   }
 }
 
@@ -143,10 +144,6 @@ function currentJsonErrorTargetRequiresActive(context: CFunctionContext): boolea
   return flags[flags.length - 1] === true
 }
 
-function shouldUseDetailedJsonParseError(context: CFunctionContext): boolean {
-  return !!currentJsonErrorTarget(context) || context.throwingFunction === true
-}
-
 function registerJsonErrorValue(context: CFunctionContext): void {
   registerOwnedValue(context, 'inox_error')
 }
@@ -156,111 +153,52 @@ function registerJsonErrorChannel(context: CFunctionContext): void {
   registerJsonErrorValue(context)
 }
 
-function pushJsonParseStatusLines(
-  target: string[],
-  call: string,
-  context: CFunctionContext,
-  detailedError: string | null
-): void {
+function pushJsonThrownCheckLines(target: string[], context: CFunctionContext): void {
   const errorTarget = currentJsonErrorTarget(context)
 
   if ((errorTarget === null || typeof errorTarget === 'undefined') && context.throwingFunction !== true) {
-    target.push(emitStatusCheck(call, context))
+    target.push(`if (inox::thrown()) ${emitFailureStatement(context)}`)
     return
   }
 
-  if (errorTarget !== null && typeof errorTarget !== 'undefined') {
-    const status = nextCName(context, 'inox_json_status')
-    const message = 'JSON.parse failed'
-    const messageLiteral = cStringLiteral(message)
-    const messageLength = utf8ByteLength(message)
-    const errorActiveNeeded = currentJsonErrorTargetRequiresActive(context)
-    const failureStatement = emitFailureStatement(context)
-
-    if (errorActiveNeeded) {
-      registerJsonErrorChannel(context)
-    }
-
-    target.push(`inox_status ${status} = ${call};`)
-    target.push(`if (${status} != INOX_OK) {`)
-
-    if (detailedError !== null && typeof detailedError !== 'undefined') {
-      const fallbackError = nextCName(context, 'inox_json_fallback_error')
-      registerOwnedValue(context, fallbackError)
-      target.push(`  if (${detailedError}.tag == INOX_TAG_STRING && ${detailedError}.as.ref != 0) {`)
-      target.push(`    inox::throw_value(${detailedError});`)
-      target.push('  } else {')
-      pushIndentedJsonLines(target, emitPrepareOwnedValueWrite(fallbackError), '    ')
-      target.push(
-        `    if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, ${fallbackError}.out()) != INOX_OK) ${failureStatement}`
-      )
-      target.push(`    inox::throw_value(${fallbackError});`)
-      target.push('  }')
-    } else {
-      const fallbackError = nextCName(context, 'inox_json_fallback_error')
-      registerOwnedValue(context, fallbackError)
-      pushIndentedJsonLines(target, emitPrepareOwnedValueWrite(fallbackError), '  ')
-      target.push(
-        `  if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, ${fallbackError}.out()) != INOX_OK) ${failureStatement}`
-      )
-      target.push(`  inox::throw_value(${fallbackError});`)
-    }
-
-    if (errorActiveNeeded) {
-      target.push('  inox_error_active = 1;')
-    }
-
-    target.push(`  goto ${errorTarget};`)
-    target.push('}')
-    return
-  }
-
-  const status = nextCName(context, 'inox_json_status')
-  const message = 'JSON.parse failed'
-  const messageLiteral = cStringLiteral(message)
-  const messageLength = utf8ByteLength(message)
   const errorActiveNeeded =
     currentJsonErrorTargetRequiresActive(context) ||
     ((errorTarget === null || typeof errorTarget === 'undefined') && context.throwingFunction === true)
-  const failureStatement = emitFailureStatement(context)
-  const fallbackErrorLine = `if (inox_string_from_literal(&inox_default_allocator, ${messageLiteral}, ${messageLength}, &inox_error) != INOX_OK) ${failureStatement}`
-  let gotoTarget = 'inox_cleanup'
 
   if (errorActiveNeeded) {
     registerJsonErrorChannel(context)
-  } else {
+  } else if (errorTarget === null || typeof errorTarget === 'undefined') {
     registerJsonErrorValue(context)
   }
 
-  if (errorTarget !== null && typeof errorTarget !== 'undefined') {
-    gotoTarget = errorTarget
+  if (!errorActiveNeeded && errorTarget !== null && typeof errorTarget !== 'undefined') {
+    target.push(`if (inox::thrown()) goto ${errorTarget};`)
+    return
   }
 
-  target.push(`inox_status ${status} = ${call};`)
-  target.push(`if (${status} != INOX_OK) {`)
-  pushIndentedJsonLines(target, emitPrepareOwnedValueWrite('inox_error'), '  ')
-
-  if (detailedError !== null && typeof detailedError !== 'undefined') {
-    target.push(`  if (${detailedError}.tag == INOX_TAG_STRING && ${detailedError}.as.ref != 0) {`)
-    target.push(`    inox_error = ${detailedError};`)
-    target.push(`    ${detailedError} = inox_undefined_value();`)
-    target.push('  } else {')
-    target.push(`    ${fallbackErrorLine}`)
-    pushIndentedJsonLines(target, emitPrepareOwnedValueWrite(detailedError), '    ')
-    target.push('  }')
-  } else {
-    target.push(`  ${fallbackErrorLine}`)
+  target.push('if (inox::thrown()) {')
+  if (errorTarget === null || typeof errorTarget === 'undefined') {
+    target.push('  inox_error = inox::take_exception();')
+  }
+  if (errorActiveNeeded) {
+    target.push('  inox_error_active = 1;')
   }
 
   if (errorTarget === null || typeof errorTarget === 'undefined') {
     target.push('  inox_status_result = INOX_ERR_THROW;')
+    target.push('  goto cleanup;')
+  } else {
+    target.push(`  goto ${errorTarget};`)
+  }
+  target.push('}')
+}
+
+function jsonParseExpectedTag(valueType: string, shape: CObjectShape | null): string | null {
+  if (valueType === 'object' && (shape === null || typeof shape.fields === 'undefined' || shape.fields === null)) {
+    return null
   }
 
-  if (errorActiveNeeded) {
-    target.push('  inox_error_active = 1;')
-  }
-  target.push(`  goto ${gotoTarget};`)
-  target.push('}')
+  return cRuntimeValueTag(valueType)
 }
 
 export function emitJsonParseVariableDeclaration(
@@ -278,32 +216,28 @@ export function emitJsonParseVariableDeclaration(
   }
 
   const shape = jsonParseVariableDeclarationShape(statement)
+  const valueType = dependencies.inferExpressionType(statement.init, context)
+  const expectedTag = jsonParseExpectedTag(valueType, shape)
 
-  if (
-    statement.valueType !== 'object' ||
-    shape === null ||
-    shape.fields === null ||
-    typeof shape.fields === 'undefined'
-  ) {
+  if (valueType !== 'object' && valueType !== 'array' && valueType !== 'unknown') {
     return null
   }
 
   const target = emitCIdentifier(statement.name)
-  context.variables.set(statement.name, 'object')
-  dependencies.registerObjectShape(context, statement.name, shape)
+  const text = dependencies.emitPreparedStringBytesOperand(statement.init.args[0], context, 'inox_json_text')
+  const lines: string[] = []
 
-  const parseCall = emitPreparedJsonCallExpression(statement.init, context, dependencies, {
-    out: target,
-    owned: false,
-    prepareOut: false
-  })
+  dependencies.registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
 
-  if (parseCall === null || typeof parseCall === 'undefined') {
-    return null
+  if (valueType === 'object') {
+    dependencies.registerObjectShape(context, statement.name, shape)
   }
 
-  const lines: string[] = [`inox::Value ${target};`]
-  pushJsonLines(lines, parseCall.lines)
+  pushJsonLines(lines, text.lines)
+  lines.push(`auto ${target} = JSON.parse(inox::string_view(${text.bytes}, ${text.length}));`)
+  pushJsonThrownCheckLines(lines, context)
+  pushJsonLines(lines, emitRuntimeValueCheckLines(target, expectedTag, context))
+  lines.push('')
 
   return lines
 }
@@ -332,35 +266,17 @@ export function emitPreparedJsonCallExpression(
   }
 
   const ownsOut = options === null || typeof options === 'undefined' || options.owned !== false
-  const preparesOut = options === null || typeof options === 'undefined' || options.prepareOut !== false
 
   if (method === 'parse') {
     const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_json_text')
     const valueType = dependencies.inferExpressionType(expression, context)
-    const expectedTag = cRuntimeValueTag(valueType)
-    let detailedError: string | null = null
+    const expectedTag = jsonParseExpectedTag(valueType, expression.shape ?? null)
 
     const lines: string[] = []
 
     pushJsonLines(lines, text.lines)
-    if (ownsOut) {
-      lines.push(`inox::Value ${out};`)
-    } else if (preparesOut) {
-      pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-    }
-
-    if (shouldUseDetailedJsonParseError(context)) {
-      detailedError = nextCName(context, 'inox_json_error')
-      lines.push(`inox::Value ${detailedError};`)
-    }
-
-    let parseCall = `JSON.parse(inox::string_view(${text.bytes}, ${text.length}), ${out})`
-
-    if (detailedError !== null && typeof detailedError !== 'undefined') {
-      parseCall = `JSON.parse(inox::string_view(${text.bytes}, ${text.length}), ${out}, ${detailedError})`
-    }
-
-    pushJsonParseStatusLines(lines, parseCall, context, detailedError)
+    lines.push(`auto ${out} = JSON.parse(inox::string_view(${text.bytes}, ${text.length}));`)
+    pushJsonThrownCheckLines(lines, context)
 
     pushJsonLines(lines, emitRuntimeValueCheckLines(out, expectedTag, context))
 

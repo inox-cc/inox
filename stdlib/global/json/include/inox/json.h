@@ -7,6 +7,7 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
+#include "inox/loop.h"
 #include "inox/string_view.h"
 #endif
 
@@ -37,12 +38,24 @@ inox_status inox_json_stringify_class_instance(
 #ifdef __cplusplus
 class Json {
 public:
-  inox_status parse(inox::StringView text, inox::Value& out) const {
-    return inox_json_parse(&inox_default_allocator, text.bytes, text.len, out.out());
-  }
+  inox::Value parse(inox::StringView text) const {
+    inox_value out = inox_undefined_value();
+    inox::Value error;
+    inox_status status = inox_json_parse_with_error(&inox_default_allocator, text.bytes, text.len, &out, error.out());
 
-  inox_status parse(inox::StringView text, inox::Value& out, inox::Value& error_out) const {
-    return inox_json_parse_with_error(&inox_default_allocator, text.bytes, text.len, out.out(), error_out.out());
+    if (status != INOX_OK) {
+      inox_release(out);
+
+      if (error.tag == INOX_TAG_STRING && error.as.ref != 0) {
+        inox::throw_value(error);
+      } else {
+        inox::throw_value(inox::string("JSON.parse failed"));
+      }
+
+      return inox::Value();
+    }
+
+    return inox::adopt(out);
   }
 
   inox_status stringify(inox_value value, inox::Value& out) const {

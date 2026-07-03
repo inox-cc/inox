@@ -39,12 +39,14 @@ for (const a of foo.v) {
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.doesNotMatch(source, /static inox_status inox_app_main\(void\) \{\n  \{/)
-  assert.match(source, /\n  inox::Value foo;/)
+  assert.match(source, /\n  auto foo = JSON\.parse\(inox::string_view\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}", 34\)\);/)
+  assert.match(source, /if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
   assert.doesNotMatch(source, /\n  inox::Value b;/)
   assert.doesNotMatch(source, /\n  inox::Value c;/)
   assert.doesNotMatch(source, /\n  inox::Value d;/)
   assert.doesNotMatch(source, /\n  inox::Value e;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
+  assert.doesNotMatch(source, /JSON\.parse\(inox::string_view\("[^"]+", \d+\), foo\)/)
   assert.match(source, /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_length_\d+; \+\+inox_for_index_\d+\) \{\n    inox::Value inox_for_value_\d+;/)
   assert.doesNotMatch(source, /for \(size_t [^)]+\) \{\n\s+\{/)
   assert.doesNotMatch(source, /for \(size_t [^)]+; [^)]+ \+= 1\)/)

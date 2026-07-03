@@ -800,7 +800,8 @@ jsonDeclarationDependencies = {
   emitPreparedClassToJsonExpression: emitPreparedJsonClassToJsonExpression,
   emitPreparedStringBytesOperand,
   inferExpressionType,
-  registerObjectShape
+  registerObjectShape,
+  registerRuntimeValueMetadata
 }
 
 function emitPreparedJsonClassToJsonExpression(

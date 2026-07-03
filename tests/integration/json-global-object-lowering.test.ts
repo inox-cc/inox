@@ -32,10 +32,12 @@ console.log(text)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /JSON\.parse\(inox::string_view\("\{\\"name\\":\\"Ada\\"\}", 14\), data\)/)
+  assert.match(source, /auto data = JSON\.parse\(inox::string_view\("\{\\"name\\":\\"Ada\\"\}", 14\)\);/)
+  assert.match(source, /if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
   assert.match(source, /JSON\.stringify\(data, inox_json_value_\d+\)/)
   assert.doesNotMatch(source, /inox::json_parse/)
   assert.doesNotMatch(source, /inox::json_stringify/)
+  assert.doesNotMatch(source, /JSON\.parse\(inox::string_view\("[^"]+", \d+\), data\)/)
   assert.doesNotMatch(source, /inox_json_stringify\(&inox_default_allocator/)
 }
 
