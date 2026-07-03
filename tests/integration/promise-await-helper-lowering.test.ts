@@ -63,7 +63,7 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_res_\d+ = inox::await_result<inox::Value>\(inox_promise_\d+\);/)
+  assert.match(source, /auto inox_res_\d+ = inox::await<inox::Value>\(inox_promise_\d+\);/)
   assert.match(
     source,
     /if \(inox::thrown\(\)\) goto catch_\d+;/

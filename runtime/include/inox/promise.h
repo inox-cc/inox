@@ -258,7 +258,7 @@ public:
 };
 
 template <typename T>
-AwaitResult<T> await_result(inox_loop* loop, inox_promise* promise) {
+AwaitResult<T> await(inox_loop* loop, inox_promise* promise) {
   Value value;
   inox_promise_state state = INOX_PROMISE_PENDING;
   inox_status status = inox_promise_await(loop, promise, true, value.out(), &state);
@@ -282,18 +282,18 @@ AwaitResult<T> await_result(inox_loop* loop, inox_promise* promise) {
 }
 
 template <typename T>
-AwaitResult<T> await_result(inox_loop* loop, const Promise& promise) {
-  return await_result<T>(loop, promise.raw());
+AwaitResult<T> await(inox_loop* loop, const Promise& promise) {
+  return await<T>(loop, promise.raw());
 }
 
 template <typename T>
-AwaitResult<T> await_result(inox_promise* promise) {
-  return await_result<T>(loop(), promise);
+AwaitResult<T> await(inox_promise* promise) {
+  return await<T>(loop(), promise);
 }
 
 template <typename T>
-AwaitResult<T> await_result(const Promise& promise) {
-  return await_result<T>(loop(), promise.raw());
+AwaitResult<T> await(const Promise& promise) {
+  return await<T>(loop(), promise.raw());
 }
 
 inline int return_code(int success_code) {

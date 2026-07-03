@@ -38,7 +38,7 @@ try {
 
   assert.match(
     source,
-    /auto inox_res_\d+ = inox::await_result<inox::Value>\(inox_promise_\d+\);/
+    /auto inox_res_\d+ = inox::await<inox::Value>\(inox_promise_\d+\);/
   )
   assert.match(
     source,

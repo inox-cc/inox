@@ -53,8 +53,8 @@ for (const a of foo.v) {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_res_\d+ = inox::await_result<inox::FetchResponse>/)
-  assert.match(source, /auto inox_res_\d+ = inox::await_result<inox::String>/)
+  assert.match(source, /auto inox_res_\d+ = inox::await<inox::FetchResponse>/)
+  assert.match(source, /auto inox_res_\d+ = inox::await<inox::String>/)
   assert.match(source, /if \(inox::thrown\(\)\) goto catch_\d+;/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
   assert.doesNotMatch(source, /inox_res_\d+\.value\(\)\.valid\(\)/)

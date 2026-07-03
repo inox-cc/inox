@@ -7934,7 +7934,7 @@ function emitPreparedAwaitResultExpression(
   const lines: string[] = []
 
   pushAll(lines, preparedPromise.lines)
-  lines.push(`auto ${result} = inox::await_result<${valueInfo.cppType}>(${preparedPromise.expression});`)
+  lines.push(`auto ${result} = inox::await<${valueInfo.cppType}>(${preparedPromise.expression});`)
   pushAll(lines, emitAwaitResultRejectedPromiseLines(result, rejectionValueType, context))
 
   if (valueInfo.valueCheck !== '') {
