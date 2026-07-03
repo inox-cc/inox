@@ -1342,16 +1342,23 @@ export function emitCUnit(
     needsNetRuntime,
     options
   )
-  emitCUnitNativeClassForwardDeclarations(lines, baseContext)
+  const declarationLines: string[] = []
+  const functionPrototypeNames = collectCUnitNeededFunctionPrototypeNames(functions, classMethods, baseContext)
 
   for (const item of functions) {
-    lines.push(`${deps.emitFunctionHead(item, baseContext)};`)
+    if (!functionPrototypeNames.has(item.name)) {
+      continue
+    }
+
+    declarationLines.push(`${deps.emitFunctionHead(item, baseContext)};`)
   }
 
-  if (baseContext.classInfos.size > 0 && functions.length > 0) {
-    lines.push('')
+  if (baseContext.classInfos.size > 0 && functionPrototypeNames.size > 0) {
+    declarationLines.push('')
   }
 
+  emitCUnitNativeClassForwardDeclarations(lines, baseContext, declarationLines)
+  pushUnitLines(lines, declarationLines)
   pushUnitLines(lines, emitCNativeClassDeclarations(baseContext, collectCUnitClassMethodPrototypes(baseContext, deps), classDescriptorNames))
   const arrowCallbackWrappers: CRuntimeArrowCallbackWrapper[] = []
   const promiseChainCallbackWrappers: CPromiseChainWrapper[] = []
@@ -1525,7 +1532,11 @@ function emitCUnitUnhandledRejectionFlagDefinition(lines: string[], context: CEm
   }
 }
 
-function emitCUnitNativeClassForwardDeclarations(lines: string[], context: CEmitContext): void {
+function emitCUnitNativeClassForwardDeclarations(
+  lines: string[],
+  context: CEmitContext,
+  declarationLines: string[]
+): void {
   let emitted = false
 
   for (const info of context.classInfos.values()) {
@@ -1533,13 +1544,159 @@ function emitCUnitNativeClassForwardDeclarations(lines: string[], context: CEmit
       continue
     }
 
-    lines.push(`class ${emitCClassTypeName(info.symbolName)};`)
+    const typeName = emitCClassTypeName(info.symbolName)
+
+    if (!cUnitDeclarationLinesReferenceName(declarationLines, typeName)) {
+      continue
+    }
+
+    lines.push(`class ${typeName};`)
     emitted = true
   }
 
   if (emitted) {
     lines.push('')
   }
+}
+
+function cUnitDeclarationLinesReferenceName(lines: string[], name: string): boolean {
+  for (let index = 0; index < lines.length; index = index + 1) {
+    if (cUnitLineReferencesName(lines[index], name)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function cUnitLineReferencesName(line: string, name: string): boolean {
+  const index = line.indexOf(name)
+
+  if (index < 0) {
+    return false
+  }
+
+  const before = index > 0 ? line[index - 1] : ''
+  const afterIndex = index + name.length
+  const after = afterIndex < line.length ? line[afterIndex] : ''
+
+  return !cUnitIdentifierChar(before) && !cUnitIdentifierChar(after)
+}
+
+function cUnitIdentifierChar(value: string): boolean {
+  return (
+    (value >= 'a' && value <= 'z') ||
+    (value >= 'A' && value <= 'Z') ||
+    (value >= '0' && value <= '9') ||
+    value === '_'
+  )
+}
+
+function collectCUnitNeededFunctionPrototypeNames(
+  functions: AnyNode[],
+  classMethods: CClassMethod[],
+  context: CEmitContext
+): Set<string> {
+  const prototypeNames = new Set<string>()
+  const functionNames = collectCUnitFunctionNames(functions)
+  const functionIndexes = collectCUnitFunctionIndexes(functions)
+
+  for (const info of context.classInfos.values()) {
+    if (info.constructor !== null && typeof info.constructor !== 'undefined') {
+      collectCUnitReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
+    }
+  }
+
+  for (const method of classMethods) {
+    collectCUnitReferencedFunctionPrototypeNames(method.method, functionNames, prototypeNames)
+  }
+
+  for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
+    const item = functions[functionIndex]
+    const referenced = new Set<string>()
+
+    collectCUnitReferencedFunctionPrototypeNames(item, functionNames, referenced)
+
+    for (const name of referenced) {
+      const referencedIndex = functionIndexes.get(name)
+
+      if (
+        referencedIndex !== null &&
+        typeof referencedIndex !== 'undefined' &&
+        referencedIndex > functionIndex
+      ) {
+        prototypeNames.add(name)
+      }
+    }
+  }
+
+  return prototypeNames
+}
+
+function collectCUnitFunctionNames(functions: AnyNode[]): Set<string> {
+  const names = new Set<string>()
+
+  for (let index = 0; index < functions.length; index = index + 1) {
+    names.add(functions[index].name)
+  }
+
+  return names
+}
+
+function collectCUnitFunctionIndexes(functions: AnyNode[]): Map<string, number> {
+  const indexes = new Map<string, number>()
+
+  for (let index = 0; index < functions.length; index = index + 1) {
+    indexes.set(functions[index].name, index)
+  }
+
+  return indexes
+}
+
+function collectCUnitReferencedFunctionPrototypeNames(
+  node: AnyNode,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(node, functionNames, target)
+}
+
+function collectCUnitReferencedFunctionPrototypeNamesFromValue(
+  value: unknown,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index = index + 1) {
+      collectCUnitReferencedFunctionPrototypeNamesFromValue(value[index], functionNames, target)
+    }
+
+    return
+  }
+
+  if (!cUnitIsRecord(value)) {
+    return
+  }
+
+  if (value.type === 'Reference' && Array.isArray(value.path) && typeof value.path[0] === 'string') {
+    const name = value.path[0]
+
+    if (functionNames.has(name)) {
+      target.add(name)
+    }
+  }
+
+  for (const key of Object.keys(value)) {
+    if (key === 'loc') {
+      continue
+    }
+
+    collectCUnitReferencedFunctionPrototypeNamesFromValue(value[key], functionNames, target)
+  }
+}
+
+function cUnitIsRecord(value: unknown): value is AnyNode {
+  return typeof value === 'object' && value !== null
 }
 
 function emitCallbackFinalizerPrototype(finalizerName: string): string {

@@ -67,6 +67,7 @@ function assertNativeClassMethodOrder(source: string): void {
   const methodIndex = source.indexOf('void Foo::test()')
   const runPrototypeMatch = /\b(?:static )?[A-Za-z_][A-Za-z0-9_:*<>, ]* run\([^)]*\);/.exec(source)
   const runPrototypeIndex = runPrototypeMatch !== null ? runPrototypeMatch.index : -1
+  const classForwardIndex = source.indexOf('class Foo;')
   const flagIndex = source.indexOf('static int inox_mod_src_index_ts_')
   const runDefinitionMatch = /\b(?:static )?[A-Za-z_][A-Za-z0-9_:*<>, ]* run\([^)]*\) \{/.exec(source)
   const runDefinitionIndex = runDefinitionMatch !== null ? runDefinitionMatch.index : -1
@@ -76,11 +77,11 @@ function assertNativeClassMethodOrder(source: string): void {
   assert.notEqual(classEndIndex, -1, 'missing Foo class declaration end')
   assert.notEqual(constructorIndex, -1, 'missing Foo constructor definition')
   assert.notEqual(methodIndex, -1, 'missing Foo::test definition')
-  assert.notEqual(runPrototypeIndex, -1, 'missing run function prototype')
+  assert.equal(classForwardIndex, -1, 'unneeded native class forward declaration should not be emitted')
+  assert.equal(runPrototypeIndex, -1, 'unneeded run function prototype should not be emitted')
   assert.equal(flagIndex, -1, 'unhandled rejection state should live in runtime')
   assert.notEqual(runDefinitionIndex, -1, 'missing run function definition')
   assert.notEqual(mainIndex, -1, 'missing module main')
-  assert.ok(runPrototypeIndex < classIndex, 'function prototypes should not split class declarations from methods')
   assert.ok(classIndex < constructorIndex, 'class declaration should precede constructor definition')
   assert.equal(
     source.slice(classEndIndex + 2, constructorIndex).trim(),

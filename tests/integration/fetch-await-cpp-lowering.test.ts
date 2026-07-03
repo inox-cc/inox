@@ -43,6 +43,7 @@ await checkFetch()
   const source = generatedTextFile(files, 'src/index.cc').code
   const checkFetch = functionSource(source, 'static void checkFetch(void) {')
 
+  assert.doesNotMatch(source, /^static void checkFetch\(void\);$/m)
   assert.match(checkFetch, /static void checkFetch\(void\) \{\n  \{\n    auto inox_res_0/)
   assert.doesNotMatch(checkFetch, /static void checkFetch\(void\) \{\n\n  \{/)
   assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)

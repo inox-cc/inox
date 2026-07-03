@@ -477,8 +477,10 @@ export function emitCModuleSource(
     )
   )
 
-  emitCModuleNativeClassForwardDeclarations(lines, context)
-  emitCModuleDeclarations(lines, plan, functions, classMethods, context, deps)
+  const declarationLines: string[] = []
+  emitCModuleDeclarations(declarationLines, plan, functions, classMethods, context, deps)
+  emitCModuleNativeClassForwardDeclarations(lines, context, declarationLines)
+  pushCModuleLines(lines, declarationLines)
   emitCModuleValueFunctionFieldDefinitions(lines, moduleValues, context)
   pushCModuleLines(
     lines,
@@ -561,7 +563,11 @@ export function emitCModuleSource(
   return joinCModuleLines(lines)
 }
 
-function emitCModuleNativeClassForwardDeclarations(lines: string[], context: CEmitContext): void {
+function emitCModuleNativeClassForwardDeclarations(
+  lines: string[],
+  context: CEmitContext,
+  declarationLines: string[]
+): void {
   let emitted = false
 
   for (const info of context.classInfos.values()) {
@@ -569,13 +575,52 @@ function emitCModuleNativeClassForwardDeclarations(lines: string[], context: CEm
       continue
     }
 
-    lines.push(`class ${emitCClassTypeNameForClassName(context, info.name)};`)
+    const typeName = emitCClassTypeNameForClassName(context, info.name)
+
+    if (!cModuleDeclarationLinesReferenceName(declarationLines, typeName)) {
+      continue
+    }
+
+    lines.push(`class ${typeName};`)
     emitted = true
   }
 
   if (emitted) {
     lines.push('')
   }
+}
+
+function cModuleDeclarationLinesReferenceName(lines: string[], name: string): boolean {
+  for (let index = 0; index < lines.length; index = index + 1) {
+    if (cModuleLineReferencesName(lines[index], name)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function cModuleLineReferencesName(line: string, name: string): boolean {
+  const index = line.indexOf(name)
+
+  if (index < 0) {
+    return false
+  }
+
+  const before = index > 0 ? line[index - 1] : ''
+  const afterIndex = index + name.length
+  const after = afterIndex < line.length ? line[afterIndex] : ''
+
+  return !cModuleIdentifierChar(before) && !cModuleIdentifierChar(after)
+}
+
+function cModuleIdentifierChar(value: string): boolean {
+  return (
+    (value >= 'a' && value <= 'z') ||
+    (value >= 'A' && value <= 'Z') ||
+    (value >= '0' && value <= '9') ||
+    value === '_'
+  )
 }
 
 export function emitCModuleHeader(
@@ -689,8 +734,15 @@ function emitCModuleDeclarations(
     lines.push('')
   }
 
+  const functionPrototypeNames = collectCModuleNeededFunctionPrototypeNames(functions, classMethods, context)
+  let emittedClassMethodPrototype = false
+
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
+
+    if (!functionPrototypeNames.has(item.name)) {
+      continue
+    }
 
     lines.push(emitCModuleFunctionPrototype(plan, item, context, deps))
   }
@@ -700,6 +752,7 @@ function emitCModuleDeclarations(
 
     if (!item.info.native) {
       lines.push(deps.emitClassMethodPrototype(item.info, item.method, context))
+      emittedClassMethodPrototype = true
     }
   }
 
@@ -731,8 +784,8 @@ function emitCModuleDeclarations(
   pushCModuleLines(lines, emitNodeNetworkHandlerPrototypeLines(context))
 
   if (
-    functions.length > 0 ||
-    classMethods.length > 0 ||
+    functionPrototypeNames.size > 0 ||
+    emittedClassMethodPrototype ||
     context.asyncTaskWrappers.size > 0 ||
     context.callbackWrappers.size > 0 ||
     context.promiseChainWrappers.size > 0 ||
@@ -740,6 +793,115 @@ function emitCModuleDeclarations(
   ) {
     lines.push('')
   }
+}
+
+function collectCModuleNeededFunctionPrototypeNames(
+  functions: AnyNode[],
+  classMethods: CClassMethod[],
+  context: CEmitContext
+): Set<string> {
+  const prototypeNames = new Set<string>()
+  const functionNames = collectCModuleFunctionNames(functions)
+  const functionIndexes = collectCModuleFunctionIndexes(functions)
+
+  for (const info of context.classInfos.values()) {
+    if (info.constructor !== null && typeof info.constructor !== 'undefined') {
+      collectCModuleReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
+    }
+  }
+
+  for (let index = 0; index < classMethods.length; index = index + 1) {
+    const method = cModuleClassMethodAt(classMethods, index)
+
+    collectCModuleReferencedFunctionPrototypeNames(method.method, functionNames, prototypeNames)
+  }
+
+  for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
+    const item = cModuleNodeAt(functions, functionIndex)
+    const referenced = new Set<string>()
+
+    collectCModuleReferencedFunctionPrototypeNames(item, functionNames, referenced)
+
+    for (const name of referenced) {
+      const referencedIndex = functionIndexes.get(name)
+
+      if (
+        referencedIndex !== null &&
+        typeof referencedIndex !== 'undefined' &&
+        referencedIndex > functionIndex
+      ) {
+        prototypeNames.add(name)
+      }
+    }
+  }
+
+  return prototypeNames
+}
+
+function collectCModuleFunctionNames(functions: AnyNode[]): Set<string> {
+  const names = new Set<string>()
+
+  for (let index = 0; index < functions.length; index = index + 1) {
+    names.add(cModuleNodeAt(functions, index).name)
+  }
+
+  return names
+}
+
+function collectCModuleFunctionIndexes(functions: AnyNode[]): Map<string, number> {
+  const indexes = new Map<string, number>()
+
+  for (let index = 0; index < functions.length; index = index + 1) {
+    indexes.set(cModuleNodeAt(functions, index).name, index)
+  }
+
+  return indexes
+}
+
+function collectCModuleReferencedFunctionPrototypeNames(
+  node: AnyNode,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(node, functionNames, target)
+}
+
+function collectCModuleReferencedFunctionPrototypeNamesFromValue(
+  value: unknown,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index = index + 1) {
+      collectCModuleReferencedFunctionPrototypeNamesFromValue(value[index], functionNames, target)
+    }
+
+    return
+  }
+
+  if (!cModuleIsRecord(value)) {
+    return
+  }
+
+  if (value.type === 'Reference' && Array.isArray(value.path) && typeof value.path[0] === 'string') {
+    const name = value.path[0]
+
+    if (functionNames.has(name)) {
+      target.add(name)
+    }
+  }
+
+  for (const key of Object.keys(value)) {
+    if (key === 'loc') {
+      continue
+    }
+
+    collectCModuleReferencedFunctionPrototypeNamesFromValue(value[key], functionNames, target)
+  }
+}
+
+function cModuleIsRecord(value: unknown): value is AnyNode {
+  return typeof value === 'object' && value !== null
 }
 
 function emitCModuleUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {

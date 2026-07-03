@@ -70,7 +70,7 @@ try {
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /inox::throw_value\(inox_json_error_\d+\);/)
-  assert.match(source, /auto inox_error = inox::take_exception\(\);/)
+  assert.match(source, /auto error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);/)
   assert.doesNotMatch(source, /inox_release\(inox_error\);/)
   assert.doesNotMatch(source, /inox_release\(inox_json_error_\d+\);/)
