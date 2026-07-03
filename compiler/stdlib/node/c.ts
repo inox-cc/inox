@@ -116,6 +116,8 @@ export {
   emitPreparedPathStringCallExpression
 } from '../../../stdlib/node/path/compiler/c.ts'
 export {
+  cProcessRuntimeObjectName,
+  cProcessRuntimePropertyName,
   emitPreparedProcessNumberExpression,
   emitPreparedProcessValueExpression,
   emitPreparedProcessStringExpression,

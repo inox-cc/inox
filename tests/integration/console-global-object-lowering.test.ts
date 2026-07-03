@@ -20,6 +20,8 @@ console.log('hello')
 console.log('user', user)
 console.error('bad', user)
 console.log('process.version', process.version)
+console.log('process.versions', process.versions)
+console.log('process', process)
 `
       }
     ],
@@ -38,8 +40,12 @@ console.log('process.version', process.version)
   assert.match(source, /console\.log\("user", user\);/)
   assert.match(source, /console\.error\("bad", user\);/)
   assert.match(source, /console\.log\("process\.version %\.\*s", process\.version\);/)
+  assert.match(source, /console\.log\("process\.versions", process\.versions\);/)
+  assert.match(source, /console\.log\("process", process\);/)
   assert.doesNotMatch(source, /process\.version\.length\(\)/)
   assert.doesNotMatch(source, /process\.version\.bytes\(\)/)
+  assert.doesNotMatch(source, /process\.versions\.value\(\);\n  if \(inox::thrown\(\)\)/)
+  assert.doesNotMatch(source, /process\.value\(\);\n  if \(inox::thrown\(\)\)/)
   assert.doesNotMatch(source, /inox::console_log/)
   assert.doesNotMatch(source, /if \(console\.(?:log|error)\(/)
 }

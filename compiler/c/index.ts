@@ -178,6 +178,8 @@ import {
   emitPreparedPathConstantExpression,
   emitPreparedPathObjectCallExpression,
   emitPreparedPathStringCallExpression,
+  cProcessRuntimeObjectName,
+  cProcessRuntimePropertyName,
   emitPreparedProcessNumberExpression,
   emitPreparedProcessStringExpression,
   emitPreparedProcessValueExpression,
@@ -6200,6 +6202,12 @@ function emitDirectRuntimeValueConsoleLogStatement(
   const lines: string[] = []
 
   if (args.length === 1) {
+    const objectExpression = emitDirectConsoleObjectExpression(args[0])
+
+    if (objectExpression !== null && typeof objectExpression !== 'undefined') {
+      return [`console.${method}(${objectExpression});`]
+    }
+
     const value = emitCValueExpression(args[0], context)
 
     pushAll(lines, value.lines)
@@ -6209,12 +6217,30 @@ function emitDirectRuntimeValueConsoleLogStatement(
   }
 
   if (args.length === 2 && args[0].type === 'StringLiteral' && isDirectRuntimeConsoleLogArgument(args[1], context)) {
+    const objectExpression = emitDirectConsoleObjectExpression(args[1])
+
+    if (objectExpression !== null && typeof objectExpression !== 'undefined') {
+      return [`console.${method}(${cStringLiteral(args[0].value)}, ${objectExpression});`]
+    }
+
     const value = emitCValueExpression(args[1], context)
 
     pushAll(lines, value.lines)
     lines.push(`console.${method}(${cStringLiteral(args[0].value)}, ${value.expression});`)
 
     return lines
+  }
+
+  return null
+}
+
+function emitDirectConsoleObjectExpression(expression: AnyNode): string | null {
+  if (cProcessRuntimeObjectName(expression) === 'process') {
+    return 'process'
+  }
+
+  if (cProcessRuntimePropertyName(expression) === 'versions') {
+    return 'process.versions'
   }
 
   return null

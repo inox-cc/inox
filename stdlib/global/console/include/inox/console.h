@@ -8,6 +8,7 @@
 
 #ifdef __cplusplus
 #include <type_traits>
+#include <utility>
 #endif
 
 #ifdef __cplusplus
@@ -60,6 +61,18 @@ inline inox_status console_newline(inox_console_stream stream) {
 } // namespace inox
 
 class console {
+private:
+  template <typename T, typename = void>
+  struct is_console_value_object : std::false_type {};
+
+  template <typename T>
+  struct is_console_value_object<
+    T,
+    typename std::enable_if<
+      std::is_same<typename std::decay<decltype(std::declval<const T&>().value())>::type, inox::Value>::value
+    >::type
+  > : std::true_type {};
+
 public:
   inox_status log() const {
     return inox::console_newline(INOX_CONSOLE_STDOUT);
@@ -91,6 +104,19 @@ public:
 
   inox_status log(const char* prefix, const inox::Value& value) const {
     return log(prefix, value.raw());
+  }
+
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type log(const T& value) const {
+    return write_value_object_line(INOX_CONSOLE_STDOUT, value);
+  }
+
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type log(
+    const char* prefix,
+    const T& value
+  ) const {
+    return write_prefixed_value_object_line(INOX_CONSOLE_STDOUT, prefix, value);
   }
 
   template <typename... Args>
@@ -127,6 +153,19 @@ public:
   }
 
   inox_status info(const char* prefix, const inox::Value& value) const {
+    return log(prefix, value);
+  }
+
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type info(const T& value) const {
+    return log(value);
+  }
+
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type info(
+    const char* prefix,
+    const T& value
+  ) const {
     return log(prefix, value);
   }
 
@@ -167,6 +206,19 @@ public:
     return warn(prefix, value.raw());
   }
 
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type warn(const T& value) const {
+    return write_value_object_line(INOX_CONSOLE_STDERR, value);
+  }
+
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type warn(
+    const char* prefix,
+    const T& value
+  ) const {
+    return write_prefixed_value_object_line(INOX_CONSOLE_STDERR, prefix, value);
+  }
+
   template <typename... Args>
   inox_status warn(const char* format, Args... args) const {
     return printf_line(INOX_CONSOLE_STDERR, format, args...);
@@ -201,6 +253,19 @@ public:
   }
 
   inox_status error(const char* prefix, const inox::Value& value) const {
+    return warn(prefix, value);
+  }
+
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type error(const T& value) const {
+    return warn(value);
+  }
+
+  template <typename T>
+  typename std::enable_if<is_console_value_object<T>::value, inox_status>::type error(
+    const char* prefix,
+    const T& value
+  ) const {
     return warn(prefix, value);
   }
 
@@ -240,6 +305,18 @@ private:
     }
 
     return inox::console_newline(stream);
+  }
+
+  template <typename T>
+  static inox_status write_value_object_line(inox_console_stream stream, const T& object) {
+    inox::Value value = object.value();
+    return inox_console_print_value_line(stream, value.raw());
+  }
+
+  template <typename T>
+  static inox_status write_prefixed_value_object_line(inox_console_stream stream, const char* prefix, const T& object) {
+    inox::Value value = object.value();
+    return write_prefixed_value_line(stream, prefix, value.raw());
   }
 
   template <typename... Args>

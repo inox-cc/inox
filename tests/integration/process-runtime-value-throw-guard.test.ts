@@ -9,7 +9,7 @@ type GeneratedTextFile = {
   code: string
 }
 
-export function assertProcessRuntimeValueExpressionsCheckThrown(): void {
+export function assertProcessRuntimeValueExpressionsUseConsoleObjects(): void {
   const host = createMemoryCompilerHost(
     [
       {
@@ -31,8 +31,10 @@ console.log(process)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /process\.versions\.value\(\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
-  assert.match(source, /process\.value\(\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
+  assert.match(source, /console\.log\(process\.versions\);/)
+  assert.match(source, /console\.log\(process\);/)
+  assert.doesNotMatch(source, /process\.versions\.value\(\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
+  assert.doesNotMatch(source, /process\.value\(\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
@@ -46,5 +48,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  assertProcessRuntimeValueExpressionsCheckThrown()
+  assertProcessRuntimeValueExpressionsUseConsoleObjects()
 }
