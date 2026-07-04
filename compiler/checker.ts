@@ -67,7 +67,6 @@ import {
   fetchAbortControllerObjectShape,
   fetchResponseObjectShape,
   fsDirentObjectShape,
-  fsStatsObjectShape,
   libuvOnlyRuntimeImportFeature,
   pathParseObjectShape,
   urlObjectShape,
@@ -112,6 +111,13 @@ import {
   unresolvedTypeInfo as unresolvedTypeInfoInContext
 } from './checker/declared-types.ts'
 import type { DeclaredTypeResolverContext } from './checker/declared-types.ts'
+import {
+  applyFsRuntimeCallPlan,
+  callExpressionArgumentLabel,
+  createMapEntryShape,
+  dynamicShapeField,
+  resolveMapEntryArrayType
+} from './checker/expression-helpers.ts'
 import {
   acceptsArgumentCount,
   argumentCountMessage,
@@ -3563,7 +3569,7 @@ class Checker {
     if (!acceptsArgumentCount(params, expression.args.length)) {
       this.report(
         'INOX_ARG_COUNT',
-        argumentCountMessage(this.callExpressionArgumentLabel(expression), params, expression.args.length),
+        argumentCountMessage(callExpressionArgumentLabel(expression), params, expression.args.length),
         expression.loc
       )
     }
@@ -3610,33 +3616,6 @@ class Checker {
     expression.valueType = 'void'
 
     return 'void'
-  }
-
-  callExpressionArgumentLabel(expression: AnyNode): string {
-    const callee = expression.callee
-
-    if (
-      callee !== null &&
-      typeof callee !== 'undefined' &&
-      callee.type === 'Reference' &&
-      callee.path !== null &&
-      typeof callee.path !== 'undefined' &&
-      callee.path.length > 0
-    ) {
-      return `function ${callee.path[0]}`
-    }
-
-    if (
-      callee !== null &&
-      typeof callee !== 'undefined' &&
-      callee.type === 'MemberExpression' &&
-      callee.property !== null &&
-      typeof callee.property !== 'undefined'
-    ) {
-      return `function ${callee.property}`
-    }
-
-    return 'function'
   }
 
   checkBinaryCall(expression: AnyNode): ValueType | null {
@@ -5779,7 +5758,7 @@ class Checker {
 
     const options = this.checkFsRuntimeArguments(expression, plan.argumentChecks)
 
-    this.applyFsRuntimeCallPlan(expression, plan, options)
+    applyFsRuntimeCallPlan(expression, plan, options)
 
     return plan.valueType
   }
@@ -5840,41 +5819,6 @@ class Checker {
     }
 
     return options
-  }
-
-  applyFsRuntimeCallPlan(expression: AnyNode, plan: FsRuntimeCallPlan, options: FsBooleanOptions): void {
-    expression.fsRuntimeMethod = plan.runtimeMethod
-    expression.valueType = plan.valueType
-    expression.promiseValueType = plan.promiseValueType
-    expression.shape = null
-    expression.arrayElementType = plan.arrayElementType
-    expression.arrayElementDeclaredType = plan.arrayElementDeclaredType
-
-    if (plan.shape === 'stats') {
-      expression.shape = fsStatsObjectShape
-    }
-
-    if (plan.bytes !== null && typeof plan.bytes !== 'undefined') {
-      expression.fsBytes = plan.bytes
-    }
-
-    if (plan.bytesFromWriteData) {
-      expression.fsBytes = options.bytes === true
-    }
-
-    if (plan.direntsFromOptions && options.withFileTypes === true) {
-      expression.fsDirents = true
-      expression.arrayElementType = 'object'
-      expression.arrayElementDeclaredType = 'fs.Dirent'
-    }
-
-    if (plan.recursiveFromOptions) {
-      expression.fsRecursive = options.recursive === true
-    }
-
-    if (plan.forceFromOptions) {
-      expression.fsForce = options.force === true
-    }
   }
 
   checkFsWriteDataArg(expression: AnyNode, index: number, _label: string): boolean {
@@ -8106,49 +8050,10 @@ class Checker {
     }
 
     if (argTypes[0] === 'array' && firstArg.type === 'ArrayLiteral') {
-      return this.resolveMapEntryArrayType(firstArg)
+      return resolveMapEntryArrayType(firstArg)
     }
 
     return null
-  }
-
-  resolveMapEntryArrayType(expression: AnyNode): CheckerMapType | null {
-    if (expression.elements.length === 0) {
-      return null
-    }
-
-    let key: ValueType | null = null
-    let value: ValueType | null = null
-
-    for (const entry of expression.elements) {
-      if (entry.type !== 'ArrayLiteral' || entry.elements.length < 2) {
-        return null
-      }
-
-      const entryKeyType = nodeValueTypeOrUnknown(checkerNodeAt(entry.elements, 0))
-      const entryValueType = nodeValueTypeOrUnknown(checkerNodeAt(entry.elements, 1))
-
-      if (entryKeyType === 'unknown' || entryValueType === 'unknown') {
-        return null
-      }
-
-      if (key === null) {
-        key = entryKeyType
-      } else if (key !== entryKeyType) {
-        return null
-      }
-
-      if (value === null) {
-        value = entryValueType
-      } else if (value !== entryValueType) {
-        return null
-      }
-    }
-
-    return {
-      key,
-      value
-    }
   }
 
   checkUrlConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {
@@ -9485,48 +9390,10 @@ class Checker {
     }
 
     if (shape.dynamic === true) {
-      return this.dynamicShapeField(shape, name)
+      return dynamicShapeField(shape, name)
     }
 
     return null
-  }
-
-  dynamicShapeField(shape: ObjectShapeInfo, name: string) {
-    if (shape.dynamicField !== null && typeof shape.dynamicField !== 'undefined') {
-      const field = shape.dynamicField
-
-      return {
-        name,
-        optional: field.optional,
-        readonly: field.readonly,
-        ownership: field.ownership,
-        weakLoc: field.weakLoc,
-        static: field.static,
-        staticLoc: field.staticLoc,
-        weakTypeValidated: field.weakTypeValidated,
-        loc: field.loc,
-        declaredType: field.declaredType,
-        valueType: field.valueType,
-        nullable: field.nullable,
-        arrayElementType: field.arrayElementType,
-        arrayElementDeclaredType: field.arrayElementDeclaredType,
-        mapKeyType: field.mapKeyType,
-        mapValueType: field.mapValueType,
-        promiseValueType: field.promiseValueType,
-        setElementType: field.setElementType,
-        functionType: field.functionType,
-        shape: field.shape,
-        className: field.className
-      }
-    }
-
-    return {
-      name,
-      optional: true,
-      readonly: false,
-      ownership: 'strong',
-      valueType: 'unknown'
-    }
   }
 
   getCallableSymbol(callee: AnyNode): SymbolInfo | null {
@@ -9678,7 +9545,7 @@ class Checker {
     let mapEntryShape: ObjectShapeInfo | null = null
 
     if (iterableType === 'map') {
-      mapEntryShape = this.createMapEntryShape(this.resolveExpressionMapType(statement.iterable), statement.nameLoc)
+      mapEntryShape = createMapEntryShape(this.resolveExpressionMapType(statement.iterable), statement.nameLoc)
     }
 
     let elementType: ValueType = 'unknown'
@@ -9864,44 +9731,6 @@ class Checker {
       }
     } finally {
       this.restoreScope(scopeState)
-    }
-  }
-
-  createMapEntryShape(mapType: CheckerMapType | null, loc: SourceLocation): ObjectShapeInfo {
-    let keyType: ValueType = 'unknown'
-    let valueType: ValueType = 'unknown'
-
-    if (mapType !== null && typeof mapType !== 'undefined') {
-      const key = mapType.key
-      const value = mapType.value
-
-      if (key !== null && typeof key !== 'undefined') {
-        keyType = key
-      }
-
-      if (value !== null && typeof value !== 'undefined') {
-        valueType = value
-      }
-    }
-
-    return {
-      kind: 'object',
-      fields: [
-        {
-          name: 'key',
-          readonly: true,
-          declaredType: keyType,
-          valueType: keyType,
-          loc
-        },
-        {
-          name: 'value',
-          readonly: true,
-          declaredType: valueType,
-          valueType,
-          loc
-        }
-      ]
     }
   }
 
