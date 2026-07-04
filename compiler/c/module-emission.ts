@@ -82,6 +82,7 @@ import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
+import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
   collectNodeNetworkHandlers,
@@ -806,7 +807,7 @@ function collectCModuleNeededFunctionPrototypeNames(
   }
 
   for (const wrapper of context.asyncTaskWrappers.values()) {
-    collectCModuleReferencedFunctionPrototypeNamesFromValue(wrapper, functionNames, prototypeNames)
+    collectCReferencedFunctionPrototypeNames(wrapper, functionNames, prototypeNames)
   }
 
   for (const wrapper of context.callbackWrappers.values()) {
@@ -814,30 +815,30 @@ function collectCModuleNeededFunctionPrototypeNames(
       prototypeNames.add(wrapper.target)
     }
 
-    collectCModuleReferencedFunctionPrototypeNamesFromValue(wrapper, functionNames, prototypeNames)
+    collectCReferencedFunctionPrototypeNames(wrapper, functionNames, prototypeNames)
   }
 
   for (const wrapper of context.promiseChainWrappers.values()) {
-    collectCModuleReferencedFunctionPrototypeNamesFromValue(wrapper, functionNames, prototypeNames)
+    collectCReferencedFunctionPrototypeNames(wrapper, functionNames, prototypeNames)
   }
 
   for (const info of context.classInfos.values()) {
     if (info.constructor !== null && typeof info.constructor !== 'undefined') {
-      collectCModuleReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
+      collectCReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
     }
   }
 
   for (let index = 0; index < classMethods.length; index = index + 1) {
     const method = cModuleClassMethodAt(classMethods, index)
 
-    collectCModuleReferencedFunctionPrototypeNames(method.method, functionNames, prototypeNames)
+    collectCReferencedFunctionPrototypeNames(method.method, functionNames, prototypeNames)
   }
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
     const referenced = new Set<string>()
 
-    collectCModuleReferencedFunctionPrototypeNames(item, functionNames, referenced)
+    collectCReferencedFunctionPrototypeNames(item, functionNames, referenced)
 
     for (const name of referenced) {
       const referencedIndex = functionIndexes.get(name)
@@ -873,216 +874,6 @@ function collectCModuleFunctionIndexes(functions: AnyNode[]): Map<string, number
   }
 
   return indexes
-}
-
-function collectCModuleReferencedFunctionPrototypeNames(
-  node: AnyNode,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(node, functionNames, target)
-}
-
-function collectCModuleReferencedFunctionPrototypeNamesFromValue(
-  value: unknown,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index = index + 1) {
-      collectCModuleReferencedFunctionPrototypeNamesFromValue(value[index], functionNames, target)
-    }
-
-    return
-  }
-
-  if (!cModuleIsRecord(value)) {
-    return
-  }
-
-  const node = value as AnyNode
-
-  if (node.type === 'Reference' && Array.isArray(node.path) && typeof node.path[0] === 'string') {
-    const name = node.path[0]
-
-    if (functionNames.has(name)) {
-      target.add(name)
-    }
-  }
-
-  if (
-    node.type === 'TemplateLiteral' &&
-    typeof node.raw === 'string'
-  ) {
-    collectCModuleTemplateReferencedFunctionNames(node.raw, functionNames, target)
-  }
-
-  collectCModuleReferencedFunctionPrototypeChildNames(node, functionNames, target)
-}
-
-function collectCModuleReferencedFunctionPrototypeChildNames(
-  item: AnyNode,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.body, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.params, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.fields, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.methods, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.init, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.condition, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.consequent, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.alternate, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.test, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.update, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.iterable, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.discriminant, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.cases, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.block, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.handler, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.finalizer, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.argument, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.args, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.callee, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.object, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.index, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.target, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.value, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.left, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.right, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.elements, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.properties, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.expression, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.declaration, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.awaitedExpression, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.awaitedPromiseExpression, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.prefixStatements, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.returnExpression, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.successPhases, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.tryHandler, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.tryPhases, functionNames, target)
-  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.statements, functionNames, target)
-}
-
-function cModuleIsRecord(value: unknown): boolean {
-  return typeof value === 'object' && value !== null
-}
-
-function collectCModuleTemplateReferencedFunctionNames(
-  raw: string,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  if (!raw.includes('${')) {
-    return
-  }
-
-  let start = raw.indexOf('${')
-
-  while (start >= 0) {
-    const end = cModuleTemplatePlaceholderEnd(raw, start + 2)
-
-    if (end < 0) {
-      return
-    }
-
-    collectCModuleTextReferencedFunctionNames(raw.slice(start + 2, end), functionNames, target)
-    start = raw.indexOf('${', end + 1)
-  }
-}
-
-function collectCModuleTextReferencedFunctionNames(
-  text: string,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  let index = 0
-  let quote = ''
-
-  while (index < text.length) {
-    const char = text[index]
-
-    if (quote !== '') {
-      if (char === '\\') {
-        index = index + 2
-        continue
-      }
-
-      if (char === quote) {
-        quote = ''
-      }
-
-      index = index + 1
-      continue
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-      index = index + 1
-      continue
-    }
-
-    if (!cModuleIdentifierChar(char)) {
-      index = index + 1
-      continue
-    }
-
-    const start = index
-
-    while (index < text.length && cModuleIdentifierChar(text[index])) {
-      index = index + 1
-    }
-
-    const name = text.slice(start, index)
-
-    if (functionNames.has(name)) {
-      target.add(name)
-    }
-  }
-}
-
-function cModuleTemplatePlaceholderEnd(raw: string, start: number): number {
-  let depth = 1
-  let quote = ''
-  let index = start
-
-  while (index < raw.length) {
-    const char = raw[index]
-
-    if (quote !== '') {
-      if (char === '\\') {
-        index = index + 2
-        continue
-      }
-
-      if (char === quote) {
-        quote = ''
-      }
-
-      index = index + 1
-      continue
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-      index = index + 1
-      continue
-    }
-
-    if (char === '{') {
-      depth = depth + 1
-    } else if (char === '}') {
-      depth = depth - 1
-
-      if (depth === 0) {
-        return index
-      }
-    }
-
-    index = index + 1
-  }
-
-  return -1
 }
 
 function emitCModuleUnhandledRejectionFlagDefinition(lines: string[], context: CEmitContext): void {

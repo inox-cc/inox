@@ -67,6 +67,8 @@ import {
   resolveCAsyncFunctionAwaitValueType,
   resolvePromiseExpressionValueType
 } from './async/promises.ts'
+import { collectLocalAwaitRejectionValueTypes, inferRejectedValueType } from './async/rejections.ts'
+import type { RejectionValueTypeDependencies } from './async/rejections.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type { CEmitContext, CFunctionContext } from './context.ts'
 import {
@@ -949,6 +951,15 @@ urlLoweringDependencies = {
   registerObjectShape
 }
 
+const rejectionValueTypeDependencies: RejectionValueTypeDependencies = {
+  cFetchRuntimeExpressionMethod,
+  cFsRuntimeExpressionMethod,
+  cPromiseRuntimeCallName,
+  inferExpressionType,
+  isErrorConstructorExpression,
+  isKnownErrorValueExpression
+}
+
 promiseLoweringDependencies = {
   emitCValueExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
@@ -960,7 +971,8 @@ promiseLoweringDependencies = {
   emitRuntimeArrowCaptureStoreLines,
   emitStatementList,
   inferExpressionType,
-  inferRejectedValueType,
+  inferRejectedValueType: (expression: AnyNode, context: CFunctionContext) =>
+    inferRejectedValueType(expression, context, rejectionValueTypeDependencies),
   isPromiseChainCallbackWrapperWithContext
 }
 
@@ -2816,7 +2828,11 @@ function inferCatchBindingValueType(statement: AnyNode, context: CFunctionContex
     types.push(throwType)
   }
 
-  const localAwaitTypes: string[] = collectLocalAwaitRejectionValueTypes(statement.block, context)
+  const localAwaitTypes: string[] = collectLocalAwaitRejectionValueTypes(
+    statement.block,
+    context,
+    rejectionValueTypeDependencies
+  )
 
   for (const awaitType of localAwaitTypes) {
     types.push(awaitType)
@@ -2921,347 +2937,6 @@ function asyncTaskWrapperFunctionParams(wrapper: CAsyncTaskWrapper | null): CFun
   }
 
   return params
-}
-
-function copyStringSet(source: CNameSet): CNameSet {
-  return new Set(source)
-}
-
-function copyStringMap(source: CStringMap): CStringMap {
-  return new Map(source)
-}
-
-function collectLocalAwaitRejectionValueTypes(node: unknown, context: CFunctionContext): string[] {
-  return collectLocalAwaitRejectionValueTypesWithState(
-    node,
-    context,
-    new Map(),
-    copyStringSet(context.errorObjectNames)
-  )
-}
-
-function pushLocalAwaitRejectionChildValueTypes(
-  target: string[],
-  value: unknown,
-  context: CFunctionContext,
-  localPromiseRejectionValueTypes: CStringMap,
-  localErrorObjectNames: CNameSet
-): void {
-  if (value === null || typeof value === 'undefined') {
-    return
-  }
-
-  pushAll(
-    target,
-    collectLocalAwaitRejectionValueTypesWithState(
-      value,
-      context,
-      localPromiseRejectionValueTypes,
-      localErrorObjectNames
-    )
-  )
-}
-
-function collectLocalAwaitRejectionValueTypesWithState(
-  node: unknown,
-  context: CFunctionContext,
-  localPromiseRejectionValueTypes: CStringMap,
-  localErrorObjectNames: CNameSet
-): string[] {
-  if (node === null || typeof node === 'undefined') {
-    return []
-  }
-
-  if (typeof node !== 'object') {
-    return []
-  }
-
-  if (Array.isArray(node)) {
-    const types: string[] = []
-    const items: AnyNode[] = node
-
-    for (const item of items) {
-      pushAll(
-        types,
-        collectLocalAwaitRejectionValueTypesWithState(
-          item,
-          context,
-          localPromiseRejectionValueTypes,
-          localErrorObjectNames
-        )
-      )
-    }
-
-    return types
-  }
-
-  const current = node as AnyNode
-
-  if (current.type === 'BlockStatement') {
-    return collectLocalAwaitRejectionValueTypesWithState(
-      current.body,
-      context,
-      copyStringMap(localPromiseRejectionValueTypes),
-      copyStringSet(localErrorObjectNames)
-    )
-  }
-
-  if (current.type === 'VariableDeclaration') {
-    const types = collectLocalAwaitRejectionValueTypesWithState(
-      current.init,
-      context,
-      localPromiseRejectionValueTypes,
-      localErrorObjectNames
-    )
-
-    if (isErrorConstructorExpression(current.init)) {
-      localErrorObjectNames.add(current.name)
-    }
-
-    if (current.valueType === 'promise') {
-      const rejectionValueType = inferPromiseRejectionValueType(
-        current.init,
-        context,
-        localPromiseRejectionValueTypes,
-        localErrorObjectNames
-      )
-
-      if (rejectionValueType !== 'unknown') {
-        localPromiseRejectionValueTypes.set(current.name, rejectionValueType)
-      }
-    }
-
-    return types
-  }
-
-  if (current.type === 'AwaitExpression') {
-    const rejectionValueType = inferPromiseRejectionValueType(
-      current.argument,
-      context,
-      localPromiseRejectionValueTypes,
-      localErrorObjectNames
-    )
-
-    if (rejectionValueType === 'unknown') {
-      return []
-    }
-
-    return [rejectionValueType]
-  }
-
-  const types: string[] = []
-
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.body,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.init,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.argument,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.args,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.callee,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.object,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.index,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.properties,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.value,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.left,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.right,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.consequent,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.alternate,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.test,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.update,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.iterable,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.cases,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.block,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.handler,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.finalizer,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-  pushLocalAwaitRejectionChildValueTypes(
-    types,
-    current.expression,
-    context,
-    localPromiseRejectionValueTypes,
-    localErrorObjectNames
-  )
-
-  return types
-}
-
-function inferPromiseRejectionValueType(
-  expression: AnyNode,
-  context: CFunctionContext,
-  localPromiseRejectionValueTypes: CStringMap,
-  localErrorObjectNames: CNameSet
-): string {
-  if (expression.type === 'CallExpression' && cPromiseRuntimeCallName(expression.callee) === 'reject') {
-    return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames)
-  }
-
-  if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression)) {
-    return 'error'
-  }
-
-  if (expression.type === 'CallExpression' && cFetchRuntimeExpressionMethod(expression)) {
-    return 'error'
-  }
-
-  if (expression.type === 'Reference' && expression.path.length === 1) {
-    const name = expression.path[0]
-    const localValueType = localPromiseRejectionValueTypes.get(name)
-
-    if (localValueType !== null && typeof localValueType !== 'undefined') {
-      return localValueType
-    }
-
-    const contextValueType = context.promiseRejectionValueTypes.get(name)
-
-    if (contextValueType !== null && typeof contextValueType !== 'undefined') {
-      return contextValueType
-    }
-
-    return 'unknown'
-  }
-
-  return 'unknown'
-}
-
-function inferRejectedValueType(expression: AnyNode, context: CFunctionContext): string {
-  return inferRejectedValueTypeWithErrors(expression, context, context.errorObjectNames)
-}
-
-function inferRejectedValueTypeWithErrors(
-  expression: AnyNode,
-  context: CFunctionContext,
-  localErrorObjectNames: CNameSet
-): string {
-  if (isKnownErrorValueExpression(expression, localErrorObjectNames)) {
-    return 'error'
-  }
-
-  if (
-    expression.type === 'StringLiteral' ||
-    expression.type === 'TemplateLiteral' ||
-    inferExpressionType(expression, context) === 'string'
-  ) {
-    return 'string'
-  }
-
-  return 'unknown'
 }
 
 function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] {

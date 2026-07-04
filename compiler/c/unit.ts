@@ -68,6 +68,7 @@ import type {
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
+import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
   collectNodeNetworkHandlers,
@@ -1598,19 +1599,19 @@ function collectCUnitNeededFunctionPrototypeNames(
 
   for (const info of context.classInfos.values()) {
     if (info.constructor !== null && typeof info.constructor !== 'undefined') {
-      collectCUnitReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
+      collectCReferencedFunctionPrototypeNames(info.constructor, functionNames, prototypeNames)
     }
   }
 
   for (const method of classMethods) {
-    collectCUnitReferencedFunctionPrototypeNames(method.method, functionNames, prototypeNames)
+    collectCReferencedFunctionPrototypeNames(method.method, functionNames, prototypeNames)
   }
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = functions[functionIndex]
     const referenced = new Set<string>()
 
-    collectCUnitReferencedFunctionPrototypeNames(item, functionNames, referenced)
+    collectCReferencedFunctionPrototypeNames(item, functionNames, referenced)
 
     for (const name of referenced) {
       const referencedIndex = functionIndexes.get(name)
@@ -1646,208 +1647,6 @@ function collectCUnitFunctionIndexes(functions: AnyNode[]): Map<string, number> 
   }
 
   return indexes
-}
-
-function collectCUnitReferencedFunctionPrototypeNames(
-  node: AnyNode,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(node, functionNames, target)
-}
-
-function collectCUnitReferencedFunctionPrototypeNamesFromValue(
-  value: unknown,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index = index + 1) {
-      collectCUnitReferencedFunctionPrototypeNamesFromValue(value[index], functionNames, target)
-    }
-
-    return
-  }
-
-  if (!cUnitIsRecord(value)) {
-    return
-  }
-
-  const node = value as AnyNode
-
-  if (node.type === 'Reference' && Array.isArray(node.path) && typeof node.path[0] === 'string') {
-    const name = node.path[0]
-
-    if (functionNames.has(name)) {
-      target.add(name)
-    }
-  }
-
-  if (
-    node.type === 'TemplateLiteral' &&
-    typeof node.raw === 'string'
-  ) {
-    collectCUnitTemplateReferencedFunctionNames(node.raw, functionNames, target)
-  }
-
-  collectCUnitReferencedFunctionPrototypeChildNames(node, functionNames, target)
-}
-
-function collectCUnitReferencedFunctionPrototypeChildNames(
-  item: AnyNode,
-  functionNames: Set<string>,
-  target: Set<string>
-): void {
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.body, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.params, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.fields, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.methods, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.init, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.condition, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.consequent, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.alternate, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.test, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.update, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.iterable, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.discriminant, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.cases, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.block, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.handler, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.finalizer, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.argument, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.args, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.callee, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.object, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.index, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.target, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.value, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.left, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.right, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.elements, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.properties, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.expression, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.declaration, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.awaitedExpression, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.awaitedPromiseExpression, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.prefixStatements, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.returnExpression, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.successPhases, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.tryHandler, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.tryPhases, functionNames, target)
-  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.statements, functionNames, target)
-}
-
-function cUnitIsRecord(value: unknown): boolean {
-  return typeof value === 'object' && value !== null
-}
-
-function collectCUnitTemplateReferencedFunctionNames(raw: string, functionNames: Set<string>, target: Set<string>): void {
-  if (!raw.includes('${')) {
-    return
-  }
-
-  let start = raw.indexOf('${')
-
-  while (start >= 0) {
-    const end = cUnitTemplatePlaceholderEnd(raw, start + 2)
-
-    if (end < 0) {
-      return
-    }
-
-    collectCUnitTextReferencedFunctionNames(raw.slice(start + 2, end), functionNames, target)
-    start = raw.indexOf('${', end + 1)
-  }
-}
-
-function collectCUnitTextReferencedFunctionNames(text: string, functionNames: Set<string>, target: Set<string>): void {
-  let index = 0
-  let quote = ''
-
-  while (index < text.length) {
-    const char = text[index]
-
-    if (quote !== '') {
-      if (char === '\\') {
-        index = index + 2
-        continue
-      }
-
-      if (char === quote) {
-        quote = ''
-      }
-
-      index = index + 1
-      continue
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-      index = index + 1
-      continue
-    }
-
-    if (!cUnitIdentifierChar(char)) {
-      index = index + 1
-      continue
-    }
-
-    const start = index
-
-    while (index < text.length && cUnitIdentifierChar(text[index])) {
-      index = index + 1
-    }
-
-    const name = text.slice(start, index)
-
-    if (functionNames.has(name)) {
-      target.add(name)
-    }
-  }
-}
-
-function cUnitTemplatePlaceholderEnd(raw: string, start: number): number {
-  let depth = 1
-  let quote = ''
-  let index = start
-
-  while (index < raw.length) {
-    const char = raw[index]
-
-    if (quote !== '') {
-      if (char === '\\') {
-        index = index + 2
-        continue
-      }
-
-      if (char === quote) {
-        quote = ''
-      }
-
-      index = index + 1
-      continue
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-      index = index + 1
-      continue
-    }
-
-    if (char === '{') {
-      depth = depth + 1
-    } else if (char === '}') {
-      depth = depth - 1
-
-      if (depth === 0) {
-        return index
-      }
-    }
-
-    index = index + 1
-  }
-
-  return -1
 }
 
 function emitCallbackFinalizerPrototype(finalizerName: string): string {
