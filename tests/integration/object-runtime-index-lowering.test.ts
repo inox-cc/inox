@@ -39,8 +39,16 @@ for (const a of foo.v) {
   assert.match(source, /inox::object_value_at\(a, 0, inox_object_value_\d+\)/)
   assert.match(source, /inox::Value inox_object_entry_\d+;/)
   assert.match(source, /inox::object_entry_at\(a, 0, inox_object_entry_\d+\)/)
+  assert.match(source, /inox_array\* inox_for_array_\d+ = Array\.raw\(inox_value_\d+\);/)
+  assert.match(source, /if \(inox_for_array_\d+ == nullptr\) \{\n\s+Array\.throwNotIterable\(\);\n\s+return;\n\s+\}/)
+  assert.match(
+    source,
+    /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_array_\d+->length; \+\+inox_for_index_\d+\) \{\n\s+inox::Value inox_for_value_\d+ = inox_for_array_\d+->items\[inox_for_index_\d+\];/
+  )
   assert.doesNotMatch(source, /inox_object_values\(&inox_default_allocator, a, &inox_object_values_\d+\)/)
   assert.doesNotMatch(source, /inox_object_entries\(&inox_default_allocator, a, &inox_object_entries_\d+\)/)
+  assert.doesNotMatch(source, /inox_array_len\(inox_value_\d+, &inox_for_length_\d+\)/)
+  assert.doesNotMatch(source, /inox_array_get\(inox_value_\d+, inox_for_index_\d+, &inox_for_value_\d+\)/)
   assert.doesNotMatch(source, /int main\(void\) \{\n\s+inox::Value inox_object_value_\d+;/)
   assert.doesNotMatch(source, /int main\(void\) \{\n\s+inox::Value inox_object_entry_\d+;/)
 }

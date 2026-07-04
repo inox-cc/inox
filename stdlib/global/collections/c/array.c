@@ -117,7 +117,7 @@ static void inox_array_dispose_ref(inox_ref* ref) {
 
   inox_array* array = (inox_array*)ref;
 
-  for (size_t index = 0; index < array->len; index += 1) {
+  for (size_t index = 0; index < array->length; index += 1) {
     inox_release(array->items[index]);
   }
 
@@ -158,7 +158,7 @@ inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* ou
   array->header.allocator = allocator;
   array->header.dispose = inox_array_dispose_ref;
   inox_ref_init_weak(&array->header);
-  array->len = len;
+  array->length = len;
   array->cap = len;
 
   for (size_t index = 0; index < len; index += 1) {
@@ -180,15 +180,15 @@ inox_status inox_array_push(inox_value array, inox_value value) {
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_reserve(instance, instance->len + 1);
+  inox_status status = inox_array_reserve(instance, instance->length + 1);
 
   if (status != INOX_OK) {
     return status;
   }
 
   inox_retain(value);
-  instance->items[instance->len] = value;
-  instance->len += 1;
+  instance->items[instance->length] = value;
+  instance->length += 1;
 
   return INOX_OK;
 }
@@ -199,20 +199,20 @@ inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out) 
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_reserve(instance, instance->len + 1);
+  inox_status status = inox_array_reserve(instance, instance->length + 1);
 
   if (status != INOX_OK) {
     return status;
   }
 
-  for (size_t index = instance->len; index > 0; index -= 1) {
+  for (size_t index = instance->length; index > 0; index -= 1) {
     instance->items[index] = instance->items[index - 1];
   }
 
   inox_retain(value);
   instance->items[0] = value;
-  instance->len += 1;
-  *out = instance->len;
+  instance->length += 1;
+  *out = instance->length;
 
   return INOX_OK;
 }
@@ -224,7 +224,7 @@ inox_status inox_array_get(inox_value array, size_t index, inox_value* out) {
 
   inox_array* instance = (inox_array*)array.as.ref;
 
-  if (index >= instance->len) {
+  if (index >= instance->length) {
     *out = inox_undefined_value();
     return INOX_ERR_FIELD;
   }
@@ -241,7 +241,7 @@ inox_status inox_array_len(inox_value array, size_t* out) {
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  *out = instance->len;
+  *out = instance->length;
 
   return INOX_OK;
 }
@@ -253,14 +253,14 @@ inox_status inox_array_pop(inox_value array, inox_value* out) {
 
   inox_array* instance = (inox_array*)array.as.ref;
 
-  if (instance->len == 0) {
+  if (instance->length == 0) {
     *out = inox_null_value();
     return INOX_OK;
   }
 
-  instance->len -= 1;
-  *out = instance->items[instance->len];
-  instance->items[instance->len] = inox_undefined_value();
+  instance->length -= 1;
+  *out = instance->items[instance->length];
+  instance->items[instance->length] = inox_undefined_value();
 
   return INOX_OK;
 }
@@ -272,7 +272,7 @@ inox_status inox_array_set(inox_value array, size_t index, inox_value value) {
 
   inox_array* instance = (inox_array*)array.as.ref;
 
-  if (index >= instance->len) {
+  if (index >= instance->length) {
     return INOX_ERR_FIELD;
   }
 
@@ -344,7 +344,7 @@ inox_status inox_array_join(
   const char* separator = separator_bytes == 0 ? "" : separator_bytes;
   size_t total_len = 0;
 
-  for (size_t index = 0; index < instance->len; index += 1) {
+  for (size_t index = 0; index < instance->length; index += 1) {
     char buffer[64];
     const char* bytes = "";
     size_t len = 0;
@@ -381,7 +381,7 @@ inox_status inox_array_join(
 
   size_t offset = 0;
 
-  for (size_t index = 0; index < instance->len; index += 1) {
+  for (size_t index = 0; index < instance->length; index += 1) {
     char buffer[64];
     const char* bytes = "";
     size_t len = 0;
@@ -416,12 +416,12 @@ inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t
 
   inox_array* source = (inox_array*)array.as.ref;
 
-  if (start > source->len) {
-    start = source->len;
+  if (start > source->length) {
+    start = source->length;
   }
 
-  if (end > source->len) {
-    end = source->len;
+  if (end > source->length) {
+    end = source->length;
   }
 
   if (end < start) {
@@ -436,7 +436,7 @@ inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t
 
   inox_array* target = (inox_array*)out->as.ref;
 
-  for (size_t index = 0; index < target->len; index += 1) {
+  for (size_t index = 0; index < target->length; index += 1) {
     inox_value value = source->items[start + index];
 
     inox_retain(value);
@@ -454,11 +454,11 @@ inox_status inox_array_sort(inox_value array) {
 
   inox_array* instance = (inox_array*)array.as.ref;
 
-  if (instance->len < 2) {
+  if (instance->length < 2) {
     return INOX_OK;
   }
 
-  for (size_t index = 1; index < instance->len; index += 1) {
+  for (size_t index = 1; index < instance->length; index += 1) {
     inox_value value = instance->items[index];
     size_t scan = index;
 

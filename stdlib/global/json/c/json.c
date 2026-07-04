@@ -1014,7 +1014,7 @@ inox_json_stringify_array(inox_json_buffer* buffer, inox_json_stringify_stack* s
     goto done;
   }
 
-  for (size_t index = 0; index < array->len; index += 1) {
+  for (size_t index = 0; index < array->length; index += 1) {
     if (index != 0) {
       status = inox_json_buffer_push_char(buffer, ',');
 

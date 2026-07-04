@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include "inox/allocator.h"
+#include "inox/loop.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
@@ -11,7 +12,7 @@ extern "C" {
 
 typedef struct inox_array {
   inox_ref header;
-  size_t len;
+  size_t length;
   size_t cap;
   inox_value* items;
 } inox_array;
@@ -47,6 +48,22 @@ public:
 
   bool isArray(const inox::Value& value) const {
     return isArray(value.raw());
+  }
+
+  inox_array* raw(inox_value value) const {
+    if (!isArray(value) || value.as.ref == nullptr) {
+      return nullptr;
+    }
+
+    return (inox_array*)value.as.ref;
+  }
+
+  inox_array* raw(const inox::Value& value) const {
+    return raw(value.raw());
+  }
+
+  void throwNotIterable() const {
+    inox::throw_value(inox::string("TypeError: value is not iterable"));
   }
 };
 

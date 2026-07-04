@@ -201,7 +201,7 @@ static inox_status inox_console_format_array(inox_console_format_buffer* buffer,
     return status;
   }
 
-  for (size_t index = 0; index < array->len; index += 1) {
+  for (size_t index = 0; index < array->length; index += 1) {
     if (index != 0) {
       status = inox_console_format_append_literal(buffer, ", ");
 

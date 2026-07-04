@@ -285,13 +285,13 @@ static inox_status inox_array_object_values(inox_allocator* allocator, inox_valu
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_new(allocator, instance->len, out);
+  inox_status status = inox_array_new(allocator, instance->length, out);
 
   if (status != INOX_OK) {
     return status;
   }
 
-  for (size_t index = 0; index < instance->len; index += 1) {
+  for (size_t index = 0; index < instance->length; index += 1) {
     inox_value value = inox_undefined_value();
 
     status = inox_array_get(array, index, &value);
@@ -318,13 +318,13 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_new(allocator, instance->len, out);
+  inox_status status = inox_array_new(allocator, instance->length, out);
 
   if (status != INOX_OK) {
     return status;
   }
 
-  for (size_t index = 0; index < instance->len; index += 1) {
+  for (size_t index = 0; index < instance->length; index += 1) {
     char key_bytes[64];
     int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
     inox_value key = inox_undefined_value();
@@ -357,13 +357,13 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_new(allocator, instance->len, out);
+  inox_status status = inox_array_new(allocator, instance->length, out);
 
   if (status != INOX_OK) {
     return status;
   }
 
-  for (size_t index = 0; index < instance->len; index += 1) {
+  for (size_t index = 0; index < instance->length; index += 1) {
     char key_bytes[64];
     int key_len = snprintf(key_bytes, sizeof(key_bytes), "%zu", index);
     inox_value pair = inox_undefined_value();
@@ -664,7 +664,7 @@ inox_status inox_object_entry_at(inox_allocator* allocator, inox_value object, s
   if (object.tag == INOX_TAG_ARRAY) {
     inox_array* instance = (inox_array*)object.as.ref;
 
-    if (index >= instance->len) {
+    if (index >= instance->length) {
       *out = inox_undefined_value();
       return INOX_ERR_FIELD;
     }

@@ -1600,8 +1600,23 @@ export function resolveRuntimeForOfArray(
   return {
     name: value.expression,
     elementType,
-    lines: value.lines
+    lines: withoutTrailingRuntimeArrayValueCheck(value.lines, value.expression)
   }
+}
+
+function withoutTrailingRuntimeArrayValueCheck(lines: string[], expression: string): string[] {
+  if (lines.length === 0) {
+    return lines
+  }
+
+  const lastLine = lines[lines.length - 1]
+  const checkPrefix = `if (${expression}.tag != INOX_TAG_ARRAY || ${expression}.as.ref == 0) `
+
+  if (lastLine.startsWith(checkPrefix)) {
+    return lines.slice(0, -1)
+  }
+
+  return lines
 }
 
 function emitArrayReferenceName(name: string, context: ArrayFunctionContext): string {

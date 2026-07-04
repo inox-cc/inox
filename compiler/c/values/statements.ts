@@ -3147,13 +3147,27 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
 
     if (runtimeArray !== null && typeof runtimeArray !== 'undefined') {
       pushAllLines(lines, runtimeArray.lines)
-      lines.push(`size_t ${length} = 0;`)
-      lines.push(emitStatusCheck(`inox_array_len(${arrayName}, &${length})`, context))
+      const rawArray = nextCName(context, 'inox_for_array')
+      const failureStatement = statementDeps(context).emitFailureStatement(context)
+      lines.push(`inox_array* ${rawArray} = Array.raw(${arrayName});`)
+      if (!context.cleanupEnabled && !context.statusReturn) {
+        lines.push(`if (${rawArray} == nullptr) {`)
+        lines.push('  Array.throwNotIterable();')
+        lines.push('  ' + failureStatement)
+        lines.push('}')
+      } else {
+        lines.push(`if (${rawArray} == nullptr) ${failureStatement}`)
+      }
+      length = `${rawArray}->length`
+      arrayName = rawArray
     }
 
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
     const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
-    const loopBody = [`inox::Value ${value};`, `${getElementStatus}`]
+    let loopBody = [`inox::Value ${value};`, `${getElementStatus}`]
+    if (runtimeArray !== null && typeof runtimeArray !== 'undefined') {
+      loopBody = [`inox::Value ${value} = ${arrayName}->items[${index}];`]
+    }
     pushAllLines(loopBody, element.lines)
     loopBody.push(element.expression)
     pushAllLines(loopBody, body)
