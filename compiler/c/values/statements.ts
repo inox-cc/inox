@@ -58,7 +58,11 @@ import {
   isRuntimeNullableType
 } from '../value-types.ts'
 import type { ArrayLoweringDependencies, PreparedArrayExpression } from './arrays.ts'
-import { emitPreparedArrayLengthExpression, resolveRuntimeArrayElementType } from './arrays.ts'
+import {
+  emitPreparedArrayLengthExpression,
+  emitPreparedObjectRuntimeArrayIndexValueExpression,
+  resolveRuntimeArrayElementType
+} from './arrays.ts'
 import {
   cClassNameFromValueType,
   cClassValueTypeName,
@@ -1733,6 +1737,40 @@ function emitObjectRuntimeCallValueVariableDeclaration(
   lines.push(`auto ${emitCIdentifier(statement.name)} = ${value.expression};`)
   const failureStatement = statementDeps(context).emitFailureStatement(context)
   lines.push(`if (inox::thrown()) ${failureStatement}`)
+
+  return lines
+}
+
+function emitObjectRuntimeArrayIndexValueVariableDeclaration(
+  statement: StatementNode,
+  context: CFunctionContext
+): string[] | null {
+  const value = emitPreparedObjectRuntimeArrayIndexValueExpression(
+    statement.init,
+    context,
+    emitCIdentifier(statement.name)
+  )
+
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  const valueType = value.valueType ?? statementDeps(context).inferExpressionType(statement.init, context)
+
+  registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
+
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+
+  if (shouldSkipRuntimeValueDeclarationCheck(statement, value, valueType)) {
+    return lines
+  }
+
+  const valueCheck = emitRuntimeValueCheck(emitCIdentifier(statement.name), cRuntimeValueTag(valueType), context)
+
+  if (valueCheck !== '') {
+    lines.push(valueCheck)
+  }
 
   return lines
 }
@@ -4285,6 +4323,12 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
       typeof runtimeElement !== 'undefined' &&
       isRuntimeValueDeclarationValueType(runtimeElement.valueType)
     ) {
+      const objectRuntimeIndexDeclaration = emitObjectRuntimeArrayIndexValueVariableDeclaration(statement, context)
+
+      if (objectRuntimeIndexDeclaration !== null && typeof objectRuntimeIndexDeclaration !== 'undefined') {
+        return objectRuntimeIndexDeclaration
+      }
+
       return emitRuntimeValueVariableDeclaration(statement, statement.init, context, runtimeElement.valueType)
     }
   }

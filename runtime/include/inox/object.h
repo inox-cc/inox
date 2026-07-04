@@ -92,6 +92,58 @@ inline inox_status object_entry_at(inox_value object, size_t index, Value& out) 
   return inox_object_entry_at(&inox_default_allocator, object, index, out.out());
 }
 
+inline Value finish_object_index_read(inox_status status, inox_value out, const char* message) {
+  if (status == INOX_OK) {
+    return adopt(out);
+  }
+
+  inox_release(out);
+
+  if (status == INOX_ERR_FIELD) {
+    return Value();
+  }
+
+  throw_value(string(message));
+
+  return Value();
+}
+
+inline Value object_value_at(inox_value object, size_t index) {
+  if (thrown()) {
+    return Value();
+  }
+
+  inox_value out = inox_undefined_value();
+
+  return finish_object_index_read(
+    inox_object_value_at(object, index, &out),
+    out,
+    "Object.values index failed"
+  );
+}
+
+inline Value object_value_at(const Value& object, size_t index) {
+  return object_value_at(object.raw(), index);
+}
+
+inline Value object_entry_at(inox_value object, size_t index) {
+  if (thrown()) {
+    return Value();
+  }
+
+  inox_value out = inox_undefined_value();
+
+  return finish_object_index_read(
+    inox_object_entry_at(&inox_default_allocator, object, index, &out),
+    out,
+    "Object.entries index failed"
+  );
+}
+
+inline Value object_entry_at(const Value& object, size_t index) {
+  return object_entry_at(object.raw(), index);
+}
+
 inline inox_status object_entries(inox_value object, Value& out) {
   return inox_object_entries(&inox_default_allocator, object, out.out());
 }

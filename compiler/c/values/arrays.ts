@@ -991,18 +991,14 @@ function emitObjectRuntimeArrayIndexGetAllowMissing(
   out: string,
   context: ArrayFunctionContext
 ): string[] {
-  const status = nextCName(context, `inox_object_${method}_status`)
   const call =
     method === 'values'
-      ? `inox::object_value_at(${objectExpression}, ${indexExpression}, ${out})`
-      : `inox::object_entry_at(${objectExpression}, ${indexExpression}, ${out})`
+      ? `inox::object_value_at(${objectExpression}, ${indexExpression})`
+      : `inox::object_entry_at(${objectExpression}, ${indexExpression})`
 
   return [
-    `inox_status ${status} = ${call};`,
-    `if (${status} == INOX_ERR_FIELD) {`,
-    `  ${out} = inox_undefined_value();`,
-    '}',
-    `if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`
+    `auto ${out} = ${call};`,
+    `if (inox::thrown()) ${emitFailureStatement(context)}`
   ]
 }
 
@@ -1066,7 +1062,8 @@ export function emitPreparedKnownArrayIndexValueExpression(
 
 export function emitPreparedObjectRuntimeArrayIndexValueExpression(
   expression: AnyNode,
-  context: ArrayFunctionContext
+  context: ArrayFunctionContext,
+  targetName?: string
 ): PreparedExpression | null {
   if (expression.type !== 'IndexExpression' || expression.object.type !== 'CallExpression') {
     return null
@@ -1092,12 +1089,11 @@ export function emitPreparedObjectRuntimeArrayIndexValueExpression(
 
   const object = arrayDeps(context).emitCValueExpression(source, context)
   const index = emitPreparedRuntimeArrayIndexExpression(runtimeElement, context)
-  const value = nextCName(context, method === 'values' ? 'inox_object_value' : 'inox_object_entry')
+  const value = targetName ?? nextCName(context, method === 'values' ? 'inox_object_value' : 'inox_object_entry')
   const lines: string[] = []
 
   appendLines(lines, object.lines)
   appendLines(lines, index.lines)
-  lines.push(`inox::Value ${value};`)
   appendLines(
     lines,
     emitObjectRuntimeArrayIndexGetAllowMissing(method, object.expression, index.expression, value, context)
@@ -1114,6 +1110,7 @@ export function emitPreparedObjectRuntimeArrayIndexValueExpression(
     expression: value,
     cppType: 'inox::Value',
     owned: false,
+    runtimeTypeChecked: tag !== '',
     valueType: runtimeElement.valueType
   }
 }
