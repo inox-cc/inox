@@ -638,6 +638,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     emitPreparedFsSyncStatementExpression(expression, context, fsLoweringDependencies),
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
+  emitPreparedInlineObjectRuntimeCallExpression,
   emitPreparedRuntimeTruthinessExpression: emitPreparedStatementRuntimeTruthinessExpression,
   emitPreparedPathObjectCallExpression: (
     expression: AnyNode,

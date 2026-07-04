@@ -446,6 +446,10 @@ export type StatementLoweringDependencies = {
   emitPreparedFsSyncStatementExpression(expression: StatementNode, context: CFunctionContext): PreparedStatement | null
   emitPreparedMapIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
+  emitPreparedInlineObjectRuntimeCallExpression(
+    expression: StatementNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedRuntimeTruthinessExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -1705,6 +1709,30 @@ function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: Prepa
   }
 
   return `${declarationType} ${name} = ${value.expression};`
+}
+
+function emitObjectRuntimeCallValueVariableDeclaration(
+  statement: StatementNode,
+  context: CFunctionContext
+): string[] | null {
+  if (statement.init === null || typeof statement.init === 'undefined') {
+    return null
+  }
+
+  const value = statementDeps(context).emitPreparedInlineObjectRuntimeCallExpression(statement.init, context)
+
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  registerRuntimeValueMetadata(statement.name, 'array', statement, statement.init, context)
+
+  const lines: string[] = []
+  pushAllLines(lines, value.lines)
+  lines.push(`auto ${emitCIdentifier(statement.name)} = ${value.expression};`)
+  lines.push(`if (inox::thrown()) ${statementDeps(context).emitFailureStatement(context)}`)
+
+  return lines
 }
 
 function shouldSkipRuntimeValueDeclarationCheck(
@@ -4264,6 +4292,12 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     ((statement.init.objectRuntimeMethod !== null && typeof statement.init.objectRuntimeMethod !== 'undefined') ||
       deps.isObjectRuntimeCallExpression(statement.init))
   ) {
+    const objectRuntimeCallDeclaration = emitObjectRuntimeCallValueVariableDeclaration(statement, context)
+
+    if (objectRuntimeCallDeclaration !== null && typeof objectRuntimeCallDeclaration !== 'undefined') {
+      return objectRuntimeCallDeclaration
+    }
+
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'array')
   }
 

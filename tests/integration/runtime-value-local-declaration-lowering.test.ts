@@ -47,19 +47,24 @@ for (const a of foo.v) {
   assert.doesNotMatch(source, /\n  inox::Value e;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
   assert.doesNotMatch(source, /JSON\.parse\(inox::StringView\("[^"]+", \d+\), foo\)/)
-  assert.match(source, /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_length_\d+; \+\+inox_for_index_\d+\) \{\n    inox::Value inox_for_value_\d+;/)
+  assert.match(
+    source,
+    /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_array_\d+->length; \+\+inox_for_index_\d+\) \{\n    inox::Value a = inox_for_array_\d+->items\[inox_for_index_\d+\];/
+  )
   assert.doesNotMatch(source, /for \(size_t [^)]+\) \{\n\s+\{/)
   assert.doesNotMatch(source, /for \(size_t [^)]+; [^)]+ \+= 1\)/)
   assert.match(
     source,
-    /\n    auto inox_values_(\d+) = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\1;/
+    /\n    auto b = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;/
   )
+  assert.doesNotMatch(source, /auto inox_values_\d+ = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\d+;/)
   assert.match(source, /\n    inox::Value c = inox_object_value_\d+;/)
   assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
   assert.match(
     source,
-    /\n    auto inox_entries_(\d+) = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\1;/
+    /\n    auto d = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;/
   )
+  assert.doesNotMatch(source, /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/)
   assert.match(source, /\n    inox::Value e = inox_object_entry_\d+;/)
   assert.doesNotMatch(source, /inox::Value e = inox::adopt\(inox_object_entry_\d+\.release\(\)\);/)
   assert.doesNotMatch(source, /inox::object_values\(a, inox_object_values_\d+\)/)
