@@ -1101,7 +1101,7 @@ export function emitPreparedObjectRuntimeArrayIndexValueExpression(
 
   const tag = cRuntimeValueTag(runtimeElement.valueType) ?? ''
 
-  if (tag !== '') {
+  if (method !== 'entries' && tag !== '') {
     appendLines(lines, emitRuntimeArrayIndexValueCheck(value, tag, expression, context))
   }
 
@@ -1110,7 +1110,7 @@ export function emitPreparedObjectRuntimeArrayIndexValueExpression(
     expression: value,
     cppType: 'inox::Value',
     owned: false,
-    runtimeTypeChecked: tag !== '',
+    runtimeTypeChecked: method === 'entries' || tag !== '',
     valueType: runtimeElement.valueType
   }
 }

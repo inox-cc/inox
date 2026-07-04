@@ -67,6 +67,7 @@ for (const a of foo.v) {
   )
   assert.doesNotMatch(source, /auto inox_entries_\d+ = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\d+;/)
   assert.match(source, /\n    auto e = inox::object_entry_at\(a, 0\);\n    if \(inox::thrown\(\)\) return;/)
+  assert.doesNotMatch(source, /if \(e\.tag != INOX_TAG_UNDEFINED && \(e\.tag != INOX_TAG_ARRAY \|\| e\.as\.ref == 0\)\) return;/)
   assert.doesNotMatch(source, /\n    inox::Value e = inox_object_entry_\d+;/)
   assert.doesNotMatch(source, /inox::Value e = inox::adopt\(inox_object_entry_\d+\.release\(\)\);/)
   assert.doesNotMatch(source, /inox::object_values\(a, inox_object_values_\d+\)/)
