@@ -234,7 +234,7 @@ console.log(process.argv[1])
   }) as GeneratedTextFile[]
   const processEntrySource = generatedTextFile(processEntryFiles, 'src/index.cc').code
 
-  assert.match(processEntrySource, /inox::main\(argc, argv, "src\/index\.ts", inox_app_main\)/)
+  assert.match(processEntrySource, /inox::main\(argc, argv, "src\/index\.ts", inox_main\)/)
   assert.doesNotMatch(processEntrySource, /inox::main\(argc, argv, "\/pkg\//)
 }
 

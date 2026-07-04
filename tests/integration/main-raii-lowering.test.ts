@@ -23,7 +23,7 @@ console.log(value)
   const main = mainFunctionSource(result.code)
 
   assert.match(result.code, /#include "inox\/main\.h"/)
-  assert.match(result.code, /static void inox_app_main\(void\)/)
+  assert.match(result.code, /static void inox_main\(void\)/)
   assert.doesNotMatch(appMain, /\ncleanup:/)
   assert.doesNotMatch(appMain, /goto cleanup;/)
   assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
@@ -37,7 +37,7 @@ console.log(value)
   assert.doesNotMatch(appMain, /return INOX_OK;/)
   assert.doesNotMatch(appMain, /\n  \{\n/)
   assert.doesNotMatch(appMain, /\n  return;\n}/)
-  assert.match(main, /return inox::main\(inox_app_main\);/)
+  assert.match(main, /return inox::main\(inox_main\);/)
 }
 
 export function assertModuleMainUsesRaiiReturns(): void {
@@ -49,7 +49,7 @@ console.log(value)
   const main = mainFunctionSource(source)
 
   assert.match(source, /#include "inox\/main\.h"/)
-  assert.match(source, /static void inox_app_main\(void\)/)
+  assert.match(source, /static void inox_main\(void\)/)
   assert.doesNotMatch(appMain, /\ncleanup:/)
   assert.doesNotMatch(appMain, /goto cleanup;/)
   assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
@@ -63,7 +63,7 @@ console.log(value)
   assert.doesNotMatch(appMain, /return INOX_OK;/)
   assert.doesNotMatch(appMain, /\n  \{\n/)
   assert.doesNotMatch(appMain, /\n  return;\n}/)
-  assert.match(main, /return inox::main\(inox_app_main\);/)
+  assert.match(main, /return inox::main\(inox_main\);/)
 }
 
 export function assertProcessMainUsesReturnCodeHelper(): void {
@@ -81,7 +81,28 @@ console.log(value)
   assert.doesNotMatch(appMain, /inox_process_string/)
   assert.doesNotMatch(main, /return !inox_promise_has_unhandled_rejection/)
   assert.doesNotMatch(main, /return inox_process_get_exit_code\(\)/)
-  assert.match(main, /return inox::main\(argc, argv, "src\/index\.ts", inox_app_main\);/)
+  assert.match(main, /return inox::main\(argc, argv, "src\/index\.ts", inox_main\);/)
+}
+
+export function assertGeneratedMainDoesNotCollideWithUserMain(): void {
+  const result = compileSource(
+    `
+function main() {
+  console.log(1)
+}
+
+main()
+`,
+    {
+      target: 'cc'
+    }
+  )
+
+  assert.match(result.code, /void inox_user_main\(void\)/)
+  assert.match(result.code, /static void inox_main\(void\)/)
+  assert.match(result.code, /inox_user_main\(\);/)
+  assert.match(result.code, /return inox::main\(inox_main\);/)
+  assert.doesNotMatch(result.code, /void inox_main\(void\) \{\n  console\.log/)
 }
 
 export function assertAwaitFunctionUsesExternalLoopRuntime(): void {
@@ -107,7 +128,7 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /inox_loop/)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
   assert.match(appMainFunctionSource(source), /checkFetch\(\);/)
-  assert.match(main, /return inox::main\(inox_app_main\);/)
+  assert.match(main, /return inox::main\(inox_main\);/)
 }
 
 function compileModuleMainSource(source: string): string {
@@ -140,7 +161,7 @@ function mainFunctionSource(source: string): string {
 }
 
 function appMainFunctionSource(source: string): string {
-  return functionSource(source, 'static void inox_app_main(void) {')
+  return functionSource(source, 'static void inox_main(void) {')
 }
 
 function functionSource(source: string, signatureStart: string): string {
@@ -148,7 +169,7 @@ function functionSource(source: string, signatureStart: string): string {
 
   assert.notEqual(start, -1, `missing generated function ${signatureStart}`)
 
-  let nextFunction = source.indexOf('\n\nstatic void inox_app_main', start + signatureStart.length)
+  let nextFunction = source.indexOf('\n\nstatic void inox_main', start + signatureStart.length)
 
   if (nextFunction === -1) {
     nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)
@@ -172,6 +193,7 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertUnitMainUsesRaiiReturns()
   assertModuleMainUsesRaiiReturns()
+  assertGeneratedMainDoesNotCollideWithUserMain()
   assertAwaitFunctionUsesExternalLoopRuntime()
   assertProcessMainUsesReturnCodeHelper()
 }

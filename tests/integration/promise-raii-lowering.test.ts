@@ -33,12 +33,12 @@ run()
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
-  const appMain = functionSource(source, 'static void inox_app_main(void) {')
+  const appMain = functionSource(source, 'static void inox_main(void) {')
   const main = functionSource(source, 'int main(void) {')
 
   assert.match(source, /#include "inox\/promise\.h"/)
   assert.match(source, /#include "inox\/main\.h"/)
-  assert.match(source, /static void inox_app_main\(void\)/)
+  assert.match(source, /static void inox_main\(void\)/)
   assert.doesNotMatch(appMain, /inox::RuntimeContext inox_runtime/)
   assert.doesNotMatch(main, /inox::RuntimeContext inox_runtime/)
   assert.doesNotMatch(source, /inox::Runtime inox_runtime;/)
@@ -48,7 +48,7 @@ run()
   assert.match(source, /inox::Promise promise;/)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
   assert.doesNotMatch(source, /return !inox_promise_has_unhandled_rejection/)
-  assert.match(source, /return inox::main\(inox_app_main\);/)
+  assert.match(source, /return inox::main\(inox_main\);/)
   assert.doesNotMatch(source, /int inox_loop_active = 0;/)
   assert.doesNotMatch(source, /inox_loop_dispose/)
   assert.doesNotMatch(source, /promise\.reset\(\);/)

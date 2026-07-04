@@ -38,7 +38,7 @@ for (const a of foo.v) {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.doesNotMatch(source, /static void inox_app_main\(void\) \{\n  \{/)
+  assert.doesNotMatch(source, /static void inox_main\(void\) \{\n  \{/)
   assert.match(source, /\n  auto foo = JSON\.parse\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}"\);/)
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /\n  inox::Value b;/)

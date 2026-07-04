@@ -1247,7 +1247,7 @@ export function emitMainWrapper(
 
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
-  lines.push('static void inox_app_main(void) {')
+  lines.push('static void inox_main(void) {')
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
@@ -1262,13 +1262,13 @@ export function emitMainWrapper(
   if (context.processRuntime) {
     lines.push('int main(int argc, char** argv) {')
     if (baseContext.processEntryPath !== null) {
-      lines.push(`  return inox::main(argc, argv, ${cStringLiteral(baseContext.processEntryPath)}, inox_app_main);`)
+      lines.push(`  return inox::main(argc, argv, ${cStringLiteral(baseContext.processEntryPath)}, inox_main);`)
     } else {
-      lines.push('  return inox::main(argc, argv, inox_app_main);')
+      lines.push('  return inox::main(argc, argv, inox_main);')
     }
   } else {
     lines.push('int main(void) {')
-    lines.push('  return inox::main(inox_app_main);')
+    lines.push('  return inox::main(inox_main);')
   }
 
   lines.push('}')

@@ -2461,7 +2461,7 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   const lines: string[] = []
 
-  lines.push('static void inox_app_main(void) {')
+  lines.push('static void inox_main(void) {')
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
@@ -2475,10 +2475,10 @@ function emitCModuleMainFunction(
 
   if (context.processRuntime) {
     lines.push('int main(int argc, char** argv) {')
-    lines.push(`  return inox::main(argc, argv, ${cStringLiteral(plan.relativeSourcePath)}, inox_app_main);`)
+    lines.push(`  return inox::main(argc, argv, ${cStringLiteral(plan.relativeSourcePath)}, inox_main);`)
   } else {
     lines.push('int main(void) {')
-    lines.push('  return inox::main(inox_app_main);')
+    lines.push('  return inox::main(inox_main);')
   }
 
   lines.push('}')

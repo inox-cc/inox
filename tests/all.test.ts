@@ -125,6 +125,7 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/generated-label-spacing.test.ts')
   const {
     assertAwaitFunctionUsesExternalLoopRuntime,
+    assertGeneratedMainDoesNotCollideWithUserMain,
     assertModuleMainUsesRaiiReturns,
     assertProcessMainUsesReturnCodeHelper,
     assertUnitMainUsesRaiiReturns
@@ -252,6 +253,7 @@ async function runIntegrationTests(): Promise<void> {
     await t.test('main-raii-lowering', () => {
       assertUnitMainUsesRaiiReturns()
       assertModuleMainUsesRaiiReturns()
+      assertGeneratedMainDoesNotCollideWithUserMain()
       assertAwaitFunctionUsesExternalLoopRuntime()
       assertProcessMainUsesReturnCodeHelper()
     })

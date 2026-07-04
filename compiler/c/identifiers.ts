@@ -94,6 +94,8 @@ function isReservedCIdentifier(value: string): boolean {
     value === 'if' ||
     value === 'index' ||
     value === 'inline' ||
+    value === 'inox_main' ||
+    value === 'inox_user_main' ||
     value === 'int' ||
     value === 'long' ||
     value === 'mutable' ||
@@ -147,7 +149,7 @@ function isReservedCIdentifier(value: string): boolean {
 
 export function emitCFunctionName(name: string): string {
   if (name === 'main') {
-    return 'inox_main'
+    return 'inox_user_main'
   }
 
   return emitCIdentifier(name)
