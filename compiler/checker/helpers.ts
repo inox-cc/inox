@@ -164,6 +164,42 @@ export function statementListAlwaysExits(statements: AnyNode[]): boolean {
   return false
 }
 
+export function resolveSingleReturnExpression(statements: AnyNode[]): AnyNode | null {
+  if (statements.length !== 1) {
+    return null
+  }
+
+  const statement = statements[0]
+
+  if (statement.type !== 'ReturnStatement') {
+    return null
+  }
+
+  if (statement.argument !== null && typeof statement.argument !== 'undefined') {
+    return statement.argument
+  }
+
+  return null
+}
+
+export function resolveTerminalReturnExpression(statements: AnyNode[]): AnyNode | null {
+  if (statements.length === 0) {
+    return null
+  }
+
+  const statement = statements[statements.length - 1]
+
+  if (statement.type !== 'ReturnStatement') {
+    return null
+  }
+
+  if (statement.argument !== null && typeof statement.argument !== 'undefined') {
+    return statement.argument
+  }
+
+  return null
+}
+
 export function isConditionValueType(valueType: ValueType): boolean {
   return (
     valueType === 'boolean' ||

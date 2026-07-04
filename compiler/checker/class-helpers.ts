@@ -91,3 +91,22 @@ export function resolveClassConstructorFieldType(expression: AnyNode, constructo
 
   return 'unknown'
 }
+
+export function classPrototypeAccessObject(expression: AnyNode): AnyNode | null {
+  if (
+    (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') &&
+    expression.property === 'prototype'
+  ) {
+    return expression.object
+  }
+
+  if (
+    (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
+    expression.index.type === 'StringLiteral' &&
+    expression.index.value === 'prototype'
+  ) {
+    return expression.object
+  }
+
+  return null
+}

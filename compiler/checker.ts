@@ -112,6 +112,7 @@ import {
 } from './checker/declared-types.ts'
 import type { DeclaredTypeResolverContext } from './checker/declared-types.ts'
 import {
+  classPrototypeAccessObject,
   collectClassConstructorFieldAssignments,
   isThisExpression as isThisExpressionNode,
   resolveClassConstructorFieldType as resolveClassConstructorFieldInitializerType
@@ -141,6 +142,8 @@ import {
   promiseExecutorFunctionType,
   promiseStaticMethodName,
   regexpFlags,
+  resolveSingleReturnExpression,
+  resolveTerminalReturnExpression,
   statementAlwaysExits,
   stringPredicateArgCountMessage,
   uniqueNames
@@ -3086,7 +3089,7 @@ class Checker {
   }
 
   reportUnsupportedClassPrototypeAccess(expression: AnyNode, nullable: boolean): boolean {
-    const object = this.classPrototypeAccessObject(expression)
+    const object = classPrototypeAccessObject(expression)
 
     if (object === null || typeof object === 'undefined') {
       return false
@@ -3101,25 +3104,6 @@ class Checker {
     expression.valueType = 'unknown'
 
     return true
-  }
-
-  classPrototypeAccessObject(expression: AnyNode): AnyNode | null {
-    if (
-      (expression.type === 'MemberExpression' || expression.type === 'OptionalMemberExpression') &&
-      expression.property === 'prototype'
-    ) {
-      return expression.object
-    }
-
-    if (
-      (expression.type === 'IndexExpression' || expression.type === 'OptionalIndexExpression') &&
-      expression.index.type === 'StringLiteral' &&
-      expression.index.value === 'prototype'
-    ) {
-      return expression.object
-    }
-
-    return null
   }
 
   isClassConstructorReference(expression: AnyNode): boolean {
@@ -6210,10 +6194,10 @@ class Checker {
         returnNullable = this.expressionCanBeNull(expression.body)
         returnPromiseValueType = this.resolveExpressionPromiseValueType(expression.body)
       } else {
-        const returnExpression = this.resolveSingleReturnExpression(expression.body)
+        const returnExpression = resolveSingleReturnExpression(expression.body)
 
         if (returnExpression === null || typeof returnExpression === 'undefined') {
-          const terminalReturnExpression = this.resolveTerminalReturnExpression(expression.body)
+          const terminalReturnExpression = resolveTerminalReturnExpression(expression.body)
           let expectedReturnType: ValueType = 'unknown'
 
           if (returnType !== null && typeof returnType !== 'undefined') {
@@ -7034,10 +7018,10 @@ class Checker {
 
         returnNullable = this.expressionCanBeNull(expression.body)
       } else {
-        const returnExpression = this.resolveSingleReturnExpression(expression.body)
+        const returnExpression = resolveSingleReturnExpression(expression.body)
 
         if (returnExpression === null || typeof returnExpression === 'undefined') {
-          const terminalReturnExpression = this.resolveTerminalReturnExpression(expression.body)
+          const terminalReturnExpression = resolveTerminalReturnExpression(expression.body)
           let expectedReturnType: ValueType = 'unknown'
 
           if (returnType !== null && typeof returnType !== 'undefined') {
@@ -7091,42 +7075,6 @@ class Checker {
     expression.returnNullable = returnNullable
 
     return actualReturnType
-  }
-
-  resolveSingleReturnExpression(statements: AnyNode[]): AnyNode | null {
-    if (statements.length !== 1) {
-      return null
-    }
-
-    const statement = statements[0]
-
-    if (statement.type !== 'ReturnStatement') {
-      return null
-    }
-
-    if (statement.argument !== null && typeof statement.argument !== 'undefined') {
-      return statement.argument
-    }
-
-    return null
-  }
-
-  resolveTerminalReturnExpression(statements: AnyNode[]): AnyNode | null {
-    if (statements.length === 0) {
-      return null
-    }
-
-    const statement = statements[statements.length - 1]
-
-    if (statement.type !== 'ReturnStatement') {
-      return null
-    }
-
-    if (statement.argument !== null && typeof statement.argument !== 'undefined') {
-      return statement.argument
-    }
-
-    return null
   }
 
   checkStringConversionCall(expression: AnyNode): ValueType | null {
