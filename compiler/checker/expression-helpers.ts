@@ -1,6 +1,6 @@
 import { fsStatsObjectShape } from './builtins.ts'
 import { checkerNodeAt, nodeValueTypeOrUnknown } from './resolved-types.ts'
-import type { CheckerMapType } from './resolved-types.ts'
+import type { CheckerMapType, FunctionTypeMetadata, FunctionTypeParamMetadata } from './resolved-types.ts'
 import type { FsBooleanOptions, FsRuntimeCallPlan } from '../stdlib/node/checker.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 
@@ -182,5 +182,37 @@ export function createMapEntryShape(mapType: CheckerMapType | null, loc: SourceL
         loc
       }
     ]
+  }
+}
+
+export function createArrowFunctionTypeMetadata(
+  expression: AnyNode,
+  params: FunctionTypeParamMetadata[]
+): FunctionTypeMetadata {
+  let returnShape: ObjectShapeInfo | null = null
+
+  if (
+    expression.body !== null &&
+    typeof expression.body !== 'undefined' &&
+    expression.body.shape !== null &&
+    typeof expression.body.shape !== 'undefined'
+  ) {
+    returnShape = expression.body.shape
+  }
+
+  return {
+    kind: 'function',
+    resolved: true,
+    params,
+    returnType: expression.returnType,
+    declaredReturnType: expression.declaredReturnType,
+    returnNullable: expression.returnNullable === true,
+    returnArrayElementType: expression.returnArrayElementType ?? null,
+    returnArrayElementDeclaredType: expression.returnArrayElementDeclaredType ?? null,
+    returnMapKeyType: expression.returnMapKeyType ?? null,
+    returnMapValueType: expression.returnMapValueType ?? null,
+    returnPromiseValueType: expression.returnPromiseValueType ?? null,
+    returnSetElementType: expression.returnSetElementType ?? null,
+    returnShape
   }
 }

@@ -120,6 +120,7 @@ import {
 import {
   applyFsRuntimeCallPlan,
   callExpressionArgumentLabel,
+  createArrowFunctionTypeMetadata,
   createMapEntryShape,
   dynamicShapeField,
   resolveMapEntryArrayType
@@ -1059,7 +1060,7 @@ class Checker {
         typeof statement.init !== 'undefined' &&
         statement.init.type === 'ArrowFunctionExpression'
       ) {
-        functionType = this.inferArrowFunctionTypeMetadata(statement.init)
+        functionType = createArrowFunctionTypeMetadata(statement.init, this.resolveParams(statement.init.params))
       }
 
       let shape: ObjectShapeInfo | null = null
@@ -8806,36 +8807,7 @@ class Checker {
     }
 
     if (expression.functionType === null || typeof expression.functionType === 'undefined') {
-      expression.functionType = this.inferArrowFunctionTypeMetadata(expression)
-    }
-  }
-
-  inferArrowFunctionTypeMetadata(expression: AnyNode): FunctionTypeMetadata {
-    let returnShape: ObjectShapeInfo | null = null
-
-    if (
-      expression.body !== null &&
-      typeof expression.body !== 'undefined' &&
-      expression.body.shape !== null &&
-      typeof expression.body.shape !== 'undefined'
-    ) {
-      returnShape = expression.body.shape
-    }
-
-    return {
-      kind: 'function',
-      resolved: true,
-      params: this.resolveParams(expression.params),
-      returnType: expression.returnType,
-      declaredReturnType: expression.declaredReturnType,
-      returnNullable: expression.returnNullable === true,
-      returnArrayElementType: expression.returnArrayElementType ?? null,
-      returnArrayElementDeclaredType: expression.returnArrayElementDeclaredType ?? null,
-      returnMapKeyType: expression.returnMapKeyType ?? null,
-      returnMapValueType: expression.returnMapValueType ?? null,
-      returnPromiseValueType: expression.returnPromiseValueType ?? null,
-      returnSetElementType: expression.returnSetElementType ?? null,
-      returnShape
+      expression.functionType = createArrowFunctionTypeMetadata(expression, this.resolveParams(expression.params))
     }
   }
 
