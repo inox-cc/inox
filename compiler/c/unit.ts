@@ -1690,13 +1690,51 @@ function collectCUnitReferencedFunctionPrototypeNamesFromValue(
     collectCUnitTemplateReferencedFunctionNames(node.raw, functionNames, target)
   }
 
-  for (const key of Object.keys(node)) {
-    if (key === 'loc') {
-      continue
-    }
+  collectCUnitReferencedFunctionPrototypeChildNames(node, functionNames, target)
+}
 
-    collectCUnitReferencedFunctionPrototypeNamesFromValue(node[key], functionNames, target)
-  }
+function collectCUnitReferencedFunctionPrototypeChildNames(
+  item: AnyNode,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.body, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.params, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.fields, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.methods, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.init, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.condition, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.consequent, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.alternate, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.test, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.update, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.iterable, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.discriminant, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.cases, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.block, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.handler, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.finalizer, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.argument, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.args, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.callee, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.object, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.index, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.target, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.value, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.left, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.right, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.elements, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.properties, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.expression, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.declaration, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.awaitedExpression, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.awaitedPromiseExpression, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.prefixStatements, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.returnExpression, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.successPhases, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.tryHandler, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.tryPhases, functionNames, target)
+  collectCUnitReferencedFunctionPrototypeNamesFromValue(item.statements, functionNames, target)
 }
 
 function cUnitIsRecord(value: unknown): boolean {

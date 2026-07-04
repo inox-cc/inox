@@ -917,13 +917,51 @@ function collectCModuleReferencedFunctionPrototypeNamesFromValue(
     collectCModuleTemplateReferencedFunctionNames(node.raw, functionNames, target)
   }
 
-  for (const key of Object.keys(node)) {
-    if (key === 'loc') {
-      continue
-    }
+  collectCModuleReferencedFunctionPrototypeChildNames(node, functionNames, target)
+}
 
-    collectCModuleReferencedFunctionPrototypeNamesFromValue(node[key], functionNames, target)
-  }
+function collectCModuleReferencedFunctionPrototypeChildNames(
+  item: AnyNode,
+  functionNames: Set<string>,
+  target: Set<string>
+): void {
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.body, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.params, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.fields, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.methods, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.init, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.condition, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.consequent, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.alternate, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.test, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.update, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.iterable, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.discriminant, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.cases, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.block, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.handler, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.finalizer, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.argument, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.args, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.callee, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.object, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.index, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.target, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.value, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.left, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.right, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.elements, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.properties, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.expression, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.declaration, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.awaitedExpression, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.awaitedPromiseExpression, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.prefixStatements, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.returnExpression, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.successPhases, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.tryHandler, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.tryPhases, functionNames, target)
+  collectCModuleReferencedFunctionPrototypeNamesFromValue(item.statements, functionNames, target)
 }
 
 function cModuleIsRecord(value: unknown): boolean {
