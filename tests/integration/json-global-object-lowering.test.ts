@@ -33,11 +33,11 @@ console.log(text)
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /auto data = JSON\.parse\("\{\\"name\\":\\"Ada\\"\}"\);/)
-  assert.match(source, /if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
+  assert.match(source, /if \(inox::thrown\(\)\) return;/)
   assert.match(source, /JSON\.stringify\(data, inox_json_value_\d+\)/)
   assert.doesNotMatch(source, /inox::json_parse/)
   assert.doesNotMatch(source, /inox::json_stringify/)
-  assert.doesNotMatch(source, /JSON\.parse\(inox::string_view/)
+  assert.doesNotMatch(source, /JSON\.parse\(inox::StringView/)
   assert.doesNotMatch(source, /inox_json_stringify\(&inox_default_allocator/)
 }
 

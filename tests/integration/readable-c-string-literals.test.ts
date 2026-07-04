@@ -46,9 +46,9 @@ console.log('label', text)
   assert.match(source, /inox_string_from_format\(&inox_default_allocator, &inox_value_\d+, "value %.17g%%", \(\(double\)v\)\)/)
   assert.match(
     source,
-    /inox_string\* text = \(inox_string\*\)text_value_\d+\.as\.ref;\n  console\.log\("%\.\*s", inox::string_view\(text->bytes, text->len\)\);/
+    /inox_string\* text = \(inox_string\*\)text_value_\d+\.as\.ref;\n  console\.log\("%\.\*s", inox::StringView\(text->bytes, text->len\)\);/
   )
-  assert.match(source, /console\.log\("label %\.\*s", inox::string_view\(text->bytes, text->len\)\);/)
+  assert.match(source, /console\.log\("label %\.\*s", inox::StringView\(text->bytes, text->len\)\);/)
   assert.doesNotMatch(source, /\\x25/)
   assert.doesNotMatch(source, /\\x73/)
   assert.doesNotMatch(source, /\\x68/)
@@ -181,8 +181,8 @@ console.log(data.v)
   const jsonLocalSource = generatedTextFile(jsonLocalFiles, 'src/index.cc').code
 
   assert.match(jsonLocalSource, /auto data = JSON\.parse\("\{\\"v\\":\[1\]\}"\);/)
-  assert.match(jsonLocalSource, /if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
-  assert.doesNotMatch(jsonLocalSource, /JSON\.parse\(inox::string_view/)
+  assert.match(jsonLocalSource, /if \(inox::thrown\(\)\) return;/)
+  assert.doesNotMatch(jsonLocalSource, /JSON\.parse\(inox::StringView/)
   assert.doesNotMatch(jsonLocalSource, /inox_object_new/)
   assert.doesNotMatch(jsonLocalSource, /inox_shape_data/)
 
@@ -212,7 +212,7 @@ console.log(response.status)
     fetchSource,
     /inox::fetch\("http:\/\/127\.0\.0\.1"\)/
   )
-  assert.doesNotMatch(fetchSource, /inox::fetch\(inox::string_view/)
+  assert.doesNotMatch(fetchSource, /inox::fetch\(inox::StringView/)
 
   const processEntryHost = createMemoryCompilerHost(
     [

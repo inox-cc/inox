@@ -153,6 +153,20 @@ function appendLines(out: string[], lines: string[]): void {
   }
 }
 
+function appendPrefixedLines(out: string[], lines: string[], prefix: string): void {
+  for (const line of lines) {
+    out.push(`${prefix}${line}`)
+  }
+}
+
+function isOptionalChainContinuationReceiver(expression: AnyNode): boolean {
+  return (
+    expression.optionalChainProtected === true ||
+    expression.type === 'OptionalMemberExpression' ||
+    expression.type === 'OptionalIndexExpression'
+  )
+}
+
 function currentObjectErrorTarget(context: ObjectFunctionContext): string {
   const targets = context.errorTargets
 
@@ -1101,6 +1115,27 @@ function emitPreparedObjectExpressionFieldValueExpression(
   const tag = cRuntimeValueTag(field.valueType)
   const lines: string[] = []
 
+  if (isOptionalChainContinuationReceiver(objectExpression)) {
+    registerOwnedValue(context, temp)
+    appendLines(lines, object.lines)
+    appendLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(`if (${object.expression}.tag == INOX_TAG_NULL || ${object.expression}.tag == INOX_TAG_UNDEFINED) {`)
+    lines.push(`  ${temp} = inox_null_value();`)
+    lines.push('} else {')
+    lines.push(`  ${emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(object.expression), context)}`)
+    lines.push(`  ${temp} = inox::get(${object.expression}, ${cStringLiteral(field.key)});`)
+    appendPrefixedLines(lines, emitObjectThrownCheckLines(context), '  ')
+    appendPrefixedLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context), '  ')
+    lines.push('}')
+
+    return {
+      lines,
+      expression: temp,
+      cppType: 'inox::Value',
+      valueType: field.valueType
+    }
+  }
+
   appendLines(lines, object.lines)
   lines.push(`auto ${temp} = inox::get(${object.expression}, ${cStringLiteral(field.key)});`)
   appendLines(lines, emitObjectThrownCheckLines(context))
@@ -1133,6 +1168,27 @@ function emitPreparedDynamicObjectFieldValueExpression(
   const temp = nextCName(context, 'inox_value')
   const tag = cRuntimeValueTag(expression.valueType)
   const lines: string[] = []
+
+  if (isOptionalChainContinuationReceiver(objectExpression)) {
+    registerOwnedValue(context, temp)
+    appendLines(lines, object.lines)
+    appendLines(lines, emitPrepareOwnedValueWrite(temp))
+    lines.push(`if (${object.expression}.tag == INOX_TAG_NULL || ${object.expression}.tag == INOX_TAG_UNDEFINED) {`)
+    lines.push(`  ${temp} = inox_null_value();`)
+    lines.push('} else {')
+    lines.push(`  ${emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(object.expression), context)}`)
+    lines.push(`  ${temp} = inox::get(${object.expression}, ${cStringLiteral(key)});`)
+    appendPrefixedLines(lines, emitObjectThrownCheckLines(context), '  ')
+    appendPrefixedLines(lines, emitRuntimeOptionalObjectFieldValueCheck(temp, tag, context), '  ')
+    lines.push('}')
+
+    return {
+      lines,
+      expression: temp,
+      cppType: 'inox::Value',
+      valueType: expression.valueType
+    }
+  }
 
   appendLines(lines, object.lines)
   lines.push(`auto ${temp} = inox::get(${object.expression}, ${cStringLiteral(key)});`)

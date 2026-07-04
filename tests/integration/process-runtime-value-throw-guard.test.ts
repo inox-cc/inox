@@ -33,8 +33,8 @@ console.log(process)
 
   assert.match(source, /console\.log\(process\.versions\);/)
   assert.match(source, /console\.log\(process\);/)
-  assert.doesNotMatch(source, /process\.versions\.value\(\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
-  assert.doesNotMatch(source, /process\.value\(\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
+  assert.doesNotMatch(source, /process\.versions\.value\(\);\n  if \(inox::thrown\(\)\) return/)
+  assert.doesNotMatch(source, /process\.value\(\);\n  if \(inox::thrown\(\)\) return/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

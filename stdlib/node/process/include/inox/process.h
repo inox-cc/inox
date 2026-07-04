@@ -229,18 +229,6 @@ inline int main(int argc, char** argv, AppMain app_main) {
   return return_code();
 }
 
-inline int main(int argc, char** argv, AppStatusMain app_main) {
-  inox_process_init(argc, argv);
-  ::process.init();
-  const inox_status status = run_status_app(app_main);
-
-  if (status != INOX_OK) {
-    return return_code(status_exit_code(status));
-  }
-
-  return return_code();
-}
-
 inline int main(int argc, char** argv, const char* entry_path, AppMain app_main) {
   inox_process_init_with_entry(argc, argv, entry_path);
   ::process.init();
@@ -248,18 +236,6 @@ inline int main(int argc, char** argv, const char* entry_path, AppMain app_main)
 
   if (code != 0) {
     return return_code(code);
-  }
-
-  return return_code();
-}
-
-inline int main(int argc, char** argv, const char* entry_path, AppStatusMain app_main) {
-  inox_process_init_with_entry(argc, argv, entry_path);
-  ::process.init();
-  const inox_status status = run_status_app(app_main);
-
-  if (status != INOX_OK) {
-    return return_code(status_exit_code(status));
   }
 
   return return_code();

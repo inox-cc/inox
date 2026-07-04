@@ -343,6 +343,11 @@ function recordCallFeatures(expression: CoreRuntimeNode, features: CoreRuntimeFe
     features.add('string-bytes')
   }
 
+  if (isArrayIsArrayCall(expression)) {
+    features.add('collections')
+    features.add('runtime-values')
+  }
+
   if (isCollectionMethodCall(expression) || isArrayMethodCall(expression)) {
     features.add('collections')
     features.add('runtime-values')
@@ -532,6 +537,18 @@ function isArrayFromCall(expression: CoreRuntimeNode): boolean {
     path.length === 2 &&
     path[0] === 'Array' &&
     path[1] === 'from'
+  )
+}
+
+function isArrayIsArrayCall(expression: CoreRuntimeNode): boolean {
+  const path = memberExpressionPath(expression.callee)
+
+  return (
+    path !== null &&
+    typeof path !== 'undefined' &&
+    path.length === 2 &&
+    path[0] === 'Array' &&
+    path[1] === 'isArray'
   )
 }
 

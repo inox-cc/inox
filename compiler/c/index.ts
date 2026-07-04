@@ -103,7 +103,6 @@ import {
   emitClassMethodPrototype,
   emitFunctionDeclaration as emitFunctionDeclarationWithDependencies,
   emitFunctionHead,
-  emitMainReturnExpression,
   emitMainWrapper as emitMainWrapperWithDependencies,
   reportUnsupportedCFunctionType,
   resolveFunctionDeclarationParams
@@ -1492,7 +1491,6 @@ const cModuleEmissionDependencies = {
   emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) =>
     emitFunctionDeclarationWithDependencies(statement, baseContext, declarationEmissionDependencies),
   emitFunctionHead,
-  emitMainReturnExpression,
   emitStatementList,
   httpLoweringDependencies,
   netLoweringDependencies,

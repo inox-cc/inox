@@ -1244,11 +1244,10 @@ export function emitMainWrapper(
   context.moduleValueDeclarationScope = true
   context.cleanupEnabled = false
   context.externalEventLoop = true
-  context.statusReturn = true
 
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
-  lines.push('static inox_status inox_app_main(void) {')
+  lines.push('static void inox_app_main(void) {')
   pushIndentedDeclarationLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedDeclarationLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedDeclarationLines(lines, emitReturnFlowDeclarations(context))
@@ -1257,9 +1256,6 @@ export function emitMainWrapper(
   pushIndentedDeclarationLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedDeclarationLines(lines, emitBoxedValueDeclarations(context))
   pushDeclarationLines(lines, bodyLines)
-
-  lines.push('')
-  lines.push(`  return ${emitMainReturnExpression(context)};`)
   lines.push('}')
   lines.push('')
 
@@ -1278,20 +1274,6 @@ export function emitMainWrapper(
   lines.push('}')
 
   return lines
-}
-
-export function emitMainReturnExpression(context: CFunctionContext): string {
-  if (context.statusReturn) {
-    return 'INOX_OK'
-  }
-
-  let successReturn = '0'
-
-  if (!context.processRuntime && context.returnType === 'number' && context.returnFlowUsed) {
-    successReturn = '(int)inox_return'
-  }
-
-  return successReturn
 }
 
 function emitRuntimeParamPreludeForParams(

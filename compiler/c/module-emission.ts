@@ -364,7 +364,6 @@ export type CModuleEmissionDependencies = {
   emitClassMethodPrototype(info: CClassInfo, method: AnyNode, context: CEmitContext): string
   emitFunctionDeclaration(statement: AnyNode, baseContext: CEmitContext): string[]
   emitFunctionHead(statement: AnyNode, context: CEmitContext): string
-  emitMainReturnExpression(context: CFunctionContext): string
   emitStatementList(body: AnyNode[], context: CFunctionContext): string[]
   httpLoweringDependencies: HttpLoweringDependencies
   netLoweringDependencies: NetLoweringDependencies
@@ -2457,13 +2456,12 @@ function emitCModuleMainFunction(
   context.moduleValueDeclarationScope = true
   context.cleanupEnabled = false
   context.externalEventLoop = true
-  context.statusReturn = true
   const bodyLines: string[] = []
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   const lines: string[] = []
 
-  lines.push('static inox_status inox_app_main(void) {')
+  lines.push('static void inox_app_main(void) {')
   pushIndentedCModuleLines(lines, emitLoopFlowDeclarations(context))
   pushIndentedCModuleLines(lines, emitMainReturnValueDeclarations(context))
   pushIndentedCModuleLines(lines, emitReturnFlowDeclarations(context))
@@ -2472,9 +2470,6 @@ function emitCModuleMainFunction(
   pushIndentedCModuleLines(lines, emitErrorChannelDeclarations(context))
   pushIndentedCModuleLines(lines, emitBoxedValueDeclarations(context))
   pushCModuleLines(lines, bodyLines)
-
-  lines.push('')
-  lines.push(`  return ${deps.emitMainReturnExpression(context)};`)
   lines.push('}')
   lines.push('')
 

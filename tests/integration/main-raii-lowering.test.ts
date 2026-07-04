@@ -23,7 +23,7 @@ console.log(value)
   const main = mainFunctionSource(result.code)
 
   assert.match(result.code, /#include "inox\/main\.h"/)
-  assert.match(result.code, /static inox_status inox_app_main\(void\)/)
+  assert.match(result.code, /static void inox_app_main\(void\)/)
   assert.doesNotMatch(appMain, /\ncleanup:/)
   assert.doesNotMatch(appMain, /goto cleanup;/)
   assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
@@ -34,9 +34,9 @@ console.log(value)
   assert.doesNotMatch(result.code, /inox::loop\(\)->now_ms/)
   assert.doesNotMatch(result.code, /\.has_unhandled_rejection\(\)/)
   assert.doesNotMatch(result.code, /inox_promise_has_unhandled_rejection\(\)/)
-  assert.match(appMain, /return INOX_OK;/)
+  assert.doesNotMatch(appMain, /return INOX_OK;/)
   assert.doesNotMatch(appMain, /\n  \{\n/)
-  assert.match(appMain, /\n  return INOX_OK;\n}/)
+  assert.doesNotMatch(appMain, /\n  return;\n}/)
   assert.match(main, /return inox::main\(inox_app_main\);/)
 }
 
@@ -49,7 +49,7 @@ console.log(value)
   const main = mainFunctionSource(source)
 
   assert.match(source, /#include "inox\/main\.h"/)
-  assert.match(source, /static inox_status inox_app_main\(void\)/)
+  assert.match(source, /static void inox_app_main\(void\)/)
   assert.doesNotMatch(appMain, /\ncleanup:/)
   assert.doesNotMatch(appMain, /goto cleanup;/)
   assert.doesNotMatch(appMain, /while \(inox_loop_has_work/)
@@ -60,9 +60,9 @@ console.log(value)
   assert.doesNotMatch(source, /inox::loop\(\)->now_ms/)
   assert.doesNotMatch(source, /\.has_unhandled_rejection\(\)/)
   assert.doesNotMatch(source, /inox_promise_has_unhandled_rejection\(\)/)
-  assert.match(appMain, /return INOX_OK;/)
+  assert.doesNotMatch(appMain, /return INOX_OK;/)
   assert.doesNotMatch(appMain, /\n  \{\n/)
-  assert.match(appMain, /\n  return INOX_OK;\n}/)
+  assert.doesNotMatch(appMain, /\n  return;\n}/)
   assert.match(main, /return inox::main\(inox_app_main\);/)
 }
 
@@ -140,7 +140,7 @@ function mainFunctionSource(source: string): string {
 }
 
 function appMainFunctionSource(source: string): string {
-  return functionSource(source, 'static inox_status inox_app_main(void) {')
+  return functionSource(source, 'static void inox_app_main(void) {')
 }
 
 function functionSource(source: string, signatureStart: string): string {
@@ -148,7 +148,7 @@ function functionSource(source: string, signatureStart: string): string {
 
   assert.notEqual(start, -1, `missing generated function ${signatureStart}`)
 
-  let nextFunction = source.indexOf('\n\nstatic inox_status inox_app_main', start + signatureStart.length)
+  let nextFunction = source.indexOf('\n\nstatic void inox_app_main', start + signatureStart.length)
 
   if (nextFunction === -1) {
     nextFunction = source.indexOf('\n\nint main', start + signatureStart.length)

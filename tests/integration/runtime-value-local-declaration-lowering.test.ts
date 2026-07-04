@@ -38,27 +38,27 @@ for (const a of foo.v) {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.doesNotMatch(source, /static inox_status inox_app_main\(void\) \{\n  \{/)
-  assert.match(source, /\n  auto foo = JSON\.parse\(inox::string_view\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}", 34\)\);/)
-  assert.match(source, /if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/)
+  assert.doesNotMatch(source, /static void inox_app_main\(void\) \{\n  \{/)
+  assert.match(source, /\n  auto foo = JSON\.parse\("\{\\"v\\":\[\{\\"1\\":2\},\{\\"3\\":4,\\"5\\":\\"text\\"\}\]\}"\);/)
+  assert.match(source, /if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /\n  inox::Value b;/)
   assert.doesNotMatch(source, /\n  inox::Value c;/)
   assert.doesNotMatch(source, /\n  inox::Value d;/)
   assert.doesNotMatch(source, /\n  inox::Value e;/)
   assert.doesNotMatch(source, /inox::Value foo;\n\s+foo = inox_undefined_value\(\);/)
-  assert.doesNotMatch(source, /JSON\.parse\(inox::string_view\("[^"]+", \d+\), foo\)/)
+  assert.doesNotMatch(source, /JSON\.parse\(inox::StringView\("[^"]+", \d+\), foo\)/)
   assert.match(source, /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_length_\d+; \+\+inox_for_index_\d+\) \{\n    inox::Value inox_for_value_\d+;/)
   assert.doesNotMatch(source, /for \(size_t [^)]+\) \{\n\s+\{/)
   assert.doesNotMatch(source, /for \(size_t [^)]+; [^)]+ \+= 1\)/)
   assert.match(
     source,
-    /\n    auto inox_values_(\d+) = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n    inox::Value b = inox_values_\1;/
+    /\n    auto inox_values_(\d+) = Object\.values\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value b = inox_values_\1;/
   )
   assert.match(source, /\n    inox::Value c = inox_object_value_\d+;/)
   assert.doesNotMatch(source, /inox::Value c = inox::adopt\(inox_object_value_\d+\.release\(\)\);/)
   assert.match(
     source,
-    /\n    auto inox_entries_(\d+) = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return INOX_ERR_TYPE;\n    inox::Value d = inox_entries_\1;/
+    /\n    auto inox_entries_(\d+) = Object\.entries\(a\);\n    if \(inox::thrown\(\)\) return;\n    inox::Value d = inox_entries_\1;/
   )
   assert.match(source, /\n    inox::Value e = inox_object_entry_\d+;/)
   assert.doesNotMatch(source, /inox::Value e = inox::adopt\(inox_object_entry_\d+\.release\(\)\);/)

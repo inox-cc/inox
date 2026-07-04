@@ -35,15 +35,15 @@ console.log(Object.keys(foo.v))
 
   assert.match(
     source,
-    /console\.log\(Object\.entries\(inox::get\(foo, "v"\)\)\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/
+    /console\.log\(Object\.entries\(inox::get\(foo, "v"\)\)\);\n  if \(inox::thrown\(\)\) return;/
   )
   assert.match(
     source,
-    /console\.log\(Object\.values\(inox::get\(foo, "v"\)\)\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/
+    /console\.log\(Object\.values\(inox::get\(foo, "v"\)\)\);\n  if \(inox::thrown\(\)\) return;/
   )
   assert.match(
     source,
-    /console\.log\(Object\.keys\(inox::get\(foo, "v"\)\)\);\n  if \(inox::thrown\(\)\) return INOX_ERR_TYPE;/
+    /console\.log\(Object\.keys\(inox::get\(foo, "v"\)\)\);\n  if \(inox::thrown\(\)\) return;/
   )
   assert.doesNotMatch(source, /auto inox_(?:entries|values|keys)_\d+ = Object\./)
   assert.doesNotMatch(source, /inox::object_get\(foo, "v", 1, inox_value_\d+\)/)

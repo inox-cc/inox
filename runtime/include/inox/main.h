@@ -11,12 +11,7 @@
 
 namespace inox {
 
-using AppMain = int (*)(void);
-using AppStatusMain = inox_status (*)(void);
-
-inline int status_exit_code(inox_status status) {
-  return status == INOX_OK ? 0 : 1;
-}
+using AppMain = void (*)(void);
 
 inline int run_app(AppMain app_main) {
   RuntimeContext runtime(&inox_default_allocator, inox_performance_now());
@@ -25,11 +20,7 @@ inline int run_app(AppMain app_main) {
     return 1;
   }
 
-  const int code = app_main();
-
-  if (code != 0) {
-    return code;
-  }
+  app_main();
 
   if (thrown()) {
     return 1;
@@ -43,45 +34,11 @@ inline int run_app(AppMain app_main) {
     return 1;
   }
 
-  return code;
+  return 0;
 }
 
 inline int main(AppMain app_main) {
   return return_code(run_app(app_main));
-}
-
-inline inox_status run_status_app(AppStatusMain app_main) {
-  RuntimeContext runtime(&inox_default_allocator, inox_performance_now());
-
-  if (!runtime) {
-    return INOX_ERR_TYPE;
-  }
-
-  const inox_status status = app_main();
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (thrown()) {
-    return INOX_ERR_TYPE;
-  }
-
-  const inox_status run_status = run();
-
-  if (run_status != INOX_OK) {
-    return run_status;
-  }
-
-  if (thrown()) {
-    return INOX_ERR_TYPE;
-  }
-
-  return INOX_OK;
-}
-
-inline int main(AppStatusMain app_main) {
-  return return_code(status_exit_code(run_status_app(app_main)));
 }
 
 } // namespace inox
