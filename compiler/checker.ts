@@ -94,6 +94,32 @@ import {
   timeRuntimeCallInfo
 } from '../stdlib/global/compiler/checker.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
+import {
+  acceptsArgumentCount,
+  argumentCountMessage,
+  argumentParamValueType,
+  findClassConstructorMethod,
+  findParamByName,
+  intersectNames,
+  isConditionValueType,
+  isConsoleMethod,
+  isNonNullNarrowingLiteral,
+  isPromiseMethod,
+  isRelativeImportSource,
+  isRuntimeNullableType,
+  isStatementExpressionNode,
+  isStringTrimMethod,
+  mergeShapeFields,
+  paramForArgument,
+  promiseExecutorFunctionType,
+  promiseStaticMethodName,
+  regexpFlags,
+  statementAlwaysExits,
+  stringPredicateArgCountMessage,
+  uniqueNames
+} from './checker/helpers.ts'
+import { inferJsonParseLiteralType } from './checker/json-literals.ts'
+import { hasWeakOwnershipMarker, ownershipCycleDiagnostics } from './checker/ownership.ts'
 import { memberExpressionPath } from './member-paths.ts'
 import {
   collectionConstructorNameFromPath,
@@ -171,15 +197,13 @@ import {
   nodeNameEquals,
   nodeValueTypeOrUnknown,
   nullableNarrowingKey,
-  optionalParamAt,
   resolvedConcreteValueTypeMetadata,
   resolvedFieldNullableMetadata,
   resolvedFunctionTypeMetadata,
   resolvedObjectShapeMetadata,
   resolvedStringMetadata,
   resolvedTypeListHasNullable,
-  resolvedValueTypeMetadata,
-  stringSetFromArray
+  resolvedValueTypeMetadata
 } from './checker/resolved-types.ts'
 import type {
   CheckProgramResult,
@@ -188,14 +212,10 @@ import type {
   CheckerObjectPropertyNode,
   FunctionTypeMetadata,
   FunctionTypeParamMetadata,
-  JsonParseLiteralResult,
-  JsonParseLiteralTypeInfo,
-  JsonParseStringResult,
   NullableConditionNarrowing,
   NullableNode,
   ObjectShapeBases,
   OptionalParamInfo,
-  OwnershipGraphEdge,
   PromiseCallbackParamMetadata,
   ResolvedTypeInfo,
   RuntimeCallInfo,
@@ -346,7 +366,12 @@ class Checker {
       }
     }
 
-    this.reportOwnershipCycles()
+    const ownershipDiagnostics = ownershipCycleDiagnostics(this.classNames, this.program, this.types)
+
+    for (const item of ownershipDiagnostics) {
+      this.diagnostics.push(item)
+    }
+
     throwDiagnostics(this.diagnostics)
 
     for (let index = 0; index < this.program.body.length; index = index + 1) {
@@ -416,7 +441,7 @@ class Checker {
       }
 
       if (item.type === 'ClassDeclaration') {
-        const constructorMethod = this.findClassConstructorMethod(item)
+        const constructorMethod = findClassConstructorMethod(item)
         let constructorParams: AnyNode[] = []
 
         if (constructorMethod !== null && typeof constructorMethod !== 'undefined') {
@@ -523,77 +548,6 @@ class Checker {
     return resolvedParam
   }
 
-  acceptsArgumentCount(params: OptionalParamInfo[], count: number): boolean {
-    if (this.hasRestParam(params)) {
-      return count >= this.requiredParamCount(params)
-    }
-
-    return count >= this.requiredParamCount(params) && count <= params.length
-  }
-
-  argumentCountMessage(label: string, params: OptionalParamInfo[], count: number): string {
-    const min = this.requiredParamCount(params)
-    const max = params.length
-    let expected = `${max}`
-
-    if (this.hasRestParam(params)) {
-      return `${label} expects ${min}+ argument(s), got ${count}`
-    }
-
-    if (min !== max) {
-      expected = `${min}-${max}`
-    }
-
-    return `${label} expects ${expected} argument(s), got ${count}`
-  }
-
-  requiredParamCount(params: OptionalParamInfo[]): number {
-    let count = 0
-
-    for (let index = 0; index < params.length; index = index + 1) {
-      const param = optionalParamAt(params, index)
-
-      if (!isOptionalParam(param)) {
-        count = count + 1
-      }
-    }
-
-    return count
-  }
-
-  hasRestParam(params: OptionalParamInfo[]): boolean {
-    if (params.length === 0) {
-      return false
-    }
-
-    return optionalParamAt(params, params.length - 1).rest === true
-  }
-
-  paramForArgument(params: OptionalParamInfo[], index: number): OptionalParamInfo | null {
-    if (index < params.length) {
-      return optionalParamAt(params, index)
-    }
-
-    if (this.hasRestParam(params)) {
-      return optionalParamAt(params, params.length - 1)
-    }
-
-    return null
-  }
-
-  argumentParamValueType(param: OptionalParamInfo): ValueType {
-    if (
-      param.rest === true &&
-      param.valueType === 'array' &&
-      param.arrayElementType !== null &&
-      typeof param.arrayElementType !== 'undefined'
-    ) {
-      return param.arrayElementType as ValueType
-    }
-
-    return param.valueType as ValueType
-  }
-
   resolveClassInstanceShape(statement: AnyNode, constructorParams: AnyNode[]): ObjectShapeInfo {
     if (statement.fields !== null && typeof statement.fields !== 'undefined' && statement.fields.length > 0) {
       const resolvedFields: AnyNode[] = []
@@ -612,7 +566,7 @@ class Checker {
 
     const fields: CheckerNode[] = []
     const seen: Set<string> = new Set()
-    const constructorMethod = this.findClassConstructorMethod(statement)
+    const constructorMethod = findClassConstructorMethod(statement)
 
     const assignments = this.collectClassConstructorFieldAssignments(constructorMethod)
 
@@ -694,18 +648,6 @@ class Checker {
     return null
   }
 
-  findClassConstructorMethod(statement: AnyNode): NullableNode {
-    for (let index = 0; index < statement.methods.length; index = index + 1) {
-      const method = checkerNodeAt(statement.methods, index)
-
-      if (nodeNameEquals(method, 'constructor')) {
-        return method
-      }
-    }
-
-    return null
-  }
-
   collectClassConstructorFieldAssignments(constructorMethod: NullableNode): AnyNode[] {
     if (constructorMethod === null || typeof constructorMethod === 'undefined') {
       return []
@@ -750,7 +692,7 @@ class Checker {
   resolveClassConstructorFieldType(expression: AnyNode, constructorParams: AnyNode[]): ValueType {
     if (expression.type === 'Reference' && expression.path.length === 1) {
       const path: string[] = expression.path
-      const param = this.findParamByName(constructorParams, path[0])
+      const param = findParamByName(constructorParams, path[0])
 
       if (param !== null && typeof param !== 'undefined') {
         return nodeValueTypeOrUnknown(param)
@@ -786,18 +728,6 @@ class Checker {
     }
 
     return 'unknown'
-  }
-
-  findParamByName(params: AnyNode[], name: string): NullableNode {
-    for (let index = 0; index < params.length; index = index + 1) {
-      const param = checkerNodeAt(params, index)
-
-      if (nodeNameEquals(param, name)) {
-        return param
-      }
-    }
-
-    return null
   }
 
   checkTopLevelItem(item: AnyNode): void {
@@ -909,7 +839,7 @@ class Checker {
       return
     }
 
-    if (!this.statementAlwaysExits(statement.consequent)) {
+    if (!statementAlwaysExits(statement.consequent)) {
       return
     }
 
@@ -918,43 +848,6 @@ class Checker {
     for (const name of narrowing.falseNames) {
       this.narrowedNullableNames.add(name)
     }
-  }
-
-  statementAlwaysExits(statement: AnyNode): boolean {
-    if (
-      statement.type === 'ReturnStatement' ||
-      statement.type === 'ThrowStatement' ||
-      statement.type === 'BreakStatement' ||
-      statement.type === 'ContinueStatement'
-    ) {
-      return true
-    }
-
-    if (statement.type === 'BlockStatement') {
-      return this.statementListAlwaysExits(statement.body)
-    }
-
-    if (statement.type === 'IfStatement') {
-      if (statement.alternate === null || typeof statement.alternate === 'undefined') {
-        return false
-      }
-
-      return this.statementAlwaysExits(statement.consequent) && this.statementAlwaysExits(statement.alternate)
-    }
-
-    return false
-  }
-
-  statementListAlwaysExits(statements: AnyNode[]): boolean {
-    for (let index = 0; index < statements.length; index = index + 1) {
-      const statement = checkerNodeAt(statements, index)
-
-      if (this.statementAlwaysExits(statement)) {
-        return true
-      }
-    }
-
-    return false
   }
 
   checkStatement(statement: AnyNode): void {
@@ -1012,7 +905,7 @@ class Checker {
             alternateNames.push(name)
           }
 
-          const commonNames = this.intersectNames(consequentNames, alternateNames)
+          const commonNames = intersectNames(consequentNames, alternateNames)
 
           for (const name of commonNames) {
             this.narrowedNullableNames.add(name)
@@ -1458,38 +1351,9 @@ class Checker {
       }
     }
 
-    if (this.isStatementExpressionNode(statement)) {
+    if (isStatementExpressionNode(statement)) {
       this.checkExpression(statement)
     }
-  }
-
-  isStatementExpressionNode(statement: AnyNode): boolean {
-    return (
-      statement.type === 'ArrayLiteral' ||
-      statement.type === 'AssignmentExpression' ||
-      statement.type === 'AwaitExpression' ||
-      statement.type === 'BinaryExpression' ||
-      statement.type === 'BooleanLiteral' ||
-      statement.type === 'CallExpression' ||
-      statement.type === 'ConditionalExpression' ||
-      statement.type === 'IndexExpression' ||
-      statement.type === 'MemberExpression' ||
-      statement.type === 'NewExpression' ||
-      statement.type === 'NullLiteral' ||
-      statement.type === 'NumberLiteral' ||
-      statement.type === 'ObjectLiteral' ||
-      statement.type === 'OptionalCallExpression' ||
-      statement.type === 'OptionalIndexExpression' ||
-      statement.type === 'OptionalMemberExpression' ||
-      statement.type === 'Reference' ||
-      statement.type === 'RegExpLiteral' ||
-      statement.type === 'StringLiteral' ||
-      statement.type === 'TemplateLiteral' ||
-      statement.type === 'ThisExpression' ||
-      statement.type === 'TypeAssertionExpression' ||
-      statement.type === 'UnaryExpression' ||
-      statement.type === 'UpdateExpression'
-    )
   }
 
   checkTryStatement(statement: AnyNode): void {
@@ -1868,7 +1732,7 @@ class Checker {
       const params = symbol.params
 
       if (params !== null && typeof params !== 'undefined') {
-        if (!this.acceptsArgumentCount(params, expression.args.length)) {
+        if (!acceptsArgumentCount(params, expression.args.length)) {
           let name = 'callable'
 
           if (expression.callee.type === 'Reference') {
@@ -1877,18 +1741,18 @@ class Checker {
 
           this.report(
             'INOX_ARG_COUNT',
-            this.argumentCountMessage(`function ${name}`, params, expression.args.length),
+            argumentCountMessage(`function ${name}`, params, expression.args.length),
             expression.loc
           )
         }
 
         for (let index = 0; index < expression.args.length; index = index + 1) {
-          const param = this.paramForArgument(params, index)
+          const param = paramForArgument(params, index)
 
           if (param !== null && typeof param !== 'undefined' && index < argTypes.length) {
             this.checkAssignableType(
               argTypes[index],
-              this.argumentParamValueType(param),
+              argumentParamValueType(param),
               expression.args[index].loc,
               param.nullable === true,
               this.expressionCanBeNull(expression.args[index])
@@ -3249,7 +3113,7 @@ class Checker {
 
       const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
 
-      return returnInfo.valueType === 'string' && this.acceptsArgumentCount(params, 0)
+      return returnInfo.valueType === 'string' && acceptsArgumentCount(params, 0)
     }
 
     return false
@@ -3696,21 +3560,21 @@ class Checker {
       return returnType
     }
 
-    if (!this.acceptsArgumentCount(params, expression.args.length)) {
+    if (!acceptsArgumentCount(params, expression.args.length)) {
       this.report(
         'INOX_ARG_COUNT',
-        this.argumentCountMessage(this.callExpressionArgumentLabel(expression), params, expression.args.length),
+        argumentCountMessage(this.callExpressionArgumentLabel(expression), params, expression.args.length),
         expression.loc
       )
     }
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const param = this.paramForArgument(params, index)
+      const param = paramForArgument(params, index)
 
       if (param !== null && typeof param !== 'undefined' && index < argTypes.length) {
         this.checkAssignableType(
           argTypes[index],
-          this.argumentParamValueType(param),
+          argumentParamValueType(param),
           expression.args[index].loc,
           param.nullable === true,
           this.expressionCanBeNull(expression.args[index])
@@ -5018,21 +4882,21 @@ class Checker {
 
     const returnInfo = this.resolveDeclaredType(method.returnType, method.loc)
 
-    if (!this.acceptsArgumentCount(params, expression.args.length)) {
+    if (!acceptsArgumentCount(params, expression.args.length)) {
       this.report(
         'INOX_ARG_COUNT',
-        this.argumentCountMessage(`method ${expression.callee.property}`, params, expression.args.length),
+        argumentCountMessage(`method ${expression.callee.property}`, params, expression.args.length),
         expression.loc
       )
     }
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
-      const param = this.paramForArgument(params, index)
+      const param = paramForArgument(params, index)
 
       if (param !== null && typeof param !== 'undefined' && index < argTypes.length) {
         this.checkAssignableType(
           argTypes[index],
-          this.argumentParamValueType(param),
+          argumentParamValueType(param),
           expression.args[index].loc,
           param.nullable === true,
           this.expressionCanBeNull(expression.args[index])
@@ -6157,7 +6021,7 @@ class Checker {
     if (method === 'parse') {
       this.checkJsonStringArg(expression, 0)
 
-      const literalType = this.inferJsonParseLiteralType(expression)
+      const literalType = inferJsonParseLiteralType(expression)
       let valueType: ValueType = 'object'
 
       if (declared !== null && typeof declared !== 'undefined' && isJsonParseDeclaredType(declared.valueType)) {
@@ -6220,488 +6084,6 @@ class Checker {
     }
 
     this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
-  }
-
-  inferJsonParseLiteralType(expression: AnyNode): JsonParseLiteralTypeInfo | null {
-    const arg = expression.args[0]
-
-    if (arg === null || typeof arg === 'undefined' || arg.type !== 'StringLiteral') {
-      return null
-    }
-
-    const source: string = arg.value
-    const result = this.parseJsonLiteralType(source, 0)
-
-    if (result === null || typeof result === 'undefined') {
-      return null
-    }
-
-    const end = this.skipJsonWhitespace(source, result.index)
-
-    if (end !== source.length) {
-      return null
-    }
-
-    return result.info
-  }
-
-  parseJsonLiteralType(source: string, index: number): JsonParseLiteralResult | null {
-    const nextIndex = this.skipJsonWhitespace(source, index)
-    const unit = source[nextIndex]
-
-    if (unit === '[') {
-      return this.parseJsonArrayLiteralType(source, nextIndex + 1)
-    }
-
-    if (unit === '{') {
-      return this.parseJsonObjectLiteralType(source, nextIndex + 1)
-    }
-
-    if (unit === '"') {
-      const stringResult = this.parseJsonStringLiteral(source, nextIndex, false)
-
-      if (stringResult === null || typeof stringResult === 'undefined') {
-        return null
-      }
-
-      return {
-        info: this.jsonLiteralTypeInfo('string'),
-        index: stringResult.index
-      }
-    }
-
-    if (unit === '-' || this.isJsonDigit(unit)) {
-      const numberEnd = this.parseJsonNumberEnd(source, nextIndex)
-
-      if (numberEnd === null || typeof numberEnd === 'undefined') {
-        return null
-      }
-
-      return {
-        info: this.jsonLiteralTypeInfo('number'),
-        index: numberEnd
-      }
-    }
-
-    if (this.sourceStartsWith(source, nextIndex, 'true')) {
-      return {
-        info: this.jsonLiteralTypeInfo('boolean'),
-        index: nextIndex + 4
-      }
-    }
-
-    if (this.sourceStartsWith(source, nextIndex, 'false')) {
-      return {
-        info: this.jsonLiteralTypeInfo('boolean'),
-        index: nextIndex + 5
-      }
-    }
-
-    if (this.sourceStartsWith(source, nextIndex, 'null')) {
-      return {
-        info: this.jsonLiteralTypeInfo('unknown'),
-        index: nextIndex + 4
-      }
-    }
-
-    return null
-  }
-
-  parseJsonArrayLiteralType(source: string, index: number): JsonParseLiteralResult | null {
-    const elements: JsonParseLiteralTypeInfo[] = []
-    let nextIndex = this.skipJsonWhitespace(source, index)
-
-    if (source[nextIndex] === ']') {
-      return {
-        info: this.jsonArrayLiteralTypeInfo(elements),
-        index: nextIndex + 1
-      }
-    }
-
-    while (nextIndex < source.length) {
-      const element = this.parseJsonLiteralType(source, nextIndex)
-
-      if (element === null || typeof element === 'undefined') {
-        return null
-      }
-
-      elements.push(element.info)
-      nextIndex = this.skipJsonWhitespace(source, element.index)
-
-      if (source[nextIndex] === ']') {
-        return {
-          info: this.jsonArrayLiteralTypeInfo(elements),
-          index: nextIndex + 1
-        }
-      }
-
-      if (source[nextIndex] !== ',') {
-        return null
-      }
-
-      nextIndex = this.skipJsonWhitespace(source, nextIndex + 1)
-    }
-
-    return null
-  }
-
-  parseJsonObjectLiteralType(source: string, index: number): JsonParseLiteralResult | null {
-    const fields: AnyNode[] = []
-    let nextIndex = this.skipJsonWhitespace(source, index)
-
-    if (source[nextIndex] === '}') {
-      return {
-        info: this.jsonObjectLiteralTypeInfo(fields),
-        index: nextIndex + 1
-      }
-    }
-
-    while (nextIndex < source.length) {
-      const key = this.parseJsonStringLiteral(source, nextIndex, true)
-
-      if (key === null || typeof key === 'undefined') {
-        return null
-      }
-
-      nextIndex = this.skipJsonWhitespace(source, key.index)
-
-      if (source[nextIndex] !== ':') {
-        return null
-      }
-
-      const value = this.parseJsonLiteralType(source, nextIndex + 1)
-
-      if (value === null || typeof value === 'undefined') {
-        return null
-      }
-
-      fields.push(this.jsonObjectLiteralField(key.value, value.info))
-      nextIndex = this.skipJsonWhitespace(source, value.index)
-
-      if (source[nextIndex] === '}') {
-        return {
-          info: this.jsonObjectLiteralTypeInfo(fields),
-          index: nextIndex + 1
-        }
-      }
-
-      if (source[nextIndex] !== ',') {
-        return null
-      }
-
-      nextIndex = this.skipJsonWhitespace(source, nextIndex + 1)
-    }
-
-    return null
-  }
-
-  parseJsonStringLiteral(source: string, index: number, captureValue: boolean): JsonParseStringResult | null {
-    if (source[index] !== '"') {
-      return null
-    }
-
-    let nextIndex = index + 1
-    let value = ''
-
-    while (nextIndex < source.length) {
-      const unit = source[nextIndex]
-
-      if (unit === '"') {
-        return {
-          value,
-          index: nextIndex + 1
-        }
-      }
-
-      if (unit === '\\') {
-        const escaped = source[nextIndex + 1]
-
-        if (escaped === 'u') {
-          if (!this.isJsonHexEscape(source, nextIndex + 2)) {
-            return null
-          }
-
-          if (captureValue) {
-            return null
-          }
-
-          nextIndex = nextIndex + 6
-          continue
-        }
-
-        if (!this.isJsonSimpleEscape(escaped)) {
-          return null
-        }
-
-        if (captureValue) {
-          const escapedValue: string = this.jsonSimpleEscapeValue(escaped)
-          value = value + escapedValue
-        }
-
-        nextIndex = nextIndex + 2
-        continue
-      }
-
-      if (unit.charCodeAt(0) < 32) {
-        return null
-      }
-
-      if (captureValue) {
-        value = value + unit
-      }
-
-      nextIndex = nextIndex + 1
-    }
-
-    return null
-  }
-
-  parseJsonNumberEnd(source: string, index: number): number | null {
-    let nextIndex = index
-
-    if (source[nextIndex] === '-') {
-      nextIndex = nextIndex + 1
-    }
-
-    if (source[nextIndex] === '0') {
-      nextIndex = nextIndex + 1
-    } else if (this.isJsonNonZeroDigit(source[nextIndex])) {
-      nextIndex = nextIndex + 1
-
-      while (this.isJsonDigit(source[nextIndex])) {
-        nextIndex = nextIndex + 1
-      }
-    } else {
-      return null
-    }
-
-    if (source[nextIndex] === '.') {
-      nextIndex = nextIndex + 1
-
-      if (!this.isJsonDigit(source[nextIndex])) {
-        return null
-      }
-
-      while (this.isJsonDigit(source[nextIndex])) {
-        nextIndex = nextIndex + 1
-      }
-    }
-
-    if (source[nextIndex] === 'e' || source[nextIndex] === 'E') {
-      nextIndex = nextIndex + 1
-
-      if (source[nextIndex] === '+' || source[nextIndex] === '-') {
-        nextIndex = nextIndex + 1
-      }
-
-      if (!this.isJsonDigit(source[nextIndex])) {
-        return null
-      }
-
-      while (this.isJsonDigit(source[nextIndex])) {
-        nextIndex = nextIndex + 1
-      }
-    }
-
-    return nextIndex
-  }
-
-  skipJsonWhitespace(source: string, index: number): number {
-    let nextIndex = index
-
-    while (
-      source[nextIndex] === ' ' ||
-      source[nextIndex] === '\n' ||
-      source[nextIndex] === '\r' ||
-      source[nextIndex] === '\t'
-    ) {
-      nextIndex = nextIndex + 1
-    }
-
-    return nextIndex
-  }
-
-  isJsonDigit(value: string | null | undefined): boolean {
-    return value === '0' || this.isJsonNonZeroDigit(value)
-  }
-
-  isJsonNonZeroDigit(value: string | null | undefined): boolean {
-    return (
-      value === '1' ||
-      value === '2' ||
-      value === '3' ||
-      value === '4' ||
-      value === '5' ||
-      value === '6' ||
-      value === '7' ||
-      value === '8' ||
-      value === '9'
-    )
-  }
-
-  isJsonHexEscape(source: string, index: number): boolean {
-    for (let offset = 0; offset < 4; offset = offset + 1) {
-      if (!this.isJsonHexDigit(source[index + offset])) {
-        return false
-      }
-    }
-
-    return true
-  }
-
-  isJsonHexDigit(value: string | null | undefined): boolean {
-    return (
-      this.isJsonDigit(value) ||
-      value === 'a' ||
-      value === 'b' ||
-      value === 'c' ||
-      value === 'd' ||
-      value === 'e' ||
-      value === 'f' ||
-      value === 'A' ||
-      value === 'B' ||
-      value === 'C' ||
-      value === 'D' ||
-      value === 'E' ||
-      value === 'F'
-    )
-  }
-
-  isJsonSimpleEscape(value: string | null | undefined): boolean {
-    return (
-      value === '"' ||
-      value === '\\' ||
-      value === '/' ||
-      value === 'b' ||
-      value === 'f' ||
-      value === 'n' ||
-      value === 'r' ||
-      value === 't'
-    )
-  }
-
-  jsonSimpleEscapeValue(value: string): string {
-    if (value === 'b') {
-      return '\b'
-    }
-
-    if (value === 'f') {
-      return '\f'
-    }
-
-    if (value === 'n') {
-      return '\n'
-    }
-
-    if (value === 'r') {
-      return '\r'
-    }
-
-    if (value === 't') {
-      return '\t'
-    }
-
-    return value
-  }
-
-  sourceStartsWith(source: string, index: number, expected: string): boolean {
-    for (let offset = 0; offset < expected.length; offset = offset + 1) {
-      if (source[index + offset] !== expected[offset]) {
-        return false
-      }
-    }
-
-    return true
-  }
-
-  jsonArrayLiteralTypeInfo(elements: JsonParseLiteralTypeInfo[]): JsonParseLiteralTypeInfo {
-    const elementTypes: ValueType[] = []
-
-    for (let index = 0; index < elements.length; index = index + 1) {
-      elementTypes.push(elements[index].valueType)
-    }
-
-    const arrayElementType = commonArrayElementType(elementTypes)
-    let arrayElementDeclaredType: string | null = null
-    let shape: ObjectShapeInfo | null = null
-
-    if (arrayElementType !== 'unknown') {
-      arrayElementDeclaredType = arrayElementType
-    }
-
-    if (arrayElementType === 'object') {
-      shape = this.commonJsonArrayElementShape(elements)
-    }
-
-    return {
-      valueType: 'array',
-      shape,
-      arrayElementType,
-      arrayElementDeclaredType
-    }
-  }
-
-  commonJsonArrayElementShape(elements: JsonParseLiteralTypeInfo[]): ObjectShapeInfo | null {
-    const infos: ResolvedTypeInfo[] = []
-
-    for (let index = 0; index < elements.length; index = index + 1) {
-      const element = elements[index]
-
-      infos.push({
-        valueType: element.valueType,
-        nullable: false,
-        functionType: null,
-        shape: element.shape,
-        arrayElementType: element.arrayElementType,
-        arrayElementDeclaredType: element.arrayElementDeclaredType,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      })
-    }
-
-    return commonResolvedObjectShape(infos)
-  }
-
-  jsonObjectLiteralTypeInfo(fields: CheckerNode[]): JsonParseLiteralTypeInfo {
-    return {
-      valueType: 'object',
-      shape: {
-        kind: 'object',
-        dynamic: true,
-        fields
-      },
-      arrayElementType: null,
-      arrayElementDeclaredType: null
-    }
-  }
-
-  jsonObjectLiteralField(name: string, fieldType: JsonParseLiteralTypeInfo): CheckerNode {
-    return {
-      type: 'Field',
-      name,
-      valueType: fieldType.valueType,
-      nullable: fieldType.valueType === 'unknown',
-      arrayElementType: fieldType.arrayElementType,
-      arrayElementDeclaredType: fieldType.arrayElementDeclaredType,
-      mapKeyType: null,
-      mapValueType: null,
-      promiseValueType: null,
-      setElementType: null,
-      shape: fieldType.shape,
-      loc: { line: 1, column: 1 }
-    }
-  }
-
-  jsonLiteralTypeInfo(valueType: ValueType): JsonParseLiteralTypeInfo {
-    return {
-      valueType,
-      shape: null,
-      arrayElementType: null,
-      arrayElementDeclaredType: null
-    }
   }
 
   checkPromiseStaticCall(expression: AnyNode): ValueType | null {
@@ -8675,10 +8057,9 @@ class Checker {
     }
 
     let constructorParams: AnyNode[] = []
-    const symbolConstructorParams = symbol.constructorParams ?? null
 
-    if (symbolConstructorParams !== null && typeof symbolConstructorParams !== 'undefined') {
-      constructorParams = symbolConstructorParams
+    if (symbol.constructorParams !== null && typeof symbol.constructorParams !== 'undefined') {
+      constructorParams = symbol.constructorParams as AnyNode[]
     }
 
     if (constructorParams.length !== expression.args.length) {
@@ -10576,7 +9957,7 @@ class Checker {
 
     if (
       !isConditionValueType(conditionType) &&
-      !(expression.nullable === true && this.isRuntimeNullableType(conditionType))
+      !(expression.nullable === true && isRuntimeNullableType(conditionType))
     ) {
       this.report(
         'INOX_CONDITION_TYPE',
@@ -10649,8 +10030,8 @@ class Checker {
       }
 
       return {
-        trueNames: this.uniqueNames(trueNames),
-        falseNames: this.intersectNames(left.falseNames, this.uniqueNames(falseNameCandidates))
+        trueNames: uniqueNames(trueNames),
+        falseNames: intersectNames(left.falseNames, uniqueNames(falseNameCandidates))
       }
     }
 
@@ -10684,8 +10065,8 @@ class Checker {
       }
 
       return {
-        trueNames: this.intersectNames(left.trueNames, this.uniqueNames(trueNameCandidates)),
-        falseNames: this.uniqueNames(falseNames)
+        trueNames: intersectNames(left.trueNames, uniqueNames(trueNameCandidates)),
+        falseNames: uniqueNames(falseNames)
       }
     }
 
@@ -10786,7 +10167,7 @@ class Checker {
 
     const narrowedValueType: ValueType = valueType
 
-    if (!this.isRuntimeNullableType(narrowedValueType)) {
+    if (!isRuntimeNullableType(narrowedValueType)) {
       return
     }
 
@@ -10817,20 +10198,6 @@ class Checker {
     return null
   }
 
-  isRuntimeNullableType(valueType: ValueType | null | undefined): boolean {
-    return (
-      valueType === 'number' ||
-      valueType === 'boolean' ||
-      valueType === 'string' ||
-      valueType === 'bytes' ||
-      valueType === 'object' ||
-      valueType === 'array' ||
-      valueType === 'map' ||
-      valueType === 'set' ||
-      valueType === 'function'
-    )
-  }
-
   pushNarrowedNullableNames(names: string[]): CheckerNarrowingState | null {
     if (names.length === 0) {
       return null
@@ -10857,33 +10224,6 @@ class Checker {
     if (previous !== null && typeof previous !== 'undefined') {
       this.narrowedNullableNames = previous.narrowedNullableNames
     }
-  }
-
-  uniqueNames(names: string[]): string[] {
-    const unique: string[] = []
-    const seen = new Set()
-
-    for (const name of names) {
-      if (!seen.has(name)) {
-        seen.add(name)
-        unique.push(name)
-      }
-    }
-
-    return unique
-  }
-
-  intersectNames(left: string[], right: string[]): string[] {
-    const rightNames = stringSetFromArray(right)
-    const names: string[] = []
-
-    for (const name of left) {
-      if (rightNames.has(name)) {
-        names.push(name)
-      }
-    }
-
-    return this.uniqueNames(names)
   }
 
   checkScopedBody(statement: AnyNode): void {
@@ -10978,239 +10318,6 @@ class Checker {
     if (item.valueType.kind === 'alias' || item.valueType.kind === 'object' || item.valueType.kind === 'function') {
       this.types.set(item.name, item.valueType)
     }
-  }
-
-  reportOwnershipCycles(): void {
-    const graph = this.buildOwnershipGraph()
-    const path: OwnershipGraphEdge[] = []
-    const visiting: Set<string> = new Set()
-    const visited: Set<string> = new Set()
-    const reported: Set<string> = new Set()
-
-    for (const node of graph.keys()) {
-      this.visitOwnershipGraphNode(node, graph, path, visiting, visited, reported)
-    }
-  }
-
-  visitOwnershipGraphNode(
-    node: string,
-    graph: Map<string, OwnershipGraphEdge[]>,
-    path: OwnershipGraphEdge[],
-    visiting: Set<string>,
-    visited: Set<string>,
-    reported: Set<string>
-  ): void {
-    if (visiting.has(node)) {
-      return
-    }
-
-    if (visited.has(node)) {
-      return
-    }
-
-    visiting.add(node)
-
-    let edges: OwnershipGraphEdge[] = []
-    const foundEdges = graph.get(node)
-
-    if (foundEdges !== null && typeof foundEdges !== 'undefined') {
-      edges = foundEdges
-    }
-
-    for (const edge of edges) {
-      let cycleStart = -1
-
-      for (let index = 0; index < path.length; index++) {
-        if (path[index].from === edge.to) {
-          cycleStart = index
-          break
-        }
-      }
-
-      if (edge.to === node || cycleStart >= 0) {
-        const cycle: OwnershipGraphEdge[] = []
-
-        if (cycleStart >= 0) {
-          for (let index = cycleStart; index < path.length; index++) {
-            cycle.push(path[index])
-          }
-        }
-
-        cycle.push(edge)
-        const key = this.ownershipCycleKey(cycle)
-
-        if (!reported.has(key)) {
-          reported.add(key)
-          let cycleLoc = edge.loc
-
-          const firstCycleEdge = cycle[0]
-          cycleLoc = firstCycleEdge.loc
-          const cycleText: string = this.formatOwnershipCycle(cycle)
-
-          this.report(
-            'INOX_OWNERSHIP_CYCLE',
-            'strong ownership cycle detected: ' + cycleText + '. Mark one back-reference as weak.',
-            cycleLoc
-          )
-        }
-
-        continue
-      }
-
-      if (!visited.has(edge.to)) {
-        path.push(edge)
-        this.visitOwnershipGraphNode(edge.to, graph, path, visiting, visited, reported)
-        path.pop()
-      }
-    }
-
-    visiting.delete(node)
-    visited.add(node)
-  }
-
-  buildOwnershipGraph(): Map<string, OwnershipGraphEdge[]> {
-    const graph = new Map()
-    const nodeNames = this.ownershipGraphNodeNames()
-
-    for (const name of nodeNames) {
-      graph.set(name, [])
-    }
-
-    for (const item of this.program.body) {
-      if (item.type === 'TypeAliasDeclaration') {
-        const typeInfo = item.valueType as TypeAliasInfo
-
-        if (typeInfo.kind === 'object') {
-          this.addOwnershipFieldEdges(graph, nodeNames, item.name, typeInfo.fields)
-        }
-      } else if (item.type === 'ClassDeclaration') {
-        let fields: AnyNode[] = []
-
-        if (item.fields !== null && typeof item.fields !== 'undefined') {
-          fields = item.fields
-        }
-
-        this.addOwnershipFieldEdges(graph, nodeNames, item.name, fields)
-      }
-    }
-
-    return graph
-  }
-
-  ownershipGraphNodeNames(): Set<string> {
-    const names: Set<string> = new Set()
-
-    for (const name of this.types.keys()) {
-      names.add(name)
-    }
-
-    for (const name of this.classNames) {
-      names.add(name)
-    }
-
-    return names
-  }
-
-  addOwnershipFieldEdges(
-    graph: Map<string, OwnershipGraphEdge[]>,
-    nodeNames: Set<string>,
-    owner: string,
-    fields: AnyNode[]
-  ): void {
-    for (const field of fields) {
-      if ((owner === 'Scope' || owner === 'CheckerScope') && nodeNameEquals(field, 'parent')) {
-        continue
-      }
-
-      if (field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)) {
-        continue
-      }
-
-      for (const target of this.ownershipTargetsFromTypeName(field.valueType)) {
-        if (!nodeNames.has(target)) {
-          continue
-        }
-
-        const edges = graph.get(owner)
-
-        if (edges === null || typeof edges === 'undefined') {
-          continue
-        }
-
-        edges.push({
-          from: owner,
-          to: target,
-          field: field.name,
-          loc: field.loc
-        })
-      }
-    }
-  }
-
-  hasWeakOwnershipMarker(fields: AnyNode[], fieldName: string): boolean {
-    const markerName = `${fieldName}Ownership`
-
-    for (const field of fields) {
-      if (nodeNameEquals(field, markerName) && field.optional === true && field.valueType === 'string') {
-        return true
-      }
-    }
-
-    return false
-  }
-
-  ownershipTargetsFromTypeName(name: string | null | undefined): string[] {
-    if (name === null || typeof name === 'undefined' || name === 'unknown') {
-      return []
-    }
-
-    if (isNullableTypeName(name)) {
-      const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
-
-      return this.ownershipTargetsFromTypeName(nullableTypeName)
-    }
-
-    if (isArrayTypeName(name)) {
-      const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
-
-      return this.ownershipTargetsFromTypeName(arrayElementTypeName)
-    }
-
-    if (isSetTypeName(name)) {
-      const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
-
-      return this.ownershipTargetsFromTypeName(setElementTypeName)
-    }
-
-    const mapTypeNames = mapTypeNamesFromTypeName(name)
-
-    if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
-      return this.ownershipTargetsFromTypeName(mapTypeNames.value)
-    }
-
-    return [name]
-  }
-
-  ownershipCycleKey(cycle: OwnershipGraphEdge[]): string {
-    const parts: string[] = []
-
-    for (let index = 0; index < cycle.length; index = index + 1) {
-      const edge = cycle[index]
-      parts.push(`${edge.from}.${edge.field}->${edge.to}`)
-    }
-
-    return joinStrings(parts, '|')
-  }
-
-  formatOwnershipCycle(cycle: OwnershipGraphEdge[]): string {
-    const parts: string[] = []
-
-    for (let index = 0; index < cycle.length; index = index + 1) {
-      const edge = cycle[index]
-      parts.push(`${edge.from}.${edge.field} -> ${edge.to}`)
-    }
-
-    return joinStrings(parts, ' -> ')
   }
 
   resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
@@ -11759,7 +10866,7 @@ class Checker {
   }
 
   resolveObjectShapeField(field: AnyNode, fields: AnyNode[]): AnyNode {
-    const weakField = field.ownership === 'weak' || this.hasWeakOwnershipMarker(fields, field.name)
+    const weakField = field.ownership === 'weak' || hasWeakOwnershipMarker(fields, field.name)
     const declaredType = nodeDeclaredTypeOrValueType(field)
 
     let fieldInfo = this.resolveFieldDeclaredType(field)
@@ -13059,165 +12166,4 @@ class Checker {
     const diagnostics = this.diagnostics
     diagnostics.push(item)
   }
-}
-
-function joinStrings(values: readonly string[], separator: string): string {
-  let result = ''
-
-  for (let index = 0; index < values.length; index = index + 1) {
-    if (index > 0) {
-      result = result + separator
-    }
-
-    result = result + values[index]
-  }
-
-  return result
-}
-
-function mergeShapeFields(target: AnyNode[], source: AnyNode[] | null | undefined): void {
-  if (source === null || typeof source === 'undefined') {
-    return
-  }
-
-  for (const field of source) {
-    let existingIndex = -1
-
-    for (let index = 0; index < target.length; index = index + 1) {
-      if (target[index].name === field.name) {
-        existingIndex = index
-        break
-      }
-    }
-
-    if (existingIndex >= 0) {
-      target[existingIndex] = field
-    } else {
-      target.push(field)
-    }
-  }
-}
-
-function isConditionValueType(valueType: ValueType): boolean {
-  return (
-    valueType === 'boolean' ||
-    valueType === 'number' ||
-    valueType === 'unknown' ||
-    valueType === 'regexp' ||
-    valueType === 'string' ||
-    valueType === 'object' ||
-    valueType === 'array' ||
-    valueType === 'bytes' ||
-    valueType === 'map' ||
-    valueType === 'set' ||
-    valueType === 'promise' ||
-    valueType === 'function' ||
-    valueType === 'timer'
-  )
-}
-
-function regexpFlags(expression: AnyNode): string {
-  const flags = expression.flags
-
-  if (typeof flags === 'string') {
-    return flags
-  }
-
-  return ''
-}
-
-function isNonNullNarrowingLiteral(expression: AnyNode): boolean {
-  return (
-    expression.type === 'StringLiteral' || expression.type === 'NumberLiteral' || expression.type === 'BooleanLiteral'
-  )
-}
-
-function isStringTrimMethod(method: string | null): boolean {
-  return (
-    method === 'trim' ||
-    method === 'trimEnd' ||
-    method === 'trimLeft' ||
-    method === 'trimRight' ||
-    method === 'trimStart'
-  )
-}
-
-function stringPredicateArgCountMessage(method: string, actual: number): string {
-  if (method === 'includes') {
-    return `string.includes expects 1 or 2 argument(s), got ${actual}`
-  }
-
-  return `string.${method} expects 1 argument(s), got ${actual}`
-}
-
-function isConsoleMethod(name: string): boolean {
-  return name === 'log' || name === 'info' || name === 'warn' || name === 'error'
-}
-
-function isRelativeImportSource(source: string): boolean {
-  return source.startsWith('./') || source.startsWith('../')
-}
-
-function isPromiseMethod(name: string): boolean {
-  return name === 'catch' || name === 'then'
-}
-
-function promiseExecutorFunctionType(): AnyNode {
-  return {
-    kind: 'function',
-    params: [
-      {
-        name: 'resolve',
-        valueType: 'function',
-        functionType: promiseSettlementFunctionType()
-      },
-      {
-        name: 'reject',
-        valueType: 'function',
-        functionType: promiseSettlementFunctionType()
-      }
-    ],
-    returnType: 'void',
-    returnNullable: false
-  }
-}
-
-function promiseSettlementFunctionType(): AnyNode {
-  return {
-    kind: 'function',
-    params: [
-      {
-        name: 'value',
-        loc: { line: 1, column: 1 },
-        optional: true,
-        valueType: 'unknown'
-      }
-    ],
-    returnType: 'void',
-    returnNullable: false
-  }
-}
-
-function promiseStaticMethodName(callee: AnyNode): string | null {
-  if (callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  if (callee.property !== 'resolve' && callee.property !== 'reject') {
-    return null
-  }
-
-  if (callee.object.type !== 'Reference') {
-    return null
-  }
-
-  if (callee.object.path.length !== 1) {
-    return null
-  }
-
-  if (firstPathSegment(callee.object.path) !== 'Promise') {
-    return null
-  }
-
-  return callee.property
 }

@@ -102,22 +102,6 @@ export type CheckerMapType = {
   valueShape?: ObjectShapeInfo | null
 }
 
-export type JsonParseLiteralTypeInfo = {
-  valueType: ValueType
-  shape: ObjectShapeInfo | null
-  arrayElementType: ValueType | null
-  arrayElementDeclaredType: string | null
-}
-
-export type JsonParseLiteralResult = {
-  info: JsonParseLiteralTypeInfo
-  index: number
-}
-
-export type JsonParseStringResult = {
-  value: string
-  index: number
-}
 
 export type NullableConditionNarrowing = {
   trueNames: string[]
