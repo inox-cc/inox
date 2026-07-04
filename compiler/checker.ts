@@ -112,6 +112,11 @@ import {
 } from './checker/declared-types.ts'
 import type { DeclaredTypeResolverContext } from './checker/declared-types.ts'
 import {
+  collectClassConstructorFieldAssignments,
+  isThisExpression as isThisExpressionNode,
+  resolveClassConstructorFieldType as resolveClassConstructorFieldInitializerType
+} from './checker/class-helpers.ts'
+import {
   applyFsRuntimeCallPlan,
   callExpressionArgumentLabel,
   createMapEntryShape,
@@ -123,7 +128,6 @@ import {
   argumentCountMessage,
   argumentParamValueType,
   findClassConstructorMethod,
-  findParamByName,
   intersectNames,
   isConditionValueType,
   isConsoleMethod,
@@ -574,7 +578,7 @@ class Checker {
     const seen: Set<string> = new Set()
     const constructorMethod = findClassConstructorMethod(statement)
 
-    const assignments = this.collectClassConstructorFieldAssignments(constructorMethod)
+    const assignments = collectClassConstructorFieldAssignments(constructorMethod)
 
     for (let index = 0; index < assignments.length; index = index + 1) {
       const assignment = checkerNodeAt(assignments, index)
@@ -654,86 +658,12 @@ class Checker {
     return null
   }
 
-  collectClassConstructorFieldAssignments(constructorMethod: NullableNode): AnyNode[] {
-    if (constructorMethod === null || typeof constructorMethod === 'undefined') {
-      return []
-    }
-
-    const assignments: AnyNode[] = []
-
-    for (let index = 0; index < constructorMethod.body.length; index = index + 1) {
-      const statement = checkerNodeAt(constructorMethod.body, index)
-
-      let assignment: NullableNode = null
-
-      if (statement.type === 'ExpressionStatement' && statement.expression.type === 'AssignmentExpression') {
-        assignment = statement.expression
-      }
-
-      if (assignment === null || typeof assignment === 'undefined') {
-        continue
-      }
-
-      const target = assignment.target
-
-      if (
-        target === null ||
-        typeof target === 'undefined' ||
-        target.type !== 'MemberExpression' ||
-        !this.isThisExpression(target.object)
-      ) {
-        continue
-      }
-
-      assignments.push({
-        field: target.property,
-        value: assignment.value,
-        loc: assignment.loc
-      })
-    }
-
-    return assignments
-  }
-
   resolveClassConstructorFieldType(expression: AnyNode, constructorParams: AnyNode[]): ValueType {
-    if (expression.type === 'Reference' && expression.path.length === 1) {
-      const path: string[] = expression.path
-      const param = findParamByName(constructorParams, path[0])
-
-      if (param !== null && typeof param !== 'undefined') {
-        return nodeValueTypeOrUnknown(param)
-      }
-    }
-
-    if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
-      return 'string'
-    }
-
     if (expression.type === 'RegExpLiteral') {
       return this.checkRegExpLiteral(expression)
     }
 
-    if (expression.type === 'NumberLiteral') {
-      return 'number'
-    }
-
-    if (expression.type === 'BooleanLiteral') {
-      return 'boolean'
-    }
-
-    if (expression.type === 'ArrayLiteral') {
-      return 'array'
-    }
-
-    if (expression.type === 'ObjectLiteral') {
-      return 'object'
-    }
-
-    if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
-      return expression.valueType
-    }
-
-    return 'unknown'
+    return resolveClassConstructorFieldInitializerType(expression, constructorParams)
   }
 
   checkTopLevelItem(item: AnyNode): void {
@@ -9372,10 +9302,7 @@ class Checker {
   }
 
   isThisExpression(expression: AnyNode): boolean {
-    return (
-      expression.type === 'ThisExpression' ||
-      (expression.type === 'Reference' && expression.path.length === 1 && firstPathSegment(expression.path) === 'this')
-    )
+    return isThisExpressionNode(expression)
   }
 
   canInitializeReadonlyClassField(expression: AnyNode): boolean {
