@@ -6363,6 +6363,12 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return directString
   }
 
+  const directObject = emitDirectConsoleObjectLogValue(expression)
+
+  if (directObject !== null && typeof directObject !== 'undefined') {
+    return directObject
+  }
+
   if (valueType === 'string') {
     return emitStringLogValue(expression, context)
   }
@@ -6410,6 +6416,20 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     lines: [],
     format: consoleLogNumberFormat,
     values: ['0']
+  }
+}
+
+function emitDirectConsoleObjectLogValue(expression: AnyNode): ConsoleLogValue | null {
+  const objectExpression = emitDirectConsoleObjectExpression(expression)
+
+  if (objectExpression === null || typeof objectExpression === 'undefined') {
+    return null
+  }
+
+  return {
+    lines: [],
+    format: '%s',
+    values: [objectExpression]
   }
 }
 
@@ -6610,23 +6630,14 @@ function isRuntimeValueLogExpression(expression: AnyNode, context: CFunctionCont
 
 function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
   const value = emitCValueExpression(expression, context)
-  const temp = nextCName(context, 'inox_log_value')
-  const string = nextCName(context, 'inox_log_string')
   const lines: string[] = []
 
-  registerOwnedValue(context, temp)
   pushAll(lines, value.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(`inox_console_format_value(&inox_default_allocator, ${value.expression}, &${temp})`, context)
-  )
-  lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
-  lines.push(`inox_string* ${string} = (inox_string*)${temp}.as.ref;`)
 
   return {
     lines,
-    format: '%.*s',
-    values: [emitConsoleRuntimeStringView(string)]
+    format: '%s',
+    values: [value.expression]
   }
 }
 

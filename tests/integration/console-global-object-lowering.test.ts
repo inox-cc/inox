@@ -22,6 +22,9 @@ console.error('bad', user)
 console.log('process.version', process.version)
 console.log('process.versions', process.versions)
 console.log('process', process)
+console.log('many', process.version, process.versions, process)
+const parsed = JSON.parse('{"v":[1]}')
+console.log('entries', Object.entries(parsed), process.versions, process)
 `
       }
     ],
@@ -42,10 +45,13 @@ console.log('process', process)
   assert.match(source, /console\.log\("process\.version %\.\*s", process\.version\);/)
   assert.match(source, /console\.log\("process\.versions", process\.versions\);/)
   assert.match(source, /console\.log\("process", process\);/)
+  assert.match(source, /console\.log\("many %\.\*s %s %s", process\.version, process\.versions, process\);/)
+  assert.match(source, /console\.log\("entries %s %s %s", inox_entries_\d+, process\.versions, process\);/)
   assert.doesNotMatch(source, /process\.version\.length\(\)/)
   assert.doesNotMatch(source, /process\.version\.bytes\(\)/)
   assert.doesNotMatch(source, /process\.versions\.value\(\);\n  if \(inox::thrown\(\)\)/)
   assert.doesNotMatch(source, /process\.value\(\);\n  if \(inox::thrown\(\)\)/)
+  assert.doesNotMatch(source, /inox_console_format_value/)
   assert.doesNotMatch(source, /inox::console_log/)
   assert.doesNotMatch(source, /if \(console\.(?:log|error)\(/)
 }

@@ -378,7 +378,7 @@ private:
       return INOX_OK;
     }
 
-    if constexpr (has_formatted_string_arg<Args...>::value) {
+    if constexpr (has_custom_format_arg<Args...>::value) {
       inox_status status = write_formatted(stream, format == nullptr ? "" : format, args...);
 
       if (status != INOX_OK) {
@@ -401,8 +401,18 @@ private:
       std::is_same<Decayed, inox::StringView>::value;
   };
 
+  template <typename T>
+  struct is_custom_format_arg {
+    using Decayed = typename std::decay<T>::type;
+    static constexpr bool value =
+      is_formatted_string_arg<T>::value ||
+      std::is_same<Decayed, inox_value>::value ||
+      std::is_same<Decayed, inox::Value>::value ||
+      is_console_value_object<T>::value;
+  };
+
   template <typename... Args>
-  struct has_formatted_string_arg : std::integral_constant<bool, (is_formatted_string_arg<Args>::value || ...)> {};
+  struct has_custom_format_arg : std::integral_constant<bool, (is_custom_format_arg<Args>::value || ...)> {};
 
   static bool is_format_conversion(char value) {
     return strchr("diuoxXfFeEgGaAcsp", value) != nullptr;
@@ -472,6 +482,10 @@ private:
     return len > 0 && spec[len - 1] == 's';
   }
 
+  static bool is_value_format_spec(const char* spec, size_t len) {
+    return is_string_format_spec(spec, len);
+  }
+
   static inox_status write_format_arg(
     inox_console_stream stream,
     const char* spec,
@@ -498,8 +512,46 @@ private:
     return inox_console_write(stream, value.bytes, value.len);
   }
 
+  static inox_status write_format_arg(
+    inox_console_stream stream,
+    const char* spec,
+    size_t spec_len,
+    inox_value value
+  ) {
+    if (!is_value_format_spec(spec, spec_len)) {
+      return INOX_ERR_TYPE;
+    }
+
+    return inox_console_print_value(stream, value);
+  }
+
+  static inox_status write_format_arg(
+    inox_console_stream stream,
+    const char* spec,
+    size_t spec_len,
+    const inox::Value& value
+  ) {
+    return write_format_arg(stream, spec, spec_len, value.raw());
+  }
+
   template <typename T>
-  static inox_status write_format_arg(inox_console_stream stream, const char* spec, size_t spec_len, T value) {
+  static typename std::enable_if<is_console_value_object<T>::value, inox_status>::type write_format_arg(
+    inox_console_stream stream,
+    const char* spec,
+    size_t spec_len,
+    const T& object
+  ) {
+    inox::Value value = object.value();
+    return write_format_arg(stream, spec, spec_len, value.raw());
+  }
+
+  template <typename T>
+  static typename std::enable_if<!is_console_value_object<T>::value, inox_status>::type write_format_arg(
+    inox_console_stream stream,
+    const char* spec,
+    size_t spec_len,
+    T value
+  ) {
     char format[64];
 
     if (spec_len >= sizeof(format)) {
