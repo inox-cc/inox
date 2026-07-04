@@ -66,6 +66,107 @@ function emitCPreludeIncludeLines(systemIncludes: string[], localIncludes: strin
   return lines
 }
 
+export function filterUnusedCPreludeIncludes(code: string): string {
+  const lines = code.split('\n')
+  const body = cPreludeFilterBody(lines)
+  const filtered: string[] = []
+  const hasProcessHeader = cPreludeLinesInclude(lines, '#include "inox/process.h"')
+
+  for (let index = 0; index < lines.length; index = index + 1) {
+    const line = lines[index]
+
+    if (line === '#include "inox/main.h"' && hasProcessHeader) {
+      continue
+    }
+
+    if (line === '#include "inox/allocator.h"' && !cPreludeBodyUsesAllocatorHeader(body)) {
+      continue
+    }
+
+    if (line === '#include "inox/string.h"' && !cPreludeBodyUsesRuntimeStringHeader(body)) {
+      continue
+    }
+
+    if (line === '#include <string.h>' && !cPreludeBodyUsesCStringHeader(body)) {
+      continue
+    }
+
+    if (line === '#include <stdio.h>' && !cPreludeBodyUsesCStdioHeader(body)) {
+      continue
+    }
+
+    filtered.push(line)
+  }
+
+  return filtered.join('\n')
+}
+
+function cPreludeFilterBody(lines: string[]): string {
+  const body: string[] = []
+
+  for (let index = 0; index < lines.length; index = index + 1) {
+    const line = lines[index]
+
+    if (line.startsWith('#include ')) {
+      continue
+    }
+
+    body.push(line)
+  }
+
+  return body.join('\n')
+}
+
+function cPreludeLinesInclude(lines: string[], includeLine: string): boolean {
+  for (let index = 0; index < lines.length; index = index + 1) {
+    if (lines[index] === includeLine) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function cPreludeBodyUsesAllocatorHeader(body: string): boolean {
+  return (
+    body.includes('inox_default_allocator') ||
+    body.includes('inox_allocator') ||
+    body.includes('inox_default_alloc') ||
+    body.includes('inox_default_realloc') ||
+    body.includes('inox_default_free')
+  )
+}
+
+function cPreludeBodyUsesRuntimeStringHeader(body: string): boolean {
+  return body.includes('inox_string') || body.includes('INOX_REF_STRING')
+}
+
+function cPreludeBodyUsesCStringHeader(body: string): boolean {
+  return (
+    body.includes('strlen(') ||
+    body.includes('memcpy(') ||
+    body.includes('memcmp(') ||
+    body.includes('memset(') ||
+    body.includes('strcmp(') ||
+    body.includes('strncmp(')
+  )
+}
+
+function cPreludeBodyUsesCStdioHeader(body: string): boolean {
+  return (
+    body.includes('printf(') ||
+    body.includes('fprintf(') ||
+    body.includes('snprintf(') ||
+    body.includes('vsnprintf(') ||
+    body.includes('puts(') ||
+    body.includes('fputs(') ||
+    body.includes('fflush(') ||
+    body.includes('FILE') ||
+    body.includes('stdout') ||
+    body.includes('stderr')
+  )
+}
+
 function cPreludeRandomOptions(options: CEmitOptions): RandomOptions {
   const emitOptions = options as CPreludeEmitOptions
   const random = emitOptions.random

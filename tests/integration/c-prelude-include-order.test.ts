@@ -33,8 +33,9 @@ console.log(label)
 
   assert.match(
     source,
-    /^#include "index\.h"\n#include <stdio\.h>\n#include <string\.h>\n#include "inox\/console\.h"\n#include "inox\/main\.h"\n#include "inox\/value\.h"\n#include "inox\/allocator\.h"/
+    /^#include "index\.h"\n#include <string\.h>\n#include "inox\/console\.h"\n#include "inox\/main\.h"\n#include "inox\/value\.h"\n#include "inox\/allocator\.h"/
   )
+  assert.doesNotMatch(source, /#include <stdio\.h>/)
   assert.doesNotMatch(source, /^#include [^\n]+\n\n#include /)
 
   const arrayHost = createMemoryCompilerHost(
@@ -88,6 +89,39 @@ console.log(values.includes(2))
   assert.match(includesSource, /#include "inox\/hash\.h"/)
   assert.doesNotMatch(includesSource, /#include "inox\/map\.h"/)
   assert.doesNotMatch(includesSource, /#include "inox\/set\.h"/)
+
+  const facadeHost = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+console.log(process.version)
+const foo = JSON.parse('{"v":[{"1":2}]}')
+console.log(Object.entries(foo.v))
+for (const a of foo.v) {
+  console.log(Object.entries(a)[0])
+}
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+  const facadeFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host: facadeHost,
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const facadeSource = generatedTextFile(facadeFiles, 'src/index.cc').code
+
+  assert.match(facadeSource, /#include "inox\/process\.h"/)
+  assert.match(facadeSource, /#include "inox\/object\.h"/)
+  assert.doesNotMatch(facadeSource, /#include <stdio\.h>/)
+  assert.doesNotMatch(facadeSource, /#include <string\.h>/)
+  assert.doesNotMatch(facadeSource, /#include "inox\/main\.h"/)
+  assert.doesNotMatch(facadeSource, /#include "inox\/allocator\.h"/)
+  assert.doesNotMatch(facadeSource, /#include "inox\/string\.h"/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

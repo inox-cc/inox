@@ -81,7 +81,7 @@ import {
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
-import { emitCPrelude } from './prelude.ts'
+import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
   collectNodeNetworkHandlers,
@@ -558,7 +558,7 @@ export function emitCModuleSource(
   emitCModuleFunctionPointerAdapterDefinitions(lines, context)
   pushCModuleLines(lines, bodyLines)
 
-  return joinCModuleLines(lines)
+  return filterUnusedCPreludeIncludes(joinCModuleLines(lines))
 }
 
 function emitCModuleNativeClassForwardDeclarations(

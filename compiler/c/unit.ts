@@ -67,7 +67,7 @@ import type {
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
-import { emitCPrelude } from './prelude.ts'
+import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
   collectNodeNetworkHandlers,
@@ -1521,7 +1521,7 @@ export function emitCUnit(
 
   throwDiagnostics(diagnostics)
 
-  const code = joinCUnitLines(lines)
+  const code = filterUnusedCPreludeIncludes(joinCUnitLines(lines))
 
   return code
 }
