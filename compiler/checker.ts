@@ -95,6 +95,24 @@ import {
 } from '../stdlib/global/compiler/checker.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
+  cloneResolvedTypeInfo as cloneResolvedTypeInfoInContext,
+  declareTypeAlias as declareTypeAliasInContext,
+  resolveDeclaredType as resolveDeclaredTypeInContext,
+  resolveFieldDeclaredType as resolveFieldDeclaredTypeInContext,
+  resolveFunctionTypeMetadata as resolveFunctionTypeMetadataInContext,
+  resolveObjectShape as resolveObjectShapeInContext,
+  resolveObjectShapeBases as resolveObjectShapeBasesInContext,
+  resolveObjectShapeField as resolveObjectShapeFieldInContext,
+  resolveUnionDeclaredType as resolveUnionDeclaredTypeInContext,
+  resolveWeakFieldDeclaredType as resolveWeakFieldDeclaredTypeInContext,
+  resolveWeakTargetDeclaredType as resolveWeakTargetDeclaredTypeInContext,
+  resolveWeakTargetObjectShape as resolveWeakTargetObjectShapeInContext,
+  resolveWeakTargetShapeFieldType as resolveWeakTargetShapeFieldTypeInContext,
+  resolveWeakTargetShapeTypeName as resolveWeakTargetShapeTypeNameInContext,
+  unresolvedTypeInfo as unresolvedTypeInfoInContext
+} from './checker/declared-types.ts'
+import type { DeclaredTypeResolverContext } from './checker/declared-types.ts'
+import {
   acceptsArgumentCount,
   argumentCountMessage,
   argumentParamValueType,
@@ -109,7 +127,6 @@ import {
   isRuntimeNullableType,
   isStatementExpressionNode,
   isStringTrimMethod,
-  mergeShapeFields,
   paramForArgument,
   promiseExecutorFunctionType,
   promiseStaticMethodName,
@@ -119,7 +136,7 @@ import {
   uniqueNames
 } from './checker/helpers.ts'
 import { inferJsonParseLiteralType } from './checker/json-literals.ts'
-import { hasWeakOwnershipMarker, ownershipCycleDiagnostics } from './checker/ownership.ts'
+import { ownershipCycleDiagnostics } from './checker/ownership.ts'
 import { memberExpressionPath } from './member-paths.ts'
 import {
   collectionConstructorNameFromPath,
@@ -147,19 +164,9 @@ import {
   unsupportedRuntimeBuiltinImportMessageFromKnownSource
 } from './stdlib/node/builtins.ts'
 import {
-  arrayElementTypeNameFromKnownTypeName,
-  isArrayTypeName,
   isBuiltinValueType,
-  isBytesTypeName,
   isNullableTypeName,
-  isPromiseTypeName,
-  isSetTypeName,
-  mapTypeNamesFromTypeName,
-  nullableTypeNameFromKnownTypeName,
-  promiseValueTypeNameFromKnownTypeName,
-  recordTypeNamesFromTypeName,
-  setElementTypeNameFromKnownTypeName,
-  unionTypeNamesFromTypeName
+  nullableTypeNameFromKnownTypeName
 } from './type-names.ts'
 import type {
   AnyNode,
@@ -174,18 +181,10 @@ import type {
 } from './types.ts'
 
 import {
-  anyNodeResolvedTypeInfo,
   anyNodeLocObjectShape,
   checkerNodeAt,
   cloneStringSet,
   commonExpressionFunctionType,
-  commonResolvedArrayElementType,
-  commonResolvedMapKeyType,
-  commonResolvedMapValueShape,
-  commonResolvedMapValueType,
-  commonResolvedObjectShape,
-  commonResolvedPromiseValueType,
-  commonResolvedSetElementType,
   conditionalExpressionValueType,
   deleteNullableNarrowingKey,
   firstPathSegment,
@@ -202,7 +201,6 @@ import {
   resolvedFunctionTypeMetadata,
   resolvedObjectShapeMetadata,
   resolvedStringMetadata,
-  resolvedTypeListHasNullable,
   resolvedValueTypeMetadata
 } from './checker/resolved-types.ts'
 import type {
@@ -308,6 +306,7 @@ class Checker {
   diagnostics: Diagnostic[]
   scope: CheckerScope
   types: Map<string, TypeAliasInfo>
+  typeSymbols: Map<string, SymbolInfo>
   classNames: Set<string>
   breakDepth: number
   continueDepth: number
@@ -328,6 +327,7 @@ class Checker {
     this.diagnostics = []
     this.scope = new CheckerScope(null)
     this.types = new Map()
+    this.typeSymbols = new Map()
     this.classNames = new Set()
     this.breakDepth = 0
     this.continueDepth = 0
@@ -10309,1080 +10309,78 @@ class Checker {
     return symbol !== null && typeof symbol !== 'undefined' && symbol.kind !== 'global'
   }
 
-  declareTypeAlias(item: TypeAliasDeclarationNode): void {
-    if (this.types.has(item.name)) {
-      this.report('INOX_REDECLARED_NAME', `type ${item.name} is already declared`, item.loc)
-      return
+  declaredTypeContext(): DeclaredTypeResolverContext {
+    return {
+      classNames: this.classNames,
+      diagnostics: this.diagnostics,
+      resolvedDeclaredTypes: this.resolvedDeclaredTypes,
+      resolvingDeclaredTypes: this.resolvingDeclaredTypes,
+      symbols: this.typeSymbols,
+      types: this.types
     }
+  }
 
-    if (item.valueType.kind === 'alias' || item.valueType.kind === 'object' || item.valueType.kind === 'function') {
-      this.types.set(item.name, item.valueType)
-    }
+  declareTypeAlias(item: TypeAliasDeclarationNode): void {
+    declareTypeAliasInContext(this.declaredTypeContext(), item)
   }
 
   resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
-    if (name === null || typeof name === 'undefined' || name === 'unknown') {
-      return {
-        valueType: 'unknown',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    if (name === 'AnyNode') {
-      return anyNodeResolvedTypeInfo(loc)
-    }
-
-    if (name === 'ValueType') {
-      return {
-        valueType: 'string',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    if (isNullableTypeName(name)) {
-      const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
-      const inner = this.resolveDeclaredType(nullableTypeName, loc)
-
-      return {
-        valueType: inner.valueType,
-        nullable: true,
-        functionType: inner.functionType,
-        shape: inner.shape,
-        arrayElementType: inner.arrayElementType,
-        arrayElementDeclaredType: inner.arrayElementDeclaredType,
-        mapKeyType: inner.mapKeyType,
-        mapValueType: inner.mapValueType,
-        mapValueShape: inner.mapValueShape,
-        promiseValueType: inner.promiseValueType,
-        setElementType: inner.setElementType
-      }
-    }
-
-    const unionTypeNames = unionTypeNamesFromTypeName(name)
-
-    if (unionTypeNames !== null && typeof unionTypeNames !== 'undefined') {
-      return this.resolveUnionDeclaredType(unionTypeNames, loc)
-    }
-
-    if (name === 'array') {
-      return {
-        valueType: 'array',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: 'unknown',
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    if (isArrayTypeName(name)) {
-      const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
-      const elementInfo = this.resolveDeclaredType(arrayElementTypeName, loc)
-
-      return {
-        valueType: 'array',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: elementInfo.valueType,
-        arrayElementDeclaredType: arrayElementTypeName,
-        arrayElementFunctionType: elementInfo.functionType,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    const mapTypeNames = mapTypeNamesFromTypeName(name)
-
-    if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined')) {
-      let mapKeyType: ValueType = 'unknown'
-      let mapValueType: ValueType = 'unknown'
-      let mapValueShape: ObjectShapeInfo | null = null
-
-      if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
-        const keyInfo = this.resolveDeclaredType(mapTypeNames.key, loc)
-        const valueInfo = this.resolveDeclaredType(mapTypeNames.value, loc)
-        mapKeyType = keyInfo.valueType
-        mapValueType = valueInfo.valueType
-        mapValueShape = valueInfo.shape
-      }
-
-      return {
-        valueType: 'map',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType,
-        mapValueType,
-        mapValueShape,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    const recordTypeNames = recordTypeNamesFromTypeName(name)
-
-    if (recordTypeNames !== null && typeof recordTypeNames !== 'undefined') {
-      const valueInfo = this.resolveDeclaredType(recordTypeNames.value, loc)
-
-      return {
-        valueType: 'object',
-        nullable: false,
-        functionType: null,
-        shape: {
-          kind: 'object',
-          dynamic: true,
-          dynamicField: {
-            name: '',
-            optional: false,
-            readonly: false,
-            ownership: 'strong',
-            declaredType: recordTypeNames.value,
-            valueType: valueInfo.valueType,
-            nullable: valueInfo.nullable,
-            arrayElementType: valueInfo.arrayElementType,
-            arrayElementDeclaredType: valueInfo.arrayElementDeclaredType,
-            mapKeyType: valueInfo.mapKeyType,
-            mapValueType: valueInfo.mapValueType,
-            mapValueShape: valueInfo.mapValueShape,
-            promiseValueType: valueInfo.promiseValueType,
-            setElementType: valueInfo.setElementType,
-            functionType: valueInfo.functionType,
-            shape: valueInfo.shape,
-            loc
-          },
-          fields: []
-        },
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    if (name === 'set') {
-      return {
-        valueType: 'set',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: 'unknown'
-      }
-    }
-
-    if (isSetTypeName(name)) {
-      const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
-      const elementInfo = this.resolveDeclaredType(setElementTypeName, loc)
-
-      return {
-        valueType: 'set',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: elementInfo.valueType
-      }
-    }
-
-    if (name === 'promise') {
-      return {
-        valueType: 'promise',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: 'unknown',
-        setElementType: null
-      }
-    }
-
-    if (isPromiseTypeName(name)) {
-      const promiseValueTypeName = promiseValueTypeNameFromKnownTypeName(name)
-      const valueInfo = this.resolveDeclaredType(promiseValueTypeName, loc)
-
-      return {
-        valueType: 'promise',
-        nullable: false,
-        functionType: null,
-        shape: valueInfo.shape,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: valueInfo.valueType,
-        setElementType: null
-      }
-    }
-
-    if (isBytesTypeName(name)) {
-      return {
-        valueType: 'bytes',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    if (isBuiltinValueType(name)) {
-      return {
-        valueType: name,
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    const classKnown = this.classNames.has(name)
-    let classSymbol: SymbolInfo | null = null
-
-    if (classKnown) {
-      const foundClassSymbol = this.scope.resolve(name)
-
-      if (foundClassSymbol !== null && typeof foundClassSymbol !== 'undefined' && foundClassSymbol.kind === 'class') {
-        classSymbol = foundClassSymbol
-      }
-    }
-
-    if (
-      classKnown ||
-      (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class')
-    ) {
-      let classShape: ObjectShapeInfo | null = null
-
-      if (
-        classSymbol !== null &&
-        typeof classSymbol !== 'undefined' &&
-        classSymbol.shape !== null &&
-        typeof classSymbol.shape !== 'undefined'
-      ) {
-        classShape = classSymbol.shape
-      }
-
-      return {
-        valueType: 'object',
-        nullable: false,
-        functionType: null,
-        shape: classShape,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    const shape = this.types.get(name)
-
-    if (shape !== null && typeof shape !== 'undefined') {
-      const cached = this.resolvedDeclaredTypes.get(name)
-
-      if (cached !== null && typeof cached !== 'undefined') {
-        return this.cloneResolvedTypeInfo(cached)
-      }
-
-      if (this.resolvingDeclaredTypes.has(name)) {
-        const recursiveInfo = this.unresolvedTypeInfo()
-
-        if (shape.kind === 'function') {
-          recursiveInfo.valueType = 'function'
-        } else if (shape.kind === 'object') {
-          recursiveInfo.valueType = 'object'
-        }
-
-        return recursiveInfo
-      }
-
-      if (shape.kind === 'alias') {
-        this.resolvingDeclaredTypes.add(name)
-
-        try {
-          const resolved = this.resolveDeclaredType(shape.valueType, loc)
-          this.resolvedDeclaredTypes.set(name, this.cloneResolvedTypeInfo(resolved))
-
-          return resolved
-        } finally {
-          this.resolvingDeclaredTypes.delete(name)
-        }
-      }
-
-      if (shape.kind === 'function') {
-        this.resolvingDeclaredTypes.add(name)
-
-        try {
-          const returnInfo = this.resolveDeclaredType(shape.returnType, loc)
-          const params: FunctionTypeParamMetadata[] = []
-          let returnPromiseValueType: ValueType | null = null
-
-          if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
-            returnPromiseValueType = returnInfo.promiseValueType
-          }
-
-          for (const param of shape.params) {
-            const declaredType = nodeDeclaredTypeOrValueType(param)
-
-            const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
-            let paramPromiseValueType: ValueType | null = null
-
-            if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
-              paramPromiseValueType = paramInfo.promiseValueType
-            }
-
-            const resolvedParam = {
-              name: param.name,
-              loc: param.loc,
-              optional: isOptionalParam(param),
-              rest: param.rest === true,
-              declaredType,
-              valueType: paramInfo.valueType,
-              nullable: paramInfo.nullable,
-              arrayElementType: paramInfo.arrayElementType,
-              arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
-              mapKeyType: paramInfo.mapKeyType,
-              mapValueType: paramInfo.mapValueType,
-              promiseValueType: paramPromiseValueType,
-              setElementType: paramInfo.setElementType,
-              functionType: paramInfo.functionType,
-              shape: paramInfo.shape
-            }
-
-            params.push(resolvedParam)
-          }
-
-          const resolved: ResolvedTypeInfo = {
-            valueType: 'function',
-            nullable: false,
-            functionType: {
-              kind: 'function',
-              resolved: true,
-              params,
-              declaredReturnType: shape.returnType,
-              returnType: returnInfo.valueType,
-              returnNullable: returnInfo.nullable,
-              returnArrayElementType: returnInfo.arrayElementType,
-              returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
-              returnMapKeyType: returnInfo.mapKeyType,
-              returnMapValueType: returnInfo.mapValueType,
-              returnPromiseValueType,
-              returnSetElementType: returnInfo.setElementType,
-              returnShape: returnInfo.shape
-            },
-            shape: null,
-            arrayElementType: null,
-            arrayElementDeclaredType: null,
-            mapKeyType: null,
-            mapValueType: null,
-            mapValueShape: null,
-            promiseValueType: null,
-            setElementType: null
-          }
-          this.resolvedDeclaredTypes.set(name, this.cloneResolvedTypeInfo(resolved))
-
-          return resolved
-        } finally {
-          this.resolvingDeclaredTypes.delete(name)
-        }
-      }
-
-      this.resolvingDeclaredTypes.add(name)
-
-      try {
-        const resolvedShape = this.resolveObjectShape(shape)
-        const resolved: ResolvedTypeInfo = {
-          valueType: 'object',
-          nullable: false,
-          functionType: null,
-          shape: resolvedShape,
-          arrayElementType: null,
-          arrayElementDeclaredType: null,
-          mapKeyType: null,
-          mapValueType: null,
-          mapValueShape: null,
-          promiseValueType: null,
-          setElementType: null
-        }
-        this.resolvedDeclaredTypes.set(name, this.cloneResolvedTypeInfo(resolved))
-
-        return resolved
-      } finally {
-        this.resolvingDeclaredTypes.delete(name)
-      }
-    }
-
-    this.report('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc)
-
-    return {
-      valueType: 'unknown',
-      nullable: false,
-      functionType: null,
-      shape: null,
-      arrayElementType: null,
-      arrayElementDeclaredType: null,
-      mapKeyType: null,
-      mapValueType: null,
-      mapValueShape: null,
-      promiseValueType: null,
-      setElementType: null
-    }
+    return resolveDeclaredTypeInContext(this.declaredTypeContext(), name, loc)
   }
 
   resolveUnionDeclaredType(names: string[], loc: SourceLocation): ResolvedTypeInfo {
-    const infos: ResolvedTypeInfo[] = []
-    const valueTypes: ValueType[] = []
-
-    for (let index = 0; index < names.length; index = index + 1) {
-      const info = this.resolveDeclaredType(names[index], loc)
-      infos.push(info)
-      valueTypes.push(info.valueType)
-    }
-
-    const valueType = commonValueType(valueTypes)
-    const result = this.unresolvedTypeInfo()
-
-    if (valueType === 'unknown') {
-      return result
-    }
-
-    result.valueType = valueType
-    result.nullable = resolvedTypeListHasNullable(infos)
-
-    if (valueType === 'array') {
-      result.arrayElementType = commonResolvedArrayElementType(infos)
-    } else if (valueType === 'map') {
-      result.mapKeyType = commonResolvedMapKeyType(infos)
-      result.mapValueType = commonResolvedMapValueType(infos)
-      result.mapValueShape = commonResolvedMapValueShape(infos)
-    } else if (valueType === 'promise') {
-      result.promiseValueType = commonResolvedPromiseValueType(infos)
-    } else if (valueType === 'set') {
-      result.setElementType = commonResolvedSetElementType(infos)
-    } else if (valueType === 'object') {
-      result.shape = commonResolvedObjectShape(infos)
-    }
-
-    return result
+    return resolveUnionDeclaredTypeInContext(this.declaredTypeContext(), names, loc)
   }
 
   resolveObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
-    const bases = this.resolveObjectShapeBases(shape)
-    const fields: AnyNode[] = []
-    const resolvedFields: AnyNode[] = []
-
-    mergeShapeFields(fields, bases.fields)
-    mergeShapeFields(fields, shape.fields)
-
-    for (const field of fields) {
-      resolvedFields.push(this.resolveObjectShapeField(field, fields))
-    }
-
-    const resolvedBaseTypes: string[] = []
-    const baseTypes = shape.baseTypes
-
-    if (baseTypes !== null && typeof baseTypes !== 'undefined') {
-      for (let index = 0; index < baseTypes.length; index = index + 1) {
-        resolvedBaseTypes.push(baseTypes[index])
-      }
-    }
-
-    const resolvedShape: ObjectShapeInfo = {
-      kind: 'object',
-      baseTypes: resolvedBaseTypes,
-      dynamic: shape.dynamic === true || bases.dynamic,
-      dynamicField: bases.dynamicField,
-      fields: resolvedFields
-    }
-
-    if (shape.dynamicField !== null && typeof shape.dynamicField !== 'undefined') {
-      resolvedShape.dynamicField = this.resolveObjectShapeField(shape.dynamicField, [shape.dynamicField])
-    }
-
-    if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
-      resolvedShape.builtin = shape.builtin
-    }
-
-    return resolvedShape
+    return resolveObjectShapeInContext(this.declaredTypeContext(), shape)
   }
 
   resolveObjectShapeField(field: AnyNode, fields: AnyNode[]): AnyNode {
-    const weakField = field.ownership === 'weak' || hasWeakOwnershipMarker(fields, field.name)
-    const declaredType = nodeDeclaredTypeOrValueType(field)
-
-    let fieldInfo = this.resolveFieldDeclaredType(field)
-
-    if (weakField) {
-      fieldInfo = this.resolveWeakTargetShapeFieldType(field)
-    }
-
-    let promiseValueType: ValueType | null = null
-    let functionType = fieldInfo.functionType
-
-    if (functionType === null || typeof functionType === 'undefined') {
-      const fieldFunctionType = field.functionType
-
-      if (fieldFunctionType !== null && typeof fieldFunctionType !== 'undefined') {
-        functionType = this.resolveFunctionTypeMetadata(fieldFunctionType, field.loc)
-      } else {
-        functionType = null
-      }
-    }
-
-    if (fieldInfo.promiseValueType !== null && typeof fieldInfo.promiseValueType !== 'undefined') {
-      promiseValueType = fieldInfo.promiseValueType
-    }
-
-    return {
-      type: field.type,
-      name: field.name,
-      optional: field.optional,
-      readonly: field.readonly,
-      ownership: field.ownership,
-      weakLoc: field.weakLoc,
-      static: field.static,
-      staticLoc: field.staticLoc,
-      weakTypeValidated: field.weakTypeValidated,
-      loc: field.loc,
-      declaredType,
-      valueType: fieldInfo.valueType,
-      nullable: fieldInfo.nullable || weakField || field.optional === true,
-      arrayElementType: fieldInfo.arrayElementType,
-      arrayElementDeclaredType: fieldInfo.arrayElementDeclaredType,
-      mapKeyType: fieldInfo.mapKeyType,
-      mapValueType: fieldInfo.mapValueType,
-      mapValueShape: fieldInfo.mapValueShape,
-      promiseValueType,
-      setElementType: fieldInfo.setElementType,
-      functionType,
-      shape: fieldInfo.shape
-    }
+    return resolveObjectShapeFieldInContext(this.declaredTypeContext(), field, fields)
   }
 
   resolveFunctionTypeMetadata(
     functionType: FunctionTypeMetadata | null | undefined,
     loc: SourceLocation | null | undefined
   ): FunctionTypeMetadata | null {
-    if (functionType === null || typeof functionType === 'undefined') {
-      return null
-    }
-
-    let typeLine = 1
-    let typeColumn = 1
-
-    if (loc !== null && typeof loc !== 'undefined') {
-      typeLine = loc.line
-      typeColumn = loc.column
-    }
-
-    const functionTypeLoc = functionType.loc
-
-    if (functionTypeLoc !== null && typeof functionTypeLoc !== 'undefined') {
-      typeLine = functionTypeLoc.line
-      typeColumn = functionTypeLoc.column
-    }
-
-    const typeLoc: SourceLocation = { line: typeLine, column: typeColumn }
-    const returnInfo = this.resolveDeclaredType(functionType.returnType, typeLoc)
-    const params: FunctionTypeParamMetadata[] = []
-    let returnPromiseValueType: ValueType | null = null
-
-    if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
-      returnPromiseValueType = returnInfo.promiseValueType
-    }
-
-    for (const param of functionType.params) {
-      const declaredType = nodeDeclaredTypeOrValueType(param)
-
-      const paramInfo = this.resolveDeclaredType(declaredType, param.loc)
-      let paramPromiseValueType: ValueType | null = null
-
-      if (paramInfo.promiseValueType !== null && typeof paramInfo.promiseValueType !== 'undefined') {
-        paramPromiseValueType = paramInfo.promiseValueType
-      }
-
-      params.push({
-        name: param.name,
-        loc: param.loc,
-        optional: isOptionalParam(param),
-        rest: param.rest === true,
-        declaredType,
-        valueType: paramInfo.valueType,
-        nullable: paramInfo.nullable,
-        arrayElementType: paramInfo.arrayElementType,
-        arrayElementDeclaredType: paramInfo.arrayElementDeclaredType,
-        mapKeyType: paramInfo.mapKeyType,
-        mapValueType: paramInfo.mapValueType,
-        mapValueShape: paramInfo.mapValueShape,
-        promiseValueType: paramPromiseValueType,
-        setElementType: paramInfo.setElementType,
-        functionType: paramInfo.functionType,
-        shape: paramInfo.shape
-      })
-    }
-
-    return {
-      kind: 'function',
-      resolved: true,
-      params,
-      declaredReturnType: functionType.returnType,
-      returnType: returnInfo.valueType,
-      returnNullable: returnInfo.nullable,
-      returnArrayElementType: returnInfo.arrayElementType,
-      returnArrayElementDeclaredType: returnInfo.arrayElementDeclaredType,
-      returnMapKeyType: returnInfo.mapKeyType,
-      returnMapValueType: returnInfo.mapValueType,
-      returnPromiseValueType,
-      returnSetElementType: returnInfo.setElementType,
-      returnShape: returnInfo.shape
-    }
+    return resolveFunctionTypeMetadataInContext(this.declaredTypeContext(), functionType, loc)
   }
 
   resolveObjectShapeBases(shape: ObjectShapeInfo): ObjectShapeBases {
-    const fields: AnyNode[] = []
-    let dynamic = false
-    let dynamicField: AnyNode | null = null
-
-    const baseTypes: string[] = shape.baseTypes ?? []
-
-    for (const name of baseTypes) {
-      const base = this.types.get(name)
-
-      if (base === null || typeof base === 'undefined' || base.kind !== 'object') {
-        continue
-      }
-
-      const resolved = this.resolveObjectShape(base)
-
-      for (const field of resolved.fields) {
-        fields.push(field)
-      }
-
-      dynamic = dynamic || resolved.dynamic === true
-
-      if (resolved.dynamicField !== null && typeof resolved.dynamicField !== 'undefined') {
-        dynamicField = resolved.dynamicField
-      }
-    }
-
-    return {
-      dynamic,
-      dynamicField,
-      fields
-    }
+    return resolveObjectShapeBasesInContext(this.declaredTypeContext(), shape)
   }
 
   resolveFieldDeclaredType(field: AnyNode): ResolvedTypeInfo {
-    if (field.ownership === 'weak') {
-      return this.resolveWeakFieldDeclaredType(field)
-    }
-
-    const declaredType = nodeDeclaredTypeOrValueType(field)
-
-    return this.resolveDeclaredType(declaredType, field.loc)
+    return resolveFieldDeclaredTypeInContext(this.declaredTypeContext(), field)
   }
 
   resolveWeakFieldDeclaredType(field: AnyNode): ResolvedTypeInfo {
-    const declaredName = nodeDeclaredTypeOrValueType(field)
-
-    let targetName = declaredName
-
-    if (isNullableTypeName(declaredName)) {
-      const nullableName = nullableTypeNameFromKnownTypeName(declaredName)
-
-      if (nullableName !== null && typeof nullableName !== 'undefined') {
-        targetName = nullableName
-      }
-    }
-
-    const fieldInfo = this.resolveWeakTargetDeclaredType(targetName, field.loc)
-
-    if (fieldInfo.valueType !== 'unknown' && fieldInfo.valueType !== 'object' && field.weakTypeValidated !== true) {
-      let weakLoc = field.loc
-
-      if (field.weakLoc !== null && typeof field.weakLoc !== 'undefined') {
-        weakLoc = field.weakLoc
-      }
-
-      this.report(
-        'INOX_WEAK_TYPE',
-        `weak field ${field.name} must target an object or class type in the current compiler slice`,
-        weakLoc
-      )
-    }
-
-    field.weakTypeValidated = true
-
-    fieldInfo.nullable = true
-
-    return fieldInfo
+    return resolveWeakFieldDeclaredTypeInContext(this.declaredTypeContext(), field)
   }
 
   resolveWeakTargetDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
-    if (name === null || typeof name === 'undefined' || name === 'unknown') {
-      return {
-        valueType: 'unknown',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    if (name === 'object') {
-      return {
-        valueType: 'object',
-        nullable: false,
-        functionType: null,
-        shape: null,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    const shape = this.types.get(name)
-
-    if (shape !== null && typeof shape !== 'undefined' && shape.kind === 'object') {
-      return {
-        valueType: 'object',
-        nullable: false,
-        functionType: null,
-        shape: this.resolveWeakTargetObjectShape(shape),
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    const classSymbol = this.scope.resolve(name)
-
-    if (
-      this.classNames.has(name) ||
-      (classSymbol !== null && typeof classSymbol !== 'undefined' && classSymbol.kind === 'class')
-    ) {
-      let classShape: ObjectShapeInfo | null = null
-
-      if (
-        classSymbol !== null &&
-        typeof classSymbol !== 'undefined' &&
-        classSymbol.shape !== null &&
-        typeof classSymbol.shape !== 'undefined'
-      ) {
-        classShape = this.resolveWeakTargetObjectShape(classSymbol.shape)
-      }
-
-      return {
-        valueType: 'object',
-        nullable: false,
-        functionType: null,
-        shape: classShape,
-        arrayElementType: null,
-        arrayElementDeclaredType: null,
-        mapKeyType: null,
-        mapValueType: null,
-        mapValueShape: null,
-        promiseValueType: null,
-        setElementType: null
-      }
-    }
-
-    return this.resolveDeclaredType(name, loc)
+    return resolveWeakTargetDeclaredTypeInContext(this.declaredTypeContext(), name, loc)
   }
 
   resolveWeakTargetObjectShape(shape: ObjectShapeInfo): ObjectShapeInfo {
-    const bases = this.resolveObjectShapeBases(shape)
-    const fields: AnyNode[] = []
-    const resolvedFields: AnyNode[] = []
-
-    mergeShapeFields(fields, bases.fields)
-    mergeShapeFields(fields, shape.fields)
-
-    for (const field of fields) {
-      const declared = this.resolveWeakTargetShapeFieldType(field)
-      let declaredType = nodeDeclaredTypeOrValueType(field)
-      const fieldDeclaredType = field.declaredType
-      let promiseValueType: ValueType | null = null
-      const functionType = resolvedFunctionTypeMetadata(declared.functionType, field.functionType)
-
-      if (fieldDeclaredType !== null && typeof fieldDeclaredType !== 'undefined') {
-        declaredType = fieldDeclaredType
-      }
-
-      if (declared.promiseValueType !== null && typeof declared.promiseValueType !== 'undefined') {
-        promiseValueType = declared.promiseValueType
-      }
-
-      resolvedFields.push({
-        type: field.type,
-        name: field.name,
-        optional: field.optional,
-        readonly: field.readonly,
-        ownership: field.ownership,
-        weakLoc: field.weakLoc,
-        static: field.static,
-        staticLoc: field.staticLoc,
-        weakTypeValidated: field.weakTypeValidated,
-        loc: field.loc,
-        declaredType,
-        valueType: declared.valueType,
-        nullable: declared.nullable || field.ownership === 'weak' || field.optional === true,
-        arrayElementType: declared.arrayElementType,
-        arrayElementDeclaredType: declared.arrayElementDeclaredType,
-        mapKeyType: declared.mapKeyType,
-        mapValueType: declared.mapValueType,
-        promiseValueType,
-        setElementType: declared.setElementType,
-        functionType,
-        shape: null
-      })
-    }
-
-    const resolvedBaseTypes: string[] = shape.baseTypes ?? []
-
-    const resolvedShape: ObjectShapeInfo = {
-      kind: 'object',
-      baseTypes: resolvedBaseTypes,
-      dynamic: shape.dynamic === true || bases.dynamic,
-      fields: resolvedFields
-    }
-
-    if (shape.builtin !== null && typeof shape.builtin !== 'undefined') {
-      resolvedShape.builtin = shape.builtin
-    }
-
-    return resolvedShape
+    return resolveWeakTargetObjectShapeInContext(this.declaredTypeContext(), shape)
   }
 
   resolveWeakTargetShapeFieldType(field: AnyNode): ResolvedTypeInfo {
-    const declaredType = nodeDeclaredTypeOrValueType(field)
-
-    return this.resolveWeakTargetShapeTypeName(declaredType, field.loc)
+    return resolveWeakTargetShapeFieldTypeInContext(this.declaredTypeContext(), field)
   }
 
   resolveWeakTargetShapeTypeName(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
-    if (name === null || typeof name === 'undefined' || name === 'unknown') {
-      return this.unresolvedTypeInfo()
-    }
-
-    if (isNullableTypeName(name)) {
-      const nullableTypeName = nullableTypeNameFromKnownTypeName(name)
-      const inner = this.resolveWeakTargetShapeTypeName(nullableTypeName, loc)
-
-      return {
-        valueType: inner.valueType,
-        nullable: true,
-        functionType: inner.functionType,
-        shape: inner.shape,
-        arrayElementType: inner.arrayElementType,
-        arrayElementDeclaredType: inner.arrayElementDeclaredType,
-        mapKeyType: inner.mapKeyType,
-        mapValueType: inner.mapValueType,
-        mapValueShape: inner.mapValueShape,
-        promiseValueType: inner.promiseValueType,
-        setElementType: inner.setElementType
-      }
-    }
-
-    if (name === 'array') {
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'array'
-      info.arrayElementType = 'unknown'
-      info.arrayElementDeclaredType = null
-
-      return info
-    }
-
-    if (isArrayTypeName(name)) {
-      const arrayElementTypeName = arrayElementTypeNameFromKnownTypeName(name)
-      const elementInfo = this.resolveWeakTargetShapeTypeName(arrayElementTypeName, loc)
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'array'
-      info.arrayElementType = elementInfo.valueType
-      info.arrayElementDeclaredType = arrayElementTypeName
-      info.arrayElementFunctionType = elementInfo.functionType
-
-      return info
-    }
-
-    const mapTypeNames = mapTypeNamesFromTypeName(name)
-
-    if (name === 'map' || (mapTypeNames !== null && typeof mapTypeNames !== 'undefined')) {
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'map'
-      info.mapKeyType = 'unknown'
-      info.mapValueType = 'unknown'
-
-      if (mapTypeNames !== null && typeof mapTypeNames !== 'undefined') {
-        const keyInfo = this.resolveWeakTargetShapeTypeName(mapTypeNames.key, loc)
-        const valueInfo = this.resolveWeakTargetShapeTypeName(mapTypeNames.value, loc)
-        info.mapKeyType = keyInfo.valueType
-        info.mapValueType = valueInfo.valueType
-      }
-
-      return info
-    }
-
-    if (name === 'set') {
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'set'
-      info.setElementType = 'unknown'
-
-      return info
-    }
-
-    if (isSetTypeName(name)) {
-      const setElementTypeName = setElementTypeNameFromKnownTypeName(name)
-      const elementInfo = this.resolveWeakTargetShapeTypeName(setElementTypeName, loc)
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'set'
-      info.setElementType = elementInfo.valueType
-
-      return info
-    }
-
-    if (isBytesTypeName(name)) {
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'bytes'
-
-      return info
-    }
-
-    if (name === 'ValueType') {
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'string'
-
-      return info
-    }
-
-    if (isBuiltinValueType(name)) {
-      const info = this.unresolvedTypeInfo()
-      info.valueType = name
-
-      return info
-    }
-
-    const shape = this.types.get(name)
-    const symbol = this.scope.resolve(name)
-
-    if (
-      (shape !== null && typeof shape !== 'undefined' && shape.kind === 'object') ||
-      this.classNames.has(name) ||
-      (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'class')
-    ) {
-      const info = this.unresolvedTypeInfo()
-      info.valueType = 'object'
-
-      return info
-    }
-
-    return this.resolveDeclaredType(name, loc)
+    return resolveWeakTargetShapeTypeNameInContext(this.declaredTypeContext(), name, loc)
   }
 
   cloneResolvedTypeInfo(info: ResolvedTypeInfo): ResolvedTypeInfo {
-    return {
-      valueType: info.valueType,
-      nullable: info.nullable,
-      functionType: info.functionType,
-      shape: info.shape,
-      arrayElementType: info.arrayElementType,
-      arrayElementDeclaredType: info.arrayElementDeclaredType,
-      arrayElementFunctionType: info.arrayElementFunctionType ?? null,
-      mapKeyType: info.mapKeyType,
-      mapValueType: info.mapValueType,
-      mapValueShape: info.mapValueShape,
-      promiseValueType: info.promiseValueType,
-      setElementType: info.setElementType
-    }
+    return cloneResolvedTypeInfoInContext(info)
   }
 
   unresolvedTypeInfo(): ResolvedTypeInfo {
-    return {
-      valueType: 'unknown',
-      nullable: false,
-      functionType: null,
-      shape: null,
-      arrayElementType: null,
-      arrayElementDeclaredType: null,
-      mapKeyType: null,
-      mapValueType: null,
-      mapValueShape: null,
-      promiseValueType: null,
-      setElementType: null
-    }
+    return unresolvedTypeInfoInContext()
   }
 
   resolveExpressionArrayElementType(expression: AnyNode | null | undefined): ValueType | null {
@@ -12024,6 +11022,9 @@ class Checker {
     }
 
     this.scope.bindings.set(name, symbol)
+    if (symbol.kind === 'class') {
+      this.typeSymbols.set(name, symbol)
+    }
     deleteNullableNarrowingKey(this.narrowedNullableNames, name)
   }
 
