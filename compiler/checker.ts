@@ -123,6 +123,9 @@ import {
   createArrowFunctionTypeMetadata,
   createMapEntryShape,
   dynamicShapeField,
+  knownCheckedExpressionType,
+  objectValuesElementTypeFromShape,
+  resolveExpressionPromiseRejectionValueType,
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
 import {
@@ -5077,7 +5080,7 @@ class Checker {
         if (argType === 'array') {
           expression.arrayElementType = this.resolveExpressionArrayElementType(arg) ?? 'unknown'
         } else {
-          expression.arrayElementType = this.resolveObjectValuesElementType(arg)
+          expression.arrayElementType = objectValuesElementTypeFromShape(this.resolveExpressionShape(arg))
         }
       }
     }
@@ -5089,28 +5092,6 @@ class Checker {
     }
 
     return 'array'
-  }
-
-  resolveObjectValuesElementType(expression: AnyNode): ValueType {
-    const shape = this.resolveExpressionShape(expression)
-
-    if (shape === null || typeof shape === 'undefined' || shape.fields.length === 0) {
-      return 'unknown'
-    }
-
-    const types: ValueType[] = []
-
-    for (const field of shape.fields) {
-      let valueType: ValueType = 'unknown'
-
-      if (field.valueType !== null && typeof field.valueType !== 'undefined') {
-        valueType = field.valueType
-      }
-
-      types.push(valueType)
-    }
-
-    return commonValueType(types)
   }
 
   checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -6062,7 +6043,7 @@ class Checker {
           shape: null
         }
       ]
-      const rejectionValueType = this.resolveExpressionPromiseRejectionValueType(expression.callee.object)
+      const rejectionValueType = resolveExpressionPromiseRejectionValueType(expression.callee.object)
 
       if (rejectionValueType === 'error') {
         catchParamTypes[0] = 'object'
@@ -8273,28 +8254,10 @@ class Checker {
   }
 
   inferCheckedExpressionType(expression: AnyNode): ValueType {
-    if (
-      expression.valueType !== null &&
-      typeof expression.valueType !== 'undefined' &&
-      expression.valueType !== 'unknown'
-    ) {
-      return expression.valueType
-    }
+    const knownType = knownCheckedExpressionType(expression)
 
-    if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
-      return 'string'
-    }
-
-    if (expression.type === 'NumberLiteral') {
-      return 'number'
-    }
-
-    if (expression.type === 'BooleanLiteral') {
-      return 'boolean'
-    }
-
-    if (expression.type === 'NullLiteral') {
-      return 'null'
+    if (knownType !== null && typeof knownType !== 'undefined') {
+      return knownType
     }
 
     return this.checkExpression(expression)
@@ -10625,34 +10588,6 @@ class Checker {
       }
 
       return null
-    }
-
-    return null
-  }
-
-  resolveExpressionPromiseRejectionValueType(expression: AnyNode | null | undefined): ValueType | null {
-    if (expression === null || typeof expression === 'undefined') {
-      return null
-    }
-
-    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      if (
-        expression.valueType === 'promise' &&
-        expression.promiseRejectionValueType !== null &&
-        typeof expression.promiseRejectionValueType !== 'undefined'
-      ) {
-        return expression.promiseRejectionValueType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const objectRejectionValueType = this.resolveExpressionPromiseRejectionValueType(expression.object)
-
-      if (objectRejectionValueType !== null && typeof objectRejectionValueType !== 'undefined') {
-        return objectRejectionValueType
-      }
     }
 
     return null

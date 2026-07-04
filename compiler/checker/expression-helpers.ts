@@ -1,3 +1,4 @@
+import { commonValueType } from './assignability.ts'
 import { fsStatsObjectShape } from './builtins.ts'
 import { checkerNodeAt, nodeValueTypeOrUnknown } from './resolved-types.ts'
 import type { CheckerMapType, FunctionTypeMetadata, FunctionTypeParamMetadata } from './resolved-types.ts'
@@ -215,4 +216,80 @@ export function createArrowFunctionTypeMetadata(
     returnSetElementType: expression.returnSetElementType ?? null,
     returnShape
   }
+}
+
+export function knownCheckedExpressionType(expression: AnyNode): ValueType | null {
+  if (
+    expression.valueType !== null &&
+    typeof expression.valueType !== 'undefined' &&
+    expression.valueType !== 'unknown'
+  ) {
+    return expression.valueType
+  }
+
+  if (expression.type === 'StringLiteral' || expression.type === 'TemplateLiteral') {
+    return 'string'
+  }
+
+  if (expression.type === 'NumberLiteral') {
+    return 'number'
+  }
+
+  if (expression.type === 'BooleanLiteral') {
+    return 'boolean'
+  }
+
+  if (expression.type === 'NullLiteral') {
+    return 'null'
+  }
+
+  return null
+}
+
+export function objectValuesElementTypeFromShape(shape: ObjectShapeInfo | null | undefined): ValueType {
+  if (shape === null || typeof shape === 'undefined' || shape.fields.length === 0) {
+    return 'unknown'
+  }
+
+  const types: ValueType[] = []
+
+  for (const field of shape.fields) {
+    let valueType: ValueType = 'unknown'
+
+    if (field.valueType !== null && typeof field.valueType !== 'undefined') {
+      valueType = field.valueType
+    }
+
+    types.push(valueType)
+  }
+
+  return commonValueType(types)
+}
+
+export function resolveExpressionPromiseRejectionValueType(expression: AnyNode | null | undefined): ValueType | null {
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
+    if (
+      expression.valueType === 'promise' &&
+      expression.promiseRejectionValueType !== null &&
+      typeof expression.promiseRejectionValueType !== 'undefined'
+    ) {
+      return expression.promiseRejectionValueType
+    }
+
+    return null
+  }
+
+  if (expression.type === 'MemberExpression') {
+    const objectRejectionValueType = resolveExpressionPromiseRejectionValueType(expression.object)
+
+    if (objectRejectionValueType !== null && typeof objectRejectionValueType !== 'undefined') {
+      return objectRejectionValueType
+    }
+  }
+
+  return null
 }
