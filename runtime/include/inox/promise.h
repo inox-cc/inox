@@ -296,6 +296,28 @@ AwaitResult<T> await(const Promise& promise) {
   return await<T>(loop(), promise.raw());
 }
 
+template <typename T>
+T await_value(inox_loop* loop, inox_promise* promise) {
+  auto result = await<T>(loop, promise);
+
+  return std::move(result.value());
+}
+
+template <typename T>
+T await_value(inox_loop* loop, const Promise& promise) {
+  return await_value<T>(loop, promise.raw());
+}
+
+template <typename T>
+T await_value(inox_promise* promise) {
+  return await_value<T>(loop(), promise);
+}
+
+template <typename T>
+T await_value(const Promise& promise) {
+  return await_value<T>(loop(), promise.raw());
+}
+
 inline int return_code(int success_code) {
   return !inox_promise_has_unhandled_rejection() ? success_code : 1;
 }

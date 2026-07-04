@@ -44,31 +44,31 @@ await checkFetch()
   const checkFetch = functionSource(source, 'static void checkFetch(void) {')
 
   assert.doesNotMatch(source, /^static void checkFetch\(void\);$/m)
-  assert.match(checkFetch, /static void checkFetch\(void\) \{\n  \{ \/\/ try_0\n    auto inox_res_0/)
+  assert.match(checkFetch, /static void checkFetch\(void\) \{\n  \{ \/\/ try_0\n    auto res = inox::await_value/)
   assert.doesNotMatch(checkFetch, /static void checkFetch\(void\) \{\n\n  \{/)
   assert.doesNotMatch(checkFetch, /\n  \{\n    \{/)
   assert.match(
     checkFetch,
-    /auto inox_res_0 = inox::await<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/"\)\);/
+    /auto res = inox::await_value<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/"\)\);/
   )
   assert.match(checkFetch, /console\.log\("Status %\.17g", res\.status\(\)\);/)
   assert.match(
     checkFetch,
-    /auto inox_res_1 = inox::await<inox::String>\(res\.text\(\)\);/
+    /auto txt = inox::await_value<inox::String>\(res\.text\(\)\);/
   )
   assert.match(
     checkFetch,
-    /auto inox_res_0 = inox::await<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/"\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto res = inox_res_0\.value\(\);\n\n\s+console\.log\("Status %\.17g", res\.status\(\)\);/
+    /auto res = inox::await_value<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/"\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\n\s+console\.log\("Status %\.17g", res\.status\(\)\);/
   )
   assert.match(
     checkFetch,
-    /auto inox_res_1 = inox::await<inox::String>\(res\.text\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\s+auto txt = inox_res_1\.value\(\);\n\n\s+console\.log\("Text %\.\*s", txt\);/
+    /auto txt = inox::await_value<inox::String>\(res\.text\(\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\n\s+console\.log\("Text %\.\*s", txt\);/
   )
   assert.match(checkFetch, /auto error = inox::take_exception\(\);\n\s+console\.log\("#error:", error\);/)
   assert.doesNotMatch(checkFetch, /auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(checkFetch, /auto \w+ = inox::take_exception\(\);\n\s+if \(\(\w+\.tag/)
-  assert.match(checkFetch, /auto res = inox_res_0\.value\(\);/)
-  assert.match(checkFetch, /auto txt = inox_res_1\.value\(\);/)
+  assert.doesNotMatch(checkFetch, /auto res = inox_res_\d+\.value\(\);/)
+  assert.doesNotMatch(checkFetch, /auto txt = inox_res_\d+\.value\(\);/)
   assert.match(checkFetch, /console\.log\("Text %\.\*s", txt\);/)
   assert.match(
     checkFetch,
@@ -84,6 +84,8 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /inox::FetchResponse res =/)
   assert.doesNotMatch(checkFetch, /inox::String txt =/)
   assert.doesNotMatch(checkFetch, /inox_await_result_\d+/)
+  assert.doesNotMatch(checkFetch, /auto inox_res_\d+ = inox::await</)
+  assert.doesNotMatch(checkFetch, /inox_res_\d+\.value\(\)/)
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.status\(\)/)
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.valid\(\)/)
   assert.doesNotMatch(checkFetch, /inox_res_\d+\.ok\(\)/)

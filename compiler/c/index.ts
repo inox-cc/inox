@@ -565,6 +565,7 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitArrayFilterVariableDeclaration,
   emitArrayMapVariableDeclaration,
   emitArraySortVariableDeclaration,
+  emitAwaitValueVariableDeclaration,
   emitBoxedObjectVariableDeclaration,
   emitCAwaitValueExpression,
   emitClassObjectVariableDeclaration,
@@ -7887,6 +7888,80 @@ function emitPreparedAwaitPromiseExpression(expression: AnyNode, context: CFunct
   return null
 }
 
+function emitPreparedAwaitValuePromiseExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression | null {
+  const fetchPromise = emitPreparedFetchCallExpression(expression.argument, context, fetchLoweringDependencies, {
+    cppExpression: true
+  })
+
+  if (fetchPromise !== null && typeof fetchPromise !== 'undefined') {
+    return preparedExpressionOrEmpty(fetchPromise)
+  }
+
+  const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
+
+  if (promise !== null && typeof promise !== 'undefined') {
+    return preparedExpressionOrEmpty(promise)
+  }
+
+  return null
+}
+
+function emitAwaitValueVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
+  const expression = statement.init
+
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'AwaitExpression' ||
+    !shouldAwaitReadRejectedPromise(context)
+  ) {
+    return null
+  }
+
+  const preparedPromise = emitPreparedAwaitValuePromiseExpression(expression, context)
+
+  if (preparedPromise === null || typeof preparedPromise === 'undefined') {
+    return null
+  }
+
+  const valueType = firstKnownValueTypeOrUnknown(
+    expression.valueType,
+    preparedPromise.valueType,
+    resolvePromiseExpressionValueType(expression.argument, context)
+  )
+
+  if (valueType === 'number' || valueType === 'boolean') {
+    return null
+  }
+
+  registerEventLoop(context)
+
+  const name = emitCIdentifier(statement.name)
+  const valueTag = cRuntimeValueTag(valueType)
+  const valueCheckNeeded = emitRuntimeValueCheck('inox_await_value', valueTag, context) !== ''
+  const valueInfo = resolveAwaitResultCppValueInfo(expression, name, valueType, valueTag, valueCheckNeeded, context)
+  const lines: string[] = []
+
+  pushAll(lines, preparedPromise.lines)
+  lines.push(`auto ${name} = inox::await_value<${valueInfo.cppType}>(${preparedPromise.expression});`)
+  pushAll(lines, emitThrownCheckLines(context))
+
+  if (valueInfo.valueCheck !== '') {
+    lines.push(valueInfo.valueCheck)
+  }
+
+  lines.push('')
+
+  if (valueInfo.cppType === 'inox::String') {
+    context.variables.set(statement.name, 'string')
+    context.cppStringValues.add(statement.name)
+  } else {
+    registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
+  }
+
+  return lines
+}
+
 function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const asyncCall = emitCAsyncFunctionAwaitExpression(expression, context)
 
@@ -8005,14 +8080,21 @@ function emitPreparedAwaitResultExpression(
   rejectionValueType: string,
   context: CFunctionContext
 ): PreparedExpression {
-  const result = `inox_res_${context.nextAwaitResultId}`
+  const result = `inox_await_value_${context.nextAwaitResultId}`
   context.nextAwaitResultId = context.nextAwaitResultId + 1
-  const valueExpression = `${result}.value()`
-  const valueInfo = resolveAwaitResultCppValueInfo(expression, result, valueType, valueTag, valueCheckNeeded, context)
+  const valueExpression = result
+  const valueInfo = resolveAwaitResultCppValueInfo(
+    expression,
+    valueExpression,
+    valueType,
+    valueTag,
+    valueCheckNeeded,
+    context
+  )
   const lines: string[] = []
 
   pushAll(lines, preparedPromise.lines)
-  lines.push(`auto ${result} = inox::await<${valueInfo.cppType}>(${preparedPromise.expression});`)
+  lines.push(`auto ${result} = inox::await_value<${valueInfo.cppType}>(${preparedPromise.expression});`)
   pushAll(lines, emitAwaitResultRejectedPromiseLines(result, rejectionValueType, context))
 
   if (valueInfo.valueCheck !== '') {
@@ -8042,14 +8124,12 @@ type AwaitResultCppValueInfo = {
 
 function resolveAwaitResultCppValueInfo(
   expression: AnyNode,
-  result: string,
+  valueExpression: string,
   valueType: string,
   valueTag: string | null,
   valueCheckNeeded: boolean,
   context: CFunctionContext
 ): AwaitResultCppValueInfo {
-  const valueExpression = `${result}.value()`
-
   if (isFetchResponseAwaitExpression(expression)) {
     return {
       cppType: 'inox::FetchResponse',

@@ -297,6 +297,7 @@ export type StatementLoweringDependencies = {
     sorted: PreparedArrayExpression,
     context: CFunctionContext
   ): string[]
+  emitAwaitValueVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
   emitBoxedObjectVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitCAwaitValueExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitCExpression(expression: StatementNode, context: CFunctionContext): string
@@ -1730,7 +1731,8 @@ function emitObjectRuntimeCallValueVariableDeclaration(
   const lines: string[] = []
   pushAllLines(lines, value.lines)
   lines.push(`auto ${emitCIdentifier(statement.name)} = ${value.expression};`)
-  lines.push(`if (inox::thrown()) ${statementDeps(context).emitFailureStatement(context)}`)
+  const failureStatement = statementDeps(context).emitFailureStatement(context)
+  lines.push(`if (inox::thrown()) ${failureStatement}`)
 
   return lines
 }
@@ -4299,6 +4301,14 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
 
     return emitRuntimeValueVariableDeclaration(statement, statement.init, context, 'array')
+  }
+
+  if (statement.init.type === 'AwaitExpression') {
+    const awaitValueDeclaration = deps.emitAwaitValueVariableDeclaration(statement, context)
+
+    if (awaitValueDeclaration !== null && typeof awaitValueDeclaration !== 'undefined') {
+      return awaitValueDeclaration
+    }
   }
 
   if (statement.init.type === 'AwaitExpression' && deps.inferExpressionType(statement.init, context) === 'string') {

@@ -38,7 +38,7 @@ try {
 
   assert.match(
     source,
-    /auto inox_res_\d+ = inox::await<inox::Value>\(inox_promise_\d+\);/
+    /auto inox_await_value_\d+ = inox::await_value<inox::Value>\(inox_promise_\d+\);/
   )
   assert.match(
     source,
@@ -47,6 +47,8 @@ try {
   assert.match(source, /auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
+  assert.doesNotMatch(source, /auto inox_res_\d+ = inox::await</)
+  assert.doesNotMatch(source, /inox_res_\d+\.value\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.ok\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.error\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.error_value\(\)/)

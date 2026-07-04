@@ -63,7 +63,7 @@ try {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_res_\d+ = inox::await<inox::Value>\(inox_promise_\d+\);/)
+  assert.match(source, /auto value = inox::await_value<inox::Value>\(inox_promise_\d+\);/)
   assert.match(
     source,
     /if \(inox::thrown\(\)\) goto catch_\d+;/
@@ -71,6 +71,8 @@ try {
   assert.match(source, /auto inox_error = inox::take_exception\(\);/)
   assert.doesNotMatch(source, /inox_error = inox_undefined_value\(\);\n\s+inox_error = inox_res_\d+\.error_value\(\);/)
   assert.doesNotMatch(source, /inox_await_result_\d+/)
+  assert.doesNotMatch(source, /auto inox_res_\d+ = inox::await</)
+  assert.doesNotMatch(source, /inox_res_\d+\.value\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.ok\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.error\(\)/)
   assert.doesNotMatch(source, /inox_res_\d+\.error_value\(\)/)
