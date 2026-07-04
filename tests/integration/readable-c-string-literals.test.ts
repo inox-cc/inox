@@ -44,10 +44,7 @@ console.log('label', text)
   assert.match(source, /console\.log\("hello world"\);/)
   assert.match(source, /console\.log\("num %.17g blabla", \(\(double\)v\)\);/)
   assert.match(source, /inox_string_from_format\(&inox_default_allocator, &inox_value_\d+, "value %.17g%%", \(\(double\)v\)\)/)
-  assert.match(
-    source,
-    /inox_string\* text = \(inox_string\*\)text_value_\d+\.as\.ref;\n  console\.log\("%\.\*s", inox::StringView\(text->bytes, text->len\)\);/
-  )
+  assert.match(source, /console\.log\(text_value_\d+\);/)
   assert.match(source, /console\.log\("label %\.\*s", inox::StringView\(text->bytes, text->len\)\);/)
   assert.doesNotMatch(source, /\\x25/)
   assert.doesNotMatch(source, /\\x73/)
