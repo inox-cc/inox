@@ -35,9 +35,14 @@ for (const a of foo.v) {
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /auto inox_object_value_\d+ = inox::object_value_at\(a, 0\);/)
-  assert.match(source, /auto inox_object_entry_\d+ = inox::object_entry_at\(a, 0\);/)
-  assert.match(source, /if \(inox::thrown\(\)\) return;/)
+  assert.match(
+    source,
+    /auto inox_object_value_\d+ = inox::object_value_at\(a, 0\);\n\s+if \(inox::thrown\(\)\) return;\n\s+console\.log\(inox_object_value_\d+\);/
+  )
+  assert.match(
+    source,
+    /auto inox_object_entry_\d+ = inox::object_entry_at\(a, 0\);\n\s+if \(inox::thrown\(\)\) return;\n\s+if \(inox_object_entry_\d+\.tag != INOX_TAG_UNDEFINED/
+  )
   assert.match(source, /inox_array\* inox_for_array_\d+ = Array\.raw\(inox_value_\d+\);/)
   assert.match(source, /if \(inox_for_array_\d+ == nullptr\) \{\n\s+Array\.throwNotIterable\(\);\n\s+return;\n\s+\}/)
   assert.match(
