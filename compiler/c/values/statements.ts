@@ -2327,6 +2327,10 @@ function emitForOfElementDeclaration(
   }
 }
 
+function shouldEmitRuntimeArrayValueBinding(elementType: string): boolean {
+  return elementType === 'unknown' || elementType === 'object'
+}
+
 function emitCollectionVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] {
   const deps = statementDeps(context)
   const collectionConstructor = deps.collectionConstructorName(statement.init)
@@ -3139,7 +3143,11 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
-    const element = emitForOfElementDeclaration(statement.name, value, elementType, context)
+    const useRuntimeArrayValueBinding =
+      runtimeArray !== null && typeof runtimeArray !== 'undefined' && shouldEmitRuntimeArrayValueBinding(elementType)
+    const element = useRuntimeArrayValueBinding
+      ? null
+      : emitForOfElementDeclaration(statement.name, value, elementType, context)
 
     const getElementStatus = emitStatusCheck(`inox_array_get(${arrayName}, ${index}, &${value})`, context)
     const lines: string[] = []
@@ -3165,11 +3173,15 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
     const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
     let loopBody = [`inox::Value ${value};`, `${getElementStatus}`]
-    if (runtimeArray !== null && typeof runtimeArray !== 'undefined') {
+    if (useRuntimeArrayValueBinding) {
+      loopBody = [`inox::Value ${emitCIdentifier(statement.name)} = ${arrayName}->items[${index}];`]
+    } else if (runtimeArray !== null && typeof runtimeArray !== 'undefined') {
       loopBody = [`inox::Value ${value} = ${arrayName}->items[${index}];`]
     }
-    pushAllLines(loopBody, element.lines)
-    loopBody.push(element.expression)
+    if (element !== null) {
+      pushAllLines(loopBody, element.lines)
+      loopBody.push(element.expression)
+    }
     pushAllLines(loopBody, body)
     pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
     if (hasContinueLabel) {
