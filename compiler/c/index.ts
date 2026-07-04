@@ -6185,6 +6185,12 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
     return [`console.${method}();`]
   }
 
+  const directSingleRuntimeValue = emitDirectSingleRuntimeValueConsoleLogStatement(args, method, context)
+
+  if (directSingleRuntimeValue !== null && typeof directSingleRuntimeValue !== 'undefined') {
+    return directSingleRuntimeValue
+  }
+
   const directRuntimeValue = emitDirectRuntimeValueConsoleLogStatement(args, method, context)
 
   if (directRuntimeValue !== null && typeof directRuntimeValue !== 'undefined') {
@@ -6206,6 +6212,24 @@ function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunc
   const format = joinStrings(parts, ' ')
 
   lines.push(emitConsoleMethodCallStatement(method, format, values))
+
+  return lines
+}
+
+function emitDirectSingleRuntimeValueConsoleLogStatement(
+  args: AnyNode[],
+  method: string,
+  context: CFunctionContext
+): string[] | null {
+  if (args.length !== 1 || !isRuntimeValueLogExpression(args[0], context)) {
+    return null
+  }
+
+  const value = emitCValueExpression(args[0], context)
+  const lines: string[] = []
+
+  pushAll(lines, value.lines)
+  lines.push(`console.${method}(${value.expression});`)
 
   return lines
 }
