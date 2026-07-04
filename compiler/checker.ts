@@ -129,6 +129,11 @@ import {
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
 import {
+  resolveExpressionArrayElementDeclaredType as resolveExpressionArrayElementDeclaredTypeInContext,
+  resolveExpressionArrayElementFunctionType as resolveExpressionArrayElementFunctionTypeInContext,
+  resolveExpressionArrayElementType as resolveExpressionArrayElementTypeInContext
+} from './checker/expression-metadata.ts'
+import {
   acceptsArgumentCount,
   argumentCountMessage,
   argumentParamValueType,
@@ -236,6 +241,7 @@ import type {
   RuntimeCallInfo,
   TypeAliasDeclarationNode
 } from './checker/resolved-types.ts'
+import type { ExpressionMetadataResolverContext } from './checker/expression-metadata.ts'
 
 class CheckerScope {
   parent: CheckerScope | null
@@ -270,6 +276,17 @@ class CheckerScope {
     }
 
     return null
+  }
+
+  collectBindings(target: Map<string, SymbolInfo>[]): void {
+    target.push(this.bindings)
+
+    let current = this.parent
+
+    while (current !== null && typeof current !== 'undefined') {
+      target.push(current.bindings)
+      current = current.parent
+    }
   }
 }
 
@@ -9959,6 +9976,16 @@ class Checker {
     }
   }
 
+  expressionMetadataContext(): ExpressionMetadataResolverContext {
+    const scopeBindings: Map<string, SymbolInfo>[] = []
+    this.scope.collectBindings(scopeBindings)
+
+    return {
+      declaredTypes: this.declaredTypeContext(),
+      scopeBindings
+    }
+  }
+
   declareTypeAlias(item: TypeAliasDeclarationNode): void {
     declareTypeAliasInContext(this.declaredTypeContext(), item)
   }
@@ -10023,279 +10050,15 @@ class Checker {
   }
 
   resolveExpressionArrayElementType(expression: AnyNode | null | undefined): ValueType | null {
-    if (expression === null || typeof expression === 'undefined') {
-      return null
-    }
-
-    if (expression.type === 'ArrayLiteral') {
-      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-        return expression.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'CallExpression') {
-      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-        return expression.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'AwaitExpression') {
-      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-        return expression.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'Reference' && expression.path.length === 1) {
-      const name = firstPathSegment(expression.path)
-      const symbol = this.scope.resolve(name)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.arrayElementType !== null &&
-        typeof symbol.arrayElementType !== 'undefined'
-      ) {
-        return symbol.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.property)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.arrayElementType !== null &&
-        typeof field.arrayElementType !== 'undefined'
-      ) {
-        return field.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.index.value)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.arrayElementType !== null &&
-        typeof field.arrayElementType !== 'undefined'
-      ) {
-        return field.arrayElementType
-      }
-
-      return null
-    }
-
-    return null
+    return resolveExpressionArrayElementTypeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveExpressionArrayElementDeclaredType(expression: AnyNode | null | undefined): string | null {
-    if (expression === null || typeof expression === 'undefined') {
-      return null
-    }
-
-    if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
-      if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
-        return expression.arrayElementDeclaredType
-      }
-
-      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-        return expression.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'AwaitExpression') {
-      if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
-        return expression.arrayElementDeclaredType
-      }
-
-      if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-        return expression.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'Reference' && expression.path.length === 1) {
-      const name = firstPathSegment(expression.path)
-      const symbol = this.scope.resolve(name)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.arrayElementDeclaredType !== null &&
-        typeof symbol.arrayElementDeclaredType !== 'undefined'
-      ) {
-        return symbol.arrayElementDeclaredType
-      }
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.arrayElementType !== null &&
-        typeof symbol.arrayElementType !== 'undefined'
-      ) {
-        return symbol.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.property)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.arrayElementDeclaredType !== null &&
-        typeof field.arrayElementDeclaredType !== 'undefined'
-      ) {
-        return field.arrayElementDeclaredType
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.arrayElementType !== null &&
-        typeof field.arrayElementType !== 'undefined'
-      ) {
-        return field.arrayElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.index.value)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.arrayElementDeclaredType !== null &&
-        typeof field.arrayElementDeclaredType !== 'undefined'
-      ) {
-        return field.arrayElementDeclaredType
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.arrayElementType !== null &&
-        typeof field.arrayElementType !== 'undefined'
-      ) {
-        return field.arrayElementType
-      }
-
-      return null
-    }
-
-    return null
+    return resolveExpressionArrayElementDeclaredTypeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveExpressionArrayElementFunctionType(expression: AnyNode | null | undefined): FunctionTypeMetadata | null {
-    if (expression === null || typeof expression === 'undefined') {
-      return null
-    }
-
-    if (
-      expression.type === 'ArrayLiteral' ||
-      expression.type === 'CallExpression' ||
-      expression.type === 'AwaitExpression'
-    ) {
-      if (
-        expression.arrayElementFunctionType !== null &&
-        typeof expression.arrayElementFunctionType !== 'undefined'
-      ) {
-        return expression.arrayElementFunctionType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'Reference' && expression.path.length === 1) {
-      const name = firstPathSegment(expression.path)
-      const symbol = this.scope.resolve(name)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.arrayElementFunctionType !== null &&
-        typeof symbol.arrayElementFunctionType !== 'undefined'
-      ) {
-        return symbol.arrayElementFunctionType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.property)
-      }
-
-      if (field !== null && typeof field !== 'undefined') {
-        const fieldType = this.resolveFieldDeclaredType(field)
-
-        return resolvedFunctionTypeMetadata(field.arrayElementFunctionType, fieldType.arrayElementFunctionType)
-      }
-
-      return null
-    }
-
-    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.index.value)
-      }
-
-      if (field !== null && typeof field !== 'undefined') {
-        const fieldType = this.resolveFieldDeclaredType(field)
-
-        return resolvedFunctionTypeMetadata(field.arrayElementFunctionType, fieldType.arrayElementFunctionType)
-      }
-
-      return null
-    }
-
-    return null
+    return resolveExpressionArrayElementFunctionTypeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveExpressionMapType(expression: AnyNode | null | undefined): CheckerMapType | null {
