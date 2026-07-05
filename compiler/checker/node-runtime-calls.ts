@@ -144,9 +144,9 @@ export function checkProcessCall(
       )
     }
 
-    const firstArg = argInfos[0]
+    if (argInfos.length > 0) {
+      const firstArg = argInfos[0]
 
-    if (firstArg !== null && typeof firstArg !== 'undefined') {
       checkAssignableType(context, firstArg.valueType, 'array', firstArg.loc, false, false)
     }
 
@@ -164,9 +164,9 @@ export function checkProcessCall(
     )
   }
 
-  const firstArg = argInfos[0]
+  if (argInfos.length > 0) {
+    const firstArg = argInfos[0]
 
-  if (firstArg !== null && typeof firstArg !== 'undefined') {
     checkAssignableType(context, firstArg.valueType, 'number', firstArg.loc, false, false)
   }
 
@@ -214,9 +214,9 @@ export function checkPathCall(
   if (method === 'format') {
     checkExactArgCount(context, expression, call.label, 1)
 
-    const firstArg = argInfos[0]
+    if (argInfos.length > 0) {
+      const firstArg = argInfos[0]
 
-    if (firstArg !== null && typeof firstArg !== 'undefined') {
       checkAssignableType(context, firstArg.valueType, 'object', firstArg.loc, false, firstArg.nullable)
     }
 
@@ -275,9 +275,9 @@ export function checkUrlCall(
 
   checkExactArgCount(context, expression, call.label, 1)
 
-  const firstArg = argInfos[0]
+  if (argInfos.length > 0) {
+    const firstArg = argInfos[0]
 
-  if (firstArg !== null && typeof firstArg !== 'undefined') {
     if (call.method === 'fileURLToPath') {
       let isUrlObject = false
 

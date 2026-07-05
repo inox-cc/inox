@@ -265,7 +265,7 @@ function processRuntimeMethodName(
     path !== null &&
     typeof path !== 'undefined' &&
     path.length === 2 &&
-    isProcessGlobalRoot(path, rootSymbol)
+    (isProcessModuleObjectImportSymbol(rootSymbol) || isProcessGlobalRoot(path, rootSymbol))
   ) {
     return knownProcessRuntimeMethodName(path[1])
   }

@@ -193,9 +193,9 @@ export function checkObjectStaticCall(
     )
   }
 
-  const firstArg = argInfos[0]
+  if (argInfos.length > 0) {
+    const firstArg = argInfos[0]
 
-  if (firstArg !== null && typeof firstArg !== 'undefined') {
     if (firstArg.valueType !== 'unknown' && firstArg.valueType !== 'object' && firstArg.valueType !== 'array') {
       report(context, 'INOX_TYPE_MISMATCH', `function Object.${method} expects an object or array argument`, firstArg.loc)
     }

@@ -61,7 +61,6 @@ import {
 } from './checker/assignability.ts'
 import {
   builtinGlobalSymbol,
-  childProcessSpawnSyncResultShape,
   errorObjectShape,
   fetchAbortControllerObjectShape,
   fetchResponseObjectShape,
@@ -83,6 +82,18 @@ import {
   isSupportedFetchRedirectLiteral,
   jsonRuntimeMethodName
 } from '../stdlib/global/compiler/checker.ts'
+import {
+  checkChildProcessCall as checkChildProcessCallInContext
+} from './checker/child-process-calls.ts'
+import type {
+  CheckedChildProcessArgsInfo,
+  CheckedChildProcessCallInfo,
+  CheckedChildProcessEnvPropertyInfo,
+  CheckedChildProcessOptionInfo,
+  CheckedChildProcessOptionsInfo,
+  CheckedChildProcessValueInfo,
+  ChildProcessCallCheckerContext
+} from './checker/child-process-calls.ts'
 import { applyCallableSymbolCall as applyCallableSymbolCallInContext } from './checker/callable-symbols.ts'
 import type { CallableSymbolCheckerContext } from './checker/callable-symbols.ts'
 import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
@@ -146,6 +157,12 @@ import {
   checkUrlSearchParamsMethodCall as checkUrlSearchParamsMethodCallInContext
 } from './checker/node-runtime-calls.ts'
 import type { NodeRuntimeCallCheckerContext } from './checker/node-runtime-calls.ts'
+import {
+  checkDateConstructorExpression as checkDateConstructorExpressionInContext,
+  checkDateInstanceMethodCall as checkDateInstanceMethodCallInContext,
+  checkTimeCall as checkTimeCallInContext
+} from './checker/time-calls.ts'
+import type { TimeCallCheckerContext } from './checker/time-calls.ts'
 import {
   findShapeField as findShapeFieldInContext,
   isErrorObjectExpression as isErrorObjectExpressionInContext,
@@ -3850,114 +3867,35 @@ class Checker {
       return null
     }
 
-    if (call.unsupported) {
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
+    return checkChildProcessCallInContext(
+      this.childProcessCallContext(),
+      expression,
+      call,
+      this.checkedChildProcessCallInfo(expression, call.method, call.unsupported === true)
+    )
+  }
 
-        this.checkExpression(arg)
+  checkedChildProcessCallInfo(
+    expression: AnyNode,
+    method: string,
+    unsupported: boolean
+  ): CheckedChildProcessCallInfo {
+    if (unsupported) {
+      return {
+        args: null,
+        firstArg: null,
+        options: null,
+        topLevelArgs: this.checkedChildProcessTopLevelArgs(expression)
       }
-
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:child_process ${call.method} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
     }
 
-    if (call.method === 'execSync') {
-      if (expression.args.length !== 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
+    if (method === 'execSync') {
+      return {
+        args: null,
+        firstArg: this.checkedChildProcessArg(expression.args[0]),
+        options: this.checkedChildProcessOptionsInfo(expression.args[1]),
+        topLevelArgs: []
       }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          this.checkExpression(expression.args[0]),
-          'string',
-          expression.args[0].loc,
-          false,
-          false
-        )
-      }
-
-      this.checkChildProcessSyncOptions(expression.args[1], expression.loc, true)
-      expression.childProcessRuntimeMethod = call.method
-      expression.valueType = 'string'
-
-      return 'string'
-    }
-
-    if (call.method === 'execFileSync') {
-      if (expression.args.length < 2 || expression.args.length > 3) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 2 or 3 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          this.checkExpression(expression.args[0]),
-          'string',
-          expression.args[0].loc,
-          false,
-          false
-        )
-      }
-
-      const second = expression.args[1]
-      let args: AnyNode | null = null
-      let options: AnyNode | null = null
-
-      if (second !== null && typeof second !== 'undefined' && second.type === 'ObjectLiteral') {
-        options = second
-      } else {
-        if (second !== null && typeof second !== 'undefined') {
-          args = second
-        }
-
-        if (expression.args[2] !== null && typeof expression.args[2] !== 'undefined') {
-          options = expression.args[2]
-        }
-      }
-
-      if (args !== null && typeof args !== 'undefined' && args.type !== 'ArrayLiteral') {
-        this.report(
-          'INOX_NOT_IMPLEMENTED',
-          'node:child_process execFileSync currently expects a string[] literal args argument',
-          args.loc
-        )
-      } else if (args !== null && typeof args !== 'undefined') {
-        for (let index = 0; index < args.elements.length; index = index + 1) {
-          const element = checkerNodeAt(args.elements, index)
-
-          this.checkAssignableType(this.checkExpression(element), 'string', element.loc, false, false)
-        }
-      }
-
-      this.checkChildProcessSyncOptions(options, expression.loc, true)
-      expression.childProcessRuntimeMethod = call.method
-      expression.valueType = 'string'
-
-      return 'string'
-    }
-
-    if (expression.args.length < 1 || expression.args.length > 3) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${call.label} expects 1 to 3 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(this.checkExpression(expression.args[0]), 'string', expression.args[0].loc, false, false)
     }
 
     const second = expression.args[1]
@@ -3976,137 +3914,120 @@ class Checker {
       }
     }
 
-    if (args !== null && typeof args !== 'undefined' && args.type !== 'ArrayLiteral') {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        'node:child_process spawnSync currently expects a string[] literal args argument',
-        args.loc
-      )
-    } else if (args !== null && typeof args !== 'undefined' && args.type === 'ArrayLiteral') {
-      for (let index = 0; index < args.elements.length; index = index + 1) {
-        const element = checkerNodeAt(args.elements, index)
-
-        this.checkAssignableType(this.checkExpression(element), 'string', element.loc, false, false)
-      }
+    return {
+      args: this.checkedChildProcessArgsInfo(args),
+      firstArg: this.checkedChildProcessArg(expression.args[0]),
+      options: this.checkedChildProcessOptionsInfo(options),
+      topLevelArgs: []
     }
-
-    this.checkChildProcessSyncOptions(options, expression.loc, true)
-    expression.childProcessRuntimeMethod = call.method
-    expression.valueType = 'object'
-    expression.shape = childProcessSpawnSyncResultShape
-
-    return 'object'
   }
 
-  checkChildProcessSyncOptions(
-    options: AnyNode | null | undefined,
-    loc: SourceLocation,
-    requireEncoding: boolean
-  ): void {
-    if (options === null || typeof options === 'undefined' || options.type !== 'ObjectLiteral') {
-      let reportLoc = loc
+  checkedChildProcessTopLevelArgs(expression: AnyNode): CheckedChildProcessValueInfo[] {
+    const result: CheckedChildProcessValueInfo[] = []
 
-      if (options !== null && typeof options !== 'undefined') {
-        reportLoc = options.loc
-      }
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
 
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        'node:child_process sync helpers currently require { encoding: "utf8" }',
-        reportLoc
-      )
-      return
+      result.push(this.checkedChildProcessValueInfo(arg))
     }
 
-    let encoding: AnyNode | null = null
+    return result
+  }
 
-    for (const property of options.properties) {
-      if (property.key === 'encoding') {
-        encoding = property.value
-        break
+  checkedChildProcessArg(arg: AnyNode | null | undefined): CheckedChildProcessValueInfo | null {
+    if (arg === null || typeof arg === 'undefined') {
+      return null
+    }
+
+    return this.checkedChildProcessValueInfo(arg)
+  }
+
+  checkedChildProcessValueInfo(node: AnyNode): CheckedChildProcessValueInfo {
+    return {
+      loc: node.loc,
+      node,
+      valueType: this.checkExpression(node)
+    }
+  }
+
+  checkedChildProcessArgsInfo(node: AnyNode | null | undefined): CheckedChildProcessArgsInfo | null {
+    if (node === null || typeof node === 'undefined') {
+      return null
+    }
+
+    const elements: CheckedChildProcessValueInfo[] = []
+
+    if (node.type === 'ArrayLiteral') {
+      for (let index = 0; index < node.elements.length; index = index + 1) {
+        const element = checkerNodeAt(node.elements, index)
+
+        elements.push(this.checkedChildProcessValueInfo(element))
       }
     }
 
-    if (
-      requireEncoding &&
-      (encoding === null ||
-        typeof encoding === 'undefined' ||
-        encoding.type !== 'StringLiteral' ||
-        encoding.value !== 'utf8')
-    ) {
-      let reportLoc = options.loc
+    return {
+      elements,
+      node
+    }
+  }
 
-      if (encoding !== null && typeof encoding !== 'undefined') {
-        reportLoc = encoding.loc
+  checkedChildProcessOptionsInfo(node: AnyNode | null | undefined): CheckedChildProcessOptionsInfo | null {
+    if (node === null || typeof node === 'undefined') {
+      return {
+        node: null,
+        properties: []
       }
-
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        'node:child_process sync helpers currently support only { encoding: "utf8" }',
-        reportLoc
-      )
     }
 
-    for (const property of options.properties) {
-      if (property.key === 'encoding') {
-        continue
+    if (node.type !== 'ObjectLiteral') {
+      return {
+        node,
+        properties: []
       }
+    }
 
-      if (property.key === 'cwd') {
-        this.checkAssignableType(this.checkExpression(property.value), 'string', property.value.loc, false, false)
-        continue
+    const properties: CheckedChildProcessOptionInfo[] = []
+    const optionProperties: CheckerObjectPropertyNode[] = node.properties
+
+    for (const property of optionProperties) {
+      properties.push(this.checkedChildProcessOptionInfo(property.key, property.value, property.loc))
+    }
+
+    return {
+      node,
+      properties
+    }
+  }
+
+  checkedChildProcessOptionInfo(
+    key: string,
+    value: AnyNode,
+    loc: SourceLocation
+  ): CheckedChildProcessOptionInfo {
+    const envProperties: CheckedChildProcessEnvPropertyInfo[] = []
+    let valueType: ValueType = 'unknown'
+
+    if (key === 'env' && value.type === 'ObjectLiteral') {
+      const properties: CheckerObjectPropertyNode[] = value.properties
+
+      for (const property of properties) {
+        envProperties.push({
+          key: property.key,
+          loc: property.loc,
+          value: property.value,
+          valueType: this.checkExpression(property.value)
+        })
       }
+    } else if (key !== 'encoding' && key !== 'stdio') {
+      valueType = this.checkExpression(value)
+    }
 
-      if (property.key === 'stdio') {
-        if (
-          property.value.type !== 'StringLiteral' ||
-          (property.value.value !== 'pipe' && property.value.value !== 'ignore')
-        ) {
-          this.report(
-            'INOX_NOT_IMPLEMENTED',
-            "node:child_process sync helpers currently support stdio: 'pipe' or 'ignore'",
-            property.value.loc
-          )
-        }
-        continue
-      }
-
-      if (property.key === 'timeout') {
-        this.checkAssignableType(this.checkExpression(property.value), 'number', property.value.loc, false, false)
-        continue
-      }
-
-      if (property.key === 'env') {
-        if (property.value.type !== 'ObjectLiteral') {
-          this.checkExpression(property.value)
-          this.report(
-            'INOX_NOT_IMPLEMENTED',
-            'node:child_process sync helpers currently expect env to be an object literal',
-            property.value.loc
-          )
-          continue
-        }
-
-        const envProperties: CheckerObjectPropertyNode[] = property.value.properties
-
-        for (const envProperty of envProperties) {
-          this.checkAssignableType(
-            this.checkExpression(envProperty.value),
-            'string',
-            envProperty.value.loc,
-            false,
-            false
-          )
-        }
-        continue
-      }
-
-      this.checkExpression(property.value)
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:child_process sync option ${property.key} is not implemented by the current C backend`,
-        property.loc
-      )
+    return {
+      envProperties,
+      key,
+      loc,
+      value,
+      valueType
     }
   }
 
@@ -4435,65 +4356,7 @@ class Checker {
       return null
     }
 
-    const method = call.method
-    expression.valueType = 'number'
-
-    if (method === 'dateParse') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.root}.${call.member} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          this.checkExpression(expression.args[0]),
-          'string',
-          expression.args[0].loc,
-          false,
-          this.expressionCanBeNull(expression.args[0])
-        )
-      }
-
-      expression.timeRuntimeMethod = method
-      return 'number'
-    }
-
-    if (method === 'dateUTC') {
-      if (expression.args.length < 2 || expression.args.length > 7) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.root}.${call.member} expects 2 to 7 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-
-        this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
-      }
-
-      expression.timeRuntimeMethod = method
-      return 'number'
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${call.root}.${call.member} expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      this.checkExpression(checkerNodeAt(expression.args, index))
-    }
-
-    expression.timeRuntimeMethod = method
-    return 'number'
+    return checkTimeCallInContext(this.timeCallContext(), expression, call, this.checkedCallArgInfos(expression))
   }
 
   checkDateInstanceMethodCall(expression: AnyNode): ValueType | null {
@@ -4513,22 +4376,12 @@ class Checker {
       return null
     }
 
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function Date.${info.method} expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      this.checkExpression(checkerNodeAt(expression.args, index))
-    }
-
-    expression.timeRuntimeMethod = info.method
-    expression.valueType = info.returnType
-
-    return info.returnType
+    return checkDateInstanceMethodCallInContext(
+      this.timeCallContext(),
+      expression,
+      info,
+      this.checkedCallArgInfos(expression)
+    )
   }
 
   checkDateConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {
@@ -4536,34 +4389,7 @@ class Checker {
       return null
     }
 
-    if (expression.args.length > 7) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `Date constructor expects 0 to 7 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args.length === 1) {
-      const argType = argTypes[0]
-
-      if (argType !== 'unknown' && argType !== 'number' && argType !== 'string' && argType !== 'date') {
-        this.report(
-          'INOX_TYPE_MISMATCH',
-          `Date constructor expects number, string or Date, got ${argType}`,
-          expression.args[0].loc
-        )
-      }
-    } else if (expression.args.length > 1) {
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        this.checkAssignableType(argTypes[index], 'number', expression.args[index].loc, false, false)
-      }
-    }
-
-    expression.timeRuntimeMethod = 'dateConstructor'
-    expression.valueType = 'date'
-
-    return 'date'
+    return checkDateConstructorExpressionInContext(this.timeCallContext(), expression, argTypes)
   }
 
   isDateConstructorExpression(expression: AnyNode): boolean {
@@ -8959,6 +8785,18 @@ class Checker {
   }
 
   nodeRuntimeCallContext(): NodeRuntimeCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  childProcessCallContext(): ChildProcessCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  timeCallContext(): TimeCallCheckerContext {
     return {
       diagnostics: this.diagnostics
     }
