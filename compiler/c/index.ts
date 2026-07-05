@@ -5846,6 +5846,7 @@ type ConsoleLogValue = {
 }
 
 const consoleLogNumberFormat = '%.17g'
+const consoleLogStringFormat = '%s'
 
 function emitConsoleStringView(bytes: string, length: string): string {
   return `inox::StringView(${bytes}, ${length})`
@@ -5853,6 +5854,14 @@ function emitConsoleStringView(bytes: string, length: string): string {
 
 function emitConsoleRuntimeStringView(name: string): string {
   return emitConsoleStringView(`${name}->bytes`, `${name}->len`)
+}
+
+function emitConsolePreparedStringValue(value: PreparedExpression): string {
+  if (value.cppType === 'inox::String') {
+    return value.expression
+  }
+
+  return `inox::String(${value.expression})`
 }
 
 function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
@@ -6471,22 +6480,10 @@ function emitPreparedStringLogValue(value: PreparedExpression, context: CFunctio
 
   pushAll(lines, value.lines)
 
-  if (value.cppType === 'inox::String') {
-    return {
-      lines,
-      format: '%.*s',
-      values: [value.expression]
-    }
-  }
-
-  const string = nextCName(context, 'inox_log_string')
-
-  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
-
   return {
     lines,
-    format: '%.*s',
-    values: [emitConsoleRuntimeStringView(string)]
+    format: consoleLogStringFormat,
+    values: [emitConsolePreparedStringValue(value)]
   }
 }
 
@@ -6498,7 +6495,6 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
   }
 
   const temp = nextCName(context, 'inox_log_value')
-  const string = nextCName(context, 'inox_log_string')
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
@@ -6511,12 +6507,11 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
     )
   )
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
-  lines.push(`inox_string* ${string} = (inox_string*)${temp}.as.ref;`)
 
   return {
     lines,
-    format: '%.*s',
-    values: [emitConsoleRuntimeStringView(string)]
+    format: consoleLogStringFormat,
+    values: [`inox::String(${temp})`]
   }
 }
 
@@ -6526,15 +6521,12 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     const emittedName = emitCIdentifier(name)
 
     if (isBoxedRuntimeStringName(name, context)) {
-      const string = nextCName(context, 'inox_log_string')
-
       return {
         lines: [
-          emitRuntimeTypeCheck(`(*${emittedName}).tag != INOX_TAG_STRING || (*${emittedName}).as.ref == 0`, context),
-          `inox_string* ${string} = (inox_string*)(*${emittedName}).as.ref;`
+          emitRuntimeTypeCheck(`(*${emittedName}).tag != INOX_TAG_STRING || (*${emittedName}).as.ref == 0`, context)
         ],
-        format: '%.*s',
-        values: [emitConsoleRuntimeStringView(string)]
+        format: consoleLogStringFormat,
+        values: [`inox::String(*${emittedName})`]
       }
     }
 
@@ -6549,28 +6541,25 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     if (context.cppStringValues.has(name)) {
       return {
         lines: [],
-        format: '%.*s',
+        format: consoleLogStringFormat,
         values: [reference]
       }
     }
 
     if (context.variables.get(name) === 'string' && context.nullableVariables.has(name)) {
-      const string = nextCName(context, 'inox_log_string')
-
       return {
         lines: [
-          emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context),
-          `inox_string* ${string} = (inox_string*)${reference}.as.ref;`
+          emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context)
         ],
-        format: '%.*s',
-        values: [emitConsoleRuntimeStringView(string)]
+        format: consoleLogStringFormat,
+        values: [`inox::String(${reference})`]
       }
     }
 
     if (context.runtimeStrings.has(name)) {
       return {
         lines: [],
-        format: '%.*s',
+        format: consoleLogStringFormat,
         values: [emitConsoleRuntimeStringView(reference)]
       }
     }
@@ -6578,17 +6567,15 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
   if (isDateStringExpression(expression, context)) {
     const value = emitPreparedDateStringExpression(expression, context, timeLoweringDependencies)
-    const string = nextCName(context, 'inox_log_string')
     const lines: string[] = []
 
     if (value !== null && typeof value !== 'undefined') {
       pushAll(lines, value.lines)
-      lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
       return {
         lines,
-        format: '%.*s',
-        values: [emitConsoleRuntimeStringView(string)]
+        format: consoleLogStringFormat,
+        values: [emitConsolePreparedStringValue(value)]
       }
     }
   }
@@ -6617,7 +6604,6 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
       typeof nativeClassField !== 'undefined' &&
       inferExpressionType(expression, context) === 'string'
     ) {
-      const string = nextCName(context, 'inox_log_string')
       const lines: string[] = []
 
       pushAll(lines, nativeClassField.lines)
@@ -6627,12 +6613,11 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
           context
         )
       )
-      lines.push(`inox_string* ${string} = (inox_string*)${nativeClassField.expression}.as.ref;`)
 
       return {
         lines,
-        format: '%.*s',
-        values: [emitConsoleRuntimeStringView(string)]
+        format: consoleLogStringFormat,
+        values: [emitConsolePreparedStringValue(nativeClassField)]
       }
     }
 
@@ -6660,19 +6645,17 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
     if (runtimeElement !== null && typeof runtimeElement !== 'undefined' && runtimeElement.valueType === 'string') {
       const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_log_value')
-      const string = nextCName(context, 'inox_log_string')
       const lines: string[] = []
 
       pushAll(lines, value.lines)
       lines.push(
         emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context)
       )
-      lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
       return {
         lines,
-        format: '%.*s',
-        values: [emitConsoleRuntimeStringView(string)]
+        format: consoleLogStringFormat,
+        values: [emitConsolePreparedStringValue(value)]
       }
     }
   }
@@ -6681,16 +6664,14 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
     const classMethodCall = emitPreparedClassMethodCallExpression(expression, context, {})
 
     if (classMethodCall !== null && typeof classMethodCall !== 'undefined' && classMethodCall.expression !== '') {
-      const string = nextCName(context, 'inox_log_string')
       const lines: string[] = []
 
       pushAll(lines, classMethodCall.lines)
-      lines.push(`inox_string* ${string} = (inox_string*)${classMethodCall.expression}.as.ref;`)
 
       return {
         lines,
-        format: '%.*s',
-        values: [emitConsoleRuntimeStringView(string)]
+        format: consoleLogStringFormat,
+        values: [emitConsolePreparedStringValue(classMethodCall)]
       }
     }
   }
@@ -6703,34 +6684,30 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
   if (isStringConcatExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
-    const string = nextCName(context, 'inox_log_string')
     const lines: string[] = []
 
     pushAll(lines, value.lines)
-    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
     return {
       lines,
-      format: '%.*s',
-      values: [emitConsoleRuntimeStringView(string)]
+      format: consoleLogStringFormat,
+      values: [emitConsolePreparedStringValue(value)]
     }
   }
 
   if (isCoalesceExpression(expression) && canLowerCNullishCoalescingExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
-    const string = nextCName(context, 'inox_log_string')
     const lines: string[] = []
 
     pushAll(lines, value.lines)
     lines.push(
       emitRuntimeTypeCheck(`${value.expression}.tag != INOX_TAG_STRING || ${value.expression}.as.ref == 0`, context)
     )
-    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
 
     return {
       lines,
-      format: '%.*s',
-      values: [emitConsoleRuntimeStringView(string)]
+      format: consoleLogStringFormat,
+      values: [emitConsolePreparedStringValue(value)]
     }
   }
 
@@ -6759,7 +6736,6 @@ function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunct
     return null
   }
 
-  const string = nativeClassStringFieldLogName(expression, context)
   const lines: string[] = []
 
   pushAll(lines, value.lines)
@@ -6767,30 +6743,16 @@ function emitNativeClassStringFieldLogValue(expression: AnyNode, context: CFunct
   if (value.cppType === 'inox::String') {
     return {
       lines,
-      format: '%.*s',
+      format: consoleLogStringFormat,
       values: [value.expression]
     }
   }
 
-  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
-
   return {
     lines,
-    format: '%.*s',
-    values: [emitConsoleRuntimeStringView(string)]
+    format: consoleLogStringFormat,
+    values: [emitConsolePreparedStringValue(value)]
   }
-}
-
-function nativeClassStringFieldLogName(expression: AnyNode, context: CFunctionContext): string {
-  if (expression.type === 'MemberExpression') {
-    const fieldName = emitCIdentifier(expression.property)
-
-    if (!context.localValueNames.has(expression.property) && !context.localValueNames.has(fieldName)) {
-      return fieldName
-    }
-  }
-
-  return nextCName(context, 'inox_log_string')
 }
 
 function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
@@ -6821,15 +6783,12 @@ function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunction
     return null
   }
 
-  const string = nextCName(context, 'inox_log_string')
-
   return {
     lines: [
-      emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context),
-      `inox_string* ${string} = (inox_string*)${storage}.as.ref;`
+      emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context)
     ],
-    format: '%.*s',
-    values: [emitConsoleRuntimeStringView(string)]
+    format: consoleLogStringFormat,
+    values: [`inox::String(${storage})`]
   }
 }
 
@@ -7021,7 +6980,6 @@ function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunction
 
 function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFunctionContext): ConsoleLogValue {
   const value = nextCName(context, 'inox_log_value')
-  const string = nextCName(context, 'inox_log_string')
   const lines: string[] = []
 
   registerOwnedValue(context, value)
@@ -7029,12 +6987,11 @@ function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFuncti
   pushAll(lines, emitPrepareOwnedValueWrite(value))
   pushAll(lines, emitRuntimeLogGetLines(source, value, context))
   lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
-  lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
 
   return {
     lines,
-    format: '%.*s',
-    values: [emitConsoleRuntimeStringView(string)]
+    format: consoleLogStringFormat,
+    values: [`inox::String(${value})`]
   }
 }
 

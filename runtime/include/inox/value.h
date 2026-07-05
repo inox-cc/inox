@@ -256,6 +256,8 @@ public:
 
   explicit String(Value value) : value_(std::move(value)) {}
 
+  explicit String(inox_value value) : value_(value) {}
+
   bool valid() const {
     inox_value value = value_.raw();
 
