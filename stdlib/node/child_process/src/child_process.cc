@@ -329,7 +329,7 @@ static inox_status inox_child_process_options_init(
 
 static void inox_child_process_options_dispose(inox_allocator* allocator, inox_child_process_options* options) {
   if (options->cwd_nul != 0) {
-    allocator->free(allocator->user, options->cwd_nul, options->cwd_len + 1, _Alignof(char));
+    allocator->free(allocator->user, options->cwd_nul, options->cwd_len + 1, alignof(char));
   }
 
   inox_release(options->cwd_value);
@@ -370,7 +370,7 @@ static inox_status inox_child_process_envp_from_object(
   }
 
   inox_object* object = (inox_object*)env.as.ref;
-  char** envp = allocator->alloc(allocator->user, sizeof(char*) * (object->shape->field_count + 1), _Alignof(char*));
+  char** envp = (char**)allocator->alloc(allocator->user, sizeof(char*) * (object->shape->field_count + 1), alignof(char*));
 
   if (envp == 0) {
     return INOX_ERR_OOM;
@@ -429,11 +429,11 @@ static void inox_child_process_envp_free(inox_allocator* allocator, char** envp,
 
   for (size_t index = 0; index < count; index += 1) {
     if (envp[index] != 0) {
-      allocator->free(allocator->user, envp[index], strlen(envp[index]) + 1, _Alignof(char));
+      allocator->free(allocator->user, envp[index], strlen(envp[index]) + 1, alignof(char));
     }
   }
 
-  allocator->free(allocator->user, envp, sizeof(char*) * (count + 1), _Alignof(char*));
+  allocator->free(allocator->user, envp, sizeof(char*) * (count + 1), alignof(char*));
 }
 
 static inox_status inox_child_process_run_shell(
@@ -450,7 +450,7 @@ static inox_status inox_child_process_run_shell(
     return status;
   }
 
-  char** argv = allocator->alloc(allocator->user, sizeof(char*) * 4, _Alignof(char*));
+  char** argv = (char**)allocator->alloc(allocator->user, sizeof(char*) * 4, alignof(char*));
 
   if (argv == 0) {
     return INOX_ERR_OOM;
@@ -694,7 +694,7 @@ static inox_status inox_child_process_build_argv(
     return status;
   }
 
-  char** argv = allocator->alloc(allocator->user, sizeof(char*) * (arg_count + 2), _Alignof(char*));
+  char** argv = (char**)allocator->alloc(allocator->user, sizeof(char*) * (arg_count + 2), alignof(char*));
 
   if (argv == 0) {
     return INOX_ERR_OOM;
@@ -742,11 +742,11 @@ static void inox_child_process_free_argv(inox_allocator* allocator, char** argv)
   size_t index = 0;
 
   while (argv[index] != 0) {
-    allocator->free(allocator->user, argv[index], strlen(argv[index]) + 1, _Alignof(char));
+    allocator->free(allocator->user, argv[index], strlen(argv[index]) + 1, alignof(char));
     index += 1;
   }
 
-  allocator->free(allocator->user, argv, sizeof(char*) * (index + 1), _Alignof(char*));
+  allocator->free(allocator->user, argv, sizeof(char*) * (index + 1), alignof(char*));
 }
 
 static inox_status inox_child_process_result_init(inox_allocator* allocator, inox_child_process_result* result) {
@@ -768,11 +768,11 @@ static inox_status inox_child_process_result_init(inox_allocator* allocator, ino
 
 static void inox_child_process_result_dispose(inox_allocator* allocator, inox_child_process_result* result) {
   if (result->stdout_bytes != 0) {
-    allocator->free(allocator->user, result->stdout_bytes, result->stdout_cap + 1, _Alignof(char));
+    allocator->free(allocator->user, result->stdout_bytes, result->stdout_cap + 1, alignof(char));
   }
 
   if (result->stderr_bytes != 0) {
-    allocator->free(allocator->user, result->stderr_bytes, result->stderr_cap + 1, _Alignof(char));
+    allocator->free(allocator->user, result->stderr_bytes, result->stderr_cap + 1, alignof(char));
   }
 }
 
@@ -791,7 +791,7 @@ static inox_status inox_child_process_result_append(
       next_cap *= 2;
     }
 
-    char* next = allocator->realloc(allocator->user, *bytes, *cap + 1, next_cap + 1, _Alignof(char));
+    char* next = (char*)allocator->realloc(allocator->user, *bytes, *cap + 1, next_cap + 1, alignof(char));
 
     if (next == 0) {
       return INOX_ERR_OOM;
@@ -926,7 +926,7 @@ static char* inox_child_process_alloc(inox_allocator* allocator, size_t len) {
     return 0;
   }
 
-  char* bytes = allocator->alloc(allocator->user, len + 1, _Alignof(char));
+  char* bytes = (char*)allocator->alloc(allocator->user, len + 1, alignof(char));
 
   if (bytes != 0) {
     bytes[len] = 0;
