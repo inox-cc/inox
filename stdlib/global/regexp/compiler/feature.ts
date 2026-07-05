@@ -36,10 +36,10 @@ export function collectRegExpIrFeatures(node: AnyNode, features: RegExpFeatureSe
 
 export function emitCRegExpFlags(flags: string | null | undefined): string {
   if (flags !== null && typeof flags !== 'undefined' && flags.includes('i')) {
-    return 'REG_ICASE'
+    return 'RegExpFlags::IgnoreCase'
   }
 
-  return '0'
+  return 'RegExpFlags::None'
 }
 
 export function emitCRegExpPreludeHelpers(): string[] {

@@ -33,13 +33,14 @@ console.log(/Inox/.test(trimmed))
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /RegExp regexp\("stdlib", REG_ICASE\);/)
+  assert.match(source, /RegExp regexp\("stdlib", RegExpFlags::IgnoreCase\);/)
   assert.match(source, /regexp\.test\(trimmed\)/)
-  assert.match(source, /RegExp\("Inox", 0\)\.test\(trimmed\)/)
+  assert.match(source, /RegExp\("Inox", RegExpFlags::None\)\.test\(trimmed\)/)
   assert.match(source, /console\.log\("%d", regexp\.test\(trimmed\)\);/)
   assert.doesNotMatch(source, /\(\(double\)\(regexp\.test/)
   assert.doesNotMatch(source, /inox_regexp_test/)
   assert.doesNotMatch(source, /inox_regexp_literal/)
+  assert.doesNotMatch(source, /REG_ICASE/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

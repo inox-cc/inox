@@ -1,7 +1,16 @@
 #include "inox/regexp.h"
 
+#include <regex.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int regexp_native_flags(RegExpFlags flags) {
+  if (flags == RegExpFlags::IgnoreCase) {
+    return REG_ICASE;
+  }
+
+  return 0;
+}
 
 bool RegExp::test(const char* value) const {
   if (value == nullptr) {
@@ -13,7 +22,7 @@ bool RegExp::test(const char* value) const {
 
 bool RegExp::test(inox::StringView value) const {
   regex_t regex;
-  int status = regcomp(&regex, pattern_, REG_EXTENDED | flags_);
+  int status = regcomp(&regex, pattern_, REG_EXTENDED | regexp_native_flags(flags_));
 
   if (status != 0) {
     return false;
