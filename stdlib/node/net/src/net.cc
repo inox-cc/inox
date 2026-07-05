@@ -107,7 +107,7 @@ inox_status inox_net_server_new(
   }
 
   inox_allocator* allocator = loop->allocator;
-  inox_net_server* server = allocator->alloc(allocator->user, sizeof(inox_net_server), _Alignof(inox_net_server));
+  inox_net_server* server = (inox_net_server*)allocator->alloc(allocator->user, sizeof(inox_net_server), alignof(inox_net_server));
 
   if (server == 0) {
     return INOX_ERR_OOM;
@@ -120,14 +120,14 @@ inox_status inox_net_server_new(
   server->user = user;
 
   if (uv_tcp_init(uv_loop, &server->handle) != 0) {
-    allocator->free(allocator->user, server, sizeof(inox_net_server), _Alignof(inox_net_server));
+    allocator->free(allocator->user, server, sizeof(inox_net_server), alignof(inox_net_server));
     return INOX_ERR_FIELD;
   }
 
   if (inox_libuv_loop_retain_request(loop) != INOX_OK) {
     uv_close((uv_handle_t*)&server->handle, 0);
     uv_run(uv_loop, UV_RUN_NOWAIT);
-    allocator->free(allocator->user, server, sizeof(inox_net_server), _Alignof(inox_net_server));
+    allocator->free(allocator->user, server, sizeof(inox_net_server), alignof(inox_net_server));
     return INOX_ERR_TYPE;
   }
 
@@ -279,7 +279,7 @@ inox_status inox_net_connect(
 
   inox_allocator* allocator = loop->allocator;
   inox_net_connect_request* request =
-    allocator->alloc(allocator->user, sizeof(inox_net_connect_request), _Alignof(inox_net_connect_request));
+    (inox_net_connect_request*)allocator->alloc(allocator->user, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
 
   if (request == 0) {
     inox_net_socket_close(socket);
@@ -295,7 +295,7 @@ inox_status inox_net_connect(
   status = inox_net_resolve_ip4_addr(loop, host, port, &addr);
 
   if (status != INOX_OK) {
-    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), _Alignof(inox_net_connect_request));
+    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
     inox_net_socket_close(socket);
     return status;
   }
@@ -303,7 +303,7 @@ inox_status inox_net_connect(
   status = inox_libuv_loop_retain_request(loop);
 
   if (status != INOX_OK) {
-    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), _Alignof(inox_net_connect_request));
+    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
     inox_net_socket_close(socket);
     return status;
   }
@@ -312,7 +312,7 @@ inox_status inox_net_connect(
 
   if (uv_tcp_connect(&request->request, &socket->handle, (const struct sockaddr*)&addr, inox_net_connect_cb) != 0) {
     inox_libuv_loop_release_request(loop);
-    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), _Alignof(inox_net_connect_request));
+    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
     inox_net_socket_close(socket);
     return INOX_ERR_FIELD;
   }
@@ -590,7 +590,7 @@ static inox_status inox_net_socket_write_internal(
 
   inox_allocator* allocator = socket->allocator;
   inox_net_write_request* request =
-    allocator->alloc(allocator->user, sizeof(inox_net_write_request), _Alignof(inox_net_write_request));
+    (inox_net_write_request*)allocator->alloc(allocator->user, sizeof(inox_net_write_request), alignof(inox_net_write_request));
 
   if (request == 0) {
     return INOX_ERR_OOM;
@@ -604,10 +604,10 @@ static inox_status inox_net_socket_write_internal(
   request->user = user;
 
   if (len != 0) {
-    request->bytes = allocator->alloc(allocator->user, len, _Alignof(char));
+    request->bytes = (char*)allocator->alloc(allocator->user, len, alignof(char));
 
     if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(inox_net_write_request), _Alignof(inox_net_write_request));
+      allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
       return INOX_ERR_OOM;
     }
 
@@ -618,24 +618,24 @@ static inox_status inox_net_socket_write_internal(
 
   if (status != INOX_OK) {
     if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
+      allocator->free(allocator->user, request->bytes, len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_net_write_request), _Alignof(inox_net_write_request));
+    allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
     return status;
   }
 
-  uv_buf_t buffer = uv_buf_init(request->bytes == 0 ? "" : request->bytes, (unsigned int)len);
+  uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)len);
   request->request.data = request;
 
   if (uv_write(&request->request, (uv_stream_t*)&socket->handle, &buffer, 1, inox_net_write_cb) != 0) {
     inox_libuv_loop_release_request(socket->loop);
 
     if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
+      allocator->free(allocator->user, request->bytes, len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_net_write_request), _Alignof(inox_net_write_request));
+    allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
     return INOX_ERR_FIELD;
   }
 
@@ -749,7 +749,7 @@ static inox_status inox_net_socket_init(inox_loop* loop, inox_net_socket** out) 
   }
 
   inox_allocator* allocator = loop->allocator;
-  inox_net_socket* socket = allocator->alloc(allocator->user, sizeof(inox_net_socket), _Alignof(inox_net_socket));
+  inox_net_socket* socket = (inox_net_socket*)allocator->alloc(allocator->user, sizeof(inox_net_socket), alignof(inox_net_socket));
 
   if (socket == 0) {
     return INOX_ERR_OOM;
@@ -760,14 +760,14 @@ static inox_status inox_net_socket_init(inox_loop* loop, inox_net_socket** out) 
   socket->allocator = allocator;
 
   if (uv_tcp_init(uv_loop, &socket->handle) != 0) {
-    allocator->free(allocator->user, socket, sizeof(inox_net_socket), _Alignof(inox_net_socket));
+    allocator->free(allocator->user, socket, sizeof(inox_net_socket), alignof(inox_net_socket));
     return INOX_ERR_FIELD;
   }
 
   if (inox_libuv_loop_retain_request(loop) != INOX_OK) {
     uv_close((uv_handle_t*)&socket->handle, 0);
     uv_run(uv_loop, UV_RUN_NOWAIT);
-    allocator->free(allocator->user, socket, sizeof(inox_net_socket), _Alignof(inox_net_socket));
+    allocator->free(allocator->user, socket, sizeof(inox_net_socket), alignof(inox_net_socket));
     return INOX_ERR_TYPE;
   }
 
@@ -897,7 +897,7 @@ static void inox_net_connect_cb(uv_connect_t* request, int status) {
     socket->allocator->user,
     connect_request,
     sizeof(inox_net_connect_request),
-    _Alignof(inox_net_connect_request)
+    alignof(inox_net_connect_request)
   );
 }
 
@@ -910,7 +910,7 @@ static void inox_net_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf
     return;
   }
 
-  char* bytes = socket->allocator->alloc(socket->allocator->user, len, _Alignof(char));
+  char* bytes = (char*)socket->allocator->alloc(socket->allocator->user, len, alignof(char));
 
   *buf = uv_buf_init(bytes, bytes == 0 ? 0 : (unsigned int)len);
 }
@@ -944,7 +944,7 @@ static void inox_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
   }
 
   if (buf != 0 && buf->base != 0) {
-    socket->allocator->free(socket->allocator->user, buf->base, buf->len, _Alignof(char));
+    socket->allocator->free(socket->allocator->user, buf->base, buf->len, alignof(char));
   }
 }
 
@@ -986,10 +986,10 @@ static void inox_net_write_cb(uv_write_t* request, int status) {
   }
 
   if (write->bytes != 0) {
-    socket->allocator->free(socket->allocator->user, write->bytes, write->len, _Alignof(char));
+    socket->allocator->free(socket->allocator->user, write->bytes, write->len, alignof(char));
   }
 
-  socket->allocator->free(socket->allocator->user, write, sizeof(inox_net_write_request), _Alignof(inox_net_write_request));
+  socket->allocator->free(socket->allocator->user, write, sizeof(inox_net_write_request), alignof(inox_net_write_request));
 }
 
 static void inox_net_server_close_cb(uv_handle_t* handle) {
@@ -1011,7 +1011,7 @@ static void inox_net_server_close_cb(uv_handle_t* handle) {
     inox_libuv_loop_release_request(server->loop);
   }
 
-  server->allocator->free(server->allocator->user, server, sizeof(inox_net_server), _Alignof(inox_net_server));
+  server->allocator->free(server->allocator->user, server, sizeof(inox_net_server), alignof(inox_net_server));
 }
 
 static void inox_net_socket_close_cb(uv_handle_t* handle) {
@@ -1037,7 +1037,7 @@ static void inox_net_socket_close_cb(uv_handle_t* handle) {
     inox_libuv_loop_release_request(socket->loop);
   }
 
-  socket->allocator->free(socket->allocator->user, socket, sizeof(inox_net_socket), _Alignof(inox_net_socket));
+  socket->allocator->free(socket->allocator->user, socket, sizeof(inox_net_socket), alignof(inox_net_socket));
 }
 
 #else
