@@ -6098,6 +6098,24 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     }
   }
 
+  const knownRuntimeString = emitKnownRuntimeStringLogValue(expression, context)
+
+  if (knownRuntimeString !== null && typeof knownRuntimeString !== 'undefined') {
+    return knownRuntimeString
+  }
+
+  const runtimeObjectMember = emitRuntimeObjectMemberLogValue(expression, context)
+
+  if (runtimeObjectMember !== null && typeof runtimeObjectMember !== 'undefined') {
+    return runtimeObjectMember
+  }
+
+  const runtimeStringCall = emitRuntimeStringCallLogValue(expression, context)
+
+  if (runtimeStringCall !== null && typeof runtimeStringCall !== 'undefined') {
+    return runtimeStringCall
+  }
+
   if (isRuntimeLogValueType(valueType)) {
     return emitRuntimeValueLogValue(expression, context)
   }
@@ -6340,6 +6358,138 @@ function emitRuntimeValueLogValue(expression: AnyNode, context: CFunctionContext
   }
 }
 
+function emitKnownRuntimeStringLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (isMemberAccessExpression(expression)) {
+    const member = resolveKnownObjectMember(expression, context)
+
+    if (member !== null && typeof member !== 'undefined' && member.valueType === 'string') {
+      return emitRuntimeStringLogValue({ kind: 'known-object', member }, context)
+    }
+  }
+
+  if (isIndexAccessExpression(expression)) {
+    const field = resolveKnownObjectIndex(expression, context)
+
+    if (field !== null && typeof field !== 'undefined' && field.valueType === 'string') {
+      return emitRuntimeStringLogValue({ kind: 'known-object-index', field }, context)
+    }
+  }
+
+  return null
+}
+
+function emitRuntimeObjectMemberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  let value: PreparedExpression | null = null
+
+  if (isMemberAccessExpression(expression)) {
+    value = emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies)
+  } else if (isIndexAccessExpression(expression)) {
+    value = emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies)
+  }
+
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  const lines: string[] = []
+
+  pushAll(lines, value.lines)
+
+  return {
+    lines,
+    format: '%s',
+    values: [value.expression]
+  }
+}
+
+function emitRuntimeStringCallLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (expression.type !== 'CallExpression') {
+    return null
+  }
+
+  const method = consoleRuntimeStringCallMethod(expression)
+
+  if (method === null || typeof method === 'undefined') {
+    return null
+  }
+
+  if (expression.urlRuntimeMethod === null || typeof expression.urlRuntimeMethod === 'undefined') {
+    expression.urlRuntimeMethod = method
+  }
+
+  const value = emitCValueExpression(expression, context)
+
+  if (value.valueType !== 'string') {
+    return null
+  }
+
+  return emitPreparedStringLogValue(value, context)
+}
+
+function consoleRuntimeStringCallMethod(expression: AnyNode): string | null {
+  const method = expression.urlRuntimeMethod
+
+  if (method === 'fileURLToPath') {
+    return method
+  }
+
+  if (method === 'URLSearchParams.get') {
+    return method
+  }
+
+  if (method === 'URLSearchParams.toString') {
+    return method
+  }
+
+  if (expression.callee.type !== 'MemberExpression') {
+    return null
+  }
+
+  const receiver = expression.callee.object
+
+  if (
+    receiver.shape === null ||
+    typeof receiver.shape === 'undefined' ||
+    receiver.shape.builtin !== 'url.URLSearchParams'
+  ) {
+    return null
+  }
+
+  if (expression.callee.property === 'get') {
+    return 'URLSearchParams.get'
+  }
+
+  if (expression.callee.property === 'toString') {
+    return 'URLSearchParams.toString'
+  }
+
+  return null
+}
+
+function emitPreparedStringLogValue(value: PreparedExpression, context: CFunctionContext): ConsoleLogValue {
+  const lines: string[] = []
+
+  pushAll(lines, value.lines)
+
+  if (value.cppType === 'inox::String') {
+    return {
+      lines,
+      format: '%.*s',
+      values: [value.expression]
+    }
+  }
+
+  const string = nextCName(context, 'inox_log_string')
+
+  lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
+
+  return {
+    lines,
+    format: '%.*s',
+    values: [emitConsoleRuntimeStringView(string)]
+  }
+}
+
 function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
   const instance = emitPreparedNativeClassInstanceExpression(expression, context)
 
@@ -6547,27 +6697,8 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
 
   if (isRuntimeProducedStringExpression(expression, context)) {
     const value = emitCValueExpression(expression, context)
-    const lines: string[] = []
 
-    pushAll(lines, value.lines)
-
-    if (value.cppType === 'inox::String') {
-      return {
-        lines,
-        format: '%.*s',
-        values: [value.expression]
-      }
-    }
-
-    const string = nextCName(context, 'inox_log_string')
-
-    lines.push(`inox_string* ${string} = (inox_string*)${value.expression}.as.ref;`)
-
-    return {
-      lines,
-      format: '%.*s',
-      values: [emitConsoleRuntimeStringView(string)]
-    }
+    return emitPreparedStringLogValue(value, context)
   }
 
   if (isStringConcatExpression(expression, context)) {
