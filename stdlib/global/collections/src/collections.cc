@@ -950,6 +950,8 @@ void Array::throwNotIterable() const {
   inox::throw_value(inox::String("TypeError: value is not iterable"));
 }
 
+class Array Array;
+
 extern "C" inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out) {
   return array_make(allocator, len, out);
 }

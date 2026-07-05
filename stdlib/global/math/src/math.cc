@@ -196,3 +196,5 @@ double Math::xorshift32_random() const {
   random_state_ = value;
   return (double)(value >> 8) / 16777216.0;
 }
+
+class Math Math;

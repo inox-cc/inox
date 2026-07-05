@@ -382,3 +382,5 @@ inox_status console::write_formatted(inox::ConsoleStream stream, const char* for
 
   return write_format_literal(stream, format, format + strlen(format));
 }
+
+class console console;

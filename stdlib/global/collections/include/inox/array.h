@@ -56,7 +56,7 @@ public:
 
 using ArrayClass = Array;
 
-inline Array Array;
+extern Array Array;
 
 #endif
 

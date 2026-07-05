@@ -633,6 +633,8 @@ inox::Value process::value() const {
   return inox::node_process::value(process_value);
 }
 
+class process process;
+
 int inox::return_code() {
   return inox::return_code(process_get_exit_code());
 }

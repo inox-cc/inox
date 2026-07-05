@@ -29,7 +29,7 @@ public:
   inox_status stringify(const inox_class_descriptor* descriptor, const void* instance, inox::Value& out) const;
 };
 
-inline Json JSON;
+extern Json JSON;
 #endif
 
 #endif

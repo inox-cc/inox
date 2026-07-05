@@ -38,6 +38,6 @@ private:
   double xorshift32_random() const;
 };
 
-inline Math Math;
+extern Math Math;
 
 #endif

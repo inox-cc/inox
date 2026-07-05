@@ -78,7 +78,7 @@ public:
   inox::Value value() const;
 };
 
-inline process process;
+extern process process;
 
 namespace inox {
 

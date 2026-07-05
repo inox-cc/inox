@@ -535,6 +535,9 @@ inox_number Performance::now() const {
   return inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_performance_base_ms;
 }
 
+class Date Date;
+Performance performance;
+
 extern "C" inox_number inox_performance_now(void) {
   inox_time_ensure_initialized();
 

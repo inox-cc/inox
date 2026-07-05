@@ -42,14 +42,14 @@ public:
   inox_status toStringValue(inox_allocator* allocator, inox_number value, int kind, inox_value* out) const;
 };
 
-inline Date Date;
+extern Date Date;
 
 class Performance {
 public:
   inox_number now() const;
 };
 
-inline Performance performance;
+extern Performance performance;
 
 #endif
 

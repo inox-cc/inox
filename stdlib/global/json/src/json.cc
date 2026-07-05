@@ -1322,3 +1322,5 @@ inox_status Json::stringify(const inox_class_descriptor* descriptor, const void*
 
   return status;
 }
+
+Json JSON;

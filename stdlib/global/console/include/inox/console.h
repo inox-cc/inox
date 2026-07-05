@@ -478,7 +478,7 @@ private:
   }
 };
 
-inline console console;
+extern console console;
 
 #endif
 
