@@ -12,18 +12,6 @@
 #endif
 #include "inox/string.h"
 
-extern "C" {
-  inox_status inox_array_join(
-    inox_allocator* allocator,
-    inox_value array,
-    const char* separator_bytes,
-    size_t separator_len,
-    inox_value* out
-  );
-  inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
-  inox_status inox_array_push(inox_value array, inox_value value);
-}
-
 static inox_string* inox_string_alloc_storage(inox_allocator* allocator, size_t len) {
   if (allocator == 0 || allocator->alloc == 0 || len > ((size_t)-1) - sizeof(inox_string)) {
     return 0;
@@ -240,7 +228,7 @@ inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, 
   }
 
   if (value.tag == INOX_TAG_ARRAY) {
-    return inox_array_join(allocator, value, ",", 1, out);
+    return Array.join(allocator, value, ",", 1, out);
   }
 
   if (value.tag == INOX_TAG_OBJECT) {
@@ -729,7 +717,7 @@ static inox_status inox_string_split_push(inox_allocator* allocator, inox_value 
     return status;
   }
 
-  status = inox_array_push(array, item);
+  status = Array.push(array, item);
   inox_release(item);
 
   return status;
@@ -1051,7 +1039,7 @@ ArrayClass String::split(StringView separator) const {
   }
 
   inox_value out = inox_undefined_value();
-  inox_status status = inox_array_new(&inox_default_allocator, 0, &out);
+  inox_status status = Array.make(&inox_default_allocator, 0, &out);
 
   if (status != INOX_OK) {
     return ArrayClass();
