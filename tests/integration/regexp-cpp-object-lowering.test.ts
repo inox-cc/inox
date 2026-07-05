@@ -36,6 +36,8 @@ console.log(/Inox/.test(trimmed))
   assert.match(source, /RegExp regexp\("stdlib", REG_ICASE\);/)
   assert.match(source, /regexp\.test\(trimmed\)/)
   assert.match(source, /RegExp\("Inox", 0\)\.test\(trimmed\)/)
+  assert.match(source, /console\.log\("%d", regexp\.test\(trimmed\)\);/)
+  assert.doesNotMatch(source, /\(\(double\)\(regexp\.test/)
   assert.doesNotMatch(source, /inox_regexp_test/)
   assert.doesNotMatch(source, /inox_regexp_literal/)
 }

@@ -61,6 +61,20 @@ public:
     return value.tag == INOX_TAG_ARRAY && value.as.ref != nullptr;
   }
 
+  inox::String join(inox::StringView separator) const {
+    if (!valid()) {
+      return inox::String();
+    }
+
+    inox_value out = inox_undefined_value();
+
+    if (inox_array_join(&inox_default_allocator, inox::Value::raw(), separator.bytes, separator.len, &out) != INOX_OK) {
+      return inox::String();
+    }
+
+    return inox::String(inox::adopt_value, out);
+  }
+
   bool isArray(inox_value value) const {
     return value.tag == INOX_TAG_ARRAY;
   }

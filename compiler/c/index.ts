@@ -991,6 +991,7 @@ const arrayLoweringDependencies: ArrayLoweringDependencies = {
   emitCArrayLiteralValueExpression,
   emitCStringSplitValueExpression,
   emitCValueExpression,
+  emitPreparedCppStringArgument,
   emitPreparedStringBytesOperand,
   emitPreparedNumberExpression,
   inferExpressionType,
@@ -5868,6 +5869,7 @@ type ConsoleLogValue = {
 }
 
 const consoleLogNumberFormat = '%.17g'
+const consoleLogBooleanFormat = '%d'
 const consoleLogStringFormat = '%s'
 
 function emitConsoleStringView(bytes: string, length: string): string {
@@ -6113,7 +6115,11 @@ function emitConsoleLogValue(expression: AnyNode, context: CFunctionContext): Co
     return nativeClassInstance
   }
 
-  if (valueType === 'number' || valueType === 'boolean') {
+  if (valueType === 'boolean') {
+    return emitBooleanLogValue(expression, context)
+  }
+
+  if (valueType === 'number') {
     return emitNumberLogValue(expression, context)
   }
 
@@ -6913,6 +6919,80 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
   }
 }
 
+function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+  const moduleRuntimeBoolean = emitModuleRuntimeBooleanLogValue(expression, context)
+
+  if (moduleRuntimeBoolean !== null && typeof moduleRuntimeBoolean !== 'undefined') {
+    return moduleRuntimeBoolean
+  }
+
+  if (isMemberAccessExpression(expression)) {
+    const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
+
+    if (nativeClassField !== null && typeof nativeClassField !== 'undefined') {
+      return {
+        lines: nativeClassField.lines,
+        format: consoleLogBooleanFormat,
+        values: [nativeClassField.expression]
+      }
+    }
+
+    const fetchResponseMember = emitFetchResponseBooleanMemberLogValue(expression, context)
+
+    if (fetchResponseMember !== null && typeof fetchResponseMember !== 'undefined') {
+      return fetchResponseMember
+    }
+
+    const member = resolveKnownObjectMember(expression, context)
+
+    if (member !== null && typeof member !== 'undefined' && member.valueType === 'boolean') {
+      return emitRuntimeBooleanLogValue({ kind: 'known-object', member }, context)
+    }
+  }
+
+  if (isIndexAccessExpression(expression)) {
+    const element = resolveKnownArrayIndex(expression, context)
+
+    if (element !== null && typeof element !== 'undefined' && element.valueType === 'boolean') {
+      return emitKnownArrayBooleanLogValue(element, context)
+    }
+
+    const field = resolveKnownObjectIndex(expression, context)
+
+    if (field !== null && typeof field !== 'undefined' && field.valueType === 'boolean') {
+      return emitRuntimeBooleanLogValue({ kind: 'known-object-index', field }, context)
+    }
+
+    const runtimeElement = resolveRuntimeArrayIndex(expression, context)
+
+    if (
+      runtimeElement !== null &&
+      typeof runtimeElement !== 'undefined' &&
+      runtimeElement.valueType === 'boolean'
+    ) {
+      const value = emitPreparedRuntimeArrayIndexValue(expression, runtimeElement, context, 'inox_log_value')
+      const lines: string[] = []
+
+      pushAll(lines, value.lines)
+      lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_BOOL', context))
+
+      return {
+        lines,
+        format: consoleLogBooleanFormat,
+        values: [`${value.expression}.as.boolean`]
+      }
+    }
+  }
+
+  const value = emitPreparedNumberExpression(expression, context)
+
+  return {
+    lines: value.lines,
+    format: consoleLogBooleanFormat,
+    values: [value.expression]
+  }
+}
+
 function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
   if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
     return null
@@ -6938,19 +7018,39 @@ function emitFetchResponseScalarMemberLogValue(expression: AnyNode, context: CFu
     }
   }
 
+  return null
+}
+
+function emitFetchResponseBooleanMemberLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (expression.type !== 'MemberExpression' || expression.object.type !== 'Reference') {
+    return null
+  }
+
+  if (expression.object.path.length !== 1) {
+    return null
+  }
+
+  const objectName = expression.object.path[0]
+
+  if (context.objectDeclaredTypes.get(objectName) !== 'fetch.Response') {
+    return null
+  }
+
+  const reference = emitCIdentifier(objectName)
+
   if (expression.property === 'ok') {
     return {
       lines: [],
-      format: consoleLogNumberFormat,
-      values: [`((double)(${reference}.ok() ? 1 : 0))`]
+      format: consoleLogBooleanFormat,
+      values: [`${reference}.ok()`]
     }
   }
 
   if (expression.property === 'redirected') {
     return {
       lines: [],
-      format: consoleLogNumberFormat,
-      values: [`((double)(${reference}.redirected() ? 1 : 0))`]
+      format: consoleLogBooleanFormat,
+      values: [`${reference}.redirected()`]
     }
   }
 
@@ -7000,6 +7100,39 @@ function emitModuleRuntimeScalarLogValue(expression: AnyNode, context: CFunction
   }
 }
 
+function emitModuleRuntimeBooleanLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return null
+  }
+
+  const name = expression.path[0]
+
+  if (context.localValueNames.has(name) || context.moduleValueTypes.get(name) !== 'unknown') {
+    return null
+  }
+
+  if (context.variables.get(name) !== 'boolean') {
+    return null
+  }
+
+  const storage = context.moduleValueNames.get(name)
+
+  if (storage === null || typeof storage === 'undefined') {
+    return null
+  }
+
+  return {
+    lines: [emitRuntimeValueCheck(storage, 'INOX_TAG_BOOL', context)],
+    format: consoleLogBooleanFormat,
+    values: [`${storage}.as.boolean`]
+  }
+}
+
 function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFunctionContext): ConsoleLogValue {
   const value = nextCName(context, 'inox_log_value')
   const lines: string[] = []
@@ -7045,6 +7178,23 @@ function emitRuntimeNumberLogValue(
   }
 }
 
+function emitRuntimeBooleanLogValue(source: RuntimeLogGetSource, context: CFunctionContext): ConsoleLogValue {
+  const value = nextCName(context, 'inox_log_value')
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+
+  pushAll(lines, emitPrepareOwnedValueWrite(value))
+  pushAll(lines, emitRuntimeLogGetLines(source, value, context))
+  lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
+
+  return {
+    lines,
+    format: consoleLogBooleanFormat,
+    values: [`${value}.as.boolean`]
+  }
+}
+
 function emitKnownArrayScalarLogValue(
   valueType: string,
   element: CKnownArrayElement,
@@ -7070,6 +7220,23 @@ function emitKnownArrayScalarLogValue(
     lines,
     format: consoleLogNumberFormat,
     values: [formattedValue]
+  }
+}
+
+function emitKnownArrayBooleanLogValue(element: CKnownArrayElement, context: CFunctionContext): ConsoleLogValue {
+  const value = nextCName(context, 'inox_log_value')
+  const lines: string[] = []
+
+  registerOwnedValue(context, value)
+
+  pushAll(lines, emitPrepareOwnedValueWrite(value))
+  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${value})`, context))
+  lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
+
+  return {
+    lines,
+    format: consoleLogBooleanFormat,
+    values: [`${value}.as.boolean`]
   }
 }
 

@@ -73,6 +73,11 @@ export type ArrayLoweringDependencies = {
   emitCArrayLiteralValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
   emitCStringSplitValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedArrayExpression | null
   emitCValueExpression(expression: AnyNode, context: ArrayFunctionContext): PreparedExpression
+  emitPreparedCppStringArgument(
+    expression: AnyNode,
+    context: ArrayFunctionContext,
+    tempPrefix: string
+  ): PreparedExpression | null
   emitPreparedStringBytesOperand(
     expression: AnyNode | null | undefined,
     context: ArrayFunctionContext,
@@ -93,6 +98,7 @@ type PreparedArrayReceiver = {
   lines: string[]
   expression: string
   elementType: string
+  cppType?: string
 }
 
 type KnownForOfArray = {
@@ -1933,11 +1939,45 @@ export function emitPreparedArrayJoinCallExpression(
     return null
   }
 
+  if (receiver.cppType === 'Array') {
+    let separator: PreparedExpression = {
+      lines: [],
+      expression: '","'
+    }
+
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+      const preparedSeparator = arrayDeps(context).emitPreparedCppStringArgument(
+        expression.args[0],
+        context,
+        'inox_array_join_separator'
+      )
+
+      if (preparedSeparator !== null && typeof preparedSeparator !== 'undefined') {
+        separator = preparedSeparator
+      }
+    }
+
+    const lines: string[] = []
+    appendLines(lines, receiver.lines)
+    appendLines(lines, separator.lines)
+
+    return {
+      lines,
+      expression: `${receiver.expression}.join(${separator.expression})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
+    }
+  }
+
+  const out = nextCName(context, 'inox_array_join')
   let separator: PreparedStringBytesOperand = {
     lines: [],
     bytes: '","',
     length: '1'
   }
+  const lines: string[] = []
+  registerOwnedValue(context, out)
 
   if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
     separator = arrayDeps(context).emitPreparedStringBytesOperand(
@@ -1946,10 +1986,6 @@ export function emitPreparedArrayJoinCallExpression(
       'inox_array_join_separator'
     )
   }
-
-  const out = nextCName(context, 'inox_array_join')
-  const lines: string[] = []
-  registerOwnedValue(context, out)
 
   appendLines(lines, receiver.lines)
   appendLines(lines, separator.lines)
@@ -2013,14 +2049,14 @@ export function emitPreparedArrayIncludesCallExpression(
   registerOwnedValue(context, value)
   appendLines(lines, receiver.lines)
   appendLines(lines, searchValue.lines)
-  lines.push(`double ${found} = 0;`)
+  lines.push(`bool ${found} = false;`)
   lines.push(`size_t ${length} = 0;`)
   lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
   lines.push(`  ${readStatus}`)
   lines.push(`  if (inox_hash_value_equal(${value}, ${searchValue.expression})) {`)
-  lines.push(`    ${found} = 1;`)
+  lines.push(`    ${found} = true;`)
   lines.push('    break;')
   lines.push('  }')
   lines.push('}')
@@ -2028,7 +2064,9 @@ export function emitPreparedArrayIncludesCallExpression(
 
   return {
     lines,
-    expression: found
+    expression: found,
+    runtimeTypeChecked: true,
+    valueType: 'boolean'
   }
 }
 
@@ -3427,6 +3465,15 @@ function emitPreparedArrayReceiver(
       }
     }
 
+    if (context.cppArrayValues.has(name)) {
+      return {
+        lines: [],
+        expression: emitArrayReferenceName(name, context),
+        elementType,
+        cppType: 'Array'
+      }
+    }
+
     return {
       lines: [],
       expression: emitArrayReferenceName(name, context),
@@ -3446,7 +3493,8 @@ function emitPreparedArrayReceiver(
     return {
       lines: value.lines,
       expression: value.expression,
-      elementType: resolvePreparedArrayReceiverElementType(expression, context)
+      elementType: resolvePreparedArrayReceiverElementType(expression, context),
+      cppType: value.cppType
     }
   }
 
@@ -3486,7 +3534,8 @@ function emitPreparedArrayReceiver(
       return {
         lines: call.lines,
         expression: call.expression,
-        elementType: call.elementType
+        elementType: call.elementType,
+        cppType: call.cppType
       }
     }
 
@@ -3495,7 +3544,8 @@ function emitPreparedArrayReceiver(
     return {
       lines: value.lines,
       expression: value.expression,
-      elementType: resolvePreparedArrayReceiverElementType(expression, context)
+      elementType: resolvePreparedArrayReceiverElementType(expression, context),
+      cppType: value.cppType
     }
   }
 

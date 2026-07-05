@@ -712,13 +712,15 @@ export function emitPreparedStringPredicateCall(expression: AnyNode, context: St
 
         return {
           lines,
-          expression: `(${cppValue.expression}.includes(${search.expression}, ${position.expression}) ? 1 : 0)`
+          expression: `${cppValue.expression}.includes(${search.expression}, ${position.expression})`,
+          valueType: 'boolean'
         }
       }
 
       return {
         lines,
-        expression: `(${cppValue.expression}.${expression.callee.property}(${search.expression}) ? 1 : 0)`
+        expression: `${cppValue.expression}.${expression.callee.property}(${search.expression})`,
+        valueType: 'boolean'
       }
     }
   }

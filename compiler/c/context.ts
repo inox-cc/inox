@@ -248,6 +248,7 @@ type CVariableScopeContext = {
   byteKinds: CStringMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
+  cppArrayValues: CStringSet
   cppStringValues: CStringSet
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
@@ -284,6 +285,7 @@ export type CFunctionContext = CEmitContext & {
   cleanupEnabled: boolean
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
+  cppArrayValues: CStringSet
   cppStringValues: CStringSet
   dgramBoundSockets: CStringSet
   dgramMessageSockets: CStringSet
@@ -344,6 +346,7 @@ export type CVariableScopeSnapshot = {
   byteKinds: CStringMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
+  cppArrayValues: CStringSet
   cppStringValues: CStringSet
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
@@ -442,6 +445,7 @@ export function createFunctionContext(
     boxedValues: [],
     boxedVariables: new Set(),
     classInstanceTypes: new Map(),
+    cppArrayValues: new Set(),
     cppStringValues: new Set(),
     continueFlowUsed: false,
     continueTargets: [],
@@ -983,6 +987,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousByteKinds = context.byteKinds
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
+  const previousCppArrayValues = context.cppArrayValues
   const previousCppStringValues = context.cppStringValues
   const previousErrorObjectNames = context.errorObjectNames
   const previousFunctionTypes = context.functionTypes
@@ -1009,6 +1014,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.byteKinds = cloneCStringMap(previousByteKinds)
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
+  context.cppArrayValues = cloneCStringSet(previousCppArrayValues)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
   context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
   context.functionTypes = cloneCFunctionTypeMap(previousFunctionTypes)
@@ -1035,6 +1041,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     byteKinds: previousByteKinds,
     boxedVariables: previousBoxedVariables,
     classInstanceTypes: previousClassInstanceTypes,
+    cppArrayValues: previousCppArrayValues,
     cppStringValues: previousCppStringValues,
     errorObjectNames: previousErrorObjectNames,
     functionTypes: previousFunctionTypes,
@@ -1067,6 +1074,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.byteKinds = snapshot.byteKinds
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
+  context.cppArrayValues = snapshot.cppArrayValues
   context.cppStringValues = snapshot.cppStringValues
   context.errorObjectNames = snapshot.errorObjectNames
   context.functionTypes = snapshot.functionTypes

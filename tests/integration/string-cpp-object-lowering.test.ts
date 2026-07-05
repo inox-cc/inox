@@ -29,6 +29,7 @@ console.log(trimmed.includes('std'), trimmed.startsWith('In'), trimmed.endsWith(
 console.log(trimmed.indexOf('o'), trimmed.lastIndexOf('i'))
 const parts = 'alpha,beta'.split(',')
 console.log(parts)
+console.log(parts.join('|'))
 console.log(words('left,right'))
 `
       }
@@ -57,11 +58,19 @@ console.log(words('left,right'))
   assert.match(source, /trimmed\.includes\("std"\)/)
   assert.match(source, /trimmed\.startsWith\("In"\)/)
   assert.match(source, /trimmed\.endsWith\("lib"\)/)
+  assert.match(
+    source,
+    /console\.log\("%d %d %d", trimmed\.includes\("std"\), trimmed\.startsWith\("In"\), trimmed\.endsWith\("lib"\)\);/
+  )
+  assert.doesNotMatch(source, /trimmed\.includes\("std"\) \? 1 : 0/)
+  assert.doesNotMatch(source, /\(\(double\)\(trimmed\.includes/)
   assert.match(source, /trimmed\.indexOf\("o"\)/)
   assert.match(source, /trimmed\.lastIndexOf\("i"\)/)
   assert.match(source, /auto parts = inox::String\("alpha,beta"\)\.split\(","\);/)
+  assert.match(source, /parts\.join\("\|"\)/)
   assert.match(source, /inox::String\("alpha,beta"\)\.split\(","\)/)
   assert.doesNotMatch(source, /inox::Value parts = inox::String\("alpha,beta"\)\.split\(","\);/)
+  assert.doesNotMatch(source, /inox_array_join\(&inox_default_allocator, parts/)
   assert.doesNotMatch(
     source,
     /inox_string_(trim|to_upper_case|slice|includes|starts_with|ends_with|index_of|last_index_of|split)_parts/

@@ -133,6 +133,7 @@ type CFunctionContext = {
   collectionLoweringDependencies: CollectionLoweringDependencies
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
+  cppArrayValues: CStringSet
   cppStringValues: CStringSet
   cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
@@ -1670,6 +1671,10 @@ export function emitRuntimeValueVariableDeclaration(
   }
 
   registerRuntimeValueMetadata(statement.name, valueType, statement, expression, context)
+
+  if (value.cppType === 'Array') {
+    context.cppArrayValues.add(statement.name)
+  }
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
