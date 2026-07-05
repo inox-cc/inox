@@ -46,8 +46,7 @@ import type {
   CryptoHashMethodCheckerContext,
   FsBooleanOptions,
   FsRuntimeArgumentCheck,
-  FsRuntimeCallInfo,
-  FsRuntimeCallPlan
+  FsRuntimeCallInfo
 } from './stdlib/node/checker.ts'
 import {
   commonArrayElementType,
@@ -63,7 +62,6 @@ import {
   builtinGlobalSymbol,
   errorObjectShape,
   fetchAbortControllerObjectShape,
-  fetchResponseObjectShape,
   fsDirentObjectShape,
   libuvOnlyRuntimeImportFeature,
   urlObjectShape,
@@ -73,11 +71,9 @@ import {
   fetchAbortControllerConstructorName,
   fetchAbortControllerRuntimeMethod,
   fetchHeadersRuntimeMethodName,
-  fetchInitOptionName,
   fetchResponseBodyMethodInfo,
   fetchRuntimeCallName,
   isJsonParseDeclaredType,
-  isFetchHttpsLiteral,
   isFetchUnsupportedResponseBodyMember,
   isSupportedFetchRedirectLiteral,
   jsonRuntimeMethodName
@@ -136,6 +132,28 @@ import {
   resolveExpressionPromiseRejectionValueType,
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
+import { checkFsCall as checkFsCallInContext } from './checker/fs-calls.ts'
+import type {
+  CheckedFsArgInfo,
+  CheckedFsCallInfo,
+  CheckedFsIndexedArgInfo,
+  CheckedFsObjectPropertyInfo,
+  FsCallCheckerContext
+} from './checker/fs-calls.ts'
+import {
+  checkFetchAbortControllerMethodCall as checkFetchAbortControllerMethodCallInContext,
+  checkFetchCall as checkFetchCallInContext,
+  checkFetchHeadersMethodCall as checkFetchHeadersMethodCallInContext,
+  checkFetchResponseMethodCall as checkFetchResponseMethodCallInContext,
+  checkFetchUnsupportedResponseBodyMember as checkFetchUnsupportedResponseBodyMemberInContext
+} from './checker/fetch-calls.ts'
+import type {
+  CheckedFetchHeaderInfo,
+  CheckedFetchInitInfo,
+  CheckedFetchInitPropertyInfo,
+  CheckedFetchReceiverInfo,
+  FetchCallCheckerContext
+} from './checker/fetch-calls.ts'
 import {
   checkArrayIsArrayCall as checkArrayIsArrayCallInContext,
   checkConsoleCall as checkConsoleCallInContext,
@@ -163,6 +181,13 @@ import {
   checkTimeCall as checkTimeCallInContext
 } from './checker/time-calls.ts'
 import type { TimeCallCheckerContext } from './checker/time-calls.ts'
+import { checkTimerCall as checkTimerCallInContext } from './checker/timer-calls.ts'
+import type {
+  CheckedTimerArgInfo,
+  CheckedTimerCallInfo,
+  CheckedTimerCallbackInfo,
+  TimerCallCheckerContext
+} from './checker/timer-calls.ts'
 import {
   findShapeField as findShapeFieldInContext,
   isErrorObjectExpression as isErrorObjectExpressionInContext,
@@ -4487,149 +4512,94 @@ class Checker {
       return null
     }
 
-    if (!this.requireLibuvBackend('fetch', expression.loc)) {
-      expression.fetchRuntimeMethod = method
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'object'
-      expression.shape = fetchResponseObjectShape
+    let initInfo: CheckedFetchInitInfo | null = null
 
-      return 'promise'
+    if (expression.args.length > 1) {
+      initInfo = this.checkedFetchInitInfo(checkerNodeAt(expression.args, 1))
     }
 
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function fetch expects 1 or 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        this.checkExpression(expression.args[0]),
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-
-      if (isFetchHttpsLiteral(expression.args[0]) && !this.supportsFetchHttps()) {
-        this.report(
-          'INOX_FETCH',
-          'https fetch URLs require a configured TLS adapter and are not supported by the current C/libuv fetch slice',
-          expression.args[0].loc
-        )
-      }
-    }
-
-    if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-      this.checkFetchInitObject(expression.args[1])
-    }
-
-    expression.fetchRuntimeMethod = method
-    expression.valueType = 'promise'
-    expression.promiseValueType = 'object'
-    expression.shape = fetchResponseObjectShape
-
-    return 'promise'
+    return checkFetchCallInContext(
+      this.fetchCallContext(),
+      expression,
+      method,
+      this.requireLibuvBackend('fetch', expression.loc),
+      this.supportsFetchHttps(),
+      this.checkedCallArgInfos(expression),
+      initInfo
+    )
   }
 
-  checkFetchInitObject(expression: AnyNode): void {
+  checkedFetchInitInfo(expression: AnyNode): CheckedFetchInitInfo {
     if (expression.type !== 'ObjectLiteral') {
       this.checkExpression(expression)
-      this.report(
-        'INOX_FETCH',
-        'fetch init must be an object literal in the current C/libuv fetch slice',
-        expression.loc
-      )
-      return
+
+      return {
+        loc: expression.loc,
+        isObjectLiteral: false,
+        properties: []
+      }
     }
 
-    for (const property of expression.properties) {
-      const optionName = fetchInitOptionName(property.key)
+    const properties: CheckedFetchInitPropertyInfo[] = []
+    const nodeProperties: CheckerObjectPropertyNode[] = expression.properties
 
-      if (optionName === null || typeof optionName === 'undefined') {
-        this.checkExpression(property.value)
-        this.report(
-          'INOX_FETCH',
-          `fetch init option ${property.key} is not supported by the current C/libuv fetch slice`,
-          property.loc
-        )
-        continue
+    for (const property of nodeProperties) {
+      properties.push(this.checkedFetchInitPropertyInfo(property, property.key === 'headers'))
+    }
+
+    return {
+      loc: expression.loc,
+      isObjectLiteral: true,
+      properties
+    }
+  }
+
+  checkedFetchInitPropertyInfo(
+    property: CheckerObjectPropertyNode,
+    inspectHeaders: boolean
+  ): CheckedFetchInitPropertyInfo {
+    const headers: CheckedFetchHeaderInfo[] = []
+    let valueType: ValueType = 'object'
+    let shape: ObjectShapeInfo | null = null
+
+    if (inspectHeaders && property.value.type === 'ObjectLiteral') {
+      const headerProperties: CheckerObjectPropertyNode[] = property.value.properties
+
+      for (const header of headerProperties) {
+        headers.push(this.checkedFetchHeaderInfo(header))
       }
+    } else {
+      valueType = this.checkExpression(property.value)
+      shape = this.resolveExpressionShape(property.value)
+    }
 
-      if (property.key === 'method' || property.key === 'redirect') {
-        this.checkAssignableType(
-          this.checkExpression(property.value),
-          'string',
-          property.value.loc,
-          false,
-          this.expressionCanBeNull(property.value)
-        )
+    return {
+      key: property.key,
+      loc: property.loc,
+      valueLoc: property.value.loc,
+      valueType,
+      nullable: this.expressionCanBeNull(property.value),
+      shape,
+      valueIsObjectLiteral: property.value.type === 'ObjectLiteral',
+      supportedRedirectLiteral: isSupportedFetchRedirectLiteral(property.value),
+      headers
+    }
+  }
 
-        if (property.key === 'redirect' && !isSupportedFetchRedirectLiteral(property.value)) {
-          this.report(
-            'INOX_FETCH',
-            "fetch init redirect must be 'follow', 'manual' or 'error' in the current C/libuv fetch slice",
-            property.value.loc
-          )
-        }
-        continue
-      }
+  checkedFetchHeaderInfo(property: CheckerObjectPropertyNode): CheckedFetchHeaderInfo {
+    return {
+      key: property.key,
+      loc: property.loc,
+      nullable: this.expressionCanBeNull(property.value),
+      valueLoc: property.value.loc,
+      valueType: this.checkExpression(property.value)
+    }
+  }
 
-      if (property.key === 'body') {
-        const bodyType = this.checkExpression(property.value)
-
-        if (bodyType !== 'string' && bodyType !== 'bytes') {
-          this.report(
-            'INOX_FETCH',
-            'fetch init body must be a string, Buffer or Uint8Array in the current C/libuv fetch slice',
-            property.value.loc
-          )
-        }
-        continue
-      }
-
-      if (property.key === 'signal') {
-        const signalType = this.checkExpression(property.value)
-        const signalShape = this.resolveExpressionShape(property.value)
-
-        if (
-          signalType !== 'object' ||
-          signalShape === null ||
-          typeof signalShape === 'undefined' ||
-          signalShape.builtin !== 'fetch.AbortSignal'
-        ) {
-          this.report(
-            'INOX_FETCH',
-            'fetch init signal must be an AbortSignal in the current C/libuv fetch slice',
-            property.value.loc
-          )
-        }
-        continue
-      }
-
-      if (property.value.type !== 'ObjectLiteral') {
-        this.checkExpression(property.value)
-        this.report(
-          'INOX_FETCH',
-          'fetch init headers must be an object literal in the current C/libuv fetch slice',
-          property.value.loc
-        )
-        continue
-      }
-
-      const headers: CheckerObjectPropertyNode[] = property.value.properties
-
-      for (const header of headers) {
-        this.checkAssignableType(
-          this.checkExpression(header.value),
-          'string',
-          header.value.loc,
-          false,
-          this.expressionCanBeNull(header.value)
-        )
-      }
+  checkedFetchReceiverInfo(expression: AnyNode): CheckedFetchReceiverInfo {
+    return {
+      valueType: this.checkExpression(expression),
+      shape: this.resolveExpressionShape(expression)
     }
   }
 
@@ -4756,30 +4726,12 @@ class Checker {
       return null
     }
 
-    const objectType = this.checkExpression(expression.callee.object)
-    const shape = this.resolveExpressionShape(expression.callee.object)
-
-    if (
-      objectType !== 'object' ||
-      shape === null ||
-      typeof shape === 'undefined' ||
-      shape.builtin !== 'fetch.AbortController'
-    ) {
-      return null
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function AbortController.abort expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    expression.fetchRuntimeMethod = method
-    expression.valueType = 'void'
-
-    return 'void'
+    return checkFetchAbortControllerMethodCallInContext(
+      this.fetchCallContext(),
+      expression,
+      method,
+      this.checkedFetchReceiverInfo(expression.callee.object)
+    )
   }
 
   checkFetchResponseMethodCall(expression: AnyNode): ValueType | null {
@@ -4792,70 +4744,21 @@ class Checker {
       return null
     }
 
-    const objectType = this.checkExpression(expression.callee.object)
-    const shape = this.resolveExpressionShape(expression.callee.object)
-
-    if (
-      objectType !== 'object' ||
-      shape === null ||
-      typeof shape === 'undefined' ||
-      shape.builtin !== 'fetch.Response'
-    ) {
-      return null
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function Response.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (!methodInfo.supported) {
-      this.report(
-        'INOX_FETCH',
-        `Response.${expression.callee.property} is not supported by the current C/libuv fetch slice`,
-        expression.loc
-      )
-      expression.valueType = 'promise'
-      expression.promiseValueType = 'unknown'
-
-      return 'promise'
-    }
-
-    expression.fetchRuntimeMethod = 'text'
-    expression.valueType = 'promise'
-    expression.promiseValueType = 'string'
-
-    return 'promise'
+    return checkFetchResponseMethodCallInContext(
+      this.fetchCallContext(),
+      expression,
+      methodInfo,
+      this.checkedFetchReceiverInfo(expression.callee.object)
+    )
   }
 
   checkFetchUnsupportedResponseBodyMember(expression: AnyNode): ValueType | null {
-    if (!isFetchUnsupportedResponseBodyMember(expression.property)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.object)
-    const shape = this.resolveExpressionShape(expression.object)
-
-    if (
-      objectType !== 'object' ||
-      shape === null ||
-      typeof shape === 'undefined' ||
-      shape.builtin !== 'fetch.Response'
-    ) {
-      return null
-    }
-
-    this.report(
-      'INOX_FETCH',
-      'Response.body streams are not supported by the current C/libuv fetch slice',
-      expression.loc
+    return checkFetchUnsupportedResponseBodyMemberInContext(
+      this.fetchCallContext(),
+      expression,
+      isFetchUnsupportedResponseBodyMember(expression.property),
+      this.checkedFetchReceiverInfo(expression.object)
     )
-    expression.valueType = 'object'
-
-    return 'object'
   }
 
   checkFetchHeadersMethodCall(expression: AnyNode): ValueType | null {
@@ -4868,46 +4771,13 @@ class Checker {
       return null
     }
 
-    const objectType = this.checkExpression(expression.callee.object)
-    const shape = this.resolveExpressionShape(expression.callee.object)
-
-    if (
-      objectType !== 'object' ||
-      shape === null ||
-      typeof shape === 'undefined' ||
-      shape.builtin !== 'fetch.Headers'
-    ) {
-      return null
-    }
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function Headers.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        this.checkExpression(expression.args[0]),
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-    }
-
-    expression.fetchRuntimeMethod = method
-    expression.valueType = 'boolean'
-    expression.nullable = false
-
-    if (method === 'headersGet') {
-      expression.valueType = 'string'
-      expression.nullable = true
-    }
-
-    return expression.valueType
+    return checkFetchHeadersMethodCallInContext(
+      this.fetchCallContext(),
+      expression,
+      method,
+      this.checkedFetchReceiverInfo(expression.callee.object),
+      this.checkedCallArgInfos(expression)
+    )
   }
 
   resolveClassMethodReceiverClassName(expression: AnyNode): string | null {
@@ -4966,25 +4836,53 @@ class Checker {
 
     const promisesApi = info.viaPromises || isFsPromisesImportSymbol(this.scope.resolve(info.root))
     const plan = fsRuntimeCallPlan(info, promisesApi, expression.args.length)
+    const callInfo = plan.unsupportedMessage !== null && typeof plan.unsupportedMessage !== 'undefined'
+      ? { argCount: expression.args.length, args: [] }
+      : this.checkedFsCallInfo(expression, plan.argumentChecks)
+    const options = this.fsCallOptionsFromInfo(plan.argumentChecks, callInfo)
 
-    if (plan.unsupportedMessage !== null && typeof plan.unsupportedMessage !== 'undefined') {
-      this.report('INOX_FS_UNSUPPORTED', plan.unsupportedMessage, expression.loc)
-      expression.valueType = 'unknown'
+    checkFsCallInContext(this.fsCallContext(), expression, plan, callInfo)
 
-      return 'unknown'
+    if (plan.unsupportedMessage === null || typeof plan.unsupportedMessage === 'undefined') {
+      applyFsRuntimeCallPlan(expression, plan, options)
+
+      if (plan.bytesFromWriteData) {
+        expression.fsBytes = options.bytes === true
+      }
+
+      if (plan.direntsFromOptions && options.withFileTypes === true) {
+        expression.fsDirents = true
+        expression.arrayElementType = 'object'
+        expression.arrayElementDeclaredType = 'fs.Dirent'
+      }
+
+      if (plan.recursiveFromOptions) {
+        expression.fsRecursive = options.recursive === true
+      }
+
+      if (plan.forceFromOptions) {
+        expression.fsForce = options.force === true
+      }
     }
 
-    if (expression.args.length < plan.minArgs || expression.args.length > plan.maxArgs) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${plan.label} expects ${plan.expectedArgsLabel} argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
+    expression.fsRuntimeMethod = plan.runtimeMethod
+    expression.valueType = plan.valueType
+    expression.promiseValueType = plan.promiseValueType
+
+    if (plan.bytes !== null && typeof plan.bytes !== 'undefined') {
+      expression.fsBytes = plan.bytes
     }
 
-    const options = this.checkFsRuntimeArguments(expression, plan.argumentChecks)
+    if (expression.arrayElementType === null || typeof expression.arrayElementType === 'undefined') {
+      expression.arrayElementType = plan.arrayElementType
+    }
 
-    applyFsRuntimeCallPlan(expression, plan, options)
+    if (
+      expression.arrayElementDeclaredType === null ||
+      typeof expression.arrayElementDeclaredType === 'undefined'
+    ) {
+      expression.arrayElementDeclaredType = plan.arrayElementDeclaredType
+    }
 
     return plan.valueType
   }
@@ -5009,37 +4907,138 @@ class Checker {
     return fsRuntimeCallInfoFromImportSymbol(expression.callee, symbol)
   }
 
-  checkFsRuntimeArguments(expression: AnyNode, checks: FsRuntimeArgumentCheck[]): FsBooleanOptions {
+  checkedFsCallInfo(expression: AnyNode, checks: FsRuntimeArgumentCheck[]): CheckedFsCallInfo {
+    const args: CheckedFsIndexedArgInfo[] = []
+
+    for (const check of checks) {
+      if (
+        check.index >= expression.args.length ||
+        this.hasCheckedFsIndexedArg(args, check.index)
+      ) {
+        continue
+      }
+
+      const arg = checkerNodeAt(expression.args, check.index)
+
+      args.push({
+        arg: this.checkedFsArgInfo(arg, this.fsCheckInspectsObjectLiteral(checks, check.index)),
+        index: check.index
+      })
+    }
+
+    return {
+      argCount: expression.args.length,
+      args
+    }
+  }
+
+  hasCheckedFsIndexedArg(args: CheckedFsIndexedArgInfo[], index: number): boolean {
+    for (const arg of args) {
+      if (arg.index === index) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  fsCheckInspectsObjectLiteral(checks: FsRuntimeArgumentCheck[], index: number): boolean {
+    for (const check of checks) {
+      if (check.index === index && (check.kind === 'boolean-options' || check.kind === 'readdir-options')) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  checkedFsArgInfo(node: AnyNode, inspectObjectLiteral: boolean): CheckedFsArgInfo {
+    if (inspectObjectLiteral && node.type === 'ObjectLiteral') {
+      const properties: CheckedFsObjectPropertyInfo[] = []
+      const nodeProperties: CheckerObjectPropertyNode[] = node.properties
+
+      for (const property of nodeProperties) {
+        properties.push(this.checkedFsObjectPropertyInfo(property))
+      }
+
+      let valueType: ValueType = 'object'
+
+      if (node.valueType !== null && typeof node.valueType !== 'undefined') {
+        valueType = node.valueType
+      }
+
+      return this.checkedFsValueInfoFromType(node, valueType, properties)
+    }
+
+    return this.checkedFsValueInfoFromType(node, this.checkExpression(node), [])
+  }
+
+  checkedFsObjectPropertyInfo(property: CheckerObjectPropertyNode): CheckedFsObjectPropertyInfo {
+    let valueType: ValueType = 'unknown'
+
+    if (property.value.valueType === null || typeof property.value.valueType === 'undefined') {
+      valueType = this.checkExpression(property.value)
+    } else {
+      valueType = property.value.valueType
+    }
+
+    return {
+      key: property.key,
+      loc: property.loc,
+      value: this.checkedFsValueInfoFromType(property.value, valueType, [])
+    }
+  }
+
+  checkedFsValueInfoFromType(
+    node: AnyNode,
+    valueType: ValueType,
+    properties: CheckedFsObjectPropertyInfo[]
+  ): CheckedFsArgInfo {
+    let stringLiteralValue: string | null = null
+    let booleanLiteralValue: boolean | null = null
+
+    if (node.type === 'StringLiteral') {
+      stringLiteralValue = node.value
+    }
+
+    if (node.type === 'BooleanLiteral') {
+      booleanLiteralValue = node.value === true
+    }
+
+    return {
+      booleanLiteralValue,
+      loc: node.loc,
+      nullable: this.expressionCanBeNull(node),
+      properties,
+      stringLiteralValue,
+      type: node.type,
+      valueType
+    }
+  }
+
+  fsCallOptionsFromInfo(checks: FsRuntimeArgumentCheck[], info: CheckedFsCallInfo): FsBooleanOptions {
     const options: FsBooleanOptions = {}
 
     for (const check of checks) {
-      if (check.kind === 'string') {
-        this.checkFsStringArg(expression, check.index)
-      } else if (check.kind === 'number') {
-        this.checkFsNumberArg(expression, check.index)
-      } else if (check.kind === 'utf8-encoding') {
-        this.checkUtf8EncodingArg(expression, check.index, check.label)
-      } else if (check.kind === 'write-data') {
-        options.bytes = this.checkFsWriteDataArg(expression, check.index, check.label)
+      if (check.kind === 'write-data') {
+        const arg = this.checkedFsArgAt(info, check.index)
+
+        options.bytes = arg !== null && typeof arg !== 'undefined' && arg.valueType === 'bytes'
       } else if (check.kind === 'readdir-options') {
-        options.withFileTypes = this.checkFsReaddirOptionsArg(expression, check.index, check.label)
+        options.withFileTypes = this.checkedFsBooleanOption(info, check.index, 'withFileTypes')
       } else if (
         check.kind === 'boolean-options' &&
         check.allowedOptions !== null &&
         typeof check.allowedOptions !== 'undefined'
       ) {
-        const booleanOptions = this.checkFsBooleanOptionsArg(expression, check.index, check.label, check.allowedOptions)
-
-        if (booleanOptions.recursive === true) {
-          options.recursive = true
-        }
-
-        if (booleanOptions.force === true) {
-          options.force = true
-        }
-
-        if (booleanOptions.withFileTypes === true) {
-          options.withFileTypes = true
+        for (const optionName of check.allowedOptions) {
+          if (optionName === 'recursive') {
+            options.recursive = this.checkedFsBooleanOption(info, check.index, optionName)
+          } else if (optionName === 'force') {
+            options.force = this.checkedFsBooleanOption(info, check.index, optionName)
+          } else if (optionName === 'withFileTypes') {
+            options.withFileTypes = this.checkedFsBooleanOption(info, check.index, optionName)
+          }
         }
       }
     }
@@ -5047,124 +5046,30 @@ class Checker {
     return options
   }
 
-  checkFsWriteDataArg(expression: AnyNode, index: number, _label: string): boolean {
-    const arg = expression.args[index]
+  checkedFsArgAt(info: CheckedFsCallInfo, index: number): CheckedFsArgInfo | null {
+    for (const item of info.args) {
+      if (item.index === index) {
+        return item.arg
+      }
+    }
+
+    return null
+  }
+
+  checkedFsBooleanOption(info: CheckedFsCallInfo, index: number, key: string): boolean {
+    const arg = this.checkedFsArgAt(info, index)
 
     if (arg === null || typeof arg === 'undefined') {
       return false
     }
 
-    const argType = this.checkExpression(arg)
-
-    if (argType === 'bytes') {
-      return true
+    for (const property of arg.properties) {
+      if (property.key === key) {
+        return property.value.booleanLiteralValue === true
+      }
     }
-
-    this.checkAssignableType(argType, 'string', arg.loc, false, this.expressionCanBeNull(arg))
 
     return false
-  }
-
-  checkFsStringArg(expression: AnyNode, index: number): void {
-    const arg = expression.args[index]
-
-    if (arg === null || typeof arg === 'undefined') {
-      return
-    }
-
-    this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
-  }
-
-  checkFsNumberArg(expression: AnyNode, index: number): void {
-    const arg = expression.args[index]
-
-    if (arg === null || typeof arg === 'undefined') {
-      return
-    }
-
-    this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, this.expressionCanBeNull(arg))
-  }
-
-  checkFsReaddirOptionsArg(expression: AnyNode, index: number, label: string): boolean {
-    const arg = expression.args[index]
-
-    if (arg === null || typeof arg === 'undefined') {
-      return false
-    }
-
-    if (arg.type === 'StringLiteral') {
-      this.checkUtf8EncodingArg(expression, index, label)
-
-      return false
-    }
-
-    const options = this.checkFsBooleanOptionsArg(expression, index, label, ['withFileTypes'])
-
-    return options.withFileTypes === true
-  }
-
-  checkFsBooleanOptionsArg(expression: AnyNode, index: number, label: string, allowed: string[]): FsBooleanOptions {
-    const arg = expression.args[index]
-    const result: FsBooleanOptions = {}
-
-    if (arg === null || typeof arg === 'undefined') {
-      return result
-    }
-
-    if (arg.type !== 'ObjectLiteral') {
-      this.report(
-        'INOX_TYPE_MISMATCH',
-        `${label} options must be an object literal in the current compiler slice`,
-        arg.loc
-      )
-      this.checkExpression(arg)
-
-      return result
-    }
-
-    const properties: CheckerObjectPropertyNode[] = arg.properties
-
-    for (const property of properties) {
-      let allowedOption = false
-
-      for (const allowedName of allowed) {
-        if (property.key === allowedName) {
-          allowedOption = true
-          break
-        }
-      }
-
-      if (!allowedOption) {
-        this.report('INOX_UNKNOWN_FIELD', `unknown ${label} option ${property.key}`, property.loc)
-        this.checkExpression(property.value)
-        continue
-      }
-
-      let valueType = property.value.valueType
-
-      if (valueType === null || typeof valueType === 'undefined') {
-        valueType = this.checkExpression(property.value)
-      }
-
-      if (valueType !== 'boolean' || property.value.type !== 'BooleanLiteral') {
-        this.report(
-          'INOX_TYPE_MISMATCH',
-          `${label} option ${property.key} must be a boolean literal in the current compiler slice`,
-          property.value.loc
-        )
-        continue
-      }
-
-      if (property.key === 'recursive') {
-        result.recursive = property.value.value === true
-      } else if (property.key === 'force') {
-        result.force = property.value.value === true
-      } else if (property.key === 'withFileTypes') {
-        result.withFileTypes = property.value.value === true
-      }
-    }
-
-    return result
   }
 
   checkJsonCall(expression: AnyNode, declared?: ResolvedTypeInfo | null): ValueType | null {
@@ -5754,66 +5659,12 @@ class Checker {
       return null
     }
 
-    expression.timerRuntimeMethod = method
-
-    if (timerClearMethodName(method)) {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${method} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          this.checkExpression(expression.args[0]),
-          'timer',
-          expression.args[0].loc,
-          false,
-          false
-        )
-      }
-
-      expression.valueType = 'void'
-
-      return 'void'
-    }
-
-    if (method === 'setImmediate') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function setImmediate expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkTimerCallbackArg(expression, 0)
-      expression.valueType = 'timer'
-
-      return 'timer'
-    }
-
-    if (expression.args.length !== 2) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${method} expects 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    this.checkTimerCallbackArg(expression, 0)
-
-    if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-      const delayArg = checkerNodeAt(expression.args, 1)
-      const delayType = this.checkExpression(delayArg)
-      this.checkAssignableType(delayType, 'number', delayArg.loc, false, false)
-    }
-
-    expression.valueType = 'timer'
-
-    return 'timer'
+    return checkTimerCallInContext(
+      this.timerCallContext(),
+      expression,
+      method,
+      this.checkedTimerCallInfo(expression, method)
+    )
   }
 
   resolveTimerRuntimeMethod(callee: AnyNode): string | null {
@@ -5835,77 +5686,94 @@ class Checker {
     )
   }
 
-  checkTimerCallbackArg(expression: AnyNode, index: number): void {
-    const arg = expression.args[index]
-    const functionType = timerCallbackFunctionType()
+  checkedTimerCallInfo(expression: AnyNode, method: string): CheckedTimerCallInfo {
+    const isClearMethod = timerClearMethodName(method) !== null
 
+    return {
+      argCount: expression.args.length,
+      callback: isClearMethod ? this.missingTimerCallbackInfo(expression.loc) : this.checkedTimerCallbackInfo(expression.args[0]),
+      firstArg: isClearMethod ? this.checkedTimerArgInfo(expression.args[0]) : null,
+      delayArg: isClearMethod || method === 'setImmediate' ? null : this.checkedTimerArgInfo(expression.args[1])
+    }
+  }
+
+  checkedTimerArgInfo(arg: AnyNode | null | undefined): CheckedTimerArgInfo | null {
     if (arg === null || typeof arg === 'undefined') {
-      return
+      return null
+    }
+
+    return {
+      valueType: this.checkExpression(arg),
+      loc: arg.loc
+    }
+  }
+
+  checkedTimerCallbackInfo(arg: AnyNode | null | undefined): CheckedTimerCallbackInfo {
+    if (arg === null || typeof arg === 'undefined') {
+      return this.missingTimerCallbackInfo({
+        line: 0,
+        column: 0
+      })
     }
 
     if (arg.type === 'ArrowFunctionExpression') {
-      if (arg.async === true) {
-        this.report(
-          'INOX_ASYNC_TIMER_CALLBACK',
-          'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly',
-          arg.loc
-        )
-        return
+      if (arg.async !== true) {
+        this.checkArrowFunctionExpression(arg, timerCallbackFunctionType())
       }
 
-      this.checkArrowFunctionExpression(arg, functionType)
-      return
+      return {
+        async: arg.async === true,
+        kind: 'arrow',
+        loc: arg.loc,
+        paramsLength: null,
+        returnNullable: false,
+        returnType: null,
+        valueType: null
+      }
     }
 
-    this.checkAssignableType(this.checkExpression(arg), 'function', arg.loc, false, false)
-
+    const valueType = this.checkExpression(arg)
     const symbol = this.getCallableSymbol(arg)
+    let paramsLength: number | null = null
+    let returnType: ValueType | null = null
+    let returnNullable = false
+    let isAsync = false
 
-    let params: AnyNode[] | null = null
+    if (symbol !== null && typeof symbol !== 'undefined') {
+      if (symbol.params !== null && typeof symbol.params !== 'undefined') {
+        paramsLength = symbol.params.length
+      }
 
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.params !== null &&
-      typeof symbol.params !== 'undefined'
-    ) {
-      params = symbol.params
+      if (symbol.async === true || symbol.returnType === 'promise') {
+        isAsync = true
+      }
+
+      if (symbol.returnType !== null && typeof symbol.returnType !== 'undefined') {
+        returnType = symbol.returnType
+        returnNullable = symbol.returnNullable === true
+      }
     }
 
-    if (params !== null && typeof params !== 'undefined' && params.length !== functionType.params.length) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function callback expects ${functionType.params.length} argument(s), got ${params.length}`,
-        arg.loc
-      )
+    return {
+      async: isAsync,
+      kind: 'reference',
+      loc: arg.loc,
+      paramsLength,
+      returnNullable,
+      returnType,
+      valueType
     }
+  }
 
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      (symbol.async === true || symbol.returnType === 'promise')
-    ) {
-      this.report(
-        'INOX_ASYNC_TIMER_CALLBACK',
-        'async timer callbacks are not supported in the MVP; use a synchronous timer callback and handle Promise work explicitly',
-        arg.loc
-      )
-      return
-    }
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.returnType !== null &&
-      typeof symbol.returnType !== 'undefined'
-    ) {
-      this.checkAssignableType(
-        symbol.returnType,
-        functionType.returnType,
-        arg.loc,
-        functionType.returnNullable === true,
-        symbol.returnNullable === true
-      )
+  missingTimerCallbackInfo(loc: SourceLocation): CheckedTimerCallbackInfo {
+    return {
+      async: false,
+      kind: 'missing',
+      loc,
+      paramsLength: null,
+      returnNullable: false,
+      returnType: null,
+      valueType: null
     }
   }
 
@@ -8796,7 +8664,25 @@ class Checker {
     }
   }
 
+  fsCallContext(): FsCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  fetchCallContext(): FetchCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
   timeCallContext(): TimeCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  timerCallContext(): TimerCallCheckerContext {
     return {
       diagnostics: this.diagnostics
     }
