@@ -131,7 +131,7 @@ set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/core/callback.c"
   "${INOX_RUNTIME_DIR}/src/core/class_descriptor.c"
   "${INOX_RUNTIME_DIR}/src/core/value.c"
-  "${INOX_RUNTIME_DIR}/src/objects/object.c"
+  "${INOX_RUNTIME_DIR}/src/objects/object.cc"
   ${INOX_STDLIB_GLOBAL_SOURCES}
   ${INOX_STDLIB_NODE_SOURCES}
 )

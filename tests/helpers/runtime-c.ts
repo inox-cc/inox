@@ -40,7 +40,7 @@ const runtimeBaseSources = [
   'runtime/src/core/weak.c',
   'runtime/src/async/loop.c',
   'runtime/src/async/promise.c',
-  'runtime/src/objects/object.c'
+  'runtime/src/objects/object.cc'
 ]
 let runtimeIncludeArgsPromise: Promise<string[]> | null = null
 let runtimeSourcesPromise: Promise<string[]> | null = null

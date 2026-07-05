@@ -13,10 +13,6 @@
 #include "inox/weak.h"
 #endif
 
-inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
-inox_status inox_array_get(inox_value array, size_t index, inox_value* out);
-inox_status inox_array_set(inox_value array, size_t index, inox_value value);
-
 static void inox_object_dispose_ref(inox_ref* ref);
 static bool inox_class_descriptor_is_valid(const inox_class_descriptor* descriptor);
 
@@ -81,7 +77,7 @@ inox_status inox_object_new(inox_allocator* allocator, const inox_shape* shape, 
   }
 
   const size_t size = sizeof(inox_object) + sizeof(inox_object_field) * shape->field_count;
-  inox_object* object = allocator->alloc(allocator->user, size, _Alignof(inox_object));
+  inox_object* object = (inox_object*)allocator->alloc(allocator->user, size, alignof(inox_object));
 
   if (object == 0) {
     *out = inox_undefined_value();
@@ -92,7 +88,7 @@ inox_status inox_object_new(inox_allocator* allocator, const inox_shape* shape, 
   object->header.ref_count = 1;
   object->header.flags = 0;
   object->header.size = size;
-  object->header.align = _Alignof(inox_object);
+  object->header.align = alignof(inox_object);
   object->header.allocator = allocator;
   object->header.dispose = inox_object_dispose_ref;
   inox_ref_init_weak(&object->header);
@@ -248,19 +244,19 @@ static void inox_object_dispose_ref(inox_ref* ref) {
     const char* name = object->shape->fields[index].name;
 
     if (name != 0) {
-      object->header.allocator->free(object->header.allocator->user, (void*)name, strlen(name) + 1, _Alignof(char));
+      object->header.allocator->free(object->header.allocator->user, (void*)name, strlen(name) + 1, alignof(char));
     }
   }
 
   if (object->shape->fields != 0) {
     object->header.allocator->free(
       object->header.allocator->user, (void*)object->shape->fields,
-      sizeof(inox_field_info) * object->shape->field_count, _Alignof(inox_field_info)
+      sizeof(inox_field_info) * object->shape->field_count, alignof(inox_field_info)
     );
   }
 
   object->header.allocator->free(
-    object->header.allocator->user, (void*)object->shape, sizeof(inox_shape), _Alignof(inox_shape)
+    object->header.allocator->user, (void*)object->shape, sizeof(inox_shape), alignof(inox_shape)
   );
 }
 
@@ -289,7 +285,7 @@ static inox_status inox_array_object_values(inox_allocator* allocator, inox_valu
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_new(allocator, instance->length, out);
+  inox_status status = Array.make(allocator, instance->length, out);
 
   if (status != INOX_OK) {
     return status;
@@ -298,10 +294,10 @@ static inox_status inox_array_object_values(inox_allocator* allocator, inox_valu
   for (size_t index = 0; index < instance->length; index += 1) {
     inox_value value = inox_undefined_value();
 
-    status = inox_array_get(array, index, &value);
+    status = Array.get(array, index, &value);
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, index, value);
+      status = Array.set(*out, index, value);
     }
 
     inox_release(value);
@@ -322,7 +318,7 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_new(allocator, instance->length, out);
+  inox_status status = Array.make(allocator, instance->length, out);
 
   if (status != INOX_OK) {
     return status;
@@ -340,7 +336,7 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, index, key);
+      status = Array.set(*out, index, key);
     }
 
     inox_release(key);
@@ -361,7 +357,7 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_new(allocator, instance->length, out);
+  inox_status status = Array.make(allocator, instance->length, out);
 
   if (status != INOX_OK) {
     return status;
@@ -377,7 +373,7 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
       status = INOX_ERR_TYPE;
     } else {
-      status = inox_array_new(allocator, 2, &pair);
+      status = Array.make(allocator, 2, &pair);
     }
 
     if (status == INOX_OK) {
@@ -385,19 +381,19 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     }
 
     if (status == INOX_OK) {
-      status = inox_array_get(array, index, &value);
+      status = Array.get(array, index, &value);
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(pair, 0, key);
+      status = Array.set(pair, 0, key);
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(pair, 1, value);
+      status = Array.set(pair, 1, value);
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, index, pair);
+      status = Array.set(*out, index, pair);
     }
 
     inox_release(value);
@@ -427,18 +423,18 @@ static inox_status inox_object_entry_from_key_value(
 
   inox_value pair = inox_undefined_value();
   inox_value key = inox_undefined_value();
-  inox_status status = inox_array_new(allocator, 2, &pair);
+  inox_status status = Array.make(allocator, 2, &pair);
 
   if (status == INOX_OK) {
     status = inox_string_from_literal(allocator, key_bytes, key_len, &key);
   }
 
   if (status == INOX_OK) {
-    status = inox_array_set(pair, 0, key);
+    status = Array.set(pair, 0, key);
   }
 
   if (status == INOX_OK) {
-    status = inox_array_set(pair, 1, value);
+    status = Array.set(pair, 1, value);
   }
 
   inox_release(key);
@@ -485,7 +481,7 @@ inox_status inox_class_instance_keys(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  inox_status status = inox_array_new(allocator, field_count, out);
+  inox_status status = Array.make(allocator, field_count, out);
 
   if (status != INOX_OK) {
     return status;
@@ -506,7 +502,7 @@ inox_status inox_class_instance_keys(
     status = inox_string_from_literal(allocator, name, strlen(name), &key);
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, output_index, key);
+      status = Array.set(*out, output_index, key);
     }
 
     inox_release(key);
@@ -534,7 +530,7 @@ inox_status inox_class_instance_values(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  inox_status status = inox_array_new(allocator, field_count, out);
+  inox_status status = Array.make(allocator, field_count, out);
 
   if (status != INOX_OK) {
     return status;
@@ -553,7 +549,7 @@ inox_status inox_class_instance_values(
     status = descriptor->read_field(instance, index, &value);
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, output_index, value);
+      status = Array.set(*out, output_index, value);
     }
 
     inox_release(value);
@@ -581,7 +577,7 @@ inox_status inox_class_instance_entries(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  inox_status status = inox_array_new(allocator, field_count, out);
+  inox_status status = Array.make(allocator, field_count, out);
 
   if (status != INOX_OK) {
     return status;
@@ -601,7 +597,7 @@ inox_status inox_class_instance_entries(
     inox_value key = inox_undefined_value();
     inox_value value = inox_undefined_value();
 
-    status = inox_array_new(allocator, 2, &pair);
+    status = Array.make(allocator, 2, &pair);
 
     if (status == INOX_OK) {
       status = inox_string_from_literal(allocator, name, strlen(name), &key);
@@ -612,15 +608,15 @@ inox_status inox_class_instance_entries(
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(pair, 0, key);
+      status = Array.set(pair, 0, key);
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(pair, 1, value);
+      status = Array.set(pair, 1, value);
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, output_index, pair);
+      status = Array.set(*out, output_index, pair);
     }
 
     inox_release(value);
@@ -645,7 +641,7 @@ inox_status inox_object_value_at(inox_value object, size_t index, inox_value* ou
   }
 
   if (object.tag == INOX_TAG_ARRAY) {
-    return inox_array_get(object, index, out);
+    return Array.get(object, index, out);
   }
 
   if (object.tag != INOX_TAG_OBJECT) {
@@ -681,7 +677,7 @@ inox_status inox_object_entry_at(inox_allocator* allocator, inox_value object, s
     if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
       status = INOX_ERR_TYPE;
     } else {
-      status = inox_array_get(object, index, &value);
+      status = Array.get(object, index, &value);
     }
 
     if (status == INOX_OK) {
@@ -736,7 +732,7 @@ inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  inox_status status = inox_array_new(allocator, instance->shape->field_count, out);
+  inox_status status = Array.make(allocator, instance->shape->field_count, out);
 
   if (status != INOX_OK) {
     return status;
@@ -749,7 +745,7 @@ inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_
     status = inox_string_from_literal(allocator, name, strlen(name), &key);
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, index, key);
+      status = Array.set(*out, index, key);
     }
 
     inox_release(key);
@@ -778,7 +774,7 @@ inox_status inox_object_values(inox_allocator* allocator, inox_value object, ino
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  inox_status status = inox_array_new(allocator, instance->shape->field_count, out);
+  inox_status status = Array.make(allocator, instance->shape->field_count, out);
 
   if (status != INOX_OK) {
     return status;
@@ -790,7 +786,7 @@ inox_status inox_object_values(inox_allocator* allocator, inox_value object, ino
     status = inox_object_get_known(object, index, &value);
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, index, value);
+      status = Array.set(*out, index, value);
     }
 
     inox_release(value);
@@ -819,7 +815,7 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  inox_status status = inox_array_new(allocator, instance->shape->field_count, out);
+  inox_status status = Array.make(allocator, instance->shape->field_count, out);
 
   if (status != INOX_OK) {
     return status;
@@ -831,7 +827,7 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
     inox_value key = inox_undefined_value();
     inox_value value = inox_undefined_value();
 
-    status = inox_array_new(allocator, 2, &pair);
+    status = Array.make(allocator, 2, &pair);
 
     if (status == INOX_OK) {
       status = inox_string_from_literal(allocator, name, strlen(name), &key);
@@ -842,15 +838,15 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(pair, 0, key);
+      status = Array.set(pair, 0, key);
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(pair, 1, value);
+      status = Array.set(pair, 1, value);
     }
 
     if (status == INOX_OK) {
-      status = inox_array_set(*out, index, pair);
+      status = Array.set(*out, index, pair);
     }
 
     inox_release(value);
