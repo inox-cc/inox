@@ -32,8 +32,8 @@ console.log(Array.isArray(1))
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /console\.log\("%\.17g", \(\(double\)Array\.isArray\(foo\)\)\);/)
-  assert.match(source, /console\.log\("%\.17g", \(\(double\)Array\.isArray\(inox_number_value\(1\)\)\)\);/)
+  assert.match(source, /console\.log\("%d", Array\.isArray\(foo\)\);/)
+  assert.match(source, /console\.log\("%d", Array\.isArray\(inox_number_value\(1\)\)\);/)
   assert.doesNotMatch(source, /foo\.tag == INOX_TAG_ARRAY/)
   assert.doesNotMatch(source, /inox_number_value\(1\)\.tag == INOX_TAG_ARRAY/)
 }

@@ -42,81 +42,29 @@ inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out);
 
 class Array : public inox::Value {
 public:
-  Array() : inox::Value() {}
+  Array();
 
-  explicit Array(inox_value value) : inox::Value(value) {}
+  explicit Array(inox_value value);
 
-  explicit Array(const inox::Value& value) : inox::Value(value) {}
+  explicit Array(const inox::Value& value);
 
-  explicit Array(inox::Value&& value) : inox::Value(std::move(value)) {}
+  explicit Array(inox::Value&& value);
 
-  Array(inox::AdoptValue, inox_value value) : inox::Value(inox::adopt_value, value) {}
+  Array(inox::AdoptValue, inox_value value);
 
   using inox::Value::operator=;
   using inox::Value::raw;
 
-  bool valid() const {
-    inox_value value = inox::Value::raw();
-
-    return value.tag == INOX_TAG_ARRAY && value.as.ref != nullptr;
-  }
-
-  inox::String join(inox::StringView separator) const {
-    if (!valid()) {
-      return inox::String();
-    }
-
-    inox_value out = inox_undefined_value();
-
-    if (inox_array_join(&inox_default_allocator, inox::Value::raw(), separator.bytes, separator.len, &out) != INOX_OK) {
-      return inox::String();
-    }
-
-    return inox::String(inox::adopt_value, out);
-  }
-
-  bool isArray(inox_value value) const {
-    return value.tag == INOX_TAG_ARRAY;
-  }
-
-  bool isArray(const inox::Value& value) const {
-    return isArray(value.raw());
-  }
-
-  inox_array* raw(inox_value value) const {
-    if (!isArray(value) || value.as.ref == nullptr) {
-      return nullptr;
-    }
-
-    return (inox_array*)value.as.ref;
-  }
-
-  inox_array* raw(const inox::Value& value) const {
-    return raw(value.raw());
-  }
-
-  void throwNotIterable() const {
-    inox::throw_value(inox::string("TypeError: value is not iterable"));
-  }
+  bool valid() const;
+  inox::String join(inox::StringView separator) const;
+  bool isArray(inox_value value) const;
+  bool isArray(const inox::Value& value) const;
+  inox_array* raw(inox_value value) const;
+  inox_array* raw(const inox::Value& value) const;
+  void throwNotIterable() const;
 };
 
-namespace inox {
-
-inline ::Array String::split(StringView separator) const {
-  if (!valid()) {
-    return ::Array();
-  }
-
-  inox_value out = inox_undefined_value();
-
-  if (inox_string_split_parts(&inox_default_allocator, bytes(), length(), separator.bytes, separator.len, &out) != INOX_OK) {
-    return ::Array();
-  }
-
-  return ::Array(inox::adopt_value, out);
-}
-
-} // namespace inox
+using ArrayClass = Array;
 
 inline Array Array;
 

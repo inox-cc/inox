@@ -119,118 +119,37 @@ private:
   Value value_;
 
 public:
-  FetchResponse() : value_() {}
+  FetchResponse();
 
-  explicit FetchResponse(Value value) : value_(std::move(value)) {}
+  explicit FetchResponse(Value value);
 
-  bool valid() const {
-    inox_value value = value_.raw();
-
-    return value.tag == INOX_TAG_OBJECT && value.as.ref != nullptr;
-  }
-
-  inox_number status() const {
-    Value value;
-
-    if (!number_field("status", 6, value)) {
-      return 0;
-    }
-
-    return value.as.number;
-  }
-
-  bool ok() const {
-    Value value;
-
-    return bool_field("ok", 2, value) && value.as.boolean;
-  }
-
-  bool redirected() const {
-    Value value;
-
-    return bool_field("redirected", 10, value) && value.as.boolean;
-  }
-
-  Promise text(inox_loop* loop) const {
-    inox_promise* promise = nullptr;
-
-    if (!valid()) {
-      return Promise();
-    }
-
-    if (inox_fetch_response_text(loop, value_, &promise) != INOX_OK) {
-      return Promise();
-    }
-
-    return adopt(promise);
-  }
-
-  Promise text() const {
-    return text(loop());
-  }
-
-  inox_value raw() const {
-    return value_.raw();
-  }
-
-  operator inox_value() const {
-    return value_.raw();
-  }
+  bool valid() const;
+  inox_number status() const;
+  bool ok() const;
+  bool redirected() const;
+  Promise text(inox_loop* loop) const;
+  Promise text() const;
+  inox_value raw() const;
+  operator inox_value() const;
 
 private:
-  bool field(const char* name, size_t len, Value& out) const {
-    return valid() && inox_object_get(value_, name, len, out.out()) == INOX_OK;
-  }
-
-  bool number_field(const char* name, size_t len, Value& out) const {
-    return field(name, len, out) && out.tag == INOX_TAG_NUMBER;
-  }
-
-  bool bool_field(const char* name, size_t len, Value& out) const {
-    return field(name, len, out) && out.tag == INOX_TAG_BOOL;
-  }
+  bool field(const char* name, size_t len, Value& out) const;
+  bool number_field(const char* name, size_t len, Value& out) const;
+  bool bool_field(const char* name, size_t len, Value& out) const;
 };
 
-inline Promise fetch(inox_loop* loop, StringView url) {
-  inox_promise* promise = nullptr;
-
-  if (inox_fetch(loop, url, &promise) != INOX_OK) {
-    return Promise();
-  }
-
-  return adopt(promise);
-}
-
-inline Promise fetch(StringView url) {
-  return fetch(loop(), url);
-}
-
-inline Promise fetch(const char* url) {
-  return fetch(StringView(url));
-}
+Promise fetch(inox_loop* loop, StringView url);
+Promise fetch(StringView url);
+Promise fetch(const char* url);
 
 template <size_t N>
 inline Promise fetch(const char (&url)[N]) {
   return fetch(StringView(url));
 }
 
-inline Promise fetch(inox_loop* loop, StringView url, const inox_fetch_init* init) {
-  inox_promise* promise = nullptr;
-
-  if (inox_fetch_with_init(loop, url, init, &promise) != INOX_OK) {
-    return Promise();
-  }
-
-  return adopt(promise);
-}
-
-inline Promise fetch(StringView url, const inox_fetch_init* init) {
-  return fetch(loop(), url, init);
-}
-
-inline Promise fetch(const char* url, const inox_fetch_init* init) {
-  return fetch(StringView(url), init);
-}
+Promise fetch(inox_loop* loop, StringView url, const inox_fetch_init* init);
+Promise fetch(StringView url, const inox_fetch_init* init);
+Promise fetch(const char* url, const inox_fetch_init* init);
 
 template <size_t N>
 inline Promise fetch(const char (&url)[N], const inox_fetch_init* init) {

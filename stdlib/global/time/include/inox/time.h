@@ -52,17 +52,11 @@ void inox_time_sleep_ms(inox_number delay_ms);
 
 class Date {
 public:
-  inox_number now() const {
-    return inox_date_now();
-  }
+  inox_number now() const;
 
-  inox_number parse(const char* bytes, size_t len) const {
-    return inox_date_parse(bytes, len);
-  }
+  inox_number parse(const char* bytes, size_t len) const;
 
-  inox_number parse(inox::StringView text) const {
-    return parse(text.bytes, text.len);
-  }
+  inox_number parse(inox::StringView text) const;
 
   inox_number UTC(
     inox_number year,
@@ -72,9 +66,7 @@ public:
     inox_number minute = 0,
     inox_number second = 0,
     inox_number millisecond = 0
-  ) const {
-    return inox_date_utc(year, month, day, hour, minute, second, millisecond);
-  }
+  ) const;
 
   inox_number fromLocal(
     inox_number year,
@@ -84,30 +76,20 @@ public:
     inox_number minute = 0,
     inox_number second = 0,
     inox_number millisecond = 0
-  ) const {
-    return inox_date_from_local(year, month, day, hour, minute, second, millisecond);
-  }
+  ) const;
 
-  inox_number part(inox_number value, int part, bool utc) const {
-    return inox_date_get_part(value, part, utc);
-  }
+  inox_number part(inox_number value, int part, bool utc) const;
 
-  inox_number timezoneOffset(inox_number value) const {
-    return inox_date_get_timezone_offset(value);
-  }
+  inox_number timezoneOffset(inox_number value) const;
 
-  inox_status toStringValue(inox_allocator* allocator, inox_number value, int kind, inox_value* out) const {
-    return inox_date_to_string(allocator, value, kind, out);
-  }
+  inox_status toStringValue(inox_allocator* allocator, inox_number value, int kind, inox_value* out) const;
 };
 
 inline Date Date;
 
 class Performance {
 public:
-  inox_number now() const {
-    return inox_performance_now();
-  }
+  inox_number now() const;
 };
 
 inline Performance performance;
