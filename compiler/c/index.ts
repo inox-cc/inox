@@ -1773,6 +1773,7 @@ function createBaseContext(
     functionAsyncFlags,
     asyncTaskWrappers: new Map(),
     jsGlobalRoots,
+    mathRuntimeInitStatement: null,
     moduleValueNames: new Map(),
     objectAccessorReturnPaths,
     moduleObjectShapes,

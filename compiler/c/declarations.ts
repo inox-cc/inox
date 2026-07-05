@@ -1245,6 +1245,9 @@ export function emitMainWrapper(
   context.cleanupEnabled = false
   context.externalEventLoop = true
 
+  if (context.mathRuntimeInitStatement !== null) {
+    bodyLines.push(context.mathRuntimeInitStatement)
+  }
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 
   lines.push('static void inox_main(void) {')

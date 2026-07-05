@@ -175,6 +175,7 @@ type CFunctionContext = {
   httpHandlers: Map<string, CHttpHandler>
   httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
+  mathRuntimeInitStatement: string | null
   localValueNames: CStringSet
   mapTypes: Map<string, CFunctionReturnMapType>
   moduleObjectShapes: Map<string, CObjectShapeField[]>

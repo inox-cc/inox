@@ -178,10 +178,6 @@ function cPreludeRandomOptions(options: CEmitOptions): RandomOptions {
   return {}
 }
 
-function cPreludeUsesOsRandom(random: CPreludeRandomConfig): boolean {
-  return random.backend === 'os'
-}
-
 export function emitCPrelude(
   needsRuntime: boolean,
   needsMainRuntime: boolean,
@@ -261,12 +257,12 @@ export function emitCPrelude(
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/net.h"')
   }
 
-  if (needsMathRuntime || needsCryptoRuntime) {
+  if (needsCryptoRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include <stdint.h>')
   }
 
-  if (needsMathRuntime && cPreludeUsesOsRandom(random)) {
-    pushCPreludeIncludes(systemIncludes, localIncludes, emitOsEntropyHeaders())
+  if (needsMathRuntime) {
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/math.h"')
   }
 
   if (needsStringHeader) {
@@ -337,13 +333,8 @@ export function emitCPrelude(
 
   lines.push('')
 
-  if (needsMathRuntime && cPreludeUsesOsRandom(random)) {
-    pushCPreludeLines(lines, emitOsEntropyHelper())
-    lines.push('')
-  }
-
   if (needsMathRuntime) {
-    pushCPreludeLines(lines, emitMathHelpers(random))
+    pushCPreludeLines(lines, emitMathRuntimeInitHelper(random))
     lines.push('')
   }
 
@@ -387,184 +378,31 @@ export function emitCPrelude(
   return lines
 }
 
-function emitMathHelpers(random: CPreludeRandomConfig): string[] {
+function emitMathRuntimeInitHelper(random: CPreludeRandomConfig): string[] {
   const randomSeed = emitRandomSeedLiteral(random)
-  const randomBackend = random.backend
-  const lines: string[] = []
+  const randomBackend = emitRandomBackendLiteral(random.backend)
 
-  lines.push('static double inox_math_abs(double value) {')
-  lines.push('  return value < 0 ? -value : value;')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_floor(double value) {')
-  lines.push('  long long truncated = (long long)value;')
-  lines.push('  return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_ceil(double value) {')
-  lines.push('  long long truncated = (long long)value;')
-  lines.push('  return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_round(double value) {')
-  lines.push('  return inox_math_floor(value + 0.5);')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_trunc(double value) {')
-  lines.push('  return (double)((long long)value);')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_fround(double value) {')
-  lines.push('  return (double)((float)value);')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_min(double left, double right) {')
-  lines.push('  return left < right ? left : right;')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_max(double left, double right) {')
-  lines.push('  return left > right ? left : right;')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_sqrt(double value) {')
-  lines.push('  if (value < 0) return 0.0/0.0;')
-  lines.push('  if (value == 0) return 0;')
-  lines.push('  double estimate = value < 1 ? 1 : value;')
-  lines.push('  for (int index = 0; index < 24; ++index) {')
-  lines.push('    estimate = 0.5 * (estimate + value/estimate);')
-  lines.push('  }')
-  lines.push('  return estimate;')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_reduce_radians(double value) {')
-  lines.push('  const double pi = 3.14159265358979323846;')
-  lines.push('  const double tau = 6.28318530717958647692;')
-  lines.push('  while (value > pi) value -= tau;')
-  lines.push('  while (value < -pi) value += tau;')
-  lines.push('  return value;')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_sin(double value) {')
-  lines.push('  double x = inox_math_reduce_radians(value);')
-  lines.push('  double x2 = x * x;')
-  lines.push('  return x * (1 - x2/6 + (x2 * x2)/120 - (x2 * x2 * x2)/5040 + (x2 * x2 * x2 * x2)/362880);')
-  lines.push('}')
-  lines.push('')
-  lines.push('static double inox_math_cos(double value) {')
-  lines.push('  double x = inox_math_reduce_radians(value);')
-  lines.push('  double x2 = x * x;')
-  lines.push('  return 1 - x2/2 + (x2 * x2)/24 - (x2 * x2 * x2)/720 + (x2 * x2 * x2 * x2)/40320;')
-  lines.push('}')
-  lines.push('')
-  lines.push(`static uint32_t inox_math_random_state = ${randomSeed};`)
-  lines.push('')
-  pushCPreludeLines(lines, emitRandomBackendHelper(randomBackend))
-
-  return lines
-}
-
-function emitOsEntropyHeaders(): string[] {
   return [
-    '#if defined(_WIN32) && defined(_MSC_VER)',
-    '#define _CRT_RAND_S',
-    '#endif',
-    '#if defined(_WIN32)',
-    '#include <stdlib.h>',
-    '#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)',
-    '#include <stdlib.h>',
-    '#else',
-    '#include <fcntl.h>',
-    '#include <unistd.h>',
-    '#if defined(__linux__)',
-    '#include <sys/random.h>',
-    '#endif',
-    '#endif'
-  ]
-}
-
-function emitOsEntropyHelper(): string[] {
-  return [
-    'static int inox_os_random_bytes(uint8_t* out, size_t len) {',
-    '  if (out == 0 && len != 0) return 0;',
-    '#if defined(_WIN32) && defined(_MSC_VER)',
-    '  size_t filled = 0;',
-    '  while (filled < len) {',
-    '    unsigned int value = 0;',
-    '    if (rand_s(&value) != 0) return 0;',
-    '    for (size_t index = 0; index < sizeof(value) && filled < len; ++index) {',
-    '      out[filled] = (uint8_t)(value >> (index * 8));',
-    '      filled += 1;',
-    '    }',
-    '  }',
-    '  return 1;',
-    '#elif defined(_WIN32)',
-    '  (void)out;',
-    '  (void)len;',
-    '  return 0;',
-    '#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)',
-    '  arc4random_buf(out, len);',
-    '  return 1;',
-    '#else',
-    '  size_t filled = 0;',
-    '#if defined(__linux__)',
-    '  while (filled < len) {',
-    '    ssize_t count = getrandom(out + filled, len - filled, 0);',
-    '    if (count <= 0) break;',
-    '    filled += (size_t)count;',
-    '  }',
-    '  if (filled == len) return 1;',
-    '#endif',
-    '  int fd = open("/dev/urandom", O_RDONLY);',
-    '  if (fd < 0) return 0;',
-    '  while (filled < len) {',
-    '    ssize_t count = read(fd, out + filled, len - filled);',
-    '    if (count <= 0) {',
-    '      close(fd);',
-    '      return 0;',
-    '    }',
-    '    filled += (size_t)count;',
-    '  }',
-    '  close(fd);',
-    '  return 1;',
-    '#endif',
+    'static void inox_math_configure_module(void) {',
+    `  inox_math_configure_random(${randomSeed}, ${randomBackend});`,
     '}'
   ]
 }
 
-function emitRandomBackendHelper(backend: CRandomBackend): string[] {
-  if (backend === 'os') {
-    return [
-      'static double inox_math_random(void) {',
-      '  uint32_t value = 0;',
-      '  if (!inox_os_random_bytes((uint8_t*)&value, sizeof(value))) {',
-      '    inox_math_random_state = inox_math_random_state * 1664525u + 1013904223u;',
-      '    value = inox_math_random_state;',
-      '  }',
-      '  return (double)(value >> 8) / 16777216.0;',
-      '}'
-    ]
-  }
+export function emitMathRuntimeInitLines(): string[] {
+  return ['inox_math_configure_module();']
+}
 
+function emitRandomBackendLiteral(backend: CRandomBackend): string {
   if (backend === 'xorshift32') {
-    return [
-      'static double inox_math_random(void) {',
-      '  if (inox_math_random_state == 0u) inox_math_random_state = 0x6d2b79f5u;',
-      '  uint32_t value = inox_math_random_state;',
-      '  value ^= value << 13;',
-      '  value ^= value >> 17;',
-      '  value ^= value << 5;',
-      '  inox_math_random_state = value;',
-      '  return (double)(value >> 8) / 16777216.0;',
-      '}'
-    ]
+    return 'INOX_MATH_RANDOM_XORSHIFT32'
   }
 
-  return [
-    'static double inox_math_random(void) {',
-    '  inox_math_random_state = inox_math_random_state * 1664525u + 1013904223u;',
-    '  return (double)(inox_math_random_state >> 8) / 16777216.0;',
-    '}'
-  ]
+  if (backend === 'os') {
+    return 'INOX_MATH_RANDOM_OS'
+  }
+
+  return 'INOX_MATH_RANDOM_SIMPLE'
 }
 
 function emitRandomSeedLiteral(random: CPreludeRandomConfig): string {

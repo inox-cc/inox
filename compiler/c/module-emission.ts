@@ -81,7 +81,7 @@ import {
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { cStringLiteral, emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
-import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
+import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
@@ -412,6 +412,7 @@ export function emitCModuleSource(
   }
 
   context.processRuntime = prelude.needsProcessRuntime
+  context.mathRuntimeInitStatement = prelude.needsMathRuntime ? emitMathRuntimeInitLines()[0] : null
   if (prelude.needsAsyncRuntime) {
     context.unhandledRejectionFlag = `${plan.symbolPrefix}_unhandled_rejection`
   } else {
@@ -2239,6 +2240,9 @@ function emitCModuleInitFunction(
   const initCalls = emitCModuleImportInitCalls(plan)
   context.moduleValueDeclarationScope = true
   const bodyLines: string[] = []
+  if (context.mathRuntimeInitStatement !== null) {
+    bodyLines.push(context.mathRuntimeInitStatement)
+  }
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   pushIndentedCModuleLines(bodyLines, emitEventLoopDrain(context))
@@ -2286,6 +2290,9 @@ function emitCModuleMainFunction(
   context.cleanupEnabled = false
   context.externalEventLoop = true
   const bodyLines: string[] = []
+  if (context.mathRuntimeInitStatement !== null) {
+    bodyLines.push(context.mathRuntimeInitStatement)
+  }
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
   const lines: string[] = []

@@ -2319,7 +2319,7 @@ function emitPreparedMathCallExpression(
 
   return {
     lines,
-    expression: `inox_math_${method}(${joinStrings(expressions, ', ')})`
+    expression: `Math.${method}(${joinStrings(expressions, ', ')})`
   }
 }
 

@@ -67,7 +67,7 @@ import type {
 } from './context.ts'
 import { reportUnsupportedCGlobalUsages, reportUnsupportedCSyntaxFeatures } from './diagnostics.ts'
 import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
-import { emitCPrelude, filterUnusedCPreludeIncludes } from './prelude.ts'
+import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
 import {
@@ -1302,6 +1302,7 @@ export function emitCUnit(
   const needsHttpRuntime: boolean = preludeRequirements.needsHttpRuntime
   const needsNetRuntime: boolean = preludeRequirements.needsNetRuntime
   baseContext.processRuntime = needsProcessRuntime
+  baseContext.mathRuntimeInitStatement = needsMathRuntime ? emitMathRuntimeInitLines()[0] : null
   if (needsAsyncRuntime) {
     baseContext.unhandledRejectionFlag = 'inox_unhandled_rejection'
   } else {

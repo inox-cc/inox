@@ -178,6 +178,7 @@ export type CEmitContext = {
   httpHandlers: CHttpHandlerMap
   httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
+  mathRuntimeInitStatement: string | null
   moduleValueNames: CStringMap
   objectAccessorReturnPaths: CObjectAccessorReturnPathMap
   moduleObjectShapes: CObjectShapeFieldMap
@@ -411,6 +412,7 @@ export function createFunctionContext(
     httpHandlers: baseContext.httpHandlers,
     httpImportNames: baseContext.httpImportNames,
     jsGlobalRoots: baseContext.jsGlobalRoots,
+    mathRuntimeInitStatement: baseContext.mathRuntimeInitStatement,
     moduleValueNames: baseContext.moduleValueNames,
     objectAccessorReturnPaths: baseContext.objectAccessorReturnPaths,
     moduleObjectShapes: baseContext.moduleObjectShapes,
