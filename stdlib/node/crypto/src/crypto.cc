@@ -8,9 +8,6 @@
 #include "inox/binary.h"
 #include "inox/string.h"
 
-inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
-inox_status inox_array_set(inox_value array, size_t index, inox_value value);
-
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -66,7 +63,7 @@ inox_status inox_crypto_get_hashes(inox_allocator* allocator, inox_value* out) {
 #if INOX_CRYPTO_HASH_HAS_EVP
   inox_value hashes = inox_undefined_value();
   inox_value sha256 = inox_undefined_value();
-  inox_status status = inox_array_new(allocator, 1, &hashes);
+  inox_status status = Array.make(allocator, 1, &hashes);
 
   if (status != INOX_OK) {
     return status;
@@ -75,7 +72,7 @@ inox_status inox_crypto_get_hashes(inox_allocator* allocator, inox_value* out) {
   status = inox_string_from_literal(allocator, "sha256", 6, &sha256);
 
   if (status == INOX_OK) {
-    status = inox_array_set(hashes, 0, sha256);
+    status = Array.set(hashes, 0, sha256);
   }
 
   inox_release(sha256);
@@ -242,7 +239,7 @@ inox_status inox_crypto_hash_create(
   }
 
 #if INOX_CRYPTO_HASH_HAS_EVP
-  inox_crypto_hash* hash = allocator->alloc(allocator->user, sizeof(inox_crypto_hash), _Alignof(inox_crypto_hash));
+  inox_crypto_hash* hash = (inox_crypto_hash*)allocator->alloc(allocator->user, sizeof(inox_crypto_hash), alignof(inox_crypto_hash));
 
   if (hash == 0) {
     return INOX_ERR_OOM;
@@ -253,7 +250,7 @@ inox_status inox_crypto_hash_create(
   hash->finalized = 0;
 
   if (hash->ctx == 0) {
-    allocator->free(allocator->user, hash, sizeof(inox_crypto_hash), _Alignof(inox_crypto_hash));
+    allocator->free(allocator->user, hash, sizeof(inox_crypto_hash), alignof(inox_crypto_hash));
     return INOX_ERR_OOM;
   }
 
@@ -418,7 +415,7 @@ void inox_crypto_hash_free(inox_crypto_hash* hash) {
 #endif
 
   if (hash->allocator != 0 && hash->allocator->free != 0) {
-    hash->allocator->free(hash->allocator->user, hash, sizeof(inox_crypto_hash), _Alignof(inox_crypto_hash));
+    hash->allocator->free(hash->allocator->user, hash, sizeof(inox_crypto_hash), alignof(inox_crypto_hash));
   }
 }
 
@@ -452,7 +449,7 @@ inox_status inox_crypto_hmac_create(
     return INOX_ERR_TYPE;
   }
 
-  inox_crypto_hmac* hmac = allocator->alloc(allocator->user, sizeof(inox_crypto_hmac), _Alignof(inox_crypto_hmac));
+  inox_crypto_hmac* hmac = (inox_crypto_hmac*)allocator->alloc(allocator->user, sizeof(inox_crypto_hmac), alignof(inox_crypto_hmac));
 
   if (hmac == 0) {
     return INOX_ERR_OOM;
@@ -463,7 +460,7 @@ inox_status inox_crypto_hmac_create(
   hmac->finalized = 0;
 
   if (hmac->ctx == 0) {
-    allocator->free(allocator->user, hmac, sizeof(inox_crypto_hmac), _Alignof(inox_crypto_hmac));
+    allocator->free(allocator->user, hmac, sizeof(inox_crypto_hmac), alignof(inox_crypto_hmac));
     return INOX_ERR_OOM;
   }
 
@@ -571,7 +568,7 @@ void inox_crypto_hmac_free(inox_crypto_hmac* hmac) {
 #endif
 
   if (hmac->allocator != 0 && hmac->allocator->free != 0) {
-    hmac->allocator->free(hmac->allocator->user, hmac, sizeof(inox_crypto_hmac), _Alignof(inox_crypto_hmac));
+    hmac->allocator->free(hmac->allocator->user, hmac, sizeof(inox_crypto_hmac), alignof(inox_crypto_hmac));
   }
 }
 
