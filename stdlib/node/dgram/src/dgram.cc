@@ -63,7 +63,7 @@ inox_status inox_dgram_socket_new(
 
   inox_allocator* allocator = loop->allocator;
   inox_dgram_socket* socket =
-    allocator->alloc(allocator->user, sizeof(inox_dgram_socket), _Alignof(inox_dgram_socket));
+    (inox_dgram_socket*)allocator->alloc(allocator->user, sizeof(inox_dgram_socket), alignof(inox_dgram_socket));
 
   if (socket == 0) {
     return INOX_ERR_OOM;
@@ -76,14 +76,14 @@ inox_status inox_dgram_socket_new(
   socket->recv_user = user;
 
   if (uv_udp_init(uv_loop, &socket->handle) != 0) {
-    allocator->free(allocator->user, socket, sizeof(inox_dgram_socket), _Alignof(inox_dgram_socket));
+    allocator->free(allocator->user, socket, sizeof(inox_dgram_socket), alignof(inox_dgram_socket));
     return INOX_ERR_FIELD;
   }
 
   if (inox_libuv_loop_retain_request(loop) != INOX_OK) {
     uv_close((uv_handle_t*)&socket->handle, 0);
     uv_run(uv_loop, UV_RUN_NOWAIT);
-    allocator->free(allocator->user, socket, sizeof(inox_dgram_socket), _Alignof(inox_dgram_socket));
+    allocator->free(allocator->user, socket, sizeof(inox_dgram_socket), alignof(inox_dgram_socket));
     return INOX_ERR_TYPE;
   }
 
@@ -372,7 +372,7 @@ static inox_status inox_dgram_send_resolved(
 
   inox_allocator* allocator = socket->allocator;
   inox_dgram_send_request* request =
-    allocator->alloc(allocator->user, sizeof(inox_dgram_send_request), _Alignof(inox_dgram_send_request));
+    (inox_dgram_send_request*)allocator->alloc(allocator->user, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
 
   if (request == 0) {
     return INOX_ERR_OOM;
@@ -385,10 +385,10 @@ static inox_status inox_dgram_send_resolved(
   request->user = user;
 
   if (len != 0) {
-    request->bytes = allocator->alloc(allocator->user, len, _Alignof(char));
+    request->bytes = (char*)allocator->alloc(allocator->user, len, alignof(char));
 
     if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), _Alignof(inox_dgram_send_request));
+      allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
       return INOX_ERR_OOM;
     }
 
@@ -399,24 +399,24 @@ static inox_status inox_dgram_send_resolved(
 
   if (status != INOX_OK) {
     if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
+      allocator->free(allocator->user, request->bytes, len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), _Alignof(inox_dgram_send_request));
+    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
     return status;
   }
 
-  uv_buf_t buffer = uv_buf_init(request->bytes == 0 ? "" : request->bytes, (unsigned int)len);
+  uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)len);
   request->request.data = request;
 
   if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, addr, inox_dgram_send_cb) != 0) {
     inox_libuv_loop_release_request(socket->loop);
 
     if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, _Alignof(char));
+      allocator->free(allocator->user, request->bytes, len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), _Alignof(inox_dgram_send_request));
+    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
     return INOX_ERR_FIELD;
   }
 
@@ -459,7 +459,7 @@ static void inox_dgram_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_b
     return;
   }
 
-  char* bytes = socket->allocator->alloc(socket->allocator->user, len, _Alignof(char));
+  char* bytes = (char*)socket->allocator->alloc(socket->allocator->user, len, alignof(char));
 
   *buf = uv_buf_init(bytes, bytes == 0 ? 0 : (unsigned int)len);
 }
@@ -498,7 +498,7 @@ static void inox_dgram_recv_cb(
   }
 
   if (buf != 0 && buf->base != 0) {
-    socket->allocator->free(socket->allocator->user, buf->base, buf->len, _Alignof(char));
+    socket->allocator->free(socket->allocator->user, buf->base, buf->len, alignof(char));
   }
 }
 
@@ -528,10 +528,10 @@ static void inox_dgram_send_cb(uv_udp_send_t* request, int status) {
   inox_libuv_loop_release_request(socket->loop);
 
   if (send->bytes != 0) {
-    socket->allocator->free(socket->allocator->user, send->bytes, send->len, _Alignof(char));
+    socket->allocator->free(socket->allocator->user, send->bytes, send->len, alignof(char));
   }
 
-  socket->allocator->free(socket->allocator->user, send, sizeof(inox_dgram_send_request), _Alignof(inox_dgram_send_request));
+  socket->allocator->free(socket->allocator->user, send, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
 }
 
 static void inox_dgram_close_cb(uv_handle_t* handle) {
@@ -549,7 +549,7 @@ static void inox_dgram_close_cb(uv_handle_t* handle) {
     inox_libuv_loop_release_request(socket->loop);
   }
 
-  socket->allocator->free(socket->allocator->user, socket, sizeof(inox_dgram_socket), _Alignof(inox_dgram_socket));
+  socket->allocator->free(socket->allocator->user, socket, sizeof(inox_dgram_socket), alignof(inox_dgram_socket));
 }
 
 #else
