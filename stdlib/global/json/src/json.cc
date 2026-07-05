@@ -1230,7 +1230,7 @@ inox::Value Json::parse(inox::StringView text) const {
     if (error.tag == INOX_TAG_STRING && error.as.ref != 0) {
       inox::throw_value(error);
     } else {
-      inox::throw_value(inox::string("JSON.parse failed"));
+      inox::throw_value(inox::String("JSON.parse failed"));
     }
 
     return inox::Value();
@@ -1251,7 +1251,7 @@ inox::Value Json::parse(const char* text) const {
     if (error.tag == INOX_TAG_STRING && error.as.ref != 0) {
       inox::throw_value(error);
     } else {
-      inox::throw_value(inox::string("JSON.parse failed"));
+      inox::throw_value(inox::String("JSON.parse failed"));
     }
 
     return inox::Value();

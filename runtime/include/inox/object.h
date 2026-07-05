@@ -73,6 +73,7 @@ void inox_object_dispose_fields(inox_object* object);
 #ifdef __cplusplus
 #include <stdio.h>
 #include "inox/loop.h"
+#include "inox/string.h"
 
 namespace inox {
 
@@ -103,7 +104,7 @@ inline Value finish_object_index_read(inox_status status, inox_value out, const 
     return Value();
   }
 
-  throw_value(string(message));
+  throw_value(String(message));
 
   return Value();
 }
@@ -168,11 +169,11 @@ inline void throw_property_read_type_error(StringView name, const char* receiver
   );
 
   if (written > 0) {
-    throw_value(string(message));
+    throw_value(String(message));
     return;
   }
 
-  throw_value(string("TypeError: Cannot read property"));
+  throw_value(String("TypeError: Cannot read property"));
 }
 
 inline Value get(inox_value object, StringView name) {
@@ -235,7 +236,7 @@ private:
     }
 
     inox_release(out);
-    inox::throw_value(inox::string(message));
+    inox::throw_value(inox::String(message));
 
     return inox::Value();
   }

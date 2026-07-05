@@ -17,7 +17,6 @@ typedef struct inox_string {
 } inox_string;
 
 inox_status inox_string_from_literal(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out);
-inox_status inox_string_from_bool(inox_allocator* allocator, bool value, inox_value* out);
 inox_status inox_string_from_number(inox_allocator* allocator, double value, inox_value* out);
 inox_status inox_string_from_number_radix(inox_allocator* allocator, double value, int radix, inox_value* out);
 inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, const char* format, ...);
@@ -33,59 +32,6 @@ inox_status inox_string_concat_parts(
   size_t right_len,
   inox_value* out
 );
-inox_status inox_string_trim_parts(inox_allocator* allocator, const char* value_bytes, size_t value_len, inox_value* out);
-inox_status inox_string_to_upper_case_parts(inox_allocator* allocator, const char* value_bytes, size_t value_len, inox_value* out);
-inox_status inox_string_pad_start_parts(
-  inox_allocator* allocator,
-  const char* value_bytes,
-  size_t value_len,
-  size_t target_len,
-  const char* pad_bytes,
-  size_t pad_len,
-  inox_value* out
-);
-inox_status inox_string_slice_parts(
-  inox_allocator* allocator,
-  const char* value_bytes,
-  size_t value_len,
-  size_t start,
-  size_t end,
-  inox_value* out
-);
-inox_status inox_string_split_parts(
-  inox_allocator* allocator,
-  const char* value_bytes,
-  size_t value_len,
-  const char* separator_bytes,
-  size_t separator_len,
-  inox_value* out
-);
-inox_status inox_string_trim_start_parts(inox_allocator* allocator, const char* value_bytes, size_t value_len, inox_value* out);
-inox_status inox_string_trim_end_parts(inox_allocator* allocator, const char* value_bytes, size_t value_len, inox_value* out);
-bool inox_string_includes_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
-bool inox_string_includes_from_parts(
-  const char* value_bytes,
-  size_t value_len,
-  const char* search_bytes,
-  size_t search_len,
-  size_t start
-);
-double inox_string_index_of_parts(
-  const char* value_bytes,
-  size_t value_len,
-  const char* search_bytes,
-  size_t search_len,
-  size_t start
-);
-double inox_string_last_index_of_parts(
-  const char* value_bytes,
-  size_t value_len,
-  const char* search_bytes,
-  size_t search_len,
-  size_t start
-);
-bool inox_string_starts_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
-bool inox_string_ends_with_parts(const char* value_bytes, size_t value_len, const char* search_bytes, size_t search_len);
 
 #ifdef __cplusplus
 }
@@ -143,10 +89,6 @@ public:
   double lastIndexOf(StringView search) const;
   double lastIndexOf(StringView search, double start) const;
 };
-
-String string(const char* bytes, size_t len);
-String string(StringView view);
-String string(const char* bytes);
 
 } // namespace inox
 

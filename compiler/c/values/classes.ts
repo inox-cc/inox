@@ -2671,13 +2671,7 @@ function emitPreparedCppValueConstructorArgs(
     const arg = expression.args[index]
 
     if (param.valueType === 'string' && arg.type === 'StringLiteral') {
-      const value = `inox::string(${cStringLiteral(arg.value)}, ${utf8ByteLength(arg.value)})`
-
-      if (classParamUsesCppStringStorage(param)) {
-        args.push(`inox::String(${value})`)
-      } else {
-        args.push(value)
-      }
+      args.push(`inox::String(${cStringLiteral(arg.value)}, ${utf8ByteLength(arg.value)})`)
       continue
     }
 

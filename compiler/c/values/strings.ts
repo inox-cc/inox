@@ -21,7 +21,6 @@ import {
 } from '../context.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { cStringLiteral, emitCIdentifier, escapeCPrintfFormatText, utf8ByteLength } from '../identifiers.ts'
-import { emitRuntimeValueCheck } from '../runtime-values.ts'
 import { cUnsupportedExpressionCode, isCoalesceExpression, isOptionalChainExpression } from '../syntax.ts'
 import type {
   CObjectFieldInfo,
@@ -30,7 +29,6 @@ import type {
   CRuntimeArrayElement
 } from '../types.ts'
 import { isManagedRuntimeReturnType, isNullableScalarType, isOpaqueRuntimeValueType } from '../value-types.ts'
-import { emitSliceIndexNormalizationLines } from './slices.ts'
 
 type StringDiagnosticContext = {
   diagnostics: Diagnostic[]
@@ -726,29 +724,35 @@ export function emitPreparedStringPredicateCall(expression: AnyNode, context: St
   }
 
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_string_method_value')
-  const search = emitPreparedStringBytesOperand(expression.args[0], context, 'inox_string_method_search')
-  const helper = cStringPredicateHelperName(expression.callee.property)
+  const search = emitPreparedCppStringArgument(expression.args[0], context, 'inox_string_method_search')
   const lines: string[] = []
-  let helperCall = `${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length})`
 
   pushAllLines(lines, value.lines)
+
+  if (search === null || typeof search === 'undefined') {
+    return {
+      lines,
+      expression: 'false',
+      valueType: 'boolean'
+    }
+  }
+
   pushAllLines(lines, search.lines)
+
+  let methodCall = `inox::String(${value.bytes}, ${value.length}).${expression.callee.property}(${search.expression})`
 
   if (expression.callee.property === 'includes' && expression.args.length > 1) {
     const positionArgument = expression.args[1]
     const position = stringDeps(context).emitPreparedNumberExpression(positionArgument, context)
-    const positionRaw = nextCName(context, 'inox_string_includes_position_raw')
-    const positionIndex = nextCName(context, 'inox_string_includes_position')
 
     pushAllLines(lines, position.lines)
-    lines.push(`double ${positionRaw} = ${position.expression};`)
-    pushAllLines(lines, emitNonNegativeStringPositionLines(positionRaw, positionIndex))
-    helperCall = `inox_string_includes_from_parts(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}, ${positionIndex})`
+    methodCall = `inox::String(${value.bytes}, ${value.length}).includes(${search.expression}, ${position.expression})`
   }
 
   return {
     lines,
-    expression: `(${helperCall} ? 1 : 0)`
+    expression: methodCall,
+    valueType: 'boolean'
   }
 }
 
@@ -867,12 +871,18 @@ export function emitPreparedStringIndexCallExpression(
   }
 
   const value = emitPreparedStringBytesOperand(object, context, 'inox_string_index_value')
-  const search = emitPreparedStringBytesOperand(searchArgument, context, 'inox_string_index_search')
+  const search = emitPreparedCppStringArgument(searchArgument, context, 'inox_string_index_search')
   const lines: string[] = []
-  let startExpression = '0'
 
   pushAllLines(lines, value.lines)
+
+  if (search === null || typeof search === 'undefined') {
+    return null
+  }
+
   pushAllLines(lines, search.lines)
+
+  let methodArgs = search.expression
 
   if (args.length > 1) {
     const startArgument = args[1]
@@ -882,22 +892,16 @@ export function emitPreparedStringIndexCallExpression(
     }
 
     const start = stringDeps(context).emitPreparedNumberExpression(startArgument, context)
-    const startRaw = nextCName(context, 'inox_string_index_start_raw')
-    const startIndex = nextCName(context, 'inox_string_index_start')
 
     pushAllLines(lines, start.lines)
-    lines.push(`double ${startRaw} = ${start.expression};`)
-    pushAllLines(lines, emitNonNegativeStringPositionLines(startRaw, startIndex))
-    startExpression = startIndex
-  } else if (method === 'lastIndexOf') {
-    startExpression = `inox_string_code_unit_length_parts(${value.bytes}, ${value.length})`
+    methodArgs = `${search.expression}, ${start.expression}`
   }
-
-  const helper = cStringIndexHelperName(method)
 
   return {
     lines,
-    expression: `${helper}(${value.bytes}, ${value.length}, ${search.bytes}, ${search.length}, ${startExpression})`
+    expression: `inox::String(${value.bytes}, ${value.length}).${method}(${methodArgs})`,
+    scalarType: 'double',
+    valueType: 'number'
   }
 }
 
@@ -924,24 +928,18 @@ export function emitCStringIndexValueExpression(
   const value = emitPreparedStringBytesOperand(object, context, 'inox_string_index_value')
   const index = stringDeps(context).emitPreparedNumberExpression(indexExpression, context)
   const offset = nextCName(context, 'inox_string_index')
-  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
-  registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, index.lines)
-  lines.push(`size_t ${offset} = (size_t)(${index.expression});`)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_string_slice_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${offset}, ${offset} + 1, &${temp})`,
-      context
-    )
-  )
+  lines.push(`double ${offset} = ${index.expression};`)
 
   return {
     lines,
-    expression: temp
+    expression: `inox::String(${value.bytes}, ${value.length}).slice(${offset}, ${offset} + 1)`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
   }
 }
 
@@ -1527,17 +1525,6 @@ export function emitPreparedCppStringArgument(
   return {
     lines: bytes.lines,
     expression: `inox::StringView(${bytes.bytes}, ${bytes.length})`
-  }
-}
-
-function emitAdoptedCppStringExpression(lines: string[], temp: string): PreparedExpression {
-  return {
-    lines,
-    expression: `inox::String(inox::adopt(${temp}.release()))`,
-    cppType: 'inox::String',
-    runtimeTypeChecked: true,
-    valueType: 'string',
-    owned: false
   }
 }
 
@@ -2769,11 +2756,15 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
   let helper = `inox_string_from_number(&inox_default_allocator, ${value.expression}, &${temp})`
   const lines: string[] = []
 
+  pushAllLines(lines, value.lines)
+
   if (valueType === 'boolean') {
-    helper = `inox_string_from_bool(&inox_default_allocator, (${value.expression}) != 0, &${temp})`
+    const boolValue = nextCName(context, 'inox_string_bool')
+
+    lines.push(`bool ${boolValue} = (${value.expression}) != 0;`)
+    helper = `inox_string_from_literal(&inox_default_allocator, ${boolValue} ? "true" : "false", ${boolValue} ? 4 : 5, &${temp})`
   }
 
-  pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(emitStatusCheck(helper, context))
 
@@ -2856,16 +2847,17 @@ export function emitCStringTrimValueExpression(expression: AnyNode, context: Str
   }
 
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_trim_string')
-  const helper = cStringTrimHelperName(expression.callee.property)
-  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
-  registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`${helper}(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`, context))
 
-  return emitAdoptedCppStringExpression(lines, temp)
+  return {
+    lines,
+    expression: `inox::String(${value.bytes}, ${value.length}).${expression.callee.property}()`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
+  }
 }
 
 export function emitCStringCaseValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
@@ -2882,20 +2874,17 @@ export function emitCStringCaseValueExpression(expression: AnyNode, context: Str
   }
 
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_case_string')
-  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
-  registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_string_to_upper_case_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
-      context
-    )
-  )
 
-  return emitAdoptedCppStringExpression(lines, temp)
+  return {
+    lines,
+    expression: `inox::String(${value.bytes}, ${value.length}).toUpperCase()`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
+  }
 }
 
 export function emitCStringPadStartValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
@@ -2928,36 +2917,32 @@ export function emitCStringPadStartValueExpression(expression: AnyNode, context:
   }
 
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_pad_string')
-  let pad: PreparedStringBytesOperand = {
+  let pad: PreparedExpression = {
     lines: [],
-    bytes: cStringLiteral(' '),
-    length: '1'
+    expression: cStringLiteral(' ')
   }
 
   if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-    pad = emitPreparedStringBytesOperand(expression.args[1], context, 'inox_pad_fill')
+    const preparedPad = emitPreparedCppStringArgument(expression.args[1], context, 'inox_pad_fill')
+
+    if (preparedPad !== null && typeof preparedPad !== 'undefined') {
+      pad = preparedPad
+    }
   }
 
-  const targetLengthRaw = nextCName(context, 'inox_pad_target_length_raw')
-  const targetLengthIndex = nextCName(context, 'inox_pad_target_length')
-  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
-  registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, targetLength.lines)
   pushAllLines(lines, pad.lines)
-  lines.push(`double ${targetLengthRaw} = ${targetLength.expression};`)
-  pushAllLines(lines, emitNonNegativeStringPositionLines(targetLengthRaw, targetLengthIndex))
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_string_pad_start_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${targetLengthIndex}, ${pad.bytes}, ${pad.length}, &${temp})`,
-      context
-    )
-  )
 
-  return emitAdoptedCppStringExpression(lines, temp)
+  return {
+    lines,
+    expression: `inox::String(${value.bytes}, ${value.length}).padStart(${targetLength.expression}, ${pad.expression})`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
+  }
 }
 
 export function emitCStringSliceValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
@@ -2988,42 +2973,26 @@ export function emitCStringSliceValueExpression(expression: AnyNode, context: St
   }
 
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_slice_string')
-  const lengthName = nextCName(context, 'inox_slice_length')
-  const startRaw = nextCName(context, 'inox_slice_start_raw')
-  const startIndex = nextCName(context, 'inox_slice_start')
-  const endRaw = nextCName(context, 'inox_slice_end_raw')
-  const endIndex = nextCName(context, 'inox_slice_end')
-  let end: PreparedExpression = {
-    lines: [],
-    expression: `((double)${lengthName})`
-  }
-  const temp = nextCName(context, 'inox_value')
+  let endExpression = ''
   const lines: string[] = []
-
-  if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-    end = stringDeps(context).emitPreparedNumberExpression(expression.args[1], context)
-  }
-
-  registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, start.lines)
-  lines.push(`size_t ${lengthName} = inox_string_code_unit_length_parts(${value.bytes}, ${value.length});`)
-  pushAllLines(lines, end.lines)
-  lines.push(`double ${startRaw} = ${start.expression};`)
-  lines.push(`double ${endRaw} = ${end.expression};`)
-  pushAllLines(lines, emitSliceIndexNormalizationLines(startRaw, lengthName, startIndex, context, 'inox_slice_start'))
-  pushAllLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_slice_end'))
-  lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_string_slice_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${startIndex}, ${endIndex}, &${temp})`,
-      context
-    )
-  )
 
-  return emitAdoptedCppStringExpression(lines, temp)
+  if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
+    const end = stringDeps(context).emitPreparedNumberExpression(expression.args[1], context)
+
+    pushAllLines(lines, end.lines)
+    endExpression = `, ${end.expression}`
+  }
+
+  return {
+    lines,
+    expression: `inox::String(${value.bytes}, ${value.length}).slice(${start.expression}${endExpression})`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
+  }
 }
 
 export function emitCStringSplitValueExpression(
@@ -3053,26 +3022,31 @@ export function emitCStringSplitValueExpression(
   }
 
   const value = emitPreparedStringBytesOperand(expression.callee.object, context, 'inox_split_string')
-  const separator = emitPreparedStringBytesOperand(expression.args[0], context, 'inox_split_separator')
-  const temp = nextCName(context, 'inox_split_array')
+  const separator = emitPreparedCppStringArgument(expression.args[0], context, 'inox_split_separator')
   const lines: string[] = []
-  registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
+
+  if (separator === null || typeof separator === 'undefined') {
+    return {
+      lines,
+      expression: 'Array()',
+      elementType: 'string',
+      cppType: 'Array',
+      runtimeTypeChecked: true,
+      valueType: 'array'
+    }
+  }
+
   pushAllLines(lines, separator.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_string_split_parts(&inox_default_allocator, ${value.bytes}, ${value.length}, ${separator.bytes}, ${separator.length}, &${temp})`,
-      context
-    )
-  )
-  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_ARRAY', context))
 
   return {
     lines,
-    expression: temp,
-    elementType: 'string'
+    expression: `inox::String(${value.bytes}, ${value.length}).split(${separator.expression})`,
+    elementType: 'string',
+    cppType: 'Array',
+    runtimeTypeChecked: true,
+    valueType: 'array'
   }
 }
 
@@ -3403,45 +3377,6 @@ export function isStringPredicateCall(expression: AnyNode | null | undefined, co
   }
 
   return true
-}
-
-function cStringPredicateHelperName(method: string): string {
-  if (method === 'startsWith') {
-    return 'inox_string_starts_with_parts'
-  }
-
-  if (method === 'endsWith') {
-    return 'inox_string_ends_with_parts'
-  }
-
-  return 'inox_string_includes_parts'
-}
-
-function cStringIndexHelperName(method: string): string {
-  if (method === 'lastIndexOf') {
-    return 'inox_string_last_index_of_parts'
-  }
-
-  return 'inox_string_index_of_parts'
-}
-
-function cStringTrimHelperName(method: string): string {
-  if (method === 'trimStart' || method === 'trimLeft') {
-    return 'inox_string_trim_start_parts'
-  }
-
-  if (method === 'trimEnd' || method === 'trimRight') {
-    return 'inox_string_trim_end_parts'
-  }
-
-  return 'inox_string_trim_parts'
-}
-
-function emitNonNegativeStringPositionLines(raw: string, target: string): string[] {
-  return [
-    `size_t ${target} = 0;`,
-    `if (${raw} > 0) ${target} = ${raw} > (double)((size_t)-1) ? ((size_t)-1) : (size_t)${raw};`
-  ]
 }
 
 function isStringTrimMethod(method: string): boolean {

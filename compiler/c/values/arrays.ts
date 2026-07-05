@@ -2293,18 +2293,11 @@ export function emitPreparedArrayFromCallExpression(
   const lines: string[] = []
 
   registerOwnedValue(context, out)
-  registerOwnedValue(context, item)
   appendLines(lines, source.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(emitStatusCheck(`Array.make(&inox_default_allocator, 0, &${out})`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${source.length}; ++${index}) {`)
-  appendPrefixedLines(lines, emitPrepareOwnedValueWrite(item), '  ')
-  lines.push(
-    `  ${emitStatusCheck(
-      `inox_string_slice_parts(&inox_default_allocator, ${source.bytes}, ${source.length}, ${index}, ${index} + 1, &${item})`,
-      context
-    )}`
-  )
+  lines.push(`  auto ${item} = inox::String(${source.bytes}, ${source.length}).slice(${index}, ${index} + 1);`)
   lines.push(`  ${emitStatusCheck(`Array.push(${out}, ${item})`, context)}`)
   lines.push('}')
 
