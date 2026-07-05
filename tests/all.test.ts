@@ -174,6 +174,7 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/promise-await-helper-lowering.test.ts')
   const { assertPromiseVariablesUseCppRaii } = await import('./integration/promise-raii-lowering.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
+  const { assertRegExpLowersToCppObject } = await import('./integration/regexp-cpp-object-lowering.test.ts')
   const { assertRuntimeAllocatorStaysInRuntime } =
     await import('./integration/runtime-allocator-prelude.test.ts')
   const { assertStringMethodsLowerToCppObject } =
@@ -399,6 +400,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('readable-c-string-literals', () => {
       assertReadableCStringLiterals()
+    })
+
+    await t.test('regexp-cpp-object-lowering', () => {
+      assertRegExpLowersToCppObject()
     })
 
     await t.test('string-cpp-object-lowering', () => {

@@ -427,6 +427,7 @@ import {
   emitCStringTrimValueExpression,
   emitCTemplateLiteralFormatExpression,
   emitCTemplateLiteralValueExpression,
+  emitPreparedCppStringArgument,
   emitPreparedStringBytesOperand,
   emitPreparedStringCharCodeAtExpression,
   emitPreparedStringCompareExpression,
@@ -1321,6 +1322,7 @@ const cScalarExpressionDependencies = {
   emitPreparedNumberExpression,
   emitPreparedProcessNumberExpression,
   emitPreparedRuntimeArrayIndexValue,
+  emitPreparedCppStringArgument,
   emitPreparedStringCharCodeAtExpression,
   emitPreparedStringBytesOperand,
   emitPreparedStringCompareExpression,
@@ -3078,9 +3080,9 @@ function emitRegExpLiteralVariableDeclaration(
   context.regexpLiterals.set(statement.name, statement.init)
 
   return [
-    `${regexpVariableConstPrefix(statement)}inox_regexp_literal ${emitCIdentifier(statement.name)} = { ${cStringLiteral(
+      `${regexpVariableConstPrefix(statement)}RegExp ${emitCIdentifier(statement.name)}(${cStringLiteral(
       statement.init.pattern
-    )}, ${emitCRegExpFlags(statement.init.flags)} };`
+    )}, ${emitCRegExpFlags(statement.init.flags)});`
   ]
 }
 
@@ -3235,9 +3237,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     context.moduleValueTypes.set(statement.name, 'regexp')
     context.regexpLiterals.set(statement.name, statement.init)
     return [
-      `${name} = (inox_regexp_literal){ ${cStringLiteral(statement.init.pattern)}, ${emitCRegExpFlags(
-        statement.init.flags
-      )} };`
+      `${name} = RegExp(${cStringLiteral(statement.init.pattern)}, ${emitCRegExpFlags(statement.init.flags)});`
     ]
   }
 

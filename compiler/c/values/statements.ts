@@ -3003,9 +3003,9 @@ function emitRegExpLiteralVariableDeclaration(statement: StatementNode, context:
 }
 
 function emitRegExpLiteralVariableInitializer(statement: StatementNode): string {
-  return `${constPrefix(statement.kind === 'const')}inox_regexp_literal ${emitCIdentifier(statement.name)} = { ${cStringLiteral(
+  return `${constPrefix(statement.kind === 'const')}RegExp ${emitCIdentifier(statement.name)}(${cStringLiteral(
     statement.init.pattern
-  )}, ${emitCRegExpFlags(statement.init.flags)} }`
+  )}, ${emitCRegExpFlags(statement.init.flags)})`
 }
 
 function registerPromiseVariableMetadata(

@@ -1864,6 +1864,11 @@ export type CScalarExpressionDependencies = {
     tempPrefix: string
   ): PreparedExpression
   emitPreparedStringCompareExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedCppStringArgument(
+    expression: CValueNode,
+    context: CFunctionContext,
+    tempPrefix: string
+  ): PreparedExpression | null
   emitPreparedStringBytesOperand(
     expression: CValueNode,
     context: CFunctionContext,
@@ -4858,17 +4863,39 @@ function emitPreparedRegExpTestExpression(
     }
   }
 
-  const value = deps.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_regexp_value')
+  const value = deps.emitPreparedCppStringArgument(expression.args[0], context, 'inox_regexp_value')
   const lines: string[] = []
+
+  if (value === null || typeof value === 'undefined') {
+    return {
+      lines: [],
+      expression: '0'
+    }
+  }
 
   appendLines(lines, value.lines)
 
   return {
     lines,
-    expression: `inox_regexp_test(${cStringLiteral(literal.pattern)}, ${emitCRegExpFlags(
-      literal.flags
-    )}, ${value.bytes}, ${value.length})`
+    expression: `${emitPreparedRegExpExpression(expression.callee.object, literal, context, deps)}.test(${value.expression})`
   }
+}
+
+function emitPreparedRegExpExpression(
+  expression: CValueNode,
+  literal: CValueNode,
+  context: CFunctionContext,
+  deps: CScalarExpressionDependencies
+): string {
+  if (
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    context.regexpLiterals.has(expression.path[0])
+  ) {
+    return deps.emitReference(expression, context)
+  }
+
+  return `RegExp(${cStringLiteral(literal.pattern)}, ${emitCRegExpFlags(literal.flags)})`
 }
 
 function resolveRegExpLiteralExpression(expression: CValueNode, context: CFunctionContext): CValueNode | null {

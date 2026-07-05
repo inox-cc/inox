@@ -673,7 +673,7 @@ function cUnitValueGlobalInitializer(valueType: string): string {
   }
 
   if (valueType === 'regexp') {
-    return '{ 0, 0 }'
+    return ''
   }
 
   if (valueType === 'unknown' || isManagedRuntimeReturnType(valueType) || isOpaqueRuntimeValueType(valueType)) {

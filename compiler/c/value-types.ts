@@ -89,7 +89,7 @@ export function emitCType(valueType: CValueTypeInput): string {
   }
 
   if (valueType === 'regexp') {
-    return 'inox_regexp_literal'
+    return 'RegExp'
   }
 
   if (valueType === 'date') {

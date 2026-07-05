@@ -1482,7 +1482,7 @@ function emitPreparedCppStringExpression(
   return null
 }
 
-function emitPreparedCppStringArgument(
+export function emitPreparedCppStringArgument(
   expression: AnyNode,
   context: StringCContext,
   tempPrefix: string
