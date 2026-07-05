@@ -76,9 +76,6 @@ public:
   inox::Value hrtime(const inox::Value& previous) const;
   inox::Value memoryUsage() const;
   inox::Value value() const;
-
-private:
-  inox::Value hrtime(inox_value previous, int has_previous) const;
 };
 
 inline process process;

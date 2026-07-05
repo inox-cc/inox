@@ -8,10 +8,11 @@
 #else
 #include <sys/resource.h>
 #include <time.h>
+#include <unistd.h>
 #endif
+
 #include "inox/array.h"
 #include "inox/object.h"
-#include <unistd.h>
 #include "inox/string.h"
 
 #ifndef INOX_PACKAGE_VERSION
@@ -560,7 +561,13 @@ inox::String process_env::get(const char* name, size_t name_len) const {
 }
 
 inox::String process_env::get(inox::StringView name) const {
-  return get(name.bytes, name.len);
+  inox_value value = inox_undefined_value();
+
+  if (process_env_value(&inox_default_allocator, name.bytes, name.len, &value) != INOX_OK) {
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt(value));
 }
 
 void process_versions::init() {
@@ -589,15 +596,33 @@ void process::exit(int code) const {
 }
 
 inox::Value process::hrtime() const {
-  return hrtime(inox_undefined_value(), 0);
+  inox_value value = inox_undefined_value();
+
+  if (process_hrtime(&inox_default_allocator, inox_undefined_value(), 0, &value) != INOX_OK) {
+    return inox::Value();
+  }
+
+  return inox::adopt(value);
 }
 
 inox::Value process::hrtime(inox_value previous) const {
-  return hrtime(previous, 1);
+  inox_value value = inox_undefined_value();
+
+  if (process_hrtime(&inox_default_allocator, previous, 1, &value) != INOX_OK) {
+    return inox::Value();
+  }
+
+  return inox::adopt(value);
 }
 
 inox::Value process::hrtime(const inox::Value& previous) const {
-  return hrtime(previous.raw(), 1);
+  inox_value value = inox_undefined_value();
+
+  if (process_hrtime(&inox_default_allocator, previous.raw(), 1, &value) != INOX_OK) {
+    return inox::Value();
+  }
+
+  return inox::adopt(value);
 }
 
 inox::Value process::memoryUsage() const {
@@ -606,16 +631,6 @@ inox::Value process::memoryUsage() const {
 
 inox::Value process::value() const {
   return inox::node_process::value(process_value);
-}
-
-inox::Value process::hrtime(inox_value previous, int has_previous) const {
-  inox_value value = inox_undefined_value();
-
-  if (process_hrtime(&inox_default_allocator, previous, has_previous, &value) != INOX_OK) {
-    return inox::Value();
-  }
-
-  return inox::adopt(value);
 }
 
 int inox::return_code() {
