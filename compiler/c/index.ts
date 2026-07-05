@@ -6915,8 +6915,16 @@ function emitNumberLogValue(expression: AnyNode, context: CFunctionContext): Con
   return {
     lines: value.lines,
     format: consoleLogNumberFormat,
-    values: [`((double)${value.expression})`]
+    values: [emitConsoleNumberValue(value)]
   }
+}
+
+function emitConsoleNumberValue(value: PreparedExpression): string {
+  if (value.scalarType === 'double') {
+    return value.expression
+  }
+
+  return `((double)${value.expression})`
 }
 
 function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {

@@ -851,13 +851,17 @@ export function emitPreparedStringIndexCallExpression(
 
         return {
           lines,
-          expression: `${cppValue.expression}.${method}(${search.expression}, ${start.expression})`
+          expression: `${cppValue.expression}.${method}(${search.expression}, ${start.expression})`,
+          scalarType: 'double',
+          valueType: 'number'
         }
       }
 
       return {
         lines,
-        expression: `${cppValue.expression}.${method}(${search.expression})`
+        expression: `${cppValue.expression}.${method}(${search.expression})`,
+        scalarType: 'double',
+        valueType: 'number'
       }
     }
   }

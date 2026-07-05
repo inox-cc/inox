@@ -12,6 +12,7 @@ export type CPreparedExpression = {
   owned?: boolean
   rejectionValueType?: string
   runtimeTypeChecked?: boolean
+  scalarType?: string
   valueType?: string
   cppType?: string
 }
