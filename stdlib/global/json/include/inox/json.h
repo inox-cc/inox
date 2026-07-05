@@ -24,9 +24,7 @@ public:
 
   inox_status stringify(inox_value value, inox::Value& out) const;
 
-  inox_status stringify(const inox_class_descriptor& descriptor, const void* instance, inox::Value& out) const {
-    return stringify(&descriptor, instance, out);
-  }
+  inox_status stringify(const inox_class_descriptor& descriptor, const void* instance, inox::Value& out) const;
 
   inox_status stringify(const inox_class_descriptor* descriptor, const void* instance, inox::Value& out) const;
 };

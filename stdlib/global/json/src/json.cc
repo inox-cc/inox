@@ -1144,25 +1144,6 @@ inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* s
   return INOX_ERR_UNSUPPORTED;
 }
 
-static inox_status json_stringify(inox_allocator* allocator, inox_value value, inox_value* out) {
-  if (allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-  inox_json_buffer buffer = { allocator, 0, 0, 0 };
-  inox_json_stringify_stack stack = { 0 };
-  inox_status status = inox_json_stringify_value(&buffer, &stack, value, 0);
-
-  if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
-  }
-
-  inox_json_buffer_dispose(&buffer);
-
-  return status;
-}
-
 static inox_status inox_json_stringify_class_instance_value(
   inox_json_buffer* buffer,
   inox_json_stringify_stack* stack,
@@ -1238,30 +1219,6 @@ static inox_status inox_json_stringify_class_instance_value(
   return inox_json_buffer_push_char(buffer, '}');
 }
 
-static inox_status json_stringify_class_instance(
-  inox_allocator* allocator,
-  const inox_class_descriptor* descriptor,
-  const void* instance,
-  inox_value* out
-) {
-  if (allocator == 0 || allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-  inox_json_buffer buffer = { allocator, 0, 0, 0 };
-  inox_json_stringify_stack stack = { 0 };
-  inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, descriptor, instance, 0);
-
-  if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
-  }
-
-  inox_json_buffer_dispose(&buffer);
-
-  return status;
-}
-
 inox::Value Json::parse(inox::StringView text) const {
   inox_value out = inox_undefined_value();
   inox::Value error;
@@ -1283,13 +1240,85 @@ inox::Value Json::parse(inox::StringView text) const {
 }
 
 inox::Value Json::parse(const char* text) const {
-  return parse(inox::StringView(text));
+  const char* bytes = text == 0 ? "" : text;
+  inox_value out = inox_undefined_value();
+  inox::Value error;
+  inox_status status = json_parse_with_error(&inox_default_allocator, bytes, strlen(bytes), &out, error.out());
+
+  if (status != INOX_OK) {
+    inox_release(out);
+
+    if (error.tag == INOX_TAG_STRING && error.as.ref != 0) {
+      inox::throw_value(error);
+    } else {
+      inox::throw_value(inox::string("JSON.parse failed"));
+    }
+
+    return inox::Value();
+  }
+
+  return inox::adopt(out);
 }
 
 inox_status Json::stringify(inox_value value, inox::Value& out) const {
-  return json_stringify(&inox_default_allocator, value, out.out());
+  inox_allocator* allocator = &inox_default_allocator;
+  inox_value* raw_out = out.out();
+
+  if (allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_json_buffer buffer = { allocator, 0, 0, 0 };
+  inox_json_stringify_stack stack = { 0 };
+  inox_status status = inox_json_stringify_value(&buffer, &stack, value, 0);
+
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, raw_out);
+  }
+
+  inox_json_buffer_dispose(&buffer);
+
+  return status;
+}
+
+inox_status Json::stringify(const inox_class_descriptor& descriptor, const void* instance, inox::Value& out) const {
+  inox_allocator* allocator = &inox_default_allocator;
+  inox_value* raw_out = out.out();
+
+  if (allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_json_buffer buffer = { allocator, 0, 0, 0 };
+  inox_json_stringify_stack stack = { 0 };
+  inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, &descriptor, instance, 0);
+
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, raw_out);
+  }
+
+  inox_json_buffer_dispose(&buffer);
+
+  return status;
 }
 
 inox_status Json::stringify(const inox_class_descriptor* descriptor, const void* instance, inox::Value& out) const {
-  return json_stringify_class_instance(&inox_default_allocator, descriptor, instance, out.out());
+  inox_allocator* allocator = &inox_default_allocator;
+  inox_value* raw_out = out.out();
+
+  if (allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_json_buffer buffer = { allocator, 0, 0, 0 };
+  inox_json_stringify_stack stack = { 0 };
+  inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, descriptor, instance, 0);
+
+  if (status == INOX_OK) {
+    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, raw_out);
+  }
+
+  inox_json_buffer_dispose(&buffer);
+
+  return status;
 }
