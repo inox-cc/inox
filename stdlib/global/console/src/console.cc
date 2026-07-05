@@ -6,51 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum console_stream_impl {
-  CONSOLE_STDOUT = 1,
-  CONSOLE_STDERR = 2
-} console_stream_impl;
-
-inox_status console_write_impl(console_stream_impl stream, const char* bytes, size_t len);
-inox_status console_write_line_impl(console_stream_impl stream, const char* bytes, size_t len);
-inox_status console_print_value_impl(console_stream_impl stream, inox_value value);
-inox_status console_print_value_line_impl(console_stream_impl stream, inox_value value);
-inox_status console_format_class_instance_impl(
-  inox_allocator* allocator,
-  const inox_class_descriptor* descriptor,
-  const void* instance,
-  inox_value* out
-);
-
-static console_stream_impl console_native_stream(inox::ConsoleStream stream) {
-  return stream == inox::ConsoleStream::stderr ? CONSOLE_STDERR : CONSOLE_STDOUT;
-}
-
 namespace inox {
-
-inox_status console_newline(ConsoleStream stream) {
-  return console_write_impl(console_native_stream(stream), "\n", 1);
-}
-
-inox_status console_write(ConsoleStream stream, const char* bytes, size_t len) {
-  return console_write_impl(console_native_stream(stream), bytes, len);
-}
-
-inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len) {
-  return console_write_line_impl(console_native_stream(stream), bytes, len);
-}
-
-inox_status console_print_value(ConsoleStream stream, inox_value value) {
-  return console_print_value_impl(console_native_stream(stream), value);
-}
-
-inox_status console_print_value_line(ConsoleStream stream, inox_value value) {
-  return console_print_value_line_impl(console_native_stream(stream), value);
-}
-
-inox_status console_format_class_instance(const inox_class_descriptor& descriptor, const void* instance, Value& out) {
-  return console_format_class_instance_impl(&inox_default_allocator, &descriptor, instance, out.out());
-}
 
 int console_printf(ConsoleStream stream, const char* format, ...) {
   if (format == nullptr) {
