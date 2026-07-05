@@ -4,8 +4,6 @@
 
 #include "inox/math.h"
 
-#include <stddef.h>
-
 #if defined(_WIN32)
 #include <stdlib.h>
 #elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
@@ -18,49 +16,50 @@
 #endif
 #endif
 
-static uint32_t inox_math_random_state = 0x6d2b79f5u;
-static inox_math_random_backend inox_math_random_current_backend = INOX_MATH_RANDOM_SIMPLE;
-
-void inox_math_configure_random(uint32_t seed, inox_math_random_backend backend) {
-  inox_math_random_state = seed;
-  inox_math_random_current_backend = backend;
+void Math::init(uint32_t seed) const {
+  init(seed, MathRandomBackend::Simple);
 }
 
-double inox_math_abs(double value) {
+void Math::init(uint32_t seed, MathRandomBackend backend) const {
+  random_state_ = seed;
+  random_backend_ = backend;
+}
+
+double Math::abs(double value) const {
   return value < 0 ? -value : value;
 }
 
-double inox_math_floor(double value) {
+double Math::floor(double value) const {
   long long truncated = (long long)value;
   return (double)truncated > value ? (double)(truncated - 1) : (double)truncated;
 }
 
-double inox_math_ceil(double value) {
+double Math::ceil(double value) const {
   long long truncated = (long long)value;
   return (double)truncated < value ? (double)(truncated + 1) : (double)truncated;
 }
 
-double inox_math_round(double value) {
-  return inox_math_floor(value + 0.5);
+double Math::round(double value) const {
+  return floor(value + 0.5);
 }
 
-double inox_math_trunc(double value) {
+double Math::trunc(double value) const {
   return (double)((long long)value);
 }
 
-double inox_math_fround(double value) {
+double Math::fround(double value) const {
   return (double)((float)value);
 }
 
-double inox_math_min(double left, double right) {
+double Math::min(double left, double right) const {
   return left < right ? left : right;
 }
 
-double inox_math_max(double left, double right) {
+double Math::max(double left, double right) const {
   return left > right ? left : right;
 }
 
-double inox_math_sqrt(double value) {
+double Math::sqrt(double value) const {
   if (value < 0) return 0.0/0.0;
   if (value == 0) return 0;
 
@@ -73,7 +72,48 @@ double inox_math_sqrt(double value) {
   return estimate;
 }
 
-static double inox_math_reduce_radians(double value) {
+double Math::sin(double value) const {
+  double x = reduce_radians(value);
+  double x2 = x * x;
+
+  return x * (
+    1 -
+    x2/6 +
+    (x2 * x2)/120 -
+    (x2 * x2 * x2)/5040 +
+    (x2 * x2 * x2 * x2)/362880
+  );
+}
+
+double Math::cos(double value) const {
+  double x = reduce_radians(value);
+  double x2 = x * x;
+
+  return
+    1 -
+    x2/2 +
+    (x2 * x2)/24 -
+    (x2 * x2 * x2)/720 +
+    (x2 * x2 * x2 * x2)/40320;
+}
+
+double Math::random() const {
+  if (random_backend_ == MathRandomBackend::Xorshift32) {
+    return xorshift32_random();
+  }
+
+  if (random_backend_ == MathRandomBackend::Os) {
+    uint32_t value = 0;
+
+    if (os_random_bytes((uint8_t*)&value, sizeof(value))) {
+      return (double)(value >> 8) / 16777216.0;
+    }
+  }
+
+  return simple_random();
+}
+
+double Math::reduce_radians(double value) const {
   const double pi = 3.14159265358979323846;
   const double tau = 6.28318530717958647692;
 
@@ -88,20 +128,8 @@ static double inox_math_reduce_radians(double value) {
   return value;
 }
 
-double inox_math_sin(double value) {
-  double x = inox_math_reduce_radians(value);
-  double x2 = x * x;
-  return x * (1 - x2/6 + (x2 * x2)/120 - (x2 * x2 * x2)/5040 + (x2 * x2 * x2 * x2)/362880);
-}
-
-double inox_math_cos(double value) {
-  double x = inox_math_reduce_radians(value);
-  double x2 = x * x;
-  return 1 - x2/2 + (x2 * x2)/24 - (x2 * x2 * x2)/720 + (x2 * x2 * x2 * x2)/40320;
-}
-
-static int inox_math_os_random_bytes(uint8_t* out, size_t len) {
-  if (out == 0 && len != 0) return 0;
+int Math::os_random_bytes(uint8_t* out, size_t len) const {
+  if (out == nullptr && len != 0) return 0;
 #if defined(_WIN32) && defined(_MSC_VER)
   size_t filled = 0;
 
@@ -111,7 +139,7 @@ static int inox_math_os_random_bytes(uint8_t* out, size_t len) {
 
     for (size_t index = 0; index < sizeof(value) && filled < len; ++index) {
       out[filled] = (uint8_t)(value >> (index * 8));
-      filled += 1;
+      ++filled;
     }
   }
 
@@ -153,34 +181,18 @@ static int inox_math_os_random_bytes(uint8_t* out, size_t len) {
 #endif
 }
 
-static double inox_math_simple_random(void) {
-  inox_math_random_state = inox_math_random_state * 1664525u + 1013904223u;
-  return (double)(inox_math_random_state >> 8) / 16777216.0;
+double Math::simple_random() const {
+  random_state_ = random_state_ * 1664525u + 1013904223u;
+  return (double)(random_state_ >> 8) / 16777216.0;
 }
 
-static double inox_math_xorshift32_random(void) {
-  if (inox_math_random_state == 0u) inox_math_random_state = 0x6d2b79f5u;
+double Math::xorshift32_random() const {
+  if (random_state_ == 0u) random_state_ = 0x6d2b79f5u;
 
-  uint32_t value = inox_math_random_state;
+  uint32_t value = random_state_;
   value ^= value << 13;
   value ^= value >> 17;
   value ^= value << 5;
-  inox_math_random_state = value;
+  random_state_ = value;
   return (double)(value >> 8) / 16777216.0;
-}
-
-double inox_math_random(void) {
-  if (inox_math_random_current_backend == INOX_MATH_RANDOM_XORSHIFT32) {
-    return inox_math_xorshift32_random();
-  }
-
-  if (inox_math_random_current_backend == INOX_MATH_RANDOM_OS) {
-    uint32_t value = 0;
-
-    if (inox_math_os_random_bytes((uint8_t*)&value, sizeof(value))) {
-      return (double)(value >> 8) / 16777216.0;
-    }
-  }
-
-  return inox_math_simple_random();
 }

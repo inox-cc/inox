@@ -72,12 +72,16 @@ async function collectCFiles(directory: string): Promise<string[]> {
   const files: string[] = []
 
   for (const entry of entries) {
-    if (entry.isFile() && entry.name.endsWith('.c')) {
+    if (entry.isFile() && nativeSourceFileName(entry.name)) {
       files.push(join(directory, entry.name))
     }
   }
 
   return files
+}
+
+function nativeSourceFileName(name: string): boolean {
+  return name.endsWith('.c') || name.endsWith('.cc')
 }
 
 async function collectNativeIncludeDirs(directory: string): Promise<string[]> {

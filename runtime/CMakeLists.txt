@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(inox_c_runtime C)
+project(inox_runtime C CXX)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(INOX_LOOP_BACKEND "embedded" CACHE STRING "inox C runtime event loop backend")
 set_property(CACHE INOX_LOOP_BACKEND PROPERTY STRINGS embedded libuv)
@@ -96,12 +101,16 @@ set(INOX_STDLIB_NODE_DIR "${INOX_REPO_ROOT}/stdlib/node")
 file(GLOB INOX_STDLIB_GLOBAL_SOURCES
   CONFIGURE_DEPENDS
   "${INOX_STDLIB_GLOBAL_DIR}/*/c/*.c"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/c/*.cc"
   "${INOX_STDLIB_GLOBAL_DIR}/*/*/c/*.c"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/*/c/*.cc"
 )
 file(GLOB INOX_STDLIB_NODE_SOURCES
   CONFIGURE_DEPENDS
   "${INOX_STDLIB_NODE_DIR}/*/c/*.c"
+  "${INOX_STDLIB_NODE_DIR}/*/c/*.cc"
   "${INOX_STDLIB_NODE_DIR}/*/*/c/*.c"
+  "${INOX_STDLIB_NODE_DIR}/*/*/c/*.cc"
 )
 file(GLOB INOX_STDLIB_GLOBAL_INCLUDE_DIRS
   LIST_DIRECTORIES true

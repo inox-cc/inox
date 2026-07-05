@@ -75,6 +75,30 @@ public:
   ) const {
     return inox_date_utc(year, month, day, hour, minute, second, millisecond);
   }
+
+  inox_number fromLocal(
+    inox_number year,
+    inox_number month = 0,
+    inox_number day = 1,
+    inox_number hour = 0,
+    inox_number minute = 0,
+    inox_number second = 0,
+    inox_number millisecond = 0
+  ) const {
+    return inox_date_from_local(year, month, day, hour, minute, second, millisecond);
+  }
+
+  inox_number part(inox_number value, int part, bool utc) const {
+    return inox_date_get_part(value, part, utc);
+  }
+
+  inox_number timezoneOffset(inox_number value) const {
+    return inox_date_get_timezone_offset(value);
+  }
+
+  inox_status toStringValue(inox_allocator* allocator, inox_number value, int kind, inox_value* out) const {
+    return inox_date_to_string(allocator, value, kind, out);
+  }
 };
 
 inline Date Date;

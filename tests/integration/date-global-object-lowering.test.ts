@@ -14,8 +14,13 @@ export function assertDateLowersToGlobalObject(): void {
 const now = Date.now()
 const parsed = Date.parse('2026-06-24T12:34:56.789Z')
 const utc = Date.UTC(2026, 5, 24, 12, 34, 56, 789)
+const local = new Date(2026, 5, 24, 12, 34, 56, 789)
 console.log(now > 0)
 console.log(parsed === utc)
+console.log(local.getFullYear())
+console.log(local.getUTCMonth())
+console.log(local.getTimezoneOffset())
+console.log(local.toISOString())
 `
 
   const unitResult = compileSource(sourceText, {
@@ -49,9 +54,18 @@ function assertDateObjectCalls(source: string): void {
   assert.match(source, /Date\.now\(\)/)
   assert.match(source, /Date\.parse\("2026-06-24T12:34:56\.789Z", 24\)/)
   assert.match(source, /Date\.UTC\(2026, 5, 24, 12, 34, 56, 789\)/)
+  assert.match(source, /Date\.fromLocal\(2026, 5, 24, 12, 34, 56, 789\)/)
+  assert.match(source, /Date\.part\(local, 0, false\)/)
+  assert.match(source, /Date\.part\(local, 1, true\)/)
+  assert.match(source, /Date\.timezoneOffset\(local\)/)
+  assert.match(source, /Date\.toStringValue\(&inox_default_allocator, local, 0,/)
   assert.doesNotMatch(source, /inox_date_now\(\)/)
   assert.doesNotMatch(source, /inox_date_parse\(/)
   assert.doesNotMatch(source, /inox_date_utc\(/)
+  assert.doesNotMatch(source, /inox_date_from_local\(/)
+  assert.doesNotMatch(source, /inox_date_get_part\(/)
+  assert.doesNotMatch(source, /inox_date_get_timezone_offset\(/)
+  assert.doesNotMatch(source, /inox_date_to_string\(/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

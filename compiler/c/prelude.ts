@@ -385,14 +385,14 @@ export function emitMathRuntimeInitLines(options: CEmitOptions = {}): string[] {
 
 function emitRandomBackendLiteral(backend: CRandomBackend): string {
   if (backend === 'xorshift32') {
-    return 'INOX_MATH_RANDOM_XORSHIFT32'
+    return 'MathRandomBackend::Xorshift32'
   }
 
   if (backend === 'os') {
-    return 'INOX_MATH_RANDOM_OS'
+    return 'MathRandomBackend::Os'
   }
 
-  return 'INOX_MATH_RANDOM_SIMPLE'
+  return 'MathRandomBackend::Simple'
 }
 
 function emitRandomSeedLiteral(random: CPreludeRandomConfig): string {

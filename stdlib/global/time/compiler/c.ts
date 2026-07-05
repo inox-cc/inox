@@ -131,7 +131,7 @@ export function emitPreparedDateNumberExpression(
     const receiver = emitPreparedDateReceiverExpression(expression, context, deps)
     return {
       lines: receiver.lines,
-      expression: `inox_date_get_timezone_offset(${receiver.expression})`
+      expression: `Date.timezoneOffset(${receiver.expression})`
     }
   }
 
@@ -157,9 +157,7 @@ export function emitPreparedDateStringExpression(
 
   registerOwnedValue(context, out)
   pushTimeLines(lines, receiver.lines)
-  lines.push(
-    emitStatusCheck(`inox_date_to_string(&inox_default_allocator, ${receiver.expression}, ${kind}, &${out})`, context)
-  )
+  lines.push(emitStatusCheck(`Date.toStringValue(&inox_default_allocator, ${receiver.expression}, ${kind}, &${out})`, context))
 
   return {
     lines,
@@ -239,7 +237,7 @@ function emitPreparedDateConstructorExpression(
 
   return {
     lines: prepared.lines,
-    expression: `inox_date_from_local(${joinTimeStrings(prepared.args, ', ')})`
+    expression: `Date.fromLocal(${joinTimeStrings(prepared.args, ', ')})`
   }
 }
 
@@ -256,7 +254,7 @@ function emitPreparedDatePartExpression(
 
   return {
     lines,
-    expression: `inox_date_get_part(${receiver.expression}, ${part.code}, ${part.utc ? 'true' : 'false'})`
+    expression: `Date.part(${receiver.expression}, ${part.code}, ${part.utc ? 'true' : 'false'})`
   }
 }
 

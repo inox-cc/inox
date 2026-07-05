@@ -44,6 +44,21 @@ console.log(Math.random() >= 0)
   assert.doesNotMatch(source, /static double inox_math_/)
   assert.doesNotMatch(source, /static uint32_t inox_math_random_state/)
   assert.doesNotMatch(source, /inox_math_(abs|floor|ceil|round|trunc|fround|min|max|sqrt|sin|cos|random)\(/)
+  assert.doesNotMatch(source, /INOX_MATH_RANDOM_/)
+
+  const xorshiftFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host,
+    random: {
+      backend: 'xorshift32',
+      seed: 7
+    },
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const xorshiftSource = generatedTextFile(xorshiftFiles, 'src/index.cc').code
+
+  assert.match(xorshiftSource, /Math\.init\(0x00000007u, MathRandomBackend::Xorshift32\);/)
+  assert.doesNotMatch(xorshiftSource, /INOX_MATH_RANDOM_/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
