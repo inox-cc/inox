@@ -129,9 +129,14 @@ import {
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
 import {
+  isErrorObjectExpression as isErrorObjectExpressionInContext,
   resolveExpressionArrayElementDeclaredType as resolveExpressionArrayElementDeclaredTypeInContext,
   resolveExpressionArrayElementFunctionType as resolveExpressionArrayElementFunctionTypeInContext,
-  resolveExpressionArrayElementType as resolveExpressionArrayElementTypeInContext
+  resolveExpressionArrayElementType as resolveExpressionArrayElementTypeInContext,
+  resolveExpressionMapType as resolveExpressionMapTypeInContext,
+  resolveExpressionPromiseValueType as resolveExpressionPromiseValueTypeInContext,
+  resolveExpressionSetElementType as resolveExpressionSetElementTypeInContext,
+  resolveRejectedExpressionValueType as resolveRejectedExpressionValueTypeInContext
 } from './checker/expression-metadata.ts'
 import {
   acceptsArgumentCount,
@@ -10062,331 +10067,23 @@ class Checker {
   }
 
   resolveExpressionMapType(expression: AnyNode | null | undefined): CheckerMapType | null {
-    if (expression === null || typeof expression === 'undefined') {
-      return null
-    }
-
-    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      if (expression.valueType === 'map') {
-        let key: ValueType | null = null
-        let value: ValueType | null = null
-        let valueShape: ObjectShapeInfo | null = null
-
-        if (expression.mapKeyType !== null && typeof expression.mapKeyType !== 'undefined') {
-          key = expression.mapKeyType
-        }
-
-        if (expression.mapValueType !== null && typeof expression.mapValueType !== 'undefined') {
-          value = expression.mapValueType
-        }
-
-        if (expression.mapValueShape !== null && typeof expression.mapValueShape !== 'undefined') {
-          valueShape = expression.mapValueShape
-        }
-
-        return {
-          key,
-          value,
-          valueShape
-        }
-      }
-
-      return null
-    }
-
-    if (expression.type === 'Reference' && expression.path.length === 1) {
-      const name = firstPathSegment(expression.path)
-      const symbol = this.scope.resolve(name)
-
-      if (symbol !== null && typeof symbol !== 'undefined' && symbol.valueType === 'map') {
-        let key: ValueType | null = null
-        let value: ValueType | null = null
-        let valueShape: ObjectShapeInfo | null = null
-
-        if (symbol.mapKeyType !== null && typeof symbol.mapKeyType !== 'undefined') {
-          key = symbol.mapKeyType
-        }
-
-        if (symbol.mapValueType !== null && typeof symbol.mapValueType !== 'undefined') {
-          value = symbol.mapValueType
-        }
-
-        if (symbol.mapValueShape !== null && typeof symbol.mapValueShape !== 'undefined') {
-          valueShape = symbol.mapValueShape
-        }
-
-        return {
-          key,
-          value,
-          valueShape
-        }
-      }
-
-      return null
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.property)
-      }
-
-      if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
-        let key: ValueType | null = null
-        let value: ValueType | null = null
-        let valueShape: ObjectShapeInfo | null = null
-
-        if (field.mapKeyType !== null && typeof field.mapKeyType !== 'undefined') {
-          key = field.mapKeyType
-        }
-
-        if (field.mapValueType !== null && typeof field.mapValueType !== 'undefined') {
-          value = field.mapValueType
-        }
-
-        if (field.mapValueShape !== null && typeof field.mapValueShape !== 'undefined') {
-          valueShape = field.mapValueShape
-        }
-
-        return {
-          key,
-          value,
-          valueShape
-        }
-      }
-
-      return null
-    }
-
-    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.index.value)
-      }
-
-      if (field !== null && typeof field !== 'undefined' && field.valueType === 'map') {
-        let key: ValueType | null = null
-        let value: ValueType | null = null
-        let valueShape: ObjectShapeInfo | null = null
-
-        if (field.mapKeyType !== null && typeof field.mapKeyType !== 'undefined') {
-          key = field.mapKeyType
-        }
-
-        if (field.mapValueType !== null && typeof field.mapValueType !== 'undefined') {
-          value = field.mapValueType
-        }
-
-        if (field.mapValueShape !== null && typeof field.mapValueShape !== 'undefined') {
-          valueShape = field.mapValueShape
-        }
-
-        return {
-          key,
-          value,
-          valueShape
-        }
-      }
-
-      return null
-    }
-
-    return null
+    return resolveExpressionMapTypeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveExpressionSetElementType(expression: AnyNode | null | undefined): ValueType | null {
-    if (expression === null || typeof expression === 'undefined') {
-      return null
-    }
-
-    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      if (
-        expression.valueType === 'set' &&
-        expression.setElementType !== null &&
-        typeof expression.setElementType !== 'undefined'
-      ) {
-        return expression.setElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'Reference' && expression.path.length === 1) {
-      const name = firstPathSegment(expression.path)
-      const symbol = this.scope.resolve(name)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.valueType === 'set' &&
-        symbol.setElementType !== null &&
-        typeof symbol.setElementType !== 'undefined'
-      ) {
-        return symbol.setElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.property)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.valueType === 'set' &&
-        field.setElementType !== null &&
-        typeof field.setElementType !== 'undefined'
-      ) {
-        return field.setElementType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.index.value)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.valueType === 'set' &&
-        field.setElementType !== null &&
-        typeof field.setElementType !== 'undefined'
-      ) {
-        return field.setElementType
-      }
-
-      return null
-    }
-
-    return null
+    return resolveExpressionSetElementTypeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveExpressionPromiseValueType(expression: AnyNode | null | undefined): ValueType | null {
-    if (expression === null || typeof expression === 'undefined') {
-      return null
-    }
-
-    if (expression.type === 'CallExpression' || expression.type === 'NewExpression') {
-      if (
-        expression.valueType === 'promise' &&
-        expression.promiseValueType !== null &&
-        typeof expression.promiseValueType !== 'undefined'
-      ) {
-        return expression.promiseValueType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'Reference' && expression.path.length === 1) {
-      const name = firstPathSegment(expression.path)
-      const symbol = this.scope.resolve(name)
-
-      if (
-        symbol !== null &&
-        typeof symbol !== 'undefined' &&
-        symbol.valueType === 'promise' &&
-        symbol.promiseValueType !== null &&
-        typeof symbol.promiseValueType !== 'undefined'
-      ) {
-        return symbol.promiseValueType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.property)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.valueType === 'promise' &&
-        field.promiseValueType !== null &&
-        typeof field.promiseValueType !== 'undefined'
-      ) {
-        return field.promiseValueType
-      }
-
-      return null
-    }
-
-    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-      const shape = this.resolveExpressionShape(expression.object)
-      let field: AnyNode | null = null
-
-      if (shape !== null && typeof shape !== 'undefined') {
-        field = this.findShapeField(shape, expression.index.value)
-      }
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.valueType === 'promise' &&
-        field.promiseValueType !== null &&
-        typeof field.promiseValueType !== 'undefined'
-      ) {
-        return field.promiseValueType
-      }
-
-      return null
-    }
-
-    return null
+    return resolveExpressionPromiseValueTypeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveRejectedExpressionValueType(expression: AnyNode | null | undefined): ValueType {
-    if (expression === null || typeof expression === 'undefined') {
-      return 'unknown'
-    }
-
-    if (this.isErrorObjectExpression(expression)) {
-      return 'error'
-    }
-
-    if (expression.valueType === 'string') {
-      return 'string'
-    }
-
-    return 'unknown'
+    return resolveRejectedExpressionValueTypeInContext(this.expressionMetadataContext(), expression)
   }
 
   isErrorObjectExpression(expression: AnyNode): boolean {
-    if (
-      expression.type === 'NewExpression' &&
-      expression.callee !== null &&
-      typeof expression.callee !== 'undefined' &&
-      expression.callee.type === 'Reference' &&
-      expression.callee.path.length === 1 &&
-      firstPathSegment(expression.callee.path) === 'Error'
-    ) {
-      return true
-    }
-
-    const shape = this.resolveExpressionShape(expression)
-
-    return shape === errorObjectShape
+    return isErrorObjectExpressionInContext(this.expressionMetadataContext(), expression)
   }
 
   declare(name: string, symbol: SymbolInfo, loc: SourceLocation): void {
