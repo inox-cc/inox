@@ -5,21 +5,59 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <utility>
 #include "inox/array.h"
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
 #endif
 #include "inox/string.h"
 
-inox_status inox_array_join(
-  inox_allocator* allocator,
-  inox_value array,
-  const char* separator_bytes,
-  size_t separator_len,
-  inox_value* out
-);
-inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
-inox_status inox_array_push(inox_value array, inox_value value);
+extern "C" {
+  inox_status inox_array_join(
+    inox_allocator* allocator,
+    inox_value array,
+    const char* separator_bytes,
+    size_t separator_len,
+    inox_value* out
+  );
+  inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
+  inox_status inox_array_push(inox_value array, inox_value value);
+}
+
+static inox_string* inox_string_alloc_storage(inox_allocator* allocator, size_t len) {
+  if (allocator == 0 || allocator->alloc == 0 || len > ((size_t)-1) - sizeof(inox_string)) {
+    return 0;
+  }
+
+  const size_t size = sizeof(inox_string) + len;
+  inox_string* string = (inox_string*)allocator->alloc(allocator->user, size, alignof(inox_string));
+
+  if (string == 0) {
+    return 0;
+  }
+
+  string->header.kind = INOX_REF_STRING;
+  string->header.ref_count = 1;
+  string->header.flags = 0;
+  string->header.size = size;
+  string->header.align = alignof(inox_string);
+  string->header.allocator = allocator;
+  string->header.dispose = 0;
+  inox_ref_init_weak(&string->header);
+  string->len = len;
+#ifdef INOX_DEBUG_MEMORY
+  inox_debug_memory_record_ref_created(INOX_REF_STRING);
+#endif
+
+  return string;
+}
+
+static inox_value inox_string_adopt_storage(inox_string* string) {
+  inox_value value = { INOX_TAG_STRING };
+  value.as.ref = &string->header;
+
+  return value;
+}
 
 inox_status inox_string_from_literal(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || bytes == 0 || out == 0) {
@@ -27,7 +65,7 @@ inox_status inox_string_from_literal(inox_allocator* allocator, const char* byte
   }
 
   const size_t size = sizeof(inox_string) + len;
-  inox_string* string = allocator->alloc(allocator->user, size, _Alignof(inox_string));
+  inox_string* string = (inox_string*)allocator->alloc(allocator->user, size, alignof(inox_string));
 
   if (string == 0) {
     *out = inox_undefined_value();
@@ -38,7 +76,7 @@ inox_status inox_string_from_literal(inox_allocator* allocator, const char* byte
   string->header.ref_count = 1;
   string->header.flags = 0;
   string->header.size = size;
-  string->header.align = _Alignof(inox_string);
+  string->header.align = alignof(inox_string);
   string->header.allocator = allocator;
   string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
@@ -146,7 +184,7 @@ inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, 
   }
 
   const size_t size = sizeof(inox_string) + len + 1;
-  inox_string* string = allocator->alloc(allocator->user, size, _Alignof(inox_string));
+  inox_string* string = (inox_string*)allocator->alloc(allocator->user, size, alignof(inox_string));
 
   if (string == 0) {
     va_end(args);
@@ -158,7 +196,7 @@ inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, 
 
   if (written < 0 || (size_t)written != len) {
     if (allocator->free != 0) {
-      allocator->free(allocator->user, string, size, _Alignof(inox_string));
+      allocator->free(allocator->user, string, size, alignof(inox_string));
     }
 
     return INOX_ERR_TYPE;
@@ -168,7 +206,7 @@ inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, 
   string->header.ref_count = 1;
   string->header.flags = 0;
   string->header.size = size;
-  string->header.align = _Alignof(inox_string);
+  string->header.align = alignof(inox_string);
   string->header.allocator = allocator;
   string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
@@ -654,7 +692,7 @@ inox_status inox_string_concat_parts(
   }
 
   const size_t size = sizeof(inox_string) + len;
-  inox_string* string = allocator->alloc(allocator->user, size, _Alignof(inox_string));
+  inox_string* string = (inox_string*)allocator->alloc(allocator->user, size, alignof(inox_string));
 
   if (string == 0) {
     return INOX_ERR_OOM;
@@ -664,7 +702,7 @@ inox_status inox_string_concat_parts(
   string->header.ref_count = 1;
   string->header.flags = 0;
   string->header.size = size;
-  string->header.align = _Alignof(inox_string);
+  string->header.align = alignof(inox_string);
   string->header.allocator = allocator;
   string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
@@ -756,7 +794,7 @@ inox_status inox_string_to_upper_case_parts(inox_allocator* allocator, const cha
 
   const char* bytes = value_bytes == 0 ? "" : value_bytes;
   const size_t size = sizeof(inox_string) + value_len;
-  inox_string* string = allocator->alloc(allocator->user, size, _Alignof(inox_string));
+  inox_string* string = (inox_string*)allocator->alloc(allocator->user, size, alignof(inox_string));
 
   if (string == 0) {
     return INOX_ERR_OOM;
@@ -766,7 +804,7 @@ inox_status inox_string_to_upper_case_parts(inox_allocator* allocator, const cha
   string->header.ref_count = 1;
   string->header.flags = 0;
   string->header.size = size;
-  string->header.align = _Alignof(inox_string);
+  string->header.align = alignof(inox_string);
   string->header.allocator = allocator;
   string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
@@ -851,7 +889,7 @@ inox_status inox_string_pad_start_parts(
   }
 
   const size_t size = sizeof(inox_string) + len;
-  inox_string* string = allocator->alloc(allocator->user, size, _Alignof(inox_string));
+  inox_string* string = (inox_string*)allocator->alloc(allocator->user, size, alignof(inox_string));
 
   if (string == 0) {
     return INOX_ERR_OOM;
@@ -861,7 +899,7 @@ inox_status inox_string_pad_start_parts(
   string->header.ref_count = 1;
   string->header.flags = 0;
   string->header.size = size;
-  string->header.align = _Alignof(inox_string);
+  string->header.align = alignof(inox_string);
   string->header.allocator = allocator;
   string->header.dispose = 0;
   inox_ref_init_weak(&string->header);
@@ -1162,3 +1200,632 @@ bool inox_string_ends_with_parts(const char* value_bytes, size_t value_len, cons
 
   return search_len == 0 || memcmp(value_bytes + value_len - search_len, search_bytes, search_len) == 0;
 }
+
+namespace inox {
+
+Value String::make(const char* bytes, size_t len) {
+  if (bytes == nullptr) {
+    return Value();
+  }
+
+  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+
+  if (string == nullptr) {
+    return Value();
+  }
+
+  memcpy(string->bytes, bytes, len);
+
+  return adopt(inox_string_adopt_storage(string));
+}
+
+inox_value String::from_ref(inox_string* string) {
+  if (string == nullptr) {
+    return inox_undefined_value();
+  }
+
+  inox_value value = { INOX_TAG_STRING };
+  value.as.ref = (inox_ref*)&string->header;
+
+  return value;
+}
+
+size_t String::non_negative_index(double raw) {
+  if (raw != raw || raw <= 0) {
+    return 0;
+  }
+
+  if (raw > (double)((size_t)-1)) {
+    return (size_t)-1;
+  }
+
+  return (size_t)raw;
+}
+
+size_t String::slice_index(double raw, size_t length) {
+  if (raw != raw) {
+    return 0;
+  }
+
+  if (raw <= -((double)length)) {
+    return 0;
+  }
+
+  if (raw >= ((double)length)) {
+    return length;
+  }
+
+  long long index = (long long)raw;
+
+  if (index < 0) {
+    long long from_end = (long long)length + index;
+    return from_end < 0 ? 0 : (size_t)from_end;
+  }
+
+  return (size_t)index;
+}
+
+String::String() : Value() {}
+
+String::String(const char* bytes) : Value(make(bytes, bytes == nullptr ? 0 : strlen(bytes))) {}
+
+String::String(const char* bytes, size_t len) : Value(make(bytes, len)) {}
+
+String::String(StringView view) : Value(make(view.bytes, view.len)) {}
+
+String::String(inox_string* string) : Value(from_ref(string)) {}
+
+String::String(const Value& value) : Value(value) {}
+
+String::String(Value&& value) : Value(std::move(value)) {}
+
+String::String(inox_value value) : Value(value) {}
+
+String::String(AdoptValue, inox_value value) : Value(adopt_value, value) {}
+
+bool String::valid() const {
+  inox_value value = raw();
+
+  return value.tag == INOX_TAG_STRING && value.as.ref != nullptr;
+}
+
+size_t String::length() const {
+  if (!valid()) {
+    return 0;
+  }
+
+  return ((inox_string*)raw().as.ref)->len;
+}
+
+const char* String::bytes() const {
+  if (!valid()) {
+    return "";
+  }
+
+  return ((inox_string*)raw().as.ref)->bytes;
+}
+
+String::operator StringView() const {
+  return StringView(bytes(), length());
+}
+
+String String::trim() const {
+  if (!valid()) {
+    return String();
+  }
+
+  size_t start = 0;
+  size_t end = length();
+  inox_string_trim_span(bytes(), length(), &start, &end);
+
+  return String(bytes() + start, end - start);
+}
+
+String String::trimStart() const {
+  if (!valid()) {
+    return String();
+  }
+
+  size_t start = 0;
+  size_t end = length();
+  inox_string_trim_span(bytes(), length(), &start, &end);
+
+  if (end == 0) {
+    return String("");
+  }
+
+  return String(bytes() + start, length() - start);
+}
+
+String String::trimLeft() const {
+  if (!valid()) {
+    return String();
+  }
+
+  size_t start = 0;
+  size_t end = length();
+  inox_string_trim_span(bytes(), length(), &start, &end);
+
+  if (end == 0) {
+    return String("");
+  }
+
+  return String(bytes() + start, length() - start);
+}
+
+String String::trimEnd() const {
+  if (!valid()) {
+    return String();
+  }
+
+  size_t end = length();
+  inox_string_trim_span(bytes(), length(), 0, &end);
+
+  return String(bytes(), end);
+}
+
+String String::trimRight() const {
+  if (!valid()) {
+    return String();
+  }
+
+  size_t end = length();
+  inox_string_trim_span(bytes(), length(), 0, &end);
+
+  return String(bytes(), end);
+}
+
+String String::toUpperCase() const {
+  if (!valid()) {
+    return String();
+  }
+
+  String out(bytes(), length());
+
+  if (!out.valid()) {
+    return String();
+  }
+
+  inox_string* string = (inox_string*)out.raw().as.ref;
+
+  for (size_t index = 0; index < string->len; index += 1) {
+    unsigned char value = (unsigned char)string->bytes[index];
+
+    if (value >= (unsigned char)'a' && value <= (unsigned char)'z') {
+      value = (unsigned char)(value - ((unsigned char)'a' - (unsigned char)'A'));
+    }
+
+    string->bytes[index] = (char)value;
+  }
+
+  return out;
+}
+
+String String::padStart(double target_len) const {
+  return padStart(target_len, StringView(" "));
+}
+
+String String::padStart(double target_len, StringView pad) const {
+  if (!valid()) {
+    return String();
+  }
+
+  size_t target = non_negative_index(target_len);
+  const size_t value_units = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t pad_units = inox_string_code_unit_length_parts(pad.bytes, pad.len);
+
+  if (target <= value_units || pad.len == 0 || pad_units == 0) {
+    return String(*this);
+  }
+
+  size_t remaining_units = target - value_units;
+  size_t pad_total_len = 0;
+
+  while (remaining_units > 0) {
+    size_t take_units = pad_units;
+
+    if (take_units > remaining_units) {
+      take_units = remaining_units;
+    }
+
+    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+
+    if (take_len > ((size_t)-1) - pad_total_len) {
+      return String();
+    }
+
+    pad_total_len += take_len;
+    remaining_units -= take_units;
+  }
+
+  if (length() > ((size_t)-1) - pad_total_len) {
+    return String();
+  }
+
+  const size_t len = pad_total_len + length();
+  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+
+  if (string == 0) {
+    return String();
+  }
+
+  remaining_units = target - value_units;
+  size_t offset = 0;
+
+  while (remaining_units > 0) {
+    size_t take_units = pad_units;
+
+    if (take_units > remaining_units) {
+      take_units = remaining_units;
+    }
+
+    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+
+    if (take_len != 0) {
+      memcpy(string->bytes + offset, pad.bytes, take_len);
+      offset += take_len;
+    }
+
+    remaining_units -= take_units;
+  }
+
+  if (length() != 0) {
+    memcpy(string->bytes + offset, bytes(), length());
+  }
+
+  return String(adopt_value, inox_string_adopt_storage(string));
+}
+
+String String::slice(double start) const {
+  if (!valid()) {
+    return String();
+  }
+
+  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  size_t start_index = slice_index(start, code_unit_length);
+  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+
+  return String(bytes() + start_byte, length() - start_byte);
+}
+
+String String::slice(double start, double end) const {
+  if (!valid()) {
+    return String();
+  }
+
+  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  size_t start_index = slice_index(start, code_unit_length);
+  size_t end_index = slice_index(end, code_unit_length);
+
+  if (end_index < start_index) {
+    end_index = start_index;
+  }
+
+  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+  size_t end_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), end_index);
+
+  if (end_byte < start_byte) {
+    end_byte = start_byte;
+  }
+
+  return String(bytes() + start_byte, end_byte - start_byte);
+}
+
+ArrayClass String::split(StringView separator) const {
+  if (!valid()) {
+    return ArrayClass();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_array_new(&inox_default_allocator, 0, &out);
+
+  if (status != INOX_OK) {
+    return ArrayClass();
+  }
+
+  if (separator.len == 0) {
+    for (size_t index = 0; index < length();) {
+      size_t step = inox_utf8_next_len(bytes(), length(), index);
+
+      if (step == 0) {
+        step = 1;
+      }
+
+      status = inox_string_split_push(&inox_default_allocator, out, bytes() + index, step);
+
+      if (status != INOX_OK) {
+        inox_release(out);
+        return ArrayClass();
+      }
+
+      index += step;
+    }
+
+    return ArrayClass(inox::adopt_value, out);
+  }
+
+  size_t start = 0;
+  size_t index = 0;
+
+  while (index + separator.len <= length()) {
+    if (memcmp(bytes() + index, separator.bytes, separator.len) != 0) {
+      index += 1;
+      continue;
+    }
+
+    status = inox_string_split_push(&inox_default_allocator, out, bytes() + start, index - start);
+
+    if (status != INOX_OK) {
+      inox_release(out);
+      return ArrayClass();
+    }
+
+    index += separator.len;
+    start = index;
+  }
+
+  status = inox_string_split_push(&inox_default_allocator, out, bytes() + start, length() - start);
+
+  if (status != INOX_OK) {
+    inox_release(out);
+    return ArrayClass();
+  }
+
+  return ArrayClass(inox::adopt_value, out);
+}
+
+bool String::includes(StringView search) const {
+  if (!valid()) {
+    return false;
+  }
+
+  if (search.len == 0) {
+    return true;
+  }
+
+  if (search.len > length()) {
+    return false;
+  }
+
+  const size_t max_start = length() - search.len;
+
+  for (size_t index = 0; index <= max_start;) {
+    if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
+      return true;
+    }
+
+    size_t step = inox_utf8_next_len(bytes(), length(), index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+  }
+
+  return false;
+}
+
+bool String::includes(StringView search, double start) const {
+  if (!valid()) {
+    return false;
+  }
+
+  size_t start_index = non_negative_index(start);
+  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+
+  if (start_index > code_unit_length) {
+    start_index = code_unit_length;
+  }
+
+  if (search.len == 0) {
+    return true;
+  }
+
+  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+
+  if (search.len > length() - start_byte) {
+    return false;
+  }
+
+  const size_t max_start = length() - search.len;
+
+  for (size_t index = start_byte; index <= max_start;) {
+    if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
+      return true;
+    }
+
+    size_t step = inox_utf8_next_len(bytes(), length(), index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+  }
+
+  return false;
+}
+
+bool String::startsWith(StringView search) const {
+  if (!valid() || search.len > length()) {
+    return false;
+  }
+
+  return search.len == 0 || memcmp(bytes(), search.bytes, search.len) == 0;
+}
+
+bool String::endsWith(StringView search) const {
+  if (!valid() || search.len > length()) {
+    return false;
+  }
+
+  return search.len == 0 || memcmp(bytes() + length() - search.len, search.bytes, search.len) == 0;
+}
+
+double String::indexOf(StringView search) const {
+  if (!valid()) {
+    return -1;
+  }
+
+  if (search.len == 0) {
+    return 0;
+  }
+
+  if (search.len > length()) {
+    return -1;
+  }
+
+  const size_t max_start = length() - search.len;
+
+  for (size_t index = 0; index <= max_start;) {
+    if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
+      return (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+    }
+
+    size_t step = inox_utf8_next_len(bytes(), length(), index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+  }
+
+  return -1;
+}
+
+double String::indexOf(StringView search, double start) const {
+  if (!valid()) {
+    return -1;
+  }
+
+  size_t start_index = non_negative_index(start);
+  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+
+  if (start_index > code_unit_length) {
+    start_index = code_unit_length;
+  }
+
+  if (search.len == 0) {
+    return (double)start_index;
+  }
+
+  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+
+  if (search.len > length() - start_byte) {
+    return -1;
+  }
+
+  const size_t max_start = length() - search.len;
+
+  for (size_t index = start_byte; index <= max_start;) {
+    if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
+      return (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+    }
+
+    size_t step = inox_utf8_next_len(bytes(), length(), index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+  }
+
+  return -1;
+}
+
+double String::lastIndexOf(StringView search) const {
+  if (!valid()) {
+    return -1;
+  }
+
+  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+
+  if (search.len == 0) {
+    return (double)code_unit_length;
+  }
+
+  if (search.len > length()) {
+    return -1;
+  }
+
+  const size_t max_start = length() - search.len;
+  double last_match = -1;
+
+  for (size_t index = 0; index <= max_start;) {
+    if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
+      last_match = (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+    }
+
+    size_t step = inox_utf8_next_len(bytes(), length(), index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+  }
+
+  return last_match;
+}
+
+double String::lastIndexOf(StringView search, double start) const {
+  if (!valid()) {
+    return -1;
+  }
+
+  size_t start_index = non_negative_index(start);
+  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+
+  if (start_index > code_unit_length) {
+    start_index = code_unit_length;
+  }
+
+  if (search.len == 0) {
+    return (double)start_index;
+  }
+
+  if (search.len > length()) {
+    return -1;
+  }
+
+  const size_t start_byte = inox_string_code_unit_to_byte_offset_floor(bytes(), length(), start_index);
+  const size_t max_start = length() - search.len;
+  double last_match = -1;
+
+  for (size_t index = 0; index <= max_start;) {
+    if (index > start_byte) {
+      break;
+    }
+
+    if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
+      last_match = (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+    }
+
+    size_t step = inox_utf8_next_len(bytes(), length(), index);
+
+    if (step == 0) {
+      step = 1;
+    }
+
+    index += step;
+  }
+
+  return last_match;
+}
+
+String string(const char* bytes, size_t len) {
+  return String(bytes, len);
+}
+
+String string(StringView view) {
+  return String(view);
+}
+
+String string(const char* bytes) {
+  return String(bytes);
+}
+
+} // namespace inox

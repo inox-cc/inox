@@ -579,24 +579,6 @@ void Array::throwNotIterable() const {
   inox::throw_value(inox::string("TypeError: value is not iterable"));
 }
 
-namespace inox {
-
-ArrayClass String::split(StringView separator) const {
-  if (!valid()) {
-    return ArrayClass();
-  }
-
-  inox_value out = inox_undefined_value();
-
-  if (inox_string_split_parts(&inox_default_allocator, bytes(), length(), separator.bytes, separator.len, &out) != INOX_OK) {
-    return ArrayClass();
-  }
-
-  return ArrayClass(inox::adopt_value, out);
-}
-
-} // namespace inox
-
 extern "C" inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out) {
   return array_make(allocator, len, out);
 }

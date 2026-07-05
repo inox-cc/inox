@@ -91,4 +91,65 @@ bool inox_string_ends_with_parts(const char* value_bytes, size_t value_len, cons
 }
 #endif
 
+#ifdef __cplusplus
+
+#include "inox/string_view.h"
+
+class Array;
+
+namespace inox {
+
+class String : public Value {
+private:
+  static Value make(const char* bytes, size_t len);
+  static inox_value from_ref(inox_string* string);
+  static size_t non_negative_index(double raw);
+  static size_t slice_index(double raw, size_t length);
+
+public:
+  String();
+  String(const char* bytes);
+  String(const char* bytes, size_t len);
+  String(StringView view);
+  explicit String(inox_string* string);
+  explicit String(const Value& value);
+  explicit String(Value&& value);
+  explicit String(inox_value value);
+  String(AdoptValue, inox_value value);
+
+  using Value::operator=;
+
+  bool valid() const;
+  size_t length() const;
+  const char* bytes() const;
+  operator StringView() const;
+  String trim() const;
+  String trimStart() const;
+  String trimLeft() const;
+  String trimEnd() const;
+  String trimRight() const;
+  String toUpperCase() const;
+  String padStart(double target_len) const;
+  String padStart(double target_len, StringView pad) const;
+  String slice(double start) const;
+  String slice(double start, double end) const;
+  ::Array split(StringView separator) const;
+  bool includes(StringView search) const;
+  bool includes(StringView search, double start) const;
+  bool startsWith(StringView search) const;
+  bool endsWith(StringView search) const;
+  double indexOf(StringView search) const;
+  double indexOf(StringView search, double start) const;
+  double lastIndexOf(StringView search) const;
+  double lastIndexOf(StringView search, double start) const;
+};
+
+String string(const char* bytes, size_t len);
+String string(StringView view);
+String string(const char* bytes);
+
+} // namespace inox
+
+#endif
+
 #endif
