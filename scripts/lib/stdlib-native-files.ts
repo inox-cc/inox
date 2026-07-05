@@ -52,8 +52,8 @@ async function collectNativeSourceFiles(directory: string): Promise<string[]> {
       continue
     }
 
-    if (entry.name === 'c') {
-      files.push(...(await collectCFiles(path)))
+    if (entry.name === 'src') {
+      files.push(...(await collectPackageSourceFiles(path)))
       continue
     }
 
@@ -65,15 +65,22 @@ async function collectNativeSourceFiles(directory: string): Promise<string[]> {
   return files
 }
 
-async function collectCFiles(directory: string): Promise<string[]> {
+async function collectPackageSourceFiles(directory: string): Promise<string[]> {
   const entries = await readdir(directory, {
     withFileTypes: true
   })
   const files: string[] = []
 
   for (const entry of entries) {
+    const path = join(directory, entry.name)
+
+    if (entry.isDirectory()) {
+      files.push(...(await collectPackageSourceFiles(path)))
+      continue
+    }
+
     if (entry.isFile() && nativeSourceFileName(entry.name)) {
-      files.push(join(directory, entry.name))
+      files.push(path)
     }
   }
 
@@ -102,7 +109,7 @@ async function collectNativeIncludeDirs(directory: string): Promise<string[]> {
       continue
     }
 
-    if (entry.name !== 'c') {
+    if (entry.name !== 'src') {
       directories.push(...(await collectNativeIncludeDirs(path)))
     }
   }

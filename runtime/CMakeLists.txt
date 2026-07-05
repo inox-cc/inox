@@ -100,17 +100,17 @@ set(INOX_STDLIB_GLOBAL_DIR "${INOX_REPO_ROOT}/stdlib/global")
 set(INOX_STDLIB_NODE_DIR "${INOX_REPO_ROOT}/stdlib/node")
 file(GLOB INOX_STDLIB_GLOBAL_SOURCES
   CONFIGURE_DEPENDS
-  "${INOX_STDLIB_GLOBAL_DIR}/*/c/*.c"
-  "${INOX_STDLIB_GLOBAL_DIR}/*/c/*.cc"
-  "${INOX_STDLIB_GLOBAL_DIR}/*/*/c/*.c"
-  "${INOX_STDLIB_GLOBAL_DIR}/*/*/c/*.cc"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/src/*.c"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/src/*.cc"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/*/src/*.c"
+  "${INOX_STDLIB_GLOBAL_DIR}/*/*/src/*.cc"
 )
 file(GLOB INOX_STDLIB_NODE_SOURCES
   CONFIGURE_DEPENDS
-  "${INOX_STDLIB_NODE_DIR}/*/c/*.c"
-  "${INOX_STDLIB_NODE_DIR}/*/c/*.cc"
-  "${INOX_STDLIB_NODE_DIR}/*/*/c/*.c"
-  "${INOX_STDLIB_NODE_DIR}/*/*/c/*.cc"
+  "${INOX_STDLIB_NODE_DIR}/*/src/*.c"
+  "${INOX_STDLIB_NODE_DIR}/*/src/*.cc"
+  "${INOX_STDLIB_NODE_DIR}/*/*/src/*.c"
+  "${INOX_STDLIB_NODE_DIR}/*/*/src/*.cc"
 )
 file(GLOB INOX_STDLIB_GLOBAL_INCLUDE_DIRS
   LIST_DIRECTORIES true
