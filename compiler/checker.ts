@@ -62,13 +62,11 @@ import {
 import {
   builtinGlobalSymbol,
   childProcessSpawnSyncResultShape,
-  debugMemoryStatsObjectShape,
   errorObjectShape,
   fetchAbortControllerObjectShape,
   fetchResponseObjectShape,
   fsDirentObjectShape,
   libuvOnlyRuntimeImportFeature,
-  pathParseObjectShape,
   urlObjectShape,
   urlSearchParamsObjectShape
 } from './checker/builtins.ts'
@@ -82,10 +80,11 @@ import {
   isJsonParseDeclaredType,
   isFetchHttpsLiteral,
   isFetchUnsupportedResponseBodyMember,
-  isMathRuntimeMethod,
   isSupportedFetchRedirectLiteral,
   jsonRuntimeMethodName
 } from '../stdlib/global/compiler/checker.ts'
+import { applyCallableSymbolCall as applyCallableSymbolCallInContext } from './checker/callable-symbols.ts'
+import type { CallableSymbolCheckerContext } from './checker/callable-symbols.ts'
 import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
 import {
   dateInstanceRuntimeMethodInfo,
@@ -123,10 +122,30 @@ import {
   createArrowFunctionTypeMetadata,
   createMapEntryShape,
   knownCheckedExpressionType,
-  objectValuesElementTypeFromShape,
   resolveExpressionPromiseRejectionValueType,
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
+import {
+  checkArrayIsArrayCall as checkArrayIsArrayCallInContext,
+  checkConsoleCall as checkConsoleCallInContext,
+  checkDebugMemoryCall as checkDebugMemoryCallInContext,
+  checkMathCall as checkMathCallInContext,
+  checkObjectStaticCall as checkObjectStaticCallInContext,
+  isMathCall as isMathCallInContext,
+  isObjectStaticCall as isObjectStaticCallInContext
+} from './checker/global-calls.ts'
+import type {
+  CheckedCallArgInfo,
+  GlobalCallCheckerContext
+} from './checker/global-calls.ts'
+import {
+  checkOsCall as checkOsCallInContext,
+  checkPathCall as checkPathCallInContext,
+  checkProcessCall as checkProcessCallInContext,
+  checkUrlCall as checkUrlCallInContext,
+  checkUrlSearchParamsMethodCall as checkUrlSearchParamsMethodCallInContext
+} from './checker/node-runtime-calls.ts'
+import type { NodeRuntimeCallCheckerContext } from './checker/node-runtime-calls.ts'
 import {
   findShapeField as findShapeFieldInContext,
   isErrorObjectExpression as isErrorObjectExpressionInContext,
@@ -203,11 +222,6 @@ import {
   isArrayMethod,
   mapRuntimeMethodName,
   setRuntimeMethodName
-} from '../stdlib/global/compiler/descriptor.ts'
-import {
-  debugRuntimeMethodNameFromKnownPath,
-  isDebugRuntimeMethodPath,
-  knownMathRuntimeArgCount
 } from '../stdlib/global/compiler/descriptor.ts'
 import type { StdlibModuleId } from './stdlib/node/modules.ts'
 import {
@@ -3449,13 +3463,7 @@ class Checker {
     }
 
     this.checkExpression(expression.callee)
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
+    const argInfos = this.checkedCallArgInfos(expression)
 
     const symbol = this.getCallableSymbol(expression.callee)
 
@@ -3463,128 +3471,21 @@ class Checker {
       return 'unknown'
     }
 
-    let returnType: ValueType = 'unknown'
-    const symbolReturnType = symbol.returnType ?? null
-
-    if (symbolReturnType !== null && typeof symbolReturnType !== 'undefined') {
-      returnType = symbolReturnType
-    }
-
-    let returnArrayElementType: ValueType | null = null
-    const symbolReturnArrayElementType = symbol.returnArrayElementType ?? null
-
-    if (symbolReturnArrayElementType !== null && typeof symbolReturnArrayElementType !== 'undefined') {
-      returnArrayElementType = symbolReturnArrayElementType
-    }
-
-    let returnArrayElementDeclaredType: string | null = null
-    const symbolReturnArrayElementDeclaredType = symbol.returnArrayElementDeclaredType ?? null
-
-    if (symbolReturnArrayElementDeclaredType !== null && typeof symbolReturnArrayElementDeclaredType !== 'undefined') {
-      returnArrayElementDeclaredType = symbolReturnArrayElementDeclaredType
-    }
-
-    let returnMapKeyType: ValueType | null = null
-    const symbolReturnMapKeyType = symbol.returnMapKeyType ?? null
-
-    if (symbolReturnMapKeyType !== null && typeof symbolReturnMapKeyType !== 'undefined') {
-      returnMapKeyType = symbolReturnMapKeyType
-    }
-
-    let returnMapValueType: ValueType | null = null
-    const symbolReturnMapValueType = symbol.returnMapValueType ?? null
-
-    if (symbolReturnMapValueType !== null && typeof symbolReturnMapValueType !== 'undefined') {
-      returnMapValueType = symbolReturnMapValueType
-    }
-
-    let returnPromiseValueType: ValueType | null = null
-    const symbolReturnPromiseValueType = symbol.returnPromiseValueType ?? null
-
-    if (symbolReturnPromiseValueType !== null && typeof symbolReturnPromiseValueType !== 'undefined') {
-      returnPromiseValueType = symbolReturnPromiseValueType
-    }
-
-    let returnSetElementType: ValueType | null = null
-    const symbolReturnSetElementType = symbol.returnSetElementType ?? null
-
-    if (symbolReturnSetElementType !== null && typeof symbolReturnSetElementType !== 'undefined') {
-      returnSetElementType = symbolReturnSetElementType
-    }
-
-    let returnShape: ObjectShapeInfo | null = null
-    const symbolReturnShape = symbol.returnShape
-
-    if (symbolReturnShape !== null && typeof symbolReturnShape !== 'undefined') {
-      returnShape = symbolReturnShape
-    }
-
-    expression.valueType = returnType
-    expression.nullable = symbol.returnNullable === true
-    expression.arrayElementType = returnArrayElementType
-    expression.arrayElementDeclaredType = returnArrayElementDeclaredType
-    expression.mapKeyType = returnMapKeyType
-    expression.mapValueType = returnMapValueType
-    expression.promiseValueType = returnPromiseValueType
-    expression.setElementType = returnSetElementType
-    expression.shape = returnShape
-
-    const params = symbol.params ?? null
-
-    if (params === null || typeof params === 'undefined') {
-      return returnType
-    }
-
-    if (!acceptsArgumentCount(params, expression.args.length)) {
-      this.report(
-        'INOX_ARG_COUNT',
-        argumentCountMessage(callExpressionArgumentLabel(expression), params, expression.args.length),
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const param = paramForArgument(params, index)
-
-      if (param !== null && typeof param !== 'undefined' && index < argTypes.length) {
-        this.checkAssignableType(
-          argTypes[index],
-          argumentParamValueType(param),
-          expression.args[index].loc,
-          param.nullable === true,
-          this.expressionCanBeNull(expression.args[index])
-        )
-      }
-    }
-
-    return returnType
+    return applyCallableSymbolCallInContext(this.callableSymbolContext(), expression, symbol, argInfos)
   }
 
   checkConsoleCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression') {
-      return null
-    }
-
-    const path = memberExpressionPath(expression.callee)
-
-    if (
-      path.length !== 2 ||
-      path[0] !== 'console' ||
-      !isConsoleMethod(path[1]) ||
+    const valueType = checkConsoleCallInContext(
+      this.globalCallContext(),
+      expression,
       this.runtimeGlobalIsShadowed('console')
-    ) {
-      return null
+    )
+
+    if (valueType !== null && typeof valueType !== 'undefined') {
+      this.checkCallArgumentTypes(expression)
     }
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkExpression(arg)
-    }
-
-    expression.valueType = 'void'
-
-    return 'void'
+    return valueType
   }
 
   checkBinaryCall(expression: AnyNode): ValueType | null {
@@ -4221,36 +4122,9 @@ class Checker {
       return null
     }
 
-    const argTypes: ValueType[] = []
+    this.checkedCallArgInfos(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (call.unsupported) {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:os ${call.method} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    expression.osRuntimeMethod = call.method
-    expression.valueType = 'string'
-
-    return 'string'
+    return checkOsCallInContext(this.nodeRuntimeCallContext(), expression, call)
   }
 
   checkOsConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -4284,72 +4158,7 @@ class Checker {
       return null
     }
 
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (call.unsupported) {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:process ${call.method} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
-    }
-
-    expression.processRuntimeMethod = call.method
-
-    if (call.method === 'cwd' || call.method === 'memoryUsage') {
-      if (expression.args.length !== 0) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      expression.valueType = call.valueType
-      expression.shape = call.shape ?? null
-      return expression.valueType
-    }
-
-    if (call.method === 'hrtime') {
-      if (expression.args.length > 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 0 or 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(argTypes[0], 'array', expression.args[0].loc, false, false)
-      }
-
-      expression.valueType = call.valueType
-      expression.arrayElementType = call.arrayElementType ?? null
-      return expression.valueType
-    }
-
-    if (expression.args.length > 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${call.label} expects 0 or 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
-    }
-
-    expression.valueType = 'void'
-    return 'void'
+    return checkProcessCallInContext(this.nodeRuntimeCallContext(), expression, call, this.checkedCallArgInfos(expression))
   }
 
   checkProcessMemberExpression(expression: AnyNode): ValueType | null {
@@ -4430,73 +4239,7 @@ class Checker {
       return null
     }
 
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (call.unsupported) {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:url ${call.method} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
-    }
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      let argType: ValueType = 'unknown'
-
-      argType = argTypes[0]
-
-      if (call.method === 'fileURLToPath') {
-        const shape = this.resolveExpressionShape(expression.args[0])
-        let isUrlObject = false
-
-        if (shape !== null && typeof shape !== 'undefined' && shape.builtin === 'url.URL') {
-          isUrlObject = true
-        }
-
-        if (argType !== 'string' && !(argType === 'object' && isUrlObject)) {
-          this.report(
-            'INOX_TYPE_MISMATCH',
-            `function ${call.label} expects string or URL, got ${argType}`,
-            expression.args[0].loc
-          )
-        }
-      } else {
-        this.checkAssignableType(
-          argType,
-          'string',
-          expression.args[0].loc,
-          false,
-          this.expressionCanBeNull(expression.args[0])
-        )
-      }
-    }
-
-    expression.urlRuntimeMethod = call.method
-
-    if (call.method === 'pathToFileURL') {
-      expression.valueType = 'object'
-      expression.shape = urlObjectShape
-      return 'object'
-    }
-
-    expression.valueType = 'string'
-    return 'string'
+    return checkUrlCallInContext(this.nodeRuntimeCallContext(), expression, call, this.checkedCallArgInfos(expression))
   }
 
   checkUrlSearchParamsMethodCall(expression: AnyNode): ValueType | null {
@@ -4516,45 +4259,12 @@ class Checker {
       return null
     }
 
-    const method = expression.callee.property
-    let expectedArgs = 1
-
-    if (method === 'set' || method === 'append') {
-      expectedArgs = 2
-    } else if (method === 'toString') {
-      expectedArgs = 0
-    }
-
-    if (expression.args.length !== expectedArgs) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function URLSearchParams.${method} expects ${expectedArgs} argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkAssignableType(this.checkExpression(arg), 'string', arg.loc, false, this.expressionCanBeNull(arg))
-    }
-
-    expression.urlRuntimeMethod = `URLSearchParams.${method}`
-
-    if (method === 'has') {
-      expression.valueType = 'boolean'
-      return 'boolean'
-    }
-
-    if (method === 'append' || method === 'delete' || method === 'set') {
-      expression.valueType = 'void'
-      return 'void'
-    }
-
-    expression.valueType = 'string'
-    expression.nullable = method === 'get'
-
-    return 'string'
+    return checkUrlSearchParamsMethodCallInContext(
+      this.nodeRuntimeCallContext(),
+      expression,
+      expression.callee.property,
+      this.checkedCallArgInfos(expression)
+    )
   }
 
   checkPathCall(expression: AnyNode): ValueType | null {
@@ -4570,154 +4280,7 @@ class Checker {
       return null
     }
 
-    if (call.unsupported) {
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-
-        this.checkExpression(arg)
-      }
-
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:path ${call.method} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
-    }
-
-    const method = call.method
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    let returnType: ValueType = 'string'
-
-    if (method === 'isAbsolute') {
-      returnType = 'boolean'
-    } else if (method === 'parse') {
-      returnType = 'object'
-    }
-
-    expression.valueType = returnType
-    expression.pathRuntimeMethod = method
-
-    if (method === 'parse') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          argTypes[0],
-          'string',
-          expression.args[0].loc,
-          false,
-          this.expressionCanBeNull(expression.args[0])
-        )
-      }
-
-      expression.shape = pathParseObjectShape
-      return 'object'
-    }
-
-    if (method === 'format') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          argTypes[0],
-          'object',
-          expression.args[0].loc,
-          false,
-          this.expressionCanBeNull(expression.args[0])
-        )
-      }
-
-      return 'string'
-    }
-
-    if (method === 'join' || method === 'resolve') {
-      for (let index = 0; index < argTypes.length; index++) {
-        const argType = argTypes[index]
-
-        this.checkAssignableType(
-          argType,
-          'string',
-          expression.args[index].loc,
-          false,
-          this.expressionCanBeNull(expression.args[index])
-        )
-      }
-
-      return returnType
-    }
-
-    if (method === 'basename') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `function ${call.label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      for (let index = 0; index < argTypes.length; index++) {
-        const argType = argTypes[index]
-
-        this.checkAssignableType(
-          argType,
-          'string',
-          expression.args[index].loc,
-          false,
-          this.expressionCanBeNull(expression.args[index])
-        )
-      }
-
-      return 'string'
-    }
-
-    let expectedArgs = 1
-
-    if (method === 'relative') {
-      expectedArgs = 2
-    }
-
-    if (expression.args.length !== expectedArgs) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${call.label} expects ${expectedArgs} argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < argTypes.length; index++) {
-      const argType = argTypes[index]
-
-      this.checkAssignableType(
-        argType,
-        'string',
-        expression.args[index].loc,
-        false,
-        this.expressionCanBeNull(expression.args[index])
-      )
-    }
-
-    return returnType
+    return checkPathCallInContext(this.nodeRuntimeCallContext(), expression, call, this.checkedCallArgInfos(expression))
   }
 
   checkPathConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -4753,27 +4316,7 @@ class Checker {
   }
 
   checkDebugMemoryCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-
-    if (!isDebugRuntimeMethodPath(path)) {
-      return null
-    }
-
-    const method = debugRuntimeMethodNameFromKnownPath(path)
-
-    expression.valueType = 'object'
-    expression.shape = debugMemoryStatsObjectShape
-    expression.debugRuntimeMethod = method
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function inox.__debug.memory expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    return 'object'
+    return checkDebugMemoryCallInContext(this.globalCallContext(), expression)
   }
 
   checkClassMethodCall(expression: AnyNode): ValueType | null {
@@ -4871,31 +4414,11 @@ class Checker {
   }
 
   checkMathCall(expression: AnyNode): ValueType | null {
-    if (!isMathRuntimeMethod(expression.callee) || this.scope.resolve('Math')) {
+    if (!isMathCallInContext(expression, this.runtimeGlobalIsShadowed('Math'))) {
       return null
     }
 
-    const method = expression.callee.property
-    const expectedArgCount = knownMathRuntimeArgCount(method)
-
-    expression.mathRuntimeMethod = method
-    expression.valueType = 'number'
-
-    if (expression.args.length !== expectedArgCount) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function Math.${method} expects ${expectedArgCount} argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
-    }
-
-    return 'number'
+    return checkMathCallInContext(this.globalCallContext(), expression, this.checkedCallArgInfos(expression))
   }
 
   checkTimeCall(expression: AnyNode): ValueType | null {
@@ -5048,101 +4571,31 @@ class Checker {
   }
 
   checkArrayIsArrayCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
+    const valueType = checkArrayIsArrayCallInContext(
+      this.globalCallContext(),
+      expression,
+      this.runtimeGlobalIsShadowed('Array')
+    )
 
     if (
-      path === null ||
-      typeof path === 'undefined' ||
-      path.length !== 2 ||
-      path[0] !== 'Array' ||
-      path[1] !== 'isArray'
+      valueType !== null &&
+      typeof valueType !== 'undefined' &&
+      expression.args.length === 1 &&
+      expression.args[0] !== null &&
+      typeof expression.args[0] !== 'undefined'
     ) {
-      return null
+      this.checkExpression(expression.args[0])
     }
 
-    if (this.runtimeGlobalIsShadowed('Array')) {
-      return null
-    }
-
-    expression.arrayIsArrayCall = true
-    expression.valueType = 'boolean'
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function Array.isArray expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-      return 'boolean'
-    }
-
-    this.checkExpression(expression.args[0])
-
-    return 'boolean'
+    return valueType
   }
 
   checkObjectStaticCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-
-    if (
-      path === null ||
-      typeof path === 'undefined' ||
-      path.length !== 2 ||
-      path[0] !== 'Object' ||
-      (path[1] !== 'values' && path[1] !== 'entries' && path[1] !== 'keys')
-    ) {
+    if (!isObjectStaticCallInContext(expression, this.runtimeGlobalIsShadowed('Object'))) {
       return null
     }
 
-    if (this.runtimeGlobalIsShadowed('Object')) {
-      return null
-    }
-
-    const method = path[1]
-
-    expression.objectRuntimeMethod = method
-    expression.valueType = 'array'
-    expression.arrayElementType = 'unknown'
-    expression.arrayElementDeclaredType = null
-
-    if (method === 'entries') {
-      expression.arrayElementType = 'array'
-    } else if (method === 'keys') {
-      expression.arrayElementType = 'string'
-      expression.arrayElementDeclaredType = 'string'
-    }
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function Object.${method} expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      const arg = checkerNodeAt(expression.args, 0)
-      const argType = this.checkExpression(arg)
-
-      if (argType !== 'unknown' && argType !== 'object' && argType !== 'array') {
-        this.report('INOX_TYPE_MISMATCH', `function Object.${method} expects an object or array argument`, arg.loc)
-      }
-      if (method === 'values') {
-        if (argType === 'array') {
-          expression.arrayElementType = this.resolveExpressionArrayElementType(arg) ?? 'unknown'
-        } else {
-          expression.arrayElementType = objectValuesElementTypeFromShape(this.resolveExpressionShape(arg))
-        }
-      }
-    }
-
-    for (let index = 1; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkExpression(arg)
-    }
-
-    return 'array'
+    return checkObjectStaticCallInContext(this.globalCallContext(), expression, this.checkedCallArgInfos(expression))
   }
 
   checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -7120,6 +6573,25 @@ class Checker {
     }
 
     return argTypes
+  }
+
+  checkedCallArgInfos(expression: AnyNode): CheckedCallArgInfo[] {
+    const argInfos: CheckedCallArgInfo[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      const arg = checkerNodeAt(expression.args, index)
+      const valueType = this.checkExpression(arg)
+
+      argInfos.push({
+        valueType,
+        nullable: this.expressionCanBeNull(arg),
+        loc: arg.loc,
+        arrayElementType: this.resolveExpressionArrayElementType(arg),
+        shape: this.resolveExpressionShape(arg)
+      })
+    }
+
+    return argInfos
   }
 
   checkStringConversionCall(expression: AnyNode): ValueType | null {
@@ -9469,6 +8941,24 @@ class Checker {
   }
 
   primitiveCallContext(): PrimitiveCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  globalCallContext(): GlobalCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  callableSymbolContext(): CallableSymbolCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  nodeRuntimeCallContext(): NodeRuntimeCallCheckerContext {
     return {
       diagnostics: this.diagnostics
     }
