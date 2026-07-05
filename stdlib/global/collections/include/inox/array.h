@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 #include "inox/allocator.h"
-#include "inox/loop.h"
 #include "inox/value.h"
 
 typedef struct inox_array {

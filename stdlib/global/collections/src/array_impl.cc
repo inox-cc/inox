@@ -3,6 +3,7 @@
 #include <string.h>
 #include <utility>
 #include "inox/array.h"
+#include "inox/loop.h"
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
 #endif
