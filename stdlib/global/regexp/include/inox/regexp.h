@@ -17,9 +17,9 @@ private:
   RegExpFlags flags_ = RegExpFlags::None;
 
 public:
-  RegExp() = default;
+  RegExp();
 
-  RegExp(const char* pattern, RegExpFlags flags = RegExpFlags::None) : pattern_(pattern), flags_(flags) {}
+  RegExp(const char* pattern, RegExpFlags flags = RegExpFlags::None);
 
   bool test(const char* value) const;
   bool test(inox::StringView value) const;

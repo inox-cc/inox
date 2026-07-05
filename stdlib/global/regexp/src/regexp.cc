@@ -12,12 +12,26 @@ static int regexp_native_flags(RegExpFlags flags) {
   return 0;
 }
 
+RegExp::RegExp() = default;
+
+RegExp::RegExp(const char* pattern, RegExpFlags flags) : pattern_(pattern), flags_(flags) {}
+
 bool RegExp::test(const char* value) const {
   if (value == nullptr) {
     return false;
   }
 
-  return test(inox::StringView(value));
+  regex_t regex;
+  int status = regcomp(&regex, pattern_, REG_EXTENDED | regexp_native_flags(flags_));
+
+  if (status != 0) {
+    return false;
+  }
+
+  status = regexec(&regex, value, 0, 0, 0);
+  regfree(&regex);
+
+  return status == 0;
 }
 
 bool RegExp::test(inox::StringView value) const {
@@ -48,9 +62,56 @@ bool RegExp::test(inox::StringView value) const {
 }
 
 bool RegExp::test(const inox::String& value) const {
-  return test(inox::StringView(value.bytes(), value.length()));
+  regex_t regex;
+  int status = regcomp(&regex, pattern_, REG_EXTENDED | regexp_native_flags(flags_));
+
+  if (status != 0) {
+    return false;
+  }
+
+  char* bytes = (char*)malloc(value.length() + 1);
+
+  if (bytes == nullptr) {
+    regfree(&regex);
+    return false;
+  }
+
+  if (value.length() > 0) {
+    memcpy(bytes, value.bytes(), value.length());
+  }
+
+  bytes[value.length()] = 0;
+  status = regexec(&regex, bytes, 0, 0, 0);
+  free(bytes);
+  regfree(&regex);
+
+  return status == 0;
 }
 
 bool RegExp::test(const inox::Value& value) const {
-  return test(inox::String(value));
+  const inox::String string(value);
+  regex_t regex;
+  int status = regcomp(&regex, pattern_, REG_EXTENDED | regexp_native_flags(flags_));
+
+  if (status != 0) {
+    return false;
+  }
+
+  char* bytes = (char*)malloc(string.length() + 1);
+
+  if (bytes == nullptr) {
+    regfree(&regex);
+    return false;
+  }
+
+  if (string.length() > 0) {
+    memcpy(bytes, string.bytes(), string.length());
+  }
+
+  bytes[string.length()] = 0;
+  status = regexec(&regex, bytes, 0, 0, 0);
+  free(bytes);
+  regfree(&regex);
+
+  return status == 0;
 }
