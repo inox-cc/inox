@@ -1,7 +1,6 @@
 #define INOX_CONSOLE_NO_PRINTF_MACRO
 #include "inox/console.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,12 +10,15 @@
 #include "inox/object.h"
 #include "inox/string.h"
 
+typedef enum console_stream_impl {
+  CONSOLE_STDOUT = 1,
+  CONSOLE_STDERR = 2
+} console_stream_impl;
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include <limits.h>
 #include <uv.h>
 #endif
-
-static inox_console_adapter inox_console_active_adapter = { 0 };
 
 typedef struct inox_console_format_buffer {
   char* bytes;
@@ -25,11 +27,11 @@ typedef struct inox_console_format_buffer {
 } inox_console_format_buffer;
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
-static inox_status inox_console_libuv_write(inox_console_stream stream, const char* bytes, size_t len);
+static inox_status inox_console_libuv_write(console_stream_impl stream, const char* bytes, size_t len);
 #endif
 
 #ifndef INOX_CONSOLE_DISABLE_HOST
-static inox_status inox_console_host_write(inox_console_stream stream, const char* bytes, size_t len);
+static inox_status inox_console_host_write(console_stream_impl stream, const char* bytes, size_t len);
 #endif
 
 static inox_status inox_console_format_value_into(inox_console_format_buffer* buffer, inox_value value, unsigned int depth);
@@ -434,29 +436,13 @@ static inox_status inox_console_format_value_into(inox_console_format_buffer* bu
   return inox_console_format_append_literal(buffer, "undefined");
 }
 
-void inox_console_set_adapter(inox_console_adapter adapter) {
-  inox_console_active_adapter = adapter;
-}
-
-inox_console_adapter inox_console_get_adapter(void) {
-  return inox_console_active_adapter;
-}
-
-void inox_console_clear_adapter(void) {
-  inox_console_active_adapter = (inox_console_adapter){ 0 };
-}
-
-inox_status inox_console_write(inox_console_stream stream, const char* bytes, size_t len) {
-  if (stream != INOX_CONSOLE_STDOUT && stream != INOX_CONSOLE_STDERR) {
+inox_status console_write_impl(console_stream_impl stream, const char* bytes, size_t len) {
+  if (stream != CONSOLE_STDOUT && stream != CONSOLE_STDERR) {
     return INOX_ERR_TYPE;
   }
 
   if (bytes == 0 && len != 0) {
     return INOX_ERR_TYPE;
-  }
-
-  if (inox_console_active_adapter.write != 0) {
-    return inox_console_active_adapter.write(inox_console_active_adapter.user, stream, bytes, len);
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -468,22 +454,22 @@ inox_status inox_console_write(inox_console_stream stream, const char* bytes, si
 #endif
 }
 
-inox_status inox_console_write_line(inox_console_stream stream, const char* bytes, size_t len) {
-  inox_status status = inox_console_write(stream, bytes, len);
+inox_status console_write_line_impl(console_stream_impl stream, const char* bytes, size_t len) {
+  inox_status status = console_write_impl(stream, bytes, len);
 
   if (status != INOX_OK) {
     return status;
   }
 
-  return inox_console_write(stream, "\n", 1);
+  return console_write_impl(stream, "\n", 1);
 }
 
-inox_status inox_console_print_value(inox_console_stream stream, inox_value value) {
+inox_status console_print_value_impl(console_stream_impl stream, inox_value value) {
   inox_console_format_buffer buffer = { 0 };
   inox_status status = inox_console_format_value_into(&buffer, value, 0);
 
   if (status == INOX_OK) {
-    status = inox_console_write(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
+    status = console_write_impl(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
   }
 
   inox_console_format_buffer_dispose(&buffer);
@@ -491,12 +477,12 @@ inox_status inox_console_print_value(inox_console_stream stream, inox_value valu
   return status;
 }
 
-inox_status inox_console_print_value_line(inox_console_stream stream, inox_value value) {
+inox_status console_print_value_line_impl(console_stream_impl stream, inox_value value) {
   inox_console_format_buffer buffer = { 0 };
   inox_status status = inox_console_format_value_into(&buffer, value, 0);
 
   if (status == INOX_OK) {
-    status = inox_console_write_line(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
+    status = console_write_line_impl(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
   }
 
   inox_console_format_buffer_dispose(&buffer);
@@ -504,24 +490,7 @@ inox_status inox_console_print_value_line(inox_console_stream stream, inox_value
   return status;
 }
 
-inox_status inox_console_format_value(inox_allocator* allocator, inox_value value, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_console_format_buffer buffer = { 0 };
-  inox_status status = inox_console_format_value_into(&buffer, value, 0);
-
-  if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, out);
-  }
-
-  inox_console_format_buffer_dispose(&buffer);
-
-  return status;
-}
-
-inox_status inox_console_format_class_instance(
+inox_status console_format_class_instance_impl(
   inox_allocator* allocator,
   const inox_class_descriptor* descriptor,
   const void* instance,
@@ -544,52 +513,9 @@ inox_status inox_console_format_class_instance(
   return status;
 }
 
-int inox_console_printf(inox_console_stream stream, const char* format, ...) {
-  va_list args;
-  va_list copy;
-  int len;
-  char* bytes;
-  int written;
-  inox_status status;
-
-  if (format == 0) {
-    return -1;
-  }
-
-  va_start(args, format);
-  va_copy(copy, args);
-  len = vsnprintf(0, 0, format, copy);
-  va_end(copy);
-
-  if (len < 0) {
-    va_end(args);
-    return -1;
-  }
-
-  bytes = (char*)malloc((size_t)len + 1);
-
-  if (bytes == 0) {
-    va_end(args);
-    return -1;
-  }
-
-  written = vsnprintf(bytes, (size_t)len + 1, format, args);
-  va_end(args);
-
-  if (written < 0 || written > len) {
-    free(bytes);
-    return -1;
-  }
-
-  status = inox_console_write(stream, bytes, (size_t)len);
-  free(bytes);
-
-  return status == INOX_OK ? len : -1;
-}
-
 #ifdef INOX_LOOP_BACKEND_LIBUV
-static inox_status inox_console_libuv_write(inox_console_stream stream, const char* bytes, size_t len) {
-  int fd = stream == INOX_CONSOLE_STDERR ? 2 : 1;
+static inox_status inox_console_libuv_write(console_stream_impl stream, const char* bytes, size_t len) {
+  int fd = stream == CONSOLE_STDERR ? 2 : 1;
   size_t offset = 0;
 
   while (offset < len) {
@@ -612,8 +538,8 @@ static inox_status inox_console_libuv_write(inox_console_stream stream, const ch
 #endif
 
 #ifndef INOX_CONSOLE_DISABLE_HOST
-static inox_status inox_console_host_write(inox_console_stream stream, const char* bytes, size_t len) {
-  FILE* file = stream == INOX_CONSOLE_STDERR ? stderr : stdout;
+static inox_status inox_console_host_write(console_stream_impl stream, const char* bytes, size_t len) {
+  FILE* file = stream == CONSOLE_STDERR ? stderr : stdout;
 
   if (len != 0 && fwrite(bytes, 1, len, file) != len) {
     return INOX_ERR_FIELD;

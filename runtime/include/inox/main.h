@@ -14,7 +14,7 @@ namespace inox {
 using AppMain = void (*)(void);
 
 inline int run_app(AppMain app_main) {
-  RuntimeContext runtime(&inox_default_allocator, inox_performance_now());
+  RuntimeContext runtime(&inox_default_allocator, ::performance.now());
 
   if (!runtime) {
     return 1;

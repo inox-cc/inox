@@ -982,7 +982,7 @@ function emitRuntimeArrayGetAllowMissing(
   const status = nextCName(context, 'inox_array_status')
 
   return [
-    `inox_status ${status} = inox_array_get(${arrayExpression}, ${indexExpression}, ${out}.out());`,
+    `inox_status ${status} = Array.get(${arrayExpression}, ${indexExpression}, ${out}.out());`,
     `if (${status} == INOX_ERR_FIELD) {`,
     `  ${out} = inox_undefined_value();`,
     '}',
@@ -1053,7 +1053,7 @@ export function emitPreparedKnownArrayIndexValueExpression(
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
+    lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context))
     appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
     return {
@@ -1274,7 +1274,7 @@ function emitPreparedDirectRuntimeArrayLengthExpression(
   return {
     lines: [
       `size_t ${temp} = 0;`,
-      emitStatusCheck(`inox_array_len(${arrayExpression}, &${temp})`, context)
+      emitStatusCheck(`Array.length(${arrayExpression}, &${temp})`, context)
     ],
     expression: `((double)${temp})`
   }
@@ -1290,7 +1290,7 @@ function emitPreparedRuntimeArrayLengthExpression(
 
   appendLines(lines, valueLines)
   lines.push(`size_t ${temp} = 0;`)
-  lines.push(emitStatusCheck(`inox_array_len(${arrayExpression}, &${temp})`, context))
+  lines.push(emitStatusCheck(`Array.length(${arrayExpression}, &${temp})`, context))
 
   return {
     lines,
@@ -1829,7 +1829,7 @@ export function emitPreparedArraySortCallExpression(
     const lines: string[] = []
 
     appendLines(lines, receiver.lines)
-    lines.push(emitStatusCheck(`inox_array_sort(${receiver.expression})`, context))
+    lines.push(emitStatusCheck(`Array.sort(${receiver.expression})`, context))
 
     return {
       lines,
@@ -1891,7 +1891,7 @@ export function emitPreparedArraySliceCallExpression(
   appendLines(lines, start.lines)
   appendLines(lines, end.lines)
   lines.push(`size_t ${lengthName} = 0;`)
-  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${lengthName})`, context))
+  lines.push(emitStatusCheck(`Array.length(${receiver.expression}, &${lengthName})`, context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${end.expression};`)
   appendLines(
@@ -1903,7 +1903,7 @@ export function emitPreparedArraySliceCallExpression(
   appendLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(
     emitStatusCheck(
-      `inox_array_slice(&inox_default_allocator, ${receiver.expression}, ${startIndex}, ${endIndex}, &${out})`,
+      `Array.slice(&inox_default_allocator, ${receiver.expression}, ${startIndex}, ${endIndex}, &${out})`,
       context
     )
   )
@@ -1992,7 +1992,7 @@ export function emitPreparedArrayJoinCallExpression(
   appendLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(
     emitStatusCheck(
-      `inox_array_join(&inox_default_allocator, ${receiver.expression}, ${separator.bytes}, ${separator.length}, &${out})`,
+      `Array.join(&inox_default_allocator, ${receiver.expression}, ${separator.bytes}, ${separator.length}, &${out})`,
       context
     )
   )
@@ -2043,7 +2043,7 @@ export function emitPreparedArrayIncludesCallExpression(
   const length = nextCName(context, 'inox_array_includes_length')
   const index = nextCName(context, 'inox_array_includes_index')
   const value = nextCName(context, 'inox_array_includes_value')
-  const readStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)
+  const readStatus = emitStatusCheck(`Array.get(${receiver.expression}, ${index}, &${value})`, context)
   const lines: string[] = []
 
   registerOwnedValue(context, value)
@@ -2051,7 +2051,7 @@ export function emitPreparedArrayIncludesCallExpression(
   appendLines(lines, searchValue.lines)
   lines.push(`bool ${found} = false;`)
   lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
+  lines.push(emitStatusCheck(`Array.length(${receiver.expression}, &${length})`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
   lines.push(`  ${readStatus}`)
@@ -2102,7 +2102,7 @@ export function emitPreparedArrayPushCallExpression(
 
     appendLines(lines, receiver.lines)
     appendLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_array_push(${receiver.expression}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`Array.push(${receiver.expression}, ${value.expression})`, context))
 
     return {
       lines,
@@ -2150,7 +2150,7 @@ export function emitPreparedArrayUnshiftCallExpression(
   appendLines(lines, receiver.lines)
   appendLines(lines, value.lines)
   lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`inox_array_unshift(${receiver.expression}, ${value.expression}, &${length})`, context))
+  lines.push(emitStatusCheck(`Array.unshift(${receiver.expression}, ${value.expression}, &${length})`, context))
 
   return {
     lines,
@@ -2184,7 +2184,7 @@ export function emitPreparedArrayPopCallExpression(
 
     appendLines(lines, receiver.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(value))
-    lines.push(emitStatusCheck(`inox_array_pop(${receiver.expression}, &${value})`, context))
+    lines.push(emitStatusCheck(`Array.pop(${receiver.expression}, &${value})`, context))
 
     if (options !== null && typeof options !== 'undefined' && options.discard === true) {
       lines.push(`inox_release(${value});`)
@@ -2240,17 +2240,17 @@ function emitPreparedArrayComparatorSortCallExpression(
   appendLines(body, result.lines)
   body.push(`double ${compare} = ${result.expression};`)
   body.push(`if (!(${compare} > 0)) break;`)
-  body.push(emitStatusCheck(`inox_array_set(${receiver.expression}, ${scan} - 1, ${right})`, context))
-  body.push(emitStatusCheck(`inox_array_set(${receiver.expression}, ${scan}, ${left})`, context))
+  body.push(emitStatusCheck(`Array.set(${receiver.expression}, ${scan} - 1, ${right})`, context))
+  body.push(emitStatusCheck(`Array.set(${receiver.expression}, ${scan}, ${left})`, context))
   restoreArrayVariableScope(context, bodyScope)
 
-  const leftReadStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${scan} - 1, &${left})`, context)
-  const rightReadStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${scan}, &${right})`, context)
+  const leftReadStatus = emitStatusCheck(`Array.get(${receiver.expression}, ${scan} - 1, &${left})`, context)
+  const rightReadStatus = emitStatusCheck(`Array.get(${receiver.expression}, ${scan}, &${right})`, context)
   const lines: string[] = []
 
   appendLines(lines, receiver.lines)
   lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
+  lines.push(emitStatusCheck(`Array.length(${receiver.expression}, &${length})`, context))
   lines.push(`for (size_t ${index} = 1; ${index} < ${length}; ++${index}) {`)
   lines.push(`  for (size_t ${scan} = ${index}; ${scan} > 0; --${scan}) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(left), '    ')
@@ -2296,7 +2296,7 @@ export function emitPreparedArrayFromCallExpression(
   registerOwnedValue(context, item)
   appendLines(lines, source.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, 0, &${out})`, context))
+  lines.push(emitStatusCheck(`Array.make(&inox_default_allocator, 0, &${out})`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${source.length}; ++${index}) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(item), '  ')
   lines.push(
@@ -2305,7 +2305,7 @@ export function emitPreparedArrayFromCallExpression(
       context
     )}`
   )
-  lines.push(`  ${emitStatusCheck(`inox_array_push(${out}, ${item})`, context)}`)
+  lines.push(`  ${emitStatusCheck(`Array.push(${out}, ${item})`, context)}`)
   lines.push('}')
 
   return {
@@ -2378,10 +2378,10 @@ export function emitPreparedArrayReduceCallExpression(
   appendLines(lines, initialValue.lines)
   lines.push(`double ${accumulator} = ${initialValue.expression};`)
   lines.push(`size_t ${length} = 0;`)
-  lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
+  lines.push(emitStatusCheck(`Array.length(${receiver.expression}, &${length})`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
-  lines.push(`  ${emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)}`)
+  lines.push(`  ${emitStatusCheck(`Array.get(${receiver.expression}, ${index}, &${value})`, context)}`)
   appendPrefixedLines(lines, body, '  ')
   lines.push('}')
   appendLines(lines, emitPrepareOwnedValueWrite(value))
@@ -2465,14 +2465,14 @@ export function emitPreparedArrayMapCallExpression(
       return null
     }
 
-    const readStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)
+    const readStatus = emitStatusCheck(`Array.get(${receiver.expression}, ${index}, &${value})`, context)
     const lines: string[] = []
 
     appendLines(lines, receiver.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`Array.make(&inox_default_allocator, 0, &${out})`, context))
     lines.push(`size_t ${length} = 0;`)
-    lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
+    lines.push(emitStatusCheck(`Array.length(${receiver.expression}, &${length})`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
     appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
     lines.push(`  ${readStatus}`)
@@ -2562,14 +2562,14 @@ export function emitPreparedArrayFilterCallExpression(
       return null
     }
 
-    const readStatus = emitStatusCheck(`inox_array_get(${receiver.expression}, ${index}, &${value})`, context)
+    const readStatus = emitStatusCheck(`Array.get(${receiver.expression}, ${index}, &${value})`, context)
     const lines: string[] = []
 
     appendLines(lines, receiver.lines)
     appendLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, 0, &${out})`, context))
+    lines.push(emitStatusCheck(`Array.make(&inox_default_allocator, 0, &${out})`, context))
     lines.push(`size_t ${length} = 0;`)
-    lines.push(emitStatusCheck(`inox_array_len(${receiver.expression}, &${length})`, context))
+    lines.push(emitStatusCheck(`Array.length(${receiver.expression}, &${length})`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
     appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
     lines.push(`  ${readStatus}`)
@@ -2877,7 +2877,7 @@ function emitArrayFilterBooleanCallbackBodyLines(
   value: string,
   context: ArrayFunctionContext
 ): string[] {
-  const pushStatus = emitStatusCheck(`inox_array_push(${out}, ${value})`, context)
+  const pushStatus = emitStatusCheck(`Array.push(${out}, ${value})`, context)
   const lines: string[] = []
 
   appendLines(lines, emitArrayFilterBooleanTypeCheckLines(elementType, value, context))
@@ -3094,7 +3094,7 @@ function emitArrayMapReturnLines(
   const lines: string[] = []
 
   appendLines(lines, mappedValue.lines)
-  lines.push(emitStatusCheck(`inox_array_push(${out}, ${mappedValue.expression})`, context))
+  lines.push(emitStatusCheck(`Array.push(${out}, ${mappedValue.expression})`, context))
 
   return lines
 }
@@ -3107,7 +3107,7 @@ function emitArrayFilterReturnLines(
 ): string[] {
   const predicate = arrayDeps(context).emitPreparedNumberExpression(expression, context)
 
-  const pushStatus = emitStatusCheck(`inox_array_push(${out}, ${value})`, context)
+  const pushStatus = emitStatusCheck(`Array.push(${out}, ${value})`, context)
   const lines: string[] = []
 
   appendLines(lines, predicate.lines)

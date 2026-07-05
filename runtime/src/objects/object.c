@@ -13,6 +13,10 @@
 #include "inox/weak.h"
 #endif
 
+inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
+inox_status inox_array_get(inox_value array, size_t index, inox_value* out);
+inox_status inox_array_set(inox_value array, size_t index, inox_value value);
+
 static void inox_object_dispose_ref(inox_ref* ref);
 static bool inox_class_descriptor_is_valid(const inox_class_descriptor* descriptor);
 

@@ -3,7 +3,7 @@ import {
   dateConstructorRuntimeMethodNameFromPath,
   dateInstanceRuntimeMethodName,
   dateInstanceRuntimeMethodReturnType,
-  timeRuntimeCFunctionNameFromPath,
+  timeRuntimeCppFunctionNameFromPath,
   timeRuntimeMethodNameFromPath
 } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
@@ -12,7 +12,7 @@ import type { CFunctionContext } from '../../../../compiler/c/context.ts'
 import type { CPreparedExpression, CPreparedStringBytesOperand } from '../../../../compiler/c/types.ts'
 
 export function cTimeRuntimeCallName(callee: AnyNode | null | undefined): string | null {
-  return timeRuntimeCFunctionNameFromPath(memberExpressionPath(callee))
+  return timeRuntimeCppFunctionNameFromPath(memberExpressionPath(callee))
 }
 
 export type TimeLoweringDependencies = {

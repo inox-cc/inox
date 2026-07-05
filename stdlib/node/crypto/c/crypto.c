@@ -8,6 +8,9 @@
 #include "inox/binary.h"
 #include "inox/string.h"
 
+inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
+inox_status inox_array_set(inox_value array, size_t index, inox_value value);
+
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
 #include <openssl/evp.h>
 #include <openssl/hmac.h>

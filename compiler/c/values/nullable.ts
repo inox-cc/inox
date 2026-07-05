@@ -909,7 +909,7 @@ function emitCOptionalArrayIndexValueExpression(
     `${array.expression}.tag != INOX_TAG_ARRAY || ${array.expression}.as.ref == 0`,
     context
   )
-  const statusCheck = emitStatusCheck(`inox_array_get(${array.expression}, ${element.index}, &${temp})`, context)
+  const statusCheck = emitStatusCheck(`Array.get(${array.expression}, ${element.index}, &${temp})`, context)
   const lines: string[] = []
 
   registerOwnedValue(context, temp)

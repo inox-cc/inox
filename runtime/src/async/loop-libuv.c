@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+inox_number inox_performance_now(void);
+
 typedef struct inox_microtask {
   inox_microtask_fn run;
   void* context;

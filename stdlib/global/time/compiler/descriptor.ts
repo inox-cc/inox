@@ -6,7 +6,7 @@ export type TimeRuntimeCapability = {
 export type TimeRuntimeDescriptor = {
   method: string
   path: string[]
-  cFunction: string
+  cppFunction: string
   capability: TimeRuntimeCapability
 }
 
@@ -58,14 +58,14 @@ const monotonicClockTimeRuntimeCapability: TimeRuntimeCapability = {
 const dateNowRuntimeDescriptor: TimeRuntimeDescriptor = {
   method: 'dateNow',
   path: ['Date', 'now'],
-  cFunction: 'inox_date_now',
+  cppFunction: 'Date.now',
   capability: wallClockTimeRuntimeCapability
 }
 
 const performanceNowRuntimeDescriptor: TimeRuntimeDescriptor = {
   method: 'performanceNow',
   path: ['performance', 'now'],
-  cFunction: 'inox_performance_now',
+  cppFunction: 'performance.now',
   capability: monotonicClockTimeRuntimeCapability
 }
 
@@ -125,13 +125,13 @@ export function timeRuntimeMethodNameFromPath(path: string[] | null | undefined)
   return null
 }
 
-export function timeRuntimeCFunctionNameFromPath(path: string[] | null | undefined): string | null {
+export function timeRuntimeCppFunctionNameFromPath(path: string[] | null | undefined): string | null {
   if (isDateNowRuntimePath(path)) {
-    return 'inox_date_now'
+    return 'Date.now'
   }
 
   if (isPerformanceNowRuntimePath(path)) {
-    return 'inox_performance_now'
+    return 'performance.now'
   }
 
   return null

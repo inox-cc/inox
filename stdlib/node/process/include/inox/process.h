@@ -6,45 +6,21 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
-extern "C" {
-#endif
-
-void inox_process_init(int argc, char** argv);
-void inox_process_init_with_entry(int argc, char** argv, const char* entry_path);
-inox_status inox_process(inox_allocator* allocator, inox_value* out);
-inox_status inox_process_arch(inox_allocator* allocator, inox_value* out);
-inox_status inox_process_argv(inox_allocator* allocator, int index, inox_value* out);
-int inox_process_argv_length(void);
-inox_status inox_process_argv0(inox_allocator* allocator, inox_value* out);
-inox_status inox_process_cwd(inox_allocator* allocator, inox_value* out);
-inox_status inox_process_env(inox_allocator* allocator, const char* name, size_t name_len, inox_value* out);
-inox_status inox_process_execPath(inox_allocator* allocator, inox_value* out);
-int inox_process_get_exit_code(void);
-inox_status inox_process_hrtime(inox_allocator* allocator, inox_value previous, int has_previous, inox_value* out);
-inox_status inox_process_memoryUsage(inox_allocator* allocator, inox_value* out);
-int inox_process_pid(void);
-inox_status inox_process_platform(inox_allocator* allocator, inox_value* out);
-inox_status inox_process_version(inox_allocator* allocator, inox_value* out);
-inox_status inox_process_versions(inox_allocator* allocator, inox_value* out);
-inox_status inox_process_versions_node(inox_allocator* allocator, inox_value* out);
-void inox_process_set_exit_code(int code);
-void inox_process_exit(int code);
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifdef __cplusplus
 
 #include "inox/main.h"
 #include "inox/string_view.h"
 
+enum class process_number_reader {
+  argvLength,
+  pid
+};
+
 class process_number_property {
 private:
-  int (*read_)();
+  process_number_reader read_;
 
 public:
-  explicit process_number_property(int (*read)());
+  explicit process_number_property(process_number_reader read);
 
   double value() const;
   operator double() const;
@@ -60,7 +36,7 @@ public:
 
 class process_argv {
 public:
-  process_number_property length{inox_process_argv_length};
+  process_number_property length{process_number_reader::argvLength};
 
   inox::String operator[](int index) const;
 };
@@ -87,7 +63,7 @@ public:
   process_env env;
   inox::String execPath;
   process_exit_code_property exitCode;
-  process_number_property pid{inox_process_pid};
+  process_number_property pid{process_number_reader::pid};
   inox::String platform;
   inox::String version;
   process_versions versions;

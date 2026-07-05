@@ -9,7 +9,7 @@ import {
   registerOwnedPromise,
   registerOwnedValue
 } from '../../../../compiler/c/context.ts'
-import { cStringLiteral, emitCIdentifier, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
+import { cStringLiteral, emitCIdentifier } from '../../../../compiler/c/identifiers.ts'
 import { emitRuntimeValueCheck } from '../../../../compiler/c/runtime-values.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
@@ -178,11 +178,11 @@ export function emitPreparedFetchCallExpression(
       const init = emitPreparedFetchInitOperand(expression, context, dependencies)
       let call = ''
 
-      if (init.expression === '0') {
-        call = `inox_fetch(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)}, &${out})`
-      } else {
-        call = `inox_fetch_with_init(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)}, ${init.expression}, &${out})`
-      }
+      const fetchExpression =
+        init.expression === '0'
+          ? `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)})`
+          : `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)}, ${init.expression})`
+      call = `(${out} = ${fetchExpression}, ${out}.valid() ? INOX_OK : INOX_ERR_TYPE)`
 
       const lines: string[] = []
 
@@ -237,7 +237,7 @@ export function emitPreparedFetchCallExpression(
       )
       lines.push(
         emitStatusCheck(
-          `inox_fetch_response_text(${emitEventLoopReference(context)}, ${response.expression}, &${out})`,
+          `(${out} = inox::FetchResponse(inox::Value(${response.expression})).text(${emitEventLoopReference(context)}), ${out}.valid() ? INOX_OK : INOX_ERR_TYPE)`,
           context
         )
       )
@@ -278,7 +278,7 @@ export function emitPreparedFetchHeadersCallExpression(
       lines.push(`int ${out} = 0;`)
       lines.push(
         emitStatusCheck(
-          `inox_fetch_headers_has(${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
+          `(${out} = inox::fetch_headers_has(${headers.expression}, ${emitFetchStringArgument(name)}), inox::thrown() ? INOX_ERR_TYPE : INOX_OK)`,
           context
         )
       )
@@ -297,12 +297,8 @@ export function emitPreparedFetchHeadersCallExpression(
     }
 
     appendLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(
-      emitStatusCheck(
-        `inox_fetch_headers_get(&inox_default_allocator, ${headers.expression}, ${name.bytes}, ${name.length}, &${out})`,
-        context
-      )
-    )
+    lines.push(`${out} = inox::fetch_headers_get(${headers.expression}, ${emitFetchStringArgument(name)});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
@@ -372,13 +368,11 @@ export function emitPreparedFetchInitOperand(
       const value = dependencies.emitPreparedStringBytesOperand(property.value, context, 'inox_fetch_header')
 
       appendLines(lines, value.lines)
-      headerInitializers.push(
-        `{ ${cStringLiteral(String(property.key))}, ${utf8ByteLength(String(property.key))}, ${value.bytes}, ${value.length} }`
-      )
+      headerInitializers.push(`{ ${cStringLiteral(String(property.key))}, ${emitFetchStringArgument(value)} }`)
     }
 
     lines.push(
-      `inox_fetch_header ${headersName}[${headersValue.properties.length}] = { ${joinStrings(headerInitializers, ', ')} };`
+      `inox::FetchHeader ${headersName}[${headersValue.properties.length}] = { ${joinStrings(headerInitializers, ', ')} };`
     )
     headersExpression = headersName
     headerCount = `${headersValue.properties.length}`
@@ -391,7 +385,7 @@ export function emitPreparedFetchInitOperand(
   const initName = nextCName(context, 'inox_fetch_init')
 
   lines.push(
-    `inox_fetch_init ${initName} = { ${method.bytes}, ${method.length}, ${headersExpression}, ${headerCount}, ${body.bytes}, ${body.length}, ${signal.expression}, ${redirect.bytes}, ${redirect.length} };`
+    `inox::FetchInit ${initName} = { ${emitFetchStringArgument(method)}, ${headersExpression}, ${headerCount}, ${emitFetchStringArgument(body)}, ${signal.expression}, ${emitFetchStringArgument(redirect)} };`
   )
 
   return {
@@ -433,7 +427,8 @@ export function emitPreparedFetchSignalOperand(
       )
     )
     appendLines(lines, emitPrepareOwnedValueWrite(signal))
-    lines.push(emitStatusCheck(`inox_fetch_abort_controller_signal(${controller.expression}, &${signal})`, context))
+    lines.push(`${signal} = inox::fetch_abort_controller_signal(${controller.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,

@@ -6,6 +6,9 @@
 #include "inox/object.h"
 #include "inox/string.h"
 
+inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
+inox_status inox_array_push(inox_value array, inox_value value);
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include <limits.h>
 #include "loop-libuv-internal.h"

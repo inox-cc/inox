@@ -132,6 +132,10 @@ public:
     return promise_;
   }
 
+  bool valid() const {
+    return promise_ != nullptr;
+  }
+
   operator inox_promise*() const {
     return promise_;
   }

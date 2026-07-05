@@ -11,6 +11,16 @@
 #endif
 #include "inox/string.h"
 
+inox_status inox_array_join(
+  inox_allocator* allocator,
+  inox_value array,
+  const char* separator_bytes,
+  size_t separator_len,
+  inox_value* out
+);
+inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
+inox_status inox_array_push(inox_value array, inox_value value);
+
 inox_status inox_string_from_literal(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || bytes == 0 || out == 0) {
     return INOX_ERR_TYPE;

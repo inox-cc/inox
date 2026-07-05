@@ -1,5 +1,58 @@
 #include "inox/fetch.h"
 
+typedef struct fetch_response {
+  int status;
+  bool ok;
+  bool redirected;
+  const char* url;
+  size_t url_len;
+  const char* status_text;
+  size_t status_text_len;
+  const char* headers;
+  size_t headers_len;
+  const char* body;
+  size_t body_len;
+} fetch_response;
+
+typedef struct fetch_header {
+  const char* name;
+  size_t name_len;
+  const char* value;
+  size_t value_len;
+} fetch_header;
+
+typedef struct fetch_init {
+  const char* method;
+  size_t method_len;
+  const fetch_header* headers;
+  size_t header_count;
+  const char* body;
+  size_t body_len;
+  inox_value signal;
+  const char* redirect;
+  size_t redirect_len;
+} fetch_init;
+
+typedef inox_status (*fetch_done_fn)(void* user, inox_status status, const fetch_response* response);
+
+inox_status fetch_get(inox_loop* loop, const char* url, fetch_done_fn done, void* user);
+inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* init, fetch_done_fn done, void* user);
+inox_status fetch_promise_impl(inox_loop* loop, const char* url, size_t url_len, inox_promise** out);
+inox_status fetch_with_init_impl(
+  inox_loop* loop,
+  const char* url,
+  size_t url_len,
+  const fetch_init* init,
+  inox_promise** out
+);
+inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_promise** out);
+inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out);
+inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t name_len, int* out);
+inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_value* out);
+inox_status fetch_abort_controller_signal_impl(inox_value controller, inox_value* out);
+inox_status fetch_abort_controller_abort_impl(inox_value controller);
+inox_status fetch_signal_aborted_impl(inox_value signal, int* out);
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "inox/net.h"
 #include "inox/object.h"
@@ -12,13 +65,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct inox_fetch_operation {
+typedef struct fetch_operation {
   inox_loop* loop;
   inox_allocator* allocator;
   inox_net_socket* socket;
   inox_tls_client* tls;
   inox_timer_handle* abort_timer;
-  inox_fetch_done_fn done;
+  fetch_done_fn done;
   void* user;
   inox_value signal;
   char url[1024];
@@ -37,14 +90,14 @@ typedef struct inox_fetch_operation {
   char response[8192];
   size_t response_len;
   int completed;
-} inox_fetch_operation;
+} fetch_operation;
 
-typedef struct inox_fetch_promise_request {
+typedef struct fetch_promise_request {
   inox_loop* loop;
   inox_promise* promise;
   char* url;
   size_t url_len;
-} inox_fetch_promise_request;
+} fetch_promise_request;
 
 enum {
   INOX_FETCH_RESPONSE_STATUS_INDEX = 0,
@@ -74,7 +127,7 @@ enum {
 #define INOX_FETCH_MAX_REDIRECTS 20
 
 static inox_status
-inox_fetch_parse_url(
+fetch_parse_url(
   const char* url,
   size_t url_len,
   int* secure,
@@ -84,49 +137,49 @@ inox_fetch_parse_url(
   char* path,
   size_t path_len
 );
-static inox_status inox_fetch_copy_url(inox_allocator* allocator, const char* url, size_t url_len, char** out);
-static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url, size_t url_len);
-static inox_status inox_fetch_request_view(
+static inox_status fetch_copy_url(inox_allocator* allocator, const char* url, size_t url_len, char** out);
+static inox_status fetch_set_url(fetch_operation* request, const char* url, size_t url_len);
+static inox_status fetch_request_view(
   inox_loop* loop,
   const char* url,
   size_t url_len,
-  const inox_fetch_init* init,
-  inox_fetch_done_fn done,
+  const fetch_init* init,
+  fetch_done_fn done,
   void* user
 );
-static inox_status inox_fetch_build_request(inox_fetch_operation* request, const inox_fetch_init* init);
-static inox_status inox_fetch_start_connection(inox_fetch_operation* request);
-static inox_status inox_fetch_operation_is_aborted(inox_fetch_operation* request, int* out);
-static void inox_fetch_operation_free(inox_fetch_operation* request);
-static inox_status inox_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len);
-static inox_status inox_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text);
-static inox_status inox_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value);
-static int inox_fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
-static int inox_fetch_headers_include(const inox_fetch_header* headers, size_t header_count, const char* name);
-static inox_status inox_fetch_redirect_mode_from_init(const inox_fetch_init* init, int* out);
-static inox_status inox_fetch_on_connect(void* user, inox_net_socket* socket, inox_status status);
-static inox_status inox_fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len);
-static void inox_fetch_on_close(void* user, inox_net_socket* socket);
-static inox_status inox_fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status);
-static inox_status inox_fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len);
-static void inox_fetch_on_tls_close(void* user, inox_tls_client* client);
-static inox_status inox_fetch_on_transport_connect(inox_fetch_operation* request, inox_status status);
-static inox_status inox_fetch_on_transport_data(inox_fetch_operation* request, const char* bytes, size_t len);
-static void inox_fetch_on_transport_close(inox_fetch_operation* request);
-static inox_status inox_fetch_transport_write(inox_fetch_operation* request, const char* bytes, size_t len);
-static void inox_fetch_transport_close(inox_fetch_operation* request);
-static inox_status inox_fetch_abort_poll(void* user);
-static inox_status inox_fetch_try_complete(inox_fetch_operation* request);
-static const char* inox_fetch_find_header_end(const char* bytes, size_t len);
-static int inox_fetch_parse_status_line(
+static inox_status fetch_build_request(fetch_operation* request, const fetch_init* init);
+static inox_status fetch_start_connection(fetch_operation* request);
+static inox_status fetch_operation_is_aborted(fetch_operation* request, int* out);
+static void fetch_operation_free(fetch_operation* request);
+static inox_status fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len);
+static inox_status fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text);
+static inox_status fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value);
+static int fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
+static int fetch_headers_include(const fetch_header* headers, size_t header_count, const char* name);
+static inox_status fetch_redirect_mode_from_init(const fetch_init* init, int* out);
+static inox_status fetch_on_connect(void* user, inox_net_socket* socket, inox_status status);
+static inox_status fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len);
+static void fetch_on_close(void* user, inox_net_socket* socket);
+static inox_status fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status);
+static inox_status fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len);
+static void fetch_on_tls_close(void* user, inox_tls_client* client);
+static inox_status fetch_on_transport_connect(fetch_operation* request, inox_status status);
+static inox_status fetch_on_transport_data(fetch_operation* request, const char* bytes, size_t len);
+static void fetch_on_transport_close(fetch_operation* request);
+static inox_status fetch_transport_write(fetch_operation* request, const char* bytes, size_t len);
+static void fetch_transport_close(fetch_operation* request);
+static inox_status fetch_abort_poll(void* user);
+static inox_status fetch_try_complete(fetch_operation* request);
+static const char* fetch_find_header_end(const char* bytes, size_t len);
+static int fetch_parse_status_line(
   const char* bytes,
   size_t len,
   int* status,
   const char** status_text,
   size_t* status_text_len
 );
-static int inox_fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out);
-static int inox_fetch_find_header_value(
+static int fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out);
+static int fetch_find_header_value(
   const char* bytes,
   size_t header_len,
   const char* name,
@@ -134,61 +187,61 @@ static int inox_fetch_find_header_value(
   const char** value,
   size_t* value_len
 );
-static int inox_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token);
-static inox_status inox_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete);
-static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode);
-static const char* inox_fetch_find_crlf(const char* bytes, size_t len);
-static int inox_fetch_hex_digit(char value);
-static int inox_fetch_is_redirect_status(int status);
-static inox_status inox_fetch_resolve_redirect_url(
-  inox_fetch_operation* request,
+static int fetch_header_value_contains_token(const char* value, size_t value_len, const char* token);
+static inox_status fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete);
+static inox_status fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode);
+static const char* fetch_find_crlf(const char* bytes, size_t len);
+static int fetch_hex_digit(char value);
+static int fetch_is_redirect_status(int status);
+static inox_status fetch_resolve_redirect_url(
+  fetch_operation* request,
   const char* location,
   size_t location_len,
   char* out,
   size_t out_len
 );
-static inox_status inox_fetch_follow_redirect(inox_fetch_operation* request, const char* location, size_t location_len);
-static inox_status inox_fetch_finish(inox_fetch_operation* request, inox_status status, const inox_fetch_response* response);
-static inox_status inox_fetch_promise_done(void* user, inox_status status, const inox_fetch_response* response);
-static inox_status inox_fetch_response_new(
+static inox_status fetch_follow_redirect(fetch_operation* request, const char* location, size_t location_len);
+static inox_status fetch_finish(fetch_operation* request, inox_status status, const fetch_response* response);
+static inox_status fetch_promise_done(void* user, inox_status status, const fetch_response* response);
+static inox_status fetch_response_new(
   inox_allocator* allocator,
   const char* url,
   size_t url_len,
-  const inox_fetch_response* response,
+  const fetch_response* response,
   inox_value* out
 );
-static inox_status inox_fetch_headers_new(inox_allocator* allocator, const char* headers, size_t headers_len, inox_value* out);
-static inox_status inox_fetch_headers_raw(inox_value headers, inox_value* out);
-static inox_status inox_fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status);
-static inox_status inox_fetch_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out);
-static inox_status inox_fetch_error_field(
+static inox_status fetch_headers_new(inox_allocator* allocator, const char* headers, size_t headers_len, inox_value* out);
+static inox_status fetch_headers_raw(inox_value headers, inox_value* out);
+static inox_status fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status);
+static inox_status fetch_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out);
+static inox_status fetch_error_field(
   inox_allocator* allocator,
   inox_value error,
   uint32_t index,
   const char* value,
   size_t value_len
 );
-static const char* inox_fetch_error_message(inox_status status);
-static void inox_fetch_promise_request_free(inox_fetch_promise_request* request);
+static const char* fetch_error_message(inox_status status);
+static void fetch_promise_request_free(fetch_promise_request* request);
 
-inox_status inox_fetch_get(inox_loop* loop, const char* url, inox_fetch_done_fn done, void* user) {
-  return inox_fetch_request(loop, url, 0, done, user);
+inox_status fetch_get(inox_loop* loop, const char* url, fetch_done_fn done, void* user) {
+  return fetch_request(loop, url, 0, done, user);
 }
 
-inox_status inox_fetch_request(inox_loop* loop, const char* url, const inox_fetch_init* init, inox_fetch_done_fn done, void* user) {
+inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* init, fetch_done_fn done, void* user) {
   if (url == 0) {
     return INOX_ERR_TYPE;
   }
 
-  return inox_fetch_request_view(loop, url, strlen(url), init, done, user);
+  return fetch_request_view(loop, url, strlen(url), init, done, user);
 }
 
-static inox_status inox_fetch_request_view(
+static inox_status fetch_request_view(
   inox_loop* loop,
   const char* url,
   size_t url_len,
-  const inox_fetch_init* init,
-  inox_fetch_done_fn done,
+  const fetch_init* init,
+  fetch_done_fn done,
   void* user
 ) {
   if (loop == 0 || loop->allocator == 0 || url == 0 || done == 0) {
@@ -196,14 +249,14 @@ static inox_status inox_fetch_request_view(
   }
 
   inox_allocator* allocator = loop->allocator;
-  inox_fetch_operation* request =
-    allocator->alloc(allocator->user, sizeof(inox_fetch_operation), _Alignof(inox_fetch_operation));
+  fetch_operation* request =
+    (fetch_operation*)allocator->alloc(allocator->user, sizeof(fetch_operation), alignof(fetch_operation));
 
   if (request == 0) {
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(inox_fetch_operation));
+  memset(request, 0, sizeof(fetch_operation));
   request->loop = loop;
   request->allocator = allocator;
   request->done = done;
@@ -212,43 +265,43 @@ static inox_status inox_fetch_request_view(
   request->redirect_mode = INOX_FETCH_REDIRECT_FOLLOW;
   request->replayable = 1;
 
-  inox_status status = inox_fetch_set_url(request, url, url_len);
+  inox_status status = fetch_set_url(request, url, url_len);
 
   if (status != INOX_OK) {
-    inox_fetch_operation_free(request);
+    fetch_operation_free(request);
     return status;
   }
 
-  status = inox_fetch_build_request(request, init);
+  status = fetch_build_request(request, init);
 
   if (status != INOX_OK) {
-    inox_fetch_operation_free(request);
+    fetch_operation_free(request);
     return status;
   }
 
   int aborted = 0;
-  status = inox_fetch_operation_is_aborted(request, &aborted);
+  status = fetch_operation_is_aborted(request, &aborted);
 
   if (status != INOX_OK) {
-    inox_fetch_operation_free(request);
+    fetch_operation_free(request);
     return status;
   }
 
   if (aborted) {
-    inox_fetch_operation_free(request);
+    fetch_operation_free(request);
     return INOX_ERR_THROW;
   }
 
   if (request->signal.tag != INOX_TAG_UNDEFINED && request->signal.tag != INOX_TAG_NULL) {
-    status = inox_loop_set_interval(loop, 1, inox_fetch_abort_poll, request, 0, &request->abort_timer);
+    status = inox_loop_set_interval(loop, 1, fetch_abort_poll, request, 0, &request->abort_timer);
 
     if (status != INOX_OK) {
-      inox_fetch_operation_free(request);
+      fetch_operation_free(request);
       return status;
     }
   }
 
-  status = inox_fetch_start_connection(request);
+  status = fetch_start_connection(request);
 
   if (status != INOX_OK) {
     if (request->abort_timer != 0) {
@@ -256,22 +309,22 @@ static inox_status inox_fetch_request_view(
       request->abort_timer = 0;
     }
 
-    inox_fetch_operation_free(request);
+    fetch_operation_free(request);
     return status;
   }
 
   return INOX_OK;
 }
 
-inox_status inox_fetch(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
-  return inox_fetch_with_init(loop, url, url_len, 0, out);
+inox_status fetch_promise_impl(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
+  return fetch_with_init_impl(loop, url, url_len, 0, out);
 }
 
-inox_status inox_fetch_with_init(
+inox_status fetch_with_init_impl(
   inox_loop* loop,
   const char* url,
   size_t url_len,
-  const inox_fetch_init* init,
+  const fetch_init* init,
   inox_promise** out
 ) {
   if (out == 0) {
@@ -292,29 +345,29 @@ inox_status inox_fetch_with_init(
   }
 
   inox_allocator* allocator = loop->allocator;
-  inox_fetch_promise_request* request =
-    allocator->alloc(allocator->user, sizeof(inox_fetch_promise_request), _Alignof(inox_fetch_promise_request));
+  fetch_promise_request* request =
+    (fetch_promise_request*)allocator->alloc(allocator->user, sizeof(fetch_promise_request), alignof(fetch_promise_request));
 
   if (request == 0) {
     inox_promise_release(promise);
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(inox_fetch_promise_request));
+  memset(request, 0, sizeof(fetch_promise_request));
   request->loop = loop;
   request->promise = promise;
   request->url_len = url_len;
   inox_promise_retain(promise);
 
-  status = inox_fetch_copy_url(allocator, url, url_len, &request->url);
+  status = fetch_copy_url(allocator, url, url_len, &request->url);
 
   if (status == INOX_OK) {
-    status = inox_fetch_request_view(loop, request->url, request->url_len, init, inox_fetch_promise_done, request);
+    status = fetch_request_view(loop, request->url, request->url_len, init, fetch_promise_done, request);
   }
 
   if (status != INOX_OK) {
-    inox_status reject_status = inox_fetch_reject_status(loop, promise, status);
-    inox_fetch_promise_request_free(request);
+    inox_status reject_status = fetch_reject_status(loop, promise, status);
+    fetch_promise_request_free(request);
 
     if (reject_status != INOX_OK) {
       inox_promise_release(promise);
@@ -327,7 +380,7 @@ inox_status inox_fetch_with_init(
   return INOX_OK;
 }
 
-inox_status inox_fetch_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
+inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_promise** out) {
   if (loop == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -352,14 +405,14 @@ inox_status inox_fetch_response_text(inox_loop* loop, inox_value response, inox_
   return status;
 }
 
-inox_status inox_fetch_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
+inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
   if (allocator == 0 || name == 0 || name_len == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
   *out = inox_undefined_value();
   inox_value raw = inox_undefined_value();
-  inox_status status = inox_fetch_headers_raw(headers, &raw);
+  inox_status status = fetch_headers_raw(headers, &raw);
 
   if (status != INOX_OK) {
     return status;
@@ -374,7 +427,7 @@ inox_status inox_fetch_headers_get(inox_allocator* allocator, inox_value headers
   const char* value = 0;
   size_t value_len = 0;
 
-  if (inox_fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len)) {
+  if (fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len)) {
     status = inox_string_from_literal(allocator, value, value_len, out);
   } else {
     *out = inox_null_value();
@@ -385,14 +438,14 @@ inox_status inox_fetch_headers_get(inox_allocator* allocator, inox_value headers
   return status;
 }
 
-inox_status inox_fetch_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
+inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t name_len, int* out) {
   if (name == 0 || name_len == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
   *out = 0;
   inox_value raw = inox_undefined_value();
-  inox_status status = inox_fetch_headers_raw(headers, &raw);
+  inox_status status = fetch_headers_raw(headers, &raw);
 
   if (status != INOX_OK) {
     return status;
@@ -406,13 +459,13 @@ inox_status inox_fetch_headers_has(inox_value headers, const char* name, size_t 
   inox_string* raw_string = (inox_string*)raw.as.ref;
   const char* value = 0;
   size_t value_len = 0;
-  *out = inox_fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len) ? 1 : 0;
+  *out = fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len) ? 1 : 0;
 
   inox_release(raw);
   return INOX_OK;
 }
 
-inox_status inox_fetch_abort_controller_new(inox_allocator* allocator, inox_value* out) {
+inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_value* out) {
   static const inox_field_info signal_fields[] = { { "aborted", 0 } };
   static const inox_shape signal_shape = { 1, signal_fields };
   static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
@@ -451,13 +504,13 @@ inox_status inox_fetch_abort_controller_new(inox_allocator* allocator, inox_valu
   return INOX_OK;
 }
 
-inox_status inox_fetch_abort_controller_signal(inox_value controller, inox_value* out) {
+inox_status fetch_abort_controller_signal_impl(inox_value controller, inox_value* out) {
   return inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out);
 }
 
-inox_status inox_fetch_abort_controller_abort(inox_value controller) {
+inox_status fetch_abort_controller_abort_impl(inox_value controller) {
   inox_value signal = inox_undefined_value();
-  inox_status status = inox_fetch_abort_controller_signal(controller, &signal);
+  inox_status status = fetch_abort_controller_signal_impl(controller, &signal);
 
   if (status == INOX_OK) {
     status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
@@ -468,7 +521,7 @@ inox_status inox_fetch_abort_controller_abort(inox_value controller) {
   return status;
 }
 
-inox_status inox_fetch_signal_aborted(inox_value signal, int* out) {
+inox_status fetch_signal_aborted_impl(inox_value signal, int* out) {
   if (out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -492,7 +545,7 @@ inox_status inox_fetch_signal_aborted(inox_value signal, int* out) {
   return INOX_OK;
 }
 
-static inox_status inox_fetch_parse_url(
+static inox_status fetch_parse_url(
   const char* url,
   size_t url_len,
   int* secure,
@@ -596,12 +649,12 @@ static inox_status inox_fetch_parse_url(
   return INOX_OK;
 }
 
-static inox_status inox_fetch_copy_url(inox_allocator* allocator, const char* url, size_t url_len, char** out) {
+static inox_status fetch_copy_url(inox_allocator* allocator, const char* url, size_t url_len, char** out) {
   if (allocator == 0 || url == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
-  *out = allocator->alloc(allocator->user, url_len + 1, _Alignof(char));
+  *out = (char*)allocator->alloc(allocator->user, url_len + 1, alignof(char));
 
   if (*out == 0) {
     return INOX_ERR_OOM;
@@ -613,7 +666,7 @@ static inox_status inox_fetch_copy_url(inox_allocator* allocator, const char* ur
   return INOX_OK;
 }
 
-static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char* url, size_t url_len) {
+static inox_status fetch_set_url(fetch_operation* request, const char* url, size_t url_len) {
   if (request == 0 || url == 0) {
     return INOX_ERR_TYPE;
   }
@@ -626,7 +679,7 @@ static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char*
   request->url[url_len] = '\0';
   request->url_len = url_len;
 
-  return inox_fetch_parse_url(
+  return fetch_parse_url(
     request->url,
     request->url_len,
     &request->secure,
@@ -638,7 +691,7 @@ static inox_status inox_fetch_set_url(inox_fetch_operation* request, const char*
   );
 }
 
-static inox_status inox_fetch_start_connection(inox_fetch_operation* request) {
+static inox_status fetch_start_connection(fetch_operation* request) {
   if (request == 0 || request->loop == 0) {
     return INOX_ERR_TYPE;
   }
@@ -652,9 +705,9 @@ static inox_status inox_fetch_start_connection(inox_fetch_operation* request) {
       request->host,
       request->port,
       request->host,
-      inox_fetch_on_tls_connect,
-      inox_fetch_on_tls_data,
-      inox_fetch_on_tls_close,
+      fetch_on_tls_connect,
+      fetch_on_tls_data,
+      fetch_on_tls_close,
       request,
       &request->tls
     );
@@ -664,22 +717,22 @@ static inox_status inox_fetch_start_connection(inox_fetch_operation* request) {
     request->loop,
     request->host,
     request->port,
-    inox_fetch_on_connect,
-    inox_fetch_on_data,
-    inox_fetch_on_close,
+    fetch_on_connect,
+    fetch_on_data,
+    fetch_on_close,
     request,
     &request->socket
   );
 }
 
-static inox_status inox_fetch_build_request(inox_fetch_operation* request, const inox_fetch_init* init) {
+static inox_status fetch_build_request(fetch_operation* request, const fetch_init* init) {
   if (request == 0) {
     return INOX_ERR_TYPE;
   }
 
   const char* method = "GET";
   size_t method_len = 3;
-  const inox_fetch_header* headers = 0;
+  const fetch_header* headers = 0;
   size_t header_count = 0;
   const char* body = 0;
   size_t body_len = 0;
@@ -698,7 +751,7 @@ static inox_status inox_fetch_build_request(inox_fetch_operation* request, const
     body_len = init->body_len;
     request->replayable = method_len == 3 && strncasecmp(method, "GET", 3) == 0 && header_count == 0 && body_len == 0;
 
-    inox_status redirect_status = inox_fetch_redirect_mode_from_init(init, &request->redirect_mode);
+    inox_status redirect_status = fetch_redirect_mode_from_init(init, &request->redirect_mode);
 
     if (redirect_status != INOX_OK) {
       return redirect_status;
@@ -727,40 +780,40 @@ static inox_status inox_fetch_build_request(inox_fetch_operation* request, const
   }
 
   size_t offset = 0;
-  inox_status status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, method, method_len);
+  inox_status status = fetch_append_bytes(request->request, sizeof(request->request), &offset, method, method_len);
 
-  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, " ");
-  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->path);
-  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, " HTTP/1.1\r\nHost: ");
-  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, request->host);
-  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, " ");
+  if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, request->path);
+  if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, " HTTP/1.1\r\nHost: ");
+  if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, request->host);
+  if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
 
   for (size_t index = 0; status == INOX_OK && index < header_count; index += 1) {
-    const inox_fetch_header* header = headers + index;
+    const fetch_header* header = headers + index;
 
     if (header->name == 0 || header->name_len == 0 || header->value == 0) {
       return INOX_ERR_TYPE;
     }
 
-    status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->name, header->name_len);
-    if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, ": ");
-    if (status == INOX_OK) status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, header->value, header->value_len);
-    if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+    status = fetch_append_bytes(request->request, sizeof(request->request), &offset, header->name, header->name_len);
+    if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, ": ");
+    if (status == INOX_OK) status = fetch_append_bytes(request->request, sizeof(request->request), &offset, header->value, header->value_len);
+    if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
   }
 
-  if (status == INOX_OK && body_len > 0 && !inox_fetch_headers_include(headers, header_count, "Content-Length")) {
-    status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Content-Length: ");
-    if (status == INOX_OK) status = inox_fetch_append_size(request->request, sizeof(request->request), &offset, body_len);
-    if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  if (status == INOX_OK && body_len > 0 && !fetch_headers_include(headers, header_count, "Content-Length")) {
+    status = fetch_append_cstr(request->request, sizeof(request->request), &offset, "Content-Length: ");
+    if (status == INOX_OK) status = fetch_append_size(request->request, sizeof(request->request), &offset, body_len);
+    if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
   }
 
-  if (status == INOX_OK && !inox_fetch_headers_include(headers, header_count, "Connection")) {
-    status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "Connection: close\r\n");
+  if (status == INOX_OK && !fetch_headers_include(headers, header_count, "Connection")) {
+    status = fetch_append_cstr(request->request, sizeof(request->request), &offset, "Connection: close\r\n");
   }
 
-  if (status == INOX_OK) status = inox_fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
+  if (status == INOX_OK) status = fetch_append_cstr(request->request, sizeof(request->request), &offset, "\r\n");
   if (status == INOX_OK && body_len > 0) {
-    status = inox_fetch_append_bytes(request->request, sizeof(request->request), &offset, body, body_len);
+    status = fetch_append_bytes(request->request, sizeof(request->request), &offset, body, body_len);
   }
 
   if (status != INOX_OK) {
@@ -771,7 +824,7 @@ static inox_status inox_fetch_build_request(inox_fetch_operation* request, const
   return INOX_OK;
 }
 
-static inox_status inox_fetch_operation_is_aborted(inox_fetch_operation* request, int* out) {
+static inox_status fetch_operation_is_aborted(fetch_operation* request, int* out) {
   if (request == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -782,19 +835,19 @@ static inox_status inox_fetch_operation_is_aborted(inox_fetch_operation* request
     return INOX_OK;
   }
 
-  return inox_fetch_signal_aborted(request->signal, out);
+  return fetch_signal_aborted_impl(request->signal, out);
 }
 
-static void inox_fetch_operation_free(inox_fetch_operation* request) {
+static void fetch_operation_free(fetch_operation* request) {
   if (request == 0 || request->allocator == 0) {
     return;
   }
 
   inox_release(request->signal);
-  request->allocator->free(request->allocator->user, request, sizeof(inox_fetch_operation), _Alignof(inox_fetch_operation));
+  request->allocator->free(request->allocator->user, request, sizeof(fetch_operation), alignof(fetch_operation));
 }
 
-static inox_status inox_fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len) {
+static inox_status fetch_append_bytes(char* out, size_t out_size, size_t* offset, const char* bytes, size_t len) {
   if (out == 0 || offset == 0 || (len > 0 && bytes == 0)) {
     return INOX_ERR_TYPE;
   }
@@ -811,15 +864,15 @@ static inox_status inox_fetch_append_bytes(char* out, size_t out_size, size_t* o
   return INOX_OK;
 }
 
-static inox_status inox_fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text) {
+static inox_status fetch_append_cstr(char* out, size_t out_size, size_t* offset, const char* text) {
   if (text == 0) {
     return INOX_ERR_TYPE;
   }
 
-  return inox_fetch_append_bytes(out, out_size, offset, text, strlen(text));
+  return fetch_append_bytes(out, out_size, offset, text, strlen(text));
 }
 
-static inox_status inox_fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value) {
+static inox_status fetch_append_size(char* out, size_t out_size, size_t* offset, size_t value) {
   char buffer[32];
   int written = snprintf(buffer, sizeof(buffer), "%zu", value);
 
@@ -827,10 +880,10 @@ static inox_status inox_fetch_append_size(char* out, size_t out_size, size_t* of
     return INOX_ERR_FIELD;
   }
 
-  return inox_fetch_append_bytes(out, out_size, offset, buffer, (size_t)written);
+  return fetch_append_bytes(out, out_size, offset, buffer, (size_t)written);
 }
 
-static int inox_fetch_header_name_equals(const char* name, size_t name_len, const char* expected) {
+static int fetch_header_name_equals(const char* name, size_t name_len, const char* expected) {
   if (name == 0 || expected == 0 || strlen(expected) != name_len) {
     return 0;
   }
@@ -844,13 +897,13 @@ static int inox_fetch_header_name_equals(const char* name, size_t name_len, cons
   return 1;
 }
 
-static int inox_fetch_headers_include(const inox_fetch_header* headers, size_t header_count, const char* name) {
+static int fetch_headers_include(const fetch_header* headers, size_t header_count, const char* name) {
   if (headers == 0 || name == 0) {
     return 0;
   }
 
   for (size_t index = 0; index < header_count; index += 1) {
-    if (inox_fetch_header_name_equals(headers[index].name, headers[index].name_len, name)) {
+    if (fetch_header_name_equals(headers[index].name, headers[index].name_len, name)) {
       return 1;
     }
   }
@@ -858,7 +911,7 @@ static int inox_fetch_headers_include(const inox_fetch_header* headers, size_t h
   return 0;
 }
 
-static inox_status inox_fetch_redirect_mode_from_init(const inox_fetch_init* init, int* out) {
+static inox_status fetch_redirect_mode_from_init(const fetch_init* init, int* out) {
   if (out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -886,93 +939,93 @@ static inox_status inox_fetch_redirect_mode_from_init(const inox_fetch_init* ini
   return INOX_ERR_UNSUPPORTED;
 }
 
-static inox_status inox_fetch_on_connect(void* user, inox_net_socket* socket, inox_status status) {
-  inox_fetch_operation* request = (inox_fetch_operation*)user;
+static inox_status fetch_on_connect(void* user, inox_net_socket* socket, inox_status status) {
+  fetch_operation* request = (fetch_operation*)user;
 
   if (status != INOX_OK) {
-    return inox_fetch_on_transport_connect(request, status);
+    return fetch_on_transport_connect(request, status);
   }
 
   if (inox_net_socket_read_start(socket) != INOX_OK) {
-    return inox_fetch_finish(request, INOX_ERR_FIELD, 0);
+    return fetch_finish(request, INOX_ERR_FIELD, 0);
   }
 
-  return inox_fetch_on_transport_connect(request, INOX_OK);
+  return fetch_on_transport_connect(request, INOX_OK);
 }
 
-static inox_status inox_fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
+static inox_status fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
-  return inox_fetch_on_transport_data((inox_fetch_operation*)user, bytes, len);
+  return fetch_on_transport_data((fetch_operation*)user, bytes, len);
 }
 
-static void inox_fetch_on_close(void* user, inox_net_socket* socket) {
+static void fetch_on_close(void* user, inox_net_socket* socket) {
   (void)socket;
-  inox_fetch_on_transport_close((inox_fetch_operation*)user);
+  fetch_on_transport_close((fetch_operation*)user);
 }
 
-static inox_status inox_fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status) {
+static inox_status fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status) {
   (void)client;
-  return inox_fetch_on_transport_connect((inox_fetch_operation*)user, status);
+  return fetch_on_transport_connect((fetch_operation*)user, status);
 }
 
-static inox_status inox_fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len) {
+static inox_status fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len) {
   (void)client;
-  return inox_fetch_on_transport_data((inox_fetch_operation*)user, bytes, len);
+  return fetch_on_transport_data((fetch_operation*)user, bytes, len);
 }
 
-static void inox_fetch_on_tls_close(void* user, inox_tls_client* client) {
+static void fetch_on_tls_close(void* user, inox_tls_client* client) {
   (void)client;
-  inox_fetch_on_transport_close((inox_fetch_operation*)user);
+  fetch_on_transport_close((fetch_operation*)user);
 }
 
-static inox_status inox_fetch_on_transport_connect(inox_fetch_operation* request, inox_status status) {
+static inox_status fetch_on_transport_connect(fetch_operation* request, inox_status status) {
   if (status != INOX_OK) {
-    return inox_fetch_finish(request, status, 0);
+    return fetch_finish(request, status, 0);
   }
 
   int aborted = 0;
-  status = inox_fetch_operation_is_aborted(request, &aborted);
+  status = fetch_operation_is_aborted(request, &aborted);
 
   if (status != INOX_OK) {
-    return inox_fetch_finish(request, status, 0);
+    return fetch_finish(request, status, 0);
   }
 
   if (aborted) {
-    return inox_fetch_finish(request, INOX_ERR_THROW, 0);
+    return fetch_finish(request, INOX_ERR_THROW, 0);
   }
 
-  return inox_fetch_transport_write(request, request->request, request->request_len);
+  return fetch_transport_write(request, request->request, request->request_len);
 }
 
-static inox_status inox_fetch_on_transport_data(inox_fetch_operation* request, const char* bytes, size_t len) {
+static inox_status fetch_on_transport_data(fetch_operation* request, const char* bytes, size_t len) {
   int aborted = 0;
-  inox_status status = inox_fetch_operation_is_aborted(request, &aborted);
+  inox_status status = fetch_operation_is_aborted(request, &aborted);
 
   if (status != INOX_OK) {
-    return inox_fetch_finish(request, status, 0);
+    return fetch_finish(request, status, 0);
   }
 
   if (aborted) {
-    return inox_fetch_finish(request, INOX_ERR_THROW, 0);
+    return fetch_finish(request, INOX_ERR_THROW, 0);
   }
 
   if (request->response_len + len > sizeof(request->response)) {
-    return inox_fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
+    return fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
   }
 
   memcpy(request->response + request->response_len, bytes, len);
   request->response_len += len;
 
-  return inox_fetch_try_complete(request);
+  return fetch_try_complete(request);
 }
 
-static void inox_fetch_on_transport_close(inox_fetch_operation* request) {
+static void fetch_on_transport_close(fetch_operation* request) {
   if (request == 0) {
     return;
   }
 
   if (request->completed) {
-    inox_fetch_operation_free(request);
+    fetch_operation_free(request);
     return;
   }
 
@@ -980,21 +1033,21 @@ static void inox_fetch_on_transport_close(inox_fetch_operation* request) {
     request->socket = 0;
     request->tls = 0;
     request->waiting_redirect_close = 0;
-    inox_status status = inox_fetch_start_connection(request);
+    inox_status status = fetch_start_connection(request);
 
     if (status != INOX_OK) {
-      inox_fetch_finish(request, status, 0);
-      inox_fetch_operation_free(request);
+      fetch_finish(request, status, 0);
+      fetch_operation_free(request);
     }
 
     return;
   }
 
-  inox_fetch_finish(request, INOX_ERR_FIELD, 0);
-  inox_fetch_operation_free(request);
+  fetch_finish(request, INOX_ERR_FIELD, 0);
+  fetch_operation_free(request);
 }
 
-static inox_status inox_fetch_transport_write(inox_fetch_operation* request, const char* bytes, size_t len) {
+static inox_status fetch_transport_write(fetch_operation* request, const char* bytes, size_t len) {
   if (request == 0) {
     return INOX_ERR_TYPE;
   }
@@ -1006,7 +1059,7 @@ static inox_status inox_fetch_transport_write(inox_fetch_operation* request, con
   return request->socket == 0 ? INOX_ERR_TYPE : inox_net_socket_write(request->socket, bytes, len);
 }
 
-static void inox_fetch_transport_close(inox_fetch_operation* request) {
+static void fetch_transport_close(fetch_operation* request) {
   if (request == 0) {
     return;
   }
@@ -1018,29 +1071,29 @@ static void inox_fetch_transport_close(inox_fetch_operation* request) {
   }
 }
 
-static inox_status inox_fetch_abort_poll(void* user) {
-  inox_fetch_operation* request = (inox_fetch_operation*)user;
+static inox_status fetch_abort_poll(void* user) {
+  fetch_operation* request = (fetch_operation*)user;
 
   if (request == 0 || request->completed) {
     return INOX_OK;
   }
 
   int aborted = 0;
-  inox_status status = inox_fetch_operation_is_aborted(request, &aborted);
+  inox_status status = fetch_operation_is_aborted(request, &aborted);
 
   if (status != INOX_OK) {
-    return inox_fetch_finish(request, status, 0);
+    return fetch_finish(request, status, 0);
   }
 
   if (aborted) {
-    return inox_fetch_finish(request, INOX_ERR_THROW, 0);
+    return fetch_finish(request, INOX_ERR_THROW, 0);
   }
 
   return INOX_OK;
 }
 
-static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
-  const char* header_end = inox_fetch_find_header_end(request->response, request->response_len);
+static inox_status fetch_try_complete(fetch_operation* request) {
+  const char* header_end = fetch_find_header_end(request->response, request->response_len);
 
   if (header_end == 0) {
     return INOX_OK;
@@ -1049,7 +1102,7 @@ static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
   size_t header_len = (size_t)(header_end - request->response);
   size_t content_len = 0;
 
-  if (inox_fetch_parse_content_length(request->response, header_len, &content_len)) {
+  if (fetch_parse_content_length(request->response, header_len, &content_len)) {
     if (request->response_len < header_len + content_len) {
       return INOX_OK;
     }
@@ -1058,7 +1111,7 @@ static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
     size_t transfer_encoding_len = 0;
 
     if (
-      !inox_fetch_find_header_value(
+      !fetch_find_header_value(
         request->response,
         header_len,
         "Transfer-Encoding",
@@ -1066,13 +1119,13 @@ static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
         &transfer_encoding,
         &transfer_encoding_len
       ) ||
-      !inox_fetch_header_value_contains_token(transfer_encoding, transfer_encoding_len, "chunked")
+      !fetch_header_value_contains_token(transfer_encoding, transfer_encoding_len, "chunked")
     ) {
       return INOX_OK;
     }
 
     int complete = 0;
-    inox_status chunked_status = inox_fetch_decode_chunked_body(
+    inox_status chunked_status = fetch_decode_chunked_body(
       request->response + header_len,
       request->response_len - header_len,
       &content_len,
@@ -1080,7 +1133,7 @@ static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
     );
 
     if (chunked_status != INOX_OK) {
-      return inox_fetch_finish(request, chunked_status, 0);
+      return fetch_finish(request, chunked_status, 0);
     }
 
     if (!complete) {
@@ -1092,27 +1145,27 @@ static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
   const char* status_text = "";
   size_t status_text_len = 0;
 
-  if (!inox_fetch_parse_status_line(request->response, header_len, &status, &status_text, &status_text_len)) {
-    return inox_fetch_finish(request, INOX_ERR_FIELD, 0);
+  if (!fetch_parse_status_line(request->response, header_len, &status, &status_text, &status_text_len)) {
+    return fetch_finish(request, INOX_ERR_FIELD, 0);
   }
 
-  if (inox_fetch_is_redirect_status(status)) {
+  if (fetch_is_redirect_status(status)) {
     const char* location = 0;
     size_t location_len = 0;
 
     if (request->redirect_mode == INOX_FETCH_REDIRECT_ERROR) {
-      return inox_fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
+      return fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
     }
 
     if (
       request->redirect_mode == INOX_FETCH_REDIRECT_FOLLOW &&
-      inox_fetch_find_header_value(request->response, header_len, "Location", 8, &location, &location_len)
+      fetch_find_header_value(request->response, header_len, "Location", 8, &location, &location_len)
     ) {
-      return inox_fetch_follow_redirect(request, location, location_len);
+      return fetch_follow_redirect(request, location, location_len);
     }
   }
 
-  inox_fetch_response response = {
+  fetch_response response = {
     status,
     status >= 200 && status < 300,
     request->redirected ? true : false,
@@ -1126,10 +1179,10 @@ static inox_status inox_fetch_try_complete(inox_fetch_operation* request) {
     content_len
   };
 
-  return inox_fetch_finish(request, INOX_OK, &response);
+  return fetch_finish(request, INOX_OK, &response);
 }
 
-static const char* inox_fetch_find_header_end(const char* bytes, size_t len) {
+static const char* fetch_find_header_end(const char* bytes, size_t len) {
   if (bytes == 0 || len < 4) {
     return 0;
   }
@@ -1143,7 +1196,7 @@ static const char* inox_fetch_find_header_end(const char* bytes, size_t len) {
   return 0;
 }
 
-static int inox_fetch_parse_status_line(
+static int fetch_parse_status_line(
   const char* bytes,
   size_t len,
   int* status_out,
@@ -1154,7 +1207,7 @@ static int inox_fetch_parse_status_line(
     return 0;
   }
 
-  const char* first_space = memchr(bytes, ' ', len);
+  const char* first_space = (const char*)memchr(bytes, ' ', len);
 
   if (first_space == 0 || first_space + 3 >= bytes + len) {
     return 0;
@@ -1191,7 +1244,7 @@ static int inox_fetch_parse_status_line(
   return 1;
 }
 
-static int inox_fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out) {
+static int fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out) {
   const char* key = "Content-Length:";
   size_t key_len = strlen(key);
 
@@ -1221,7 +1274,7 @@ static int inox_fetch_parse_content_length(const char* bytes, size_t header_len,
   return 0;
 }
 
-static int inox_fetch_find_header_value(
+static int fetch_find_header_value(
   const char* bytes,
   size_t header_len,
   const char* name,
@@ -1251,7 +1304,7 @@ static int inox_fetch_find_header_value(
       line_end += 1;
     }
 
-    const char* colon = memchr(cursor, ':', (size_t)(line_end - cursor));
+    const char* colon = (const char*)memchr(cursor, ':', (size_t)(line_end - cursor));
 
     if (colon != 0 && (size_t)(colon - cursor) == name_len && strncasecmp(cursor, name, name_len) == 0) {
       const char* field_value = colon + 1;
@@ -1279,7 +1332,7 @@ static int inox_fetch_find_header_value(
   return 0;
 }
 
-static int inox_fetch_header_value_contains_token(const char* value, size_t value_len, const char* token) {
+static int fetch_header_value_contains_token(const char* value, size_t value_len, const char* token) {
   if (value == 0 || token == 0) {
     return 0;
   }
@@ -1312,17 +1365,17 @@ static int inox_fetch_header_value_contains_token(const char* value, size_t valu
   return 0;
 }
 
-static inox_status inox_fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete) {
-  inox_status status = inox_fetch_scan_chunked_body(bytes, len, out_len, complete, 0);
+static inox_status fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete) {
+  inox_status status = fetch_scan_chunked_body(bytes, len, out_len, complete, 0);
 
   if (status != INOX_OK || complete == 0 || !*complete) {
     return status;
   }
 
-  return inox_fetch_scan_chunked_body(bytes, len, out_len, complete, 1);
+  return fetch_scan_chunked_body(bytes, len, out_len, complete, 1);
 }
 
-static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode) {
+static inox_status fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode) {
   if (bytes == 0 || out_len == 0 || complete == 0) {
     return INOX_ERR_TYPE;
   }
@@ -1333,7 +1386,7 @@ static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
   *complete = 0;
 
   while (read < len) {
-    const char* line_end = inox_fetch_find_crlf(bytes + read, len - read);
+    const char* line_end = fetch_find_crlf(bytes + read, len - read);
 
     if (line_end == 0) {
       return INOX_OK;
@@ -1345,7 +1398,7 @@ static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
     int saw_digit = 0;
 
     while (index < line_len) {
-      int digit = inox_fetch_hex_digit(bytes[read + index]);
+      int digit = fetch_hex_digit(bytes[read + index]);
 
       if (digit < 0) {
         break;
@@ -1376,7 +1429,7 @@ static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
 
     if (chunk_size == 0) {
       for (;;) {
-        const char* trailer_end = inox_fetch_find_crlf(bytes + read, len - read);
+        const char* trailer_end = fetch_find_crlf(bytes + read, len - read);
 
         if (trailer_end == 0) {
           return INOX_OK;
@@ -1411,7 +1464,7 @@ static inox_status inox_fetch_scan_chunked_body(char* bytes, size_t len, size_t*
   return INOX_OK;
 }
 
-static const char* inox_fetch_find_crlf(const char* bytes, size_t len) {
+static const char* fetch_find_crlf(const char* bytes, size_t len) {
   if (bytes == 0 || len < 2) {
     return 0;
   }
@@ -1425,7 +1478,7 @@ static const char* inox_fetch_find_crlf(const char* bytes, size_t len) {
   return 0;
 }
 
-static int inox_fetch_hex_digit(char value) {
+static int fetch_hex_digit(char value) {
   if (value >= '0' && value <= '9') {
     return value - '0';
   }
@@ -1441,12 +1494,12 @@ static int inox_fetch_hex_digit(char value) {
   return -1;
 }
 
-static int inox_fetch_is_redirect_status(int status) {
+static int fetch_is_redirect_status(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
 }
 
-static inox_status inox_fetch_resolve_redirect_url(
-  inox_fetch_operation* request,
+static inox_status fetch_resolve_redirect_url(
+  fetch_operation* request,
   const char* location,
   size_t location_len,
   char* out,
@@ -1497,30 +1550,30 @@ static inox_status inox_fetch_resolve_redirect_url(
   return INOX_OK;
 }
 
-static inox_status inox_fetch_follow_redirect(inox_fetch_operation* request, const char* location, size_t location_len) {
+static inox_status fetch_follow_redirect(fetch_operation* request, const char* location, size_t location_len) {
   if (request == 0) {
     return INOX_ERR_TYPE;
   }
 
   if (!request->replayable || request->redirect_count >= INOX_FETCH_MAX_REDIRECTS) {
-    return inox_fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
+    return fetch_finish(request, INOX_ERR_UNSUPPORTED, 0);
   }
 
   char next_url[1024];
-  inox_status status = inox_fetch_resolve_redirect_url(request, location, location_len, next_url, sizeof(next_url));
+  inox_status status = fetch_resolve_redirect_url(request, location, location_len, next_url, sizeof(next_url));
 
   if (status != INOX_OK) {
-    return inox_fetch_finish(request, status, 0);
+    return fetch_finish(request, status, 0);
   }
 
-  status = inox_fetch_set_url(request, next_url, strlen(next_url));
+  status = fetch_set_url(request, next_url, strlen(next_url));
 
   if (status == INOX_OK) {
-    status = inox_fetch_build_request(request, 0);
+    status = fetch_build_request(request, 0);
   }
 
   if (status != INOX_OK) {
-    return inox_fetch_finish(request, status, 0);
+    return fetch_finish(request, status, 0);
   }
 
   request->response_len = 0;
@@ -1529,14 +1582,14 @@ static inox_status inox_fetch_follow_redirect(inox_fetch_operation* request, con
   request->waiting_redirect_close = 1;
 
   if (request->socket != 0 || request->tls != 0) {
-    inox_fetch_transport_close(request);
+    fetch_transport_close(request);
   } else {
     request->waiting_redirect_close = 0;
-    status = inox_fetch_start_connection(request);
+    status = fetch_start_connection(request);
 
     if (status != INOX_OK) {
-      inox_fetch_finish(request, status, 0);
-      inox_fetch_operation_free(request);
+      fetch_finish(request, status, 0);
+      fetch_operation_free(request);
       return status;
     }
   }
@@ -1544,7 +1597,7 @@ static inox_status inox_fetch_follow_redirect(inox_fetch_operation* request, con
   return INOX_OK;
 }
 
-static inox_status inox_fetch_finish(inox_fetch_operation* request, inox_status status, const inox_fetch_response* response) {
+static inox_status fetch_finish(fetch_operation* request, inox_status status, const fetch_response* response) {
   if (request->completed) {
     return INOX_OK;
   }
@@ -1558,13 +1611,13 @@ static inox_status inox_fetch_finish(inox_fetch_operation* request, inox_status 
 
   inox_status callback_status = request->done(request->user, status, response);
 
-  inox_fetch_transport_close(request);
+  fetch_transport_close(request);
 
   return callback_status;
 }
 
-static inox_status inox_fetch_promise_done(void* user, inox_status status, const inox_fetch_response* response) {
-  inox_fetch_promise_request* request = (inox_fetch_promise_request*)user;
+static inox_status fetch_promise_done(void* user, inox_status status, const fetch_response* response) {
+  fetch_promise_request* request = (fetch_promise_request*)user;
 
   if (request == 0 || request->promise == 0 || request->loop == 0) {
     return INOX_ERR_TYPE;
@@ -1573,30 +1626,30 @@ static inox_status inox_fetch_promise_done(void* user, inox_status status, const
   inox_status result = INOX_OK;
 
   if (status != INOX_OK || response == 0) {
-    result = inox_fetch_reject_status(request->loop, request->promise, status == INOX_OK ? INOX_ERR_FIELD : status);
+    result = fetch_reject_status(request->loop, request->promise, status == INOX_OK ? INOX_ERR_FIELD : status);
   } else {
     inox_value value = inox_undefined_value();
-    result = inox_fetch_response_new(request->loop->allocator, request->url, request->url_len, response, &value);
+    result = fetch_response_new(request->loop->allocator, request->url, request->url_len, response, &value);
 
     if (result == INOX_OK) {
       inox_status resolve_status = inox_promise_resolve(request->promise, value);
       inox_release(value);
       result = resolve_status;
     } else {
-      result = inox_fetch_reject_status(request->loop, request->promise, result);
+      result = fetch_reject_status(request->loop, request->promise, result);
     }
   }
 
-  inox_fetch_promise_request_free(request);
+  fetch_promise_request_free(request);
 
   return result;
 }
 
-static inox_status inox_fetch_response_new(
+static inox_status fetch_response_new(
   inox_allocator* allocator,
   const char* url,
   size_t url_len,
-  const inox_fetch_response* response,
+  const fetch_response* response,
   inox_value* out
 ) {
   static const inox_field_info fields[] = { { "status", INOX_FIELD_READONLY },
@@ -1639,7 +1692,7 @@ static inox_status inox_fetch_response_new(
   }
 
   if (status == INOX_OK) {
-    status = inox_fetch_headers_new(
+    status = fetch_headers_new(
       allocator,
       response->headers == 0 ? "" : response->headers,
       response->headers == 0 ? 0 : response->headers_len,
@@ -1699,7 +1752,7 @@ static inox_status inox_fetch_response_new(
   return INOX_OK;
 }
 
-static inox_status inox_fetch_headers_new(inox_allocator* allocator, const char* headers, size_t headers_len, inox_value* out) {
+static inox_status fetch_headers_new(inox_allocator* allocator, const char* headers, size_t headers_len, inox_value* out) {
   static const inox_field_info fields[] = { { "__inoxHeaders", INOX_FIELD_READONLY } };
   static const inox_shape shape = { 1, fields };
 
@@ -1732,17 +1785,17 @@ static inox_status inox_fetch_headers_new(inox_allocator* allocator, const char*
   return INOX_OK;
 }
 
-static inox_status inox_fetch_headers_raw(inox_value headers, inox_value* out) {
+static inox_status fetch_headers_raw(inox_value headers, inox_value* out) {
   return inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, out);
 }
 
-static inox_status inox_fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status) {
+static inox_status fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status) {
   if (loop == 0 || promise == 0 || loop->allocator == 0) {
     return INOX_ERR_TYPE;
   }
 
   inox_value error = inox_undefined_value();
-  inox_status error_status = inox_fetch_error_from_status(loop->allocator, status, &error);
+  inox_status error_status = fetch_error_from_status(loop->allocator, status, &error);
 
   if (error_status != INOX_OK) {
     return inox_promise_reject(promise, inox_number_value((inox_number)status));
@@ -1754,7 +1807,7 @@ static inox_status inox_fetch_reject_status(inox_loop* loop, inox_promise* promi
   return reject_status == INOX_OK ? INOX_OK : reject_status;
 }
 
-static inox_status inox_fetch_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out) {
+static inox_status fetch_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out) {
   static const inox_field_info fields[] = { { "name", INOX_FIELD_READONLY },
                                             { "message", INOX_FIELD_READONLY },
                                             { "code", INOX_FIELD_READONLY } };
@@ -1768,19 +1821,19 @@ static inox_status inox_fetch_error_from_status(inox_allocator* allocator, inox_
   inox_value error = inox_undefined_value();
   const char* name_text = status == INOX_ERR_THROW ? "AbortError" : "FetchError";
   const char* code_text = status == INOX_ERR_THROW ? "ABORT_ERR" : "ERR_FETCH";
-  const char* message_text = inox_fetch_error_message(status);
+  const char* message_text = fetch_error_message(status);
   inox_status result = inox_object_new(allocator, &shape, &error);
 
   if (result == INOX_OK) {
-    result = inox_fetch_error_field(allocator, error, 0, name_text, strlen(name_text));
+    result = fetch_error_field(allocator, error, 0, name_text, strlen(name_text));
   }
 
   if (result == INOX_OK) {
-    result = inox_fetch_error_field(allocator, error, 1, message_text, strlen(message_text));
+    result = fetch_error_field(allocator, error, 1, message_text, strlen(message_text));
   }
 
   if (result == INOX_OK) {
-    result = inox_fetch_error_field(allocator, error, 2, code_text, strlen(code_text));
+    result = fetch_error_field(allocator, error, 2, code_text, strlen(code_text));
   }
 
   if (result != INOX_OK) {
@@ -1793,7 +1846,7 @@ static inox_status inox_fetch_error_from_status(inox_allocator* allocator, inox_
   return INOX_OK;
 }
 
-static inox_status inox_fetch_error_field(
+static inox_status fetch_error_field(
   inox_allocator* allocator,
   inox_value error,
   uint32_t index,
@@ -1812,7 +1865,7 @@ static inox_status inox_fetch_error_field(
   return status;
 }
 
-static const char* inox_fetch_error_message(inox_status status) {
+static const char* fetch_error_message(inox_status status) {
   if (status == INOX_ERR_THROW) {
     return "fetch request aborted";
   }
@@ -1828,7 +1881,7 @@ static const char* inox_fetch_error_message(inox_status status) {
   return "fetch request failed";
 }
 
-static void inox_fetch_promise_request_free(inox_fetch_promise_request* request) {
+static void fetch_promise_request_free(fetch_promise_request* request) {
   if (request == 0 || request->loop == 0 || request->loop->allocator == 0) {
     return;
   }
@@ -1836,16 +1889,16 @@ static void inox_fetch_promise_request_free(inox_fetch_promise_request* request)
   inox_allocator* allocator = request->loop->allocator;
 
   if (request->url != 0) {
-    allocator->free(allocator->user, request->url, request->url_len + 1, _Alignof(char));
+    allocator->free(allocator->user, request->url, request->url_len + 1, alignof(char));
   }
 
   inox_promise_release(request->promise);
-  allocator->free(allocator->user, request, sizeof(inox_fetch_promise_request), _Alignof(inox_fetch_promise_request));
+  allocator->free(allocator->user, request, sizeof(fetch_promise_request), alignof(fetch_promise_request));
 }
 
 #else
 
-inox_status inox_fetch_get(inox_loop* loop, const char* url, inox_fetch_done_fn done, void* user) {
+inox_status fetch_get(inox_loop* loop, const char* url, fetch_done_fn done, void* user) {
   (void)loop;
   (void)url;
   (void)done;
@@ -1853,7 +1906,7 @@ inox_status inox_fetch_get(inox_loop* loop, const char* url, inox_fetch_done_fn 
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_request(inox_loop* loop, const char* url, const inox_fetch_init* init, inox_fetch_done_fn done, void* user) {
+inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* init, fetch_done_fn done, void* user) {
   (void)loop;
   (void)url;
   (void)init;
@@ -1862,15 +1915,15 @@ inox_status inox_fetch_request(inox_loop* loop, const char* url, const inox_fetc
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
-  return inox_fetch_with_init(loop, url, url_len, 0, out);
+inox_status fetch_promise_impl(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
+  return fetch_with_init_impl(loop, url, url_len, 0, out);
 }
 
-inox_status inox_fetch_with_init(
+inox_status fetch_with_init_impl(
   inox_loop* loop,
   const char* url,
   size_t url_len,
-  const inox_fetch_init* init,
+  const fetch_init* init,
   inox_promise** out
 ) {
   (void)loop;
@@ -1886,7 +1939,7 @@ inox_status inox_fetch_with_init(
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
+inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_promise** out) {
   (void)loop;
   (void)response;
 
@@ -1898,7 +1951,7 @@ inox_status inox_fetch_response_text(inox_loop* loop, inox_value response, inox_
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
+inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
   (void)allocator;
   (void)headers;
   (void)name;
@@ -1912,7 +1965,7 @@ inox_status inox_fetch_headers_get(inox_allocator* allocator, inox_value headers
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
+inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t name_len, int* out) {
   (void)headers;
   (void)name;
   (void)name_len;
@@ -1925,7 +1978,7 @@ inox_status inox_fetch_headers_has(inox_value headers, const char* name, size_t 
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_abort_controller_new(inox_allocator* allocator, inox_value* out) {
+inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_value* out) {
   (void)allocator;
 
   if (out == 0) {
@@ -1936,7 +1989,7 @@ inox_status inox_fetch_abort_controller_new(inox_allocator* allocator, inox_valu
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_abort_controller_signal(inox_value controller, inox_value* out) {
+inox_status fetch_abort_controller_signal_impl(inox_value controller, inox_value* out) {
   (void)controller;
 
   if (out == 0) {
@@ -1947,12 +2000,12 @@ inox_status inox_fetch_abort_controller_signal(inox_value controller, inox_value
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_abort_controller_abort(inox_value controller) {
+inox_status fetch_abort_controller_abort_impl(inox_value controller) {
   (void)controller;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_fetch_signal_aborted(inox_value signal, int* out) {
+inox_status fetch_signal_aborted_impl(inox_value signal, int* out) {
   (void)signal;
 
   if (out == 0) {

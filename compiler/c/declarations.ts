@@ -1473,7 +1473,7 @@ function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: 
 
     return [
       `if (${localName}.tag == INOX_TAG_UNDEFINED) {`,
-      `  if (inox_array_new(&inox_default_allocator, 0, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
+      `  if (Array.make(&inox_default_allocator, 0, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
       `  ${localName} = ${temp};`,
       '}'
     ]

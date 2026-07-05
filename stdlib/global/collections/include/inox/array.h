@@ -6,37 +6,12 @@
 #include "inox/loop.h"
 #include "inox/value.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct inox_array {
   inox_ref header;
   size_t length;
   size_t cap;
   inox_value* items;
 } inox_array;
-
-inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
-inox_status inox_array_get(inox_value array, size_t index, inox_value* out);
-inox_status inox_array_join(
-  inox_allocator* allocator,
-  inox_value array,
-  const char* separator_bytes,
-  size_t separator_len,
-  inox_value* out
-);
-inox_status inox_array_len(inox_value array, size_t* out);
-inox_status inox_array_pop(inox_value array, inox_value* out);
-inox_status inox_array_push(inox_value array, inox_value value);
-inox_status inox_array_set(inox_value array, size_t index, inox_value value);
-inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out);
-inox_status inox_array_sort(inox_value array);
-inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out);
-
-#ifdef __cplusplus
-}
-#endif
 
 #ifdef __cplusplus
 
@@ -56,6 +31,22 @@ public:
   using inox::Value::raw;
 
   bool valid() const;
+  inox_status make(inox_allocator* allocator, size_t len, inox_value* out) const;
+  inox_status get(inox_value array, size_t index, inox_value* out) const;
+  inox_status join(
+    inox_allocator* allocator,
+    inox_value array,
+    const char* separator_bytes,
+    size_t separator_len,
+    inox_value* out
+  ) const;
+  inox_status length(inox_value array, size_t* out) const;
+  inox_status pop(inox_value array, inox_value* out) const;
+  inox_status push(inox_value array, inox_value value) const;
+  inox_status set(inox_value array, size_t index, inox_value value) const;
+  inox_status slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) const;
+  inox_status sort(inox_value array) const;
+  inox_status unshift(inox_value array, inox_value value, size_t* out) const;
   inox::String join(inox::StringView separator) const;
   bool isArray(inox_value value) const;
   bool isArray(const inox::Value& value) const;

@@ -3223,7 +3223,7 @@ export function emitPreparedNumberExpression(
 
     if (element !== null && typeof element !== 'undefined' && isNumberOrBooleanValueType(element.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
-      const getCall = `inox_array_get(${element.arrayName}, ${element.index}, &${value})`
+      const getCall = `Array.get(${element.arrayName}, ${element.index}, &${value})`
 
       return emitPreparedRuntimeNumberValue(element.valueType, value, [emitStatusCheck(getCall, context)], context)
     }
@@ -4452,7 +4452,7 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
   appendLines(lines, emitRuntimeObjectGetValueLines(receiver.expression, receiver.key, array, context))
   lines.push(emitRuntimeTypeCheck(`${array}.tag != INOX_TAG_ARRAY || ${array}.as.ref == 0`, context))
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(`inox_status ${status} = inox_array_get(${array}, ${index.expression}, &${value});`)
+  lines.push(`inox_status ${status} = Array.get(${array}, ${index.expression}, &${value});`)
   lines.push(`if (${status} == INOX_ERR_FIELD) {`)
   lines.push(`  ${value} = inox_undefined_value();`)
   lines.push('}')

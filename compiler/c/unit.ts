@@ -925,7 +925,7 @@ function emitCUnitFunctionPointerAdapterDefaultParamValue(
       const name = `inox_adapter_default_${defaultLines.length}`
 
       defaultLines.push(`  inox_value ${name} = inox_undefined_value();`)
-      defaultLines.push(`  if (inox_array_new(&inox_default_allocator, 0, &${name}) != INOX_OK) {`)
+      defaultLines.push(`  if (Array.make(&inox_default_allocator, 0, &${name}) != INOX_OK) {`)
       defaultLines.push(`    return ${cUnitFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`)
       defaultLines.push('  }')
       cleanupLines.push(`  inox_release(${name});`)

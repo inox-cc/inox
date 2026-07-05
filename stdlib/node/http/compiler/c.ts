@@ -711,14 +711,12 @@ function emitHttpHandlerConsoleLogStatement(
 
   formatParts.push('\n')
 
-  const format = cStringLiteral(joinStrings(formatParts, ''))
   const callArgs = args.length > 0 ? `, ${joinStrings(args, ', ')}` : ''
 
-  if (callee.property === 'warn' || callee.property === 'error') {
-    return [`if (inox_console_printf(INOX_CONSOLE_STDERR, ${format}${callArgs}) < 0) return INOX_ERR_TYPE;`]
-  }
+  const consoleMethod = callee.property === 'warn' || callee.property === 'error' ? 'error' : 'log'
+  const trimmedFormat = cStringLiteral(joinStrings(formatParts.slice(0, formatParts.length - 1), ''))
 
-  return [`printf(${format}${callArgs});`, 'fflush(stdout);']
+  return [`if (console.${consoleMethod}(${trimmedFormat}${callArgs}) != INOX_OK) return INOX_ERR_TYPE;`]
 }
 
 function emitHttpLogOperand(
@@ -1116,7 +1114,7 @@ function isHttpDateNowStringCall(expression: AnyNode | null | undefined): boolea
     value !== null &&
     typeof value !== 'undefined' &&
     value.type === 'CallExpression' &&
-    cTimeRuntimeCallName(value.callee) === 'inox_date_now'
+    cTimeRuntimeCallName(value.callee) === 'Date.now'
   )
 }
 

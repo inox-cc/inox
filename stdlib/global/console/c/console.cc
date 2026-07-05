@@ -1,12 +1,98 @@
 #define INOX_CONSOLE_NO_PRINTF_MACRO
 #include "inox/console.h"
 
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+typedef enum console_stream_impl {
+  CONSOLE_STDOUT = 1,
+  CONSOLE_STDERR = 2
+} console_stream_impl;
+
+inox_status console_write_impl(console_stream_impl stream, const char* bytes, size_t len);
+inox_status console_write_line_impl(console_stream_impl stream, const char* bytes, size_t len);
+inox_status console_print_value_impl(console_stream_impl stream, inox_value value);
+inox_status console_print_value_line_impl(console_stream_impl stream, inox_value value);
+inox_status console_format_class_instance_impl(
+  inox_allocator* allocator,
+  const inox_class_descriptor* descriptor,
+  const void* instance,
+  inox_value* out
+);
+
+static console_stream_impl console_native_stream(inox::ConsoleStream stream) {
+  return stream == inox::ConsoleStream::stderr ? CONSOLE_STDERR : CONSOLE_STDOUT;
+}
 
 namespace inox {
 
-inox_status console_newline(inox_console_stream stream) {
-  return inox_console_write(stream, "\n", 1);
+inox_status console_newline(ConsoleStream stream) {
+  return console_write_impl(console_native_stream(stream), "\n", 1);
+}
+
+inox_status console_write(ConsoleStream stream, const char* bytes, size_t len) {
+  return console_write_impl(console_native_stream(stream), bytes, len);
+}
+
+inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len) {
+  return console_write_line_impl(console_native_stream(stream), bytes, len);
+}
+
+inox_status console_print_value(ConsoleStream stream, inox_value value) {
+  return console_print_value_impl(console_native_stream(stream), value);
+}
+
+inox_status console_print_value_line(ConsoleStream stream, inox_value value) {
+  return console_print_value_line_impl(console_native_stream(stream), value);
+}
+
+inox_status console_format_class_instance(const inox_class_descriptor& descriptor, const void* instance, Value& out) {
+  return console_format_class_instance_impl(&inox_default_allocator, &descriptor, instance, out.out());
+}
+
+int console_printf(ConsoleStream stream, const char* format, ...) {
+  if (format == nullptr) {
+    format = "";
+  }
+
+  va_list args;
+  va_list copy;
+  va_start(args, format);
+  va_copy(copy, args);
+  int len = vsnprintf(nullptr, 0, format, copy);
+  va_end(copy);
+
+  if (len < 0) {
+    va_end(args);
+    return -1;
+  }
+
+  char stack_buffer[256];
+  char* bytes = stack_buffer;
+
+  if ((size_t)len + 1 > sizeof(stack_buffer)) {
+    bytes = (char*)malloc((size_t)len + 1);
+
+    if (bytes == nullptr) {
+      va_end(args);
+      return -1;
+    }
+  }
+
+  int written = vsnprintf(bytes, (size_t)len + 1, format, args);
+  va_end(args);
+
+  if (written == len && console_write(stream, bytes, (size_t)len) != INOX_OK) {
+    written = -1;
+  }
+
+  if (bytes != stack_buffer) {
+    free(bytes);
+  }
+
+  return written;
 }
 
 } // namespace inox
@@ -16,11 +102,11 @@ inox_status console::log() const {
     return INOX_OK;
   }
 
-  return inox::console_newline(INOX_CONSOLE_STDOUT);
+  return inox::console_newline(inox::ConsoleStream::stdout);
 }
 
 inox_status console::log(const char* text) const {
-  return write_text_line(INOX_CONSOLE_STDOUT, text);
+  return write_text_line(inox::ConsoleStream::stdout, text);
 }
 
 inox_status console::log(inox::StringView text) const {
@@ -28,7 +114,7 @@ inox_status console::log(inox::StringView text) const {
     return INOX_OK;
   }
 
-  return inox_console_write_line(INOX_CONSOLE_STDOUT, text.bytes, text.len);
+  return inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
 }
 
 inox_status console::log(const inox::String& value) const {
@@ -36,7 +122,7 @@ inox_status console::log(const inox::String& value) const {
     return INOX_OK;
   }
 
-  return inox_console_write_line(INOX_CONSOLE_STDOUT, value.bytes(), value.length());
+  return inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
 }
 
 inox_status console::log(inox_value value) const {
@@ -44,7 +130,7 @@ inox_status console::log(inox_value value) const {
     return INOX_OK;
   }
 
-  return inox_console_print_value_line(INOX_CONSOLE_STDOUT, value);
+  return inox::console_print_value_line(inox::ConsoleStream::stdout, value);
 }
 
 inox_status console::log(const inox::Value& value) const {
@@ -52,7 +138,7 @@ inox_status console::log(const inox::Value& value) const {
 }
 
 inox_status console::log(const char* prefix, inox_value value) const {
-  return write_prefixed_value_line(INOX_CONSOLE_STDOUT, prefix, value);
+  return write_prefixed_value_line(inox::ConsoleStream::stdout, prefix, value);
 }
 
 inox_status console::log(const char* prefix, const inox::Value& value) const {
@@ -96,11 +182,11 @@ inox_status console::warn() const {
     return INOX_OK;
   }
 
-  return inox::console_newline(INOX_CONSOLE_STDERR);
+  return inox::console_newline(inox::ConsoleStream::stderr);
 }
 
 inox_status console::warn(const char* text) const {
-  return write_text_line(INOX_CONSOLE_STDERR, text);
+  return write_text_line(inox::ConsoleStream::stderr, text);
 }
 
 inox_status console::warn(inox::StringView text) const {
@@ -108,7 +194,7 @@ inox_status console::warn(inox::StringView text) const {
     return INOX_OK;
   }
 
-  return inox_console_write_line(INOX_CONSOLE_STDERR, text.bytes, text.len);
+  return inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
 }
 
 inox_status console::warn(const inox::String& value) const {
@@ -116,7 +202,7 @@ inox_status console::warn(const inox::String& value) const {
     return INOX_OK;
   }
 
-  return inox_console_write_line(INOX_CONSOLE_STDERR, value.bytes(), value.length());
+  return inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
 }
 
 inox_status console::warn(inox_value value) const {
@@ -124,7 +210,7 @@ inox_status console::warn(inox_value value) const {
     return INOX_OK;
   }
 
-  return inox_console_print_value_line(INOX_CONSOLE_STDERR, value);
+  return inox::console_print_value_line(inox::ConsoleStream::stderr, value);
 }
 
 inox_status console::warn(const inox::Value& value) const {
@@ -132,7 +218,7 @@ inox_status console::warn(const inox::Value& value) const {
 }
 
 inox_status console::warn(const char* prefix, inox_value value) const {
-  return write_prefixed_value_line(INOX_CONSOLE_STDERR, prefix, value);
+  return write_prefixed_value_line(inox::ConsoleStream::stderr, prefix, value);
 }
 
 inox_status console::warn(const char* prefix, const inox::Value& value) const {
@@ -175,7 +261,7 @@ bool console::skip_write() {
   return inox::thrown();
 }
 
-inox_status console::write_text_line(inox_console_stream stream, const char* text) {
+inox_status console::write_text_line(inox::ConsoleStream stream, const char* text) {
   if (skip_write()) {
     return INOX_OK;
   }
@@ -184,29 +270,29 @@ inox_status console::write_text_line(inox_console_stream stream, const char* tex
     return inox::console_newline(stream);
   }
 
-  return inox_console_write_line(stream, text, strlen(text));
+  return inox::console_write_line(stream, text, strlen(text));
 }
 
-inox_status console::write_prefixed_value_line(inox_console_stream stream, const char* prefix, inox_value value) {
+inox_status console::write_prefixed_value_line(inox::ConsoleStream stream, const char* prefix, inox_value value) {
   if (skip_write()) {
     return INOX_OK;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
-    inox_status status = inox_console_write(stream, prefix, strlen(prefix));
+    inox_status status = inox::console_write(stream, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
       return status;
     }
 
-    status = inox_console_write(stream, " ", 1);
+    status = inox::console_write(stream, " ", 1);
 
     if (status != INOX_OK) {
       return status;
     }
   }
 
-  inox_status status = inox_console_print_value(stream, value);
+  inox_status status = inox::console_print_value(stream, value);
 
   if (status != INOX_OK) {
     return status;
@@ -258,19 +344,19 @@ const char* console::next_format_spec(const char* format, const char** spec_end)
   return nullptr;
 }
 
-inox_status console::write_format_literal(inox_console_stream stream, const char* begin, const char* end) {
+inox_status console::write_format_literal(inox::ConsoleStream stream, const char* begin, const char* end) {
   const char* chunk = begin;
   const char* current = begin;
 
   while (current < end) {
     if (*current == '%' && current + 1 < end && *(current + 1) == '%') {
-      inox_status status = inox_console_write(stream, chunk, (size_t)(current - chunk));
+      inox_status status = inox::console_write(stream, chunk, (size_t)(current - chunk));
 
       if (status != INOX_OK) {
         return status;
       }
 
-      status = inox_console_write(stream, "%", 1);
+      status = inox::console_write(stream, "%", 1);
 
       if (status != INOX_OK) {
         return status;
@@ -284,11 +370,11 @@ inox_status console::write_format_literal(inox_console_stream stream, const char
     current += 1;
   }
 
-  return inox_console_write(stream, chunk, (size_t)(end - chunk));
+  return inox::console_write(stream, chunk, (size_t)(end - chunk));
 }
 
 inox_status console::write_format_arg(
-  inox_console_stream stream,
+  inox::ConsoleStream stream,
   const char* spec,
   size_t spec_len,
   const inox::String& value
@@ -297,11 +383,11 @@ inox_status console::write_format_arg(
     return INOX_ERR_TYPE;
   }
 
-  return inox_console_write(stream, value.bytes(), value.length());
+  return inox::console_write(stream, value.bytes(), value.length());
 }
 
 inox_status console::write_format_arg(
-  inox_console_stream stream,
+  inox::ConsoleStream stream,
   const char* spec,
   size_t spec_len,
   inox::StringView value
@@ -310,19 +396,19 @@ inox_status console::write_format_arg(
     return INOX_ERR_TYPE;
   }
 
-  return inox_console_write(stream, value.bytes, value.len);
+  return inox::console_write(stream, value.bytes, value.len);
 }
 
-inox_status console::write_format_arg(inox_console_stream stream, const char* spec, size_t spec_len, inox_value value) {
+inox_status console::write_format_arg(inox::ConsoleStream stream, const char* spec, size_t spec_len, inox_value value) {
   if (!is_value_format_spec(spec, spec_len)) {
     return INOX_ERR_TYPE;
   }
 
-  return inox_console_print_value(stream, value);
+  return inox::console_print_value(stream, value);
 }
 
 inox_status console::write_format_arg(
-  inox_console_stream stream,
+  inox::ConsoleStream stream,
   const char* spec,
   size_t spec_len,
   const inox::Value& value
@@ -330,7 +416,7 @@ inox_status console::write_format_arg(
   return write_format_arg(stream, spec, spec_len, value.raw());
 }
 
-inox_status console::write_formatted(inox_console_stream stream, const char* format) {
+inox_status console::write_formatted(inox::ConsoleStream stream, const char* format) {
   const char* spec_end = nullptr;
   const char* spec = next_format_spec(format, &spec_end);
 

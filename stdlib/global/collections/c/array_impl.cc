@@ -1,6 +1,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <utility>
 #include "inox/array.h"
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
@@ -90,9 +91,12 @@ static inox_status inox_array_reserve(inox_array* array, size_t cap) {
     next_cap *= 2;
   }
 
-  inox_value* items = array->header.allocator->realloc(
-    array->header.allocator->user, array->items, sizeof(inox_value) * array->cap, sizeof(inox_value) * next_cap,
-    _Alignof(inox_value)
+  inox_value* items = (inox_value*)array->header.allocator->realloc(
+    array->header.allocator->user,
+    array->items,
+    sizeof(inox_value) * array->cap,
+    sizeof(inox_value) * next_cap,
+    alignof(inox_value)
   );
 
   if (items == 0) {
@@ -123,29 +127,30 @@ static void inox_array_dispose_ref(inox_ref* ref) {
 
   if (array->header.allocator != 0 && array->header.allocator->free != 0 && array->items != 0) {
     array->header.allocator->free(
-      array->header.allocator->user, array->items, sizeof(inox_value) * array->cap, _Alignof(inox_value)
+      array->header.allocator->user, array->items, sizeof(inox_value) * array->cap, alignof(inox_value)
     );
   }
 }
 
-inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out) {
+static inox_status array_make(inox_allocator* allocator, size_t len, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
-  inox_array* array = allocator->alloc(allocator->user, sizeof(inox_array), _Alignof(inox_array));
+  inox_array* array = (inox_array*)allocator->alloc(allocator->user, sizeof(inox_array), alignof(inox_array));
 
   if (array == 0) {
     *out = inox_undefined_value();
     return INOX_ERR_OOM;
   }
 
-  array->items = len == 0 ? 0 : allocator->alloc(allocator->user, sizeof(inox_value) * len, _Alignof(inox_value));
+  array->items =
+    len == 0 ? 0 : (inox_value*)allocator->alloc(allocator->user, sizeof(inox_value) * len, alignof(inox_value));
 
   if (len > 0 && array->items == 0) {
     *out = inox_undefined_value();
     if (allocator->free != 0) {
-      allocator->free(allocator->user, array, sizeof(inox_array), _Alignof(inox_array));
+      allocator->free(allocator->user, array, sizeof(inox_array), alignof(inox_array));
     }
     return INOX_ERR_OOM;
   }
@@ -154,7 +159,7 @@ inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* ou
   array->header.ref_count = 1;
   array->header.flags = 0;
   array->header.size = sizeof(inox_array);
-  array->header.align = _Alignof(inox_array);
+  array->header.align = alignof(inox_array);
   array->header.allocator = allocator;
   array->header.dispose = inox_array_dispose_ref;
   inox_ref_init_weak(&array->header);
@@ -174,7 +179,7 @@ inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* ou
   return INOX_OK;
 }
 
-inox_status inox_array_push(inox_value array, inox_value value) {
+static inox_status array_push(inox_value array, inox_value value) {
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -193,7 +198,7 @@ inox_status inox_array_push(inox_value array, inox_value value) {
   return INOX_OK;
 }
 
-inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out) {
+static inox_status array_unshift(inox_value array, inox_value value, size_t* out) {
   if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -217,7 +222,7 @@ inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out) 
   return INOX_OK;
 }
 
-inox_status inox_array_get(inox_value array, size_t index, inox_value* out) {
+static inox_status array_get(inox_value array, size_t index, inox_value* out) {
   if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -235,7 +240,7 @@ inox_status inox_array_get(inox_value array, size_t index, inox_value* out) {
   return INOX_OK;
 }
 
-inox_status inox_array_len(inox_value array, size_t* out) {
+static inox_status array_length(inox_value array, size_t* out) {
   if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -246,7 +251,7 @@ inox_status inox_array_len(inox_value array, size_t* out) {
   return INOX_OK;
 }
 
-inox_status inox_array_pop(inox_value array, inox_value* out) {
+static inox_status array_pop(inox_value array, inox_value* out) {
   if (out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -265,7 +270,7 @@ inox_status inox_array_pop(inox_value array, inox_value* out) {
   return INOX_OK;
 }
 
-inox_status inox_array_set(inox_value array, size_t index, inox_value value) {
+static inox_status array_set(inox_value array, size_t index, inox_value value) {
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -322,7 +327,7 @@ static inox_status inox_array_join_part(inox_value value, char* buffer, size_t b
   return INOX_ERR_TYPE;
 }
 
-inox_status inox_array_join(
+static inox_status array_join(
   inox_allocator* allocator,
   inox_value array,
   const char* separator_bytes,
@@ -373,7 +378,7 @@ inox_status inox_array_join(
     return inox_string_from_literal(allocator, "", 0, out);
   }
 
-  char* joined = allocator->alloc(allocator->user, total_len, _Alignof(char));
+  char* joined = (char*)allocator->alloc(allocator->user, total_len, alignof(char));
 
   if (joined == 0) {
     return INOX_ERR_OOM;
@@ -388,7 +393,7 @@ inox_status inox_array_join(
     inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
 
     if (status != INOX_OK) {
-      allocator->free(allocator->user, joined, total_len, _Alignof(char));
+      allocator->free(allocator->user, joined, total_len, alignof(char));
       return status;
     }
 
@@ -404,12 +409,12 @@ inox_status inox_array_join(
   }
 
   inox_status status = inox_string_from_literal(allocator, joined, total_len, out);
-  allocator->free(allocator->user, joined, total_len, _Alignof(char));
+  allocator->free(allocator->user, joined, total_len, alignof(char));
 
   return status;
 }
 
-inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) {
+static inox_status array_slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) {
   if (allocator == 0 || out == 0 || array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -428,7 +433,7 @@ inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t
     end = start;
   }
 
-  inox_status status = inox_array_new(allocator, end - start, out);
+  inox_status status = array_make(allocator, end - start, out);
 
   if (status != INOX_OK) {
     return status;
@@ -447,7 +452,7 @@ inox_status inox_array_slice(inox_allocator* allocator, inox_value array, size_t
   return INOX_OK;
 }
 
-inox_status inox_array_sort(inox_value array) {
+static inox_status array_sort(inox_value array) {
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -471,4 +476,174 @@ inox_status inox_array_sort(inox_value array) {
   }
 
   return INOX_OK;
+}
+
+Array::Array() : inox::Value() {}
+
+Array::Array(inox_value value) : inox::Value(value) {}
+
+Array::Array(const inox::Value& value) : inox::Value(value) {}
+
+Array::Array(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+Array::Array(inox::AdoptValue, inox_value value) : inox::Value(inox::adopt_value, value) {}
+
+bool Array::valid() const {
+  inox_value value = inox::Value::raw();
+
+  return value.tag == INOX_TAG_ARRAY && value.as.ref != 0;
+}
+
+inox_status Array::make(inox_allocator* allocator, size_t len, inox_value* out) const {
+  return array_make(allocator, len, out);
+}
+
+inox_status Array::get(inox_value array, size_t index, inox_value* out) const {
+  return array_get(array, index, out);
+}
+
+inox_status Array::join(
+  inox_allocator* allocator,
+  inox_value array,
+  const char* separator_bytes,
+  size_t separator_len,
+  inox_value* out
+) const {
+  return array_join(allocator, array, separator_bytes, separator_len, out);
+}
+
+inox_status Array::length(inox_value array, size_t* out) const {
+  return array_length(array, out);
+}
+
+inox_status Array::pop(inox_value array, inox_value* out) const {
+  return array_pop(array, out);
+}
+
+inox_status Array::push(inox_value array, inox_value value) const {
+  return array_push(array, value);
+}
+
+inox_status Array::set(inox_value array, size_t index, inox_value value) const {
+  return array_set(array, index, value);
+}
+
+inox_status Array::slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) const {
+  return array_slice(allocator, array, start, end, out);
+}
+
+inox_status Array::sort(inox_value array) const {
+  return array_sort(array);
+}
+
+inox_status Array::unshift(inox_value array, inox_value value, size_t* out) const {
+  return array_unshift(array, value, out);
+}
+
+inox::String Array::join(inox::StringView separator) const {
+  if (!valid()) {
+    return inox::String();
+  }
+
+  inox_value out = inox_undefined_value();
+
+  if (array_join(&inox_default_allocator, inox::Value::raw(), separator.bytes, separator.len, &out) != INOX_OK) {
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt_value, out);
+}
+
+bool Array::isArray(inox_value value) const {
+  return value.tag == INOX_TAG_ARRAY;
+}
+
+bool Array::isArray(const inox::Value& value) const {
+  return isArray(value.raw());
+}
+
+inox_array* Array::raw(inox_value value) const {
+  if (!isArray(value) || value.as.ref == 0) {
+    return 0;
+  }
+
+  return (inox_array*)value.as.ref;
+}
+
+inox_array* Array::raw(const inox::Value& value) const {
+  return raw(value.raw());
+}
+
+void Array::throwNotIterable() const {
+  inox::throw_value(inox::string("TypeError: value is not iterable"));
+}
+
+namespace inox {
+
+ArrayClass String::split(StringView separator) const {
+  if (!valid()) {
+    return ArrayClass();
+  }
+
+  inox_value out = inox_undefined_value();
+
+  if (inox_string_split_parts(&inox_default_allocator, bytes(), length(), separator.bytes, separator.len, &out) != INOX_OK) {
+    return ArrayClass();
+  }
+
+  return ArrayClass(inox::adopt_value, out);
+}
+
+} // namespace inox
+
+extern "C" inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out) {
+  return array_make(allocator, len, out);
+}
+
+extern "C" inox_status inox_array_push(inox_value array, inox_value value) {
+  return array_push(array, value);
+}
+
+extern "C" inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out) {
+  return array_unshift(array, value, out);
+}
+
+extern "C" inox_status inox_array_get(inox_value array, size_t index, inox_value* out) {
+  return array_get(array, index, out);
+}
+
+extern "C" inox_status inox_array_len(inox_value array, size_t* out) {
+  return array_length(array, out);
+}
+
+extern "C" inox_status inox_array_pop(inox_value array, inox_value* out) {
+  return array_pop(array, out);
+}
+
+extern "C" inox_status inox_array_set(inox_value array, size_t index, inox_value value) {
+  return array_set(array, index, value);
+}
+
+extern "C" inox_status inox_array_join(
+  inox_allocator* allocator,
+  inox_value array,
+  const char* separator_bytes,
+  size_t separator_len,
+  inox_value* out
+) {
+  return array_join(allocator, array, separator_bytes, separator_len, out);
+}
+
+extern "C" inox_status inox_array_slice(
+  inox_allocator* allocator,
+  inox_value array,
+  size_t start,
+  size_t end,
+  inox_value* out
+) {
+  return array_slice(allocator, array, start, end, out);
+}
+
+extern "C" inox_status inox_array_sort(inox_value array) {
+  return array_sort(array);
 }

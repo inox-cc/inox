@@ -3594,7 +3594,7 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
   context.arrayLengths.set(statement.name, elements.length)
   context.arrayShapes.set(statement.name, shapes)
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`inox_array_new(&inox_default_allocator, ${elements.length}, &${name})`, context))
+  lines.push(emitStatusCheck(`Array.make(&inox_default_allocator, ${elements.length}, &${name})`, context))
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const element = elements[index] as AnyNode
@@ -3609,7 +3609,7 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
     }
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_array_set(${name}, ${index}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`Array.set(${name}, ${index}, ${value.expression})`, context))
   }
 
   return lines
@@ -4696,7 +4696,7 @@ function emitKnownArrayIndexVariableDeclaration(
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
+  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context))
   lines.push(`double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, element.valueType)
@@ -4720,7 +4720,7 @@ function emitKnownArrayFunctionIndexVariableDeclaration(
   context.runtimeCallbacks.add(name)
 
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${reference})`, context))
+  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${reference})`, context))
   lines.push(emitRuntimeValueCheck(reference, 'INOX_TAG_FUNCTION', context))
   lines.push(`inox_retain(${reference});`)
 
@@ -4740,7 +4740,7 @@ function emitKnownArrayRuntimeIndexVariableDeclaration(
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${reference})`, context))
+  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${reference})`, context))
 
   if (tag !== null && typeof tag !== 'undefined') {
     lines.push(emitRuntimeTypeCheck(`${reference}.tag != ${tag} || ${reference}.as.ref == 0`, context))
@@ -4802,7 +4802,7 @@ function emitKnownArrayStringIndexVariableDeclaration(
   registerOwnedValue(context, temp)
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context))
+  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context))
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
   lines.push(`inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${temp}.as.ref;`)
 
@@ -4824,7 +4824,7 @@ function emitKnownArrayIndexAssignment(
   updateKnownArrayElementValueType(element, valueType, context)
 
   pushAll(lines, value.lines)
-  lines.push(emitStatusCheck(`inox_array_set(${element.arrayName}, ${element.index}, ${value.expression})`, context))
+  lines.push(emitStatusCheck(`Array.set(${element.arrayName}, ${element.index}, ${value.expression})`, context))
 
   return lines
 }
@@ -4836,7 +4836,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(
     emitStatusCheck(
-      `inox_array_new(&inox_default_allocator, ${statement.init.elements.length}, &${emitCIdentifier(statement.name)})`,
+      `Array.make(&inox_default_allocator, ${statement.init.elements.length}, &${emitCIdentifier(statement.name)})`,
       context
     )
   )
@@ -4875,7 +4875,7 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
     }
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_array_set(${emitCIdentifier(statement.name)}, ${index}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`Array.set(${emitCIdentifier(statement.name)}, ${index}, ${value.expression})`, context))
   }
 
   return lines
@@ -5331,7 +5331,7 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
-    emitStatusCheck(`inox_array_new(&inox_default_allocator, ${expression.elements.length}, &${temp})`, context)
+    emitStatusCheck(`Array.make(&inox_default_allocator, ${expression.elements.length}, &${temp})`, context)
   )
 
   for (let index = 0; index < expression.elements.length; index++) {
@@ -5347,7 +5347,7 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
     }
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_array_set(${temp}, ${index}, ${value.expression})`, context))
+    lines.push(emitStatusCheck(`Array.set(${temp}, ${index}, ${value.expression})`, context))
   }
 
   return {
@@ -6249,7 +6249,7 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
 
       registerOwnedValue(context, value)
       pushAll(lines, emitPrepareOwnedValueWrite(value))
-      lines.push(emitStatusCheck(`inox_array_get(${name}, ${index}, &${value})`, context))
+      lines.push(emitStatusCheck(`Array.get(${name}, ${index}, &${value})`, context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_STRING', context))
       lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
       parts.push("'%.*s'")
@@ -6259,7 +6259,7 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
 
       registerOwnedValue(context, value)
       pushAll(lines, emitPrepareOwnedValueWrite(value))
-      lines.push(emitStatusCheck(`inox_array_get(${name}, ${index}, &${value})`, context))
+      lines.push(emitStatusCheck(`Array.get(${name}, ${index}, &${value})`, context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_NUMBER', context))
       parts.push(consoleLogNumberFormat)
       values.push(`${value}.as.number`)
@@ -6268,7 +6268,7 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
 
       registerOwnedValue(context, value)
       pushAll(lines, emitPrepareOwnedValueWrite(value))
-      lines.push(emitStatusCheck(`inox_array_get(${name}, ${index}, &${value})`, context))
+      lines.push(emitStatusCheck(`Array.get(${name}, ${index}, &${value})`, context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
       parts.push('%s')
       values.push(`(${value}.as.boolean ? "true" : "false")`)
@@ -6530,7 +6530,7 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_console_format_class_instance(&inox_default_allocator, &${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression}, &${temp})`,
+      `inox::console_format_class_instance(${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression}, ${temp})`,
       context
     )
   )
@@ -7221,7 +7221,7 @@ function emitKnownArrayScalarLogValue(
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${value})`, context))
+  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${value})`, context))
   lines.push(emitRuntimeValueCheck(value, tag, context))
 
   return {
@@ -7238,7 +7238,7 @@ function emitKnownArrayBooleanLogValue(element: CKnownArrayElement, context: CFu
   registerOwnedValue(context, value)
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${value})`, context))
+  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${value})`, context))
   lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
 
   return {
@@ -7256,7 +7256,7 @@ function emitRuntimeLogGetLines(source: RuntimeLogGetSource, temp: string, conte
       return [emitStatusCheck('INOX_ERR_FIELD', context)]
     }
 
-    return [emitStatusCheck(`inox_array_get(${element.arrayName}, ${element.index}, &${temp})`, context)]
+    return [emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context)]
   }
 
   if (source.kind === 'known-object-index') {
@@ -7439,7 +7439,8 @@ function emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_fetch_abort_controller_new(&inox_default_allocator, &${emitCIdentifier(statement.name)})`, context))
+  lines.push(`${emitCIdentifier(statement.name)} = inox::fetch_abort_controller();`)
+  lines.push(...emitThrownCheckLines(context))
 
   return lines
 }
@@ -7456,7 +7457,8 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
   lines.push(
     emitRuntimeTypeCheck(runtimeFetchAbortControllerValueMismatchCondition(controller.expression), context)
   )
-  lines.push(emitStatusCheck(`inox_fetch_abort_controller_abort(${controller.expression})`, context))
+  lines.push(`inox::fetch_abort_controller_abort(${controller.expression});`)
+  lines.push(...emitThrownCheckLines(context))
 
   return lines
 }

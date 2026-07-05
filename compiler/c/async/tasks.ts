@@ -3299,10 +3299,11 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     appendAsyncTaskLines(lines, init.lines)
 
     if (init.expression === '0') {
-      lines.push(`status = inox_fetch(inox_loop, ${emitFetchStringArgument(url)}, &frame->awaited);`)
+      lines.push(`frame->awaited = inox::fetch(inox_loop, ${emitFetchStringArgument(url)}).release();`)
     } else {
-      lines.push(`status = inox_fetch_with_init(inox_loop, ${emitFetchStringArgument(url)}, ${init.expression}, &frame->awaited);`)
+      lines.push(`frame->awaited = inox::fetch(inox_loop, ${emitFetchStringArgument(url)}, ${init.expression}).release();`)
     }
+    lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
   } else {
     const response = asyncTaskDeps(context).emitCValueExpression(expression.callee.object, context)
 
@@ -3310,7 +3311,8 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     lines.push(
       emitRuntimeTypeCheck(runtimeFetchResponseValueMismatchCondition(response.expression), context)
     )
-    lines.push(`status = inox_fetch_response_text(inox_loop, ${response.expression}, &frame->awaited);`)
+    lines.push(`frame->awaited = inox::FetchResponse(inox::Value(${response.expression})).text(inox_loop).release();`)
+    lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
   }
 
   appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))

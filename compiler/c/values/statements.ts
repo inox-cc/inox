@@ -2639,7 +2639,7 @@ function emitDirentArrayIndexVariableDeclaration(statement: StatementNode, conte
   const lines: string[] = []
   pushAllLines(lines, array.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_array_get(${array.expression}, ${index}, &${emitCIdentifier(statement.name)})`, context))
+  lines.push(emitStatusCheck(`Array.get(${array.expression}, ${index}, &${emitCIdentifier(statement.name)})`, context))
   lines.push(emitRuntimeValueCheck(emitCIdentifier(statement.name), 'INOX_TAG_OBJECT', context))
 
   return lines
@@ -3223,7 +3223,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
       ? null
       : emitForOfElementDeclaration(statement.name, value, elementType, context)
 
-    const getElementStatus = emitStatusCheck(`inox_array_get(${arrayName}, ${index}, &${value})`, context)
+    const getElementStatus = emitStatusCheck(`Array.get(${arrayName}, ${index}, &${value})`, context)
     const lines: string[] = []
     pushAllLines(lines, setup)
 
@@ -3323,13 +3323,13 @@ function emitRuntimeMapForOfStatement(
     const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
-    const createEntryStatus = emitStatusCheck(`inox_array_new(&inox_default_allocator, 2, &${emitCIdentifier(statement.name)})`, context)
+    const createEntryStatus = emitStatusCheck(`Array.make(&inox_default_allocator, 2, &${emitCIdentifier(statement.name)})`, context)
     const initKeyStatus = emitStatusCheck(
-      `inox_array_set(${emitCIdentifier(statement.name)}, 0, ${map}->entries[${index}].key)`,
+      `Array.set(${emitCIdentifier(statement.name)}, 0, ${map}->entries[${index}].key)`,
       context
     )
     const initValueStatus = emitStatusCheck(
-      `inox_array_set(${emitCIdentifier(statement.name)}, 1, ${map}->entries[${index}].value)`,
+      `Array.set(${emitCIdentifier(statement.name)}, 1, ${map}->entries[${index}].value)`,
       context
     )
 
@@ -5005,7 +5005,7 @@ function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFu
 
   pushAllLines(lines, index.lines)
   pushAllLines(lines, value.lines)
-  lines.push(emitStatusCheck(`inox_array_set(${arrayName}, ${index.expression}, ${value.expression})`, context))
+  lines.push(emitStatusCheck(`Array.set(${arrayName}, ${index.expression}, ${value.expression})`, context))
 
   return lines
 }

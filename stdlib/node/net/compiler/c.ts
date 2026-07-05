@@ -490,10 +490,10 @@ function emitNetHandlerConsoleLogStatement(
   }
 
   const callee = expression.callee
-  let stream = 'INOX_CONSOLE_STDOUT'
+  let stream = 'log'
 
   if (callee.property === 'warn' || callee.property === 'error') {
-    stream = 'INOX_CONSOLE_STDERR'
+    stream = 'error'
   }
 
   let firstArg: AnyNode | null = null
@@ -512,11 +512,7 @@ function emitNetHandlerConsoleLogStatement(
     firstArg.path.length === 1 &&
     netReferenceName(firstArg) === netContext.dataName
   ) {
-    if (stream === 'INOX_CONSOLE_STDOUT') {
-      return ['printf("%.*s\\n", (int)inox_len, inox_bytes);']
-    }
-
-    return [`if (inox_console_printf(${stream}, "%.*s\\n", (int)inox_len, inox_bytes) < 0) return INOX_ERR_TYPE;`]
+    return [`if (console.${stream}("%.*s", (int)inox_len, inox_bytes) != INOX_OK) return INOX_ERR_TYPE;`]
   }
 
   return deps.emitConsoleLogStatement(callee.property, expression.args, context)

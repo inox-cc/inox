@@ -1,0 +1,647 @@
+#include "inox/process.h"
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#include <time.h>
+#endif
+#include "inox/array.h"
+#include "inox/object.h"
+#include <unistd.h>
+#include "inox/string.h"
+
+#ifndef INOX_PACKAGE_VERSION
+#define INOX_PACKAGE_VERSION "0.0.0"
+#endif
+
+static inox_status process_argv_value(inox_allocator* allocator, int index, inox_value* out);
+static inox_status process_version(inox_allocator* allocator, inox_value* out);
+static inox_status process_versions_value(inox_allocator* allocator, inox_value* out);
+static inox_status process_versions_node(inox_allocator* allocator, inox_value* out);
+
+static int process_argc = 0;
+static char** process_argv_values = 0;
+static const char* process_entry_path = 0;
+static int process_exit_code = 0;
+
+static const inox_field_info process_memory_usage_fields[] = {
+  { "rss", INOX_FIELD_READONLY },
+  { "heapTotal", INOX_FIELD_READONLY },
+  { "heapUsed", INOX_FIELD_READONLY },
+  { "external", INOX_FIELD_READONLY },
+  { "arrayBuffers", INOX_FIELD_READONLY }
+};
+
+static const inox_shape process_memory_usage_shape = { 5, process_memory_usage_fields };
+
+static const inox_field_info process_versions_fields[] = {
+  { "node", INOX_FIELD_READONLY }
+};
+
+static const inox_shape process_versions_shape = { 1, process_versions_fields };
+
+static const inox_field_info process_fields[] = {
+  { "version", INOX_FIELD_READONLY },
+  { "versions", INOX_FIELD_READONLY }
+};
+
+static const inox_shape process_shape = { 2, process_fields };
+
+static inox_status process_string(inox_allocator* allocator, const char* value, inox_value* out) {
+  return inox_string_from_literal(allocator, value == 0 ? "" : value, value == 0 ? 0 : strlen(value), out);
+}
+
+static inox_status process_init_object_field(
+  inox_value object,
+  uint32_t index,
+  inox_status (*init)(inox_allocator* allocator, inox_value* out),
+  inox_allocator* allocator
+) {
+  inox_value value = inox_undefined_value();
+  inox_status status = init(allocator, &value);
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(object, index, value);
+  }
+
+  inox_release(value);
+
+  return status;
+}
+
+static inox_status process_value(inox_allocator* allocator, inox_value* out) {
+  if (allocator == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_status status = inox_object_new(allocator, &process_shape, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  status = process_init_object_field(*out, 0, process_version, allocator);
+
+  if (status == INOX_OK) {
+    status = process_init_object_field(*out, 1, process_versions_value, allocator);
+  }
+
+  if (status != INOX_OK) {
+    inox_release(*out);
+    *out = inox_undefined_value();
+  }
+
+  return status;
+}
+
+static void process_init(int argc, char** argv) {
+  process_argc = argc;
+  process_argv_values = argv;
+  process_entry_path = 0;
+}
+
+static void process_init_with_entry(int argc, char** argv, const char* entry_path) {
+  process_argc = argc;
+  process_argv_values = argv;
+  process_entry_path = entry_path;
+}
+
+static int process_argv_native_index(int index) {
+  if (process_entry_path != 0 && index > 1) {
+    return index - 1;
+  }
+
+  return index;
+}
+
+static const char* process_argv_value_at(int index) {
+  if (index < 0) {
+    return 0;
+  }
+
+  if (process_entry_path != 0 && index == 1) {
+    return process_entry_path;
+  }
+
+  if (process_argv_values == 0) {
+    return 0;
+  }
+
+  int native_index = process_argv_native_index(index);
+
+  if (native_index < 0 || native_index >= process_argc || process_argv_values[native_index] == 0) {
+    return 0;
+  }
+
+  return process_argv_values[native_index];
+}
+
+static inox_status process_arch(inox_allocator* allocator, inox_value* out) {
+#if defined(__aarch64__) || defined(_M_ARM64)
+  return process_string(allocator, "arm64", out);
+#elif defined(__x86_64__) || defined(_M_X64)
+  return process_string(allocator, "x64", out);
+#elif defined(__i386__) || defined(_M_IX86)
+  return process_string(allocator, "ia32", out);
+#elif defined(__arm__) || defined(_M_ARM)
+  return process_string(allocator, "arm", out);
+#elif defined(__riscv) && __riscv_xlen == 64
+  return process_string(allocator, "riscv64", out);
+#elif defined(__powerpc64__) || defined(__ppc64__)
+  return process_string(allocator, "ppc64", out);
+#elif defined(__s390x__)
+  return process_string(allocator, "s390x", out);
+#else
+  return process_string(allocator, "unknown", out);
+#endif
+}
+
+static inox_status process_argv_value(inox_allocator* allocator, int index, inox_value* out) {
+  if (out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  const char* value = process_argv_value_at(index);
+
+  if (value == 0) {
+    return inox_string_from_literal(allocator, "", 0, out);
+  }
+
+  return inox_string_from_literal(allocator, value, strlen(value), out);
+}
+
+static int process_argv_length(void) {
+  if (process_entry_path != 0) {
+    return process_argc + 1;
+  }
+
+  return process_argc;
+}
+
+static inox_status process_argv0(inox_allocator* allocator, inox_value* out) {
+  return process_argv_value(allocator, 0, out);
+}
+
+static inox_status process_cwd(inox_allocator* allocator, inox_value* out) {
+  char cwd[4096];
+
+  if (getcwd(cwd, sizeof(cwd)) == 0) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  return inox_string_from_literal(allocator, cwd, strlen(cwd), out);
+}
+
+static inox_status process_env_value(inox_allocator* allocator, const char* name, size_t name_len, inox_value* out) {
+  if (name == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  char* key = (char*)allocator->alloc(allocator->user, name_len + 1, alignof(char));
+
+  if (key == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  memcpy(key, name, name_len);
+  key[name_len] = 0;
+
+  const char* value = getenv(key);
+  inox_status status = inox_string_from_literal(allocator, value == 0 ? "" : value, value == 0 ? 0 : strlen(value), out);
+
+  allocator->free(allocator->user, key, name_len + 1, alignof(char));
+
+  return status;
+}
+
+static inox_status process_execPath(inox_allocator* allocator, inox_value* out) {
+  return process_argv_value(allocator, 0, out);
+}
+
+static int process_get_exit_code(void) {
+  return process_exit_code;
+}
+
+static inox_status process_now(int64_t* seconds, int64_t* nanoseconds) {
+  if (seconds == 0 || nanoseconds == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+#if defined(_WIN32)
+  LARGE_INTEGER frequency;
+  LARGE_INTEGER counter;
+
+  if (!QueryPerformanceFrequency(&frequency) || !QueryPerformanceCounter(&counter) || frequency.QuadPart == 0) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  *seconds = (int64_t)(counter.QuadPart / frequency.QuadPart);
+  *nanoseconds = (int64_t)(((counter.QuadPart % frequency.QuadPart) * 1000000000ll) / frequency.QuadPart);
+  return INOX_OK;
+#elif defined(CLOCK_MONOTONIC)
+  struct timespec current;
+
+  if (clock_gettime(CLOCK_MONOTONIC, &current) != 0) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  *seconds = (int64_t)current.tv_sec;
+  *nanoseconds = (int64_t)current.tv_nsec;
+  return INOX_OK;
+#else
+  struct timespec current;
+
+  if (timespec_get(&current, TIME_UTC) == 0) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  *seconds = (int64_t)current.tv_sec;
+  *nanoseconds = (int64_t)current.tv_nsec;
+  return INOX_OK;
+#endif
+}
+
+static inox_status process_hrtime_component(inox_value previous, size_t index, int64_t* out) {
+  if (out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_value value = inox_undefined_value();
+  inox_status status = Array.get(previous, index, &value);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  if (value.tag != INOX_TAG_NUMBER) {
+    inox_release(value);
+    return INOX_ERR_TYPE;
+  }
+
+  *out = (int64_t)value.as.number;
+  inox_release(value);
+
+  return INOX_OK;
+}
+
+static inox_status process_hrtime(inox_allocator* allocator, inox_value previous, int has_previous, inox_value* out) {
+  if (allocator == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  int64_t seconds = 0;
+  int64_t nanoseconds = 0;
+  inox_status status = process_now(&seconds, &nanoseconds);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  if (has_previous) {
+    int64_t previous_seconds = 0;
+    int64_t previous_nanoseconds = 0;
+
+    status = process_hrtime_component(previous, 0, &previous_seconds);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = process_hrtime_component(previous, 1, &previous_nanoseconds);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    seconds -= previous_seconds;
+    nanoseconds -= previous_nanoseconds;
+
+    if (nanoseconds < 0) {
+      seconds -= 1;
+      nanoseconds += 1000000000ll;
+    }
+  }
+
+  status = Array.make(allocator, 2, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  status = Array.set(*out, 0, inox_number_value((inox_number)seconds));
+
+  if (status == INOX_OK) {
+    status = Array.set(*out, 1, inox_number_value((inox_number)nanoseconds));
+  }
+
+  if (status != INOX_OK) {
+    inox_release(*out);
+    *out = inox_undefined_value();
+  }
+
+  return status;
+}
+
+static inox_number process_rss_bytes(void) {
+#if defined(_WIN32)
+  return 0;
+#else
+  struct rusage usage;
+
+  if (getrusage(RUSAGE_SELF, &usage) != 0) {
+    return 0;
+  }
+
+#if defined(__APPLE__)
+  return (inox_number)usage.ru_maxrss;
+#else
+  return (inox_number)usage.ru_maxrss * 1024.0;
+#endif
+#endif
+}
+
+static inox_status process_memory_usage_set(inox_value object, uint32_t index, inox_number value) {
+  return inox_object_init_known(object, index, inox_number_value(value));
+}
+
+static inox_status process_memoryUsage(inox_allocator* allocator, inox_value* out) {
+  if (allocator == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_status status = inox_object_new(allocator, &process_memory_usage_shape, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  status = process_memory_usage_set(*out, 0, process_rss_bytes());
+
+  if (status == INOX_OK) {
+    status = process_memory_usage_set(*out, 1, 0);
+  }
+
+  if (status == INOX_OK) {
+    status = process_memory_usage_set(*out, 2, 0);
+  }
+
+  if (status == INOX_OK) {
+    status = process_memory_usage_set(*out, 3, 0);
+  }
+
+  if (status == INOX_OK) {
+    status = process_memory_usage_set(*out, 4, 0);
+  }
+
+  if (status != INOX_OK) {
+    inox_release(*out);
+    *out = inox_undefined_value();
+  }
+
+  return status;
+}
+
+static int process_pid(void) {
+#ifdef _WIN32
+  return 0;
+#else
+  return (int)getpid();
+#endif
+}
+
+static inox_status process_platform(inox_allocator* allocator, inox_value* out) {
+#if defined(__APPLE__)
+  return process_string(allocator, "darwin", out);
+#elif defined(__linux__)
+  return process_string(allocator, "linux", out);
+#elif defined(_WIN32)
+  return process_string(allocator, "win32", out);
+#elif defined(__FreeBSD__)
+  return process_string(allocator, "freebsd", out);
+#elif defined(__OpenBSD__)
+  return process_string(allocator, "openbsd", out);
+#elif defined(__sun)
+  return process_string(allocator, "sunos", out);
+#elif defined(_AIX)
+  return process_string(allocator, "aix", out);
+#else
+  return process_string(allocator, "unknown", out);
+#endif
+}
+
+static inox_status process_version(inox_allocator* allocator, inox_value* out) {
+  return process_string(allocator, "v" INOX_PACKAGE_VERSION, out);
+}
+
+static inox_status process_versions_value(inox_allocator* allocator, inox_value* out) {
+  if (allocator == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_status status = inox_object_new(allocator, &process_versions_shape, out);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  inox_value node = inox_undefined_value();
+  status = process_versions_node(allocator, &node);
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(*out, 0, node);
+  }
+
+  inox_release(node);
+
+  if (status != INOX_OK) {
+    inox_release(*out);
+    *out = inox_undefined_value();
+  }
+
+  return status;
+}
+
+static inox_status process_versions_node(inox_allocator* allocator, inox_value* out) {
+  return process_string(allocator, INOX_PACKAGE_VERSION, out);
+}
+
+static void process_set_exit_code(int code) {
+  process_exit_code = code;
+}
+
+static void process_exit(int code) {
+  exit(code);
+}
+
+namespace inox {
+namespace node_process {
+
+static String string(inox_status (*read)(inox_allocator*, inox_value*)) {
+  inox_value value = inox_undefined_value();
+
+  if (read(&inox_default_allocator, &value) != INOX_OK) {
+    return String();
+  }
+
+  return String(adopt(value));
+}
+
+static Value value(inox_status (*read)(inox_allocator*, inox_value*)) {
+  inox_value result = inox_undefined_value();
+
+  if (read(&inox_default_allocator, &result) != INOX_OK) {
+    return Value();
+  }
+
+  return adopt(result);
+}
+
+} // namespace node_process
+} // namespace inox
+
+process_number_property::process_number_property(process_number_reader read) : read_(read) {}
+
+double process_number_property::value() const {
+  if (read_ == process_number_reader::argvLength) {
+    return (double)process_argv_length();
+  }
+
+  if (read_ == process_number_reader::pid) {
+    return (double)process_pid();
+  }
+
+  return 0;
+}
+
+process_number_property::operator double() const {
+  return value();
+}
+
+double process_exit_code_property::value() const {
+  return (double)process_get_exit_code();
+}
+
+process_exit_code_property::operator double() const {
+  return value();
+}
+
+process_exit_code_property& process_exit_code_property::operator=(int code) {
+  process_set_exit_code(code);
+  return *this;
+}
+
+process_exit_code_property& process_exit_code_property::operator=(double code) {
+  process_set_exit_code((int)code);
+  return *this;
+}
+
+inox::String process_argv::operator[](int index) const {
+  inox_value value = inox_undefined_value();
+
+  if (process_argv_value(&inox_default_allocator, index, &value) != INOX_OK) {
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt(value));
+}
+
+inox::String process_env::get(const char* name, size_t name_len) const {
+  inox_value value = inox_undefined_value();
+
+  if (process_env_value(&inox_default_allocator, name, name_len, &value) != INOX_OK) {
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt(value));
+}
+
+inox::String process_env::get(inox::StringView name) const {
+  return get(name.bytes, name.len);
+}
+
+void process_versions::init() {
+  node = inox::node_process::string(process_versions_node);
+}
+
+inox::Value process_versions::value() const {
+  return inox::node_process::value(process_versions_value);
+}
+
+void process::init() {
+  arch = inox::node_process::string(process_arch);
+  argv0 = inox::node_process::string(process_argv0);
+  execPath = inox::node_process::string(process_execPath);
+  platform = inox::node_process::string(process_platform);
+  version = inox::node_process::string(process_version);
+  versions.init();
+}
+
+inox::String process::cwd() const {
+  return inox::node_process::string(process_cwd);
+}
+
+void process::exit(int code) const {
+  process_exit(code);
+}
+
+inox::Value process::hrtime() const {
+  return hrtime(inox_undefined_value(), 0);
+}
+
+inox::Value process::hrtime(inox_value previous) const {
+  return hrtime(previous, 1);
+}
+
+inox::Value process::hrtime(const inox::Value& previous) const {
+  return hrtime(previous.raw(), 1);
+}
+
+inox::Value process::memoryUsage() const {
+  return inox::node_process::value(process_memoryUsage);
+}
+
+inox::Value process::value() const {
+  return inox::node_process::value(process_value);
+}
+
+inox::Value process::hrtime(inox_value previous, int has_previous) const {
+  inox_value value = inox_undefined_value();
+
+  if (process_hrtime(&inox_default_allocator, previous, has_previous, &value) != INOX_OK) {
+    return inox::Value();
+  }
+
+  return inox::adopt(value);
+}
+
+int inox::return_code() {
+  return inox::return_code(process_get_exit_code());
+}
+
+int inox::main(int argc, char** argv, AppMain app_main) {
+  process_init(argc, argv);
+  ::process.init();
+  const int code = run_app(app_main);
+
+  if (code != 0) {
+    return return_code(code);
+  }
+
+  return return_code();
+}
+
+int inox::main(int argc, char** argv, const char* entry_path, AppMain app_main) {
+  process_init_with_entry(argc, argv, entry_path);
+  ::process.init();
+  const int code = run_app(app_main);
+
+  if (code != 0) {
+    return return_code(code);
+  }
+
+  return return_code();
+}

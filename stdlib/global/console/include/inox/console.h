@@ -7,80 +7,95 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
-#include <concepts>
 #include <type_traits>
+#include <utility>
 #include "inox/loop.h"
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef enum inox_console_stream {
-  INOX_CONSOLE_STDOUT = 1,
-  INOX_CONSOLE_STDERR = 2
-} inox_console_stream;
-
-typedef inox_status (*inox_console_write_fn)(void* user, inox_console_stream stream, const char* bytes, size_t len);
-
-typedef struct inox_console_adapter {
-  void* user;
-  inox_console_write_fn write;
-} inox_console_adapter;
-
-void inox_console_set_adapter(inox_console_adapter adapter);
-inox_console_adapter inox_console_get_adapter(void);
-void inox_console_clear_adapter(void);
-inox_status inox_console_write(inox_console_stream stream, const char* bytes, size_t len);
-inox_status inox_console_write_line(inox_console_stream stream, const char* bytes, size_t len);
-inox_status inox_console_print_value(inox_console_stream stream, inox_value value);
-inox_status inox_console_print_value_line(inox_console_stream stream, inox_value value);
-inox_status inox_console_format_value(inox_allocator* allocator, inox_value value, inox_value* out);
-inox_status inox_console_format_class_instance(
-  inox_allocator* allocator,
-  const inox_class_descriptor* descriptor,
-  const void* instance,
-  inox_value* out
-);
-int inox_console_printf(inox_console_stream stream, const char* format, ...);
-
-#ifndef INOX_CONSOLE_NO_PRINTF_MACRO
-#define printf(...) inox_console_printf(INOX_CONSOLE_STDOUT, __VA_ARGS__)
-#endif
-
-#ifdef __cplusplus
-}
 #endif
 
 #ifdef __cplusplus
 namespace inox {
 
-inox_status console_newline(inox_console_stream stream);
+enum class ConsoleStream {
+  stdout,
+  stderr
+};
+
+inox_status console_newline(ConsoleStream stream);
+inox_status console_write(ConsoleStream stream, const char* bytes, size_t len);
+inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len);
+inox_status console_print_value(ConsoleStream stream, inox_value value);
+inox_status console_print_value_line(ConsoleStream stream, inox_value value);
+inox_status console_format_class_instance(
+  const inox_class_descriptor& descriptor,
+  const void* instance,
+  Value& out
+);
+int console_printf(ConsoleStream stream, const char* format, ...);
 
 } // namespace inox
 
-template <typename T>
-concept inox_console_value_object = requires(const T& value) {
-  { value.value() } -> std::same_as<inox::Value>;
+template <typename...>
+using ConsoleVoid = void;
+
+template <typename T, typename = void>
+struct ConsoleValueObject : std::false_type {
 };
 
 template <typename T>
-using inox_console_decayed_t = std::remove_cvref_t<T>;
+struct ConsoleValueObject<T, ConsoleVoid<decltype(std::declval<const T&>().value())>>
+  : std::is_same<decltype(std::declval<const T&>().value()), inox::Value> {
+};
 
 template <typename T>
-concept inox_console_formatted_string_arg =
-  std::same_as<inox_console_decayed_t<T>, inox::String> ||
-  std::same_as<inox_console_decayed_t<T>, inox::StringView>;
+using ConsoleDecayed = typename std::decay<T>::type;
 
 template <typename T>
-concept inox_console_custom_format_arg =
-  inox_console_formatted_string_arg<T> ||
-  std::same_as<inox_console_decayed_t<T>, inox_value> ||
-  std::same_as<inox_console_decayed_t<T>, inox::Value> ||
-  inox_console_value_object<T>;
+struct ConsoleFormattedStringArg
+  : std::integral_constant<
+      bool,
+      std::is_same<ConsoleDecayed<T>, inox::String>::value ||
+      std::is_same<ConsoleDecayed<T>, inox::StringView>::value
+    > {
+};
+
+template <typename T>
+struct ConsoleCustomFormatArg
+  : std::integral_constant<
+      bool,
+      ConsoleFormattedStringArg<T>::value ||
+      std::is_arithmetic<ConsoleDecayed<T>>::value ||
+      std::is_same<ConsoleDecayed<T>, inox_value>::value ||
+      std::is_same<ConsoleDecayed<T>, inox::Value>::value ||
+      ConsoleValueObject<T>::value
+    > {
+};
 
 template <typename... Args>
-concept inox_console_has_custom_format_arg = (inox_console_custom_format_arg<Args> || ...);
+struct ConsoleHasCustomFormatArg : std::false_type {
+};
+
+template <typename T, typename... Rest>
+struct ConsoleHasCustomFormatArg<T, Rest...>
+  : std::integral_constant<bool, ConsoleCustomFormatArg<T>::value || ConsoleHasCustomFormatArg<Rest...>::value> {
+};
+
+template <typename T>
+struct ConsolePlainVararg
+  : std::integral_constant<
+      bool,
+      std::is_arithmetic<ConsoleDecayed<T>>::value ||
+      std::is_pointer<ConsoleDecayed<T>>::value
+    > {
+};
+
+template <typename... Args>
+struct ConsoleCanUsePlainVarargs : std::true_type {
+};
+
+template <typename T, typename... Rest>
+struct ConsoleCanUsePlainVarargs<T, Rest...>
+  : std::integral_constant<bool, ConsolePlainVararg<T>::value && ConsoleCanUsePlainVarargs<Rest...>::value> {
+};
 
 class console {
 public:
@@ -93,21 +108,19 @@ public:
   inox_status log(const char* prefix, inox_value value) const;
   inox_status log(const char* prefix, const inox::Value& value) const;
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status log(const T& value) const {
-    return write_value_object_line(INOX_CONSOLE_STDOUT, value);
+    return write_value_object_line(inox::ConsoleStream::stdout, value);
   }
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status log(const char* prefix, const T& value) const {
-    return write_prefixed_value_object_line(INOX_CONSOLE_STDOUT, prefix, value);
+    return write_prefixed_value_object_line(inox::ConsoleStream::stdout, prefix, value);
   }
 
   template <typename... Args>
   inox_status log(const char* format, Args... args) const {
-    return printf_line(INOX_CONSOLE_STDOUT, format, args...);
+    return printf_line(inox::ConsoleStream::stdout, format, args...);
   }
 
   inox_status info() const;
@@ -119,14 +132,12 @@ public:
   inox_status info(const char* prefix, inox_value value) const;
   inox_status info(const char* prefix, const inox::Value& value) const;
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status info(const T& value) const {
     return log(value);
   }
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status info(const char* prefix, const T& value) const {
     return log(prefix, value);
   }
@@ -145,21 +156,19 @@ public:
   inox_status warn(const char* prefix, inox_value value) const;
   inox_status warn(const char* prefix, const inox::Value& value) const;
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status warn(const T& value) const {
-    return write_value_object_line(INOX_CONSOLE_STDERR, value);
+    return write_value_object_line(inox::ConsoleStream::stderr, value);
   }
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status warn(const char* prefix, const T& value) const {
-    return write_prefixed_value_object_line(INOX_CONSOLE_STDERR, prefix, value);
+    return write_prefixed_value_object_line(inox::ConsoleStream::stderr, prefix, value);
   }
 
   template <typename... Args>
   inox_status warn(const char* format, Args... args) const {
-    return printf_line(INOX_CONSOLE_STDERR, format, args...);
+    return printf_line(inox::ConsoleStream::stderr, format, args...);
   }
 
   inox_status error() const;
@@ -171,14 +180,12 @@ public:
   inox_status error(const char* prefix, inox_value value) const;
   inox_status error(const char* prefix, const inox::Value& value) const;
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status error(const T& value) const {
     return warn(value);
   }
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status error(const char* prefix, const T& value) const {
     return warn(prefix, value);
   }
@@ -190,21 +197,21 @@ public:
 
 private:
   static bool skip_write();
-  static inox_status write_text_line(inox_console_stream stream, const char* text);
-  static inox_status write_prefixed_value_line(inox_console_stream stream, const char* prefix, inox_value value);
+  static inox_status write_text_line(inox::ConsoleStream stream, const char* text);
+  static inox_status write_prefixed_value_line(inox::ConsoleStream stream, const char* prefix, inox_value value);
 
   template <typename T>
-  static inox_status write_value_object_line(inox_console_stream stream, const T& object) {
+  static inox_status write_value_object_line(inox::ConsoleStream stream, const T& object) {
     if (skip_write()) {
       return INOX_OK;
     }
 
     inox::Value value = object.value();
-    return inox_console_print_value_line(stream, value.raw());
+    return inox::console_print_value_line(stream, value.raw());
   }
 
   template <typename T>
-  static inox_status write_prefixed_value_object_line(inox_console_stream stream, const char* prefix, const T& object) {
+  static inox_status write_prefixed_value_object_line(inox::ConsoleStream stream, const char* prefix, const T& object) {
     if (skip_write()) {
       return INOX_OK;
     }
@@ -214,21 +221,69 @@ private:
   }
 
   template <typename... Args>
-  static inox_status printf_line(inox_console_stream stream, const char* format, Args... args) {
+  static inox_status printf_line(inox::ConsoleStream stream, const char* format, Args... args) {
     if (skip_write()) {
       return INOX_OK;
     }
 
-    if constexpr (inox_console_has_custom_format_arg<Args...>) {
-      inox_status status = write_formatted(stream, format == nullptr ? "" : format, args...);
+    const char* safe_format = format == nullptr ? "" : format;
 
-      if (status != INOX_OK) {
-        return status;
-      }
-    } else {
-      if (inox_console_printf(stream, format == nullptr ? "" : format, args...) < 0) {
+    return printf_line_format_dispatch(stream, safe_format, ConsoleCanUsePlainVarargs<Args...>(), args...);
+  }
+
+  template <typename... Args>
+  static inox_status printf_line_format_dispatch(
+    inox::ConsoleStream stream,
+    const char* safe_format,
+    std::true_type,
+    Args... args
+  ) {
+    if (format_uses_dynamic_width_or_precision(safe_format)) {
+      if (inox::console_printf(stream, safe_format, args...) < 0) {
         return INOX_ERR_TYPE;
       }
+
+      return inox::console_newline(stream);
+    }
+
+    return printf_line_dispatch(stream, safe_format, ConsoleHasCustomFormatArg<Args...>(), args...);
+  }
+
+  template <typename... Args>
+  static inox_status printf_line_format_dispatch(
+    inox::ConsoleStream stream,
+    const char* safe_format,
+    std::false_type,
+    Args... args
+  ) {
+    return printf_line_dispatch(stream, safe_format, ConsoleHasCustomFormatArg<Args...>(), args...);
+  }
+
+  template <typename... Args>
+  static inox_status printf_line_dispatch(
+    inox::ConsoleStream stream,
+    const char* format,
+    std::true_type,
+    Args... args
+  ) {
+    inox_status status = write_formatted(stream, format == nullptr ? "" : format, args...);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    return inox::console_newline(stream);
+  }
+
+  template <typename... Args>
+  static inox_status printf_line_dispatch(
+    inox::ConsoleStream stream,
+    const char* format,
+    std::false_type,
+    Args... args
+  ) {
+    if (inox::console_printf(stream, format == nullptr ? "" : format, args...) < 0) {
+      return INOX_ERR_TYPE;
     }
 
     return inox::console_newline(stream);
@@ -237,36 +292,138 @@ private:
   static bool is_string_format_spec(const char* spec, size_t len);
   static bool is_value_format_spec(const char* spec, size_t len);
   static const char* next_format_spec(const char* format, const char** spec_end);
-  static inox_status write_format_literal(inox_console_stream stream, const char* begin, const char* end);
+  static bool format_uses_dynamic_width_or_precision(const char* format) {
+    const char* current = format;
+
+    while (*current != '\0') {
+      if (*current != '%') {
+        current += 1;
+        continue;
+      }
+
+      current += 1;
+
+      if (*current == '%') {
+        current += 1;
+        continue;
+      }
+
+      while (*current != '\0' && strchr("diuoxXfFeEgGaAcsp", *current) == nullptr) {
+        if (*current == '*') {
+          return true;
+        }
+
+        current += 1;
+      }
+
+      if (*current != '\0') {
+        current += 1;
+      }
+    }
+
+    return false;
+  }
+
+  static bool format_spec_has_length_modifier(const char* spec, size_t len) {
+    for (size_t index = 1; index + 1 < len; ++index) {
+      const char value = spec[index];
+
+      if (
+        value == 'h' || value == 'l' || value == 'j' || value == 'z' ||
+        value == 't' || value == 'L'
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  template <typename T>
+  static inox_status write_plain_format_arg(
+    inox::ConsoleStream stream,
+    const char* format,
+    const char* spec,
+    size_t spec_len,
+    T value,
+    std::true_type
+  ) {
+    const char conversion = spec_len > 0 ? spec[spec_len - 1] : '\0';
+
+    if (!format_spec_has_length_modifier(spec, spec_len)) {
+      switch (conversion) {
+        case 'd':
+        case 'i':
+          return inox::console_printf(stream, format, (int)value) < 0 ? INOX_ERR_TYPE : INOX_OK;
+        case 'u':
+        case 'o':
+        case 'x':
+        case 'X':
+          return inox::console_printf(stream, format, (unsigned int)value) < 0 ? INOX_ERR_TYPE : INOX_OK;
+        case 'c':
+          return inox::console_printf(stream, format, (int)value) < 0 ? INOX_ERR_TYPE : INOX_OK;
+      }
+    }
+
+    switch (conversion) {
+      case 'f':
+      case 'F':
+      case 'e':
+      case 'E':
+      case 'g':
+      case 'G':
+      case 'a':
+      case 'A':
+        return inox::console_printf(stream, format, (double)value) < 0 ? INOX_ERR_TYPE : INOX_OK;
+    }
+
+    return inox::console_printf(stream, format, value) < 0 ? INOX_ERR_TYPE : INOX_OK;
+  }
+
+  template <typename T>
+  static inox_status write_plain_format_arg(
+    inox::ConsoleStream stream,
+    const char* format,
+    const char* spec,
+    size_t spec_len,
+    T value,
+    std::false_type
+  ) {
+    (void)spec;
+    (void)spec_len;
+
+    return inox::console_printf(stream, format, value) < 0 ? INOX_ERR_TYPE : INOX_OK;
+  }
+
+  static inox_status write_format_literal(inox::ConsoleStream stream, const char* begin, const char* end);
   static inox_status write_format_arg(
-    inox_console_stream stream,
+    inox::ConsoleStream stream,
     const char* spec,
     size_t spec_len,
     const inox::String& value
   );
   static inox_status write_format_arg(
-    inox_console_stream stream,
+    inox::ConsoleStream stream,
     const char* spec,
     size_t spec_len,
     inox::StringView value
   );
   static inox_status write_format_arg(
-    inox_console_stream stream,
+    inox::ConsoleStream stream,
     const char* spec,
     size_t spec_len,
     inox_value value
   );
   static inox_status write_format_arg(
-    inox_console_stream stream,
+    inox::ConsoleStream stream,
     const char* spec,
     size_t spec_len,
     const inox::Value& value
   );
 
-  template <typename T>
-  requires inox_console_value_object<T>
+  template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   static inox_status write_format_arg(
-    inox_console_stream stream,
+    inox::ConsoleStream stream,
     const char* spec,
     size_t spec_len,
     const T& object
@@ -275,10 +432,9 @@ private:
     return write_format_arg(stream, spec, spec_len, value.raw());
   }
 
-  template <typename T>
-  requires (!inox_console_value_object<T>)
+  template <typename T, typename std::enable_if_t<!ConsoleValueObject<T>::value, int> = 0>
   static inox_status write_format_arg(
-    inox_console_stream stream,
+    inox::ConsoleStream stream,
     const char* spec,
     size_t spec_len,
     T value
@@ -292,17 +448,13 @@ private:
     memcpy(format, spec, spec_len);
     format[spec_len] = '\0';
 
-    if (inox_console_printf(stream, format, value) < 0) {
-      return INOX_ERR_TYPE;
-    }
-
-    return INOX_OK;
+    return write_plain_format_arg(stream, format, spec, spec_len, value, std::is_arithmetic<ConsoleDecayed<T>>());
   }
 
-  static inox_status write_formatted(inox_console_stream stream, const char* format);
+  static inox_status write_formatted(inox::ConsoleStream stream, const char* format);
 
   template <typename T, typename... Rest>
-  static inox_status write_formatted(inox_console_stream stream, const char* format, T value, Rest... rest) {
+  static inox_status write_formatted(inox::ConsoleStream stream, const char* format, T value, Rest... rest) {
     const char* spec_end = nullptr;
     const char* spec = next_format_spec(format, &spec_end);
 
