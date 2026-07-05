@@ -5150,7 +5150,7 @@ export function emitRuntimeCallbackRuntimeValueReturnLines(
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`${returnOut} = ${value.expression};`)
+  pushRuntimeValueReturnAssignment(lines, returnOut, value, context)
   lines.push(emitRuntimeValueCheck(returnOut, expectedTag, context))
   lines.push(`inox_retain(${returnOut});`)
   return lines
@@ -5199,7 +5199,7 @@ function emitRuntimeValueReturnStatement(statement: StatementNode, context: CFun
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`inox_return = ${value.expression};`)
+  pushRuntimeValueReturnAssignment(lines, 'inox_return', value, context)
   if (context.returnNullable === true) {
     pushAllLines(lines, emitRuntimeNullableValueCheck('inox_return', expectedTag, context))
   } else {
@@ -5220,13 +5220,30 @@ function emitNullableScalarReturnStatement(statement: StatementNode, context: CF
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
-  lines.push(`inox_return = ${value.expression};`)
+  pushRuntimeValueReturnAssignment(lines, 'inox_return', value, context)
   pushAllLines(lines, emitRuntimeNullableValueCheck('inox_return', expectedTag, context))
   if (isManagedRuntimeReturnType(context.returnType)) {
     lines.push('inox_retain(inox_return);')
   }
   pushAllLines(lines, emitReturnJump(context))
   return lines
+}
+
+function pushRuntimeValueReturnAssignment(
+  lines: string[],
+  target: string,
+  value: PreparedExpression,
+  context: CFunctionContext
+): void {
+  if (value.cppType === 'inox::String' || value.cppType === 'inox::Value') {
+    const temp = nextCName(context, 'inox_return_value')
+
+    lines.push(`auto ${temp} = ${value.expression};`)
+    lines.push(`${target} = ${temp};`)
+    return
+  }
+
+  lines.push(`${target} = ${value.expression};`)
 }
 
 export function registerErrorChannel(context: CFunctionContext): void {

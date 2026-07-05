@@ -340,10 +340,10 @@ console.log(f.isPromise())
   const constructor = generatedBlock(result.code, 'Foo::Foo(const inox::String& name)')
 
   assert.match(constructor, /: name\(name\) \{\n\}/)
-  assert.match(result.code, /!this->name\.valid\(\)/)
+  assert.match(result.code, /!inox_cmp_string_\d+\.valid\(\)/)
   assert.match(
     result.code,
-    /this->name\.length\(\) == 7 && memcmp\(this->name\.bytes\(\), "promise", this->name\.length\(\)\) == 0/
+    /inox_cmp_string_\d+\.length\(\) == 7 && memcmp\(inox_cmp_string_\d+\.bytes\(\), "promise", inox_cmp_string_\d+\.length\(\)\) == 0/
   )
   assert.doesNotMatch(constructor, /this->name/)
   assert.doesNotMatch(constructor, /inox::Value/)

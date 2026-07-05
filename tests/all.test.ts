@@ -176,6 +176,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRuntimeAllocatorStaysInRuntime } =
     await import('./integration/runtime-allocator-prelude.test.ts')
+  const { assertStringMethodsLowerToCppObject } =
+    await import('./integration/string-cpp-object-lowering.test.ts')
   const { assertRuntimeValueDeclarationsStayLocal } =
     await import('./integration/runtime-value-local-declaration-lowering.test.ts')
   const { assertRuntimeValueDeclarationsReuseTypedHelperContracts } =
@@ -397,6 +399,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('readable-c-string-literals', () => {
       assertReadableCStringLiterals()
+    })
+
+    await t.test('string-cpp-object-lowering', () => {
+      assertStringMethodsLowerToCppObject()
     })
 
     await t.test('promise-await-helper-lowering', () => {

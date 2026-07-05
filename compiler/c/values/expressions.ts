@@ -5559,7 +5559,10 @@ export function emitCValueExpression(
     if (valueType === 'string' && context.cppStringValues.has(name)) {
       return {
         lines: [],
-        expression: reference
+        expression: reference,
+        cppType: 'inox::String',
+        runtimeTypeChecked: true,
+        valueType: 'string'
       }
     }
 

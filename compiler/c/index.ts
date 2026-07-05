@@ -3259,7 +3259,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
       context.variables.set(statement.name, 'string')
       context.moduleValueTypes.set(statement.name, 'unknown')
       pushAll(lines, value.lines)
-      lines.push(`${name} = ${value.expression};`)
+      pushModuleRuntimeValueAssignment(lines, name, value, context)
       lines.push(`inox_retain(${name});`)
       return lines
     }
@@ -3333,7 +3333,7 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   registerModuleRuntimeValueMetadata(statement, inferred, context)
   pushAll(lines, value.lines)
   pushAll(lines, emitModuleObjectFunctionFieldAssignments(statement.name, statement.init, context))
-  lines.push(`${name} = ${value.expression};`)
+  pushModuleRuntimeValueAssignment(lines, name, value, context)
 
   if (inferred === 'unknown' || isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
     lines.push(`inox_retain(${name});`)
@@ -3428,7 +3428,7 @@ function emitModuleCollectionValueAssignment(
 
   const lines: string[] = []
   pushAll(lines, collection.lines)
-  lines.push(`${name} = ${collection.expression};`)
+  pushModuleRuntimeValueAssignment(lines, name, collection, context)
   lines.push(`inox_retain(${name});`)
 
   return lines
@@ -3464,7 +3464,7 @@ function emitModuleNullableRuntimeValueAssignment(
 
   const lines: string[] = []
   pushAll(lines, value.lines)
-  lines.push(`${name} = ${value.expression};`)
+  pushModuleRuntimeValueAssignment(lines, name, value, context)
   lines.push(`inox_retain(${name});`)
 
   return lines
@@ -3537,10 +3537,27 @@ function emitModuleArrayValueAssignment(
 
   const lines: string[] = []
   pushAll(lines, array.lines)
-  lines.push(`${name} = ${array.expression};`)
+  pushModuleRuntimeValueAssignment(lines, name, array, context)
   lines.push(`inox_retain(${name});`)
 
   return lines
+}
+
+function pushModuleRuntimeValueAssignment(
+  lines: string[],
+  name: string,
+  value: PreparedExpression,
+  context: CFunctionContext
+): void {
+  if (value.cppType === 'inox::String' || value.cppType === 'inox::Value') {
+    const temp = nextCName(context, 'inox_module_value')
+
+    lines.push(`auto ${temp} = ${value.expression};`)
+    lines.push(`${name} = ${temp};`)
+    return
+  }
+
+  lines.push(`${name} = ${value.expression};`)
 }
 
 function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {

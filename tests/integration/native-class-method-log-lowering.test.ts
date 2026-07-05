@@ -27,7 +27,7 @@ f.test()
 
   assert.match(result.code, /void test\(\);/)
   assert.doesNotMatch(result.code, /inox_value test\(\);/)
-  assert.match(method, /console\.log\("%\.\*s", this->name\);/)
+  assert.match(method, /console\.log\("%s", this->name\);/)
   assert.doesNotMatch(method, /inox_string\* name/)
   assert.doesNotMatch(method, /this->name\.raw\(\)\.as\.ref/)
   assert.doesNotMatch(method, /void Foo::test\(\) \{\n  \{/)
