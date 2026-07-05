@@ -95,7 +95,7 @@ inox_status inox_http_server_new(
   *out = 0;
   inox_allocator* allocator = loop->allocator;
   inox_http_server* server =
-    allocator->alloc(allocator->user, sizeof(inox_http_server), _Alignof(inox_http_server));
+    (inox_http_server*)allocator->alloc(allocator->user, sizeof(inox_http_server), alignof(inox_http_server));
 
   if (server == 0) {
     return INOX_ERR_OOM;
@@ -110,7 +110,7 @@ inox_status inox_http_server_new(
   inox_status status = inox_net_server_new(loop, inox_http_on_connection, server, &server->net_server);
 
   if (status != INOX_OK) {
-    allocator->free(allocator->user, server, sizeof(inox_http_server), _Alignof(inox_http_server));
+    allocator->free(allocator->user, server, sizeof(inox_http_server), alignof(inox_http_server));
     return status;
   }
 
@@ -341,7 +341,7 @@ inox_status inox_http_response_end(inox_http_response* response, const char* byt
 
   size_t total_len = header_size + response->body_len;
   char* response_bytes =
-    connection->server->allocator->alloc(connection->server->allocator->user, total_len, _Alignof(char));
+    (char*)connection->server->allocator->alloc(connection->server->allocator->user, total_len, alignof(char));
 
   if (response_bytes == 0) {
     return INOX_ERR_OOM;
@@ -354,7 +354,7 @@ inox_status inox_http_response_end(inox_http_response* response, const char* byt
   }
 
   inox_status write_status = inox_net_socket_write_and_close(connection->socket, response_bytes, total_len);
-  connection->server->allocator->free(connection->server->allocator->user, response_bytes, total_len, _Alignof(char));
+  connection->server->allocator->free(connection->server->allocator->user, response_bytes, total_len, alignof(char));
 
   return write_status;
 }
@@ -494,10 +494,10 @@ int inox_http_response_send_fs_file(
 static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket) {
   (void)server;
   inox_http_server* http_server = (inox_http_server*)user;
-  inox_http_connection* connection = http_server->allocator->alloc(
+  inox_http_connection* connection = (inox_http_connection*)http_server->allocator->alloc(
     http_server->allocator->user,
     sizeof(inox_http_connection),
-    _Alignof(inox_http_connection)
+    alignof(inox_http_connection)
   );
 
   if (connection == 0) {
@@ -541,7 +541,7 @@ static void inox_http_on_close(void* user, inox_net_socket* socket) {
     connection->server->allocator->user,
     connection,
     sizeof(inox_http_connection),
-    _Alignof(inox_http_connection)
+    alignof(inox_http_connection)
   );
 }
 
@@ -560,7 +560,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
     return inox_http_response_text(&response, 400, "bad request", 11);
   }
 
-  const char* method_end = memchr(connection->buffer, ' ', (size_t)(line_end - connection->buffer));
+  const char* method_end = (const char*)memchr(connection->buffer, ' ', (size_t)(line_end - connection->buffer));
 
   if (method_end == 0) {
     inox_http_response response;
@@ -569,7 +569,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   }
 
   const char* url_start = method_end + 1;
-  const char* url_end = memchr(url_start, ' ', (size_t)(line_end - url_start));
+  const char* url_end = (const char*)memchr(url_start, ' ', (size_t)(line_end - url_start));
 
   if (url_end == 0) {
     inox_http_response response;
@@ -707,7 +707,7 @@ static inox_status inox_http_parse_headers(
     }
 
     const char* line_end = raw_line_end;
-    const char* separator = memchr(cursor, ':', (size_t)(line_end - cursor));
+    const char* separator = (const char*)memchr(cursor, ':', (size_t)(line_end - cursor));
 
     if (separator == 0) {
       return INOX_ERR_FIELD;
