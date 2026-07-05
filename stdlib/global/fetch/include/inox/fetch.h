@@ -58,19 +58,9 @@ Promise fetch(inox_loop* loop, StringView url);
 Promise fetch(StringView url);
 Promise fetch(const char* url);
 
-template <size_t N>
-inline Promise fetch(const char (&url)[N]) {
-  return fetch(StringView(url));
-}
-
 Promise fetch(inox_loop* loop, StringView url, const FetchInit* init);
 Promise fetch(StringView url, const FetchInit* init);
 Promise fetch(const char* url, const FetchInit* init);
-
-template <size_t N>
-inline Promise fetch(const char (&url)[N], const FetchInit* init) {
-  return fetch(StringView(url), init);
-}
 
 bool fetch_headers_has(inox_value headers, StringView name);
 Value fetch_headers_get(inox_value headers, StringView name);
