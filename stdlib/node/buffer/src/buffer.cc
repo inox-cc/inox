@@ -166,7 +166,7 @@ inox_status inox_bytes_to_uint8array_string(inox_allocator* allocator, inox_valu
     total_len += comma_len + digit_len;
   }
 
-  char* text = allocator->alloc(allocator->user, total_len, _Alignof(char));
+  char* text = (char*)allocator->alloc(allocator->user, total_len, alignof(char));
 
   if (text == 0) {
     return INOX_ERR_OOM;
@@ -184,7 +184,7 @@ inox_status inox_bytes_to_uint8array_string(inox_allocator* allocator, inox_valu
   }
 
   inox_status status = inox_string_from_literal(allocator, text, total_len, out);
-  allocator->free(allocator->user, text, total_len, _Alignof(char));
+  allocator->free(allocator->user, text, total_len, alignof(char));
 
   return status;
 }
@@ -201,7 +201,7 @@ static inox_status inox_bytes_allocate(inox_allocator* allocator, size_t len, in
   }
 
   size_t size = sizeof(inox_bytes) + len;
-  inox_bytes* bytes = allocator->alloc(allocator->user, size, _Alignof(inox_bytes));
+  inox_bytes* bytes = (inox_bytes*)allocator->alloc(allocator->user, size, alignof(inox_bytes));
 
   if (bytes == 0) {
     return INOX_ERR_OOM;
@@ -211,7 +211,7 @@ static inox_status inox_bytes_allocate(inox_allocator* allocator, size_t len, in
   bytes->header.ref_count = 1;
   bytes->header.flags = 0;
   bytes->header.size = size;
-  bytes->header.align = _Alignof(inox_bytes);
+  bytes->header.align = alignof(inox_bytes);
   bytes->header.allocator = allocator;
   bytes->header.dispose = 0;
   inox_ref_init_weak(&bytes->header);
