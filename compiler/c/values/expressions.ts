@@ -2324,7 +2324,9 @@ function emitPreparedMathCallExpression(
 
   return {
     lines,
-    expression: `Math.${method}(${joinStrings(expressions, ', ')})`
+    expression: `Math.${method}(${joinStrings(expressions, ', ')})`,
+    scalarType: 'double',
+    valueType: 'number'
   }
 }
 
