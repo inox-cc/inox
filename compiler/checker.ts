@@ -141,6 +141,24 @@ import type {
   FsCallCheckerContext
 } from './checker/fs-calls.ts'
 import {
+  checkCollectionMethodCall as checkCollectionMethodCallInContext,
+  isCollectionMethodCandidate
+} from './checker/collection-calls.ts'
+import type {
+  CheckedCollectionArgInfo,
+  CheckedCollectionCallInfo,
+  CollectionCallCheckerContext
+} from './checker/collection-calls.ts'
+import {
+  checkSimpleArrayMethodCall as checkSimpleArrayMethodCallInContext,
+  isSimpleArrayMethod
+} from './checker/array-calls.ts'
+import type {
+  ArrayCallCheckerContext,
+  CheckedArrayArgInfo,
+  CheckedArrayCallInfo
+} from './checker/array-calls.ts'
+import {
   checkFetchAbortControllerMethodCall as checkFetchAbortControllerMethodCallInContext,
   checkFetchCall as checkFetchCallInContext,
   checkFetchHeadersMethodCall as checkFetchHeadersMethodCallInContext,
@@ -261,9 +279,7 @@ import { ownershipCycleDiagnostics } from './checker/ownership.ts'
 import { memberExpressionPath } from './member-paths.ts'
 import {
   collectionConstructorNameFromPath,
-  isArrayMethod,
-  mapRuntimeMethodName,
-  setRuntimeMethodName
+  isArrayMethod
 } from '../stdlib/global/compiler/descriptor.ts'
 import type { StdlibModuleId } from './stdlib/node/modules.ts'
 import {
@@ -5503,139 +5519,43 @@ class Checker {
     const property = expression.callee.property
     const objectType = this.checkExpression(expression.callee.object)
 
-    const mapMethod = mapRuntimeMethodName(property)
-
-    if (objectType === 'map' && mapMethod !== null && typeof mapMethod !== 'undefined') {
-      const mapType = this.resolveExpressionMapType(expression.callee.object)
-      let mapKeyType: ValueType = 'unknown'
-      let mapRawValueType: ValueType = 'unknown'
-
-      if (mapType !== null && typeof mapType !== 'undefined') {
-        if (mapType.key !== null && typeof mapType.key !== 'undefined') {
-          mapKeyType = mapType.key
-        }
-
-        if (mapType.value !== null && typeof mapType.value !== 'undefined') {
-          mapRawValueType = mapType.value
-        }
-      }
-
-      const mapValueType = resolvedConcreteValueTypeMetadata(mapRawValueType, 'unknown')
-
-      if (mapMethod === 'clear') {
-        this.checkCollectionArgCount(expression, 'map.clear', 0)
-        expression.valueType = 'void'
-        return 'void'
-      }
-
-      if (mapMethod === 'get' || mapMethod === 'has' || mapMethod === 'delete') {
-        this.checkCollectionArgCount(expression, `map.${mapMethod}`, 1)
-
-        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-          const keyArg = checkerNodeAt(expression.args, 0)
-          this.checkAssignableType(
-            this.checkExpression(keyArg),
-            mapKeyType,
-            keyArg.loc,
-            false,
-            this.expressionCanBeNull(keyArg)
-          )
-        }
-
-        for (let index = 1; index < expression.args.length; index = index + 1) {
-          const arg = checkerNodeAt(expression.args, index)
-
-          this.checkExpression(arg)
-        }
-
-        if (mapMethod === 'get') {
-          expression.valueType = mapValueType
-          expression.nullable = true
-          expression.shape = mapType?.valueShape ?? null
-          return mapValueType
-        }
-
-        expression.valueType = 'boolean'
-        return 'boolean'
-      }
-
-      this.checkCollectionArgCount(expression, 'map.set', 2)
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        const keyArg = checkerNodeAt(expression.args, 0)
-        this.checkAssignableType(
-          this.checkExpression(keyArg),
-          mapKeyType,
-          keyArg.loc,
-          false,
-          this.expressionCanBeNull(keyArg)
-        )
-      }
-
-      if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-        const valueArg = checkerNodeAt(expression.args, 1)
-        this.checkAssignableType(
-          this.checkExpression(valueArg),
-          mapRawValueType,
-          valueArg.loc,
-          false,
-          this.expressionCanBeNull(valueArg)
-        )
-      }
-
-      for (let index = 2; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-
-        this.checkExpression(arg)
-      }
-
-      expression.valueType = 'map'
-      expression.mapKeyType = mapKeyType
-      expression.mapValueType = mapRawValueType
-
-      return 'map'
+    if (!isCollectionMethodCandidate(objectType, property)) {
+      return null
     }
 
-    const setMethod = setRuntimeMethodName(property)
+    return checkCollectionMethodCallInContext(
+      this.collectionCallContext(),
+      expression,
+      property,
+      this.checkedCollectionCallInfo(expression, objectType)
+    )
+  }
 
-    if (objectType === 'set' && setMethod !== null && typeof setMethod !== 'undefined') {
-      const elementType = this.resolveExpressionSetElementType(expression.callee.object) ?? 'unknown'
+  checkedCollectionCallInfo(expression: AnyNode, objectType: ValueType): CheckedCollectionCallInfo {
+    const args: CheckedCollectionArgInfo[] = []
 
-      if (setMethod === 'clear') {
-        this.checkCollectionArgCount(expression, 'set.clear', 0)
-        expression.valueType = 'void'
-        return 'void'
-      }
-
-      this.checkCollectionArgCount(expression, `set.${setMethod}`, 1)
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        this.checkAssignableType(
-          this.checkExpression(expression.args[0]),
-          elementType,
-          expression.args[0].loc,
-          false,
-          this.expressionCanBeNull(expression.args[0])
-        )
-      }
-
-      for (let index = 1; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-
-        this.checkExpression(arg)
-      }
-
-      if (setMethod === 'add') {
-        expression.valueType = 'set'
-        expression.setElementType = elementType
-        return 'set'
-      }
-
-      expression.valueType = 'boolean'
-      return 'boolean'
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      args.push(this.checkedCollectionArgInfo(checkerNodeAt(expression.args, index)))
     }
 
-    return null
+    return {
+      argCount: expression.args.length,
+      args,
+      mapType: objectType === 'map' ? this.resolveExpressionMapType(expression.callee.object) : null,
+      objectType,
+      setElementType:
+        objectType === 'set'
+          ? this.resolveExpressionSetElementType(expression.callee.object) ?? 'unknown'
+          : 'unknown'
+    }
+  }
+
+  checkedCollectionArgInfo(arg: AnyNode): CheckedCollectionArgInfo {
+    return {
+      loc: arg.loc,
+      nullable: this.expressionCanBeNull(arg),
+      valueType: this.checkExpression(arg)
+    }
   }
 
   checkTimerCall(expression: AnyNode): ValueType | null {
@@ -5777,16 +5697,6 @@ class Checker {
     }
   }
 
-  checkCollectionArgCount(expression: AnyNode, name: string, expected: number): void {
-    if (expression.args.length !== expected) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `${name} expects ${expected} argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-  }
-
   checkArrayMethodCall(expression: AnyNode): ValueType | null {
     if (expression.callee.type !== 'MemberExpression' || !isArrayMethod(expression.callee.property)) {
       return null
@@ -5815,140 +5725,20 @@ class Checker {
     expression.arrayElementType = elementType
     expression.arrayElementDeclaredType = elementDeclaredType
 
-    if (expression.callee.property === 'push' || expression.callee.property === 'unshift') {
-      const method = expression.callee.property
-      expression.valueType = 'number'
+    const method = expression.callee.property
 
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `array.${method} expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        const pushedType = this.checkExpression(expression.args[0])
-
-        if (elementType !== 'unknown') {
-          this.checkAssignableType(
-            pushedType,
-            elementType,
-            expression.args[0].loc,
-            false,
-            this.expressionCanBeNull(expression.args[0])
-          )
-        }
-      }
-
-      for (let index = 1; index < expression.args.length; index++) {
-        this.checkExpression(expression.args[index])
-      }
-
-      return 'number'
-    }
-
-    if (expression.callee.property === 'pop') {
-      expression.valueType = elementType
-      expression.nullable = true
-
-      if (expression.args.length !== 0) {
-        this.report('INOX_ARG_COUNT', `array.pop expects 0 argument(s), got ${expression.args.length}`, expression.loc)
-      }
-
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-
-        this.checkExpression(arg)
-      }
-
-      return elementType
-    }
-
-    if (expression.callee.property === 'join') {
-      expression.valueType = 'string'
-
-      if (expression.args.length > 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `array.join expects 0 or 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        const separatorType = this.checkExpression(expression.args[0])
-
-        this.checkAssignableType(
-          separatorType,
-          'string',
-          expression.args[0].loc,
-          false,
-          this.expressionCanBeNull(expression.args[0])
-        )
-      }
-
-      for (let index = 1; index < expression.args.length; index++) {
-        this.checkExpression(expression.args[index])
-      }
-
-      return 'string'
-    }
-
-    if (expression.callee.property === 'includes') {
-      expression.valueType = 'boolean'
-
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `array.includes expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        const searchType = this.checkExpression(expression.args[0])
-
-        if (elementType !== 'unknown') {
-          this.checkAssignableType(
-            searchType,
-            elementType,
-            expression.args[0].loc,
-            false,
-            this.expressionCanBeNull(expression.args[0])
-          )
-        }
-      }
-
-      for (let index = 1; index < expression.args.length; index++) {
-        this.checkExpression(expression.args[index])
-      }
-
-      return 'boolean'
+    if (isSimpleArrayMethod(method)) {
+      return checkSimpleArrayMethodCallInContext(
+        this.arrayCallContext(),
+        expression,
+        method,
+        this.checkedArrayCallInfo(expression, elementType)
+      )
     }
 
     expression.valueType = 'array'
 
-    if (expression.callee.property === 'slice') {
-      if (expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `array.slice expects 0, 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-        const argType = this.checkExpression(arg)
-
-        this.checkAssignableType(argType, 'number', arg.loc, false, false)
-      }
-
-      return 'array'
-    }
-
-    if (expression.callee.property === 'sort') {
+    if (method === 'sort') {
       if (expression.args.length > 1) {
         this.report(
           'INOX_ARG_COUNT',
@@ -5968,7 +5758,7 @@ class Checker {
       return 'array'
     }
 
-    if (expression.callee.property === 'reduce') {
+    if (method === 'reduce') {
       if (expression.args.length !== 2) {
         this.report(
           'INOX_ARG_COUNT',
@@ -6016,12 +5806,12 @@ class Checker {
     if (expression.args.length !== 1) {
       this.report(
         'INOX_ARG_COUNT',
-        `array.${expression.callee.property} expects 1 argument(s), got ${expression.args.length}`,
+        `array.${method} expects 1 argument(s), got ${expression.args.length}`,
         expression.loc
       )
     }
 
-    if (expression.callee.property === 'filter') {
+    if (method === 'filter') {
       if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
         if (!this.isBooleanReference(expression.args[0])) {
           this.checkArrayCallback(expression.args[0], [elementType, 'number'], 'boolean')
@@ -6035,7 +5825,7 @@ class Checker {
       return 'array'
     }
 
-    if (expression.callee.property === 'find') {
+    if (method === 'find') {
       expression.valueType = elementType
       expression.nullable = true
 
@@ -6108,6 +5898,28 @@ class Checker {
     }
 
     return 'array'
+  }
+
+  checkedArrayCallInfo(expression: AnyNode, elementType: ValueType): CheckedArrayCallInfo {
+    const args: CheckedArrayArgInfo[] = []
+
+    for (let index = 0; index < expression.args.length; index = index + 1) {
+      args.push(this.checkedArrayArgInfo(checkerNodeAt(expression.args, index)))
+    }
+
+    return {
+      argCount: expression.args.length,
+      args,
+      elementType
+    }
+  }
+
+  checkedArrayArgInfo(arg: AnyNode): CheckedArrayArgInfo {
+    return {
+      loc: arg.loc,
+      nullable: this.expressionCanBeNull(arg),
+      valueType: this.checkExpression(arg)
+    }
   }
 
   isBooleanReference(expression: AnyNode): boolean {
@@ -8671,6 +8483,18 @@ class Checker {
   }
 
   fetchCallContext(): FetchCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  collectionCallContext(): CollectionCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
+    }
+  }
+
+  arrayCallContext(): ArrayCallCheckerContext {
     return {
       diagnostics: this.diagnostics
     }
