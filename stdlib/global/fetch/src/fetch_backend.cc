@@ -37,21 +37,20 @@ typedef inox_status (*fetch_done_fn)(void* user, inox_status status, const fetch
 
 inox_status fetch_get(inox_loop* loop, const char* url, fetch_done_fn done, void* user);
 inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* init, fetch_done_fn done, void* user);
-inox_status fetch_promise_impl(inox_loop* loop, const char* url, size_t url_len, inox_promise** out);
-inox_status fetch_with_init_impl(
+inox_status fetch_backend_with_init(
   inox_loop* loop,
   const char* url,
   size_t url_len,
   const fetch_init* init,
   inox_promise** out
 );
-inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_promise** out);
-inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out);
-inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t name_len, int* out);
-inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_value* out);
-inox_status fetch_abort_controller_signal_impl(inox_value controller, inox_value* out);
-inox_status fetch_abort_controller_abort_impl(inox_value controller);
-inox_status fetch_signal_aborted_impl(inox_value signal, int* out);
+inox_status fetch_backend_response_text(inox_loop* loop, inox_value response, inox_promise** out);
+inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out);
+inox_status fetch_backend_headers_has(inox_value headers, const char* name, size_t name_len, int* out);
+inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out);
+inox_status fetch_backend_abort_controller_signal(inox_value controller, inox_value* out);
+inox_status fetch_backend_abort_controller_abort(inox_value controller);
+inox_status fetch_backend_signal_aborted(inox_value signal, int* out);
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "inox/net.h"
@@ -316,11 +315,7 @@ static inox_status fetch_request_view(
   return INOX_OK;
 }
 
-inox_status fetch_promise_impl(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
-  return fetch_with_init_impl(loop, url, url_len, 0, out);
-}
-
-inox_status fetch_with_init_impl(
+inox_status fetch_backend_with_init(
   inox_loop* loop,
   const char* url,
   size_t url_len,
@@ -380,7 +375,7 @@ inox_status fetch_with_init_impl(
   return INOX_OK;
 }
 
-inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_promise** out) {
+inox_status fetch_backend_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
   if (loop == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -405,7 +400,7 @@ inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_
   return status;
 }
 
-inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
+inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
   if (allocator == 0 || name == 0 || name_len == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -438,7 +433,7 @@ inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers
   return status;
 }
 
-inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t name_len, int* out) {
+inox_status fetch_backend_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
   if (name == 0 || name_len == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -465,7 +460,7 @@ inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t 
   return INOX_OK;
 }
 
-inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_value* out) {
+inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out) {
   static const inox_field_info signal_fields[] = { { "aborted", 0 } };
   static const inox_shape signal_shape = { 1, signal_fields };
   static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
@@ -504,13 +499,13 @@ inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_valu
   return INOX_OK;
 }
 
-inox_status fetch_abort_controller_signal_impl(inox_value controller, inox_value* out) {
+inox_status fetch_backend_abort_controller_signal(inox_value controller, inox_value* out) {
   return inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out);
 }
 
-inox_status fetch_abort_controller_abort_impl(inox_value controller) {
+inox_status fetch_backend_abort_controller_abort(inox_value controller) {
   inox_value signal = inox_undefined_value();
-  inox_status status = fetch_abort_controller_signal_impl(controller, &signal);
+  inox_status status = fetch_backend_abort_controller_signal(controller, &signal);
 
   if (status == INOX_OK) {
     status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
@@ -521,7 +516,7 @@ inox_status fetch_abort_controller_abort_impl(inox_value controller) {
   return status;
 }
 
-inox_status fetch_signal_aborted_impl(inox_value signal, int* out) {
+inox_status fetch_backend_signal_aborted(inox_value signal, int* out) {
   if (out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -835,7 +830,7 @@ static inox_status fetch_operation_is_aborted(fetch_operation* request, int* out
     return INOX_OK;
   }
 
-  return fetch_signal_aborted_impl(request->signal, out);
+  return fetch_backend_signal_aborted(request->signal, out);
 }
 
 static void fetch_operation_free(fetch_operation* request) {
@@ -1915,11 +1910,7 @@ inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* in
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_promise_impl(inox_loop* loop, const char* url, size_t url_len, inox_promise** out) {
-  return fetch_with_init_impl(loop, url, url_len, 0, out);
-}
-
-inox_status fetch_with_init_impl(
+inox_status fetch_backend_with_init(
   inox_loop* loop,
   const char* url,
   size_t url_len,
@@ -1939,7 +1930,7 @@ inox_status fetch_with_init_impl(
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_promise** out) {
+inox_status fetch_backend_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
   (void)loop;
   (void)response;
 
@@ -1951,7 +1942,7 @@ inox_status fetch_response_text_impl(inox_loop* loop, inox_value response, inox_
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
+inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
   (void)allocator;
   (void)headers;
   (void)name;
@@ -1965,7 +1956,7 @@ inox_status fetch_headers_get_impl(inox_allocator* allocator, inox_value headers
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t name_len, int* out) {
+inox_status fetch_backend_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
   (void)headers;
   (void)name;
   (void)name_len;
@@ -1978,7 +1969,7 @@ inox_status fetch_headers_has_impl(inox_value headers, const char* name, size_t 
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_value* out) {
+inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out) {
   (void)allocator;
 
   if (out == 0) {
@@ -1989,7 +1980,7 @@ inox_status fetch_abort_controller_new_impl(inox_allocator* allocator, inox_valu
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_abort_controller_signal_impl(inox_value controller, inox_value* out) {
+inox_status fetch_backend_abort_controller_signal(inox_value controller, inox_value* out) {
   (void)controller;
 
   if (out == 0) {
@@ -2000,12 +1991,12 @@ inox_status fetch_abort_controller_signal_impl(inox_value controller, inox_value
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_abort_controller_abort_impl(inox_value controller) {
+inox_status fetch_backend_abort_controller_abort(inox_value controller) {
   (void)controller;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status fetch_signal_aborted_impl(inox_value signal, int* out) {
+inox_status fetch_backend_signal_aborted(inox_value signal, int* out) {
   (void)signal;
 
   if (out == 0) {
