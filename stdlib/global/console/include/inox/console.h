@@ -292,52 +292,8 @@ private:
   static bool is_string_format_spec(const char* spec, size_t len);
   static bool is_value_format_spec(const char* spec, size_t len);
   static const char* next_format_spec(const char* format, const char** spec_end);
-  static bool format_uses_dynamic_width_or_precision(const char* format) {
-    const char* current = format;
-
-    while (*current != '\0') {
-      if (*current != '%') {
-        current += 1;
-        continue;
-      }
-
-      current += 1;
-
-      if (*current == '%') {
-        current += 1;
-        continue;
-      }
-
-      while (*current != '\0' && strchr("diuoxXfFeEgGaAcsp", *current) == nullptr) {
-        if (*current == '*') {
-          return true;
-        }
-
-        current += 1;
-      }
-
-      if (*current != '\0') {
-        current += 1;
-      }
-    }
-
-    return false;
-  }
-
-  static bool format_spec_has_length_modifier(const char* spec, size_t len) {
-    for (size_t index = 1; index + 1 < len; ++index) {
-      const char value = spec[index];
-
-      if (
-        value == 'h' || value == 'l' || value == 'j' || value == 'z' ||
-        value == 't' || value == 'L'
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  }
+  static bool format_uses_dynamic_width_or_precision(const char* format);
+  static bool format_spec_has_length_modifier(const char* spec, size_t len);
 
   template <typename T>
   static inox_status write_plain_format_arg(

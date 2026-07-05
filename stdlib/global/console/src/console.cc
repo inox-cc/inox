@@ -300,6 +300,53 @@ const char* console::next_format_spec(const char* format, const char** spec_end)
   return nullptr;
 }
 
+bool console::format_uses_dynamic_width_or_precision(const char* format) {
+  const char* current = format;
+
+  while (*current != '\0') {
+    if (*current != '%') {
+      current += 1;
+      continue;
+    }
+
+    current += 1;
+
+    if (*current == '%') {
+      current += 1;
+      continue;
+    }
+
+    while (*current != '\0' && !inox_console_is_format_conversion(*current)) {
+      if (*current == '*') {
+        return true;
+      }
+
+      current += 1;
+    }
+
+    if (*current != '\0') {
+      current += 1;
+    }
+  }
+
+  return false;
+}
+
+bool console::format_spec_has_length_modifier(const char* spec, size_t len) {
+  for (size_t index = 1; index + 1 < len; ++index) {
+    const char value = spec[index];
+
+    if (
+      value == 'h' || value == 'l' || value == 'j' || value == 'z' ||
+      value == 't' || value == 'L'
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 inox_status console::write_format_literal(inox::ConsoleStream stream, const char* begin, const char* end) {
   const char* chunk = begin;
   const char* current = begin;
