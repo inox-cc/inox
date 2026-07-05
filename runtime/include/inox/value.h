@@ -128,6 +128,8 @@ void inox_release(inox_value value);
 
 #ifdef __cplusplus
 
+class Array;
+
 #include <memory>
 #include <utility>
 #include <string.h>
@@ -438,19 +440,7 @@ public:
     return String(adopt_value, out);
   }
 
-  Value split(StringView separator) const {
-    if (!valid()) {
-      return Value();
-    }
-
-    inox_value out = inox_undefined_value();
-
-    if (inox_string_split_parts(&inox_default_allocator, bytes(), length(), separator.bytes, separator.len, &out) != INOX_OK) {
-      return Value();
-    }
-
-    return adopt(out);
-  }
+  ::Array split(StringView separator) const;
 
   bool includes(StringView search) const {
     return valid() && inox_string_includes_parts(bytes(), length(), search.bytes, search.len);

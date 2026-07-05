@@ -59,7 +59,9 @@ console.log(words('left,right'))
   assert.match(source, /trimmed\.endsWith\("lib"\)/)
   assert.match(source, /trimmed\.indexOf\("o"\)/)
   assert.match(source, /trimmed\.lastIndexOf\("i"\)/)
+  assert.match(source, /auto parts = inox::String\("alpha,beta"\)\.split\(","\);/)
   assert.match(source, /inox::String\("alpha,beta"\)\.split\(","\)/)
+  assert.doesNotMatch(source, /inox::Value parts = inox::String\("alpha,beta"\)\.split\(","\);/)
   assert.doesNotMatch(
     source,
     /inox_string_(trim|to_upper_case|slice|includes|starts_with|ends_with|index_of|last_index_of|split)_parts/

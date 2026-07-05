@@ -40,8 +40,27 @@ inox_status inox_array_unshift(inox_value array, inox_value value, size_t* out);
 
 #ifdef __cplusplus
 
-class Array {
+class Array : public inox::Value {
 public:
+  Array() : inox::Value() {}
+
+  explicit Array(inox_value value) : inox::Value(value) {}
+
+  explicit Array(const inox::Value& value) : inox::Value(value) {}
+
+  explicit Array(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+  Array(inox::AdoptValue, inox_value value) : inox::Value(inox::adopt_value, value) {}
+
+  using inox::Value::operator=;
+  using inox::Value::raw;
+
+  bool valid() const {
+    inox_value value = inox::Value::raw();
+
+    return value.tag == INOX_TAG_ARRAY && value.as.ref != nullptr;
+  }
+
   bool isArray(inox_value value) const {
     return value.tag == INOX_TAG_ARRAY;
   }
@@ -66,6 +85,24 @@ public:
     inox::throw_value(inox::string("TypeError: value is not iterable"));
   }
 };
+
+namespace inox {
+
+inline ::Array String::split(StringView separator) const {
+  if (!valid()) {
+    return ::Array();
+  }
+
+  inox_value out = inox_undefined_value();
+
+  if (inox_string_split_parts(&inox_default_allocator, bytes(), length(), separator.bytes, separator.len, &out) != INOX_OK) {
+    return ::Array();
+  }
+
+  return ::Array(inox::adopt_value, out);
+}
+
+} // namespace inox
 
 inline Array Array;
 

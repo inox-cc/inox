@@ -3038,7 +3038,7 @@ export function emitCStringSplitValueExpression(
       return {
         lines,
         expression: `${cppValue.expression}.split(${separator.expression})`,
-        cppType: 'inox::Value',
+        cppType: 'Array',
         elementType: 'string',
         runtimeTypeChecked: true,
         valueType: 'array'

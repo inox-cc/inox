@@ -3549,7 +3549,7 @@ function pushModuleRuntimeValueAssignment(
   value: PreparedExpression,
   context: CFunctionContext
 ): void {
-  if (value.cppType === 'inox::String' || value.cppType === 'inox::Value') {
+  if (isCppRuntimeValueType(value.cppType)) {
     const temp = nextCName(context, 'inox_module_value')
 
     lines.push(`auto ${temp} = ${value.expression};`)
@@ -3558,6 +3558,10 @@ function pushModuleRuntimeValueAssignment(
   }
 
   lines.push(`${name} = ${value.expression};`)
+}
+
+function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
+  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array'
 }
 
 function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {

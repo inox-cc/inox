@@ -5235,7 +5235,7 @@ function pushRuntimeValueReturnAssignment(
   value: PreparedExpression,
   context: CFunctionContext
 ): void {
-  if (value.cppType === 'inox::String' || value.cppType === 'inox::Value') {
+  if (isCppRuntimeValueType(value.cppType)) {
     const temp = nextCName(context, 'inox_return_value')
 
     lines.push(`auto ${temp} = ${value.expression};`)
@@ -5244,6 +5244,10 @@ function pushRuntimeValueReturnAssignment(
   }
 
   lines.push(`${target} = ${value.expression};`)
+}
+
+function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
+  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array'
 }
 
 export function registerErrorChannel(context: CFunctionContext): void {
