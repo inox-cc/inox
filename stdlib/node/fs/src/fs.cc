@@ -6,9 +6,6 @@
 #include "inox/object.h"
 #include "inox/string.h"
 
-inox_status inox_array_new(inox_allocator* allocator, size_t len, inox_value* out);
-inox_status inox_array_push(inox_value array, inox_value value);
-
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include <limits.h>
 #include "loop-libuv-internal.h"
@@ -1005,7 +1002,7 @@ static inox_status inox_fs_copy_bytes(inox_allocator* allocator, const char* byt
     return INOX_ERR_TYPE;
   }
 
-  char* copy = allocator->alloc(allocator->user, len + 1, _Alignof(char));
+  char* copy = (char*)allocator->alloc(allocator->user, len + 1, alignof(char));
 
   if (copy == 0) {
     return INOX_ERR_OOM;
@@ -1037,7 +1034,7 @@ static inox_status inox_fs_copy_host_bytes(const char* bytes, size_t len, char**
     return INOX_ERR_OOM;
   }
 
-  char* copy = malloc(len + 1);
+  char* copy = (char*)malloc(len + 1);
 
   if (copy == 0) {
     return INOX_ERR_OOM;
@@ -1216,7 +1213,7 @@ static inox_status inox_fs_libuv_read_file_data(const char* path, size_t path_le
   char* buffer = 0;
 
   if (byte_len != 0) {
-    buffer = malloc(byte_len + 1);
+    buffer = (char*)malloc(byte_len + 1);
 
     if (buffer == 0) {
       return inox_fs_libuv_close_sync(file, INOX_ERR_OOM);
@@ -1312,7 +1309,7 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
   *out = inox_undefined_value();
 
   inox_value entries = inox_undefined_value();
-  inox_status status = inox_array_new(allocator, 0, &entries);
+  inox_status status = Array.make(allocator, 0, &entries);
 
   if (status != INOX_OK) {
     return status;
@@ -1344,7 +1341,7 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
     }
 
     if (status == INOX_OK) {
-      status = inox_array_push(entries, value);
+      status = Array.push(entries, value);
     }
 
     inox_release(value);
@@ -1659,7 +1656,7 @@ static inox_status inox_fs_libuv_rm_path(char* path, bool recursive, bool force)
 
     size_t path_len = strlen(path);
     size_t name_len = strlen(entry.name);
-    char* child = malloc(path_len + 1 + name_len + 1);
+    char* child = (char*)malloc(path_len + 1 + name_len + 1);
 
     if (child == 0) {
       uv_fs_req_cleanup(&scan_req);
@@ -1907,7 +1904,7 @@ static inox_status inox_fs_libuv_queue_request(
   }
 
   inox_fs_libuv_request* request =
-    loop->allocator->alloc(loop->allocator->user, sizeof(inox_fs_libuv_request), _Alignof(inox_fs_libuv_request));
+    (inox_fs_libuv_request*)loop->allocator->alloc(loop->allocator->user, sizeof(inox_fs_libuv_request), alignof(inox_fs_libuv_request));
 
   if (request == 0) {
     inox_promise_release(promise);
@@ -2414,7 +2411,7 @@ static void inox_fs_libuv_cb(uv_fs_t* req) {
 
         if (request->data_cap != 0) {
           request->data =
-            request->loop->allocator->alloc(request->loop->allocator->user, request->data_cap + 1, _Alignof(char));
+            (char*)request->loop->allocator->alloc(request->loop->allocator->user, request->data_cap + 1, alignof(char));
 
           if (request->data == 0) {
             status = INOX_ERR_OOM;
@@ -2505,23 +2502,23 @@ static void inox_fs_libuv_request_finalizer(inox_fs_libuv_request* request) {
   inox_allocator* allocator = request->loop->allocator;
 
   if (request->path != 0) {
-    allocator->free(allocator->user, request->path, request->path_len + 1, _Alignof(char));
+    allocator->free(allocator->user, request->path, request->path_len + 1, alignof(char));
   }
 
   if (request->path2 != 0) {
-    allocator->free(allocator->user, request->path2, request->path2_len + 1, _Alignof(char));
+    allocator->free(allocator->user, request->path2, request->path2_len + 1, alignof(char));
   }
 
   if (request->bytes != 0) {
-    allocator->free(allocator->user, request->bytes, request->byte_len + 1, _Alignof(char));
+    allocator->free(allocator->user, request->bytes, request->byte_len + 1, alignof(char));
   }
 
   if (request->data != 0) {
-    allocator->free(allocator->user, request->data, request->data_cap + 1, _Alignof(char));
+    allocator->free(allocator->user, request->data, request->data_cap + 1, alignof(char));
   }
 
   inox_promise_release(request->promise);
-  allocator->free(allocator->user, request, sizeof(inox_fs_libuv_request), _Alignof(inox_fs_libuv_request));
+  allocator->free(allocator->user, request, sizeof(inox_fs_libuv_request), alignof(inox_fs_libuv_request));
 }
 #endif
 
@@ -2569,7 +2566,7 @@ static inox_status inox_fs_default_read_file_data(const char* path, size_t path_
   char* buffer = 0;
 
   if (byte_len != 0) {
-    buffer = malloc(byte_len);
+    buffer = (char*)malloc(byte_len);
 
     if (buffer == 0) {
       fclose(file);
@@ -2660,7 +2657,7 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
   }
 
   inox_value entries = inox_undefined_value();
-  status = inox_array_new(allocator, 0, &entries);
+  status = Array.make(allocator, 0, &entries);
 
   if (status != INOX_OK) {
     closedir(dir);
@@ -2678,7 +2675,7 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
       status = inox_string_from_literal(allocator, name, name_len, &value);
 
       if (status == INOX_OK) {
-        status = inox_array_push(entries, value);
+        status = Array.push(entries, value);
       }
 
       inox_release(value);
@@ -2714,7 +2711,7 @@ static inox_status inox_fs_default_dirent_type(const char* dir_path, const char*
 
   size_t dir_len = strlen(dir_path);
   size_t name_len = strlen(name);
-  char* child = malloc(dir_len + 1 + name_len + 1);
+  char* child = (char*)malloc(dir_len + 1 + name_len + 1);
 
   if (child == 0) {
     return INOX_ERR_OOM;
@@ -2766,7 +2763,7 @@ inox_fs_default_read_dir_dirents(void* user, inox_allocator* allocator, const ch
   }
 
   inox_value entries = inox_undefined_value();
-  status = inox_array_new(allocator, 0, &entries);
+  status = Array.make(allocator, 0, &entries);
 
   if (status != INOX_OK) {
     free(path_copy);
@@ -2792,7 +2789,7 @@ inox_fs_default_read_dir_dirents(void* user, inox_allocator* allocator, const ch
       }
 
       if (status == INOX_OK) {
-        status = inox_array_push(entries, value);
+        status = Array.push(entries, value);
       }
 
       inox_release(value);
@@ -2954,7 +2951,7 @@ static inox_status inox_fs_default_readlink(void* user, inox_allocator* allocato
   char* buffer = 0;
 
   for (;;) {
-    char* next = realloc(buffer, cap + 1);
+    char* next = (char*)realloc(buffer, cap + 1);
 
     if (next == 0) {
       free(buffer);
@@ -3127,7 +3124,7 @@ static inox_status inox_fs_default_rm_path(char* path, bool recursive, bool forc
     if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
       size_t path_len = strlen(path);
       size_t name_len = strlen(name);
-      char* child = malloc(path_len + 1 + name_len + 1);
+      char* child = (char*)malloc(path_len + 1 + name_len + 1);
 
       if (child == 0) {
         closedir(dir);
@@ -3346,7 +3343,7 @@ static inox_status inox_fs_queue_request(
     return status;
   }
 
-  inox_fs_request* request = loop->allocator->alloc(loop->allocator->user, sizeof(inox_fs_request), _Alignof(inox_fs_request));
+  inox_fs_request* request = (inox_fs_request*)loop->allocator->alloc(loop->allocator->user, sizeof(inox_fs_request), alignof(inox_fs_request));
 
   if (request == 0) {
     inox_promise_release(promise);
@@ -3704,17 +3701,17 @@ static void inox_fs_request_finalizer(void* context) {
   inox_allocator* allocator = request->loop->allocator;
 
   if (request->path != 0) {
-    allocator->free(allocator->user, request->path, request->path_len + 1, _Alignof(char));
+    allocator->free(allocator->user, request->path, request->path_len + 1, alignof(char));
   }
 
   if (request->path2 != 0) {
-    allocator->free(allocator->user, request->path2, request->path2_len + 1, _Alignof(char));
+    allocator->free(allocator->user, request->path2, request->path2_len + 1, alignof(char));
   }
 
   if (request->bytes != 0) {
-    allocator->free(allocator->user, request->bytes, request->byte_len + 1, _Alignof(char));
+    allocator->free(allocator->user, request->bytes, request->byte_len + 1, alignof(char));
   }
 
   inox_promise_release(request->promise);
-  allocator->free(allocator->user, request, sizeof(inox_fs_request), _Alignof(inox_fs_request));
+  allocator->free(allocator->user, request, sizeof(inox_fs_request), alignof(inox_fs_request));
 }
