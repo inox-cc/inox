@@ -36,269 +36,6 @@ static inox_number inox_performance_base_ms = 0;
 static inox_number inox_wall_base_ms = 0;
 static inox_number inox_wall_base_monotonic_ms = 0;
 
-static void time_set_adapter_impl(inox_time_adapter adapter) {
-  if (adapter.monotonic_now_ms == 0) {
-    adapter.monotonic_now_ms = inox_default_monotonic_now_ms;
-  }
-
-  if (adapter.wall_now_ms == 0) {
-    adapter.wall_now_ms = inox_default_wall_now_ms;
-  }
-
-  inox_time_current_adapter = adapter;
-  inox_time_initialized = 0;
-}
-
-static void time_reset_adapter_impl(void) {
-  inox_time_adapter adapter = { 0, inox_default_monotonic_now_ms, inox_default_wall_now_ms };
-
-  time_set_adapter_impl(adapter);
-}
-
-static void time_resync_wall_clock_impl(void) {
-  inox_time_ensure_initialized();
-
-  inox_wall_base_monotonic_ms = inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user);
-  inox_wall_base_ms = inox_time_current_adapter.wall_now_ms(inox_time_current_adapter.user);
-}
-
-static inox_number performance_now_impl(void) {
-  inox_time_ensure_initialized();
-
-  return inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_performance_base_ms;
-}
-
-static inox_number date_now_impl(void) {
-  inox_time_ensure_initialized();
-
-  return inox_floor_ms(
-    inox_wall_base_ms +
-    (inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_wall_base_monotonic_ms)
-  );
-}
-
-static inox_number date_parse_impl(const char* bytes, size_t len) {
-  inox_number result = 0;
-
-  if (bytes == 0) {
-    return inox_date_nan();
-  }
-
-  if (inox_date_parse_iso(bytes, len, &result)) {
-    return result;
-  }
-
-  return inox_date_nan();
-}
-
-static inox_number date_utc_impl(
-  inox_number year,
-  inox_number month,
-  inox_number day,
-  inox_number hour,
-  inox_number minute,
-  inox_number second,
-  inox_number millisecond
-) {
-  return inox_date_utc_from_parts(
-    (int)year,
-    (int)month,
-    (int)day,
-    (int)hour,
-    (int)minute,
-    (int)second,
-    (int)millisecond
-  );
-}
-
-static inox_number date_from_local_impl(
-  inox_number year,
-  inox_number month,
-  inox_number day,
-  inox_number hour,
-  inox_number minute,
-  inox_number second,
-  inox_number millisecond
-) {
-  int full_year = (int)year;
-
-  if (full_year >= 0 && full_year <= 99) {
-    full_year += 1900;
-  }
-
-  struct tm value;
-  memset(&value, 0, sizeof(value));
-  value.tm_year = full_year - 1900;
-  value.tm_mon = (int)month;
-  value.tm_mday = (int)day;
-  value.tm_hour = (int)hour;
-  value.tm_min = (int)minute;
-  value.tm_sec = (int)second;
-  value.tm_isdst = -1;
-
-  time_t seconds = mktime(&value);
-
-  if (seconds == (time_t)-1) {
-    return inox_date_nan();
-  }
-
-  return ((inox_number)seconds * 1000.0) + (inox_number)((int)millisecond);
-}
-
-static inox_number date_get_part_impl(inox_number value, int part, bool utc) {
-  struct tm time_value;
-  int millisecond = 0;
-
-  if (!inox_date_time_struct(value, utc ? 1 : 0, &time_value, &millisecond)) {
-    return inox_date_nan();
-  }
-
-  if (part == 0) return (inox_number)(time_value.tm_year + 1900);
-  if (part == 1) return (inox_number)time_value.tm_mon;
-  if (part == 2) return (inox_number)time_value.tm_mday;
-  if (part == 3) return (inox_number)time_value.tm_wday;
-  if (part == 4) return (inox_number)time_value.tm_hour;
-  if (part == 5) return (inox_number)time_value.tm_min;
-  if (part == 6) return (inox_number)time_value.tm_sec;
-  if (part == 7) return (inox_number)millisecond;
-
-  return inox_date_nan();
-}
-
-static inox_number date_get_timezone_offset_impl(inox_number value) {
-  struct tm local_value;
-  int millisecond = 0;
-
-  if (!inox_date_time_struct(value, 0, &local_value, &millisecond)) {
-    return inox_date_nan();
-  }
-
-  const inox_number whole_ms = inox_floor_ms(value);
-  const inox_number local_as_utc = inox_date_utc_from_parts(
-    local_value.tm_year + 1900,
-    local_value.tm_mon,
-    local_value.tm_mday,
-    local_value.tm_hour,
-    local_value.tm_min,
-    local_value.tm_sec,
-    millisecond
-  );
-
-  return (whole_ms - local_as_utc) / 60000.0;
-}
-
-static inox_status date_to_string_impl(inox_allocator* allocator, inox_number value, int kind, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-  static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-  struct tm time_value;
-  int millisecond = 0;
-  char buffer[96];
-  int len = 0;
-
-  if (!inox_date_time_struct(value, (kind == 0 || kind == 1) ? 1 : 0, &time_value, &millisecond)) {
-    return inox_string_from_literal(allocator, "Invalid Date", 12, out);
-  }
-
-  if (kind == 0) {
-    len = snprintf(
-      buffer,
-      sizeof(buffer),
-      "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
-      time_value.tm_year + 1900,
-      time_value.tm_mon + 1,
-      time_value.tm_mday,
-      time_value.tm_hour,
-      time_value.tm_min,
-      time_value.tm_sec,
-      millisecond
-    );
-  } else if (kind == 1) {
-    len = snprintf(
-      buffer,
-      sizeof(buffer),
-      "%s, %02d %s %04d %02d:%02d:%02d GMT",
-      weekdays[time_value.tm_wday],
-      time_value.tm_mday,
-      months[time_value.tm_mon],
-      time_value.tm_year + 1900,
-      time_value.tm_hour,
-      time_value.tm_min,
-      time_value.tm_sec
-    );
-  } else if (kind == 3) {
-    len = snprintf(
-      buffer,
-      sizeof(buffer),
-      "%s %s %02d %04d",
-      weekdays[time_value.tm_wday],
-      months[time_value.tm_mon],
-      time_value.tm_mday,
-      time_value.tm_year + 1900
-    );
-  } else if (kind == 4) {
-    len = snprintf(
-      buffer,
-      sizeof(buffer),
-      "%02d:%02d:%02d GMT",
-      time_value.tm_hour,
-      time_value.tm_min,
-      time_value.tm_sec
-    );
-  } else {
-    len = snprintf(
-      buffer,
-      sizeof(buffer),
-      "%s %s %02d %04d %02d:%02d:%02d GMT",
-      weekdays[time_value.tm_wday],
-      months[time_value.tm_mon],
-      time_value.tm_mday,
-      time_value.tm_year + 1900,
-      time_value.tm_hour,
-      time_value.tm_min,
-      time_value.tm_sec
-    );
-  }
-
-  if (len < 0 || (size_t)len >= sizeof(buffer)) {
-    return INOX_ERR_TYPE;
-  }
-
-  return inox_string_from_literal(allocator, buffer, (size_t)len, out);
-}
-
-static void time_sleep_ms_impl(inox_number delay_ms) {
-  if (delay_ms != delay_ms || delay_ms <= 0) {
-    return;
-  }
-
-#if defined(_WIN32)
-  DWORD milliseconds = delay_ms < 1 ? 1 : (DWORD)delay_ms;
-
-  Sleep(milliseconds);
-#else
-  time_t seconds = (time_t)(delay_ms / 1000.0);
-  long nanoseconds = (long)((delay_ms - ((inox_number)seconds * 1000.0)) * 1000000.0);
-
-  if (nanoseconds < 0) {
-    nanoseconds = 0;
-  }
-
-  if (nanoseconds > 999999999L) {
-    seconds += 1;
-    nanoseconds = 0;
-  }
-
-  struct timespec request = { seconds, nanoseconds };
-
-  while (nanosleep(&request, &request) != 0 && errno == EINTR) {
-  }
-#endif
-}
-
 static void inox_time_ensure_initialized(void) {
   if (inox_time_initialized) {
     return;
@@ -577,15 +314,40 @@ static inox_number inox_timespec_ms(const struct timespec* value) {
 }
 
 inox_number Date::now() const {
-  return date_now_impl();
+  inox_time_ensure_initialized();
+
+  return inox_floor_ms(
+    inox_wall_base_ms +
+    (inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_wall_base_monotonic_ms)
+  );
 }
 
 inox_number Date::parse(const char* bytes, size_t len) const {
-  return date_parse_impl(bytes, len);
+  inox_number result = 0;
+
+  if (bytes == 0) {
+    return inox_date_nan();
+  }
+
+  if (inox_date_parse_iso(bytes, len, &result)) {
+    return result;
+  }
+
+  return inox_date_nan();
 }
 
 inox_number Date::parse(inox::StringView text) const {
-  return parse(text.bytes, text.len);
+  inox_number result = 0;
+
+  if (text.bytes == 0) {
+    return inox_date_nan();
+  }
+
+  if (inox_date_parse_iso(text.bytes, text.len, &result)) {
+    return result;
+  }
+
+  return inox_date_nan();
 }
 
 inox_number Date::UTC(
@@ -597,7 +359,15 @@ inox_number Date::UTC(
   inox_number second,
   inox_number millisecond
 ) const {
-  return date_utc_impl(year, month, day, hour, minute, second, millisecond);
+  return inox_date_utc_from_parts(
+    (int)year,
+    (int)month,
+    (int)day,
+    (int)hour,
+    (int)minute,
+    (int)second,
+    (int)millisecond
+  );
 }
 
 inox_number Date::fromLocal(
@@ -609,29 +379,193 @@ inox_number Date::fromLocal(
   inox_number second,
   inox_number millisecond
 ) const {
-  return date_from_local_impl(year, month, day, hour, minute, second, millisecond);
+  int full_year = (int)year;
+
+  if (full_year >= 0 && full_year <= 99) {
+    full_year += 1900;
+  }
+
+  struct tm value;
+  memset(&value, 0, sizeof(value));
+  value.tm_year = full_year - 1900;
+  value.tm_mon = (int)month;
+  value.tm_mday = (int)day;
+  value.tm_hour = (int)hour;
+  value.tm_min = (int)minute;
+  value.tm_sec = (int)second;
+  value.tm_isdst = -1;
+
+  time_t seconds = mktime(&value);
+
+  if (seconds == (time_t)-1) {
+    return inox_date_nan();
+  }
+
+  return ((inox_number)seconds * 1000.0) + (inox_number)((int)millisecond);
 }
 
 inox_number Date::part(inox_number value, int part, bool utc) const {
-  return date_get_part_impl(value, part, utc);
+  struct tm time_value;
+  int millisecond = 0;
+
+  if (!inox_date_time_struct(value, utc ? 1 : 0, &time_value, &millisecond)) {
+    return inox_date_nan();
+  }
+
+  if (part == 0) return (inox_number)(time_value.tm_year + 1900);
+  if (part == 1) return (inox_number)time_value.tm_mon;
+  if (part == 2) return (inox_number)time_value.tm_mday;
+  if (part == 3) return (inox_number)time_value.tm_wday;
+  if (part == 4) return (inox_number)time_value.tm_hour;
+  if (part == 5) return (inox_number)time_value.tm_min;
+  if (part == 6) return (inox_number)time_value.tm_sec;
+  if (part == 7) return (inox_number)millisecond;
+
+  return inox_date_nan();
 }
 
 inox_number Date::timezoneOffset(inox_number value) const {
-  return date_get_timezone_offset_impl(value);
+  struct tm local_value;
+  int millisecond = 0;
+
+  if (!inox_date_time_struct(value, 0, &local_value, &millisecond)) {
+    return inox_date_nan();
+  }
+
+  const inox_number whole_ms = inox_floor_ms(value);
+  const inox_number local_as_utc = inox_date_utc_from_parts(
+    local_value.tm_year + 1900,
+    local_value.tm_mon,
+    local_value.tm_mday,
+    local_value.tm_hour,
+    local_value.tm_min,
+    local_value.tm_sec,
+    millisecond
+  );
+
+  return (whole_ms - local_as_utc) / 60000.0;
 }
 
 inox_status Date::toStringValue(inox_allocator* allocator, inox_number value, int kind, inox_value* out) const {
-  return date_to_string_impl(allocator, value, kind, out);
+  if (allocator == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+  static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+  struct tm time_value;
+  int millisecond = 0;
+  char buffer[96];
+  int len = 0;
+
+  if (!inox_date_time_struct(value, (kind == 0 || kind == 1) ? 1 : 0, &time_value, &millisecond)) {
+    return inox_string_from_literal(allocator, "Invalid Date", 12, out);
+  }
+
+  if (kind == 0) {
+    len = snprintf(
+      buffer,
+      sizeof(buffer),
+      "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+      time_value.tm_year + 1900,
+      time_value.tm_mon + 1,
+      time_value.tm_mday,
+      time_value.tm_hour,
+      time_value.tm_min,
+      time_value.tm_sec,
+      millisecond
+    );
+  } else if (kind == 1) {
+    len = snprintf(
+      buffer,
+      sizeof(buffer),
+      "%s, %02d %s %04d %02d:%02d:%02d GMT",
+      weekdays[time_value.tm_wday],
+      time_value.tm_mday,
+      months[time_value.tm_mon],
+      time_value.tm_year + 1900,
+      time_value.tm_hour,
+      time_value.tm_min,
+      time_value.tm_sec
+    );
+  } else if (kind == 3) {
+    len = snprintf(
+      buffer,
+      sizeof(buffer),
+      "%s %s %02d %04d",
+      weekdays[time_value.tm_wday],
+      months[time_value.tm_mon],
+      time_value.tm_mday,
+      time_value.tm_year + 1900
+    );
+  } else if (kind == 4) {
+    len = snprintf(
+      buffer,
+      sizeof(buffer),
+      "%02d:%02d:%02d GMT",
+      time_value.tm_hour,
+      time_value.tm_min,
+      time_value.tm_sec
+    );
+  } else {
+    len = snprintf(
+      buffer,
+      sizeof(buffer),
+      "%s %s %02d %04d %02d:%02d:%02d GMT",
+      weekdays[time_value.tm_wday],
+      months[time_value.tm_mon],
+      time_value.tm_mday,
+      time_value.tm_year + 1900,
+      time_value.tm_hour,
+      time_value.tm_min,
+      time_value.tm_sec
+    );
+  }
+
+  if (len < 0 || (size_t)len >= sizeof(buffer)) {
+    return INOX_ERR_TYPE;
+  }
+
+  return inox_string_from_literal(allocator, buffer, (size_t)len, out);
 }
 
 inox_number Performance::now() const {
-  return performance_now_impl();
+  inox_time_ensure_initialized();
+
+  return inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_performance_base_ms;
 }
 
 extern "C" inox_number inox_performance_now(void) {
-  return performance_now_impl();
+  inox_time_ensure_initialized();
+
+  return inox_time_current_adapter.monotonic_now_ms(inox_time_current_adapter.user) - inox_performance_base_ms;
 }
 
 extern "C" void inox_time_sleep_ms(inox_number delay_ms) {
-  time_sleep_ms_impl(delay_ms);
+  if (delay_ms != delay_ms || delay_ms <= 0) {
+    return;
+  }
+
+#if defined(_WIN32)
+  DWORD milliseconds = delay_ms < 1 ? 1 : (DWORD)delay_ms;
+
+  Sleep(milliseconds);
+#else
+  time_t seconds = (time_t)(delay_ms / 1000.0);
+  long nanoseconds = (long)((delay_ms - ((inox_number)seconds * 1000.0)) * 1000000.0);
+
+  if (nanoseconds < 0) {
+    nanoseconds = 0;
+  }
+
+  if (nanoseconds > 999999999L) {
+    seconds += 1;
+    nanoseconds = 0;
+  }
+
+  struct timespec request = { seconds, nanoseconds };
+
+  while (nanosleep(&request, &request) != 0 && errno == EINTR) {
+  }
+#endif
 }
