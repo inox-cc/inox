@@ -1246,7 +1246,7 @@ export function emitMainWrapper(
   context.externalEventLoop = true
 
   if (context.mathRuntimeInitStatement !== null) {
-    bodyLines.push(context.mathRuntimeInitStatement)
+    pushIndentedDeclarationLines(bodyLines, [context.mathRuntimeInitStatement])
   }
   pushIndentedDeclarationLines(bodyLines, deps.emitStatementList(body, context))
 

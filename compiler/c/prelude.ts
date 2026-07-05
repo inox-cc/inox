@@ -214,8 +214,6 @@ export function emitCPrelude(
 ): string[] {
   const systemIncludes = ['#include <stdio.h>']
   const localIncludes: string[] = []
-  const randomOptions = cPreludeRandomOptions(options)
-  const random = cPreludeRandomConfig(randomOptions)
 
   if (needsConsoleRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/console.h"')
@@ -333,11 +331,6 @@ export function emitCPrelude(
 
   lines.push('')
 
-  if (needsMathRuntime) {
-    pushCPreludeLines(lines, emitMathRuntimeInitHelper(random))
-    lines.push('')
-  }
-
   if (needsRegexpRuntime) {
     pushCPreludeLines(lines, emitCompilerFeatureCPreludeHelpers('regexp'))
     lines.push('')
@@ -378,19 +371,16 @@ export function emitCPrelude(
   return lines
 }
 
-function emitMathRuntimeInitHelper(random: CPreludeRandomConfig): string[] {
+export function emitMathRuntimeInitLines(options: CEmitOptions = {}): string[] {
+  const random = cPreludeRandomConfig(cPreludeRandomOptions(options))
   const randomSeed = emitRandomSeedLiteral(random)
   const randomBackend = emitRandomBackendLiteral(random.backend)
 
-  return [
-    'static void inox_math_configure_module(void) {',
-    `  inox_math_configure_random(${randomSeed}, ${randomBackend});`,
-    '}'
-  ]
-}
+  if (random.backend === 'simple') {
+    return [`Math.init(${randomSeed});`]
+  }
 
-export function emitMathRuntimeInitLines(): string[] {
-  return ['inox_math_configure_module();']
+  return [`Math.init(${randomSeed}, ${randomBackend});`]
 }
 
 function emitRandomBackendLiteral(backend: CRandomBackend): string {

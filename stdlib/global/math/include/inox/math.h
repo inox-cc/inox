@@ -35,6 +35,14 @@ double inox_math_random(void);
 
 class Math {
 public:
+  void init(uint32_t seed) const {
+    inox_math_configure_random(seed, INOX_MATH_RANDOM_SIMPLE);
+  }
+
+  void init(uint32_t seed, inox_math_random_backend backend) const {
+    inox_math_configure_random(seed, backend);
+  }
+
   double abs(double value) const {
     return inox_math_abs(value);
   }

@@ -1302,7 +1302,7 @@ export function emitCUnit(
   const needsHttpRuntime: boolean = preludeRequirements.needsHttpRuntime
   const needsNetRuntime: boolean = preludeRequirements.needsNetRuntime
   baseContext.processRuntime = needsProcessRuntime
-  baseContext.mathRuntimeInitStatement = needsMathRuntime ? emitMathRuntimeInitLines()[0] : null
+  baseContext.mathRuntimeInitStatement = needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
   if (needsAsyncRuntime) {
     baseContext.unhandledRejectionFlag = 'inox_unhandled_rejection'
   } else {

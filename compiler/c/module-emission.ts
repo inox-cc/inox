@@ -412,7 +412,7 @@ export function emitCModuleSource(
   }
 
   context.processRuntime = prelude.needsProcessRuntime
-  context.mathRuntimeInitStatement = prelude.needsMathRuntime ? emitMathRuntimeInitLines()[0] : null
+  context.mathRuntimeInitStatement = prelude.needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
   if (prelude.needsAsyncRuntime) {
     context.unhandledRejectionFlag = `${plan.symbolPrefix}_unhandled_rejection`
   } else {
@@ -2241,7 +2241,7 @@ function emitCModuleInitFunction(
   context.moduleValueDeclarationScope = true
   const bodyLines: string[] = []
   if (context.mathRuntimeInitStatement !== null) {
-    bodyLines.push(context.mathRuntimeInitStatement)
+    pushIndentedCModuleLines(bodyLines, [context.mathRuntimeInitStatement])
   }
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
@@ -2291,7 +2291,7 @@ function emitCModuleMainFunction(
   context.externalEventLoop = true
   const bodyLines: string[] = []
   if (context.mathRuntimeInitStatement !== null) {
-    bodyLines.push(context.mathRuntimeInitStatement)
+    pushIndentedCModuleLines(bodyLines, [context.mathRuntimeInitStatement])
   }
   pushIndentedCModuleLines(bodyLines, initCalls)
   pushIndentedCModuleLines(bodyLines, deps.emitStatementList(body, context))
