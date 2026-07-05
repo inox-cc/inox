@@ -142,6 +142,39 @@ import {
   resolveRejectedExpressionValueType as resolveRejectedExpressionValueTypeInContext
 } from './checker/expression-metadata.ts'
 import {
+  checkArrayFromCall as checkArrayFromCallInContext,
+  checkNumberConversionCall as checkNumberConversionCallInContext,
+  checkNumberToStringCall as checkNumberToStringCallInContext,
+  checkNumericCastCall as checkNumericCastCallInContext,
+  checkRegExpFlags as checkRegExpFlagsInContext,
+  checkRegExpLiteral as checkRegExpLiteralInContext,
+  checkRegExpTestCall as checkRegExpTestCallInContext,
+  checkStringCaseCall as checkStringCaseCallInContext,
+  checkStringCharCodeAtCall as checkStringCharCodeAtCallInContext,
+  checkStringConversionCall as checkStringConversionCallInContext,
+  checkStringIndexCall as checkStringIndexCallInContext,
+  checkStringPadStartCall as checkStringPadStartCallInContext,
+  checkStringPredicateCall as checkStringPredicateCallInContext,
+  checkStringSliceCall as checkStringSliceCallInContext,
+  checkStringSplitCall as checkStringSplitCallInContext,
+  checkStringTrimCall as checkStringTrimCallInContext,
+  isArrayFromCall,
+  isNumberConversionCall,
+  isNumberToStringCall,
+  isRegExpTestCall,
+  isStringCaseCall,
+  isStringCharCodeAtCall,
+  isStringConversionCall,
+  isStringPadStartCall,
+  isStringPredicateCall,
+  numericCastName,
+  stringIndexMethodName,
+  stringSliceMethodName,
+  stringSplitMethodName,
+  stringTrimMethodName
+} from './checker/primitive-calls.ts'
+import type { PrimitiveCallCheckerContext } from './checker/primitive-calls.ts'
+import {
   acceptsArgumentCount,
   argumentCountMessage,
   argumentParamValueType,
@@ -154,15 +187,12 @@ import {
   isRelativeImportSource,
   isRuntimeNullableType,
   isStatementExpressionNode,
-  isStringTrimMethod,
   paramForArgument,
   promiseExecutorFunctionType,
   promiseStaticMethodName,
-  regexpFlags,
   resolveSingleReturnExpression,
   resolveTerminalReturnExpression,
   statementAlwaysExits,
-  stringPredicateArgCountMessage,
   uniqueNames
 } from './checker/helpers.ts'
 import { inferJsonParseLiteralType } from './checker/json-literals.ts'
@@ -171,12 +201,8 @@ import { memberExpressionPath } from './member-paths.ts'
 import {
   collectionConstructorNameFromPath,
   isArrayMethod,
-  isNumericCastName,
-  isStringIndexMethod,
-  isStringPredicateMethod,
   mapRuntimeMethodName,
-  setRuntimeMethodName,
-  stringRuntimeMethodName
+  setRuntimeMethodName
 } from '../stdlib/global/compiler/descriptor.ts'
 import {
   debugRuntimeMethodNameFromKnownPath,
@@ -7084,15 +7110,7 @@ class Checker {
     return actualReturnType
   }
 
-  checkStringConversionCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'Reference' ||
-      expression.callee.path.length !== 1 ||
-      firstPathSegment(expression.callee.path) !== 'String'
-    ) {
-      return null
-    }
-
+  checkCallArgumentTypes(expression: AnyNode): ValueType[] {
     const argTypes: ValueType[] = []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
@@ -7101,606 +7119,190 @@ class Checker {
       argTypes.push(this.checkExpression(arg))
     }
 
-    if (expression.args.length !== 1) {
-      this.report('INOX_ARG_COUNT', `String expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-      return 'string'
+    return argTypes
+  }
+
+  checkStringConversionCall(expression: AnyNode): ValueType | null {
+    if (!isStringConversionCall(expression)) {
+      return null
     }
 
-    const arg = checkerNodeAt(expression.args, 0)
-    const hasClassToString = this.hasStringReturningClassToStringMethod(arg)
+    const argTypes = this.checkCallArgumentTypes(expression)
+    let hasClassToString = false
 
-    if (
-      argTypes[0] !== 'boolean' &&
-      argTypes[0] !== 'null' &&
-      argTypes[0] !== 'number' &&
-      argTypes[0] !== 'string' &&
-      !hasClassToString
-    ) {
-      this.report('INOX_TYPE_MISMATCH', `cannot convert ${argTypes[0]} to string with String`, expression.args[0].loc)
+    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
+      hasClassToString = this.hasStringReturningClassToStringMethod(checkerNodeAt(expression.args, 0))
     }
 
-    return 'string'
+    return checkStringConversionCallInContext(this.primitiveCallContext(), expression, argTypes, hasClassToString)
   }
 
   checkRegExpLiteral(expression: AnyNode): ValueType {
-    expression.valueType = 'regexp'
-    this.checkRegExpFlags(expression)
-
-    return 'regexp'
+    return checkRegExpLiteralInContext(this.primitiveCallContext(), expression)
   }
 
   checkRegExpFlags(expression: AnyNode): void {
-    const flags = regexpFlags(expression)
-    const seen: Set<string> = new Set()
-
-    for (let index = 0; index < flags.length; index = index + 1) {
-      const flag = flags[index]
-
-      if (seen.has(flag)) {
-        this.report('INOX_REGEXP_FLAG', `duplicate regular expression flag ${flag}`, expression.loc)
-        continue
-      }
-
-      seen.add(flag)
-
-      if (flag !== 'i') {
-        this.report(
-          'INOX_REGEXP_FLAG',
-          `regular expression flag ${flag} is not supported in the current C backend slice`,
-          expression.loc
-        )
-      }
-    }
+    checkRegExpFlagsInContext(this.primitiveCallContext(), expression)
   }
 
   checkRegExpTestCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'test') {
+    if (!isRegExpTestCall(expression)) {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    if (objectType !== 'regexp') {
-      return null
-    }
-
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (expression.args.length !== 1) {
-      this.report('INOX_ARG_COUNT', `regexp.test expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        argTypes[0],
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-    }
-
-    expression.valueType = 'boolean'
-    expression.regexpRuntimeMethod = 'test'
-
-    return 'boolean'
+    return checkRegExpTestCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
   }
 
   checkArrayFromCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'MemberExpression' ||
-      expression.callee.property !== 'from' ||
-      expression.callee.object.type !== 'Reference' ||
-      expression.callee.object.path.length !== 1 ||
-      firstPathSegment(expression.callee.object.path) !== 'Array'
-    ) {
+    if (!isArrayFromCall(expression, this.runtimeGlobalIsShadowed('Array'))) {
       return null
     }
 
-    if (this.runtimeGlobalIsShadowed('Array')) {
-      return null
-    }
-
-    if (expression.args.length !== 1) {
-      this.report('INOX_ARG_COUNT', `Array.from expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-    }
-
+    const argTypes = this.checkCallArgumentTypes(expression)
     let sourceType: ValueType = 'unknown'
 
     if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      sourceType = this.checkExpression(expression.args[0])
+      sourceType = argTypes[0]
     }
 
-    for (let index = 1; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkExpression(arg)
-    }
-
-    if (sourceType !== 'string') {
-      const source = expression.args[0]
-      let loc = expression.loc
-
-      if (source !== null && typeof source !== 'undefined') {
-        loc = source.loc
-      }
-
-      this.report('INOX_TYPE_MISMATCH', `Array.from expects string, got ${sourceType}`, loc)
-    }
-
-    expression.valueType = 'array'
-    expression.arrayElementType = 'string'
-    expression.arrayElementDeclaredType = 'string'
-
-    return 'array'
+    return checkArrayFromCallInContext(this.primitiveCallContext(), expression, sourceType)
   }
 
   checkNumberConversionCall(expression: AnyNode): ValueType | null {
-    if (
-      expression.callee.type !== 'Reference' ||
-      expression.callee.path.length !== 1 ||
-      firstPathSegment(expression.callee.path) !== 'Number'
-    ) {
+    if (!isNumberConversionCall(expression)) {
       return null
     }
 
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    expression.valueType = 'number'
-    expression.nullable = true
-
-    if (expression.args.length !== 1) {
-      this.report('INOX_ARG_COUNT', `Number expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-      return 'number'
-    }
-
-    this.checkAssignableType(
-      argTypes[0],
-      'string',
-      expression.args[0].loc,
-      false,
-      this.expressionCanBeNull(expression.args[0])
+    return checkNumberConversionCallInContext(
+      this.primitiveCallContext(),
+      expression,
+      this.checkCallArgumentTypes(expression)
     )
-
-    return 'number'
   }
 
   checkNumericCastCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
+    const castName = numericCastName(expression)
+
+    if (castName === null || typeof castName === 'undefined') {
       return null
     }
 
-    const castName = firstPathSegment(expression.callee.path)
-
-    if (!isNumericCastName(castName)) {
-      return null
-    }
-
-    const argTypes: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    expression.valueType = 'number'
-    expression.numericCast = castName
-
-    if (expression.args.length !== 1) {
-      this.report('INOX_ARG_COUNT', `${castName} expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-      return 'number'
-    }
-
-    this.checkAssignableType(
-      argTypes[0],
-      'number',
-      expression.args[0].loc,
-      false,
-      this.expressionCanBeNull(expression.args[0])
+    return checkNumericCastCallInContext(
+      this.primitiveCallContext(),
+      expression,
+      castName,
+      this.checkCallArgumentTypes(expression)
     )
-
-    return 'number'
   }
 
   checkNumberToStringCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'toString') {
+    if (!isNumberToStringCall(expression)) {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes: ValueType[] = []
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (objectType !== 'number') {
-      return null
-    }
-
-    expression.valueType = 'string'
-    expression.numberRuntimeMethod = 'toString'
-
-    if (expression.args.length > 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `number.toString expects 0 or 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        argTypes[0],
-        'number',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-    }
-
-    return 'string'
+    return checkNumberToStringCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
   }
 
   checkStringCharCodeAtCall(expression: CheckerNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'charCodeAt') {
+    if (!isStringCharCodeAtCall(expression)) {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes: ValueType[] = []
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    expression.valueType = 'number'
-    expression.stringRuntimeMethod = 'charCodeAt'
-
-    if (expression.args.length !== 1) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `string.charCodeAt expects 1 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-      return 'number'
-    }
-
-    this.checkAssignableType(
-      argTypes[0],
-      'number',
-      expression.args[0].loc,
-      false,
-      this.expressionCanBeNull(expression.args[0])
-    )
-
-    return 'number'
+    return checkStringCharCodeAtCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
   }
 
   checkStringTrimCall(expression: AnyNode): ValueType | null {
-    let method: string | null = null
+    const method = stringTrimMethodName(expression)
 
-    if (expression.callee.type === 'MemberExpression') {
-      method = stringRuntimeMethodName(expression.callee.property)
-    }
-
-    if (!isStringTrimMethod(method)) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
+    this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkExpression(arg)
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `string.${method} expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    expression.valueType = 'string'
-    expression.stringRuntimeMethod = method
-
-    return 'string'
+    return checkStringTrimCallInContext(this.primitiveCallContext(), expression, objectType, method)
   }
 
   checkStringCaseCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'toUpperCase') {
+    if (!isStringCaseCall(expression)) {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
+    this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkExpression(arg)
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `string.toUpperCase expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    expression.valueType = 'string'
-    expression.stringRuntimeMethod = 'toUpperCase'
-
-    return 'string'
+    return checkStringCaseCallInContext(this.primitiveCallContext(), expression, objectType)
   }
 
   checkStringPadStartCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || expression.callee.property !== 'padStart') {
+    if (!isStringPadStartCall(expression)) {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes: ValueType[] = []
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `string.padStart expects 1 or 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(argTypes[0], 'number', expression.args[0].loc, false, false)
-    }
-
-    if (expression.args.length > 1) {
-      this.checkAssignableType(
-        argTypes[1],
-        'string',
-        expression.args[1].loc,
-        false,
-        this.expressionCanBeNull(expression.args[1])
-      )
-    }
-
-    expression.valueType = 'string'
-    expression.stringRuntimeMethod = 'padStart'
-
-    return 'string'
+    return checkStringPadStartCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
   }
 
   checkStringIndexCall(expression: AnyNode): ValueType | null {
-    let method: string | null = null
+    const method = stringIndexMethodName(expression)
 
-    if (expression.callee.type === 'MemberExpression') {
-      method = stringRuntimeMethodName(expression.callee.property)
-    }
-
-    if (method === null || typeof method === 'undefined' || !isStringIndexMethod(method)) {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes: ValueType[] = []
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `string.${method} expects 1 or 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        argTypes[0],
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-    }
-
-    if (expression.args.length > 1) {
-      this.checkAssignableType(argTypes[1], 'number', expression.args[1].loc, false, false)
-    }
-
-    expression.valueType = 'number'
-    expression.stringRuntimeMethod = method
-
-    return 'number'
+    return checkStringIndexCallInContext(this.primitiveCallContext(), expression, objectType, method, argTypes)
   }
 
   checkStringSliceCall(expression: AnyNode): ValueType | null {
-    let method: string | null = null
+    const method = stringSliceMethodName(expression)
 
-    if (expression.callee.type === 'MemberExpression') {
-      method = stringRuntimeMethodName(expression.callee.property)
-    }
-
-    if (method !== 'slice') {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes: ValueType[] = []
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `string.slice expects 1 or 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < argTypes.length; index++) {
-      const argType = argTypes[index]
-
-      this.checkAssignableType(argType, 'number', expression.args[index].loc, false, false)
-    }
-
-    expression.valueType = 'string'
-    expression.stringRuntimeMethod = method
-
-    return 'string'
+    return checkStringSliceCallInContext(this.primitiveCallContext(), expression, objectType, method, argTypes)
   }
 
   checkStringSplitCall(expression: AnyNode): ValueType | null {
-    let method: string | null = null
+    const method = stringSplitMethodName(expression)
 
-    if (expression.callee.type === 'MemberExpression') {
-      method = stringRuntimeMethodName(expression.callee.property)
-    }
-
-    if (method !== 'split') {
+    if (method === null || typeof method === 'undefined') {
       return null
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes: ValueType[] = []
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    if (expression.args.length !== 1) {
-      this.report('INOX_ARG_COUNT', `string.split expects 1 argument(s), got ${expression.args.length}`, expression.loc)
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        argTypes[0],
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-    }
-
-    expression.valueType = 'array'
-    expression.arrayElementType = 'string'
-    expression.arrayElementDeclaredType = 'string'
-    expression.stringRuntimeMethod = method
-
-    return 'array'
+    return checkStringSplitCallInContext(this.primitiveCallContext(), expression, objectType, method, argTypes)
   }
 
   checkStringPredicateCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || !isStringPredicateMethod(expression.callee.property)) {
+    if (!isStringPredicateCall(expression)) {
       return null
-    }
-
-    const method = expression.callee.property
-    let maxArgs = 1
-
-    if (method === 'includes') {
-      maxArgs = 2
     }
 
     const objectType = this.checkExpression(expression.callee.object)
-    const argTypes: ValueType[] = []
+    const argTypes = this.checkCallArgumentTypes(expression)
 
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      argTypes.push(this.checkExpression(arg))
-    }
-
-    if (objectType !== 'string') {
-      return null
-    }
-
-    if (expression.args.length < 1 || expression.args.length > maxArgs) {
-      this.report('INOX_ARG_COUNT', stringPredicateArgCountMessage(method, expression.args.length), expression.loc)
-    }
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      this.checkAssignableType(
-        argTypes[0],
-        'string',
-        expression.args[0].loc,
-        false,
-        this.expressionCanBeNull(expression.args[0])
-      )
-    }
-
-    if (expression.args.length > 1) {
-      this.checkAssignableType(argTypes[1], 'number', expression.args[1].loc, false, false)
-    }
-
-    expression.valueType = 'boolean'
-    expression.stringRuntimeMethod = method
-
-    return 'boolean'
+    return checkStringPredicateCallInContext(this.primitiveCallContext(), expression, objectType, argTypes)
   }
 
   checkNewExpression(expression: AnyNode): ValueType {
@@ -9863,6 +9465,12 @@ class Checker {
     return {
       declaredTypes: this.declaredTypeContext(),
       scopeBindings
+    }
+  }
+
+  primitiveCallContext(): PrimitiveCallCheckerContext {
+    return {
+      diagnostics: this.diagnostics
     }
   }
 
