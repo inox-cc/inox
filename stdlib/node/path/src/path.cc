@@ -183,7 +183,7 @@ inox_status inox_path_join(inox_allocator* allocator, const inox_value* paths, s
   size_t normalized_len = 0;
 
   status = inox_path_normalize_bytes(allocator, joined, joined_len, &normalized, &normalized_len);
-  allocator->free(allocator->user, joined, joined_len + 1, _Alignof(char));
+  allocator->free(allocator->user, joined, joined_len + 1, alignof(char));
 
   return status == INOX_OK ? inox_path_string_result(allocator, normalized, normalized_len, out) : status;
 }
@@ -607,7 +607,7 @@ inox_status inox_path_resolve(inox_allocator* allocator, const inox_value* paths
     inox_status status = inox_path_string(paths[index], &bytes, &len);
 
     if (status != INOX_OK) {
-      allocator->free(allocator->user, joined, total + 1, _Alignof(char));
+      allocator->free(allocator->user, joined, total + 1, alignof(char));
       return status;
     }
 
@@ -624,7 +624,7 @@ inox_status inox_path_resolve(inox_allocator* allocator, const inox_value* paths
   char* normalized = 0;
   size_t normalized_len = 0;
   inox_status status = inox_path_normalize_bytes(allocator, joined, offset, &normalized, &normalized_len);
-  allocator->free(allocator->user, joined, total + 1, _Alignof(char));
+  allocator->free(allocator->user, joined, total + 1, alignof(char));
 
   return status == INOX_OK ? inox_path_string_result(allocator, normalized, normalized_len, out) : status;
 }
@@ -647,7 +647,7 @@ static inox_status inox_path_string_result(inox_allocator* allocator, char* byte
   }
 
   inox_status status = inox_string_from_literal(allocator, bytes, len, out);
-  allocator->free(allocator->user, bytes, len + 1, _Alignof(char));
+  allocator->free(allocator->user, bytes, len + 1, alignof(char));
 
   return status;
 }
@@ -657,7 +657,7 @@ static char* inox_path_alloc(inox_allocator* allocator, size_t len) {
     return 0;
   }
 
-  char* bytes = allocator->alloc(allocator->user, len + 1, _Alignof(char));
+  char* bytes = (char*)allocator->alloc(allocator->user, len + 1, alignof(char));
 
   if (bytes != 0) {
     bytes[len] = 0;
@@ -698,7 +698,7 @@ static inox_status inox_path_normalize_bytes(
     return inox_path_copy(allocator, ".", 1, out, out_len);
   }
 
-  inox_path_span* segments = allocator->alloc(allocator->user, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
+  inox_path_span* segments = (inox_path_span*)allocator->alloc(allocator->user, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
 
   if (segments == 0) {
     return INOX_ERR_OOM;
@@ -742,7 +742,7 @@ static inox_status inox_path_normalize_bytes(
   }
 
   if (count == 0) {
-    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
+    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
     return absolute ? inox_path_copy(allocator, "/", 1, out, out_len) : inox_path_copy(allocator, ".", 1, out, out_len);
   }
 
@@ -755,7 +755,7 @@ static inox_status inox_path_normalize_bytes(
   char* result = inox_path_alloc(allocator, result_len);
 
   if (result == 0) {
-    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
+    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
     return INOX_ERR_OOM;
   }
 
@@ -776,7 +776,7 @@ static inox_status inox_path_normalize_bytes(
     offset += segments[i].len;
   }
 
-  allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), _Alignof(inox_path_span));
+  allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
   *out = result;
   *out_len = offset;
 
@@ -827,7 +827,7 @@ static inox_status inox_path_concat_values(
     inox_status status = inox_path_string(paths[index], &bytes, &len);
 
     if (status != INOX_OK) {
-      allocator->free(allocator->user, joined, total + 1, _Alignof(char));
+      allocator->free(allocator->user, joined, total + 1, alignof(char));
       return status;
     }
 
