@@ -122,17 +122,20 @@ import {
   callExpressionArgumentLabel,
   createArrowFunctionTypeMetadata,
   createMapEntryShape,
-  dynamicShapeField,
   knownCheckedExpressionType,
   objectValuesElementTypeFromShape,
   resolveExpressionPromiseRejectionValueType,
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
 import {
+  findShapeField as findShapeFieldInContext,
   isErrorObjectExpression as isErrorObjectExpressionInContext,
+  resolveArrayElementObjectShape as resolveArrayElementObjectShapeInContext,
+  resolveArrayIterableElementShape as resolveArrayIterableElementShapeInContext,
   resolveExpressionArrayElementDeclaredType as resolveExpressionArrayElementDeclaredTypeInContext,
   resolveExpressionArrayElementFunctionType as resolveExpressionArrayElementFunctionTypeInContext,
   resolveExpressionArrayElementType as resolveExpressionArrayElementTypeInContext,
+  resolveExpressionShape as resolveExpressionShapeInContext,
   resolveExpressionMapType as resolveExpressionMapTypeInContext,
   resolveExpressionPromiseValueType as resolveExpressionPromiseValueTypeInContext,
   resolveExpressionSetElementType as resolveExpressionSetElementTypeInContext,
@@ -9073,121 +9076,11 @@ class Checker {
   }
 
   resolveExpressionShape(expression: AnyNode): ObjectShapeInfo | null {
-    if (expression.type === 'ThisExpression') {
-      const thisSymbol = this.scope.resolve('this')
-
-      if (
-        thisSymbol !== null &&
-        typeof thisSymbol !== 'undefined' &&
-        thisSymbol.shape !== null &&
-        typeof thisSymbol.shape !== 'undefined'
-      ) {
-        return thisSymbol.shape
-      }
-
-      if (expression.shape !== null && typeof expression.shape !== 'undefined') {
-        return expression.shape
-      }
-
-      return null
-    }
-
-    if (expression.type !== 'Reference' || expression.path.length !== 1) {
-      if (expression.shape !== null && typeof expression.shape !== 'undefined') {
-        return expression.shape
-      }
-
-      return null
-    }
-
-    const name = firstPathSegment(expression.path)
-    const symbol = this.scope.resolve(name)
-
-    if (
-      symbol !== null &&
-      typeof symbol !== 'undefined' &&
-      symbol.shape !== null &&
-      typeof symbol.shape !== 'undefined'
-    ) {
-      return symbol.shape
-    }
-
-    if (symbol !== null && typeof symbol !== 'undefined' && symbol.valueType === 'object') {
-      const elementShape = this.resolveArrayElementObjectShape(
-        symbol.valueType,
-        symbol.arrayElementDeclaredType,
-        expression.loc
-      )
-
-      if (elementShape !== null && typeof elementShape !== 'undefined') {
-        return elementShape
-      }
-    }
-
-    if (expression.shape !== null && typeof expression.shape !== 'undefined') {
-      return expression.shape
-    }
-
-    return null
+    return resolveExpressionShapeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveArrayIterableElementShape(expression: AnyNode): ObjectShapeInfo | null {
-    if (expression.shape !== null && typeof expression.shape !== 'undefined') {
-      return expression.shape
-    }
-
-    const elementType = this.resolveExpressionArrayElementType(expression)
-    const elementDeclaredType = this.resolveExpressionArrayElementDeclaredType(expression)
-
-    if (elementType === 'object' && elementDeclaredType !== null && typeof elementDeclaredType !== 'undefined') {
-      const elementShape = this.resolveArrayElementObjectShape(elementType, elementDeclaredType, expression.loc)
-
-      if (elementShape !== null && typeof elementShape !== 'undefined') {
-        return elementShape
-      }
-    }
-
-    if (expression.type === 'MemberExpression') {
-      const shape = this.resolveExpressionShape(expression.object)
-
-      if (shape === null || typeof shape === 'undefined') {
-        return null
-      }
-
-      const field = this.findShapeField(shape, expression.property)
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.shape !== null &&
-        typeof field.shape !== 'undefined'
-      ) {
-        return field.shape
-      }
-
-      return null
-    }
-
-    if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-      const shape = this.resolveExpressionShape(expression.object)
-
-      if (shape === null || typeof shape === 'undefined') {
-        return null
-      }
-
-      const field = this.findShapeField(shape, expression.index.value)
-
-      if (
-        field !== null &&
-        typeof field !== 'undefined' &&
-        field.shape !== null &&
-        typeof field.shape !== 'undefined'
-      ) {
-        return field.shape
-      }
-    }
-
-    return null
+    return resolveArrayIterableElementShapeInContext(this.expressionMetadataContext(), expression)
   }
 
   resolveArrayElementObjectShape(
@@ -9195,15 +9088,7 @@ class Checker {
     declaredType: string | null | undefined,
     loc: SourceLocation
   ): ObjectShapeInfo | null {
-    if (valueType !== 'object' || declaredType === null || typeof declaredType === 'undefined') {
-      return null
-    }
-
-    if (declaredType === 'fs.Dirent') {
-      return fsDirentObjectShape
-    }
-
-    return this.resolveDeclaredType(declaredType, loc).shape
+    return resolveArrayElementObjectShapeInContext(this.expressionMetadataContext(), valueType, declaredType, loc)
   }
 
   isThisExpression(expression: AnyNode): boolean {
@@ -9215,17 +9100,7 @@ class Checker {
   }
 
   findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {
-    for (const field of shape.fields) {
-      if (nodeNameEquals(field, name)) {
-        return field
-      }
-    }
-
-    if (shape.dynamic === true) {
-      return dynamicShapeField(shape, name)
-    }
-
-    return null
+    return findShapeFieldInContext(shape, name)
   }
 
   getCallableSymbol(callee: AnyNode): SymbolInfo | null {

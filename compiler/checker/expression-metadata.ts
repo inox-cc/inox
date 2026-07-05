@@ -27,7 +27,7 @@ function resolveSymbol(scopeBindings: Map<string, SymbolInfo>[], name: string): 
   return null
 }
 
-function resolveExpressionShape(
+export function resolveExpressionShape(
   context: ExpressionMetadataResolverContext,
   expression: AnyNode
 ): ObjectShapeInfo | null {
@@ -90,7 +90,7 @@ function resolveExpressionShape(
   return null
 }
 
-function resolveArrayElementObjectShape(
+export function resolveArrayElementObjectShape(
   context: ExpressionMetadataResolverContext,
   valueType: ValueType,
   declaredType: string | null | undefined,
@@ -107,7 +107,7 @@ function resolveArrayElementObjectShape(
   return resolveDeclaredType(context.declaredTypes, declaredType, loc).shape
 }
 
-function findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {
+export function findShapeField(shape: ObjectShapeInfo, name: string): AnyNode | null {
   for (const field of shape.fields) {
     if (nodeNameEquals(field, name)) {
       return field
@@ -425,6 +425,68 @@ export function resolveExpressionArrayElementFunctionType(
     }
 
     return null
+  }
+
+  return null
+}
+
+export function resolveArrayIterableElementShape(
+  context: ExpressionMetadataResolverContext,
+  expression: AnyNode
+): ObjectShapeInfo | null {
+  if (expression.shape !== null && typeof expression.shape !== 'undefined') {
+    return expression.shape
+  }
+
+  const elementType = resolveExpressionArrayElementType(context, expression)
+  const elementDeclaredType = resolveExpressionArrayElementDeclaredType(context, expression)
+
+  if (elementType === 'object' && elementDeclaredType !== null && typeof elementDeclaredType !== 'undefined') {
+    const elementShape = resolveArrayElementObjectShape(context, elementType, elementDeclaredType, expression.loc)
+
+    if (elementShape !== null && typeof elementShape !== 'undefined') {
+      return elementShape
+    }
+  }
+
+  if (expression.type === 'MemberExpression') {
+    const shape = resolveExpressionShape(context, expression.object)
+
+    if (shape === null || typeof shape === 'undefined') {
+      return null
+    }
+
+    const field = findShapeField(shape, expression.property)
+
+    if (
+      field !== null &&
+      typeof field !== 'undefined' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined'
+    ) {
+      return field.shape
+    }
+
+    return null
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    const shape = resolveExpressionShape(context, expression.object)
+
+    if (shape === null || typeof shape === 'undefined') {
+      return null
+    }
+
+    const field = findShapeField(shape, expression.index.value)
+
+    if (
+      field !== null &&
+      typeof field !== 'undefined' &&
+      field.shape !== null &&
+      typeof field.shape !== 'undefined'
+    ) {
+      return field.shape
+    }
   }
 
   return null
