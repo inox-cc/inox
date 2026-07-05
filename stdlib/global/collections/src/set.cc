@@ -44,7 +44,9 @@ static inox_status inox_set_rehash(inox_set* set, size_t next_cap) {
   }
 
   inox_allocator* allocator = set->header.allocator;
-  inox_set_entry* entries = allocator->alloc(allocator->user, sizeof(inox_set_entry) * next_cap, _Alignof(inox_set_entry));
+  inox_set_entry* entries = (inox_set_entry*)allocator->alloc(
+    allocator->user, sizeof(inox_set_entry) * next_cap, alignof(inox_set_entry)
+  );
 
   if (entries == 0) {
     return INOX_ERR_OOM;
@@ -63,7 +65,7 @@ static inox_status inox_set_rehash(inox_set* set, size_t next_cap) {
 
     if (status != INOX_OK) {
       if (allocator->free != 0) {
-        allocator->free(allocator->user, entries, sizeof(inox_set_entry) * next_cap, _Alignof(inox_set_entry));
+        allocator->free(allocator->user, entries, sizeof(inox_set_entry) * next_cap, alignof(inox_set_entry));
       }
 
       return status;
@@ -71,7 +73,7 @@ static inox_status inox_set_rehash(inox_set* set, size_t next_cap) {
   }
 
   if (allocator->free != 0 && set->entries != 0) {
-    allocator->free(allocator->user, set->entries, sizeof(inox_set_entry) * set->cap, _Alignof(inox_set_entry));
+    allocator->free(allocator->user, set->entries, sizeof(inox_set_entry) * set->cap, alignof(inox_set_entry));
   }
 
   set->entries = entries;
@@ -269,7 +271,7 @@ void inox_set_dispose(inox_set* set) {
 
   if (set->header.allocator != 0 && set->header.allocator->free != 0 && set->entries != 0) {
     set->header.allocator->free(
-      set->header.allocator->user, set->entries, sizeof(inox_set_entry) * set->cap, _Alignof(inox_set_entry)
+      set->header.allocator->user, set->entries, sizeof(inox_set_entry) * set->cap, alignof(inox_set_entry)
     );
   }
 }
@@ -301,7 +303,7 @@ inox_status inox_set_new(inox_allocator* allocator, inox_value* out) {
     return INOX_ERR_TYPE;
   }
 
-  inox_set* set = allocator->alloc(allocator->user, sizeof(inox_set), _Alignof(inox_set));
+  inox_set* set = (inox_set*)allocator->alloc(allocator->user, sizeof(inox_set), alignof(inox_set));
 
   if (set == 0) {
     *out = inox_undefined_value();
@@ -312,7 +314,7 @@ inox_status inox_set_new(inox_allocator* allocator, inox_value* out) {
   set->header.ref_count = 1;
   set->header.flags = 0;
   set->header.size = sizeof(inox_set);
-  set->header.align = _Alignof(inox_set);
+  set->header.align = alignof(inox_set);
   set->header.allocator = allocator;
   set->header.dispose = inox_set_dispose_ref;
   inox_ref_init_weak(&set->header);

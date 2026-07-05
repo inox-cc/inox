@@ -47,7 +47,9 @@ static inox_status inox_map_rehash(inox_map* map, size_t next_cap) {
   }
 
   inox_allocator* allocator = map->header.allocator;
-  inox_map_entry* entries = allocator->alloc(allocator->user, sizeof(inox_map_entry) * next_cap, _Alignof(inox_map_entry));
+  inox_map_entry* entries = (inox_map_entry*)allocator->alloc(
+    allocator->user, sizeof(inox_map_entry) * next_cap, alignof(inox_map_entry)
+  );
 
   if (entries == 0) {
     return INOX_ERR_OOM;
@@ -66,7 +68,7 @@ static inox_status inox_map_rehash(inox_map* map, size_t next_cap) {
 
     if (status != INOX_OK) {
       if (allocator->free != 0) {
-        allocator->free(allocator->user, entries, sizeof(inox_map_entry) * next_cap, _Alignof(inox_map_entry));
+        allocator->free(allocator->user, entries, sizeof(inox_map_entry) * next_cap, alignof(inox_map_entry));
       }
 
       return status;
@@ -74,7 +76,7 @@ static inox_status inox_map_rehash(inox_map* map, size_t next_cap) {
   }
 
   if (allocator->free != 0 && map->entries != 0) {
-    allocator->free(allocator->user, map->entries, sizeof(inox_map_entry) * map->cap, _Alignof(inox_map_entry));
+    allocator->free(allocator->user, map->entries, sizeof(inox_map_entry) * map->cap, alignof(inox_map_entry));
   }
 
   map->entries = entries;
@@ -157,7 +159,7 @@ inox_status inox_map_new(inox_allocator* allocator, inox_value* out) {
     return INOX_ERR_TYPE;
   }
 
-  inox_map* map = allocator->alloc(allocator->user, sizeof(inox_map), _Alignof(inox_map));
+  inox_map* map = (inox_map*)allocator->alloc(allocator->user, sizeof(inox_map), alignof(inox_map));
 
   if (map == 0) {
     *out = inox_undefined_value();
@@ -168,7 +170,7 @@ inox_status inox_map_new(inox_allocator* allocator, inox_value* out) {
   map->header.ref_count = 1;
   map->header.flags = 0;
   map->header.size = sizeof(inox_map);
-  map->header.align = _Alignof(inox_map);
+  map->header.align = alignof(inox_map);
   map->header.allocator = allocator;
   map->header.dispose = inox_map_dispose_ref;
   inox_ref_init_weak(&map->header);
@@ -269,7 +271,7 @@ void inox_map_dispose(inox_map* map) {
 
   if (map->header.allocator != 0 && map->header.allocator->free != 0 && map->entries != 0) {
     map->header.allocator->free(
-      map->header.allocator->user, map->entries, sizeof(inox_map_entry) * map->cap, _Alignof(inox_map_entry)
+      map->header.allocator->user, map->entries, sizeof(inox_map_entry) * map->cap, alignof(inox_map_entry)
     );
   }
 }
