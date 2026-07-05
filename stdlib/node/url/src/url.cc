@@ -177,7 +177,7 @@ inox_status inox_url_file_url_to_path(inox_allocator* allocator, inox_value url,
   }
 
   status = inox_string_from_literal(allocator, decoded, decoded_len, out);
-  allocator->free(allocator->user, decoded, decoded_len + 1, _Alignof(char));
+  allocator->free(allocator->user, decoded, decoded_len + 1, alignof(char));
   inox_release(retained);
 
   return status;
@@ -208,7 +208,7 @@ inox_status inox_url_path_to_file_url(inox_allocator* allocator, inox_value path
     status = inox_url_object_from_parts(allocator, shape, &parts, out);
   }
 
-  allocator->free(allocator->user, href, href_len + 1, _Alignof(char));
+  allocator->free(allocator->user, href, href_len + 1, alignof(char));
 
   return status;
 }
@@ -275,7 +275,7 @@ inox_status inox_url_new(
     status = inox_url_object_from_parts(allocator, shape, &parts, out);
   }
 
-  allocator->free(allocator->user, href, href_len + 1, _Alignof(char));
+  allocator->free(allocator->user, href, href_len + 1, alignof(char));
   inox_release(retained_base);
 
   return status;
@@ -347,7 +347,7 @@ inox_status inox_url_search_params_new(inox_allocator* allocator, inox_value ini
   }
 
   if (query != 0) {
-    allocator->free(allocator->user, query, query_len + 1, _Alignof(char));
+    allocator->free(allocator->user, query, query_len + 1, alignof(char));
   }
 
   if (status == INOX_OK) {
@@ -395,14 +395,14 @@ inox_status inox_url_search_params_get(
     }
 
     if (decoded != 0) {
-      allocator->free(allocator->user, decoded, decoded_len + 1, _Alignof(char));
+      allocator->free(allocator->user, decoded, decoded_len + 1, alignof(char));
     }
   } else if (status == INOX_OK) {
     *out = inox_null_value();
   }
 
   inox_release(retained);
-  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
+  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
 
   return status;
 }
@@ -436,7 +436,7 @@ inox_status inox_url_search_params_has(inox_value params, const char* name, size
   }
 
   inox_release(retained);
-  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
+  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
 
   return status;
 }
@@ -474,7 +474,7 @@ inox_status inox_url_search_params_append(
     status = inox_url_search_params_store_query(allocator, params, query, query_len);
   }
 
-  allocator->free(allocator->user, query, query_len + 1, _Alignof(char));
+  allocator->free(allocator->user, query, query_len + 1, alignof(char));
 
   return status;
 }
@@ -507,11 +507,11 @@ inox_status inox_url_search_params_delete(inox_allocator* allocator, inox_value 
   }
 
   if (next != 0) {
-    allocator->free(allocator->user, next, next_len + 1, _Alignof(char));
+    allocator->free(allocator->user, next, next_len + 1, alignof(char));
   }
 
   inox_release(retained);
-  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
+  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
 
   return status;
 }
@@ -585,7 +585,7 @@ static inox_status inox_url_parse(const char* bytes, size_t len, inox_url_parts*
     return INOX_ERR_TYPE;
   }
 
-  const char* colon = memchr(bytes, ':', len);
+  const char* colon = (const char*)memchr(bytes, ':', len);
 
   if (colon == 0) {
     return INOX_ERR_UNSUPPORTED;
@@ -816,8 +816,8 @@ static inox_status inox_url_build_relative_href(
   char** out,
   size_t* out_len
 ) {
-  const char* query = memchr(input, '?', input_len);
-  const char* hash = memchr(input, '#', input_len);
+  const char* query = (const char*)memchr(input, '?', input_len);
+  const char* hash = (const char*)memchr(input, '#', input_len);
   const char* suffix = query != 0 && (hash == 0 || query < hash) ? query : hash;
   size_t path_len = suffix == 0 ? input_len : (size_t)(suffix - input);
   size_t suffix_len = suffix == 0 ? 0 : input_len - path_len;
@@ -946,7 +946,7 @@ static inox_status inox_url_normalized_field_value(
   normalized[0] = prefix;
   memcpy(normalized + 1, bytes, len);
   inox_status status = inox_string_from_literal(allocator, normalized, len + 1, out);
-  allocator->free(allocator->user, normalized, len + 2, _Alignof(char));
+  allocator->free(allocator->user, normalized, len + 2, alignof(char));
 
   return status;
 }
@@ -1025,7 +1025,7 @@ static inox_status inox_url_rebuild_href(inox_allocator* allocator, inox_value u
   }
 
   inox_release(href_value);
-  allocator->free(allocator->user, href, total + 1, _Alignof(char));
+  allocator->free(allocator->user, href, total + 1, alignof(char));
 
   for (size_t index = 0; index < FIELD_COUNT; index += 1) {
     inox_release(values[index]);
@@ -1120,7 +1120,7 @@ static inox_status inox_url_search_params_from_object(inox_allocator* allocator,
   }
 
   if (status != INOX_OK) {
-    allocator->free(allocator->user, query, query_len + 1, _Alignof(char));
+    allocator->free(allocator->user, query, query_len + 1, alignof(char));
     return status;
   }
 
@@ -1152,7 +1152,7 @@ static inox_status inox_url_search_params_append_pair(
   status = inox_url_encode_query_component(allocator, value, value_len, &encoded_value, &encoded_value_len);
 
   if (status != INOX_OK) {
-    allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
+    allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
     return status;
   }
 
@@ -1162,8 +1162,8 @@ static inox_status inox_url_search_params_append_pair(
   char* next = inox_url_alloc(allocator, next_len);
 
   if (next == 0) {
-    allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
-    allocator->free(allocator->user, encoded_value, encoded_value_len + 1, _Alignof(char));
+    allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
+    allocator->free(allocator->user, encoded_value, encoded_value_len + 1, alignof(char));
     return INOX_ERR_OOM;
   }
 
@@ -1182,14 +1182,14 @@ static inox_status inox_url_search_params_append_pair(
   offset += encoded_value_len;
 
   if (*query != 0) {
-    allocator->free(allocator->user, *query, *query_len + 1, _Alignof(char));
+    allocator->free(allocator->user, *query, *query_len + 1, alignof(char));
   }
 
   *query = next;
   *query_len = offset;
 
-  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, _Alignof(char));
-  allocator->free(allocator->user, encoded_value, encoded_value_len + 1, _Alignof(char));
+  allocator->free(allocator->user, encoded_name, encoded_name_len + 1, alignof(char));
+  allocator->free(allocator->user, encoded_value, encoded_value_len + 1, alignof(char));
 
   return INOX_OK;
 }
@@ -1240,7 +1240,7 @@ static inox_status inox_url_search_params_remove_name(
       char* combined = inox_url_alloc(allocator, combined_len);
 
       if (combined == 0) {
-        allocator->free(allocator->user, next, next_len + 1, _Alignof(char));
+        allocator->free(allocator->user, next, next_len + 1, alignof(char));
         return INOX_ERR_OOM;
       }
 
@@ -1254,7 +1254,7 @@ static inox_status inox_url_search_params_remove_name(
 
       memcpy(combined + offset, query + pair_start, segment_len);
       offset += segment_len;
-      allocator->free(allocator->user, next, next_len + 1, _Alignof(char));
+      allocator->free(allocator->user, next, next_len + 1, alignof(char));
       next = combined;
       next_len = offset;
     }
@@ -1407,7 +1407,7 @@ static char* inox_url_alloc(inox_allocator* allocator, size_t len) {
     return 0;
   }
 
-  char* bytes = allocator->alloc(allocator->user, len + 1, _Alignof(char));
+  char* bytes = (char*)allocator->alloc(allocator->user, len + 1, alignof(char));
 
   if (bytes != 0) {
     bytes[len] = 0;
