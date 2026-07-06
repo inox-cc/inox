@@ -3,6 +3,7 @@ import type { AnyNode, IrProgram, SourceLocation } from '../../../../compiler/ty
 import type { CEmitContext, CFunctionContext } from '../../../../compiler/c/context.ts'
 import {
   emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
   registerOwnedCryptoHash,
@@ -11,6 +12,7 @@ import {
 } from '../../../../compiler/c/context.ts'
 import { emitRuntimeValueCheck } from '../../../../compiler/c/runtime-values.ts'
 import { collectStdlibRuntimeImportNames } from '../../../../compiler/c/runtime-imports.ts'
+import { cStringLiteral } from '../../../../compiler/c/identifiers.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
@@ -75,6 +77,14 @@ function cryptoResultExpression(options: PreparedCallOptions, value: string): st
   }
 
   return value
+}
+
+function cryptoStringViewExpression(operand: PreparedStringBytesOperand): string {
+  if (operand.literalValue !== null && typeof operand.literalValue !== 'undefined') {
+    return cStringLiteral(operand.literalValue)
+  }
+
+  return `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
 export function cryptoRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
@@ -310,17 +320,17 @@ export function emitPreparedCryptoCallExpression(
   }
 
   if (method === 'getHashes') {
-    const out = nextCName(context, 'inox_crypto_hashes')
+    const out = cryptoOutName(options, context, 'inox_crypto_hashes')
     const lines: string[] = []
 
-    registerOwnedValue(context, out)
-    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_crypto_get_hashes(&inox_default_allocator, &${out})`, context))
-    lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_ARRAY', context))
+    lines.push(`auto ${out} = crypto.getHashes();`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: cryptoResultExpression(options, out)
+      expression: cryptoResultExpression(options, out),
+      cppType: 'Array',
+      valueType: 'array'
     }
   }
 
@@ -329,10 +339,11 @@ export function emitPreparedCryptoCallExpression(
     const algorithm = deps.emitPreparedStringBytesOperand(algorithmArg, context, 'inox_crypto_algorithm')
     const dataArg = cryptoArgOrEmptyString(expression, 1, deps)
     const data = deps.emitCValueExpression(dataArg, context)
-    const out = nextCName(context, 'inox_crypto_digest')
+    const out = cryptoOutName(options, context, 'inox_crypto_digest')
     let encoding = 'hex'
-    let digestCall = `inox_crypto_hash_oneshot_bytes(&inox_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
-    let expectedTag = 'INOX_TAG_BYTES'
+    let digestCall = `crypto.hash(${cryptoStringViewExpression(algorithm)}, ${data.expression})`
+    let cppType = 'Buffer'
+    let valueType = 'bytes'
     const lines: string[] = []
 
     if (expression.cryptoHashDigestEncoding === 'bytes') {
@@ -340,20 +351,21 @@ export function emitPreparedCryptoCallExpression(
     }
 
     if (encoding === 'hex') {
-      digestCall = `inox_crypto_hash_oneshot_hex(&inox_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${data.expression}, &${out})`
-      expectedTag = 'INOX_TAG_STRING'
+      digestCall = `crypto.hashHex(${cryptoStringViewExpression(algorithm)}, ${data.expression})`
+      cppType = 'inox::String'
+      valueType = 'string'
     }
 
-    registerOwnedValue(context, out)
     pushCryptoLines(lines, algorithm.lines)
     pushCryptoLines(lines, data.lines)
-    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(digestCall, context))
-    lines.push(emitRuntimeValueCheck(out, expectedTag, context))
+    lines.push(`auto ${out} = ${digestCall};`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: cryptoResultExpression(options, out)
+      expression: cryptoResultExpression(options, out),
+      cppType,
+      valueType
     }
   }
 
@@ -401,7 +413,7 @@ export function emitPreparedCryptoCallExpression(
     const value = deps.emitCValueExpression(expression.args[0], context)
     let preparedCall: CryptoRandomFillCall = {
       lines: [],
-      call: `inox_crypto_get_random_values(${value.expression})`
+      call: `crypto.getRandomValues(${value.expression})`
     }
     const lines: string[] = []
 
@@ -411,59 +423,58 @@ export function emitPreparedCryptoCallExpression(
 
     pushCryptoLines(lines, value.lines)
     pushCryptoLines(lines, preparedCall.lines)
-    lines.push(emitStatusCheck(preparedCall.call, context))
 
     if (options.discard === true) {
+      lines.push(`${preparedCall.call};`)
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+
       return {
         lines,
         expression: ''
       }
     }
 
-    const out = nextCName(context, 'inox_crypto_bytes')
+    const out = cryptoOutName(options, context, 'inox_crypto_bytes')
 
-    registerOwnedValue(context, out)
-    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(`${out} = ${value.expression};`)
-    lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_BYTES', context))
-    lines.push(`inox_retain(${out});`)
+    lines.push(`auto ${out} = ${preparedCall.call};`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: out
+      expression: out,
+      cppType: 'Uint8Array',
+      valueType: 'bytes'
     }
   }
 
   if (method === 'randomBytes') {
     const size = deps.emitPreparedNumberExpression(expression.args[0], context)
-    const out = nextCName(context, 'inox_crypto_bytes')
+    const out = cryptoOutName(options, context, 'inox_crypto_bytes')
     const lines: string[] = []
 
-    registerOwnedValue(context, out)
     pushCryptoLines(lines, size.lines)
-    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(
-      emitStatusCheck(`inox_crypto_random_bytes(&inox_default_allocator, ${size.expression}, &${out})`, context)
-    )
-    lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_BYTES', context))
+    lines.push(`auto ${out} = crypto.randomBytes(${size.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: cryptoResultExpression(options, out)
+      expression: cryptoResultExpression(options, out),
+      cppType: 'Buffer',
+      valueType: 'bytes'
     }
   }
 
-  const out = nextCName(context, 'inox_crypto_uuid')
+  const out = cryptoOutName(options, context, 'inox_crypto_uuid')
   const lines: string[] = []
 
-  registerOwnedValue(context, out)
-  pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`inox_crypto_random_uuid(&inox_default_allocator, &${out})`, context))
-  lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
+  lines.push(`auto ${out} = crypto.randomUUID();`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,
-    expression: cryptoResultExpression(options, out)
+    expression: cryptoResultExpression(options, out),
+    cppType: 'inox::String',
+    valueType: 'string'
   }
 }
 
@@ -482,10 +493,8 @@ export function emitPreparedCryptoNumberCallExpression(
 
     pushCryptoLines(lines, left.lines)
     pushCryptoLines(lines, right.lines)
-    lines.push(`int ${out} = 0;`)
-    lines.push(
-      emitStatusCheck(`inox_crypto_timing_safe_equal(${left.expression}, ${right.expression}, &${out})`, context)
-    )
+    lines.push(`auto ${out} = crypto.timingSafeEqual(${left.expression}, ${right.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
@@ -510,8 +519,8 @@ export function emitPreparedCryptoNumberCallExpression(
 
   pushCryptoLines(lines, min.lines)
   pushCryptoLines(lines, max.lines)
-  lines.push(`inox_number ${out} = 0;`)
-  lines.push(emitStatusCheck(`inox_crypto_random_int(${min.expression}, ${max.expression}, &${out})`, context))
+  lines.push(`auto ${out} = crypto.randomInt(${min.expression}, ${max.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,
@@ -603,7 +612,7 @@ function emitCryptoRandomFillCall(
 ): CryptoRandomFillCall {
   let offset = emptyPreparedCryptoExpression('0')
   let size = emptyPreparedCryptoExpression('0')
-  let hasSize = '0'
+  let hasSize = 'false'
   const lines: string[] = []
 
   if (expression.args.length > 1) {
@@ -612,7 +621,7 @@ function emitCryptoRandomFillCall(
 
   if (expression.args.length > 2) {
     size = deps.emitPreparedNumberExpression(expression.args[2], context)
-    hasSize = '1'
+    hasSize = 'true'
   }
 
   pushCryptoLines(lines, offset.lines)
@@ -620,6 +629,6 @@ function emitCryptoRandomFillCall(
 
   return {
     lines,
-    call: `inox_crypto_random_fill(${value}, ${offset.expression}, ${size.expression}, ${hasSize})`
+    call: `crypto.randomFillSync(${value}, ${offset.expression}, ${size.expression}, ${hasSize})`
   }
 }

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <utility>
 #include "inox/array.h"
 #include "inox/binary.h"
 #include "inox/loop.h"
@@ -38,6 +39,7 @@ static inox_status inox_crypto_hash_digest_raw(inox_crypto_hash* hash, uint8_t* 
 static inox_status inox_crypto_hmac_digest_raw(inox_crypto_hmac* hmac, uint8_t* digest, size_t* len);
 static inox_status inox_crypto_copy_bytes_result(Uint8Array bytes, inox_value* out);
 static char inox_crypto_hex_digit(uint8_t value);
+static void inox_crypto_throw_failed(const char* message);
 
 struct inox_crypto_hash {
   inox_allocator* allocator;
@@ -55,12 +57,8 @@ struct inox_crypto_hmac {
   int finalized;
 };
 
-inox_status inox_crypto_get_hashes(inox_allocator* allocator, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
+ArrayClass crypto::getHashes() const {
+  inox_allocator* allocator = &inox_default_allocator;
 
 #if INOX_CRYPTO_HASH_HAS_EVP
   inox_value hashes = inox_undefined_value();
@@ -68,7 +66,8 @@ inox_status inox_crypto_get_hashes(inox_allocator* allocator, inox_value* out) {
   inox_status status = Array.make(allocator, 1, &hashes);
 
   if (status != INOX_OK) {
-    return status;
+    inox_crypto_throw_failed("crypto.getHashes failed");
+    return ArrayClass();
   }
 
   status = inox_string_from_literal(allocator, "sha256", 6, &sha256);
@@ -81,98 +80,125 @@ inox_status inox_crypto_get_hashes(inox_allocator* allocator, inox_value* out) {
 
   if (status != INOX_OK) {
     inox_release(hashes);
-    return status;
+    inox_crypto_throw_failed("crypto.getHashes failed");
+    return ArrayClass();
   }
 
-  *out = hashes;
-
-  return INOX_OK;
+  return ArrayClass(inox::adopt_value, hashes);
 #else
-  (void)allocator;
-
-  return INOX_ERR_UNSUPPORTED;
+  inox_crypto_throw_failed("crypto.getHashes failed");
+  return ArrayClass();
 #endif
 }
 
-inox_status inox_crypto_get_random_values(inox_value value) {
+Uint8Array crypto::getRandomValues(inox_value value) const {
   if (value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
-    return INOX_ERR_TYPE;
+    inox_crypto_throw_failed("crypto.getRandomValues failed");
+    return Uint8Array();
   }
 
   inox_bytes* bytes = (inox_bytes*)value.as.ref;
+  inox_status status = inox_crypto_random_bytes_raw(bytes->bytes, bytes->len);
 
-  return inox_crypto_random_bytes_raw(bytes->bytes, bytes->len);
+  if (status != INOX_OK) {
+    inox_crypto_throw_failed("crypto.getRandomValues failed");
+    return Uint8Array();
+  }
+
+  return Uint8Array(value);
 }
 
-inox_status inox_crypto_random_bytes(inox_allocator* allocator, inox_number size, inox_value* out) {
+Buffer crypto::randomBytes(inox_number size) const {
   size_t len = 0;
 
-  if (allocator == 0 || out == 0 || !inox_crypto_number_to_size(size, &len)) {
-    return INOX_ERR_TYPE;
+  if (!inox_crypto_number_to_size(size, &len)) {
+    inox_crypto_throw_failed("crypto.randomBytes failed");
+    return Buffer();
   }
 
-  *out = inox_undefined_value();
+  Buffer out(Uint8Array::create(&inox_default_allocator, len));
 
-  inox_status status = inox_crypto_copy_bytes_result(Uint8Array::create(allocator, len), out);
+  if (inox::thrown()) {
+    return Buffer();
+  }
+
+  if (!out.valid()) {
+    inox_crypto_throw_failed("crypto.randomBytes failed");
+    return Buffer();
+  }
+
+  inox_status status = inox_crypto_random_bytes_raw(out.bytes(), out.length());
 
   if (status != INOX_OK) {
-    return status;
+    inox_crypto_throw_failed("crypto.randomBytes failed");
+    return Buffer();
   }
 
-  status = inox_crypto_get_random_values(*out);
-
-  if (status != INOX_OK) {
-    inox_release(*out);
-    *out = inox_undefined_value();
-  }
-
-  return status;
+  return out;
 }
 
-inox_status inox_crypto_random_fill(inox_value value, inox_number offset_value, inox_number size_value, int has_size) {
+Uint8Array crypto::randomFillSync(inox_value value, inox_number offset_value, inox_number size_value, bool has_size) const {
   size_t offset = 0;
   size_t size = 0;
 
   if (value.tag != INOX_TAG_BYTES || value.as.ref == 0 || !inox_crypto_number_to_size(offset_value, &offset)) {
-    return INOX_ERR_TYPE;
+    inox_crypto_throw_failed("crypto.randomFillSync failed");
+    return Uint8Array();
   }
 
   inox_bytes* bytes = (inox_bytes*)value.as.ref;
 
   if (offset > bytes->len) {
-    return INOX_ERR_FIELD;
+    inox_crypto_throw_failed("crypto.randomFillSync failed");
+    return Uint8Array();
   }
 
   if (has_size) {
     if (!inox_crypto_number_to_size(size_value, &size)) {
-      return INOX_ERR_TYPE;
+      inox_crypto_throw_failed("crypto.randomFillSync failed");
+      return Uint8Array();
     }
   } else {
     size = bytes->len - offset;
   }
 
   if (size > bytes->len - offset) {
-    return INOX_ERR_FIELD;
+    inox_crypto_throw_failed("crypto.randomFillSync failed");
+    return Uint8Array();
   }
 
-  return inox_crypto_random_bytes_raw(bytes->bytes + offset, size);
+  inox_status status = inox_crypto_random_bytes_raw(bytes->bytes + offset, size);
+
+  if (status != INOX_OK) {
+    inox_crypto_throw_failed("crypto.randomFillSync failed");
+    return Uint8Array();
+  }
+
+  return Uint8Array(value);
 }
 
-inox_status inox_crypto_random_int(inox_number min, inox_number max, inox_number* out) {
-  if (out == 0 || !inox_crypto_number_is_integer(min) || !inox_crypto_number_is_integer(max) || !(max > min)) {
-    return INOX_ERR_TYPE;
+inox_number crypto::randomInt(inox_number max) const {
+  return randomInt(0, max);
+}
+
+inox_number crypto::randomInt(inox_number min, inox_number max) const {
+  if (!inox_crypto_number_is_integer(min) || !inox_crypto_number_is_integer(max) || !(max > min)) {
+    inox_crypto_throw_failed("crypto.randomInt failed");
+    return 0;
   }
 
   const inox_number range_double = max - min;
 
   if (range_double <= 0 || range_double > 281474976710656.0) {
-    return INOX_ERR_TYPE;
+    inox_crypto_throw_failed("crypto.randomInt failed");
+    return 0;
   }
 
   const uint64_t range = (uint64_t)range_double;
 
   if (range == 0 || (inox_number)range != range_double) {
-    return INOX_ERR_TYPE;
+    inox_crypto_throw_failed("crypto.randomInt failed");
+    return 0;
   }
 
   const uint64_t threshold = (UINT64_C(0) - range) % range;
@@ -182,26 +208,21 @@ inox_status inox_crypto_random_int(inox_number min, inox_number max, inox_number
     inox_status status = inox_crypto_random_bytes_raw((uint8_t*)&sample, sizeof(sample));
 
     if (status != INOX_OK) {
-      return status;
+      inox_crypto_throw_failed("crypto.randomInt failed");
+      return 0;
     }
   } while (sample < threshold);
 
-  *out = min + (inox_number)(sample % range);
-
-  return INOX_OK;
+  return min + (inox_number)(sample % range);
 }
 
-inox_status inox_crypto_random_uuid(inox_allocator* allocator, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
+inox::String crypto::randomUUID() const {
   uint8_t bytes[16];
   inox_status status = inox_crypto_random_bytes_raw(bytes, sizeof(bytes));
 
   if (status != INOX_OK) {
-    *out = inox_undefined_value();
-    return status;
+    inox_crypto_throw_failed("crypto.randomUUID failed");
+    return inox::String();
   }
 
   bytes[6] = (uint8_t)((bytes[6] & 0x0fu) | 0x40u);
@@ -221,8 +242,86 @@ inox_status inox_crypto_random_uuid(inox_allocator* allocator, inox_value* out) 
     index += 2;
   }
 
-  return inox_string_from_literal(allocator, uuid, sizeof(uuid), out);
+  return inox::String(uuid, sizeof(uuid));
 }
+
+Buffer crypto::hash(inox::StringView algorithm, inox_value data) const {
+  inox_crypto_hash* hash = 0;
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_crypto_hash_create(&inox_default_allocator, algorithm.bytes, algorithm.len, &hash);
+
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_update(hash, data);
+  }
+
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_digest_bytes(&inox_default_allocator, hash, &out);
+  }
+
+  inox_crypto_hash_free(hash);
+
+  if (status != INOX_OK) {
+    inox_release(out);
+    inox_crypto_throw_failed("crypto.hash failed");
+    return Buffer();
+  }
+
+  return Buffer(inox::adopt_value, out);
+}
+
+inox::String crypto::hashHex(inox::StringView algorithm, inox_value data) const {
+  inox_crypto_hash* hash = 0;
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_crypto_hash_create(&inox_default_allocator, algorithm.bytes, algorithm.len, &hash);
+
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_update(hash, data);
+  }
+
+  if (status == INOX_OK) {
+    status = inox_crypto_hash_digest_hex(&inox_default_allocator, hash, &out);
+  }
+
+  inox_crypto_hash_free(hash);
+
+  if (status != INOX_OK) {
+    inox_release(out);
+    inox_crypto_throw_failed("crypto.hash failed");
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt_value, out);
+}
+
+bool crypto::timingSafeEqual(inox_value left, inox_value right) const {
+  const uint8_t* left_bytes = 0;
+  const uint8_t* right_bytes = 0;
+  size_t left_len = 0;
+  size_t right_len = 0;
+  inox_status status = inox_crypto_hash_data(left, &left_bytes, &left_len);
+
+  if (status != INOX_OK) {
+    inox_crypto_throw_failed("crypto.timingSafeEqual failed");
+    return false;
+  }
+
+  status = inox_crypto_hash_data(right, &right_bytes, &right_len);
+
+  if (status != INOX_OK || left_len != right_len) {
+    inox_crypto_throw_failed("crypto.timingSafeEqual failed");
+    return false;
+  }
+
+  uint8_t diff = 0;
+
+  for (size_t index = 0; index < left_len; index += 1) {
+    diff = (uint8_t)(diff | (left_bytes[index] ^ right_bytes[index]));
+  }
+
+  return diff == 0;
+}
+
+class crypto crypto;
 
 inox_status inox_crypto_hash_create(
   inox_allocator* allocator,
@@ -345,64 +444,6 @@ inox_status inox_crypto_hash_digest_hex(inox_allocator* allocator, inox_crypto_h
 
   return INOX_ERR_UNSUPPORTED;
 #endif
-}
-
-inox_status inox_crypto_hash_oneshot_bytes(
-  inox_allocator* allocator,
-  const char* algorithm,
-  size_t algorithm_len,
-  inox_value data,
-  inox_value* out
-) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
-  inox_crypto_hash* hash = 0;
-  inox_status status = inox_crypto_hash_create(allocator, algorithm, algorithm_len, &hash);
-
-  if (status == INOX_OK) {
-    status = inox_crypto_hash_update(hash, data);
-  }
-
-  if (status == INOX_OK) {
-    status = inox_crypto_hash_digest_bytes(allocator, hash, out);
-  }
-
-  inox_crypto_hash_free(hash);
-
-  return status;
-}
-
-inox_status inox_crypto_hash_oneshot_hex(
-  inox_allocator* allocator,
-  const char* algorithm,
-  size_t algorithm_len,
-  inox_value data,
-  inox_value* out
-) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
-  inox_crypto_hash* hash = 0;
-  inox_status status = inox_crypto_hash_create(allocator, algorithm, algorithm_len, &hash);
-
-  if (status == INOX_OK) {
-    status = inox_crypto_hash_update(hash, data);
-  }
-
-  if (status == INOX_OK) {
-    status = inox_crypto_hash_digest_hex(allocator, hash, out);
-  }
-
-  inox_crypto_hash_free(hash);
-
-  return status;
 }
 
 void inox_crypto_hash_free(inox_crypto_hash* hash) {
@@ -574,40 +615,8 @@ void inox_crypto_hmac_free(inox_crypto_hmac* hmac) {
   }
 }
 
-inox_status inox_crypto_timing_safe_equal(inox_value left, inox_value right, int* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  const uint8_t* left_bytes = 0;
-  const uint8_t* right_bytes = 0;
-  size_t left_len = 0;
-  size_t right_len = 0;
-  inox_status status = inox_crypto_hash_data(left, &left_bytes, &left_len);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  status = inox_crypto_hash_data(right, &right_bytes, &right_len);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (left_len != right_len) {
-    return INOX_ERR_FIELD;
-  }
-
-  uint8_t diff = 0;
-
-  for (size_t index = 0; index < left_len; index += 1) {
-    diff = (uint8_t)(diff | (left_bytes[index] ^ right_bytes[index]));
-  }
-
-  *out = diff == 0 ? 1 : 0;
-
-  return INOX_OK;
+static void inox_crypto_throw_failed(const char* message) {
+  inox::throw_value(inox::String(message == 0 ? "crypto operation failed" : message));
 }
 
 static inox_status inox_crypto_random_bytes_raw(uint8_t* out, size_t len) {

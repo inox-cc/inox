@@ -330,7 +330,7 @@ console.log(f.isPromise())
   assert.match(result.code, /Foo::Foo\(const inox::String& name\) : name\(name\) \{\n\}/)
   assert.match(
     result.code,
-    /Foo f\{inox::String\(inox::string\("foo 1", 5\)\)\};|f = Foo\(inox::String\(inox::string\("foo 1", 5\)\)\);/
+    /Foo f\{inox::String\("foo 1", 5\)\};|f = Foo\(inox::String\("foo 1", 5\)\);/
   )
   assert.doesNotMatch(result.code, /Foo\(const inox::Value& name\)/)
   assert.doesNotMatch(result.code, /Foo::Foo\(const inox::Value& name\)/)
