@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "inox/loop.h"
 #include "inox/promise.h"
+#include "inox/string_view.h"
 #include "inox/value.h"
 
 enum {
@@ -17,72 +18,48 @@ enum {
 typedef inox_status (*FsReadFileFn)(
   void* user,
   inox_allocator* allocator,
-  const char* path,
-  size_t path_len,
+  inox::StringView path,
   inox_value* out
 );
 typedef inox_status (*FsReadFileBytesFn)(
   void* user,
   inox_allocator* allocator,
-  const char* path,
-  size_t path_len,
+  inox::StringView path,
   inox_value* out
 );
 typedef inox_status (*FsReadDirFn)(
   void* user,
   inox_allocator* allocator,
-  const char* path,
-  size_t path_len,
+  inox::StringView path,
   inox_value* out
 );
 typedef inox_status (*FsReadDirDirentsFn)(
   void* user,
   inox_allocator* allocator,
-  const char* path,
-  size_t path_len,
+  inox::StringView path,
   inox_value* out
 );
 typedef inox_status (*FsStatFn)(
   void* user,
   inox_allocator* allocator,
-  const char* path,
-  size_t path_len,
+  inox::StringView path,
   inox_value* out
 );
 typedef inox_status (*FsStringPathFn)(
   void* user,
   inox_allocator* allocator,
-  const char* path,
-  size_t path_len,
+  inox::StringView path,
   inox_value* out
 );
-typedef inox_status (*FsAccessFn)(void* user, const char* path, size_t path_len, int mode);
-typedef inox_status (*FsMkdirFn)(void* user, const char* path, size_t path_len, bool recursive);
-typedef inox_status (*FsUnlinkFn)(void* user, const char* path, size_t path_len);
-typedef inox_status (*FsRmFn)(void* user, const char* path, size_t path_len, bool recursive, bool force);
-typedef inox_status (*FsAppendFileFn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
-typedef inox_status (*FsCopyFileFn)(
-  void* user,
-  const char* src_path,
-  size_t src_path_len,
-  const char* dest_path,
-  size_t dest_path_len
-);
-typedef inox_status (*FsSymlinkFn)(
-  void* user,
-  const char* target,
-  size_t target_len,
-  const char* path,
-  size_t path_len
-);
-typedef inox_status (*FsRenameFn)(
-  void* user,
-  const char* old_path,
-  size_t old_path_len,
-  const char* new_path,
-  size_t new_path_len
-);
-typedef inox_status (*FsWriteFileFn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
+typedef inox_status (*FsAccessFn)(void* user, inox::StringView path, int mode);
+typedef inox_status (*FsMkdirFn)(void* user, inox::StringView path, bool recursive);
+typedef inox_status (*FsUnlinkFn)(void* user, inox::StringView path);
+typedef inox_status (*FsRmFn)(void* user, inox::StringView path, bool recursive, bool force);
+typedef inox_status (*FsAppendFileFn)(void* user, inox::StringView path, inox::StringView bytes);
+typedef inox_status (*FsCopyFileFn)(void* user, inox::StringView src_path, inox::StringView dest_path);
+typedef inox_status (*FsSymlinkFn)(void* user, inox::StringView target, inox::StringView path);
+typedef inox_status (*FsRenameFn)(void* user, inox::StringView old_path, inox::StringView new_path);
+typedef inox_status (*FsWriteFileFn)(void* user, inox::StringView path, inox::StringView bytes);
 
 struct FsAdapter {
   void* user;
@@ -109,7 +86,6 @@ struct FsAdapter {
 #include "inox/array.h"
 #include "inox/binary.h"
 #include "inox/string.h"
-#include "inox/string_view.h"
 
 class FsStats;
 class fs_promises {

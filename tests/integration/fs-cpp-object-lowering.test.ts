@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -73,6 +75,13 @@ fs.rmSync(dir, { recursive: true, force: true })
   assert.doesNotMatch(source, /fs\.promises\.(writeFile|appendFile|readFile|unlink)\(inox::loop\(\)/)
   assert.doesNotMatch(source, /fs\.readFileSync\(inox::StringView/)
   assert.doesNotMatch(source, /inox_fs_value_\d+/)
+
+  const header = readFileSync(resolve('stdlib/node/fs/include/inox/fs.h'), 'utf8')
+  assert.match(header, /typedef inox_status \(\*FsReadFileFn\)\([\s\S]*?inox::StringView path,[\s\S]*?inox_value\* out/)
+  assert.match(header, /typedef inox_status \(\*FsWriteFileFn\)\(void\* user, inox::StringView path, inox::StringView bytes\);/)
+  assert.match(header, /typedef inox_status \(\*FsCopyFileFn\)\(void\* user, inox::StringView src_path, inox::StringView dest_path\);/)
+  assert.doesNotMatch(header, /const char\* path,[\s\S]*?size_t path_len,[\s\S]*?inox_value\* out/)
+  assert.doesNotMatch(header, /const char\* bytes, size_t byte_len/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

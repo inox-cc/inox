@@ -431,7 +431,7 @@ inox::String fs::readFileSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.read_file != 0) {
-    status = fs_active_adapter.read_file(fs_active_adapter.user, &inox_default_allocator, path.bytes, path.len, &out);
+    status = fs_active_adapter.read_file(fs_active_adapter.user, &inox_default_allocator, path, &out);
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_read_file(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -457,7 +457,7 @@ static inox_status fs_read_file_bytes_sync_status(inox_allocator* allocator, con
   }
 
   if (fs_active_adapter.read_file_bytes != 0) {
-    return fs_active_adapter.read_file_bytes(fs_active_adapter.user, allocator, path, path_len, out);
+    return fs_active_adapter.read_file_bytes(fs_active_adapter.user, allocator, inox::StringView(path, path_len), out);
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -489,7 +489,7 @@ ArrayClass fs::readdirSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.read_dir != 0) {
-    status = fs_active_adapter.read_dir(fs_active_adapter.user, &inox_default_allocator, path.bytes, path.len, &out);
+    status = fs_active_adapter.read_dir(fs_active_adapter.user, &inox_default_allocator, path, &out);
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_read_dir(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -512,7 +512,7 @@ ArrayClass fs::readdirDirentsSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.read_dir_dirents != 0) {
-    status = fs_active_adapter.read_dir_dirents(fs_active_adapter.user, &inox_default_allocator, path.bytes, path.len, &out);
+    status = fs_active_adapter.read_dir_dirents(fs_active_adapter.user, &inox_default_allocator, path, &out);
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_read_dir_dirents(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -535,7 +535,7 @@ FsStats fs::statSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.stat != 0) {
-    status = fs_active_adapter.stat(fs_active_adapter.user, &inox_default_allocator, path.bytes, path.len, &out);
+    status = fs_active_adapter.stat(fs_active_adapter.user, &inox_default_allocator, path, &out);
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_stat(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -558,7 +558,7 @@ FsStats fs::lstatSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.lstat != 0) {
-    status = fs_active_adapter.lstat(fs_active_adapter.user, &inox_default_allocator, path.bytes, path.len, &out);
+    status = fs_active_adapter.lstat(fs_active_adapter.user, &inox_default_allocator, path, &out);
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_lstat(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -581,7 +581,7 @@ inox::String fs::realpathSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.realpath != 0) {
-    status = fs_active_adapter.realpath(fs_active_adapter.user, &inox_default_allocator, path.bytes, path.len, &out);
+    status = fs_active_adapter.realpath(fs_active_adapter.user, &inox_default_allocator, path, &out);
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_realpath(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -604,7 +604,7 @@ inox::String fs::readlinkSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.readlink != 0) {
-    status = fs_active_adapter.readlink(fs_active_adapter.user, &inox_default_allocator, path.bytes, path.len, &out);
+    status = fs_active_adapter.readlink(fs_active_adapter.user, &inox_default_allocator, path, &out);
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_readlink(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -626,7 +626,7 @@ static inox_status fs_access_sync_status(const char* path, size_t path_len, int 
   }
 
   if (fs_active_adapter.access != 0) {
-    return fs_active_adapter.access(fs_active_adapter.user, path, path_len, mode);
+    return fs_active_adapter.access(fs_active_adapter.user, inox::StringView(path, path_len), mode);
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -662,7 +662,7 @@ static inox_status fs_mkdir_sync_status(const char* path, size_t path_len, bool 
   }
 
   if (fs_active_adapter.mkdir != 0) {
-    return fs_active_adapter.mkdir(fs_active_adapter.user, path, path_len, recursive);
+    return fs_active_adapter.mkdir(fs_active_adapter.user, inox::StringView(path, path_len), recursive);
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -690,7 +690,7 @@ static inox_status fs_unlink_sync_status(const char* path, size_t path_len) {
   }
 
   if (fs_active_adapter.unlink != 0) {
-    return fs_active_adapter.unlink(fs_active_adapter.user, path, path_len);
+    return fs_active_adapter.unlink(fs_active_adapter.user, inox::StringView(path, path_len));
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -718,7 +718,7 @@ static inox_status fs_rm_sync_status(const char* path, size_t path_len, bool rec
   }
 
   if (fs_active_adapter.rm != 0) {
-    return fs_active_adapter.rm(fs_active_adapter.user, path, path_len, recursive, force);
+    return fs_active_adapter.rm(fs_active_adapter.user, inox::StringView(path, path_len), recursive, force);
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -746,7 +746,7 @@ static inox_status fs_append_file_sync_status(const char* path, size_t path_len,
   }
 
   if (fs_active_adapter.append_file != 0) {
-    return fs_active_adapter.append_file(fs_active_adapter.user, path, path_len, bytes, byte_len);
+    return fs_active_adapter.append_file(fs_active_adapter.user, inox::StringView(path, path_len), inox::StringView(bytes, byte_len));
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -784,7 +784,11 @@ static inox_status fs_copy_file_sync_status(const char* src_path, size_t src_pat
   }
 
   if (fs_active_adapter.copy_file != 0) {
-    return fs_active_adapter.copy_file(fs_active_adapter.user, src_path, src_path_len, dest_path, dest_path_len);
+    return fs_active_adapter.copy_file(
+      fs_active_adapter.user,
+      inox::StringView(src_path, src_path_len),
+      inox::StringView(dest_path, dest_path_len)
+    );
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -812,7 +816,7 @@ static inox_status fs_symlink_sync_status(const char* target, size_t target_len,
   }
 
   if (fs_active_adapter.symlink != 0) {
-    return fs_active_adapter.symlink(fs_active_adapter.user, target, target_len, path, path_len);
+    return fs_active_adapter.symlink(fs_active_adapter.user, inox::StringView(target, target_len), inox::StringView(path, path_len));
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -840,7 +844,11 @@ static inox_status fs_rename_sync_status(const char* old_path, size_t old_path_l
   }
 
   if (fs_active_adapter.rename != 0) {
-    return fs_active_adapter.rename(fs_active_adapter.user, old_path, old_path_len, new_path, new_path_len);
+    return fs_active_adapter.rename(
+      fs_active_adapter.user,
+      inox::StringView(old_path, old_path_len),
+      inox::StringView(new_path, new_path_len)
+    );
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -876,7 +884,7 @@ static inox_status fs_write_file_sync_status(const char* path, size_t path_len, 
   }
 
   if (fs_active_adapter.write_file != 0) {
-    return fs_active_adapter.write_file(fs_active_adapter.user, path, path_len, bytes, byte_len);
+    return fs_active_adapter.write_file(fs_active_adapter.user, inox::StringView(path, path_len), inox::StringView(bytes, byte_len));
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -3706,7 +3714,12 @@ static inox_status inox_fs_run_request(void* context) {
     inox_status status = INOX_ERR_UNSUPPORTED;
 
     if (fs_active_adapter.read_file != 0) {
-      status = fs_active_adapter.read_file(fs_active_adapter.user, request->loop->allocator, request->path, request->path_len, &result);
+      status = fs_active_adapter.read_file(
+        fs_active_adapter.user,
+        request->loop->allocator,
+        inox::StringView(request->path, request->path_len),
+        &result
+      );
     } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
       status = inox_fs_libuv_read_file(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3744,7 +3757,12 @@ static inox_status inox_fs_run_request(void* context) {
     inox_status status = INOX_ERR_UNSUPPORTED;
 
     if (fs_active_adapter.read_dir != 0) {
-      status = fs_active_adapter.read_dir(fs_active_adapter.user, request->loop->allocator, request->path, request->path_len, &result);
+      status = fs_active_adapter.read_dir(
+        fs_active_adapter.user,
+        request->loop->allocator,
+        inox::StringView(request->path, request->path_len),
+        &result
+      );
     } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
       status = inox_fs_libuv_read_dir(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3768,7 +3786,12 @@ static inox_status inox_fs_run_request(void* context) {
     inox_status status = INOX_ERR_UNSUPPORTED;
 
     if (fs_active_adapter.read_dir_dirents != 0) {
-      status = fs_active_adapter.read_dir_dirents(fs_active_adapter.user, request->loop->allocator, request->path, request->path_len, &result);
+      status = fs_active_adapter.read_dir_dirents(
+        fs_active_adapter.user,
+        request->loop->allocator,
+        inox::StringView(request->path, request->path_len),
+        &result
+      );
     } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
       status = inox_fs_libuv_read_dir_dirents(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3793,7 +3816,12 @@ static inox_status inox_fs_run_request(void* context) {
 
     if (request->kind == INOX_FS_REQUEST_STAT) {
       if (fs_active_adapter.stat != 0) {
-        status = fs_active_adapter.stat(fs_active_adapter.user, request->loop->allocator, request->path, request->path_len, &result);
+        status = fs_active_adapter.stat(
+          fs_active_adapter.user,
+          request->loop->allocator,
+          inox::StringView(request->path, request->path_len),
+          &result
+        );
       } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
         status = inox_fs_libuv_stat(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3802,7 +3830,12 @@ static inox_status inox_fs_run_request(void* context) {
 #endif
       }
     } else if (fs_active_adapter.lstat != 0) {
-      status = fs_active_adapter.lstat(fs_active_adapter.user, request->loop->allocator, request->path, request->path_len, &result);
+      status = fs_active_adapter.lstat(
+        fs_active_adapter.user,
+        request->loop->allocator,
+        inox::StringView(request->path, request->path_len),
+        &result
+      );
     } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
       status = inox_fs_libuv_lstat(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3827,7 +3860,12 @@ static inox_status inox_fs_run_request(void* context) {
 
     if (request->kind == INOX_FS_REQUEST_REALPATH) {
       if (fs_active_adapter.realpath != 0) {
-        status = fs_active_adapter.realpath(fs_active_adapter.user, request->loop->allocator, request->path, request->path_len, &result);
+        status = fs_active_adapter.realpath(
+          fs_active_adapter.user,
+          request->loop->allocator,
+          inox::StringView(request->path, request->path_len),
+          &result
+        );
       } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
         status = inox_fs_libuv_realpath(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3836,7 +3874,12 @@ static inox_status inox_fs_run_request(void* context) {
 #endif
       }
     } else if (fs_active_adapter.readlink != 0) {
-      status = fs_active_adapter.readlink(fs_active_adapter.user, request->loop->allocator, request->path, request->path_len, &result);
+      status = fs_active_adapter.readlink(
+        fs_active_adapter.user,
+        request->loop->allocator,
+        inox::StringView(request->path, request->path_len),
+        &result
+      );
     } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
       status = inox_fs_libuv_readlink(0, request->loop->allocator, request->path, request->path_len, &result);
