@@ -2667,7 +2667,8 @@ function emitDirentArrayIndexVariableDeclaration(statement: StatementNode, conte
   const lines: string[] = []
   pushAllLines(lines, array.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`Array.get(${array.expression}, ${index}, &${emitCIdentifier(statement.name)})`, context))
+  lines.push(`${emitCIdentifier(statement.name)} = ArrayClass(${array.expression}).get(${index});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   lines.push(emitRuntimeValueCheck(emitCIdentifier(statement.name), 'INOX_TAG_OBJECT', context))
 
   return lines
