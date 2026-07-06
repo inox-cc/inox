@@ -4,10 +4,6 @@
 #include <stddef.h>
 #include "inox/loop.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct inox_http_server inox_http_server;
 typedef struct inox_http_response inox_http_response;
 
@@ -72,9 +68,5 @@ int inox_http_response_send_fs_file(
   const char* root,
   size_t root_len
 );
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

@@ -4,10 +4,6 @@
 #include <stddef.h>
 #include "inox/loop.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct inox_dgram_socket inox_dgram_socket;
 
 typedef struct inox_dgram_address {
@@ -73,9 +69,5 @@ inox_status inox_dgram_set_recv_buffer_size(inox_dgram_socket* socket, int size)
 inox_status inox_dgram_ref(inox_dgram_socket* socket);
 inox_status inox_dgram_unref(inox_dgram_socket* socket);
 void inox_dgram_close(inox_dgram_socket* socket);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
