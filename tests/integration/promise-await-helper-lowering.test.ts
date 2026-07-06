@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
@@ -16,6 +17,7 @@ export function assertPromiseAwaitUsesRuntimeHelper(): void {
         source: `
 const value = await Promise.resolve('ok')
 console.log(value)
+await Promise.resolve('done')
 `
       }
     ],
@@ -30,10 +32,13 @@ console.log(value)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(
-    source,
-    /inox_promise_await\(inox::loop\(\), inox_promise_\d+, false, &inox_await_value_\d+, &inox_await_state_\d+\)/
-  )
+  assert.match(source, /auto value = inox::await_value<inox::String>\(inox_promise_\d+\);/)
+  assert.match(source, /if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /inox::await_value<inox::String>\(inox_promise_\d+\);/)
+  assert.doesNotMatch(source, /auto inox_await_value_\d+ = inox::await_value<inox::String>\(inox_promise_\d+\);/)
+  assert.doesNotMatch(source, /inox_promise_await/)
+  assert.doesNotMatch(source, /inox_promise_state/)
+  assert.doesNotMatch(source, /INOX_PROMISE_FULFILLED/)
   assert.doesNotMatch(source, /while \(inox_promise_get_state/)
 }
 
@@ -91,4 +96,9 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
   }
 
   assert.fail(`missing generated file ${path}`)
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  assertPromiseAwaitUsesRuntimeHelper()
+  assertPromiseAwaitCatchReadsRejectedValue()
 }

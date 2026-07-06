@@ -4889,7 +4889,7 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   if (expression.type === 'AwaitExpression') {
     const value = deps.emitCAwaitValueExpression(expression, context)
 
-    return value.lines
+    return emitDiscardedAwaitValueLines(value)
   }
 
   if (expression.type === 'UpdateExpression') {
@@ -5011,6 +5011,28 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   return []
+}
+
+function emitDiscardedAwaitValueLines(value: PreparedExpression): string[] {
+  const declaredName = value.cppDeclaredName
+
+  if (declaredName === null || typeof declaredName === 'undefined') {
+    return value.lines
+  }
+
+  const assignment = `auto ${declaredName} = `
+  const prefix = `${assignment}inox::await_value<`
+  const lines: string[] = []
+
+  for (const line of value.lines) {
+    if (line.startsWith(prefix)) {
+      lines.push(line.slice(assignment.length))
+    } else {
+      lines.push(line)
+    }
+  }
+
+  return lines
 }
 
 function emitModuleValueAssignmentExpression(
