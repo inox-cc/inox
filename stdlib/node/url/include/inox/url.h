@@ -52,4 +52,37 @@ inox_status inox_url_search_params_to_string(inox_allocator* allocator, inox_val
 }
 #endif
 
+#ifdef __cplusplus
+
+#include "inox/string.h"
+#include "inox/string_view.h"
+
+class URLSearchParams : public inox::Value {
+private:
+  static inox::Value make(inox_value init);
+  static inox::Value make(inox::StringView init);
+
+public:
+  URLSearchParams();
+  explicit URLSearchParams(inox::StringView init);
+  explicit URLSearchParams(inox_value value);
+  explicit URLSearchParams(const inox::Value& value);
+  URLSearchParams(inox::AdoptValue adopt, inox_value value);
+
+  using inox::Value::operator=;
+
+  static URLSearchParams from(inox_value init);
+  static URLSearchParams from(const inox::Value& init);
+
+  bool valid() const;
+  void append(inox::StringView name, inox::StringView value);
+  inox::Value get(inox::StringView name) const;
+  bool has(inox::StringView name) const;
+  void remove(inox::StringView name);
+  void set(inox::StringView name, inox::StringView value);
+  inox::String toString() const;
+};
+
+#endif
+
 #endif

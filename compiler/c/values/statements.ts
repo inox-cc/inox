@@ -5252,7 +5252,7 @@ function pushRuntimeValueReturnAssignment(
 }
 
 function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
-  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array'
+  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array' || cppType === 'URLSearchParams'
 }
 
 export function registerErrorChannel(context: CFunctionContext): void {

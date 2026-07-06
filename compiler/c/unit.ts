@@ -154,6 +154,7 @@ type CUnitFunctionNodeEntry = {
 type CUnitValueDeclaration = {
   functionType?: CFunctionType | null
   name: string
+  shapeBuiltin?: string | null
   symbolName: string
   valueType: string
 }
@@ -273,11 +274,18 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
       context.regexpLiterals.set(item.name, item.init)
     }
 
+    let valueType = cUnitValueType(item, context)
+
+    if (cUnitUrlSearchParamsValueType(item) !== null) {
+      valueType = 'url.URLSearchParams'
+    }
+
     values.push({
       functionType: cUnitValueFunctionType(item),
       name: item.name,
+      shapeBuiltin: cUnitValueShapeBuiltin(item),
       symbolName: emitCIdentifier(item.name),
-      valueType: cUnitValueType(item, context)
+      valueType
     })
   }
 
@@ -287,9 +295,14 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
 function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValueDeclaration[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     const item = unitValueDeclarationAt(values, index)
+    let valueType = item.valueType
+
+    if (item.shapeBuiltin === 'url.URLSearchParams') {
+      valueType = 'url.URLSearchParams'
+    }
 
     context.moduleValueNames.set(item.name, item.symbolName)
-    context.moduleValueTypes.set(item.name, item.valueType)
+    context.moduleValueTypes.set(item.name, valueType)
   }
 }
 
@@ -307,8 +320,8 @@ function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaratio
       continue
     }
 
-    const cType = cUnitValueCType(item.valueType)
-    const initializer = cUnitValueGlobalInitializer(item.valueType)
+    const cType = cUnitValueDeclarationCType(item)
+    const initializer = cUnitValueDeclarationGlobalInitializer(item)
 
     if (initializer === '') {
       lines.push(`static ${cType} ${item.symbolName};`)
@@ -448,10 +461,15 @@ function emitCUnitObjectFunctionFieldDefinitions(
 function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cUnitTimeExpressionValueType(node.init)
+  const urlSearchParamsValueType = cUnitUrlSearchParamsValueType(node)
   const classValueType = cUnitNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
+  }
+
+  if (urlSearchParamsValueType !== null && typeof urlSearchParamsValueType !== 'undefined') {
+    return urlSearchParamsValueType
   }
 
   if (
@@ -488,6 +506,63 @@ function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   }
 
   return valueType
+}
+
+function cUnitUrlSearchParamsValueType(node: AnyNode): string | null {
+  if (
+    node.shape !== null &&
+    typeof node.shape !== 'undefined' &&
+    node.shape.builtin === 'url.URLSearchParams'
+  ) {
+    return 'url.URLSearchParams'
+  }
+
+  const expression = node.init
+
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (
+    expression.shape !== null &&
+    typeof expression.shape !== 'undefined' &&
+    expression.shape.builtin === 'url.URLSearchParams'
+  ) {
+    return 'url.URLSearchParams'
+  }
+
+  if (
+    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
+    expression.urlRuntimeMethod === 'URLSearchParams'
+  ) {
+    return 'url.URLSearchParams'
+  }
+
+  return null
+}
+
+function cUnitValueShapeBuiltin(node: AnyNode): string | null {
+  if (
+    node.shape !== null &&
+    typeof node.shape !== 'undefined' &&
+    node.shape.builtin !== null &&
+    typeof node.shape.builtin !== 'undefined'
+  ) {
+    return node.shape.builtin
+  }
+
+  if (
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.shape !== null &&
+    typeof node.init.shape !== 'undefined' &&
+    node.init.shape.builtin !== null &&
+    typeof node.init.shape.builtin !== 'undefined'
+  ) {
+    return node.init.shape.builtin
+  }
+
+  return null
 }
 
 function cUnitNativeClassValueType(node: AnyNode, context: CEmitContext): string | null {
@@ -663,6 +738,14 @@ function cUnitValueCType(valueType: string): string {
   return emitCType(valueType)
 }
 
+function cUnitValueDeclarationCType(item: CUnitValueDeclaration): string {
+  if (item.shapeBuiltin === 'url.URLSearchParams') {
+    return 'URLSearchParams'
+  }
+
+  return cUnitValueCType(item.valueType)
+}
+
 function cUnitValueGlobalInitializer(valueType: string): string {
   if (cClassNameFromValueType(valueType) !== null) {
     return ''
@@ -672,7 +755,7 @@ function cUnitValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'regexp') {
+  if (valueType === 'regexp' || valueType === 'url.URLSearchParams') {
     return ''
   }
 
@@ -681,6 +764,14 @@ function cUnitValueGlobalInitializer(valueType: string): string {
   }
 
   return '0'
+}
+
+function cUnitValueDeclarationGlobalInitializer(item: CUnitValueDeclaration): string {
+  if (item.shapeBuiltin === 'url.URLSearchParams') {
+    return ''
+  }
+
+  return cUnitValueGlobalInitializer(item.valueType)
 }
 
 function collectCUnitContextRuntimeTypes(context: CEmitContext): Set<string> {

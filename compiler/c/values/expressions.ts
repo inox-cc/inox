@@ -5500,6 +5500,15 @@ export function emitCValueExpression(
 
       const moduleValueType = context.moduleValueTypes.get(name)
 
+      if (moduleValueType === 'url.URLSearchParams') {
+        return {
+          lines: [],
+          expression: moduleValueName,
+          cppType: 'URLSearchParams',
+          valueType: 'object'
+        }
+      }
+
       if (moduleValueType === 'string') {
         const temp = nextCName(context, 'inox_value')
         const lines: string[] = []
@@ -5592,6 +5601,15 @@ export function emitCValueExpression(
         cppType: 'inox::String',
         runtimeTypeChecked: true,
         valueType: 'string'
+      }
+    }
+
+    if (valueType === 'url.URLSearchParams') {
+      return {
+        lines: [],
+        expression: reference,
+        cppType: 'URLSearchParams',
+        valueType: 'object'
       }
     }
 

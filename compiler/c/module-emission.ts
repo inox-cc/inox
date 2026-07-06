@@ -133,6 +133,7 @@ type CModuleValueDeclaration = {
   exported: boolean
   functionType?: CFunctionType | null
   name: string
+  shapeBuiltin?: string | null
   symbolName: string
   valueType: string
 }
@@ -1511,7 +1512,10 @@ function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePl
     const item = cModuleValueDeclarationAt(values, index)
 
     context.moduleValueNames.set(item.name, item.symbolName)
-    context.moduleValueTypes.set(item.name, item.valueType)
+    context.moduleValueTypes.set(
+      item.name,
+      item.shapeBuiltin === 'url.URLSearchParams' ? 'url.URLSearchParams' : item.valueType
+    )
   }
 }
 
@@ -1590,12 +1594,19 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
       context.regexpLiterals.set(item.name, item.init)
     }
 
+    let valueType = cModuleValueType(item, context)
+
+    if (cModuleUrlSearchParamsValueType(item) !== null) {
+      valueType = 'url.URLSearchParams'
+    }
+
     values.push({
       exported: item.exported === true,
       functionType: cModuleValueFunctionType(item),
       name: item.name,
+      shapeBuiltin: cModuleValueShapeBuiltin(item),
       symbolName: emitCModuleValueName(plan, item.name),
-      valueType: cModuleValueType(item, context)
+      valueType
     })
   }
 
@@ -1853,8 +1864,8 @@ function emitCModuleValueDefinitions(lines: string[], values: CModuleValueDeclar
       continue
     }
 
-    const cType = cModuleValueCType(item.valueType, context)
-    const initializer = cModuleValueGlobalInitializer(item.valueType)
+    const cType = cModuleValueDeclarationCType(item, context)
+    const initializer = cModuleValueDeclarationGlobalInitializer(item)
     let prefix = ''
 
     if (item.exported !== true) {
@@ -1984,10 +1995,15 @@ function emitCModuleObjectFunctionFieldDefinitions(
 function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cModuleTimeExpressionValueType(node.init)
+  const urlSearchParamsValueType = cModuleUrlSearchParamsValueType(node)
   const classValueType = cModuleNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
+  }
+
+  if (urlSearchParamsValueType !== null && typeof urlSearchParamsValueType !== 'undefined') {
+    return urlSearchParamsValueType
   }
 
   if (
@@ -2024,6 +2040,63 @@ function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   }
 
   return valueType
+}
+
+function cModuleUrlSearchParamsValueType(node: AnyNode): string | null {
+  if (
+    node.shape !== null &&
+    typeof node.shape !== 'undefined' &&
+    node.shape.builtin === 'url.URLSearchParams'
+  ) {
+    return 'url.URLSearchParams'
+  }
+
+  const expression = node.init
+
+  if (expression === null || typeof expression === 'undefined') {
+    return null
+  }
+
+  if (
+    expression.shape !== null &&
+    typeof expression.shape !== 'undefined' &&
+    expression.shape.builtin === 'url.URLSearchParams'
+  ) {
+    return 'url.URLSearchParams'
+  }
+
+  if (
+    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
+    expression.urlRuntimeMethod === 'URLSearchParams'
+  ) {
+    return 'url.URLSearchParams'
+  }
+
+  return null
+}
+
+function cModuleValueShapeBuiltin(node: AnyNode): string | null {
+  if (
+    node.shape !== null &&
+    typeof node.shape !== 'undefined' &&
+    node.shape.builtin !== null &&
+    typeof node.shape.builtin !== 'undefined'
+  ) {
+    return node.shape.builtin
+  }
+
+  if (
+    node.init !== null &&
+    typeof node.init !== 'undefined' &&
+    node.init.shape !== null &&
+    typeof node.init.shape !== 'undefined' &&
+    node.init.shape.builtin !== null &&
+    typeof node.init.shape.builtin !== 'undefined'
+  ) {
+    return node.init.shape.builtin
+  }
+
+  return null
 }
 
 function cModuleNativeClassValueType(node: AnyNode, context: CEmitContext | null | undefined): string | null {
@@ -2209,6 +2282,14 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
   return emitCType(valueType)
 }
 
+function cModuleValueDeclarationCType(item: CModuleValueDeclaration, context: CEmitContext): string {
+  if (item.shapeBuiltin === 'url.URLSearchParams') {
+    return 'URLSearchParams'
+  }
+
+  return cModuleValueCType(item.valueType, context)
+}
+
 function cModuleValueGlobalInitializer(valueType: string): string {
   if (cClassNameFromValueType(valueType) !== null) {
     return ''
@@ -2218,7 +2299,7 @@ function cModuleValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'regexp') {
+  if (valueType === 'regexp' || valueType === 'url.URLSearchParams') {
     return ''
   }
 
@@ -2227,6 +2308,14 @@ function cModuleValueGlobalInitializer(valueType: string): string {
   }
 
   return '0'
+}
+
+function cModuleValueDeclarationGlobalInitializer(item: CModuleValueDeclaration): string {
+  if (item.shapeBuiltin === 'url.URLSearchParams') {
+    return ''
+  }
+
+  return cModuleValueGlobalInitializer(item.valueType)
 }
 
 function emitCModuleInitFunction(

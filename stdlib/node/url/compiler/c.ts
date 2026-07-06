@@ -1,4 +1,4 @@
-import { urlMutableObjectFields, urlObjectFields, urlSearchParamsObjectFields } from './descriptor.ts'
+import { urlMutableObjectFields, urlObjectFields } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
 import type { CFunctionContext } from '../../../../compiler/c/context.ts'
 import {
@@ -37,6 +37,21 @@ function emptyPreparedUrlExpression(expression: string): PreparedExpression {
     lines: [],
     expression
   }
+}
+
+function isUrlSearchParamsReference(expression: AnyNode | null | undefined, context: CFunctionContext): boolean {
+  if (
+    expression === null ||
+    typeof expression === 'undefined' ||
+    expression.type !== 'Reference' ||
+    expression.path.length !== 1
+  ) {
+    return false
+  }
+
+  const name = expression.path[0]
+
+  return context.objectDeclaredTypes.get(name) === 'url.URLSearchParams'
 }
 
 function urlOutName(options: PreparedCallOptions, context: CFunctionContext, prefix: string): string {
@@ -235,35 +250,44 @@ export function emitPreparedUrlSearchParamsObjectExpression(
     return null
   }
 
-  const out = urlOutName(options, context, 'inox_url_search_params')
-  let init = emptyPreparedUrlExpression('inox_undefined_value()')
-  const shape = emitUrlSearchParamsObjectShape(context)
+  const out = urlOutName(options, context, 'url_search_params')
+  let init = emptyPreparedUrlExpression('')
   const lines: string[] = []
+  let constructor = 'URLSearchParams::from(inox_undefined_value())'
 
   if (expression.args.length > 0) {
-    init = dependencies.emitCValueExpression(expression.args[0], context)
+    const arg = expression.args[0]
+
+    if (arg.type === 'StringLiteral') {
+      constructor = `URLSearchParams(${cStringLiteral(arg.value)})`
+    } else {
+      init = dependencies.emitCValueExpression(arg, context)
+      constructor = `URLSearchParams::from(${init.expression})`
+    }
   }
 
   pushUrlLines(lines, init.lines)
-  pushUrlLines(lines, shape.lines)
-  pushUrlLines(lines, emitPrepareOwnedValueWrite(out))
 
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
+  if (options.out !== null && typeof options.out !== 'undefined') {
+    lines.push(`auto ${out} = ${constructor};`)
+    lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
+    context.variables.set(out, 'object')
+    context.objectDeclaredTypes.set(out, 'url.URLSearchParams')
+    dependencies.registerObjectShape(context, out, expression.shape)
+
+    return {
+      lines,
+      expression: out,
+      cppType: 'URLSearchParams',
+      valueType: 'object'
+    }
   }
-
-  context.variables.set(out, 'object')
-  dependencies.registerObjectShape(context, out, expression.shape)
-  lines.push(
-    emitStatusCheck(
-      `inox_url_search_params_new(&inox_default_allocator, ${init.expression}, ${shape.expression}, &${out})`,
-      context
-    )
-  )
 
   return {
     lines,
-    expression: out
+    expression: constructor,
+    cppType: 'URLSearchParams',
+    valueType: 'object'
   }
 }
 
@@ -279,7 +303,8 @@ export function emitPreparedUrlSearchParamsCallExpression(
     return null
   }
 
-  const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
+  const receiverObject = expression.callee.object
+  const receiver = dependencies.emitCValueExpression(receiverObject, context)
   let name: PreparedStringBytesOperand | null = null
   const lines: string[] = []
 
@@ -288,9 +313,6 @@ export function emitPreparedUrlSearchParamsCallExpression(
   }
 
   pushUrlLines(lines, receiver.lines)
-  lines.push(
-    emitRuntimeTypeCheck(`${receiver.expression}.tag != INOX_TAG_OBJECT || ${receiver.expression}.as.ref == 0`, context)
-  )
 
   if (name !== null && typeof name !== 'undefined') {
     pushUrlLines(lines, name.lines)
@@ -298,16 +320,16 @@ export function emitPreparedUrlSearchParamsCallExpression(
 
   const nameBytes = urlStringBytes(name)
   const nameLength = urlStringLength(name)
+  const nameArg = `inox::StringView(${nameBytes}, ${nameLength})`
+  const receiverExpression =
+    receiver.cppType === 'URLSearchParams' || isUrlSearchParamsReference(receiverObject, context)
+      ? receiver.expression
+      : `URLSearchParams(inox::Value(${receiver.expression}))`
 
   if (method === 'URLSearchParams.has') {
     const out = urlOutName(options, context, 'inox_url_param_has')
-    lines.push(`int ${out} = 0;`)
-    lines.push(
-      emitStatusCheck(
-        `inox_url_search_params_has(${receiver.expression}, ${nameBytes}, ${nameLength}, &${out})`,
-        context
-      )
-    )
+    lines.push(`bool ${out} = ${receiverExpression}.has(${nameArg});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
@@ -318,36 +340,29 @@ export function emitPreparedUrlSearchParamsCallExpression(
 
   if (method === 'URLSearchParams.get' || method === 'URLSearchParams.toString') {
     const out = urlOutName(options, context, 'inox_url_param_value')
-    let call = `inox_url_search_params_to_string(&inox_default_allocator, ${receiver.expression}, &${out})`
+    let call = `${receiverExpression}.toString()`
     let nullable = false
 
-    if (options.owned !== false) {
-      registerOwnedValue(context, out)
-    }
-
     if (method === 'URLSearchParams.get') {
-      call = `inox_url_search_params_get(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, &${out})`
+      call = `${receiverExpression}.get(${nameArg})`
       nullable = true
     }
 
-    pushUrlLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(call, context))
+    lines.push(`auto ${out} = ${call};`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
       expression: out,
+      cppType: method === 'URLSearchParams.toString' ? 'inox::String' : 'inox::Value',
       valueType: 'string',
       nullable
     }
   }
 
   if (method === 'URLSearchParams.delete') {
-    lines.push(
-      emitStatusCheck(
-        `inox_url_search_params_delete(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength})`,
-        context
-      )
-    )
+    lines.push(`${receiverExpression}.remove(${nameArg});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
@@ -357,14 +372,16 @@ export function emitPreparedUrlSearchParamsCallExpression(
   }
 
   const value = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_url_param_value')
-  let call = `inox_url_search_params_append(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, ${value.bytes}, ${value.length})`
+  const valueArg = `inox::StringView(${value.bytes}, ${value.length})`
+  let call = `${receiverExpression}.append(${nameArg}, ${valueArg})`
 
   if (method === 'URLSearchParams.set') {
-    call = `inox_url_search_params_set(&inox_default_allocator, ${receiver.expression}, ${nameBytes}, ${nameLength}, ${value.bytes}, ${value.length})`
+    call = `${receiverExpression}.set(${nameArg}, ${valueArg})`
   }
 
   pushUrlLines(lines, value.lines)
-  lines.push(emitStatusCheck(call, context))
+  lines.push(`${call};`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,
@@ -425,30 +442,6 @@ function emitUrlObjectShape(context: CFunctionContext): PreparedExpression {
   lines.push('};')
   lines.push(`static const inox_shape ${shapeName} = {`)
   lines.push(`  ${urlObjectFields.length},`)
-  lines.push(`  ${fieldsName}`)
-  lines.push('};')
-
-  return {
-    lines,
-    expression: `&${shapeName}`
-  }
-}
-
-function emitUrlSearchParamsObjectShape(context: CFunctionContext): PreparedExpression {
-  const shapeName = nextCName(context, 'inox_shape_url_search_params')
-  const fieldsName = `${shapeName}_fields`
-  const lines: string[] = []
-
-  lines.push(`static const inox_field_info ${fieldsName}[] = {`)
-  const fields: string[] = urlSearchParamsObjectFields
-
-  for (const field of fields) {
-    lines.push(`  { ${cStringLiteral(field)}, 0 },`)
-  }
-
-  lines.push('};')
-  lines.push(`static const inox_shape ${shapeName} = {`)
-  lines.push(`  ${urlSearchParamsObjectFields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
 

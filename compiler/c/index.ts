@@ -3301,6 +3301,22 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return [`${name} = ${emitStringExpression(statement.init, context)};`]
   }
 
+  if (moduleValueType === 'url.URLSearchParams') {
+    const value = emitPreparedUrlSearchParamsObjectExpression(statement.init, context, urlLoweringDependencies)
+
+    if (value !== null && typeof value !== 'undefined') {
+      const lines: string[] = []
+
+      context.variables.set(statement.name, moduleValueType)
+      context.moduleValueTypes.set(statement.name, moduleValueType)
+      context.objectDeclaredTypes.set(statement.name, moduleValueType)
+      pushAll(lines, value.lines)
+      lines.push(`${name} = ${value.expression};`)
+
+      return lines
+    }
+  }
+
   if (inferred === 'promise') {
     const promise = emitPreparedPromiseExpression(statement.init, context, promiseLoweringDependencies, {
       out: name
@@ -3594,7 +3610,7 @@ function pushModuleRuntimeValueAssignment(
 }
 
 function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
-  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array'
+  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array' || cppType === 'URLSearchParams'
 }
 
 function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {
