@@ -159,7 +159,7 @@ static inox_status fetch_append_size(char* out, size_t out_size, size_t* offset,
 static int fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
 static int fetch_headers_include(const FetchNativeHeader* headers, size_t header_count, const char* name);
 static inox_status fetch_redirect_mode_from_init(const FetchNativeInit* init, int* out);
-static inox_status fetch_on_connect(void* user, inox_net_socket* socket, inox_status status);
+static void fetch_on_connect(void* user, NetSocket socket, inox_status status);
 static void fetch_on_data(void* user, NetSocket socket, inox::StringView bytes);
 static void fetch_on_close(void* user, NetSocket socket);
 static inox_status fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status);
@@ -928,21 +928,23 @@ static inox_status fetch_redirect_mode_from_init(const FetchNativeInit* init, in
   return INOX_ERR_UNSUPPORTED;
 }
 
-static inox_status fetch_on_connect(void* user, inox_net_socket* socket, inox_status status) {
+static void fetch_on_connect(void* user, NetSocket socket, inox_status status) {
   FetchOperation* request = (FetchOperation*)user;
 
   if (status != INOX_OK) {
-    return fetch_on_transport_connect(request, status);
+    (void)fetch_on_transport_connect(request, status);
+    return;
   }
 
-  NetSocket(socket).readStart();
+  socket.readStart();
 
   if (inox::thrown()) {
     inox::take_exception();
-    return fetch_finish(request, INOX_ERR_FIELD, 0);
+    (void)fetch_finish(request, INOX_ERR_FIELD, 0);
+    return;
   }
 
-  return fetch_on_transport_connect(request, INOX_OK);
+  (void)fetch_on_transport_connect(request, INOX_OK);
 }
 
 static void fetch_on_data(void* user, NetSocket socket, inox::StringView bytes) {

@@ -20,7 +20,7 @@ class NetSocket;
 typedef inox_status (*NetConnectionFn)(void* user, inox_net_server* server, inox_net_socket* socket);
 typedef inox_status (*NetServerFn)(void* user, inox_net_server* server);
 typedef inox_status (*NetServerErrorFn)(void* user, inox_net_server* server, inox_status status);
-typedef inox_status (*NetConnectFn)(void* user, inox_net_socket* socket, inox_status status);
+typedef void (*NetConnectFn)(void* user, NetSocket socket, inox_status status);
 typedef void (*NetDataFn)(void* user, NetSocket socket, inox::StringView bytes);
 typedef void (*NetCloseFn)(void* user, NetSocket socket);
 typedef void (*NetSocketFn)(void* user, NetSocket socket);

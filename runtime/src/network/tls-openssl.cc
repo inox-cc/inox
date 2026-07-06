@@ -27,7 +27,7 @@ struct inox_tls_client {
 
 static inox_status inox_tls_configure_verify(SSL_CTX* ctx);
 static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername);
-static inox_status inox_tls_on_tcp_connect(void* user, inox_net_socket* socket, inox_status status);
+static void inox_tls_on_tcp_connect(void* user, NetSocket socket, inox_status status);
 static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes);
 static void inox_tls_on_tcp_close(void* user, NetSocket socket);
 static inox_status inox_tls_drive_handshake(inox_tls_client* client);
@@ -276,25 +276,27 @@ static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char
   return INOX_OK;
 }
 
-static inox_status inox_tls_on_tcp_connect(void* user, inox_net_socket* socket, inox_status status) {
+static void inox_tls_on_tcp_connect(void* user, NetSocket socket, inox_status status) {
   inox_tls_client* client = (inox_tls_client*)user;
 
   if (client == 0) {
-    return INOX_OK;
+    return;
   }
 
   if (status != INOX_OK) {
-    return inox_tls_fail_async(client, status);
+    (void)inox_tls_fail_async(client, status);
+    return;
   }
 
-  NetSocket(socket).readStart();
+  socket.readStart();
 
   if (inox::thrown()) {
     inox::take_exception();
-    return inox_tls_fail_async(client, INOX_ERR_FIELD);
+    (void)inox_tls_fail_async(client, INOX_ERR_FIELD);
+    return;
   }
 
-  return inox_tls_drive_handshake(client);
+  (void)inox_tls_drive_handshake(client);
 }
 
 static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes) {

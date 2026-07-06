@@ -1018,12 +1018,13 @@ static void inox_net_connect_cb(uv_connect_t* request, int status) {
   inox_libuv_loop_release_request(socket->loop);
 
   if (connect != 0) {
-    inox_status callback_status = connect(socket->user, socket, connect_status);
+    connect(socket->user, NetSocket(socket), connect_status);
 
-    if (callback_status != INOX_OK) {
-      inox_net_socket_report_status(socket, callback_status);
+    if (inox::thrown()) {
+      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
     }
   }
+
   if (connect_status != INOX_OK) {
     inox_net_socket_report_status(socket, connect_status);
     NetSocket(socket).close();
