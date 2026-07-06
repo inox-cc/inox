@@ -6,7 +6,7 @@ import {
 } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
 import { emitFailureStatement, emitPrepareOwnedValueWrite, nextCName } from '../../../../compiler/c/context.ts'
-import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
+import { cStringLiteral } from '../../../../compiler/c/identifiers.ts'
 import type {
   CObjectShape,
   CObjectShapeField,
@@ -208,7 +208,7 @@ export function emitPreparedProcessStringExpression(
       name = envName
     }
 
-    expressionText = `process.env.get(${cStringLiteral(name)}, ${utf8ByteLength(name)})`
+    expressionText = `process.env.get(${cStringLiteral(name)})`
   }
 
   return {

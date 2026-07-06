@@ -43,7 +43,6 @@ public:
 
 class process_env {
 public:
-  inox::String get(const char* name, size_t name_len) const;
   inox::String get(inox::StringView name) const;
 };
 
