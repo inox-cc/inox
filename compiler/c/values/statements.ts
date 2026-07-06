@@ -3260,7 +3260,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
       pushAllLines(lines, runtimeArray.lines)
       const rawArray = nextCName(context, 'inox_for_array')
       const failureStatement = statementDeps(context).emitFailureStatement(context)
-      lines.push(`inox_array* ${rawArray} = Array.raw(${arrayName});`)
+      lines.push(`ArrayStorage* ${rawArray} = Array.raw(${arrayName});`)
       if (!context.cleanupEnabled && !context.statusReturn) {
         lines.push(`if (${rawArray} == nullptr) {`)
         lines.push('  Array.throwNotIterable();')

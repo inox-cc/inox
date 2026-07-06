@@ -1016,7 +1016,7 @@ static inox_status inox_json_stringify_number(inox_json_buffer* buffer, double n
 
 static inox_status
 inox_json_stringify_array(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth) {
-  inox_array* array = (inox_array*)value.as.ref;
+  ArrayStorage* array = (ArrayStorage*)value.as.ref;
   inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
 
   if (status != INOX_OK) {

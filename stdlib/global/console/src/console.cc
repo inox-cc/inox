@@ -194,7 +194,7 @@ static inox_status inox_console_format_array(inox_console_format_buffer* buffer,
     return INOX_ERR_TYPE;
   }
 
-  inox_array* array = (inox_array*)value.as.ref;
+  ArrayStorage* array = (ArrayStorage*)value.as.ref;
   inox_status status = inox_console_format_append_literal(buffer, "[");
 
   if (status != INOX_OK) {

@@ -1028,7 +1028,7 @@ static int inox_array_sort_compare(const void* left_ptr, const void* right_ptr) 
   return 0;
 }
 
-static inox_status inox_array_reserve(inox_array* array, size_t cap) {
+static inox_status inox_array_reserve(ArrayStorage* array, size_t cap) {
   if (array == 0 || array->header.allocator == 0 || array->header.allocator->realloc == 0) {
     return INOX_ERR_TYPE;
   }
@@ -1071,7 +1071,7 @@ static void inox_array_dispose_ref(inox_ref* ref) {
     return;
   }
 
-  inox_array* array = (inox_array*)ref;
+  ArrayStorage* array = (ArrayStorage*)ref;
 
   for (size_t index = 0; index < array->length; index += 1) {
     inox_release(array->items[index]);
@@ -1084,12 +1084,12 @@ static void inox_array_dispose_ref(inox_ref* ref) {
   }
 }
 
-static inox_array* inox_array_alloc_storage(inox_allocator* allocator, size_t len) {
+static ArrayStorage* inox_array_alloc_storage(inox_allocator* allocator, size_t len) {
   if (allocator == 0 || allocator->alloc == 0) {
     return 0;
   }
 
-  inox_array* array = (inox_array*)allocator->alloc(allocator->user, sizeof(inox_array), alignof(inox_array));
+  ArrayStorage* array = (ArrayStorage*)allocator->alloc(allocator->user, sizeof(ArrayStorage), alignof(ArrayStorage));
 
   if (array == 0) {
     return 0;
@@ -1100,7 +1100,7 @@ static inox_array* inox_array_alloc_storage(inox_allocator* allocator, size_t le
 
   if (len > 0 && array->items == 0) {
     if (allocator->free != 0) {
-      allocator->free(allocator->user, array, sizeof(inox_array), alignof(inox_array));
+      allocator->free(allocator->user, array, sizeof(ArrayStorage), alignof(ArrayStorage));
     }
 
     return 0;
@@ -1109,8 +1109,8 @@ static inox_array* inox_array_alloc_storage(inox_allocator* allocator, size_t le
   array->header.kind = INOX_REF_ARRAY;
   array->header.ref_count = 1;
   array->header.flags = 0;
-  array->header.size = sizeof(inox_array);
-  array->header.align = alignof(inox_array);
+  array->header.size = sizeof(ArrayStorage);
+  array->header.align = alignof(ArrayStorage);
   array->header.allocator = allocator;
   array->header.dispose = inox_array_dispose_ref;
   inox_ref_init_weak(&array->header);
@@ -1128,14 +1128,14 @@ static inox_array* inox_array_alloc_storage(inox_allocator* allocator, size_t le
   return array;
 }
 
-static inox_value inox_array_adopt_storage(inox_array* array) {
+static inox_value inox_array_adopt_storage(ArrayStorage* array) {
   inox_value value = { INOX_TAG_ARRAY };
   value.as.ref = &array->header;
 
   return value;
 }
 
-static inox_status inox_array_set_item(inox_array* array, size_t index, inox_value value) {
+static inox_status inox_array_set_item(ArrayStorage* array, size_t index, inox_value value) {
   if (array == 0) {
     return INOX_ERR_TYPE;
   }
@@ -1151,7 +1151,7 @@ static inox_status inox_array_set_item(inox_array* array, size_t index, inox_val
   return INOX_OK;
 }
 
-static inox_status inox_array_push_item(inox_array* array, inox_value value) {
+static inox_status inox_array_push_item(ArrayStorage* array, inox_value value) {
   if (array == 0) {
     return INOX_ERR_TYPE;
   }
@@ -1232,7 +1232,7 @@ size_t Array::length() const {
     return 0;
   }
 
-  return ((inox_array*)array.as.ref)->length;
+  return ((ArrayStorage*)array.as.ref)->length;
 }
 
 inox::Value Array::get(size_t index) const {
@@ -1243,7 +1243,7 @@ inox::Value Array::get(size_t index) const {
     return inox::Value();
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
 
   if (index >= instance->length) {
     return inox::Value();
@@ -1253,7 +1253,7 @@ inox::Value Array::get(size_t index) const {
 }
 
 class Array Array::create(size_t len) {
-  inox_array* array = inox_array_alloc_storage(&inox_default_allocator, len);
+  ArrayStorage* array = inox_array_alloc_storage(&inox_default_allocator, len);
 
   if (array == 0) {
     inox_collection_throw("TypeError: Array allocation failed");
@@ -1264,7 +1264,7 @@ class Array Array::create(size_t len) {
 }
 
 class Array Array::create(inox_allocator* allocator, size_t len) {
-  inox_array* array = inox_array_alloc_storage(allocator, len);
+  ArrayStorage* array = inox_array_alloc_storage(allocator, len);
 
   if (array == 0) {
     inox_collection_throw("TypeError: Array allocation failed");
@@ -1282,7 +1282,7 @@ inox::Value Array::pop() const {
     return inox::Value();
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
 
   if (instance->length == 0) {
     return inox::Value(inox_null_value());
@@ -1300,7 +1300,7 @@ void Array::push(inox_value value) const {
     return;
   }
 
-  inox_status status = inox_array_push_item((inox_array*)array.as.ref, value);
+  inox_status status = inox_array_push_item((ArrayStorage*)array.as.ref, value);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Array push failed");
@@ -1315,7 +1315,7 @@ void Array::set(size_t index, inox_value value) const {
     return;
   }
 
-  inox_status status = inox_array_set_item((inox_array*)array.as.ref, index, value);
+  inox_status status = inox_array_set_item((ArrayStorage*)array.as.ref, index, value);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Array assignment failed");
@@ -1330,7 +1330,7 @@ class Array Array::slice(size_t start, size_t end) const {
     return Array();
   }
 
-  inox_array* source = (inox_array*)array.as.ref;
+  ArrayStorage* source = (ArrayStorage*)array.as.ref;
 
   if (start > source->length) {
     start = source->length;
@@ -1344,7 +1344,7 @@ class Array Array::slice(size_t start, size_t end) const {
     end = start;
   }
 
-  inox_array* target = inox_array_alloc_storage(&inox_default_allocator, end - start);
+  ArrayStorage* target = inox_array_alloc_storage(&inox_default_allocator, end - start);
 
   if (target == 0) {
     inox_collection_throw("TypeError: Array slice allocation failed");
@@ -1370,7 +1370,7 @@ class Array Array::sort() const {
     return Array();
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
 
   if (instance->length < 2) {
     return Array(*this);
@@ -1399,7 +1399,7 @@ double Array::unshift(inox_value value) const {
     return 0;
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
   inox_status status = inox_array_reserve(instance, instance->length + 1);
 
   if (status != INOX_OK) {
@@ -1431,7 +1431,7 @@ inox::String Array::join(inox::StringView separator) const {
     return inox::String();
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
   const char* separator_bytes = separator.bytes == 0 ? "" : separator.bytes;
   const size_t separator_len = separator.len;
   size_t total_len = 0;
@@ -1509,22 +1509,22 @@ bool Array::isArray(const inox::Value& value) const {
   return value.raw().tag == INOX_TAG_ARRAY;
 }
 
-inox_array* Array::raw(inox_value value) const {
+ArrayStorage* Array::raw(inox_value value) const {
   if (value.tag != INOX_TAG_ARRAY || value.as.ref == 0) {
     return 0;
   }
 
-  return (inox_array*)value.as.ref;
+  return (ArrayStorage*)value.as.ref;
 }
 
-inox_array* Array::raw(const inox::Value& value) const {
+ArrayStorage* Array::raw(const inox::Value& value) const {
   inox_value raw_value = value.raw();
 
   if (raw_value.tag != INOX_TAG_ARRAY || raw_value.as.ref == 0) {
     return 0;
   }
 
-  return (inox_array*)raw_value.as.ref;
+  return (ArrayStorage*)raw_value.as.ref;
 }
 
 void Array::throwNotIterable() const {

@@ -5,12 +5,12 @@
 #include "inox/allocator.h"
 #include "inox/value.h"
 
-typedef struct inox_array {
+struct ArrayStorage {
   inox_ref header;
   size_t length;
   size_t cap;
   inox_value* items;
-} inox_array;
+};
 
 #ifdef __cplusplus
 
@@ -45,8 +45,8 @@ public:
   inox::String join(inox::StringView separator) const;
   bool isArray(inox_value value) const;
   bool isArray(const inox::Value& value) const;
-  inox_array* raw(inox_value value) const;
-  inox_array* raw(const inox::Value& value) const;
+  ArrayStorage* raw(inox_value value) const;
+  ArrayStorage* raw(const inox::Value& value) const;
   void throwNotIterable() const;
 };
 

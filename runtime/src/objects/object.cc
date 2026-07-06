@@ -285,7 +285,7 @@ static inox_status inox_array_object_values(inox_allocator* allocator, inox_valu
     return INOX_ERR_TYPE;
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
   ArrayClass result = ArrayClass::create(allocator, instance->length);
 
   if (inox::thrown() || !result.valid()) {
@@ -314,7 +314,7 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
     return INOX_ERR_TYPE;
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
   ArrayClass result = ArrayClass::create(allocator, instance->length);
 
   if (inox::thrown() || !result.valid()) {
@@ -362,7 +362,7 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     return INOX_ERR_TYPE;
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
   ArrayClass result = ArrayClass::create(allocator, instance->length);
 
   if (inox::thrown() || !result.valid()) {
@@ -718,7 +718,7 @@ inox_status inox_object_value_at(inox_value object, size_t index, inox_value* ou
   }
 
   if (object.tag == INOX_TAG_ARRAY) {
-    inox_array* instance = (inox_array*)object.as.ref;
+    ArrayStorage* instance = (ArrayStorage*)object.as.ref;
 
     if (index >= instance->length) {
       *out = inox_undefined_value();
@@ -749,7 +749,7 @@ inox_status inox_object_entry_at(inox_allocator* allocator, inox_value object, s
   }
 
   if (object.tag == INOX_TAG_ARRAY) {
-    inox_array* instance = (inox_array*)object.as.ref;
+    ArrayStorage* instance = (ArrayStorage*)object.as.ref;
 
     if (index >= instance->length) {
       *out = inox_undefined_value();
