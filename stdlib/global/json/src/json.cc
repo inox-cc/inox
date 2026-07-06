@@ -1310,32 +1310,4 @@ inox::String Json::stringify(const inox_class_descriptor& descriptor, const void
   return out;
 }
 
-inox::String Json::stringify(const inox_class_descriptor* descriptor, const void* instance) const {
-  inox_allocator* allocator = &inox_default_allocator;
-
-  if (allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0) {
-    inox::throw_value(inox::String("JSON.stringify failed"));
-    return inox::String();
-  }
-
-  JsonBuffer buffer = { allocator, 0, 0, 0 };
-  JsonStringifyStack stack = { 0 };
-  inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, descriptor, instance, 0);
-
-  inox::String out;
-
-  if (status == INOX_OK) {
-    out = inox::String(buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
-  }
-
-  inox_json_buffer_dispose(&buffer);
-
-  if (status != INOX_OK || !out.valid()) {
-    inox::throw_value(inox::String("JSON.stringify failed"));
-    return inox::String();
-  }
-
-  return out;
-}
-
 Json JSON;

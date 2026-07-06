@@ -18,8 +18,6 @@ public:
   inox::String stringify(inox_value value) const;
 
   inox::String stringify(const inox_class_descriptor& descriptor, const void* instance) const;
-
-  inox::String stringify(const inox_class_descriptor* descriptor, const void* instance) const;
 };
 
 extern Json JSON;

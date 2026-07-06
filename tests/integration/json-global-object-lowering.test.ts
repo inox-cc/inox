@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -40,6 +42,10 @@ console.log(text)
   assert.doesNotMatch(source, /inox::json_stringify/)
   assert.doesNotMatch(source, /JSON\.parse\(inox::StringView/)
   assert.doesNotMatch(source, /inox_json_stringify\(&inox_default_allocator/)
+
+  const header = readFileSync(resolve('stdlib/global/json/include/inox/json.h'), 'utf8')
+  assert.match(header, /inox::String stringify\(const inox_class_descriptor& descriptor, const void\* instance\) const;/)
+  assert.doesNotMatch(header, /stringify\(const inox_class_descriptor\* descriptor/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
