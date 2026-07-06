@@ -184,7 +184,7 @@ export function emitNetHandlerHead(wrapper: CNetHandler): string {
   }
 
   if (wrapper.kind === 'socket-data') {
-    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket, const char* inox_bytes, size_t inox_len)`
+    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket, inox::StringView inox_bytes)`
   }
 
   if (wrapper.kind === 'socket-write') {
@@ -266,7 +266,6 @@ export function emitNetHandlerDeclaration(
 
   if (wrapper.kind === 'socket-data' && (dataName === null || typeof dataName === 'undefined')) {
     lines.push('  (void)inox_bytes;')
-    lines.push('  (void)inox_len;')
   }
 
   if (wrapper.kind === 'error' || wrapper.kind === 'socket-error') {
@@ -508,7 +507,7 @@ function emitNetHandlerConsoleLogStatement(
     firstArg.path.length === 1 &&
     netReferenceName(firstArg) === netContext.dataName
   ) {
-    return [`console.${stream}("%.*s", (int)inox_len, inox_bytes);`]
+    return [`console.${stream}("%.*s", (int)inox_bytes.len, inox_bytes.bytes);`]
   }
 
   return deps.emitConsoleLogStatement(callee.property, expression.args, context)
@@ -1518,8 +1517,8 @@ function emitNetBytesOperand(
   ) {
     return {
       lines: [],
-      bytes: 'inox_bytes',
-      length: 'inox_len'
+      bytes: 'inox_bytes.bytes',
+      length: 'inox_bytes.len'
     }
   }
 

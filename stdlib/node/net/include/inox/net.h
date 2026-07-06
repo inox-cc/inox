@@ -2,11 +2,9 @@
 #define INOX_NET_H
 
 #include <stddef.h>
-#include "inox/loop.h"
 
-#ifdef __cplusplus
+#include "inox/loop.h"
 #include "inox/string_view.h"
-#endif
 
 struct inox_net_server;
 struct inox_net_socket;
@@ -21,7 +19,7 @@ typedef inox_status (*NetConnectionFn)(void* user, inox_net_server* server, inox
 typedef inox_status (*NetServerFn)(void* user, inox_net_server* server);
 typedef inox_status (*NetServerErrorFn)(void* user, inox_net_server* server, inox_status status);
 typedef inox_status (*NetConnectFn)(void* user, inox_net_socket* socket, inox_status status);
-typedef inox_status (*NetDataFn)(void* user, inox_net_socket* socket, const char* bytes, size_t len);
+typedef inox_status (*NetDataFn)(void* user, inox_net_socket* socket, inox::StringView bytes);
 typedef void (*NetCloseFn)(void* user, inox_net_socket* socket);
 typedef inox_status (*NetSocketFn)(void* user, inox_net_socket* socket);
 typedef inox_status (*NetSocketErrorFn)(void* user, inox_net_socket* socket, inox_status status);

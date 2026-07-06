@@ -160,7 +160,7 @@ static int fetch_header_name_equals(const char* name, size_t name_len, const cha
 static int fetch_headers_include(const FetchNativeHeader* headers, size_t header_count, const char* name);
 static inox_status fetch_redirect_mode_from_init(const FetchNativeInit* init, int* out);
 static inox_status fetch_on_connect(void* user, inox_net_socket* socket, inox_status status);
-static inox_status fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len);
+static inox_status fetch_on_data(void* user, inox_net_socket* socket, inox::StringView bytes);
 static void fetch_on_close(void* user, inox_net_socket* socket);
 static inox_status fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status);
 static inox_status fetch_on_tls_data(void* user, inox_tls_client* client, const char* bytes, size_t len);
@@ -945,9 +945,9 @@ static inox_status fetch_on_connect(void* user, inox_net_socket* socket, inox_st
   return fetch_on_transport_connect(request, INOX_OK);
 }
 
-static inox_status fetch_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
+static inox_status fetch_on_data(void* user, inox_net_socket* socket, inox::StringView bytes) {
   (void)socket;
-  return fetch_on_transport_data((FetchOperation*)user, bytes, len);
+  return fetch_on_transport_data((FetchOperation*)user, bytes.bytes, bytes.len);
 }
 
 static void fetch_on_close(void* user, inox_net_socket* socket) {

@@ -56,8 +56,10 @@ server.close()
   assert.doesNotMatch(source, /\.bytesRead\(&/)
 
   const header = readFileSync(resolve('stdlib/node/net/include/inox/net.h'), 'utf8')
+  assert.match(header, /typedef inox_status \(\*NetDataFn\)\(void\* user, inox_net_socket\* socket, inox::StringView bytes\);/)
   assert.match(header, /void listen\(inox::StringView host, int port, int backlog\) const;/)
   assert.match(header, /static NetSocket connect\([\s\S]*?inox_loop\* loop,[\s\S]*?inox::StringView host,/)
+  assert.doesNotMatch(header, /NetDataFn\)\(void\* user, inox_net_socket\* socket, const char\* bytes, size_t len\)/)
   assert.doesNotMatch(header, /listen\(const char\* host/)
   assert.doesNotMatch(header, /connect\([\s\S]*?inox_loop\* loop,[\s\S]*?const char\* host,/)
 }

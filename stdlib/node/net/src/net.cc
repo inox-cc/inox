@@ -1086,7 +1086,7 @@ static void inox_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
     NetSocket(socket).close();
   } else if (nread > 0 && socket->data != 0) {
     socket->bytes_read += (size_t)nread;
-    inox_status status = socket->data(socket->data_user, socket, buf->base, (size_t)nread);
+    inox_status status = socket->data(socket->data_user, socket, inox::StringView(buf->base, (size_t)nread));
 
     if (status != INOX_OK) {
       inox_net_socket_report_status(socket, status);
