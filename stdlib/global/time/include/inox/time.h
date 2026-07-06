@@ -16,24 +16,50 @@ public:
 
   inox_number parse(inox::StringView text) const;
 
+  inox_number UTC(inox_number year) const;
+  inox_number UTC(inox_number year, inox_number month) const;
+  inox_number UTC(inox_number year, inox_number month, inox_number day) const;
+  inox_number UTC(inox_number year, inox_number month, inox_number day, inox_number hour) const;
+  inox_number UTC(inox_number year, inox_number month, inox_number day, inox_number hour, inox_number minute) const;
   inox_number UTC(
     inox_number year,
-    inox_number month = 0,
-    inox_number day = 1,
-    inox_number hour = 0,
-    inox_number minute = 0,
-    inox_number second = 0,
-    inox_number millisecond = 0
+    inox_number month,
+    inox_number day,
+    inox_number hour,
+    inox_number minute,
+    inox_number second
+  ) const;
+  inox_number UTC(
+    inox_number year,
+    inox_number month,
+    inox_number day,
+    inox_number hour,
+    inox_number minute,
+    inox_number second,
+    inox_number millisecond
   ) const;
 
+  inox_number fromLocal(inox_number year) const;
+  inox_number fromLocal(inox_number year, inox_number month) const;
+  inox_number fromLocal(inox_number year, inox_number month, inox_number day) const;
+  inox_number fromLocal(inox_number year, inox_number month, inox_number day, inox_number hour) const;
+  inox_number fromLocal(inox_number year, inox_number month, inox_number day, inox_number hour, inox_number minute) const;
   inox_number fromLocal(
     inox_number year,
-    inox_number month = 0,
-    inox_number day = 1,
-    inox_number hour = 0,
-    inox_number minute = 0,
-    inox_number second = 0,
-    inox_number millisecond = 0
+    inox_number month,
+    inox_number day,
+    inox_number hour,
+    inox_number minute,
+    inox_number second
+  ) const;
+  inox_number fromLocal(
+    inox_number year,
+    inox_number month,
+    inox_number day,
+    inox_number hour,
+    inox_number minute,
+    inox_number second,
+    inox_number millisecond
   ) const;
 
   inox_number part(inox_number value, int part, bool utc) const;
