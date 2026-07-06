@@ -585,7 +585,18 @@ inox::String fs::realpathSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.realpath != 0) {
-    status = fs_active_adapter.realpath(fs_active_adapter.user, &inox_default_allocator, path, &out);
+    inox::String result = fs_active_adapter.realpath(fs_active_adapter.user, path);
+
+    if (inox::thrown()) {
+      return inox::String();
+    }
+
+    if (!result.valid()) {
+      inox_fs_throw_status(INOX_ERR_TYPE);
+      return inox::String();
+    }
+
+    return result;
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_realpath(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -608,7 +619,18 @@ inox::String fs::readlinkSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.readlink != 0) {
-    status = fs_active_adapter.readlink(fs_active_adapter.user, &inox_default_allocator, path, &out);
+    inox::String result = fs_active_adapter.readlink(fs_active_adapter.user, path);
+
+    if (inox::thrown()) {
+      return inox::String();
+    }
+
+    if (!result.valid()) {
+      inox_fs_throw_status(INOX_ERR_TYPE);
+      return inox::String();
+    }
+
+    return result;
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_readlink(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -3873,12 +3895,20 @@ static inox_status inox_fs_run_request(void* context) {
 
     if (request->kind == INOX_FS_REQUEST_REALPATH) {
       if (fs_active_adapter.realpath != 0) {
-        status = fs_active_adapter.realpath(
+        inox::String string_result = fs_active_adapter.realpath(
           fs_active_adapter.user,
-          request->loop->allocator,
-          inox::StringView(request->path, request->path_len),
-          &result
+          inox::StringView(request->path, request->path_len)
         );
+
+        if (inox::thrown()) {
+          return inox_fs_reject_thrown(request->promise);
+        }
+
+        if (!string_result.valid()) {
+          return inox_fs_reject_status(request->loop, request->promise, INOX_ERR_TYPE);
+        }
+
+        return inox_promise_resolve(request->promise, string_result.raw());
       } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
         status = inox_fs_libuv_realpath(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3887,12 +3917,20 @@ static inox_status inox_fs_run_request(void* context) {
 #endif
       }
     } else if (fs_active_adapter.readlink != 0) {
-      status = fs_active_adapter.readlink(
+      inox::String string_result = fs_active_adapter.readlink(
         fs_active_adapter.user,
-        request->loop->allocator,
-        inox::StringView(request->path, request->path_len),
-        &result
+        inox::StringView(request->path, request->path_len)
       );
+
+      if (inox::thrown()) {
+        return inox_fs_reject_thrown(request->promise);
+      }
+
+      if (!string_result.valid()) {
+        return inox_fs_reject_status(request->loop, request->promise, INOX_ERR_TYPE);
+      }
+
+      return inox_promise_resolve(request->promise, string_result.raw());
     } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
       status = inox_fs_libuv_readlink(0, request->loop->allocator, request->path, request->path_len, &result);

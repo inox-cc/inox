@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "inox/loop.h"
 #include "inox/promise.h"
+#include "inox/string.h"
 #include "inox/string_view.h"
 #include "inox/value.h"
 
@@ -45,11 +46,9 @@ typedef inox_status (*FsStatFn)(
   inox::StringView path,
   inox_value* out
 );
-typedef inox_status (*FsStringPathFn)(
+typedef inox::String (*FsStringPathFn)(
   void* user,
-  inox_allocator* allocator,
-  inox::StringView path,
-  inox_value* out
+  inox::StringView path
 );
 typedef void (*FsAccessFn)(void* user, inox::StringView path, int mode);
 typedef void (*FsMkdirFn)(void* user, inox::StringView path, bool recursive);
@@ -85,7 +84,6 @@ struct FsAdapter {
 
 #include "inox/array.h"
 #include "inox/binary.h"
-#include "inox/string.h"
 
 class FsStats;
 class fs_promises {
