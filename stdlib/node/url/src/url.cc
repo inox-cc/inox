@@ -204,17 +204,16 @@ inox::String url::fileURLToPath(inox_value value) const {
     return inox::String();
   }
 
-  inox_value out = inox_undefined_value();
-  status = inox::String::fromLiteral(&inox_default_allocator, decoded, decoded_len, &out);
+  auto out = inox::String(decoded, decoded_len);
   inox_default_allocator.free(inox_default_allocator.user, decoded, decoded_len + 1, alignof(char));
   inox_release(retained);
 
-  if (status != INOX_OK) {
+  if (!out.valid()) {
     inox_url_throw_failed("fileURLToPath failed");
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return out;
 }
 
 URL url::pathToFileURL(inox_value path, const inox_shape* shape) const {
