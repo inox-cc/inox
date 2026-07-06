@@ -2,7 +2,6 @@ import { memberExpressionPath } from '../../../../compiler/member-paths.ts'
 import { fsRuntimeCallInfoFromPath, isAsyncFsRuntimeMethod } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
 import {
-  emitEventLoopReference,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -102,37 +101,67 @@ function fsAsyncCppExpression(
 ): PreparedExpression | null {
   const method = cFsRuntimeExpressionMethod(expression)
 
-  if (descriptor.kind === 'path-out') {
-    if (descriptor.callName !== 'fs.promises.readFile' && descriptor.callName !== 'fs.promises.unlink') {
-      return null
-    }
+  return {
+    lines,
+    expression: emitFsAsyncPromiseCall(expression, context, dependencies, path, lines, descriptor),
+    valueType: fsPromiseValueType(expression, method),
+    rejectionValueType: 'error'
+  }
+}
 
-    return {
-      lines,
-      expression: `${descriptor.callName}(${emitFsStringArgument(path)})`,
-      valueType: fsPromiseValueType(expression, method),
-      rejectionValueType: 'error'
-    }
+function emitFsAsyncPromiseCall(
+  expression: AnyNode,
+  context: FsFunctionContext,
+  dependencies: FsLoweringDependencies,
+  path: PreparedStringBytesOperand,
+  lines: string[],
+  descriptor: FsAsyncCallDescriptor
+): string {
+  if (descriptor.kind === 'path-out') {
+    return `${descriptor.callName}(${emitFsStringArgument(path)})`
   }
 
-  if (descriptor.kind === 'string-bytes-out') {
-    if (descriptor.callName !== 'fs.promises.writeFile' && descriptor.callName !== 'fs.promises.appendFile') {
-      return null
-    }
+  if (descriptor.kind === 'access-out') {
+    const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
+    appendLines(lines, mode.lines)
 
-    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
+    return `${descriptor.callName}(${emitFsStringArgument(path)}, ${mode.expression})`
+  }
+
+  if (descriptor.kind === 'mkdir-out') {
+    return `${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsBooleanFlag(expression, 'fsRecursive')})`
+  }
+
+  if (descriptor.kind === 'rm-out') {
+    return `${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')})`
+  }
+
+  if (descriptor.kind === 'bytes-value-out') {
+    const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
     appendLines(lines, bytes.lines)
+    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
 
-    return {
-      lines,
-      expression: `${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(bytes)})`,
-      valueType: fsPromiseValueType(expression, method),
-      rejectionValueType: 'error'
-    }
+    return `${descriptor.callName}(${emitFsStringArgument(path)}, ${bytes.expression})`
   }
 
-  return null
+  if (descriptor.kind === 'path-arg-out') {
+    const argumentPath = dependencies.emitPreparedStringBytesOperand(
+      expression.args[1],
+      context,
+      fsDescriptorTempPrefix(descriptor)
+    )
+
+    appendLines(lines, argumentPath.lines)
+
+    return `${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(argumentPath)})`
+  }
+
+  const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
+
+  appendLines(lines, bytes.lines)
+
+  return `${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(bytes)})`
 }
 
 const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
@@ -175,9 +204,13 @@ function fsPromiseResultTypeForMethod(method: string | null): string | null {
 }
 
 function fsAsyncCallDescriptorForExpression(expression: AnyNode, method: string | null): FsAsyncCallDescriptor | null {
+  if (method === 'access') {
+    return { kind: 'access-out', callName: 'fs.promises.access' }
+  }
+
   if (method === 'appendFile') {
     if (fsUsesBytes(expression)) {
-      return { kind: 'bytes-value-out', callName: 'fs.promises.appendFileBytes' }
+      return { kind: 'bytes-value-out', callName: 'fs.promises.appendFile' }
     }
 
     return { kind: 'string-bytes-out', callName: 'fs.promises.appendFile' }
@@ -189,6 +222,10 @@ function fsAsyncCallDescriptorForExpression(expression: AnyNode, method: string 
 
   if (method === 'lstat') {
     return { kind: 'path-out', callName: 'fs.promises.lstat' }
+  }
+
+  if (method === 'mkdir') {
+    return { kind: 'mkdir-out', callName: 'fs.promises.mkdir' }
   }
 
   if (method === 'readFile') {
@@ -219,6 +256,10 @@ function fsAsyncCallDescriptorForExpression(expression: AnyNode, method: string 
     return { kind: 'path-arg-out', callName: 'fs.promises.rename', tempPrefix: 'inox_fs_new_path' }
   }
 
+  if (method === 'rm') {
+    return { kind: 'rm-out', callName: 'fs.promises.rm' }
+  }
+
   if (method === 'stat') {
     return { kind: 'path-out', callName: 'fs.promises.stat' }
   }
@@ -233,7 +274,7 @@ function fsAsyncCallDescriptorForExpression(expression: AnyNode, method: string 
 
   if (method === 'writeFile') {
     if (fsUsesBytes(expression)) {
-      return { kind: 'bytes-value-out', callName: 'fs.promises.writeFileBytes' }
+      return { kind: 'bytes-value-out', callName: 'fs.promises.writeFile' }
     }
 
     return { kind: 'string-bytes-out', callName: 'fs.promises.writeFile' }
@@ -408,54 +449,6 @@ export function emitPreparedFsCallExpression(
     return emitPreparedFsAsyncDescriptorExpression(expression, context, dependencies, path, lines, out, descriptor)
   }
 
-  if (method === 'access') {
-    const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
-
-    appendLines(lines, mode.lines)
-    lines.push(
-      emitStatusCheck(
-        `fs.promises.access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'mkdir') {
-    lines.push(
-      emitStatusCheck(
-        `fs.promises.mkdir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
-  if (method === 'rm') {
-    lines.push(
-      emitStatusCheck(
-        `fs.promises.rm(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &${out})`,
-        context
-      )
-    )
-
-    return {
-      lines,
-      expression: out,
-      rejectionValueType: 'error'
-    }
-  }
-
   return null
 }
 
@@ -482,39 +475,6 @@ export function emitPreparedFsAsyncTaskSourceExpression(
     }
   }
 
-  if (method === 'access') {
-    const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
-
-    appendLines(lines, mode.lines)
-    lines.push(
-      `status = fs.promises.access(inox_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
-    )
-
-    return {
-      lines
-    }
-  }
-
-  if (method === 'mkdir') {
-    lines.push(
-      `status = fs.promises.mkdir(inox_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`
-    )
-
-    return {
-      lines
-    }
-  }
-
-  if (method === 'rm') {
-    lines.push(
-      `status = fs.promises.rm(inox_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &frame->awaited);`
-    )
-
-    return {
-      lines
-    }
-  }
-
   return null
 }
 
@@ -526,35 +486,10 @@ function emitPreparedFsAsyncTaskDescriptorSourceExpression(
   lines: string[],
   descriptor: FsAsyncCallDescriptor
 ): void {
-  if (descriptor.kind === 'path-out') {
-    lines.push(`status = ${descriptor.callName}(inox_loop, ${path.bytes}, ${path.length}, &frame->awaited);`)
-  } else if (descriptor.kind === 'bytes-value-out') {
-    const bytes = dependencies.emitCValueExpression(expression.args[1], context)
+  const call = emitFsAsyncPromiseCall(expression, context, dependencies, path, lines, descriptor)
 
-    appendLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-    lines.push(
-      `status = ${descriptor.callName}(inox_loop, ${path.bytes}, ${path.length}, ${bytes.expression}, &frame->awaited);`
-    )
-  } else if (descriptor.kind === 'path-arg-out') {
-    const argumentPath = dependencies.emitPreparedStringBytesOperand(
-      expression.args[1],
-      context,
-      fsDescriptorTempPrefix(descriptor)
-    )
-
-    appendLines(lines, argumentPath.lines)
-    lines.push(
-      `status = ${descriptor.callName}(inox_loop, ${path.bytes}, ${path.length}, ${argumentPath.bytes}, ${argumentPath.length}, &frame->awaited);`
-    )
-  } else {
-    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
-
-    appendLines(lines, bytes.lines)
-    lines.push(
-      `status = ${descriptor.callName}(inox_loop, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &frame->awaited);`
-    )
-  }
+  lines.push(`frame->awaited = ${call}.release();`)
+  lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
 }
 
 function emitPreparedFsAsyncDescriptorExpression(
@@ -566,49 +501,10 @@ function emitPreparedFsAsyncDescriptorExpression(
   out: string,
   descriptor: FsAsyncCallDescriptor
 ): PreparedExpression {
-  if (descriptor.kind === 'path-out') {
-    lines.push(
-      emitStatusCheck(
-        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, &${out})`,
-        context
-      )
-    )
-  } else if (descriptor.kind === 'bytes-value-out') {
-    const bytes = dependencies.emitCValueExpression(expression.args[1], context)
+  const call = emitFsAsyncPromiseCall(expression, context, dependencies, path, lines, descriptor)
 
-    appendLines(lines, bytes.lines)
-    lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-    lines.push(
-      emitStatusCheck(
-        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.expression}, &${out})`,
-        context
-      )
-    )
-  } else if (descriptor.kind === 'path-arg-out') {
-    const argumentPath = dependencies.emitPreparedStringBytesOperand(
-      expression.args[1],
-      context,
-      fsDescriptorTempPrefix(descriptor)
-    )
-
-    appendLines(lines, argumentPath.lines)
-    lines.push(
-      emitStatusCheck(
-        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${argumentPath.bytes}, ${argumentPath.length}, &${out})`,
-        context
-      )
-    )
-  } else {
-    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
-
-    appendLines(lines, bytes.lines)
-    lines.push(
-      emitStatusCheck(
-        `${descriptor.callName}(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length}, &${out})`,
-        context
-      )
-    )
-  }
+  lines.push(`${out} = ${call};`)
+  lines.push(emitStatusCheck(`${out}.valid() ? INOX_OK : INOX_ERR_TYPE`, context))
 
   return {
     lines,

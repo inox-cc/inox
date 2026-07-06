@@ -390,6 +390,40 @@ static inox_status fs_symlink_sync_status(const char* target, size_t target_len,
 static inox_status fs_rename_sync_status(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
 static inox_status fs_write_file_sync_status(const char* path, size_t path_len, const char* bytes, size_t byte_len);
 static inox_status fs_write_file_bytes_sync_status(const char* path, size_t path_len, inox_value bytes);
+static inox::Promise fs_adopt_async_promise(inox_status status, inox_promise* promise);
+static inox_status fs_promises_read_file_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_read_file_bytes_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_read_dir_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_read_dir_dirents_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_stat_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_lstat_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_realpath_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_readlink_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_access_status(inox_loop* loop, const char* path, size_t path_len, int mode, inox_promise** out);
+static inox_status fs_promises_mkdir_status(inox_loop* loop, const char* path, size_t path_len, bool recursive, inox_promise** out);
+static inox_status fs_promises_unlink_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_rm_status(inox_loop* loop, const char* path, size_t path_len, bool recursive, bool force, inox_promise** out);
+static inox_status fs_promises_append_file_status(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out);
+static inox_status fs_promises_append_file_bytes_status(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out);
+static inox_status fs_promises_copy_file_status(
+  inox_loop* loop,
+  const char* src_path,
+  size_t src_path_len,
+  const char* dest_path,
+  size_t dest_path_len,
+  inox_promise** out
+);
+static inox_status fs_promises_symlink_status(inox_loop* loop, const char* target, size_t target_len, const char* path, size_t path_len, inox_promise** out);
+static inox_status fs_promises_rename_status(
+  inox_loop* loop,
+  const char* old_path,
+  size_t old_path_len,
+  const char* new_path,
+  size_t new_path_len,
+  inox_promise** out
+);
+static inox_status fs_promises_write_file_status(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out);
+static inox_status fs_promises_write_file_bytes_status(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out);
 
 inox::String fs::readFileSync(inox::StringView path) {
   inox_value out = inox_undefined_value();
@@ -875,47 +909,148 @@ void fs::writeFileSync(inox::StringView path, inox_value bytes) {
   }
 }
 
-inox::Promise fs_promises::readFile(inox::StringView path) {
-  inox_promise* promise = 0;
-
-  if (readFile(inox::loop(), path.bytes, path.len, &promise) != INOX_OK) {
+static inox::Promise fs_adopt_async_promise(inox_status status, inox_promise* promise) {
+  if (status != INOX_OK) {
     return inox::Promise();
   }
 
   return inox::adopt(promise);
+}
+
+inox::Promise fs_promises::readFile(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_read_file_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::readFileBytes(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_read_file_bytes_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::readdir(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_read_dir_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::readdirDirents(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_read_dir_dirents_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::stat(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_stat_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::lstat(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_lstat_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::realpath(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_realpath_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::readlink(inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_readlink_status(inox::loop(), path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::access(inox::StringView path, int mode) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_access_status(inox::loop(), path.bytes, path.len, mode, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::mkdir(inox::StringView path, bool recursive) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_mkdir_status(inox::loop(), path.bytes, path.len, recursive, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::rm(inox::StringView path, bool recursive, bool force) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_rm_status(inox::loop(), path.bytes, path.len, recursive, force, &promise);
+
+  return fs_adopt_async_promise(status, promise);
 }
 
 inox::Promise fs_promises::writeFile(inox::StringView path, inox::StringView bytes) {
   inox_promise* promise = 0;
+  inox_status status = fs_promises_write_file_status(inox::loop(), path.bytes, path.len, bytes.bytes, bytes.len, &promise);
 
-  if (writeFile(inox::loop(), path.bytes, path.len, bytes.bytes, bytes.len, &promise) != INOX_OK) {
-    return inox::Promise();
-  }
+  return fs_adopt_async_promise(status, promise);
+}
 
-  return inox::adopt(promise);
+inox::Promise fs_promises::writeFile(inox::StringView path, inox_value bytes) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_write_file_bytes_status(inox::loop(), path.bytes, path.len, bytes, &promise);
+
+  return fs_adopt_async_promise(status, promise);
 }
 
 inox::Promise fs_promises::appendFile(inox::StringView path, inox::StringView bytes) {
   inox_promise* promise = 0;
+  inox_status status = fs_promises_append_file_status(inox::loop(), path.bytes, path.len, bytes.bytes, bytes.len, &promise);
 
-  if (appendFile(inox::loop(), path.bytes, path.len, bytes.bytes, bytes.len, &promise) != INOX_OK) {
-    return inox::Promise();
-  }
+  return fs_adopt_async_promise(status, promise);
+}
 
-  return inox::adopt(promise);
+inox::Promise fs_promises::appendFile(inox::StringView path, inox_value bytes) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_append_file_bytes_status(inox::loop(), path.bytes, path.len, bytes, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::copyFile(inox::StringView src_path, inox::StringView dest_path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_copy_file_status(inox::loop(), src_path.bytes, src_path.len, dest_path.bytes, dest_path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::symlink(inox::StringView target, inox::StringView path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_symlink_status(inox::loop(), target.bytes, target.len, path.bytes, path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
+}
+
+inox::Promise fs_promises::rename(inox::StringView old_path, inox::StringView new_path) {
+  inox_promise* promise = 0;
+  inox_status status = fs_promises_rename_status(inox::loop(), old_path.bytes, old_path.len, new_path.bytes, new_path.len, &promise);
+
+  return fs_adopt_async_promise(status, promise);
 }
 
 inox::Promise fs_promises::unlink(inox::StringView path) {
   inox_promise* promise = 0;
+  inox_status status = fs_promises_unlink_status(inox::loop(), path.bytes, path.len, &promise);
 
-  if (unlink(inox::loop(), path.bytes, path.len, &promise) != INOX_OK) {
-    return inox::Promise();
-  }
-
-  return inox::adopt(promise);
+  return fs_adopt_async_promise(status, promise);
 }
 
-inox_status fs_promises::readFile(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_read_file_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.read_file == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -925,7 +1060,7 @@ inox_status fs_promises::readFile(inox_loop* loop, const char* path, size_t path
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::readFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_read_file_bytes_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.read_file_bytes == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -935,7 +1070,7 @@ inox_status fs_promises::readFileBytes(inox_loop* loop, const char* path, size_t
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::readdir(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_read_dir_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.read_dir == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -945,7 +1080,7 @@ inox_status fs_promises::readdir(inox_loop* loop, const char* path, size_t path_
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::readdirDirents(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_read_dir_dirents_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.read_dir_dirents == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_DIR_DIRENTS, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -955,7 +1090,7 @@ inox_status fs_promises::readdirDirents(inox_loop* loop, const char* path, size_
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_DIR_DIRENTS, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::stat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_stat_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.stat == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_STAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -965,7 +1100,7 @@ inox_status fs_promises::stat(inox_loop* loop, const char* path, size_t path_len
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_STAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::lstat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_lstat_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.lstat == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -975,7 +1110,7 @@ inox_status fs_promises::lstat(inox_loop* loop, const char* path, size_t path_le
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::realpath(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_realpath_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.realpath == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_REALPATH, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -985,7 +1120,7 @@ inox_status fs_promises::realpath(inox_loop* loop, const char* path, size_t path
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_REALPATH, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::readlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_readlink_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.readlink == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -995,7 +1130,7 @@ inox_status fs_promises::readlink(inox_loop* loop, const char* path, size_t path
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::access(inox_loop* loop, const char* path, size_t path_len, int mode, inox_promise** out) {
+static inox_status fs_promises_access_status(inox_loop* loop, const char* path, size_t path_len, int mode, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.access == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_ACCESS, path, path_len, 0, 0, 0, 0, mode, false, false, out);
@@ -1005,7 +1140,7 @@ inox_status fs_promises::access(inox_loop* loop, const char* path, size_t path_l
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_ACCESS, path, path_len, 0, 0, 0, 0, mode, false, false, out);
 }
 
-inox_status fs_promises::mkdir(inox_loop* loop, const char* path, size_t path_len, bool recursive, inox_promise** out) {
+static inox_status fs_promises_mkdir_status(inox_loop* loop, const char* path, size_t path_len, bool recursive, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.mkdir == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_MKDIR, path, path_len, 0, 0, 0, 0, 0, recursive, false, out);
@@ -1015,7 +1150,7 @@ inox_status fs_promises::mkdir(inox_loop* loop, const char* path, size_t path_le
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_MKDIR, path, path_len, 0, 0, 0, 0, 0, recursive, false, out);
 }
 
-inox_status fs_promises::unlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_unlink_status(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.unlink == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_UNLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -1025,7 +1160,7 @@ inox_status fs_promises::unlink(inox_loop* loop, const char* path, size_t path_l
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_UNLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::rm(inox_loop* loop, const char* path, size_t path_len, bool recursive, bool force, inox_promise** out) {
+static inox_status fs_promises_rm_status(inox_loop* loop, const char* path, size_t path_len, bool recursive, bool force, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.rm == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_RM, path, path_len, 0, 0, 0, 0, 0, recursive, force, out);
@@ -1035,7 +1170,7 @@ inox_status fs_promises::rm(inox_loop* loop, const char* path, size_t path_len, 
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_RM, path, path_len, 0, 0, 0, 0, 0, recursive, force, out);
 }
 
-inox_status fs_promises::appendFile(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
+static inox_status fs_promises_append_file_status(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.append_file == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
@@ -1045,7 +1180,7 @@ inox_status fs_promises::appendFile(inox_loop* loop, const char* path, size_t pa
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
 }
 
-inox_status fs_promises::appendFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
+static inox_status fs_promises_append_file_bytes_status(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
   if (out != 0) {
     *out = 0;
   }
@@ -1069,7 +1204,7 @@ inox_status fs_promises::appendFileBytes(inox_loop* loop, const char* path, size
   );
 }
 
-inox_status fs_promises::copyFile(
+static inox_status fs_promises_copy_file_status(
   inox_loop* loop,
   const char* src_path,
   size_t src_path_len,
@@ -1090,7 +1225,7 @@ inox_status fs_promises::copyFile(
   );
 }
 
-inox_status fs_promises::symlink(inox_loop* loop, const char* target, size_t target_len, const char* path, size_t path_len, inox_promise** out) {
+static inox_status fs_promises_symlink_status(inox_loop* loop, const char* target, size_t target_len, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.symlink == 0) {
     return inox_fs_libuv_queue_request(
@@ -1102,7 +1237,7 @@ inox_status fs_promises::symlink(inox_loop* loop, const char* target, size_t tar
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_SYMLINK, target, target_len, path, path_len, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::rename(inox_loop* loop, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len, inox_promise** out) {
+static inox_status fs_promises_rename_status(inox_loop* loop, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.rename == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_RENAME, old_path, old_path_len, new_path, new_path_len, 0, 0, 0, false, false, out);
@@ -1112,7 +1247,7 @@ inox_status fs_promises::rename(inox_loop* loop, const char* old_path, size_t ol
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_RENAME, old_path, old_path_len, new_path, new_path_len, 0, 0, 0, false, false, out);
 }
 
-inox_status fs_promises::writeFile(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
+static inox_status fs_promises_write_file_status(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.write_file == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
@@ -1122,7 +1257,7 @@ inox_status fs_promises::writeFile(inox_loop* loop, const char* path, size_t pat
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
 }
 
-inox_status fs_promises::writeFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
+static inox_status fs_promises_write_file_bytes_status(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
   if (out != 0) {
     *out = 0;
   }
