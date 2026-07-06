@@ -6,6 +6,7 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
+#include "inox/string.h"
 #include "inox/string_view.h"
 
 namespace inox {
@@ -14,8 +15,6 @@ enum class ConsoleStream {
   stdout,
   stderr
 };
-
-class String;
 
 enum class ConsoleArgKind {
   empty,
@@ -61,10 +60,9 @@ public:
   ConsoleArg(const Value& value);
 };
 
-inox_status console_format_class_instance(
+String console_format_class_instance(
   const inox_class_descriptor& descriptor,
-  const void* instance,
-  Value& out
+  const void* instance
 );
 
 } // namespace inox

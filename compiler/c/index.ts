@@ -6626,24 +6626,17 @@ function emitNativeClassInstanceLogValue(expression: AnyNode, context: CFunction
     return null
   }
 
-  const temp = nextCName(context, 'inox_log_value')
+  const temp = nextCName(context, 'inox_log_string')
   const lines: string[] = []
 
-  registerOwnedValue(context, temp)
   pushAll(lines, instance.lines)
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox::console_format_class_instance(${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression}, ${temp})`,
-      context
-    )
-  )
-  lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
+  lines.push(`auto ${temp} = inox::console_format_class_instance(${emitCClassInfoDescriptorName(instance.info)}, ${instance.expression});`)
+  lines.push(emitRuntimeTypeCheck(`!${temp}.valid()`, context))
 
   return {
     lines,
     format: consoleLogStringFormat,
-    values: [`inox::String(${temp})`]
+    values: [temp]
   }
 }
 

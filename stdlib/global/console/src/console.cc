@@ -697,22 +697,21 @@ static inox_status console_print_value_line(ConsoleStream stream, inox_value val
   return status;
 }
 
-inox_status console_format_class_instance(
+String console_format_class_instance(
   const inox_class_descriptor& descriptor,
-  const void* instance,
-  Value& out
+  const void* instance
 ) {
-  inox_value* raw_out = out.out();
   ConsoleFormatBuffer buffer = { 0 };
   inox_status status = inox_console_format_class_instance_into(&buffer, &descriptor, instance, 0);
+  String out;
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(&inox_default_allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length, raw_out);
+    out = String(buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
   }
 
   inox_console_format_buffer_dispose(&buffer);
 
-  return status;
+  return out;
 }
 
 } // namespace inox
