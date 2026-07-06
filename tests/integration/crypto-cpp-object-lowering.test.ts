@@ -21,6 +21,7 @@ import crypto from 'node:crypto'
 const bytes = crypto.randomBytes(8)
 const filled = crypto.randomFillSync(bytes, 0, 4)
 const value = crypto.randomInt(5, 10)
+const small = crypto.randomInt(5)
 const uuid = crypto.randomUUID()
 const digest = crypto.hash('sha256', 'test')
 const hash = crypto.createHash('sha256')
@@ -32,7 +33,7 @@ hmac.update('test')
 const hmacDigest = hmac.digest('hex')
 const same = crypto.timingSafeEqual(Buffer.from('a'), Buffer.from('a'))
 
-console.log(bytes.length, filled.length, value, uuid.length, digest, digestHex, chainedDigest, hmacDigest, same)
+console.log(bytes.length, filled.length, value, small, uuid.length, digest, digestHex, chainedDigest, hmacDigest, same)
 `
       }
     ],
@@ -52,6 +53,7 @@ console.log(bytes.length, filled.length, value, uuid.length, digest, digestHex, 
   assert.match(source, /crypto\.randomBytes\(8\)/)
   assert.match(source, /crypto\.randomFillSync\(bytes, 0, 4, true\)/)
   assert.match(source, /crypto\.randomInt\(5, 10\)/)
+  assert.match(source, /crypto\.randomInt\(5\)/)
   assert.match(source, /crypto\.randomUUID\(\)/)
   assert.match(source, /crypto\.hashHex\("sha256", inox_value_\d+\)/)
   assert.match(source, /static Hash hash;/)

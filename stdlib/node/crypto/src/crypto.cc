@@ -315,7 +315,40 @@ Uint8Array crypto::randomFillSync(inox_value value, inox_number offset_value, in
 }
 
 inox_number crypto::randomInt(inox_number max) const {
-  return randomInt(0, max);
+  const inox_number min = 0;
+
+  if (!inox_crypto_number_is_integer(max) || !(max > min)) {
+    inox_crypto_throw_failed("crypto.randomInt failed");
+    return 0;
+  }
+
+  const inox_number range_double = max - min;
+
+  if (range_double <= 0 || range_double > 281474976710656.0) {
+    inox_crypto_throw_failed("crypto.randomInt failed");
+    return 0;
+  }
+
+  const uint64_t range = (uint64_t)range_double;
+
+  if (range == 0 || (inox_number)range != range_double) {
+    inox_crypto_throw_failed("crypto.randomInt failed");
+    return 0;
+  }
+
+  const uint64_t threshold = (UINT64_C(0) - range) % range;
+  uint64_t sample = 0;
+
+  do {
+    inox_status status = inox_crypto_random_bytes_raw((uint8_t*)&sample, sizeof(sample));
+
+    if (status != INOX_OK) {
+      inox_crypto_throw_failed("crypto.randomInt failed");
+      return 0;
+    }
+  } while (sample < threshold);
+
+  return (inox_number)(sample % range);
 }
 
 inox_number crypto::randomInt(inox_number min, inox_number max) const {

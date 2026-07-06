@@ -518,16 +518,22 @@ export function emitPreparedCryptoNumberCallExpression(
     return null
   }
 
-  let min = emptyPreparedCryptoExpression('0')
-  let maxArg = expression.args[0]
-  if (expression.args.length !== 1) {
-    min = deps.emitPreparedNumberExpression(expression.args[0], context)
-    maxArg = expression.args[1]
-  }
-
-  const max = deps.emitPreparedNumberExpression(maxArg, context)
+  const max = deps.emitPreparedNumberExpression(expression.args[expression.args.length === 1 ? 0 : 1], context)
   const out = nextCName(context, 'inox_crypto_int')
   const lines: string[] = []
+
+  if (expression.args.length === 1) {
+    pushCryptoLines(lines, max.lines)
+    lines.push(`auto ${out} = crypto.randomInt(${max.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
+  const min = deps.emitPreparedNumberExpression(expression.args[0], context)
 
   pushCryptoLines(lines, min.lines)
   pushCryptoLines(lines, max.lines)
