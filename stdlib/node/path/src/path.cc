@@ -11,7 +11,6 @@ struct PathSpan {
 };
 
 static inox_status inox_path_string(inox_value value, const char** bytes, size_t* len);
-static inox_status inox_path_string_value_result(inox_allocator* allocator, char* bytes, size_t len, inox_value* out);
 static char* inox_path_alloc(inox_allocator* allocator, size_t len);
 static inox_status inox_path_copy(inox_allocator* allocator, const char* bytes, size_t len, char** out, size_t* out_len);
 static inox_status inox_path_normalize_bytes(
@@ -28,7 +27,6 @@ static inox_status inox_path_concat_values(
   char** out,
   size_t* out_len
 );
-static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox::StringView* paths, size_t path_count, inox_value* out);
 static size_t inox_path_trim_trailing_slashes(const char* bytes, size_t len);
 static size_t inox_path_ext_offset(const char* bytes, size_t start, size_t len);
 static int inox_path_ends_with(const char* bytes, size_t len, const char* suffix, size_t suffix_len);
@@ -503,16 +501,7 @@ inox::String path::relative(inox::StringView from, inox::StringView to) const {
 }
 
 inox::String path::resolve(const inox::StringView* paths, size_t path_count) const {
-  inox_value out = inox_undefined_value();
-
-  if (inox_path_resolve_value(&inox_default_allocator, paths, path_count, &out) != INOX_OK) {
-    return inox::String();
-  }
-
-  return inox::String(inox::adopt(out));
-}
-
-static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox::StringView* paths, size_t path_count, inox_value* out) {
+  inox_allocator* allocator = &inox_default_allocator;
   const char* start_bytes = 0;
   size_t start_len = 0;
   size_t start_index = 0;
@@ -522,7 +511,7 @@ static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox
     const inox::StringView path = paths[index - 1];
 
     if (path.bytes == 0 && path.len != 0) {
-      return INOX_ERR_TYPE;
+      return inox::String();
     }
 
     if (path.len > 0 && path.bytes[0] == '/') {
@@ -538,7 +527,7 @@ static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox
 
   if (!found_absolute) {
     if (getcwd(cwd, sizeof(cwd)) == 0) {
-      return INOX_ERR_UNSUPPORTED;
+      return inox::String();
     }
 
     start_bytes = cwd;
@@ -552,7 +541,7 @@ static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox
     const inox::StringView path = paths[index];
 
     if (path.bytes == 0 && path.len != 0) {
-      return INOX_ERR_TYPE;
+      return inox::String();
     }
 
     if (path.len != 0) {
@@ -563,7 +552,7 @@ static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox
   char* joined = inox_path_alloc(allocator, total);
 
   if (joined == 0) {
-    return INOX_ERR_OOM;
+    return inox::String();
   }
 
   size_t offset = 0;
@@ -575,7 +564,7 @@ static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox
 
     if (path.bytes == 0 && path.len != 0) {
       allocator->free(allocator->user, joined, total + 1, alignof(char));
-      return INOX_ERR_TYPE;
+      return inox::String();
     }
 
     if (path.len == 0) {
@@ -593,7 +582,13 @@ static inox_status inox_path_resolve_value(inox_allocator* allocator, const inox
   inox_status status = inox_path_normalize_bytes(allocator, joined, offset, &normalized, &normalized_len);
   allocator->free(allocator->user, joined, total + 1, alignof(char));
 
-  return status == INOX_OK ? inox_path_string_value_result(allocator, normalized, normalized_len, out) : status;
+  if (status != INOX_OK) {
+    return inox::String();
+  }
+
+  inox::String result(normalized, normalized_len);
+  allocator->free(allocator->user, normalized, normalized_len + 1, alignof(char));
+  return result;
 }
 
 static inox_status inox_path_string(inox_value value, const char** bytes, size_t* len) {
@@ -609,18 +604,6 @@ static inox_status inox_path_string(inox_value value, const char** bytes, size_t
 }
 
 class path path;
-
-static inox_status inox_path_string_value_result(inox_allocator* allocator, char* bytes, size_t len, inox_value* out) {
-  if (bytes == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  auto value = inox::String(bytes, len);
-  inox_status status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
-  allocator->free(allocator->user, bytes, len + 1, alignof(char));
-
-  return status;
-}
 
 static char* inox_path_alloc(inox_allocator* allocator, size_t len) {
   if (allocator == 0 || allocator->alloc == 0) {
