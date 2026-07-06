@@ -801,7 +801,7 @@ static int console_printf(ConsoleStream stream, const char* format, ...) {
 
 static inox_status inox_console_printf_line(
   inox::ConsoleStream stream,
-  const char* format,
+  inox::StringView format,
   const inox::ConsoleArg* args,
   size_t arg_count
 );
@@ -814,33 +814,12 @@ void console::log() const {
   inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-void console::log(const char* text) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  if (text == nullptr) {
-    inox::console_newline(inox::ConsoleStream::stdout);
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
-}
-
 void console::log(inox::StringView text) const {
   if (inox::thrown()) {
     return;
   }
 
   inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
-}
-
-void console::log(const inox::String& value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
 }
 
 void console::log(inox_value value) const {
@@ -860,7 +839,7 @@ void console::log(const inox::Value& value) const {
 }
 
 void console::log(
-  const char* format,
+  inox::StringView format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
   inox::ConsoleArg arg2,
@@ -908,33 +887,12 @@ void console::info() const {
   inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-void console::info(const char* text) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  if (text == nullptr) {
-    inox::console_newline(inox::ConsoleStream::stdout);
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
-}
-
 void console::info(inox::StringView text) const {
   if (inox::thrown()) {
     return;
   }
 
   inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
-}
-
-void console::info(const inox::String& value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
 }
 
 void console::info(inox_value value) const {
@@ -954,7 +912,7 @@ void console::info(const inox::Value& value) const {
 }
 
 void console::info(
-  const char* format,
+  inox::StringView format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
   inox::ConsoleArg arg2,
@@ -1002,33 +960,12 @@ void console::warn() const {
   inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-void console::warn(const char* text) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  if (text == nullptr) {
-    inox::console_newline(inox::ConsoleStream::stderr);
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
-}
-
 void console::warn(inox::StringView text) const {
   if (inox::thrown()) {
     return;
   }
 
   inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
-}
-
-void console::warn(const inox::String& value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
 }
 
 void console::warn(inox_value value) const {
@@ -1048,7 +985,7 @@ void console::warn(const inox::Value& value) const {
 }
 
 void console::warn(
-  const char* format,
+  inox::StringView format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
   inox::ConsoleArg arg2,
@@ -1096,33 +1033,12 @@ void console::error() const {
   inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-void console::error(const char* text) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  if (text == nullptr) {
-    inox::console_newline(inox::ConsoleStream::stderr);
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
-}
-
 void console::error(inox::StringView text) const {
   if (inox::thrown()) {
     return;
   }
 
   inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
-}
-
-void console::error(const inox::String& value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
 }
 
 void console::error(inox_value value) const {
@@ -1142,7 +1058,7 @@ void console::error(const inox::Value& value) const {
 }
 
 void console::error(
-  const char* format,
+  inox::StringView format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
   inox::ConsoleArg arg2,
@@ -1583,7 +1499,7 @@ static inox_status inox_console_write_formatted(
 
 static inox_status inox_console_printf_line(
   inox::ConsoleStream stream,
-  const char* format,
+  inox::StringView format,
   const inox::ConsoleArg* args,
   size_t arg_count
 ) {
@@ -1591,9 +1507,33 @@ static inox_status inox_console_printf_line(
     return INOX_OK;
   }
 
-  const char* safe_format = format == nullptr ? "" : format;
+  const char* format_bytes = format.bytes == nullptr ? "" : format.bytes;
+  const size_t format_len = format.bytes == nullptr ? 0 : format.len;
+  char stack_format[256];
+  char* heap_format = nullptr;
+  char* safe_format = stack_format;
+
+  if (format_len >= sizeof(stack_format)) {
+    heap_format = (char*)malloc(format_len + 1);
+
+    if (heap_format == nullptr) {
+      return INOX_ERR_OOM;
+    }
+
+    safe_format = heap_format;
+  }
+
+  if (format_len != 0) {
+    memcpy(safe_format, format_bytes, format_len);
+  }
+
+  safe_format[format_len] = '\0';
 
   if (inox_console_format_uses_dynamic_width_or_precision(safe_format)) {
+    if (heap_format != nullptr) {
+      free(heap_format);
+    }
+
     return INOX_ERR_TYPE;
   }
 
@@ -1605,6 +1545,10 @@ static inox_status inox_console_printf_line(
   inox_status status = inox_console_next_format_spec(safe_format, &spec_end) == nullptr
     ? inox_console_write_unformatted(stream, safe_format, args, arg_count)
     : inox_console_write_formatted(stream, safe_format, args, arg_count);
+
+  if (heap_format != nullptr) {
+    free(heap_format);
+  }
 
   if (status != INOX_OK) {
     return status;

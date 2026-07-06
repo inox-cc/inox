@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -55,6 +57,14 @@ console.log('entries', Object.entries(parsed), process.versions, process)
   assert.doesNotMatch(source, /inox_console_format_value/)
   assert.doesNotMatch(source, /inox::console_log/)
   assert.doesNotMatch(source, /if \(console\.(?:log|error)\(/)
+
+  const header = readFileSync(resolve('stdlib/global/console/include/inox/console.h'), 'utf8')
+  assert.match(header, /void log\(inox::StringView text\) const;/)
+  assert.match(header, /void log\(\n    inox::StringView format,/)
+  assert.match(header, /void error\(inox::StringView text\) const;/)
+  assert.match(header, /void error\(\n    inox::StringView format,/)
+  assert.doesNotMatch(header, /void (?:log|info|warn|error)\(const char\* text\) const;/)
+  assert.doesNotMatch(header, /const char\* format/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

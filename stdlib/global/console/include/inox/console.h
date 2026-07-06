@@ -70,13 +70,11 @@ String console_format_class_instance(
 class console {
 public:
   void log() const;
-  void log(const char* text) const;
   void log(inox::StringView text) const;
-  void log(const inox::String& value) const;
   void log(inox_value value) const;
   void log(const inox::Value& value) const;
   void log(
-    const char* format,
+    inox::StringView format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),
     inox::ConsoleArg arg2 = inox::ConsoleArg(),
@@ -96,13 +94,11 @@ public:
   ) const;
 
   void info() const;
-  void info(const char* text) const;
   void info(inox::StringView text) const;
-  void info(const inox::String& value) const;
   void info(inox_value value) const;
   void info(const inox::Value& value) const;
   void info(
-    const char* format,
+    inox::StringView format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),
     inox::ConsoleArg arg2 = inox::ConsoleArg(),
@@ -122,13 +118,11 @@ public:
   ) const;
 
   void warn() const;
-  void warn(const char* text) const;
   void warn(inox::StringView text) const;
-  void warn(const inox::String& value) const;
   void warn(inox_value value) const;
   void warn(const inox::Value& value) const;
   void warn(
-    const char* format,
+    inox::StringView format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),
     inox::ConsoleArg arg2 = inox::ConsoleArg(),
@@ -148,13 +142,11 @@ public:
   ) const;
 
   void error() const;
-  void error(const char* text) const;
   void error(inox::StringView text) const;
-  void error(const inox::String& value) const;
   void error(inox_value value) const;
   void error(const inox::Value& value) const;
   void error(
-    const char* format,
+    inox::StringView format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),
     inox::ConsoleArg arg2 = inox::ConsoleArg(),
