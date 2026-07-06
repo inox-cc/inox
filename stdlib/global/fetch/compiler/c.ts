@@ -1,6 +1,5 @@
 import type { AnyNode } from '../../../../compiler/types.ts'
 import {
-  emitEventLoopReference,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
   emitStatusCheck,
@@ -180,8 +179,8 @@ export function emitPreparedFetchCallExpression(
 
       const fetchExpression =
         init.expression === '0'
-          ? `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)})`
-          : `inox::fetch(${emitEventLoopReference(context)}, ${emitFetchStringArgument(url)}, ${init.expression})`
+          ? `inox::fetch(${emitFetchStringArgument(url)})`
+          : `inox::fetch(${emitFetchStringArgument(url)}, ${init.expression})`
       call = `(${out} = ${fetchExpression}, ${out}.valid() ? INOX_OK : INOX_ERR_TYPE)`
 
       const lines: string[] = []
@@ -237,7 +236,7 @@ export function emitPreparedFetchCallExpression(
       )
       lines.push(
         emitStatusCheck(
-          `(${out} = inox::FetchResponse(inox::Value(${response.expression})).text(${emitEventLoopReference(context)}), ${out}.valid() ? INOX_OK : INOX_ERR_TYPE)`,
+          `(${out} = inox::FetchResponse(inox::Value(${response.expression})).text(), ${out}.valid() ? INOX_OK : INOX_ERR_TYPE)`,
           context
         )
       )

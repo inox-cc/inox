@@ -3297,9 +3297,9 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     appendAsyncTaskLines(lines, init.lines)
 
     if (init.expression === '0') {
-      lines.push(`frame->awaited = inox::fetch(inox_loop, ${emitFetchStringArgument(url)}).release();`)
+      lines.push(`frame->awaited = inox::fetch(${emitFetchStringArgument(url)}).release();`)
     } else {
-      lines.push(`frame->awaited = inox::fetch(inox_loop, ${emitFetchStringArgument(url)}, ${init.expression}).release();`)
+      lines.push(`frame->awaited = inox::fetch(${emitFetchStringArgument(url)}, ${init.expression}).release();`)
     }
     lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
   } else {
@@ -3309,7 +3309,7 @@ function emitPreparedAsyncTaskFetchSourceExpression(
     lines.push(
       emitRuntimeTypeCheck(runtimeFetchResponseValueMismatchCondition(response.expression), context)
     )
-    lines.push(`frame->awaited = inox::FetchResponse(inox::Value(${response.expression})).text(inox_loop).release();`)
+    lines.push(`frame->awaited = inox::FetchResponse(inox::Value(${response.expression})).text().release();`)
     lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
   }
 

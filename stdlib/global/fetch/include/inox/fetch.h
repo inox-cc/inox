@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include "inox/loop.h"
 #include "inox/promise.h"
 #include "inox/value.h"
 
@@ -43,17 +42,14 @@ public:
   inox_number status() const;
   bool ok() const;
   bool redirected() const;
-  Promise text(inox_loop* loop) const;
   Promise text() const;
   inox_value raw() const;
   operator inox_value() const;
 };
 
-Promise fetch(inox_loop* loop, StringView url);
 Promise fetch(StringView url);
 Promise fetch(const char* url);
 
-Promise fetch(inox_loop* loop, StringView url, const FetchInit* init);
 Promise fetch(StringView url, const FetchInit* init);
 Promise fetch(const char* url, const FetchInit* init);
 
