@@ -44,8 +44,12 @@ console.log(params.toString())
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
+  assert.match(source, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
+  assert.match(source, /inox_object_\d+\.init\(0, inox::String\("smoke", 5\)\);/)
   assert.match(source, /\.set\("q", "inox"\);/)
   assert.match(source, /\.append\("kind", "simple"\);/)
+  assert.doesNotMatch(source, /inox_object_new/)
+  assert.doesNotMatch(source, /inox_object_init_known/)
   assert.doesNotMatch(source, /URLSearchParams.*inox::StringView/)
   assert.doesNotMatch(source, /\.set\(inox::StringView/)
   assert.doesNotMatch(source, /\.append\(inox::StringView/)

@@ -1771,9 +1771,8 @@ export function emitObjectVariableDeclaration(
   lines.push(`  ${fields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
-  registerOwnedValue(context, statement.name)
-  appendLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${reference})`, context))
+  lines.push(`auto ${reference} = inox::ObjectValue::create(&${shapeName});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   context.variables.set(statement.name, 'object')
   registerObjectShapeFields(context, statement.name, fields, new Set())
@@ -1804,7 +1803,8 @@ export function emitObjectVariableDeclaration(
 
       const value = emitObjectFieldInitializerValue(field, property, context, dependencies)
       appendLines(lines, value.lines)
-      lines.push(emitStatusCheck(`inox_object_init_known(${reference}, ${index}, ${value.expression})`, context))
+      lines.push(`${reference}.init(${index}, ${value.expression});`)
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
       appendLines(
         lines,
         emitNestedObjectFunctionFieldVariableDeclarations(

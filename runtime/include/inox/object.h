@@ -75,6 +75,20 @@ void inox_object_dispose_fields(inox_object* object);
 
 namespace inox {
 
+class ObjectValue : public Value {
+public:
+  ObjectValue();
+  explicit ObjectValue(inox_value value);
+  ObjectValue(AdoptValue, inox_value value);
+
+  using Value::operator=;
+
+  static ObjectValue create(const inox_shape* shape);
+  bool valid() const;
+  void init(uint32_t index, inox_value value) const;
+  void set(uint32_t index, inox_value value) const;
+};
+
 Value object_value_at(inox_value object, size_t index);
 Value object_entry_at(inox_value object, size_t index);
 void throw_property_read_type_error(StringView name, const char* receiver);

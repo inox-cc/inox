@@ -5351,6 +5351,7 @@ function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
   return (
     cppType === 'inox::String' ||
     cppType === 'inox::Value' ||
+    cppType === 'inox::ObjectValue' ||
     cppType === 'Array' ||
     cppType === 'Map' ||
     cppType === 'Set' ||

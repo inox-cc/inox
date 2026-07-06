@@ -3647,6 +3647,7 @@ function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
   return (
     cppType === 'inox::String' ||
     cppType === 'inox::Value' ||
+    cppType === 'inox::ObjectValue' ||
     cppType === 'Array' ||
     cppType === 'Map' ||
     cppType === 'Set' ||
@@ -5509,9 +5510,8 @@ function emitCObjectLiteralValueExpression(
   lines.push(`  ${fields.length},`)
   lines.push(`  ${fieldsName}`)
   lines.push('};')
-  registerOwnedValue(context, temp)
-  pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, &${temp})`, context))
+  lines.push(`auto ${temp} = inox::ObjectValue::create(&${shapeName});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   for (let index = 0; index < fields.length; index++) {
     const field = fields[index]
@@ -5531,12 +5531,14 @@ function emitCObjectLiteralValueExpression(
     const value = emitObjectFieldInitializerValue(field, nodeOrEmpty(propertyValue), context)
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_object_init_known(${temp}, ${index}, ${value.expression})`, context))
+    lines.push(`${temp}.init(${index}, ${value.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
   return {
     lines,
-    expression: temp
+    expression: temp,
+    cppType: 'inox::ObjectValue'
   }
 }
 

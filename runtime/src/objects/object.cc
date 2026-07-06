@@ -996,6 +996,41 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
 
 namespace inox {
 
+ObjectValue::ObjectValue() : Value() {}
+
+ObjectValue::ObjectValue(inox_value value) : Value(value) {}
+
+ObjectValue::ObjectValue(AdoptValue, inox_value value) : Value(adopt_value, value) {}
+
+ObjectValue ObjectValue::create(const inox_shape* shape) {
+  inox_value value = inox_undefined_value();
+
+  if (inox_object_new(&inox_default_allocator, shape, &value) != INOX_OK) {
+    throw_value(String("Object allocation failed"));
+    return ObjectValue();
+  }
+
+  return ObjectValue(adopt_value, value);
+}
+
+bool ObjectValue::valid() const {
+  inox_value value = raw();
+
+  return value.tag == INOX_TAG_OBJECT && value.as.ref != nullptr;
+}
+
+void ObjectValue::init(uint32_t index, inox_value value) const {
+  if (inox_object_init_known(raw(), index, value) != INOX_OK) {
+    throw_value(String("Object init failed"));
+  }
+}
+
+void ObjectValue::set(uint32_t index, inox_value value) const {
+  if (inox_object_set_known(raw(), index, value) != INOX_OK) {
+    throw_value(String("Object set failed"));
+  }
+}
+
 static Value finish_object_index_read(inox_status status, inox_value out, const char* message) {
   if (status == INOX_OK) {
     return adopt(out);
