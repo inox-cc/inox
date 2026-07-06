@@ -33,11 +33,6 @@ public:
 private:
   mutable uint32_t random_state_;
   mutable MathRandomBackend random_backend_;
-
-  double reduce_radians(double value) const;
-  int os_random_bytes(uint8_t* out, size_t len) const;
-  double simple_random() const;
-  double xorshift32_random() const;
 };
 
 extern Math Math;
