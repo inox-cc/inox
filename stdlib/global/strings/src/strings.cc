@@ -724,7 +724,20 @@ size_t String::codeUnitLength() const {
     return 0;
   }
 
-  return inox_string_code_unit_length(bytes(), length());
+  size_t index = 0;
+  size_t code_units = 0;
+  const size_t len = length();
+  const char* value = bytes();
+
+  while (index < len) {
+    size_t step = 0;
+    const uint32_t code_point = inox_utf8_code_point_at(value, len, index, &step);
+
+    index += step;
+    code_units += inox_string_utf16_code_units(code_point);
+  }
+
+  return code_units;
 }
 
 const char* String::bytes() const {
