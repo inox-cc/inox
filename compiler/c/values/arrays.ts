@@ -2056,7 +2056,7 @@ export function emitPreparedArrayIncludesCallExpression(
   lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
   appendPrefixedLines(lines, emitPrepareOwnedValueWrite(value), '  ')
   lines.push(`  ${readStatus}`)
-  lines.push(`  if (inox_hash_value_equal(${value}, ${searchValue.expression})) {`)
+  lines.push(`  if (inox::value_equal(${value}, ${searchValue.expression})) {`)
   lines.push(`    ${found} = true;`)
   lines.push('    break;')
   lines.push('  }')

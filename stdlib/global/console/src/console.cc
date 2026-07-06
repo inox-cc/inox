@@ -901,6 +901,12 @@ void console::log(const char* prefix, const inox::Value& value) const {
   inox::console_newline(inox::ConsoleStream::stdout);
 }
 
+void console::log(const char* format, const char* arg0) const {
+  const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
+
+  printf_line(inox::ConsoleStream::stdout, format, args, 1);
+}
+
 void console::log(const char* format, inox::StringView arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
@@ -1061,6 +1067,12 @@ void console::info(const char* prefix, const inox::Value& value) const {
   }
 
   inox::console_newline(inox::ConsoleStream::stdout);
+}
+
+void console::info(const char* format, const char* arg0) const {
+  const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
+
+  printf_line(inox::ConsoleStream::stdout, format, args, 1);
 }
 
 void console::info(const char* format, inox::StringView arg0) const {
@@ -1225,6 +1237,12 @@ void console::warn(const char* prefix, const inox::Value& value) const {
   inox::console_newline(inox::ConsoleStream::stderr);
 }
 
+void console::warn(const char* format, const char* arg0) const {
+  const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
+
+  printf_line(inox::ConsoleStream::stderr, format, args, 1);
+}
+
 void console::warn(const char* format, inox::StringView arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
@@ -1385,6 +1403,12 @@ void console::error(const char* prefix, const inox::Value& value) const {
   }
 
   inox::console_newline(inox::ConsoleStream::stderr);
+}
+
+void console::error(const char* format, const char* arg0) const {
+  const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
+
+  printf_line(inox::ConsoleStream::stderr, format, args, 1);
 }
 
 void console::error(const char* format, inox::StringView arg0) const {

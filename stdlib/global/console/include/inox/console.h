@@ -85,6 +85,7 @@ public:
   void log(const inox::Value& value) const;
   void log(const char* prefix, inox_value value) const;
   void log(const char* prefix, const inox::Value& value) const;
+  void log(const char* format, const char* arg0) const;
   void log(const char* format, inox::StringView arg0) const;
   void log(const char* format, const inox::String& arg0) const;
   void log(
@@ -115,6 +116,7 @@ public:
   void info(const inox::Value& value) const;
   void info(const char* prefix, inox_value value) const;
   void info(const char* prefix, const inox::Value& value) const;
+  void info(const char* format, const char* arg0) const;
   void info(const char* format, inox::StringView arg0) const;
   void info(const char* format, const inox::String& arg0) const;
   void info(
@@ -145,6 +147,7 @@ public:
   void warn(const inox::Value& value) const;
   void warn(const char* prefix, inox_value value) const;
   void warn(const char* prefix, const inox::Value& value) const;
+  void warn(const char* format, const char* arg0) const;
   void warn(const char* format, inox::StringView arg0) const;
   void warn(const char* format, const inox::String& arg0) const;
   void warn(
@@ -175,6 +178,7 @@ public:
   void error(const inox::Value& value) const;
   void error(const char* prefix, inox_value value) const;
   void error(const char* prefix, const inox::Value& value) const;
+  void error(const char* format, const char* arg0) const;
   void error(const char* format, inox::StringView arg0) const;
   void error(const char* format, const inox::String& arg0) const;
   void error(

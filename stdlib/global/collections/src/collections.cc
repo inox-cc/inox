@@ -143,7 +143,7 @@ static inox_status inox_map_find(inox_map* map, inox_value key, uint64_t hash, s
       if (first_tombstone == (size_t)-1) {
         first_tombstone = current;
       }
-    } else if (entry->hash == hash && inox_hash_value_equal(entry->key, key)) {
+    } else if (entry->hash == hash && inox::value_equal(entry->key, key)) {
       *index = current;
       *found = true;
       return INOX_OK;
@@ -258,16 +258,16 @@ bool Map::deleteKey(inox_value key) const {
   }
 
   uint64_t hash = 0;
-  inox_status status = inox_hash_value(key, &hash);
+  bool hash_ok = inox::hash_value(key, hash);
 
-  if (status != INOX_OK) {
+  if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
     return false;
   }
 
   size_t index = 0;
   bool found = false;
-  status = inox_map_find(instance, key, hash, &index, &found);
+  inox_status status = inox_map_find(instance, key, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map lookup failed");
@@ -325,16 +325,16 @@ inox::Value Map::get(inox_value key) const {
   }
 
   uint64_t hash = 0;
-  inox_status status = inox_hash_value(key, &hash);
+  bool hash_ok = inox::hash_value(key, hash);
 
-  if (status != INOX_OK) {
+  if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
     return inox::Value();
   }
 
   size_t index = 0;
   bool found = false;
-  status = inox_map_find(instance, key, hash, &index, &found);
+  inox_status status = inox_map_find(instance, key, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map lookup failed");
@@ -360,16 +360,16 @@ bool Map::has(inox_value key) const {
   }
 
   uint64_t hash = 0;
-  inox_status status = inox_hash_value(key, &hash);
+  bool hash_ok = inox::hash_value(key, hash);
 
-  if (status != INOX_OK) {
+  if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
     return false;
   }
 
   size_t index = 0;
   bool found = false;
-  status = inox_map_find(instance, key, hash, &index, &found);
+  inox_status status = inox_map_find(instance, key, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map lookup failed");
@@ -388,14 +388,14 @@ Map Map::set(inox_value key, inox_value value) const {
   }
 
   uint64_t hash = 0;
-  inox_status status = inox_hash_value(key, &hash);
+  bool hash_ok = inox::hash_value(key, hash);
 
-  if (status != INOX_OK) {
+  if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
     return Map();
   }
 
-  status = inox_map_reserve(instance, instance->len + 1);
+  inox_status status = inox_map_reserve(instance, instance->len + 1);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map allocation failed");
@@ -581,7 +581,7 @@ static inox_status inox_set_find(inox_set* set, inox_value value, uint64_t hash,
       if (first_tombstone == (size_t)-1) {
         first_tombstone = current;
       }
-    } else if (entry->hash == hash && inox_hash_value_equal(entry->value, value)) {
+    } else if (entry->hash == hash && inox::value_equal(entry->value, value)) {
       *index = current;
       *found = true;
       return INOX_OK;
@@ -632,14 +632,14 @@ Set Set::add(inox_value value) const {
   }
 
   uint64_t hash = 0;
-  inox_status status = inox_hash_value(value, &hash);
+  bool hash_ok = inox::hash_value(value, hash);
 
-  if (status != INOX_OK) {
+  if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
     return Set();
   }
 
-  status = inox_set_reserve(instance, instance->len + 1);
+  inox_status status = inox_set_reserve(instance, instance->len + 1);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Set allocation failed");
@@ -707,16 +707,16 @@ bool Set::deleteValue(inox_value value) const {
   }
 
   uint64_t hash = 0;
-  inox_status status = inox_hash_value(value, &hash);
+  bool hash_ok = inox::hash_value(value, hash);
 
-  if (status != INOX_OK) {
+  if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
     return false;
   }
 
   size_t index = 0;
   bool found = false;
-  status = inox_set_find(instance, value, hash, &index, &found);
+  inox_status status = inox_set_find(instance, value, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Set lookup failed");
@@ -771,16 +771,16 @@ bool Set::has(inox_value value) const {
   }
 
   uint64_t hash = 0;
-  inox_status status = inox_hash_value(value, &hash);
+  bool hash_ok = inox::hash_value(value, hash);
 
-  if (status != INOX_OK) {
+  if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
     return false;
   }
 
   size_t index = 0;
   bool found = false;
-  status = inox_set_find(instance, value, hash, &index, &found);
+  inox_status status = inox_set_find(instance, value, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Set lookup failed");
@@ -851,7 +851,9 @@ size_t Set::size() const {
 #endif
 #include "inox/string.h"
 
-extern "C" uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len) {
+namespace inox {
+
+uint64_t hash_mix(uint64_t hash, const void* bytes, size_t len) {
   const unsigned char* data = (const unsigned char*)bytes;
 
   for (size_t index = 0; index < len; index += 1) {
@@ -862,24 +864,20 @@ extern "C" uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len) 
   return hash;
 }
 
-extern "C" inox_status inox_hash_value(inox_value value, uint64_t* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
+bool hash_value(inox_value value, uint64_t& out) {
   uint64_t hash = 1469598103934665603ULL;
   uint8_t tag = (uint8_t)value.tag;
 
-  hash = inox_hash_mix(hash, &tag, sizeof(tag));
+  hash = hash_mix(hash, &tag, sizeof(tag));
 
   if (value.tag == INOX_TAG_STRING) {
     if (value.as.ref == 0) {
-      return INOX_ERR_TYPE;
+      return false;
     }
 
     inox_string* string = (inox_string*)value.as.ref;
-    *out = inox_hash_mix(hash, string->bytes, string->len);
-    return INOX_OK;
+    out = hash_mix(hash, string->bytes, string->len);
+    return true;
   }
 
   if (value.tag == INOX_TAG_NUMBER) {
@@ -887,8 +885,8 @@ extern "C" inox_status inox_hash_value(inox_value value, uint64_t* out) {
 
     if (number != number) {
       uint64_t nan_bits = 0x7ff8000000000000ULL;
-      *out = inox_hash_mix(hash, &nan_bits, sizeof(nan_bits));
-      return INOX_OK;
+      out = hash_mix(hash, &nan_bits, sizeof(nan_bits));
+      return true;
     }
 
     if (number == 0) {
@@ -897,35 +895,35 @@ extern "C" inox_status inox_hash_value(inox_value value, uint64_t* out) {
 
     uint64_t bits = 0;
     memcpy(&bits, &number, sizeof(bits));
-    *out = inox_hash_mix(hash, &bits, sizeof(bits));
-    return INOX_OK;
+    out = hash_mix(hash, &bits, sizeof(bits));
+    return true;
   }
 
   if (value.tag == INOX_TAG_BOOL) {
     uint8_t boolean = value.as.boolean ? 1 : 0;
-    *out = inox_hash_mix(hash, &boolean, sizeof(boolean));
-    return INOX_OK;
+    out = hash_mix(hash, &boolean, sizeof(boolean));
+    return true;
   }
 
   if (inox_is_ref_value(value)) {
     if (value.as.ref == 0) {
-      return INOX_ERR_TYPE;
+      return false;
     }
 
     uintptr_t ref = (uintptr_t)value.as.ref;
-    *out = inox_hash_mix(hash, &ref, sizeof(ref));
-    return INOX_OK;
+    out = hash_mix(hash, &ref, sizeof(ref));
+    return true;
   }
 
   if (value.tag == INOX_TAG_NULL || value.tag == INOX_TAG_UNDEFINED) {
-    *out = hash;
-    return INOX_OK;
+    out = hash;
+    return true;
   }
 
-  return INOX_ERR_TYPE;
+  return false;
 }
 
-extern "C" bool inox_hash_value_equal(inox_value left, inox_value right) {
+bool value_equal(inox_value left, inox_value right) {
   if (left.tag != right.tag) {
     return false;
   }
@@ -959,6 +957,8 @@ extern "C" bool inox_hash_value_equal(inox_value left, inox_value right) {
 
   return left.tag == INOX_TAG_NULL || left.tag == INOX_TAG_UNDEFINED;
 }
+
+} // namespace inox
 
 static void inox_array_sort_key(inox_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
   if (value.tag == INOX_TAG_STRING && value.as.ref != 0) {
