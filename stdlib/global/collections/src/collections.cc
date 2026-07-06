@@ -1224,6 +1224,34 @@ bool Array::valid() const {
   return value.tag == INOX_TAG_ARRAY && value.as.ref != 0;
 }
 
+size_t Array::length() const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.length receiver is not an Array");
+    return 0;
+  }
+
+  return ((inox_array*)array.as.ref)->length;
+}
+
+inox::Value Array::get(size_t index) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array index receiver is not an Array");
+    return inox::Value();
+  }
+
+  inox_array* instance = (inox_array*)array.as.ref;
+
+  if (index >= instance->length) {
+    return inox::Value();
+  }
+
+  return inox::Value(instance->items[index]);
+}
+
 class Array Array::create(size_t len) {
   inox_array* array = inox_array_alloc_storage(&inox_default_allocator, len);
 
@@ -1233,6 +1261,24 @@ class Array Array::create(size_t len) {
   }
 
   return Array(inox::adopt_value, inox_array_adopt_storage(array));
+}
+
+inox::Value Array::pop() const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.pop receiver is not an Array");
+    return inox::Value();
+  }
+
+  inox_array* instance = (inox_array*)array.as.ref;
+
+  if (instance->length == 0) {
+    return inox::Value(inox_null_value());
+  }
+
+  instance->length -= 1;
+  return inox::adopt(std::exchange(instance->items[instance->length], inox_undefined_value()));
 }
 
 void Array::push(inox_value value) const {
@@ -1263,6 +1309,102 @@ void Array::set(size_t index, inox_value value) const {
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Array assignment failed");
   }
+}
+
+class Array Array::slice(size_t start, size_t end) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.slice receiver is not an Array");
+    return Array();
+  }
+
+  inox_array* source = (inox_array*)array.as.ref;
+
+  if (start > source->length) {
+    start = source->length;
+  }
+
+  if (end > source->length) {
+    end = source->length;
+  }
+
+  if (end < start) {
+    end = start;
+  }
+
+  inox_array* target = inox_array_alloc_storage(&inox_default_allocator, end - start);
+
+  if (target == 0) {
+    inox_collection_throw("TypeError: Array slice allocation failed");
+    return Array();
+  }
+
+  for (size_t index = 0; index < target->length; index += 1) {
+    inox_value value = source->items[start + index];
+
+    inox_retain(value);
+    inox_release(target->items[index]);
+    target->items[index] = value;
+  }
+
+  return Array(inox::adopt_value, inox_array_adopt_storage(target));
+}
+
+class Array Array::sort() const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.sort receiver is not an Array");
+    return Array();
+  }
+
+  inox_array* instance = (inox_array*)array.as.ref;
+
+  if (instance->length < 2) {
+    return Array(*this);
+  }
+
+  for (size_t index = 1; index < instance->length; index += 1) {
+    inox_value value = instance->items[index];
+    size_t scan = index;
+
+    while (scan > 0 && inox_array_sort_compare(&instance->items[scan - 1], &value) > 0) {
+      instance->items[scan] = instance->items[scan - 1];
+      scan -= 1;
+    }
+
+    instance->items[scan] = value;
+  }
+
+  return Array(*this);
+}
+
+double Array::unshift(inox_value value) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.unshift receiver is not an Array");
+    return 0;
+  }
+
+  inox_array* instance = (inox_array*)array.as.ref;
+  inox_status status = inox_array_reserve(instance, instance->length + 1);
+
+  if (status != INOX_OK) {
+    inox_collection_throw("TypeError: Array unshift failed");
+    return 0;
+  }
+
+  for (size_t index = instance->length; index > 0; index -= 1) {
+    instance->items[index] = instance->items[index - 1];
+  }
+
+  inox_retain(value);
+  instance->items[0] = value;
+  instance->length += 1;
+
+  return (double)instance->length;
 }
 
 inox_status Array::make(inox_allocator* allocator, size_t len, inox_value* out) const {

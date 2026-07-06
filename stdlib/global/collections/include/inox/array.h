@@ -32,8 +32,14 @@ public:
   static Array create(size_t len);
 
   bool valid() const;
+  size_t length() const;
+  inox::Value get(size_t index) const;
+  inox::Value pop() const;
   void push(inox_value value) const;
   void set(size_t index, inox_value value) const;
+  Array slice(size_t start, size_t end) const;
+  Array sort() const;
+  double unshift(inox_value value) const;
 
   inox_status make(inox_allocator* allocator, size_t len, inox_value* out) const;
   inox_status get(inox_value array, size_t index, inox_value* out) const;
