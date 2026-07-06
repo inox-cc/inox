@@ -2055,17 +2055,6 @@ Promise fetch(StringView url) {
   return adopt(promise);
 }
 
-Promise fetch(const char* url) {
-  const char* bytes = url == nullptr ? "" : url;
-  inox_promise* promise = nullptr;
-
-  if (fetch_backend_with_init(loop(), bytes, strlen(bytes), nullptr, &promise) != INOX_OK) {
-    return Promise();
-  }
-
-  return adopt(promise);
-}
-
 Promise fetch(StringView url, const FetchInit* init) {
   inox_promise* promise = nullptr;
   FetchNativeInit native_init = {};
@@ -2098,45 +2087,6 @@ Promise fetch(StringView url, const FetchInit* init) {
   }
 
   if (fetch_backend_with_init(loop(), url.bytes, url.len, native_init_ptr, &promise) != INOX_OK) {
-    return Promise();
-  }
-
-  return adopt(promise);
-}
-
-Promise fetch(const char* url, const FetchInit* init) {
-  const char* bytes = url == nullptr ? "" : url;
-  inox_promise* promise = nullptr;
-  FetchNativeInit native_init = {};
-  std::vector<FetchNativeHeader> native_headers;
-  const FetchNativeInit* native_init_ptr = nullptr;
-
-  if (init != nullptr) {
-    native_headers.reserve(init->header_count);
-
-    for (size_t index = 0; index < init->header_count; ++index) {
-      const FetchHeader& header = init->headers[index];
-      native_headers.push_back({
-        header.name.bytes,
-        header.name.len,
-        header.value.bytes,
-        header.value.len
-      });
-    }
-
-    native_init.method = init->method.bytes;
-    native_init.method_len = init->method.len;
-    native_init.headers = native_headers.data();
-    native_init.header_count = native_headers.size();
-    native_init.body = init->body.bytes;
-    native_init.body_len = init->body.len;
-    native_init.signal = init->signal.raw();
-    native_init.redirect = init->redirect.bytes;
-    native_init.redirect_len = init->redirect.len;
-    native_init_ptr = &native_init;
-  }
-
-  if (fetch_backend_with_init(loop(), bytes, strlen(bytes), native_init_ptr, &promise) != INOX_OK) {
     return Promise();
   }
 

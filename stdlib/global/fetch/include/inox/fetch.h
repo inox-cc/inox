@@ -58,10 +58,8 @@ public:
 };
 
 Promise fetch(StringView url);
-Promise fetch(const char* url);
 
 Promise fetch(StringView url, const FetchInit* init);
-Promise fetch(const char* url, const FetchInit* init);
 
 bool fetch_headers_has(inox_value headers, StringView name);
 Value fetch_headers_get(inox_value headers, StringView name);
