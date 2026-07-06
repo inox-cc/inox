@@ -165,29 +165,6 @@ static int process_argv_length(void) {
   return process_argc;
 }
 
-static inox::String process_env_string(const char* name, size_t name_len) {
-  if (name == 0) {
-    return inox::String();
-  }
-
-  inox_allocator* allocator = &inox_default_allocator;
-  char* key = (char*)allocator->alloc(allocator->user, name_len + 1, alignof(char));
-
-  if (key == 0) {
-    return inox::String();
-  }
-
-  memcpy(key, name, name_len);
-  key[name_len] = 0;
-
-  const char* value = getenv(key);
-  inox::String out(value == 0 ? "" : value);
-
-  allocator->free(allocator->user, key, name_len + 1, alignof(char));
-
-  return out;
-}
-
 static int process_get_exit_code(void) {
   return process_exit_code;
 }
@@ -478,11 +455,49 @@ inox::String process_argv::operator[](int index) const {
 }
 
 inox::String process_env::get(const char* name, size_t name_len) const {
-  return process_env_string(name, name_len);
+  if (name == 0) {
+    return inox::String();
+  }
+
+  inox_allocator* allocator = &inox_default_allocator;
+  char* key = (char*)allocator->alloc(allocator->user, name_len + 1, alignof(char));
+
+  if (key == 0) {
+    return inox::String();
+  }
+
+  memcpy(key, name, name_len);
+  key[name_len] = 0;
+
+  const char* value = getenv(key);
+  inox::String out(value == 0 ? "" : value);
+
+  allocator->free(allocator->user, key, name_len + 1, alignof(char));
+
+  return out;
 }
 
 inox::String process_env::get(inox::StringView name) const {
-  return process_env_string(name.bytes, name.len);
+  if (name.bytes == 0) {
+    return inox::String();
+  }
+
+  inox_allocator* allocator = &inox_default_allocator;
+  char* key = (char*)allocator->alloc(allocator->user, name.len + 1, alignof(char));
+
+  if (key == 0) {
+    return inox::String();
+  }
+
+  memcpy(key, name.bytes, name.len);
+  key[name.len] = 0;
+
+  const char* value = getenv(key);
+  inox::String out(value == 0 ? "" : value);
+
+  allocator->free(allocator->user, key, name.len + 1, alignof(char));
+
+  return out;
 }
 
 void process_versions::init() {
