@@ -78,7 +78,6 @@ inox_status inox_tls_connect(
   }
 
   NetSocket socket = NetSocket::connect(
-    loop,
     host,
     port,
     inox_tls_on_tcp_connect,

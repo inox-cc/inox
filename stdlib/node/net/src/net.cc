@@ -141,10 +141,11 @@ static void inox_net_server_close_cb(uv_handle_t* handle);
 static void inox_net_socket_close_cb(uv_handle_t* handle);
 
 NetServer NetServer::create(
-  inox_loop* loop,
   NetConnectionFn connection,
   void* user
 ) {
+  inox_loop* loop = inox::loop();
+
   if (loop == 0 || loop->allocator == 0) {
     inox_net_throw_failed("TypeError: NetServer.create failed");
     return NetServer();
@@ -327,7 +328,6 @@ void NetServer::close() const {
 }
 
 NetSocket NetSocket::connect(
-  inox_loop* loop,
   inox::StringView host,
   int port,
   NetConnectFn connect,
@@ -335,6 +335,8 @@ NetSocket NetSocket::connect(
   NetCloseFn close,
   void* user
 ) {
+  inox_loop* loop = inox::loop();
+
   if (loop == 0) {
     inox_net_throw_failed("TypeError: NetSocket.connect failed");
     return NetSocket();
@@ -1224,11 +1226,9 @@ struct inox_net_socket {
 };
 
 NetServer NetServer::create(
-  inox_loop* loop,
   NetConnectionFn connection,
   void* user
 ) {
-  (void)loop;
   (void)connection;
   (void)user;
 
@@ -1290,7 +1290,6 @@ void NetServer::close() const {
 }
 
 NetSocket NetSocket::connect(
-  inox_loop* loop,
   inox::StringView host,
   int port,
   NetConnectFn connect,
@@ -1298,7 +1297,6 @@ NetSocket NetSocket::connect(
   NetCloseFn close,
   void* user
 ) {
-  (void)loop;
   (void)host;
   (void)port;
   (void)connect;

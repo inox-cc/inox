@@ -46,7 +46,7 @@ public:
   NetServer();
   explicit NetServer(inox_net_server* server);
 
-  static NetServer create(inox_loop* loop, NetConnectionFn connection, void* user);
+  static NetServer create(NetConnectionFn connection, void* user);
 
   inox_net_server* raw() const;
   void onConnection(NetConnectionFn connection, void* user) const;
@@ -68,7 +68,6 @@ public:
   explicit NetSocket(inox_net_socket* socket);
 
   static NetSocket connect(
-    inox_loop* loop,
     inox::StringView host,
     int port,
     NetConnectFn connect,

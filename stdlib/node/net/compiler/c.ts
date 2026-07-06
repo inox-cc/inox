@@ -3,7 +3,6 @@ import { collectIrTopLevelNodeEntries } from '../../../../compiler/ir.ts'
 import type { AnyNode, IrProgram, SourceLocation } from '../../../../compiler/types.ts'
 import type { CEmitContext, CFunctionContext } from '../../../../compiler/c/context.ts'
 import {
-  emitEventLoopReference,
   emitRuntimeTypeCheck,
   nextCName,
   registerEventLoop
@@ -900,9 +899,7 @@ function emitNetSocketConnectLines(
   }
 
   pushNetLines(lines, port.lines)
-  lines.push(
-    `${socketName} = NetSocket::connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0);`
-  )
+  lines.push(`${socketName} = NetSocket::connect(${host}, (int)(${port.expression}), 0, 0, 0, 0);`)
   lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   if (wrapper !== null && typeof wrapper !== 'undefined') {
@@ -1219,7 +1216,7 @@ function emitNetServerCreateLines(
     wrapperName = wrapper.name
   }
 
-  lines.push(`${serverName} = NetServer::create(${emitEventLoopReference(context)}, ${wrapperName}, 0);`)
+  lines.push(`${serverName} = NetServer::create(${wrapperName}, 0);`)
   lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return lines

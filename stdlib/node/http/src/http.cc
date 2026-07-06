@@ -133,7 +133,7 @@ void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   server->handler = handler;
   server->user = user;
 
-  NetServer net_server = NetServer::create(loop, inox_http_on_connection, server);
+  NetServer net_server = NetServer::create(inox_http_on_connection, server);
 
   if (inox::thrown()) {
     allocator->free(allocator->user, server, sizeof(inox_http_server), alignof(inox_http_server));

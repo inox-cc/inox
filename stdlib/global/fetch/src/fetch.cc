@@ -696,7 +696,6 @@ static inox_status fetch_start_connection(FetchOperation* request) {
   }
 
   NetSocket socket = NetSocket::connect(
-    request->loop,
     request->host,
     request->port,
     fetch_on_connect,
