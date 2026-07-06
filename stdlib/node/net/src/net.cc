@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "inox/loop.h"
 #include "inox/string.h"
 
 NetServer::NetServer() : server_(0) {}

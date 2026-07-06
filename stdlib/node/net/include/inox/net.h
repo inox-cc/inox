@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 
-#include "inox/loop.h"
 #include "inox/string_view.h"
 
 struct inox_net_server;

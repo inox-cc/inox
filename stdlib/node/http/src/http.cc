@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "inox/loop.h"
 #include "inox/string.h"
 
 HttpServer::HttpServer() : server_(0) {}

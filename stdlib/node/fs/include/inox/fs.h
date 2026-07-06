@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include "inox/array.h"
 #include "inox/binary.h"
-#include "inox/loop.h"
 #include "inox/promise.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
