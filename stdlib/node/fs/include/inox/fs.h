@@ -173,18 +173,16 @@ public:
   void unlinkSync(inox::StringView path);
   void rmSync(inox::StringView path, bool recursive, bool force);
   void appendFileSync(inox::StringView path, inox::StringView bytes);
+  void appendFileSync(inox::StringView path, inox_value bytes);
+  void copyFileSync(inox::StringView src_path, inox::StringView dest_path);
+  void symlinkSync(inox::StringView target, inox::StringView path);
+  void renameSync(inox::StringView old_path, inox::StringView new_path);
   void writeFileSync(inox::StringView path, inox::StringView bytes);
+  void writeFileSync(inox::StringView path, inox_value bytes);
   inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status mkdirSync(const char* path, size_t path_len, bool recursive);
   inox_status unlinkSync(const char* path, size_t path_len);
   inox_status rmSync(const char* path, size_t path_len, bool recursive, bool force);
-  inox_status appendFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
-  inox_status appendFileBytesSync(const char* path, size_t path_len, inox_value bytes);
-  inox_status copyFileSync(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len);
-  inox_status symlinkSync(const char* target, size_t target_len, const char* path, size_t path_len);
-  inox_status renameSync(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
-  inox_status writeFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
-  inox_status writeFileBytesSync(const char* path, size_t path_len, inox_value bytes);
 };
 
 class FsStats : public inox::Value {

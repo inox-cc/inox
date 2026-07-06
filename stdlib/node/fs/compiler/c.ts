@@ -283,11 +283,11 @@ function fsSyncStatementDescriptorForExpression(
   }
 
   if (method === 'appendFileSync' && fsUsesBytes(expression)) {
-    return { kind: 'bytes-value', callName: 'fs.appendFileBytesSync' }
+    return { kind: 'bytes-value', callName: 'fs.appendFileSync' }
   }
 
   if (method === 'writeFileSync' && fsUsesBytes(expression)) {
-    return { kind: 'bytes-value', callName: 'fs.writeFileBytesSync' }
+    return { kind: 'bytes-value', callName: 'fs.writeFileSync' }
   }
 
   return fsSyncStatementDescriptors[method] ?? null
@@ -740,7 +740,8 @@ function emitPreparedFsSyncStatementDescriptor(
 
     appendLines(lines, bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-    lines.push(emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.expression})`, context))
+    lines.push(`${descriptor.callName}(${emitFsStringArgument(path)}, ${bytes.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   } else if (descriptor.kind === 'path-arg') {
     const argumentPath = dependencies.emitPreparedStringBytesOperand(
       expression.args[1],
@@ -749,12 +750,8 @@ function emitPreparedFsSyncStatementDescriptor(
     )
 
     appendLines(lines, argumentPath.lines)
-    lines.push(
-      emitStatusCheck(
-        `${descriptor.callName}(${path.bytes}, ${path.length}, ${argumentPath.bytes}, ${argumentPath.length})`,
-        context
-      )
-    )
+    lines.push(`${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(argumentPath)});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   } else {
     const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
 
