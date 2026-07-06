@@ -95,7 +95,18 @@ inox_status inox_dgram_socket_new(
 }
 
 inox_status inox_dgram_bind(inox_dgram_socket* socket, const char* host, int port) {
-  return inox_dgram_bind_flags(socket, host, port, 0);
+  if (socket == 0 || socket->closing) {
+    return INOX_ERR_TYPE;
+  }
+
+  struct sockaddr_in addr;
+  inox_status status = inox_dgram_ip4_addr(host == 0 ? "0.0.0.0" : host, port, &addr);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, 0) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
 inox_status inox_dgram_bind_flags(inox_dgram_socket* socket, const char* host, int port, unsigned int flags) {
@@ -175,7 +186,18 @@ inox_status inox_dgram_recv_stop(inox_dgram_socket* socket) {
 }
 
 inox_status inox_dgram_send(inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
-  return inox_dgram_send_with_callback(socket, bytes, len, host, port, 0, 0);
+  if (host == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  struct sockaddr_in addr;
+  inox_status status = inox_dgram_ip4_addr(host, port, &addr);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox_dgram_send_resolved(socket, bytes, len, (const struct sockaddr*)&addr, 0, 0);
 }
 
 inox_status inox_dgram_send_with_callback(
@@ -202,7 +224,7 @@ inox_status inox_dgram_send_with_callback(
 }
 
 inox_status inox_dgram_send_connected(inox_dgram_socket* socket, const char* bytes, size_t len) {
-  return inox_dgram_send_connected_with_callback(socket, bytes, len, 0, 0);
+  return inox_dgram_send_resolved(socket, bytes, len, 0, 0, 0);
 }
 
 inox_status inox_dgram_send_connected_with_callback(
@@ -577,7 +599,10 @@ inox_status inox_dgram_socket_new(
 }
 
 inox_status inox_dgram_bind(inox_dgram_socket* socket, const char* host, int port) {
-  return inox_dgram_bind_flags(socket, host, port, 0);
+  (void)socket;
+  (void)host;
+  (void)port;
+  return INOX_ERR_UNSUPPORTED;
 }
 
 inox_status inox_dgram_bind_flags(inox_dgram_socket* socket, const char* host, int port, unsigned int flags) {
