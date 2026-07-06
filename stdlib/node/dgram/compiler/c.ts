@@ -121,7 +121,7 @@ function pushIndentedDgramLines(target: string[], lines: string[]): void {
 }
 
 export function emitDgramMessageHandlerHead(wrapper: CDgramMessageHandler): string {
-  return `static inox_status ${wrapper.name}(void* user, inox_dgram_socket* inox_socket, inox::StringView inox_bytes, inox::StringView inox_host, int inox_port)`
+  return `static void ${wrapper.name}(void* user, inox_dgram_socket* inox_socket, inox::StringView inox_bytes, inox::StringView inox_host, int inox_port)`
 }
 
 export function emitDgramMessageHandlerDeclaration(
@@ -149,8 +149,6 @@ export function emitDgramMessageHandlerDeclaration(
     rinfoName: rinfoName,
     stringLocals: new Map()
   }
-  context.statusReturn = true
-
   if (messageName !== null && typeof messageName !== 'undefined') {
     context.variables.set(messageName, 'string')
   }
@@ -186,7 +184,6 @@ export function emitDgramMessageHandlerDeclaration(
     pushIndentedDgramLines(lines, emitDgramMessageHandlerStatement(statement, dgramContext, context, deps))
   }
 
-  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -776,13 +773,13 @@ function emitDgramMessageHandlerStatement(
         const lines: string[] = []
 
         pushDgramLines(lines, call)
-        lines.push('return INOX_OK;')
+        lines.push('return;')
 
         return lines
       }
     }
 
-    return ['return INOX_OK;']
+    return ['return;']
   }
 
   context.diagnostics.push(

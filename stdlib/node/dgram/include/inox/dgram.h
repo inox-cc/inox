@@ -14,7 +14,7 @@ struct DgramAddress {
   int port;
 };
 
-typedef inox_status (*DgramRecvFn)(
+typedef void (*DgramRecvFn)(
   void* user,
   inox_dgram_socket* socket,
   inox::StringView bytes,

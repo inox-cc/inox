@@ -639,7 +639,7 @@ static void inox_dgram_recv_cb(
       port = ntohs(ip4->sin_port);
     }
 
-    inox_status status = socket->recv(
+    socket->recv(
       socket->recv_user,
       socket,
       inox::StringView(buf->base, (size_t)nread),
@@ -647,8 +647,8 @@ static void inox_dgram_recv_cb(
       port
     );
 
-    if (status != INOX_OK) {
-      inox_libuv_loop_report_status(socket->loop, status);
+    if (inox::thrown()) {
+      inox_libuv_loop_report_status(socket->loop, INOX_ERR_TYPE);
     }
   }
 
