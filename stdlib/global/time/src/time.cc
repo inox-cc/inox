@@ -22,7 +22,6 @@ static int inox_date_day_from_civil(int year, unsigned int month, unsigned int d
 static int inox_date_floor_div(int value, int divisor);
 static inox_number inox_floor_ms(inox_number value);
 static inox_number inox_date_nan(void);
-static inox_number inox_date_utc_from_parts(int year, int month, int day, int hour, int minute, int second, int millisecond);
 static int inox_date_parse_fixed_digits(const char* bytes, size_t len, size_t* offset, size_t count, int* out);
 static int inox_date_parse_iso(const char* bytes, size_t len, inox_number* out);
 static int inox_date_time_struct(inox_number value, int utc, struct tm* out, int* millisecond);
@@ -121,39 +120,6 @@ static int inox_date_day_from_civil(int year, unsigned int month, unsigned int d
   const unsigned int day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
 
   return era * 146097 + (int)day_of_era - 719468;
-}
-
-static inox_number inox_date_utc_from_parts(
-  int year,
-  int month,
-  int day,
-  int hour,
-  int minute,
-  int second,
-  int millisecond
-) {
-  if (year >= 0 && year <= 99) {
-    year += 1900;
-  }
-
-  const int month_year_delta = inox_date_floor_div(month, 12);
-  year += month_year_delta;
-  month -= month_year_delta * 12;
-
-  if (month < 0) {
-    month += 12;
-    year -= 1;
-  }
-
-  const int days = inox_date_day_from_civil(year, (unsigned int)(month + 1), 1) + day - 1;
-  const long long total_ms =
-    (long long)days * 86400000LL +
-    (long long)hour * 3600000LL +
-    (long long)minute * 60000LL +
-    (long long)second * 1000LL +
-    (long long)millisecond;
-
-  return (inox_number)total_ms;
 }
 
 static int inox_date_parse_fixed_digits(const char* bytes, size_t len, size_t* offset, size_t count, int* out) {
@@ -272,7 +238,7 @@ static int inox_date_parse_iso(const char* bytes, size_t len, inox_number* out) 
     return 0;
   }
 
-  *out = inox_date_utc_from_parts(year, month - 1, day, hour, minute, second, millisecond) -
+  *out = ::Date.UTC(year, month - 1, day, hour, minute, second, millisecond) -
          ((inox_number)timezone_offset * 60000.0);
   return 1;
 }
@@ -359,15 +325,31 @@ inox_number Date::UTC(
   inox_number second,
   inox_number millisecond
 ) const {
-  return inox_date_utc_from_parts(
-    (int)year,
-    (int)month,
-    (int)day,
-    (int)hour,
-    (int)minute,
-    (int)second,
-    (int)millisecond
-  );
+  int full_year = (int)year;
+  int full_month = (int)month;
+
+  if (full_year >= 0 && full_year <= 99) {
+    full_year += 1900;
+  }
+
+  const int month_year_delta = inox_date_floor_div(full_month, 12);
+  full_year += month_year_delta;
+  full_month -= month_year_delta * 12;
+
+  if (full_month < 0) {
+    full_month += 12;
+    full_year -= 1;
+  }
+
+  const int days = inox_date_day_from_civil(full_year, (unsigned int)(full_month + 1), 1) + (int)day - 1;
+  const long long total_ms =
+    (long long)days * 86400000LL +
+    (long long)((int)hour) * 3600000LL +
+    (long long)((int)minute) * 60000LL +
+    (long long)((int)second) * 1000LL +
+    (long long)((int)millisecond);
+
+  return (inox_number)total_ms;
 }
 
 inox_number Date::fromLocal(
@@ -433,7 +415,7 @@ inox_number Date::timezoneOffset(inox_number value) const {
   }
 
   const inox_number whole_ms = inox_floor_ms(value);
-  const inox_number local_as_utc = inox_date_utc_from_parts(
+  const inox_number local_as_utc = ::Date.UTC(
     local_value.tm_year + 1900,
     local_value.tm_mon,
     local_value.tm_mday,
