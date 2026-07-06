@@ -7,10 +7,6 @@
 #include "inox/promise.h"
 #include "inox/value.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 enum {
   INOX_FS_F_OK = 0,
   INOX_FS_X_OK = 1,
@@ -168,9 +164,5 @@ bool inox_fs_stats_is_directory(inox_value stats);
 inox_status inox_fs_dirent_new(inox_allocator* allocator, const char* name, size_t name_len, bool is_file, bool is_directory, inox_value* out);
 bool inox_fs_dirent_is_file(inox_value dirent);
 bool inox_fs_dirent_is_directory(inox_value dirent);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
