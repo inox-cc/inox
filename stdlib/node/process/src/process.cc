@@ -549,20 +549,21 @@ void process_versions::init() {
 
   if (process_versions_node(&inox_default_allocator, &value) != INOX_OK) {
     node = inox::String();
-    return;
+  } else {
+    node = inox::String(inox::adopt(value));
   }
 
-  node = inox::String(inox::adopt(value));
+  inox_value object = inox_undefined_value();
+
+  if (process_versions_value(&inox_default_allocator, &object) == INOX_OK) {
+    static_cast<inox::Value&>(*this) = inox::adopt(object);
+  } else {
+    static_cast<inox::Value&>(*this) = inox::Value();
+  }
 }
 
 inox::Value process_versions::value() const {
-  inox_value result = inox_undefined_value();
-
-  if (process_versions_value(&inox_default_allocator, &result) != INOX_OK) {
-    return inox::Value();
-  }
-
-  return inox::adopt(result);
+  return *this;
 }
 
 void process::init() {
@@ -607,6 +608,14 @@ void process::init() {
   }
 
   versions.init();
+
+  inox_value object = inox_undefined_value();
+
+  if (process_value(&inox_default_allocator, &object) == INOX_OK) {
+    static_cast<inox::Value&>(*this) = inox::adopt(object);
+  } else {
+    static_cast<inox::Value&>(*this) = inox::Value();
+  }
 }
 
 inox::String process::cwd() const {
@@ -664,13 +673,7 @@ inox::Value process::memoryUsage() const {
 }
 
 inox::Value process::value() const {
-  inox_value value = inox_undefined_value();
-
-  if (process_value(&inox_default_allocator, &value) != INOX_OK) {
-    return inox::Value();
-  }
-
-  return inox::adopt(value);
+  return *this;
 }
 
 class process process;

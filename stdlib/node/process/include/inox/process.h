@@ -47,15 +47,17 @@ public:
   inox::String get(inox::StringView name) const;
 };
 
-class process_versions {
+class process_versions : public inox::Value {
 public:
   inox::String node;
+
+  using inox::Value::operator=;
 
   void init();
   inox::Value value() const;
 };
 
-class process {
+class process : public inox::Value {
 public:
   inox::String arch;
   process_argv argv;
@@ -67,6 +69,8 @@ public:
   inox::String platform;
   inox::String version;
   process_versions versions;
+
+  using inox::Value::operator=;
 
   void init();
   inox::String cwd() const;
