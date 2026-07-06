@@ -198,30 +198,30 @@ ArrayClass crypto::getHashes() const {
   inox_allocator* allocator = &inox_default_allocator;
 
 #if INOX_CRYPTO_HASH_HAS_EVP
-  inox_value hashes = inox_undefined_value();
+  auto hashes = ArrayClass::create(1);
+
+  if (inox::thrown() || !hashes.valid()) {
+    inox_crypto_throw_failed("crypto.getHashes failed");
+    return ArrayClass();
+  }
+
   inox_value sha256 = inox_undefined_value();
-  inox_status status = Array.make(allocator, 1, &hashes);
+  inox_status status = inox_string_from_literal(allocator, "sha256", 6, &sha256);
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.getHashes failed");
     return ArrayClass();
   }
 
-  status = inox_string_from_literal(allocator, "sha256", 6, &sha256);
-
-  if (status == INOX_OK) {
-    status = Array.set(hashes, 0, sha256);
-  }
-
+  hashes.set(0, sha256);
   inox_release(sha256);
 
-  if (status != INOX_OK) {
-    inox_release(hashes);
+  if (inox::thrown()) {
     inox_crypto_throw_failed("crypto.getHashes failed");
     return ArrayClass();
   }
 
-  return ArrayClass(inox::adopt_value, hashes);
+  return hashes;
 #else
   inox_crypto_throw_failed("crypto.getHashes failed");
   return ArrayClass();
