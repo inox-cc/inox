@@ -138,13 +138,9 @@ static void inox_url_throw_failed(const char* message) {
 
 URL::URL() : inox::Value() {}
 
-URL::URL(inox_value value) : inox::Value(value) {}
-
 URL::URL(const inox::Value& value) : inox::Value(value) {}
 
 URL::URL(inox::Value&& value) : inox::Value(std::move(value)) {}
-
-URL::URL(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
 
 bool URL::valid() const {
   inox_value value = raw();
@@ -252,7 +248,7 @@ URL url::pathToFileURL(const inox::Value& path, const inox_shape* shape) const {
     return URL();
   }
 
-  return URL(inox::adopt_value, out);
+  return URL(inox::adopt(out));
 }
 
 URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base, const inox_shape* shape) {
@@ -281,7 +277,7 @@ URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base, 
       return URL();
     }
 
-    return URL(inox::adopt_value, out);
+    return URL(inox::adopt(out));
   }
 
   if (!has_base) {
@@ -336,7 +332,7 @@ URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base, 
     return URL();
   }
 
-  return URL(inox::adopt_value, out);
+  return URL(inox::adopt(out));
 }
 
 void URL::setField(uint32_t field_index, const inox::Value& value) {
@@ -475,16 +471,14 @@ URLSearchParams::URLSearchParams() : inox::Value() {}
 
 URLSearchParams::URLSearchParams(inox::StringView init) : inox::Value(make(init)) {}
 
-URLSearchParams::URLSearchParams(inox_value value) : inox::Value(value) {}
-
 URLSearchParams::URLSearchParams(const inox::Value& value) : inox::Value(value) {}
 
-URLSearchParams::URLSearchParams(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
+URLSearchParams::URLSearchParams(inox::Value&& value) : inox::Value(std::move(value)) {}
 
 URLSearchParams URLSearchParams::from(const inox::Value& init) {
   inox::Value value = make(init);
 
-  return URLSearchParams(inox::adopt_value, value.release());
+  return URLSearchParams(std::move(value));
 }
 
 bool URLSearchParams::valid() const {

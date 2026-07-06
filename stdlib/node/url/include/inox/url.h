@@ -11,10 +11,8 @@
 class URL : public inox::Value {
 public:
   URL();
-  explicit URL(inox_value value);
   explicit URL(const inox::Value& value);
   explicit URL(inox::Value&& value);
-  URL(inox::AdoptValue adopt, inox_value value);
 
   using inox::Value::operator=;
 
@@ -32,9 +30,8 @@ private:
 public:
   URLSearchParams();
   explicit URLSearchParams(inox::StringView init);
-  explicit URLSearchParams(inox_value value);
   explicit URLSearchParams(const inox::Value& value);
-  URLSearchParams(inox::AdoptValue adopt, inox_value value);
+  explicit URLSearchParams(inox::Value&& value);
 
   using inox::Value::operator=;
 
