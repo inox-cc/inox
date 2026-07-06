@@ -57,9 +57,6 @@ inox_status inox_dgram_send_connected_with_callback(
   inox_dgram_send_fn callback,
   void* user
 );
-inox_status inox_dgram_socket_address(inox_dgram_socket* socket, inox_dgram_address* out);
-inox_status inox_dgram_socket_remote_address(inox_dgram_socket* socket, inox_dgram_address* out);
-inox_status inox_dgram_local_port(inox_dgram_socket* socket, int* out_port);
 inox_status inox_dgram_set_broadcast(inox_dgram_socket* socket, int enabled);
 inox_status inox_dgram_set_ttl(inox_dgram_socket* socket, int ttl);
 inox_status inox_dgram_get_send_buffer_size(inox_dgram_socket* socket, int* out_size);
@@ -69,5 +66,21 @@ inox_status inox_dgram_set_recv_buffer_size(inox_dgram_socket* socket, int size)
 inox_status inox_dgram_ref(inox_dgram_socket* socket);
 inox_status inox_dgram_unref(inox_dgram_socket* socket);
 void inox_dgram_close(inox_dgram_socket* socket);
+
+#ifdef __cplusplus
+
+class DgramSocket {
+private:
+  inox_dgram_socket* socket_;
+
+public:
+  explicit DgramSocket(inox_dgram_socket* socket);
+
+  inox_status address(inox_dgram_address* out) const;
+  inox_status remoteAddress(inox_dgram_address* out) const;
+  inox_status localPort(int* out_port) const;
+};
+
+#endif
 
 #endif

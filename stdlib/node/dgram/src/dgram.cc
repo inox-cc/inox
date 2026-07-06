@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+DgramSocket::DgramSocket(inox_dgram_socket* socket) : socket_(socket) {}
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
 
@@ -237,7 +239,9 @@ inox_status inox_dgram_send_connected_with_callback(
   return inox_dgram_send_resolved(socket, bytes, len, 0, callback, user);
 }
 
-inox_status inox_dgram_socket_address(inox_dgram_socket* socket, inox_dgram_address* out) {
+inox_status DgramSocket::address(inox_dgram_address* out) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -252,7 +256,9 @@ inox_status inox_dgram_socket_address(inox_dgram_socket* socket, inox_dgram_addr
   return inox_dgram_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
-inox_status inox_dgram_socket_remote_address(inox_dgram_socket* socket, inox_dgram_address* out) {
+inox_status DgramSocket::remoteAddress(inox_dgram_address* out) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -267,7 +273,9 @@ inox_status inox_dgram_socket_remote_address(inox_dgram_socket* socket, inox_dgr
   return inox_dgram_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
-inox_status inox_dgram_local_port(inox_dgram_socket* socket, int* out_port) {
+inox_status DgramSocket::localPort(int* out_port) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || out_port == 0) {
     return INOX_ERR_TYPE;
   }
@@ -699,8 +707,8 @@ inox_status inox_dgram_send_connected_with_callback(
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_socket_address(inox_dgram_socket* socket, inox_dgram_address* out) {
-  (void)socket;
+inox_status DgramSocket::address(inox_dgram_address* out) const {
+  (void)socket_;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
@@ -710,8 +718,8 @@ inox_status inox_dgram_socket_address(inox_dgram_socket* socket, inox_dgram_addr
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_socket_remote_address(inox_dgram_socket* socket, inox_dgram_address* out) {
-  (void)socket;
+inox_status DgramSocket::remoteAddress(inox_dgram_address* out) const {
+  (void)socket_;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
@@ -721,8 +729,8 @@ inox_status inox_dgram_socket_remote_address(inox_dgram_socket* socket, inox_dgr
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_local_port(inox_dgram_socket* socket, int* out_port) {
-  (void)socket;
+inox_status DgramSocket::localPort(int* out_port) const {
+  (void)socket_;
 
   if (out_port == 0) {
     return INOX_ERR_TYPE;

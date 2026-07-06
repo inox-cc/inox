@@ -219,17 +219,17 @@ export function emitDgramAddressVariableDeclaration(statement: AnyNode, context:
     return null
   }
 
-  let runtime = 'inox_dgram_socket_address'
+  let method = 'address'
 
   if (statement.init.callee.property === 'remoteAddress') {
-    runtime = 'inox_dgram_socket_remote_address'
+    method = 'remoteAddress'
   }
 
   context.variables.set(statement.name, 'dgram-address')
 
   return [
     `inox_dgram_address ${statement.name};`,
-    emitStatusCheck(`${runtime}(${socketName}, &${statement.name})`, context)
+    emitStatusCheck(`DgramSocket(${socketName}).${method}(&${statement.name})`, context)
   ]
 }
 
