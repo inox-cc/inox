@@ -4234,7 +4234,7 @@ function emitNullableRuntimeValueAssignment(expression: AnyNode, context: CFunct
     lines.push(line)
   }
 
-  lines.push(`inox_value ${temp} = ${value.expression};`)
+  lines.push(`auto ${temp} = ${value.expression};`)
 
   const checkLines: string[] = emitRuntimeNullableValueCheck(temp, expectedTag, context)
 
@@ -4275,7 +4275,7 @@ function emitBoxedRuntimeValueAssignment(expression: AnyNode, context: CFunction
     lines.push(line)
   }
 
-  lines.push(`inox_value ${temp} = ${value.expression};`)
+  lines.push(`auto ${temp} = ${value.expression};`)
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != ${tag} || ${temp}.as.ref == 0`, context))
   lines.push(`inox_retain(${temp});`)
   lines.push(`inox_release(*${reference});`)
@@ -8175,8 +8175,7 @@ function emitPreparedAwaitResultExpression(
   rejectionValueType: string,
   context: CFunctionContext
 ): PreparedExpression {
-  const result = `inox_await_value_${context.nextAwaitResultId}`
-  context.nextAwaitResultId = context.nextAwaitResultId + 1
+  const result = nextCName(context, 'inox_await')
   const valueExpression = result
   const valueInfo = resolveAwaitResultCppValueInfo(
     expression,

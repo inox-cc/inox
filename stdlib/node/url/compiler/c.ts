@@ -82,8 +82,20 @@ function urlStringLength(prepared: PreparedStringBytesOperand | null): string {
 }
 
 function urlStringArgument(prepared: PreparedStringBytesOperand | null): string {
-  if (prepared !== null && typeof prepared !== 'undefined' && typeof prepared.cppExpression === 'string') {
-    return prepared.cppExpression
+  let cppExpression = ''
+  let hasCppExpression = false
+
+  if (prepared !== null && typeof prepared !== 'undefined') {
+    const candidate = prepared.cppExpression
+
+    if (candidate !== null && typeof candidate !== 'undefined') {
+      cppExpression = candidate
+      hasCppExpression = true
+    }
+  }
+
+  if (hasCppExpression) {
+    return cppExpression
   }
 
   return `inox::StringView(${urlStringBytes(prepared)}, ${urlStringLength(prepared)})`

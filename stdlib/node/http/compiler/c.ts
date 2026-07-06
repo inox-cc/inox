@@ -768,10 +768,7 @@ function emitHttpResponseStatusAssignment(
 
   const status = emitHttpStatusCodeExpression(expression.value, context)
 
-  return [
-    `${httpContext.responseName}.setStatus(${status});`,
-    ...emitHttpThrownCheck(context)
-  ]
+  return emitHttpStatementWithThrownCheck(`${httpContext.responseName}.setStatus(${status});`, context)
 }
 
 function emitHttpResponseCallStatement(
@@ -1546,10 +1543,13 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     return []
   }
 
-  return [
-    `${serverName}.onRequest(${wrapper.name}, 0);`,
-    ...emitHttpThrownCheck(context)
-  ]
+  return emitHttpStatementWithThrownCheck(`${serverName}.onRequest(${wrapper.name}, 0);`, context)
+}
+
+function emitHttpStatementWithThrownCheck(statement: string, context: CFunctionContext): string[] {
+  const lines = [statement]
+  pushHttpLines(lines, emitHttpThrownCheck(context))
+  return lines
 }
 
 function emitHttpServerCloseLines(

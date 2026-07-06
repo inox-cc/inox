@@ -189,7 +189,6 @@ type CFunctionContext = CEmitContext & {
   moduleValueNames: CStringMap
   moduleValueTypes: CStringMap
   narrowedNullableScalars: CStringSet
-  nextAwaitResultId: number
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet
@@ -4066,15 +4065,17 @@ function emitPreparedNullableBooleanLiteralCompareExpression(
   }
 
   const equals = `(${value.expression}.tag == INOX_TAG_BOOL && (${value.expression}.as.boolean ? 1 : 0) == ${expected})`
-  let result = equals
 
   if (!isPositiveEqualityOperator(expression.operator)) {
-    result = `(!${equals})`
+    return {
+      lines: value.lines,
+      expression: '(!' + equals + ')'
+    }
   }
 
   return {
     lines: value.lines,
-    expression: result
+    expression: equals
   }
 }
 

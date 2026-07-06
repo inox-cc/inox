@@ -191,7 +191,6 @@ type CFunctionContext = {
   netImportNames: CStringSet
   netReadingSockets: CStringSet
   narrowedNullableScalars: CStringSet
-  nextAwaitResultId: number
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
   nullableVariables: CStringSet

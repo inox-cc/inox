@@ -31,7 +31,7 @@ console.log(label)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /#include "inox\/allocator\.h"/)
+  assert.doesNotMatch(source, /#include "inox\/allocator\.h"/)
   assert.doesNotMatch(source, /static void\* inox_default_alloc/)
   assert.doesNotMatch(source, /static void\* inox_default_realloc/)
   assert.doesNotMatch(source, /static void inox_default_free/)

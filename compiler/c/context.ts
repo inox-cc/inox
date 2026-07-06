@@ -311,7 +311,6 @@ export type CFunctionContext = CEmitContext & {
   moduleValueDeclarationScope: boolean
   narrowedNullableScalars: CStringSet
   netReadingSockets: CStringSet
-  nextAwaitResultId: number
   nullableVariables: CStringSet
   objectAliases: CStringMap
   objectDeclaredTypes: CStringMap
@@ -474,7 +473,6 @@ export function createFunctionContext(
     moduleValueDeclarationScope: false,
     netReadingSockets: new Set(),
     narrowedNullableScalars: new Set(),
-    nextAwaitResultId: 0,
     nullableVariables: new Set(),
     objectAliases: new Map(),
     objectDeclaredTypes: new Map(),

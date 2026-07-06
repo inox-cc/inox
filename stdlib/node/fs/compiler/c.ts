@@ -3,6 +3,7 @@ import { fsRuntimeCallInfoFromPath, isAsyncFsRuntimeMethod } from './descriptor.
 import type { AnyNode } from '../../../../compiler/types.ts'
 import {
   emitPrepareOwnedValueWrite,
+  emitFailureStatement,
   emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
@@ -21,6 +22,9 @@ import { cRuntimeValueTag } from '../../../../compiler/c/value-types.ts'
 
 type FsFunctionContext = {
   cleanupEnabled: boolean
+  errorChannelUsed: boolean
+  errorTargetActiveFlags: boolean[]
+  errorTargets: string[]
   eventLoopUsed: boolean
   externalEventLoop: boolean
   failureStatement?: string | null
@@ -66,6 +70,83 @@ type FsSyncStatementDescriptor = {
 
 function emitFsStringArgument(operand: PreparedStringBytesOperand): string {
   return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
+}
+
+function emitFsBufferArgument(value: PreparedExpression): string {
+  if (value.cppType === 'Buffer') {
+    return value.expression
+  }
+
+  return `Buffer(${value.expression})`
+}
+
+function currentFsErrorTarget(context: FsFunctionContext): string | null {
+  const targets = context.errorTargets
+
+  if (targets.length === 0) {
+    return null
+  }
+
+  return targets[targets.length - 1]
+}
+
+function currentFsErrorTargetRequiresActive(context: FsFunctionContext): boolean {
+  const flags = context.errorTargetActiveFlags
+
+  if (flags.length === 0) {
+    return false
+  }
+
+  return flags[flags.length - 1] === true
+}
+
+function registerFsErrorValue(context: FsFunctionContext): void {
+  registerOwnedValue(context, 'inox_error')
+}
+
+function registerFsErrorChannel(context: FsFunctionContext): void {
+  context.errorChannelUsed = true
+  registerFsErrorValue(context)
+}
+
+function pushFsThrownCheckLines(target: string[], context: FsFunctionContext): void {
+  const errorTarget = currentFsErrorTarget(context)
+
+  if ((errorTarget === null || typeof errorTarget === 'undefined') && context.throwingFunction !== true) {
+    target.push(`if (inox::thrown()) ${emitFailureStatement(context)}`)
+    return
+  }
+
+  const errorActiveNeeded =
+    currentFsErrorTargetRequiresActive(context) ||
+    ((errorTarget === null || typeof errorTarget === 'undefined') && context.throwingFunction === true)
+
+  if (errorActiveNeeded) {
+    registerFsErrorChannel(context)
+  } else if (errorTarget === null || typeof errorTarget === 'undefined') {
+    registerFsErrorValue(context)
+  }
+
+  if (!errorActiveNeeded && errorTarget !== null && typeof errorTarget !== 'undefined') {
+    target.push(`if (inox::thrown()) goto ${errorTarget};`)
+    return
+  }
+
+  target.push('if (inox::thrown()) {')
+  if (errorTarget === null || typeof errorTarget === 'undefined') {
+    target.push('  inox_error = inox::take_exception();')
+  }
+  if (errorActiveNeeded) {
+    target.push('  inox_error_active = 1;')
+  }
+
+  if (errorTarget === null || typeof errorTarget === 'undefined') {
+    target.push('  inox_status_result = INOX_ERR_THROW;')
+    target.push('  goto cleanup;')
+  } else {
+    target.push(`  goto ${errorTarget};`)
+  }
+  target.push('}')
 }
 
 function fsSyncValueCppType(callName: string, valueType: string): string | null {
@@ -142,7 +223,7 @@ function emitFsAsyncPromiseCall(
     appendLines(lines, bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
 
-    return `${descriptor.callName}(${emitFsStringArgument(path)}, ${bytes.expression})`
+    return `${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsBufferArgument(bytes)})`
   }
 
   if (descriptor.kind === 'path-arg-out') {
@@ -541,7 +622,7 @@ export function emitPreparedFsSyncValueExpression(
   if (cppType !== null && typeof cppType !== 'undefined') {
     const out = nextCName(context, 'fs_value')
     lines.push(`auto ${out} = ${callName}(${emitFsStringArgument(path)});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushFsThrownCheckLines(lines, context)
 
     return {
       lines,
@@ -594,7 +675,7 @@ export function emitPreparedFsSyncStatementExpression(
 
     appendLines(lines, mode.lines)
     lines.push(`fs.accessSync(${emitFsStringArgument(path)}, ${mode.expression});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushFsThrownCheckLines(lines, context)
 
     return {
       lines
@@ -603,7 +684,7 @@ export function emitPreparedFsSyncStatementExpression(
 
   if (method === 'mkdirSync') {
     lines.push(`fs.mkdirSync(${emitFsStringArgument(path)}, ${emitFsBooleanFlag(expression, 'fsRecursive')});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushFsThrownCheckLines(lines, context)
 
     return {
       lines
@@ -614,7 +695,7 @@ export function emitPreparedFsSyncStatementExpression(
     lines.push(
       `fs.rmSync(${emitFsStringArgument(path)}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')});`
     )
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushFsThrownCheckLines(lines, context)
 
     return {
       lines
@@ -634,14 +715,14 @@ function emitPreparedFsSyncStatementDescriptor(
 ): PreparedStatement {
   if (descriptor.kind === 'path') {
     lines.push(`${descriptor.callName}(${emitFsStringArgument(path)});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushFsThrownCheckLines(lines, context)
   } else if (descriptor.kind === 'bytes-value') {
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
     appendLines(lines, bytes.lines)
     lines.push(emitRuntimeValueCheck(bytes.expression, 'INOX_TAG_BYTES', context))
-    lines.push(`${descriptor.callName}(${emitFsStringArgument(path)}, ${bytes.expression});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    lines.push(`${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsBufferArgument(bytes)});`)
+    pushFsThrownCheckLines(lines, context)
   } else if (descriptor.kind === 'path-arg') {
     const argumentPath = dependencies.emitPreparedStringBytesOperand(
       expression.args[1],
@@ -651,13 +732,13 @@ function emitPreparedFsSyncStatementDescriptor(
 
     appendLines(lines, argumentPath.lines)
     lines.push(`${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(argumentPath)});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushFsThrownCheckLines(lines, context)
   } else {
     const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
 
     appendLines(lines, bytes.lines)
     lines.push(`${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(bytes)});`)
-    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    pushFsThrownCheckLines(lines, context)
   }
 
   return {

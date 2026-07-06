@@ -50,11 +50,11 @@ createServer((request, response) => {
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /HttpServer server;/)
-  assert.match(source, /server\.create\(inox::loop\(\), 0, 0\);\n  if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /server\.create\(0, 0\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /server\.listen\("127\.0\.0\.1", \(int\)\(8080\), 128\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /server\.close\(\);/)
   assert.match(source, /HttpServer inox_http_server_\d+;/)
-  assert.match(source, /inox_http_server_\d+\.create\(inox::loop\(\), 0, 0\);\n  if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /inox_http_server_\d+\.create\(0, 0\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /inox_http_server_\d+\.listen\("127\.0\.0\.1", \(int\)\(8081\), 128\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /static void inox_http_handler_\d+\(void\* user, HttpRequest inox_request, HttpResponse inox_response\)/)
   assert.match(source, /HttpRequest request = inox_request;/)

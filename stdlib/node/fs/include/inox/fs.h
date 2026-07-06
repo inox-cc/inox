@@ -74,9 +74,9 @@ public:
   inox::Promise mkdir(inox::StringView path, bool recursive);
   inox::Promise rm(inox::StringView path, bool recursive, bool force);
   inox::Promise writeFile(inox::StringView path, inox::StringView bytes);
-  inox::Promise writeFile(inox::StringView path, inox_value bytes);
+  inox::Promise writeFile(inox::StringView path, Buffer bytes);
   inox::Promise appendFile(inox::StringView path, inox::StringView bytes);
-  inox::Promise appendFile(inox::StringView path, inox_value bytes);
+  inox::Promise appendFile(inox::StringView path, Buffer bytes);
   inox::Promise copyFile(inox::StringView src_path, inox::StringView dest_path);
   inox::Promise symlink(inox::StringView target, inox::StringView path);
   inox::Promise rename(inox::StringView old_path, inox::StringView new_path);
@@ -104,12 +104,12 @@ public:
   void unlinkSync(inox::StringView path);
   void rmSync(inox::StringView path, bool recursive, bool force);
   void appendFileSync(inox::StringView path, inox::StringView bytes);
-  void appendFileSync(inox::StringView path, inox_value bytes);
+  void appendFileSync(inox::StringView path, Buffer bytes);
   void copyFileSync(inox::StringView src_path, inox::StringView dest_path);
   void symlinkSync(inox::StringView target, inox::StringView path);
   void renameSync(inox::StringView old_path, inox::StringView new_path);
   void writeFileSync(inox::StringView path, inox::StringView bytes);
-  void writeFileSync(inox::StringView path, inox_value bytes);
+  void writeFileSync(inox::StringView path, Buffer bytes);
 };
 
 class FsStats : public inox::Value {

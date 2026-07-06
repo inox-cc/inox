@@ -222,10 +222,7 @@ export function emitDgramAddressVariableDeclaration(statement: AnyNode, context:
 
   context.variables.set(statement.name, 'dgram-address')
 
-  return [
-    `DgramAddress ${statement.name} = ${socketName}.${method}();`,
-    ...emitDgramThrownCheck(context)
-  ]
+  return emitDgramStatementWithThrownCheck(`DgramAddress ${statement.name} = ${socketName}.${method}();`, context)
 }
 
 export function emitDgramNumberVariableDeclaration(statement: AnyNode, context: CFunctionContext): string[] | null {
@@ -267,10 +264,7 @@ export function emitDgramNumberVariableDeclaration(statement: AnyNode, context: 
 
   context.variables.set(statement.name, 'number')
 
-  return [
-    `double ${statement.name} = (double)${socketName}.${facadeMethod}();`,
-    ...emitDgramThrownCheck(context)
-  ]
+  return emitDgramStatementWithThrownCheck(`double ${statement.name} = (double)${socketName}.${facadeMethod}();`, context)
 }
 
 export function emitDgramSocketCallStatement(
@@ -1108,10 +1102,7 @@ function emitDgramDisconnectLines(socketName: string, args: AnyNode[], context: 
     )
   }
 
-  return [
-    `${socketName}.disconnect();`,
-    ...emitDgramThrownCheck(context)
-  ]
+  return emitDgramStatementWithThrownCheck(`${socketName}.disconnect();`, context)
 }
 
 function emitDgramSocketOptionCallStatement(
@@ -1191,10 +1182,7 @@ function emitDgramSocketOptionCallStatement(
       facadeMethod = 'ref'
     }
 
-    return [
-      `${socketName}.${facadeMethod}();`,
-      ...emitDgramThrownCheck(context)
-    ]
+    return emitDgramStatementWithThrownCheck(`${socketName}.${facadeMethod}();`, context)
   }
 
   return null
@@ -1318,10 +1306,13 @@ function emitDgramMaybeRecvStartLines(socketName: string, context: CFunctionCont
     return []
   }
 
-  return [
-    `${socketName}.recvStart();`,
-    ...emitDgramThrownCheck(context)
-  ]
+  return emitDgramStatementWithThrownCheck(`${socketName}.recvStart();`, context)
+}
+
+function emitDgramStatementWithThrownCheck(statement: string, context: CFunctionContext): string[] {
+  const lines = [statement]
+  pushDgramLines(lines, emitDgramThrownCheck(context))
+  return lines
 }
 
 function emitDgramThrownCheck(context: CFunctionContext): string[] {

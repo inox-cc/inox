@@ -911,13 +911,13 @@ static inox_status fs_append_file_sync_status(const char* path, size_t path_len,
 #endif
 }
 
-void fs::appendFileSync(inox::StringView path, inox_value bytes) {
+void fs::appendFileSync(inox::StringView path, Buffer bytes) {
   inox_status status = INOX_ERR_UNSUPPORTED;
+  BytesStorage* data = bytes.data();
 
-  if (bytes.tag != INOX_TAG_BYTES || bytes.as.ref == 0 || (path.bytes == 0 && path.len != 0)) {
+  if (data == nullptr || (path.bytes == 0 && path.len != 0)) {
     status = INOX_ERR_TYPE;
   } else {
-    BytesStorage* data = (BytesStorage*)bytes.as.ref;
     inox::StringView byte_view((const char*)data->bytes, data->length);
 
     if (fs_active_adapter.append_file != 0) {
@@ -1113,13 +1113,13 @@ static inox_status fs_write_file_sync_status(const char* path, size_t path_len, 
 #endif
 }
 
-void fs::writeFileSync(inox::StringView path, inox_value bytes) {
+void fs::writeFileSync(inox::StringView path, Buffer bytes) {
   inox_status status = INOX_ERR_UNSUPPORTED;
+  BytesStorage* data = bytes.data();
 
-  if (bytes.tag != INOX_TAG_BYTES || bytes.as.ref == 0 || (path.bytes == 0 && path.len != 0)) {
+  if (data == nullptr || (path.bytes == 0 && path.len != 0)) {
     status = INOX_ERR_TYPE;
   } else {
-    BytesStorage* data = (BytesStorage*)bytes.as.ref;
     inox::StringView byte_view((const char*)data->bytes, data->length);
 
     if (fs_active_adapter.write_file != 0) {
@@ -1355,12 +1355,13 @@ inox::Promise fs_promises::writeFile(inox::StringView path, inox::StringView byt
   return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
 }
 
-inox::Promise fs_promises::writeFile(inox::StringView path, inox_value bytes) {
-  if (bytes.tag != INOX_TAG_BYTES || bytes.as.ref == 0) {
+inox::Promise fs_promises::writeFile(inox::StringView path, Buffer bytes) {
+  BytesStorage* data = bytes.data();
+
+  if (data == nullptr) {
     return inox::Promise();
   }
 
-  BytesStorage* data = (BytesStorage*)bytes.as.ref;
   const char* bytes_data = (const char*)data->bytes;
   const size_t byte_len = data->length;
   inox_promise* promise = 0;
@@ -1402,12 +1403,13 @@ inox::Promise fs_promises::appendFile(inox::StringView path, inox::StringView by
   return status == INOX_OK ? inox::adopt(promise) : inox::Promise();
 }
 
-inox::Promise fs_promises::appendFile(inox::StringView path, inox_value bytes) {
-  if (bytes.tag != INOX_TAG_BYTES || bytes.as.ref == 0) {
+inox::Promise fs_promises::appendFile(inox::StringView path, Buffer bytes) {
+  BytesStorage* data = bytes.data();
+
+  if (data == nullptr) {
     return inox::Promise();
   }
 
-  BytesStorage* data = (BytesStorage*)bytes.as.ref;
   const char* bytes_data = (const char*)data->bytes;
   const size_t byte_len = data->length;
   inox_promise* promise = 0;
