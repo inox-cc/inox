@@ -39,7 +39,8 @@ public:
 
   static inox_status create(inox_loop* loop, DgramRecvFn recv, void* user, inox_dgram_socket** out);
 
-  inox_status bind(const char* host, int port, unsigned int flags = 0) const;
+  inox_status bind(const char* host, int port) const;
+  inox_status bind(const char* host, int port, unsigned int flags) const;
   inox_status onMessage(DgramRecvFn recv, void* user) const;
   inox_status onClose(DgramCloseFn close, void* user) const;
   inox_status connect(const char* host, int port) const;
