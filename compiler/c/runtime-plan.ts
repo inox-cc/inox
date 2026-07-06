@@ -26,7 +26,6 @@ export type CRuntimePreludeRequirements = {
   needsCppValueRuntime: boolean
   needsStringHeader: boolean
   needsCollectionRuntime: boolean
-  needsHashRuntime: boolean
   needsMapRuntime: boolean
   needsSetRuntime: boolean
   needsBinaryRuntime: boolean
@@ -104,6 +103,7 @@ export function resolveCRuntimePreludeRequirements(
   const needsCollectionRuntime =
     input.runtimeRequirements.has('collections') ||
     irProgramsUseArrayIsArray(input.irPrograms) ||
+    irProgramsUseArrayIncludes(input.irPrograms) ||
     signatureRuntimeTypes.has('array') ||
     signatureRuntimeTypes.has('map') ||
     signatureRuntimeTypes.has('set')
@@ -113,10 +113,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsSetRuntime =
     signatureRuntimeTypes.has('set') ||
     irProgramsUseCollectionKind(input.irPrograms, 'set')
-  const needsHashRuntime =
-    needsMapRuntime ||
-    needsSetRuntime ||
-    irProgramsUseArrayIncludes(input.irPrograms)
   const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
@@ -195,7 +191,6 @@ export function resolveCRuntimePreludeRequirements(
     needsCppValueRuntime,
     needsStringHeader,
     needsCollectionRuntime,
-    needsHashRuntime,
     needsMapRuntime,
     needsSetRuntime,
     needsBinaryRuntime,

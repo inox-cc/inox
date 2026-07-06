@@ -87,7 +87,7 @@ console.log(values.includes(2))
   const includesSource = generatedTextFile(includesFiles, 'src/index.cc').code
 
   assert.match(includesSource, /#include "inox\/array\.h"/)
-  assert.match(includesSource, /#include "inox\/hash\.h"/)
+  assert.doesNotMatch(includesSource, /#include "inox\/hash\.h"/)
   assert.doesNotMatch(includesSource, /#include "inox\/map\.h"/)
   assert.doesNotMatch(includesSource, /#include "inox\/set\.h"/)
 

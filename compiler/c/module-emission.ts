@@ -456,7 +456,6 @@ export function emitCModuleSource(
       prelude.needsCppValueRuntime,
       prelude.needsStringHeader,
       prelude.needsCollectionRuntime,
-      prelude.needsHashRuntime,
       prelude.needsMapRuntime,
       prelude.needsSetRuntime,
       prelude.needsBinaryRuntime,

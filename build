@@ -3,7 +3,6 @@
 #include "inox/console.h"
 #include <string.h>
 #include "inox/array.h"
-#include "inox/hash.h"
 #include "inox/json.h"
 #include "inox/map.h"
 #include "inox/object.h"
@@ -434,4 +433,3 @@ inox_cleanup:
   inox_release(inox_error);
   return (int)inox_return;
 }
-

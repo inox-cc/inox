@@ -7,13 +7,15 @@
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
 #endif
-#include "inox/hash.h"
 #include "inox/loop.h"
 #include "inox/map.h"
 #include "inox/set.h"
 #include "inox/string.h"
 
 static void inox_map_dispose_ref(inox_ref* ref);
+static uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len);
+static bool inox_hash_value(inox_value value, uint64_t& out);
+static bool inox_value_equal(inox_value left, inox_value right);
 
 static void inox_collection_throw(const char* message) {
   inox::throw_value(inox::String(message));
@@ -149,7 +151,7 @@ static inox_status inox_map_find(MapStorage* map, inox_value key, uint64_t hash,
       if (first_tombstone == (size_t)-1) {
         first_tombstone = current;
       }
-    } else if (entry->hash == hash && inox::value_equal(entry->key, key)) {
+    } else if (entry->hash == hash && inox_value_equal(entry->key, key)) {
       *index = current;
       *found = true;
       return INOX_OK;
@@ -261,7 +263,7 @@ bool Map::deleteKey(const inox::Value& key) const {
 
   inox_value raw_key = key.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(raw_key, hash);
+  bool hash_ok = inox_hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -329,7 +331,7 @@ inox::Value Map::get(const inox::Value& key) const {
 
   inox_value raw_key = key.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(raw_key, hash);
+  bool hash_ok = inox_hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -365,7 +367,7 @@ bool Map::has(const inox::Value& key) const {
 
   inox_value raw_key = key.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(raw_key, hash);
+  bool hash_ok = inox_hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -395,7 +397,7 @@ Map Map::set(const inox::Value& key, const inox::Value& value) const {
   inox_value raw_key = key.raw();
   inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(raw_key, hash);
+  bool hash_ok = inox_hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -582,7 +584,7 @@ static inox_status inox_set_find(SetStorage* set, inox_value value, uint64_t has
       if (first_tombstone == (size_t)-1) {
         first_tombstone = current;
       }
-    } else if (entry->hash == hash && inox::value_equal(entry->value, value)) {
+    } else if (entry->hash == hash && inox_value_equal(entry->value, value)) {
       *index = current;
       *found = true;
       return INOX_OK;
@@ -630,7 +632,7 @@ Set Set::add(const inox::Value& value) const {
 
   inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(raw_value, hash);
+  bool hash_ok = inox_hash_value(raw_value, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
@@ -706,7 +708,7 @@ bool Set::deleteValue(const inox::Value& value) const {
 
   inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(raw_value, hash);
+  bool hash_ok = inox_hash_value(raw_value, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
@@ -771,7 +773,7 @@ bool Set::has(const inox::Value& value) const {
 
   inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(raw_value, hash);
+  bool hash_ok = inox_hash_value(raw_value, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
@@ -839,9 +841,7 @@ size_t Set::size() const {
   return instance->length;
 }
 
-namespace inox {
-
-uint64_t hash_mix(uint64_t hash, const void* bytes, size_t len) {
+static uint64_t inox_hash_mix(uint64_t hash, const void* bytes, size_t len) {
   const unsigned char* data = (const unsigned char*)bytes;
 
   for (size_t index = 0; index < len; index += 1) {
@@ -852,11 +852,11 @@ uint64_t hash_mix(uint64_t hash, const void* bytes, size_t len) {
   return hash;
 }
 
-bool hash_value(inox_value value, uint64_t& out) {
+static bool inox_hash_value(inox_value value, uint64_t& out) {
   uint64_t hash = 1469598103934665603ULL;
   uint8_t tag = (uint8_t)value.tag;
 
-  hash = hash_mix(hash, &tag, sizeof(tag));
+  hash = inox_hash_mix(hash, &tag, sizeof(tag));
 
   if (value.tag == INOX_TAG_STRING) {
     if (value.as.ref == 0) {
@@ -864,7 +864,7 @@ bool hash_value(inox_value value, uint64_t& out) {
     }
 
     inox_string* string = (inox_string*)value.as.ref;
-    out = hash_mix(hash, string->bytes, string->len);
+    out = inox_hash_mix(hash, string->bytes, string->len);
     return true;
   }
 
@@ -873,7 +873,7 @@ bool hash_value(inox_value value, uint64_t& out) {
 
     if (number != number) {
       uint64_t nan_bits = 0x7ff8000000000000ULL;
-      out = hash_mix(hash, &nan_bits, sizeof(nan_bits));
+      out = inox_hash_mix(hash, &nan_bits, sizeof(nan_bits));
       return true;
     }
 
@@ -883,13 +883,13 @@ bool hash_value(inox_value value, uint64_t& out) {
 
     uint64_t bits = 0;
     memcpy(&bits, &number, sizeof(bits));
-    out = hash_mix(hash, &bits, sizeof(bits));
+    out = inox_hash_mix(hash, &bits, sizeof(bits));
     return true;
   }
 
   if (value.tag == INOX_TAG_BOOL) {
     uint8_t boolean = value.as.boolean ? 1 : 0;
-    out = hash_mix(hash, &boolean, sizeof(boolean));
+    out = inox_hash_mix(hash, &boolean, sizeof(boolean));
     return true;
   }
 
@@ -899,7 +899,7 @@ bool hash_value(inox_value value, uint64_t& out) {
     }
 
     uintptr_t ref = (uintptr_t)value.as.ref;
-    out = hash_mix(hash, &ref, sizeof(ref));
+    out = inox_hash_mix(hash, &ref, sizeof(ref));
     return true;
   }
 
@@ -911,7 +911,7 @@ bool hash_value(inox_value value, uint64_t& out) {
   return false;
 }
 
-bool value_equal(inox_value left, inox_value right) {
+static bool inox_value_equal(inox_value left, inox_value right) {
   if (left.tag != right.tag) {
     return false;
   }
@@ -945,8 +945,6 @@ bool value_equal(inox_value left, inox_value right) {
 
   return left.tag == INOX_TAG_NULL || left.tag == INOX_TAG_UNDEFINED;
 }
-
-} // namespace inox
 
 static void inox_array_sort_key(inox_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
   if (value.tag == INOX_TAG_STRING && value.as.ref != 0) {
@@ -1200,6 +1198,26 @@ inox::Value Array::get(size_t index) const {
   }
 
   return inox::Value(instance->items[index]);
+}
+
+bool Array::includes(const inox::Value& value) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array.includes receiver is not an Array");
+    return false;
+  }
+
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  inox_value raw_value = value.raw();
+
+  for (size_t index = 0; index < instance->length; ++index) {
+    if (inox_value_equal(instance->items[index], raw_value)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 class Array Array::create(size_t len) {

@@ -30,6 +30,7 @@ public:
   bool valid() const;
   size_t length() const;
   inox::Value get(size_t index) const;
+  bool includes(const inox::Value& value) const;
   inox::Value pop() const;
   void push(const inox::Value& value) const;
   void set(size_t index, const inox::Value& value) const;

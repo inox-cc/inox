@@ -191,7 +191,6 @@ export function emitCPrelude(
   needsCppValueRuntime: boolean,
   needsStringHeader: boolean,
   needsCollectionRuntime: boolean,
-  needsHashRuntime: boolean,
   needsMapRuntime: boolean,
   needsSetRuntime: boolean,
   needsBinaryRuntime: boolean,
@@ -271,9 +270,6 @@ export function emitCPrelude(
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/allocator.h"')
     if (needsCollectionRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/array.h"')
-    }
-    if (needsHashRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/hash.h"')
     }
     if (needsAsyncRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')

@@ -2043,26 +2043,12 @@ export function emitPreparedArrayIncludesCallExpression(
   }
   const searchValue = emitPreparedArrayElementValue(search, searchType, context)
   const found = nextCName(context, 'inox_array_includes')
-  const length = nextCName(context, 'inox_array_includes_length')
-  const index = nextCName(context, 'inox_array_includes_index')
-  const value = nextCName(context, 'inox_array_includes_value')
-  const view = nextCName(context, 'inox_array_includes_view')
   const lines: string[] = []
 
   appendLines(lines, receiver.lines)
   appendLines(lines, searchValue.lines)
-  lines.push(`bool ${found} = false;`)
-  lines.push(`auto ${view} = ArrayClass(${receiver.expression});`)
-  lines.push(`size_t ${length} = ${view}.length();`)
+  lines.push(`bool ${found} = ArrayClass(${receiver.expression}).includes(${searchValue.expression});`)
   lines.push(emitArrayThrownCheck(context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
-  lines.push(`  auto ${value} = ${view}.get(${index});`)
-  lines.push(`  ${emitArrayThrownCheck(context)}`)
-  lines.push(`  if (inox::value_equal(${value}, ${searchValue.expression})) {`)
-  lines.push(`    ${found} = true;`)
-  lines.push('    break;')
-  lines.push('  }')
-  lines.push('}')
 
   return {
     lines,
