@@ -69,6 +69,25 @@ function emitFsStringArgument(operand: PreparedStringBytesOperand): string {
   return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
+function fsSyncValueCppType(callName: string, valueType: string): string | null {
+  if (callName === 'fs.statSync' || callName === 'fs.lstatSync') {
+    return 'FsStats'
+  }
+
+  if (callName === 'fs.readdirSync' || callName === 'fs.readdirDirentsSync') {
+    return 'Array'
+  }
+
+  if (
+    valueType === 'string' &&
+    (callName === 'fs.readFileSync' || callName === 'fs.realpathSync' || callName === 'fs.readlinkSync')
+  ) {
+    return 'inox::String'
+  }
+
+  return null
+}
+
 function fsAsyncCppExpression(
   expression: AnyNode,
   context: FsFunctionContext,
@@ -617,14 +636,18 @@ export function emitPreparedFsSyncValueExpression(
   const lines: string[] = []
   appendLines(lines, path.lines)
 
-  if (method === 'readFileSync' && valueType === 'string') {
-    const out = nextCName(context, 'text')
-    lines.push(`auto ${out} = fs.readFileSync(${emitFsStringArgument(path)});`)
+  const cppType = fsSyncValueCppType(callName, valueType)
+
+  if (cppType !== null && typeof cppType !== 'undefined') {
+    const out = nextCName(context, 'fs_value')
+    lines.push(`auto ${out} = ${callName}(${emitFsStringArgument(path)});`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: out
+      expression: out,
+      cppType,
+      valueType
     }
   }
 

@@ -106,9 +106,11 @@ struct FsAdapter {
 };
 #ifdef __cplusplus
 
+#include "inox/array.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
 
+class FsStats;
 class fs_promises {
 public:
   inox::Promise readFile(inox::StringView path);
@@ -162,19 +164,18 @@ public:
   inox::String readFileSync(const char* path);
   inox::String readFileSync(const inox::String& path);
   inox::String readFileSync(inox::StringView path);
+  ArrayClass readdirSync(inox::StringView path);
+  ArrayClass readdirDirentsSync(inox::StringView path);
+  FsStats statSync(inox::StringView path);
+  FsStats lstatSync(inox::StringView path);
+  inox::String realpathSync(inox::StringView path);
+  inox::String readlinkSync(inox::StringView path);
   void mkdirSync(inox::StringView path, bool recursive);
   void unlinkSync(inox::StringView path);
   void rmSync(inox::StringView path, bool recursive, bool force);
   void appendFileSync(inox::StringView path, inox::StringView bytes);
   void writeFileSync(inox::StringView path, inox::StringView bytes);
-  inox_status readFileSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-  inox_status readdirSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-  inox_status readdirDirentsSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-  inox_status statSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-  inox_status lstatSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-  inox_status realpathSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-  inox_status readlinkSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status accessSync(const char* path, size_t path_len, int mode);
   inox_status mkdirSync(const char* path, size_t path_len, bool recursive);
   inox_status unlinkSync(const char* path, size_t path_len);
@@ -194,6 +195,7 @@ public:
   explicit FsStats(inox_value value);
   explicit FsStats(const inox::Value& value);
   explicit FsStats(inox::Value&& value);
+  FsStats(inox::AdoptValue, inox_value value);
 
   bool isFile() const;
   bool isDirectory() const;
