@@ -3223,9 +3223,12 @@ export function emitPreparedNumberExpression(
 
     if (element !== null && typeof element !== 'undefined' && isNumberOrBooleanValueType(element.valueType)) {
       const value = nextCName(context, 'inox_expr_value')
-      const getCall = `Array.get(${element.arrayName}, ${element.index}, &${value})`
+      const getLines = [
+        `${value} = ArrayClass(${element.arrayName}).get(${element.index});`,
+        emitRuntimeTypeCheck('inox::thrown()', context)
+      ]
 
-      return emitPreparedRuntimeNumberValue(element.valueType, value, [emitStatusCheck(getCall, context)], context)
+      return emitPreparedRuntimeNumberValue(element.valueType, value, getLines, context)
     }
 
     const field = deps.resolveKnownObjectIndex(expression, context)
@@ -4441,7 +4444,6 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
 
   const array = nextCName(context, 'inox_array_value')
   const value = nextCName(context, 'inox_value')
-  const status = nextCName(context, 'inox_array_status')
   const lines: string[] = []
 
   registerOwnedValue(context, array)
@@ -4452,11 +4454,8 @@ function emitPreparedDynamicObjectArrayIndexValueExpression(
   appendLines(lines, emitRuntimeObjectGetValueLines(receiver.expression, receiver.key, array, context))
   lines.push(emitRuntimeTypeCheck(`${array}.tag != INOX_TAG_ARRAY || ${array}.as.ref == 0`, context))
   appendLines(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(`inox_status ${status} = Array.get(${array}, ${index.expression}, &${value});`)
-  lines.push(`if (${status} == INOX_ERR_FIELD) {`)
-  lines.push(`  ${value} = inox_undefined_value();`)
-  lines.push('}')
-  lines.push(`if (${status} != INOX_OK && ${status} != INOX_ERR_FIELD) ${emitFailureStatement(context)}`)
+  lines.push(`${value} = ArrayClass(${array}).get(${index.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,

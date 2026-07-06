@@ -1041,11 +1041,13 @@ function emitCUnitFunctionPointerAdapterDefaultParamValue(
   if (value !== null && typeof value !== 'undefined') {
     if (value.type === 'ArrayLiteral' && value.elements.length === 0 && param.valueType === 'array') {
       const name = `inox_adapter_default_${defaultLines.length}`
+      const arrayName = `${name}_array`
 
-      defaultLines.push(`  inox_value ${name} = inox_undefined_value();`)
-      defaultLines.push(`  if (Array.make(&inox_default_allocator, 0, &${name}) != INOX_OK) {`)
+      defaultLines.push(`  auto ${arrayName} = ArrayClass::create(0);`)
+      defaultLines.push('  if (inox::thrown()) {')
       defaultLines.push(`    return ${cUnitFunctionPointerAdapterDefaultReturnValue(adapterReturnType)};`)
       defaultLines.push('  }')
+      defaultLines.push(`  inox_value ${name} = ${arrayName}.release();`)
       cleanupLines.push(`  inox_release(${name});`)
 
       return name

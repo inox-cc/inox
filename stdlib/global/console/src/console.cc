@@ -1713,6 +1713,18 @@ inox_status console::write_format_arg(
   }
 
   if (value.kind == inox::ConsoleArgKind::number) {
+    const char conversion = spec_len > 0 ? spec[spec_len - 1] : '\0';
+
+    if (!inox_console_is_float_format(conversion)) {
+      if (conversion == 'd' || conversion == 'i' || conversion == 'c') {
+        return inox_console_write_signed_format(stream, format, spec, spec_len, (long long)value.number);
+      }
+
+      if (conversion == 'u' || conversion == 'o' || conversion == 'x' || conversion == 'X') {
+        return inox_console_write_unsigned_format(stream, format, spec, spec_len, (unsigned long long)value.number);
+      }
+    }
+
     return inox::console_printf(stream, format, value.number) < 0 ? INOX_ERR_TYPE : INOX_OK;
   }
 

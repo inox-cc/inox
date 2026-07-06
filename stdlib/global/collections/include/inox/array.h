@@ -42,15 +42,6 @@ public:
   Array sort() const;
   double unshift(inox_value value) const;
 
-  inox_status make(inox_allocator* allocator, size_t len, inox_value* out) const;
-  inox_status get(inox_value array, size_t index, inox_value* out) const;
-  inox_status length(inox_value array, size_t* out) const;
-  inox_status pop(inox_value array, inox_value* out) const;
-  inox_status push(inox_value array, inox_value value) const;
-  inox_status set(inox_value array, size_t index, inox_value value) const;
-  inox_status slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) const;
-  inox_status sort(inox_value array) const;
-  inox_status unshift(inox_value array, inox_value value, size_t* out) const;
   inox::String join(inox::StringView separator) const;
   bool isArray(inox_value value) const;
   bool isArray(const inox::Value& value) const;

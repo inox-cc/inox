@@ -4788,7 +4788,8 @@ function emitKnownArrayIndexVariableDeclaration(
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context))
+  lines.push(`${temp} = ArrayClass(${element.arrayName}).get(${element.index});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   lines.push(`double ${emitCIdentifier(statement.name)} = ${runtimeValueExpression};`)
 
   context.variables.set(statement.name, element.valueType)
@@ -4812,7 +4813,8 @@ function emitKnownArrayFunctionIndexVariableDeclaration(
   context.runtimeCallbacks.add(name)
 
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${reference})`, context))
+  lines.push(`${reference} = ArrayClass(${element.arrayName}).get(${element.index});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   lines.push(emitRuntimeValueCheck(reference, 'INOX_TAG_FUNCTION', context))
   lines.push(`inox_retain(${reference});`)
 
@@ -4832,7 +4834,8 @@ function emitKnownArrayRuntimeIndexVariableDeclaration(
   const lines: string[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${reference})`, context))
+  lines.push(`${reference} = ArrayClass(${element.arrayName}).get(${element.index});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   if (tag !== null && typeof tag !== 'undefined') {
     lines.push(emitRuntimeTypeCheck(`${reference}.tag != ${tag} || ${reference}.as.ref == 0`, context))
@@ -4894,7 +4897,8 @@ function emitKnownArrayStringIndexVariableDeclaration(
   registerOwnedValue(context, temp)
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context))
+  lines.push(`${temp} = ArrayClass(${element.arrayName}).get(${element.index});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   lines.push(emitRuntimeTypeCheck(`${temp}.tag != INOX_TAG_STRING || ${temp}.as.ref == 0`, context))
   lines.push(`inox_string* ${emitCIdentifier(statement.name)} = (inox_string*)${temp}.as.ref;`)
 
@@ -4916,7 +4920,8 @@ function emitKnownArrayIndexAssignment(
   updateKnownArrayElementValueType(element, valueType, context)
 
   pushAll(lines, value.lines)
-  lines.push(emitStatusCheck(`Array.set(${element.arrayName}, ${element.index}, ${value.expression})`, context))
+  lines.push(`ArrayClass(${element.arrayName}).set(${element.index}, ${value.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return lines
 }
@@ -6291,6 +6296,10 @@ function emitDirectStringLogValue(expression: AnyNode, context: CFunctionContext
 
   const formatted = emitCTemplateLiteralFormatExpression(expression, context)
 
+  if (formatted.format.indexOf('%.*s') >= 0) {
+    return emitPreparedStringLogValue(emitCTemplateLiteralValueExpression(expression, context), context)
+  }
+
   return {
     lines: formatted.lines,
     format: formatted.format,
@@ -6338,7 +6347,8 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
 
       registerOwnedValue(context, value)
       pushAll(lines, emitPrepareOwnedValueWrite(value))
-      lines.push(emitStatusCheck(`Array.get(${name}, ${index}, &${value})`, context))
+      lines.push(`${value} = ArrayClass(${name}).get(${index});`)
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_STRING', context))
       lines.push(`inox_string* ${string} = (inox_string*)${value}.as.ref;`)
       parts.push("'%.*s'")
@@ -6348,7 +6358,8 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
 
       registerOwnedValue(context, value)
       pushAll(lines, emitPrepareOwnedValueWrite(value))
-      lines.push(emitStatusCheck(`Array.get(${name}, ${index}, &${value})`, context))
+      lines.push(`${value} = ArrayClass(${name}).get(${index});`)
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_NUMBER', context))
       parts.push(consoleLogNumberFormat)
       values.push(`${value}.as.number`)
@@ -6357,7 +6368,8 @@ function emitKnownArrayShapeLogValue(expression: AnyNode, context: CFunctionCont
 
       registerOwnedValue(context, value)
       pushAll(lines, emitPrepareOwnedValueWrite(value))
-      lines.push(emitStatusCheck(`Array.get(${name}, ${index}, &${value})`, context))
+      lines.push(`${value} = ArrayClass(${name}).get(${index});`)
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
       lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
       parts.push('%s')
       values.push(`(${value}.as.boolean ? "true" : "false")`)
@@ -7017,6 +7029,20 @@ function emitConsoleNumberValue(value: PreparedExpression): string {
 }
 
 function emitBooleanLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue {
+  if (expression.type === 'BooleanLiteral') {
+    let value = 'false'
+
+    if (expression.value) {
+      value = 'true'
+    }
+
+    return {
+      lines: [],
+      format: consoleLogBooleanFormat,
+      values: [value]
+    }
+  }
+
   const moduleRuntimeBoolean = emitModuleRuntimeBooleanLogValue(expression, context)
 
   if (moduleRuntimeBoolean !== null && typeof moduleRuntimeBoolean !== 'undefined') {
@@ -7310,7 +7336,8 @@ function emitKnownArrayScalarLogValue(
   }
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${value})`, context))
+  lines.push(`${value} = ArrayClass(${element.arrayName}).get(${element.index});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   lines.push(emitRuntimeValueCheck(value, tag, context))
 
   return {
@@ -7327,7 +7354,8 @@ function emitKnownArrayBooleanLogValue(element: CKnownArrayElement, context: CFu
   registerOwnedValue(context, value)
 
   pushAll(lines, emitPrepareOwnedValueWrite(value))
-  lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${value})`, context))
+  lines.push(`${value} = ArrayClass(${element.arrayName}).get(${element.index});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   lines.push(emitRuntimeValueCheck(value, 'INOX_TAG_BOOL', context))
 
   return {
@@ -7345,7 +7373,10 @@ function emitRuntimeLogGetLines(source: RuntimeLogGetSource, temp: string, conte
       return [emitStatusCheck('INOX_ERR_FIELD', context)]
     }
 
-    return [emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context)]
+    return [
+      `${temp} = ArrayClass(${element.arrayName}).get(${element.index});`,
+      emitRuntimeTypeCheck('inox::thrown()', context)
+    ]
   }
 
   if (source.kind === 'known-object-index') {

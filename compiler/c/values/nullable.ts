@@ -6,7 +6,6 @@ import {
   emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
-  emitStatusCheck,
   nextCName,
   registerOwnedValue
 } from '../context.ts'
@@ -909,7 +908,6 @@ function emitCOptionalArrayIndexValueExpression(
     `${array.expression}.tag != INOX_TAG_ARRAY || ${array.expression}.as.ref == 0`,
     context
   )
-  const statusCheck = emitStatusCheck(`Array.get(${array.expression}, ${element.index}, &${temp})`, context)
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
@@ -920,7 +918,8 @@ function emitCOptionalArrayIndexValueExpression(
   lines.push(`  ${temp} = inox_null_value();`)
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
-  lines.push(`  ${statusCheck}`)
+  lines.push(`  ${temp} = ArrayClass(${array.expression}).get(${element.index});`)
+  lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
   appendPrefixedLines(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
   lines.push('}')
 

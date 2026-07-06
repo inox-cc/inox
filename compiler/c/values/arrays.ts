@@ -14,7 +14,6 @@ import {
   emitPrepareOwnedValueWrite,
   emitFailureStatement,
   emitRuntimeTypeCheck,
-  emitStatusCheck,
   nextCName,
   registerOwnedValue
 } from '../context.ts'
@@ -1058,7 +1057,8 @@ export function emitPreparedKnownArrayIndexValueExpression(
     const lines: string[] = []
 
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`Array.get(${element.arrayName}, ${element.index}, &${temp})`, context))
+    lines.push(`${temp} = ArrayClass(${element.arrayName}).get(${element.index});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
     appendLines(lines, emitRuntimeFieldValueCheck(temp, tag, expression, context))
 
     return {
