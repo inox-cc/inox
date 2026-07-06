@@ -3251,7 +3251,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
       ? null
       : emitForOfElementDeclaration(statement.name, value, elementType, context)
 
-    const getElementStatus = emitStatusCheck(`Array.get(${arrayName}, ${index}, &${value})`, context)
+    const arrayView = nextCName(context, 'inox_for_array_view')
     const lines: string[] = []
     pushAllLines(lines, setup)
 
@@ -3270,11 +3270,13 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
       }
       length = `${rawArray}->length`
       arrayName = rawArray
+    } else {
+      lines.push(`auto ${arrayView} = ArrayClass(${arrayName});`)
     }
 
     lines.push(`for (size_t ${index} = 0; ${index} < ${length}; ++${index}) {`)
     const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
-    let loopBody = [`inox::Value ${value};`, `${getElementStatus}`]
+    let loopBody = [`auto ${value} = ${arrayView}.get(${index});`, emitRuntimeTypeCheck('inox::thrown()', context)]
     if (useRuntimeArrayValueBinding) {
       loopBody = [`inox::Value ${emitCIdentifier(statement.name)} = ${arrayName}->items[${index}];`]
     } else if (runtimeArray !== null && typeof runtimeArray !== 'undefined') {
@@ -5080,7 +5082,8 @@ function emitRuntimeArrayIndexAssignment(expression: StatementNode, context: CFu
 
   pushAllLines(lines, index.lines)
   pushAllLines(lines, value.lines)
-  lines.push(emitStatusCheck(`Array.set(${arrayName}, ${index.expression}, ${value.expression})`, context))
+  lines.push(`ArrayClass(${arrayName}).set(${index.expression}, ${value.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return lines
 }
