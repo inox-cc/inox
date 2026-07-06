@@ -14,8 +14,6 @@ typedef struct inox_dgram_send_request {
   inox_dgram_socket* socket;
   char* bytes;
   size_t len;
-  inox_dgram_send_fn callback;
-  void* user;
 } inox_dgram_send_request;
 
 struct inox_dgram_socket {
@@ -35,9 +33,7 @@ static inox_status inox_dgram_send_resolved(
   inox_dgram_socket* socket,
   const char* bytes,
   size_t len,
-  const struct sockaddr* addr,
-  inox_dgram_send_fn callback,
-  void* user
+  const struct sockaddr* addr
 );
 static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, inox_dgram_address* out);
 static void inox_dgram_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
@@ -45,7 +41,7 @@ static void inox_dgram_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* 
 static void inox_dgram_send_cb(uv_udp_send_t* request, int status);
 static void inox_dgram_close_cb(uv_handle_t* handle);
 
-inox_status inox_dgram_socket_new(
+inox_status DgramSocket::create(
   inox_loop* loop,
   inox_dgram_recv_fn recv,
   void* user,
@@ -96,22 +92,9 @@ inox_status inox_dgram_socket_new(
   return INOX_OK;
 }
 
-inox_status inox_dgram_bind(inox_dgram_socket* socket, const char* host, int port) {
-  if (socket == 0 || socket->closing) {
-    return INOX_ERR_TYPE;
-  }
+inox_status DgramSocket::bind(const char* host, int port, unsigned int flags) const {
+  inox_dgram_socket* socket = socket_;
 
-  struct sockaddr_in addr;
-  inox_status status = inox_dgram_ip4_addr(host == 0 ? "0.0.0.0" : host, port, &addr);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, 0) == 0 ? INOX_OK : INOX_ERR_FIELD;
-}
-
-inox_status inox_dgram_bind_flags(inox_dgram_socket* socket, const char* host, int port, unsigned int flags) {
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -128,7 +111,9 @@ inox_status inox_dgram_bind_flags(inox_dgram_socket* socket, const char* host, i
   return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, uv_flags) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_socket_on_message(inox_dgram_socket* socket, inox_dgram_recv_fn recv, void* user) {
+inox_status DgramSocket::onMessage(inox_dgram_recv_fn recv, void* user) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || recv == 0) {
     return INOX_ERR_TYPE;
   }
@@ -138,7 +123,9 @@ inox_status inox_dgram_socket_on_message(inox_dgram_socket* socket, inox_dgram_r
   return INOX_OK;
 }
 
-inox_status inox_dgram_socket_on_close(inox_dgram_socket* socket, inox_dgram_close_fn close, void* user) {
+inox_status DgramSocket::onClose(inox_dgram_close_fn close, void* user) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || close == 0) {
     return INOX_ERR_TYPE;
   }
@@ -163,10 +150,6 @@ inox_status DgramSocket::connect(const char* host, int port) const {
   }
 
   return uv_udp_connect(&socket->handle, (const struct sockaddr*)&addr) == 0 ? INOX_OK : INOX_ERR_FIELD;
-}
-
-inox_status DgramSocket::connect(inox::StringView host, int port) const {
-  return connect(host.bytes, port);
 }
 
 inox_status DgramSocket::disconnect() const {
@@ -199,7 +182,7 @@ inox_status DgramSocket::recvStop() const {
   return uv_udp_recv_stop(&socket->handle) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_send(inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
+inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
   if (host == 0) {
     return INOX_ERR_TYPE;
   }
@@ -211,44 +194,11 @@ inox_status inox_dgram_send(inox_dgram_socket* socket, const char* bytes, size_t
     return status;
   }
 
-  return inox_dgram_send_resolved(socket, bytes, len, (const struct sockaddr*)&addr, 0, 0);
+  return inox_dgram_send_resolved(socket_, bytes.bytes, bytes.len, (const struct sockaddr*)&addr);
 }
 
-inox_status inox_dgram_send_with_callback(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  const char* host,
-  int port,
-  inox_dgram_send_fn callback,
-  void* user
-) {
-  if (host == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  struct sockaddr_in addr;
-  inox_status status = inox_dgram_ip4_addr(host, port, &addr);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  return inox_dgram_send_resolved(socket, bytes, len, (const struct sockaddr*)&addr, callback, user);
-}
-
-inox_status inox_dgram_send_connected(inox_dgram_socket* socket, const char* bytes, size_t len) {
-  return inox_dgram_send_resolved(socket, bytes, len, 0, 0, 0);
-}
-
-inox_status inox_dgram_send_connected_with_callback(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  inox_dgram_send_fn callback,
-  void* user
-) {
-  return inox_dgram_send_resolved(socket, bytes, len, 0, callback, user);
+inox_status DgramSocket::sendConnected(inox::StringView bytes) const {
+  return inox_dgram_send_resolved(socket_, bytes.bytes, bytes.len, 0);
 }
 
 inox_status DgramSocket::address(inox_dgram_address* out) const {
@@ -422,9 +372,7 @@ static inox_status inox_dgram_send_resolved(
   inox_dgram_socket* socket,
   const char* bytes,
   size_t len,
-  const struct sockaddr* addr,
-  inox_dgram_send_fn callback,
-  void* user
+  const struct sockaddr* addr
 ) {
   if (socket == 0 || socket->closing || (bytes == 0 && len != 0)) {
     return INOX_ERR_TYPE;
@@ -441,8 +389,6 @@ static inox_status inox_dgram_send_resolved(
   memset(request, 0, sizeof(inox_dgram_send_request));
   request->socket = socket;
   request->len = len;
-  request->callback = callback;
-  request->user = user;
 
   if (len != 0) {
     request->bytes = (char*)allocator->alloc(allocator->user, len, alignof(char));
@@ -571,18 +517,8 @@ static void inox_dgram_send_cb(uv_udp_send_t* request, int status) {
 
   inox_dgram_socket* socket = send->socket;
 
-  inox_status send_status = status == 0 ? INOX_OK : INOX_ERR_FIELD;
-
-  if (status != 0 && send->callback == 0) {
+  if (status != 0) {
     inox_libuv_loop_report_status(socket->loop, INOX_ERR_FIELD);
-  }
-
-  if (send->callback != 0) {
-    inox_status callback_status = send->callback(send->user, send_status);
-
-    if (callback_status != INOX_OK) {
-      inox_libuv_loop_report_status(socket->loop, callback_status);
-    }
   }
 
   inox_libuv_loop_release_request(socket->loop);
@@ -618,7 +554,7 @@ struct inox_dgram_socket {
   int unused;
 };
 
-inox_status inox_dgram_socket_new(
+inox_status DgramSocket::create(
   inox_loop* loop,
   inox_dgram_recv_fn recv,
   void* user,
@@ -636,30 +572,23 @@ inox_status inox_dgram_socket_new(
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_bind(inox_dgram_socket* socket, const char* host, int port) {
-  (void)socket;
-  (void)host;
-  (void)port;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status inox_dgram_bind_flags(inox_dgram_socket* socket, const char* host, int port, unsigned int flags) {
-  (void)socket;
+inox_status DgramSocket::bind(const char* host, int port, unsigned int flags) const {
+  (void)socket_;
   (void)host;
   (void)port;
   (void)flags;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_socket_on_message(inox_dgram_socket* socket, inox_dgram_recv_fn recv, void* user) {
-  (void)socket;
+inox_status DgramSocket::onMessage(inox_dgram_recv_fn recv, void* user) const {
+  (void)socket_;
   (void)recv;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_socket_on_close(inox_dgram_socket* socket, inox_dgram_close_fn close, void* user) {
-  (void)socket;
+inox_status DgramSocket::onClose(inox_dgram_close_fn close, void* user) const {
+  (void)socket_;
   (void)close;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
@@ -670,10 +599,6 @@ inox_status DgramSocket::connect(const char* host, int port) const {
   (void)host;
   (void)port;
   return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status DgramSocket::connect(inox::StringView host, int port) const {
-  return connect(host.bytes, port);
 }
 
 inox_status DgramSocket::disconnect() const {
@@ -691,53 +616,17 @@ inox_status DgramSocket::recvStop() const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_send(inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port) {
-  (void)socket;
+inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
+  (void)socket_;
   (void)bytes;
-  (void)len;
   (void)host;
   (void)port;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_send_with_callback(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  const char* host,
-  int port,
-  inox_dgram_send_fn callback,
-  void* user
-) {
-  (void)socket;
+inox_status DgramSocket::sendConnected(inox::StringView bytes) const {
+  (void)socket_;
   (void)bytes;
-  (void)len;
-  (void)host;
-  (void)port;
-  (void)callback;
-  (void)user;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status inox_dgram_send_connected(inox_dgram_socket* socket, const char* bytes, size_t len) {
-  (void)socket;
-  (void)bytes;
-  (void)len;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status inox_dgram_send_connected_with_callback(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  inox_dgram_send_fn callback,
-  void* user
-) {
-  (void)socket;
-  (void)bytes;
-  (void)len;
-  (void)callback;
-  (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 

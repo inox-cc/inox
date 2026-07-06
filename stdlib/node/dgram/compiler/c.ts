@@ -879,7 +879,7 @@ function emitDgramSocketCreateLines(
 
   lines.push(
     emitStatusCheck(
-      `inox_dgram_socket_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${socketName})`,
+      `DgramSocket::create(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${socketName})`,
       context
     )
   )
@@ -985,7 +985,7 @@ function emitDgramBindLines(
 
   pushDgramLines(lines, port.lines)
   lines.push(
-    emitStatusCheck(`inox_dgram_bind_flags(${socketName}, ${host}, (int)(${port.expression}), ${flags})`, context)
+    emitStatusCheck(`DgramSocket(${socketName}).bind(${host}, (int)(${port.expression}), ${flags})`, context)
   )
 
   context.dgramBoundSockets.add(socketName)
@@ -1052,7 +1052,7 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
 
   context.dgramMessageSockets.add(socketName)
 
-  const lines = [emitStatusCheck(`inox_dgram_socket_on_message(${socketName}, ${wrapper.name}, 0)`, context)]
+  const lines = [emitStatusCheck(`DgramSocket(${socketName}).onMessage(${wrapper.name}, 0)`, context)]
 
   pushDgramLines(lines, emitDgramMaybeRecvStartLines(socketName, context))
 
@@ -1234,7 +1234,7 @@ function emitDgramSendLines(
     pushDgramLines(
       lines,
       emitDgramStatusCheck(
-        `inox_dgram_send_connected(${socketName}, ${body.bytes}, ${body.length})`,
+        `DgramSocket(${socketName}).sendConnected(inox::StringView(${body.bytes}, ${body.length}))`,
         context,
         dgramContext
       )
@@ -1295,7 +1295,7 @@ function emitDgramSendLines(
   pushDgramLines(
     lines,
     emitDgramStatusCheck(
-      `inox_dgram_send(${socketName}, ${body.bytes}, ${body.length}, ${host}, (int)(${port.expression}))`,
+      `DgramSocket(${socketName}).send(inox::StringView(${body.bytes}, ${body.length}), ${host}, (int)(${port.expression}))`,
       context,
       dgramContext
     )

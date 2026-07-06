@@ -24,39 +24,9 @@ typedef inox_status (*inox_dgram_recv_fn)(
   const char* host,
   int port
 );
-typedef inox_status (*inox_dgram_send_fn)(void* user, inox_status status);
 typedef void (*inox_dgram_close_fn)(void* user, inox_dgram_socket* socket);
 
 #define INOX_DGRAM_BIND_REUSEADDR 1u
-
-inox_status inox_dgram_socket_new(
-  inox_loop* loop,
-  inox_dgram_recv_fn recv,
-  void* user,
-  inox_dgram_socket** out
-);
-inox_status inox_dgram_bind(inox_dgram_socket* socket, const char* host, int port);
-inox_status inox_dgram_bind_flags(inox_dgram_socket* socket, const char* host, int port, unsigned int flags);
-inox_status inox_dgram_socket_on_message(inox_dgram_socket* socket, inox_dgram_recv_fn recv, void* user);
-inox_status inox_dgram_socket_on_close(inox_dgram_socket* socket, inox_dgram_close_fn close, void* user);
-inox_status inox_dgram_send(inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port);
-inox_status inox_dgram_send_with_callback(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  const char* host,
-  int port,
-  inox_dgram_send_fn callback,
-  void* user
-);
-inox_status inox_dgram_send_connected(inox_dgram_socket* socket, const char* bytes, size_t len);
-inox_status inox_dgram_send_connected_with_callback(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  inox_dgram_send_fn callback,
-  void* user
-);
 
 #ifdef __cplusplus
 
@@ -67,11 +37,17 @@ private:
 public:
   explicit DgramSocket(inox_dgram_socket* socket);
 
+  static inox_status create(inox_loop* loop, inox_dgram_recv_fn recv, void* user, inox_dgram_socket** out);
+
+  inox_status bind(const char* host, int port, unsigned int flags = 0) const;
+  inox_status onMessage(inox_dgram_recv_fn recv, void* user) const;
+  inox_status onClose(inox_dgram_close_fn close, void* user) const;
   inox_status connect(const char* host, int port) const;
-  inox_status connect(inox::StringView host, int port) const;
   inox_status disconnect() const;
   inox_status recvStart() const;
   inox_status recvStop() const;
+  inox_status send(inox::StringView bytes, const char* host, int port) const;
+  inox_status sendConnected(inox::StringView bytes) const;
   void close() const;
   inox_status address(inox_dgram_address* out) const;
   inox_status remoteAddress(inox_dgram_address* out) const;
