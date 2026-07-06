@@ -8,6 +8,7 @@
 #include "inox/array.h"
 #include "inox/class_descriptor.h"
 #include "inox/json.h"
+#include "inox/loop.h"
 #include "inox/object.h"
 #include "inox/string.h"
 
@@ -749,47 +750,49 @@ static inox_status inox_json_parse_array(inox_json_parser* parser, size_t depth,
     return INOX_ERR_TYPE;
   }
 
-  inox_status status = Array.make(parser->allocator, 0, out);
+  if (out == 0) {
+    return INOX_ERR_TYPE;
+  }
 
-  if (status != INOX_OK) {
-    return status;
+  *out = inox_undefined_value();
+
+  ArrayClass array = ArrayClass::create(parser->allocator, 0);
+
+  if (inox::thrown()) {
+    return INOX_ERR_TYPE;
   }
 
   inox_json_skip_ws(parser);
 
   if (inox_json_match_byte(parser, ']')) {
+    *out = array.release();
     return INOX_OK;
   }
 
   while (true) {
     inox_json_skip_ws(parser);
     inox_value value = inox_undefined_value();
-    status = inox_json_parse_value(parser, depth + 1, &value);
+    inox_status status = inox_json_parse_value(parser, depth + 1, &value);
 
     if (status != INOX_OK) {
-      inox_release(*out);
-      *out = inox_undefined_value();
       return status;
     }
 
-    status = Array.push(*out, value);
+    array.push(value);
     inox_release(value);
 
-    if (status != INOX_OK) {
-      inox_release(*out);
-      *out = inox_undefined_value();
-      return status;
+    if (inox::thrown()) {
+      return INOX_ERR_TYPE;
     }
 
     inox_json_skip_ws(parser);
 
     if (inox_json_match_byte(parser, ']')) {
+      *out = array.release();
       return INOX_OK;
     }
 
     if (!inox_json_match_byte(parser, ',')) {
-      inox_release(*out);
-      *out = inox_undefined_value();
       inox_json_set_error(parser, "Expected ',' or ']' after array element");
       return INOX_ERR_TYPE;
     }
@@ -1227,6 +1230,10 @@ inox::Value Json::parse(inox::StringView text) const {
   if (status != INOX_OK) {
     inox_release(out);
 
+    if (inox::thrown()) {
+      return inox::Value();
+    }
+
     if (error.tag == INOX_TAG_STRING && error.as.ref != 0) {
       inox::throw_value(error);
     } else {
@@ -1247,6 +1254,10 @@ inox::Value Json::parse(const char* text) const {
 
   if (status != INOX_OK) {
     inox_release(out);
+
+    if (inox::thrown()) {
+      return inox::Value();
+    }
 
     if (error.tag == INOX_TAG_STRING && error.as.ref != 0) {
       inox::throw_value(error);
