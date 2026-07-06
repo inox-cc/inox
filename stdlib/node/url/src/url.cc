@@ -663,7 +663,9 @@ URLSearchParams URLSearchParams::from(inox_value init) {
 }
 
 URLSearchParams URLSearchParams::from(const inox::Value& init) {
-  return from(init.raw());
+  inox::Value value = make(init.raw());
+
+  return URLSearchParams(inox::adopt_value, value.release());
 }
 
 bool URLSearchParams::valid() const {
