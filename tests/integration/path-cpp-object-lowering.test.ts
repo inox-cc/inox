@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -56,6 +58,10 @@ console.log(path.resolve('/tmp', 'file.txt'))
   assert.doesNotMatch(source, /inox_object_new/)
   assert.doesNotMatch(source, /inox_object_init_known/)
   assert.doesNotMatch(source, /const inox_value inox_path_args_\d+\[\]/)
+
+  const header = readFileSync(resolve('stdlib/node/path/include/inox/path.h'), 'utf8')
+  assert.match(header, /inox::String format\(const inox::Value& path_object\) const;/)
+  assert.doesNotMatch(header, /format\(inox_value path_object\)/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

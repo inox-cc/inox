@@ -18,7 +18,7 @@ public:
   inox::String basename(inox::StringView value, inox::StringView suffix, bool has_suffix) const;
   inox::String dirname(inox::StringView value) const;
   inox::String extname(inox::StringView value) const;
-  inox::String format(inox_value path_object) const;
+  inox::String format(const inox::Value& path_object) const;
   bool isAbsolute(inox::StringView value) const;
   inox::String join(const inox::StringView* values, size_t count) const;
   inox::String normalize(inox::StringView value) const;

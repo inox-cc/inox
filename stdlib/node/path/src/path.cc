@@ -166,7 +166,7 @@ inox::String path::join(const inox::StringView* paths, size_t path_count) const 
   return result;
 }
 
-inox::String path::format(inox_value path_object) const {
+inox::String path::format(const inox::Value& path_object) const {
   inox_allocator* allocator = &inox_default_allocator;
   const char* dir = "";
   const char* root = "";
@@ -188,22 +188,22 @@ inox::String path::format(inox_value path_object) const {
   inox_value base_value = inox_undefined_value();
   inox_value name_value = inox_undefined_value();
   inox_value ext_value = inox_undefined_value();
-  inox_status status = inox_path_object_string(path_object, "dir", &dir, &dir_len, &dir_present, &dir_value);
+  inox_status status = inox_path_object_string(path_object.raw(), "dir", &dir, &dir_len, &dir_present, &dir_value);
 
   if (status == INOX_OK) {
-    status = inox_path_object_string(path_object, "root", &root, &root_len, &root_present, &root_value);
+    status = inox_path_object_string(path_object.raw(), "root", &root, &root_len, &root_present, &root_value);
   }
 
   if (status == INOX_OK) {
-    status = inox_path_object_string(path_object, "base", &base, &base_len, &base_present, &base_value);
+    status = inox_path_object_string(path_object.raw(), "base", &base, &base_len, &base_present, &base_value);
   }
 
   if (status == INOX_OK) {
-    status = inox_path_object_string(path_object, "name", &name, &name_len, &name_present, &name_value);
+    status = inox_path_object_string(path_object.raw(), "name", &name, &name_len, &name_present, &name_value);
   }
 
   if (status == INOX_OK) {
-    status = inox_path_object_string(path_object, "ext", &ext, &ext_len, &ext_present, &ext_value);
+    status = inox_path_object_string(path_object.raw(), "ext", &ext, &ext_len, &ext_present, &ext_value);
   }
 
   if (status != INOX_OK) {

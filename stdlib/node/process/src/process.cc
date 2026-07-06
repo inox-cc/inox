@@ -403,7 +403,7 @@ inox::Value process::hrtime() const {
   return inox::adopt(result.release());
 }
 
-inox::Value process::hrtime(inox_value previous) const {
+inox::Value process::hrtime(const inox::Value& previous) const {
   int64_t seconds = 0;
   int64_t nanoseconds = 0;
 
@@ -415,8 +415,8 @@ inox::Value process::hrtime(inox_value previous) const {
   int64_t previous_nanoseconds = 0;
 
   if (
-    process_hrtime_component(previous, 0, &previous_seconds) != INOX_OK ||
-    process_hrtime_component(previous, 1, &previous_nanoseconds) != INOX_OK
+    process_hrtime_component(previous.raw(), 0, &previous_seconds) != INOX_OK ||
+    process_hrtime_component(previous.raw(), 1, &previous_nanoseconds) != INOX_OK
   ) {
     return inox::Value();
   }
