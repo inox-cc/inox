@@ -253,23 +253,23 @@ export function emitPreparedUrlSearchParamsObjectExpression(
   const out = urlOutName(options, context, 'url_search_params')
   let init = emptyPreparedUrlExpression('')
   const lines: string[] = []
-  let constructor = 'URLSearchParams::from(inox_undefined_value())'
+  let constructorExpression = 'URLSearchParams::from(inox_undefined_value())'
 
   if (expression.args.length > 0) {
     const arg = expression.args[0]
 
     if (arg.type === 'StringLiteral') {
-      constructor = `URLSearchParams(${cStringLiteral(arg.value)})`
+      constructorExpression = `URLSearchParams(${cStringLiteral(arg.value)})`
     } else {
       init = dependencies.emitCValueExpression(arg, context)
-      constructor = `URLSearchParams::from(${init.expression})`
+      constructorExpression = `URLSearchParams::from(${init.expression})`
     }
   }
 
   pushUrlLines(lines, init.lines)
 
   if (options.out !== null && typeof options.out !== 'undefined') {
-    lines.push(`auto ${out} = ${constructor};`)
+    lines.push(`auto ${out} = ${constructorExpression};`)
     lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
     context.variables.set(out, 'object')
     context.objectDeclaredTypes.set(out, 'url.URLSearchParams')
@@ -285,7 +285,7 @@ export function emitPreparedUrlSearchParamsObjectExpression(
 
   return {
     lines,
-    expression: constructor,
+    expression: constructorExpression,
     cppType: 'URLSearchParams',
     valueType: 'object'
   }

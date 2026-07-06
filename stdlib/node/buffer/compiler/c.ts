@@ -7,8 +7,7 @@ import {
 } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
 import type { CFunctionContext } from '../../../../compiler/c/context.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
-import { emitRuntimeValueCheck } from '../../../../compiler/c/runtime-values.ts'
+import { emitRuntimeTypeCheck, nextCName } from '../../../../compiler/c/context.ts'
 import type {
   CPreparedExpression as PreparedExpression,
   CPreparedStatement as PreparedStatement,
@@ -41,6 +40,18 @@ function binaryNodeAt(values: AnyNode[], index: number): AnyNode {
 
 function binaryStringAt(values: string[], index: number): string {
   return values[index]
+}
+
+function binaryThrownCheck(context: CFunctionContext): string {
+  return emitRuntimeTypeCheck('inox::thrown()', context)
+}
+
+function binaryCppType(kind: BinaryBytesKind): string {
+  return kind === 'buffer' ? 'Buffer' : 'Uint8Array'
+}
+
+function binaryFacade(expression: string, kind: BinaryBytesKind): string {
+  return `${binaryCppType(kind)}(${expression})`
 }
 
 export function binaryRuntimeMethodName(callee: AnyNode): string | null {
@@ -184,23 +195,19 @@ function emitCBufferFromValueExpression(
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
   const value = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_buffer_from')
-  const temp = nextCName(context, 'inox_bytes')
-  registerOwnedValue(context, temp)
+  const temp = nextCName(context, 'buffer')
   const lines: string[] = []
 
   pushBinaryLines(lines, value.lines)
-  pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_bytes_from_data(&inox_default_allocator, (const uint8_t*)${value.bytes}, ${value.length}, &${temp})`,
-      context
-    )
-  )
-  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_BYTES', context))
+  lines.push(`auto ${temp} = Buffer::from(inox::StringView(${value.bytes}, ${value.length}));`)
+  lines.push(binaryThrownCheck(context))
 
   return {
     lines: lines,
-    expression: temp
+    expression: temp,
+    valueType: 'bytes',
+    cppType: 'Buffer',
+    runtimeTypeChecked: true
   }
 }
 
@@ -209,8 +216,9 @@ function emitCBytesAllocValueExpression(
   context: CFunctionContext,
   dependencies: BinaryLoweringDependencies
 ): PreparedExpression {
-  const temp = nextCName(context, 'inox_bytes')
-  registerOwnedValue(context, temp)
+  const kind: BinaryBytesKind = isBufferAllocCall(expression) ? 'buffer' : 'uint8array'
+  const cppType = binaryCppType(kind)
+  const temp = nextCName(context, kind === 'buffer' ? 'buffer' : 'uint8array')
   let firstArg: AnyNode | null = null
 
   if (expression.args.length > 0) {
@@ -226,20 +234,24 @@ function emitCBytesAllocValueExpression(
     const elements = firstArg.elements
     const lines: string[] = []
 
-    pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`inox_bytes_new(&inox_default_allocator, ${elements.length}, &${temp})`, context))
+    lines.push(`auto ${temp} = Uint8Array::create(${elements.length});`)
+    lines.push(binaryThrownCheck(context))
 
     for (let index = 0; index < elements.length; index = index + 1) {
       const element = binaryNodeAt(elements, index)
       const value = dependencies.emitPreparedNumberExpression(element, context)
 
       pushBinaryLines(lines, value.lines)
-      lines.push(emitStatusCheck(`inox_bytes_set(${temp}, ${index}, (uint8_t)(${value.expression}))`, context))
+      lines.push(`${temp}.set(${index}, (uint8_t)(${value.expression}));`)
+      lines.push(binaryThrownCheck(context))
     }
 
     return {
       lines,
-      expression: temp
+      expression: temp,
+      valueType: 'bytes',
+      cppType: 'Uint8Array',
+      runtimeTypeChecked: true
     }
   }
 
@@ -265,16 +277,18 @@ function emitCBytesAllocValueExpression(
 
   const size = dependencies.emitPreparedNumberExpression(expression.args[0], context)
   const lines: string[] = []
+  const factory = kind === 'buffer' ? 'Buffer::alloc' : 'Uint8Array::create'
 
   pushBinaryLines(lines, size.lines)
-  pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(`inox_bytes_new(&inox_default_allocator, (size_t)(${size.expression}), &${temp})`, context)
-  )
+  lines.push(`auto ${temp} = ${factory}((size_t)(${size.expression}));`)
+  lines.push(binaryThrownCheck(context))
 
   return {
     lines: lines,
-    expression: temp
+    expression: temp,
+    valueType: 'bytes',
+    cppType,
+    runtimeTypeChecked: true
   }
 }
 
@@ -285,16 +299,18 @@ function emitCBytesSliceValueExpression(
 ): PreparedExpression {
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
   const start = dependencies.emitPreparedNumberExpression(expression.args[0], context)
-  const lengthName = nextCName(context, 'inox_bytes_len')
+  const kind = resolveBinaryExpressionKind(expression.callee.object, context) ?? 'uint8array'
+  const cppType = binaryCppType(kind)
+  const lengthName = nextCName(context, 'bytes_length')
   const startRaw = nextCName(context, 'inox_bytes_start_raw')
   const startIndex = nextCName(context, 'inox_bytes_start')
   const endRaw = nextCName(context, 'inox_bytes_end_raw')
   const endIndex = nextCName(context, 'inox_bytes_end')
-  const temp = nextCName(context, 'inox_bytes_slice')
-  registerOwnedValue(context, temp)
+  const temp = nextCName(context, kind === 'buffer' ? 'buffer_slice' : 'uint8array_slice')
   const lines: string[] = []
   const endLines: string[] = []
   let endExpression = `((double)${lengthName})`
+  const receiverFacade = binaryFacade(receiver.expression, kind)
 
   if (expression.args.length > 1) {
     const preparedEnd = dependencies.emitPreparedNumberExpression(expression.args[1], context)
@@ -307,8 +323,8 @@ function emitCBytesSliceValueExpression(
 
   pushBinaryLines(lines, endLines)
 
-  lines.push(`size_t ${lengthName} = 0;`)
-  lines.push(emitStatusCheck(`inox_bytes_len(${receiver.expression}, &${lengthName})`, context))
+  lines.push(`auto ${lengthName} = ${receiverFacade}.length();`)
+  lines.push(binaryThrownCheck(context))
   lines.push(`double ${startRaw} = ${start.expression};`)
   lines.push(`double ${endRaw} = ${endExpression};`)
   pushBinaryLines(
@@ -317,13 +333,15 @@ function emitCBytesSliceValueExpression(
   )
   pushBinaryLines(lines, emitSliceIndexNormalizationLines(endRaw, lengthName, endIndex, context, 'inox_bytes_end'))
   lines.push(`if (${endIndex} < ${startIndex}) ${endIndex} = ${startIndex};`)
-  pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_bytes_slice(${receiver.expression}, ${startIndex}, ${endIndex}, &${temp})`, context))
-  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_BYTES', context))
+  lines.push(`auto ${temp} = ${receiverFacade}.slice(${startIndex}, ${endIndex});`)
+  lines.push(binaryThrownCheck(context))
 
   return {
     lines: lines,
-    expression: temp
+    expression: temp,
+    valueType: 'bytes',
+    cppType,
+    runtimeTypeChecked: true
   }
 }
 
@@ -334,22 +352,23 @@ function emitCBytesToStringValueExpression(
 ): PreparedExpression {
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
   const temp = nextCName(context, 'inox_bytes_string')
-  let helper = 'inox_bytes_to_string'
-  registerOwnedValue(context, temp)
+  let kind: BinaryBytesKind = 'buffer'
   const lines: string[] = []
 
   if (resolveBinaryExpressionKind(expression.callee.object, context) === 'uint8array') {
-    helper = 'inox_bytes_to_uint8array_string'
+    kind = 'uint8array'
   }
 
   pushBinaryLines(lines, receiver.lines)
-  pushBinaryLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`${helper}(&inox_default_allocator, ${receiver.expression}, &${temp})`, context))
-  lines.push(emitRuntimeValueCheck(temp, 'INOX_TAG_STRING', context))
+  lines.push(`auto ${temp} = ${binaryFacade(receiver.expression, kind)}.toString();`)
+  lines.push(binaryThrownCheck(context))
 
   return {
     lines: lines,
-    expression: temp
+    expression: temp,
+    valueType: 'string',
+    cppType: 'inox::String',
+    runtimeTypeChecked: true
   }
 }
 
@@ -361,7 +380,7 @@ export function emitPreparedBinaryNumberCallExpression(
   if (expression.type === 'CallExpression' && expression.binaryRuntimeMethod === 'isBuffer') {
     const value = dependencies.emitCValueExpression(expression.args[0], context)
     const kind = resolveBinaryExpressionKind(expression.args[0], context)
-    let isBufferExpression = `(${value.expression}.tag == INOX_TAG_BYTES ? 1 : 0)`
+    let isBufferExpression = `(Buffer::isBuffer(${value.expression}) ? 1 : 0)`
 
     if (kind === 'uint8array') {
       isBufferExpression = '0'
@@ -390,12 +409,13 @@ export function emitPreparedBytesLengthExpression(
   }
 
   const value = dependencies.emitCValueExpression(expression.object, context)
-  const temp = nextCName(context, 'inox_bytes_len')
+  const kind = resolveBinaryExpressionKind(expression.object, context) ?? 'uint8array'
+  const temp = nextCName(context, 'bytes_length')
   const lines: string[] = []
 
   pushBinaryLines(lines, value.lines)
-  lines.push(`size_t ${temp} = 0;`)
-  lines.push(emitStatusCheck(`inox_bytes_len(${value.expression}, &${temp})`, context))
+  lines.push(`auto ${temp} = ${binaryFacade(value.expression, kind)}.length();`)
+  lines.push(binaryThrownCheck(context))
 
   return {
     lines: lines,
@@ -417,13 +437,14 @@ export function emitPreparedBytesIndexExpression(
 
   const value = dependencies.emitCValueExpression(expression.object, context)
   const index = dependencies.emitPreparedNumberExpression(expression.index, context)
+  const kind = resolveBinaryExpressionKind(expression.object, context) ?? 'uint8array'
   const byte = nextCName(context, 'inox_byte')
   const lines: string[] = []
 
   pushBinaryLines(lines, value.lines)
   pushBinaryLines(lines, index.lines)
-  lines.push(`uint8_t ${byte} = 0;`)
-  lines.push(emitStatusCheck(`inox_bytes_get(${value.expression}, (size_t)(${index.expression}), &${byte})`, context))
+  lines.push(`auto ${byte} = ${binaryFacade(value.expression, kind)}.get((size_t)(${index.expression}));`)
+  lines.push(binaryThrownCheck(context))
 
   return {
     lines: lines,
@@ -448,17 +469,14 @@ export function emitPreparedBytesIndexAssignment(
   const value = dependencies.emitCValueExpression(expression.target.object, context)
   const index = dependencies.emitPreparedNumberExpression(expression.target.index, context)
   const byte = dependencies.emitPreparedNumberExpression(expression.value, context)
+  const kind = resolveBinaryExpressionKind(expression.target.object, context) ?? 'uint8array'
   const lines: string[] = []
 
   pushBinaryLines(lines, value.lines)
   pushBinaryLines(lines, index.lines)
   pushBinaryLines(lines, byte.lines)
-  lines.push(
-    emitStatusCheck(
-      `inox_bytes_set(${value.expression}, (size_t)(${index.expression}), (uint8_t)(${byte.expression}))`,
-      context
-    )
-  )
+  lines.push(`${binaryFacade(value.expression, kind)}.set((size_t)(${index.expression}), (uint8_t)(${byte.expression}));`)
+  lines.push(binaryThrownCheck(context))
 
   return {
     lines: lines

@@ -3616,6 +3616,8 @@ function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
     cppType === 'Array' ||
     cppType === 'Map' ||
     cppType === 'Set' ||
+    cppType === 'Buffer' ||
+    cppType === 'Uint8Array' ||
     cppType === 'URLSearchParams'
   )
 }
@@ -7495,7 +7497,7 @@ function emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
   lines.push(`${emitCIdentifier(statement.name)} = inox::fetch_abort_controller();`)
-  lines.push(...emitThrownCheckLines(context))
+  pushAll(lines, emitThrownCheckLines(context))
 
   return lines
 }
@@ -7513,7 +7515,7 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
     emitRuntimeTypeCheck(runtimeFetchAbortControllerValueMismatchCondition(controller.expression), context)
   )
   lines.push(`inox::fetch_abort_controller_abort(${controller.expression});`)
-  lines.push(...emitThrownCheckLines(context))
+  pushAll(lines, emitThrownCheckLines(context))
 
   return lines
 }

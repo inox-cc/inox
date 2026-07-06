@@ -299,15 +299,20 @@ export function emitPreparedJsonCallExpression(
     lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${classToJson.expression});`)
     pushJsonThrownCheckLines(lines, context)
 
-    return {
+    const result: PreparedExpression = {
       lines: lines,
       expression: out,
       owned: false,
       runtimeTypeChecked: true,
       valueType: 'string',
-      cppType: 'inox::String',
-      cppDeclaredName: declare ? out : undefined
+      cppType: 'inox::String'
     }
+
+    if (declare) {
+      result.cppDeclaredName = out
+    }
+
+    return result
   }
 
   const classInstance = dependencies.emitPreparedClassInstanceOperand(expression.args[0], context)
@@ -319,15 +324,20 @@ export function emitPreparedJsonCallExpression(
     )
     pushJsonThrownCheckLines(lines, context)
 
-    return {
+    const result: PreparedExpression = {
       lines: lines,
       expression: out,
       owned: false,
       runtimeTypeChecked: true,
       valueType: 'string',
-      cppType: 'inox::String',
-      cppDeclaredName: declare ? out : undefined
+      cppType: 'inox::String'
     }
+
+    if (declare) {
+      result.cppDeclaredName = out
+    }
+
+    return result
   }
 
   const value = dependencies.emitCValueExpression(expression.args[0], context)
@@ -335,15 +345,20 @@ export function emitPreparedJsonCallExpression(
   lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${value.expression});`)
   pushJsonThrownCheckLines(lines, context)
 
-  return {
+  const result: PreparedExpression = {
     lines: lines,
     expression: out,
     owned: false,
     runtimeTypeChecked: true,
     valueType: 'string',
-    cppType: 'inox::String',
-    cppDeclaredName: declare ? out : undefined
+    cppType: 'inox::String'
   }
+
+  if (declare) {
+    result.cppDeclaredName = out
+  }
+
+  return result
 }
 
 export function emitPreparedJsonScalarParseExpression(

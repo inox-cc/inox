@@ -6,6 +6,7 @@
 #include <string.h>
 #include "inox/array.h"
 #include "inox/binary.h"
+#include "inox/loop.h"
 #include "inox/string.h"
 
 #if defined(INOX_TLS_BACKEND_BORINGSSL) || defined(INOX_TLS_BACKEND_OPENSSL)
@@ -35,6 +36,7 @@ static int inox_crypto_hash_algorithm_is_sha256(const char* algorithm, size_t al
 static inox_status inox_crypto_hash_data(inox_value data, const uint8_t** bytes, size_t* len);
 static inox_status inox_crypto_hash_digest_raw(inox_crypto_hash* hash, uint8_t* digest, size_t* len);
 static inox_status inox_crypto_hmac_digest_raw(inox_crypto_hmac* hmac, uint8_t* digest, size_t* len);
+static inox_status inox_crypto_copy_bytes_result(Uint8Array bytes, inox_value* out);
 static char inox_crypto_hex_digit(uint8_t value);
 
 struct inox_crypto_hash {
@@ -111,7 +113,7 @@ inox_status inox_crypto_random_bytes(inox_allocator* allocator, inox_number size
 
   *out = inox_undefined_value();
 
-  inox_status status = inox_bytes_new(allocator, len, out);
+  inox_status status = inox_crypto_copy_bytes_result(Uint8Array::create(allocator, len), out);
 
   if (status != INOX_OK) {
     return status;
@@ -307,7 +309,7 @@ inox_status inox_crypto_hash_digest_bytes(inox_allocator* allocator, inox_crypto
     return status;
   }
 
-  return inox_bytes_from_data(allocator, digest, len, out);
+  return inox_crypto_copy_bytes_result(Uint8Array::from(allocator, digest, len), out);
 #else
   (void)hash;
 
@@ -518,7 +520,7 @@ inox_status inox_crypto_hmac_digest_bytes(inox_allocator* allocator, inox_crypto
     return status;
   }
 
-  return inox_bytes_from_data(allocator, digest, len, out);
+  return inox_crypto_copy_bytes_result(Uint8Array::from(allocator, digest, len), out);
 #else
   (void)hmac;
 
@@ -781,6 +783,25 @@ static inox_status inox_crypto_hmac_digest_raw(inox_crypto_hmac* hmac, uint8_t* 
 
   return INOX_ERR_UNSUPPORTED;
 #endif
+}
+
+static inox_status inox_crypto_copy_bytes_result(Uint8Array bytes, inox_value* out) {
+  if (out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = inox_undefined_value();
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    return INOX_ERR_TYPE;
+  }
+
+  if (!bytes.valid()) {
+    return INOX_ERR_TYPE;
+  }
+
+  return bytes.copy_to(out);
 }
 
 static char inox_crypto_hex_digit(uint8_t value) {

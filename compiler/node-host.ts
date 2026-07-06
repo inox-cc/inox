@@ -22,44 +22,44 @@ class NodeCompilerHost {
     }
   }
 
-  dirname(path: string): string {
-    return dirnameNodeCompilerHost(path)
+  dirname(filePath: string): string {
+    return dirnameNodeCompilerHost(filePath)
   }
 
-  extname(path: string): string {
-    return extnameNodeCompilerHost(path)
+  extname(filePath: string): string {
+    return extnameNodeCompilerHost(filePath)
   }
 
-  isAbsolutePath(path: string): boolean {
-    return isAbsoluteNodeCompilerHost(path)
+  isAbsolutePath(filePath: string): boolean {
+    return isAbsoluteNodeCompilerHost(filePath)
   }
 
   joinPath(left: string, right: string): string {
     return joinNodeCompilerHost(left, right)
   }
 
-  normalizePath(path: string): string {
-    return normalizeNodeCompilerHost(path)
+  normalizePath(filePath: string): string {
+    return normalizeNodeCompilerHost(filePath)
   }
 
-  pathToFileUrl(path: string): string {
-    return pathToFileUrlNodeCompilerHost(path)
+  pathToFileUrl(filePath: string): string {
+    return pathToFileUrlNodeCompilerHost(filePath)
   }
 
-  readFile(path: string): Promise<string> {
-    return readFileNodeCompilerHost(path)
+  readFile(filePath: string): Promise<string> {
+    return readFileNodeCompilerHost(filePath)
   }
 
-  readFileSync(path: string): string | null {
-    return readFileSyncNodeCompilerHost(path)
+  readFileSync(filePath: string): string | null {
+    return readFileSyncNodeCompilerHost(filePath)
   }
 
   relativePath(fromPath: string, toPath: string): string {
     return relativeNodeCompilerHost(fromPath, toPath)
   }
 
-  resolvePath(path: string): string {
-    return resolveNodeCompilerHost(path)
+  resolvePath(filePath: string): string {
+    return resolveNodeCompilerHost(filePath)
   }
 
   shortHash(value: string): string {
@@ -67,59 +67,59 @@ class NodeCompilerHost {
   }
 }
 
-export function basenameNodePosixPath(path: string): string {
-  return posix.basename(path)
+export function basenameNodePosixPath(filePath: string): string {
+  return posix.basename(filePath)
 }
 
-export function dirnameNodePosixPath(path: string): string {
-  return posix.dirname(path)
+export function dirnameNodePosixPath(filePath: string): string {
+  return posix.dirname(filePath)
 }
 
-export function extnameNodePosixPath(path: string): string {
-  return posix.extname(path)
+export function extnameNodePosixPath(filePath: string): string {
+  return posix.extname(filePath)
 }
 
 export function relativeNodePosixPath(fromPath: string, toPath: string): string {
   return posix.relative(fromPath, toPath)
 }
 
-export function dirnameNodeCompilerHost(path: string): string {
-  return dirname(path)
+export function dirnameNodeCompilerHost(filePath: string): string {
+  return dirname(filePath)
 }
 
-export function extnameNodeCompilerHost(path: string): string {
-  return extname(path)
+export function extnameNodeCompilerHost(filePath: string): string {
+  return extname(filePath)
 }
 
-export function isAbsoluteNodeCompilerHost(path: string): boolean {
-  return isAbsolute(path)
+export function isAbsoluteNodeCompilerHost(filePath: string): boolean {
+  return isAbsolute(filePath)
 }
 
 export function joinNodeCompilerHost(left: string, right: string): string {
   return join(left, right)
 }
 
-export function normalizeNodeCompilerHost(path: string): string {
-  return normalize(path)
+export function normalizeNodeCompilerHost(filePath: string): string {
+  return normalize(filePath)
 }
 
-export function pathToFileUrlNodeCompilerHost(path: string): string {
-  return pathToFileURL(path).href
+export function pathToFileUrlNodeCompilerHost(filePath: string): string {
+  return pathToFileURL(filePath).href
 }
 
-export function readFileNodeCompilerHost(path: string): Promise<string> {
-  const source = readFileSyncNodeCompilerHost(path)
+export function readFileNodeCompilerHost(filePath: string): Promise<string> {
+  const source = readFileSyncNodeCompilerHost(filePath)
 
   if (source !== null && typeof source !== 'undefined') {
     return Promise.resolve(source)
   }
 
-  return Promise.reject(new Error(`source not found: ${path}`))
+  return Promise.reject(new Error(`source not found: ${filePath}`))
 }
 
-export function readFileSyncNodeCompilerHost(path: string): string | null {
+export function readFileSyncNodeCompilerHost(filePath: string): string | null {
   try {
-    return readNodeFileSync(path, 'utf8')
+    return readNodeFileSync(filePath, 'utf8')
   } catch {
     return null
   }
@@ -129,8 +129,8 @@ export function relativeNodeCompilerHost(fromPath: string, toPath: string): stri
   return relative(fromPath, toPath)
 }
 
-export function resolveNodeCompilerHost(path: string): string {
-  return resolve(path)
+export function resolveNodeCompilerHost(filePath: string): string {
+  return resolve(filePath)
 }
 
 export function shortHashNodeCompilerHost(value: string): string {

@@ -68,8 +68,6 @@ export function emitPreparedPathConstantExpression(
   expression: AnyNode,
   context: PathCContext
 ): PreparedExpression | null {
-  void context
-
   const constant = cPathRuntimeConstantName(expression)
   let value: string | null = null
 
@@ -147,7 +145,6 @@ export function emitPreparedPathStringCallExpression(
   }
 
   const lines: string[] = []
-  void options
 
   if (method === 'join' || method === 'resolve') {
     const args: PreparedExpression[] = []

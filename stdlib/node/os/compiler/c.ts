@@ -37,8 +37,6 @@ export function cOsRuntimeConstantValue(name: string): string | null {
 }
 
 export function emitPreparedOsConstantExpression(expression: AnyNode, context: OsCContext): PreparedExpression | null {
-  void context
-
   const constant = cOsRuntimeConstantName(expression)
   let value: string | null = null
 
@@ -62,8 +60,6 @@ export function emitPreparedOsStringCallExpression(
   expression: AnyNode,
   context: OsCContext
 ): PreparedExpression | null {
-  void context
-
   const method = cOsRuntimeMethodName(expression)
 
   if (method === null || typeof method === 'undefined') {

@@ -1,209 +1,342 @@
 #include <string.h>
+#include <utility>
 #include "inox/binary.h"
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
 #endif
-#include "inox/string.h"
+#include "inox/loop.h"
 
-static inox_status inox_bytes_allocate(inox_allocator* allocator, size_t len, inox_bytes** out);
-static size_t inox_uint8_decimal_len(uint8_t value);
-static size_t inox_uint8_write_decimal(uint8_t value, char* out);
+static inox_status make_bytes_value(
+  inox_allocator* allocator,
+  const uint8_t* data,
+  size_t length,
+  bool zero_fill,
+  inox_value* out
+);
+static Uint8Array make_bytes(
+  inox_allocator* allocator,
+  const uint8_t* data,
+  size_t length,
+  bool zero_fill,
+  const char* error
+);
+static inox_status allocate_bytes(inox_allocator* allocator, size_t length, inox_bytes** out);
+static void throw_bytes_error(const char* message);
+static size_t uint8_decimal_length(uint8_t value);
+static size_t write_uint8_decimal(uint8_t value, char* out);
 
-inox_status inox_bytes_new(inox_allocator* allocator, size_t len, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
+Uint8Array::Uint8Array() : inox::Value() {}
 
-  *out = inox_undefined_value();
+Uint8Array::Uint8Array(inox_value value) : inox::Value(value) {}
 
-  inox_bytes* bytes = 0;
-  inox_status status = inox_bytes_allocate(allocator, len, &bytes);
+Uint8Array::Uint8Array(const inox::Value& value) : inox::Value(value) {}
 
-  if (status != INOX_OK) {
-    return status;
-  }
+Uint8Array::Uint8Array(inox::Value&& value) : inox::Value(std::move(value)) {}
 
-  if (len != 0) {
-    memset(bytes->bytes, 0, len);
-  }
+Uint8Array::Uint8Array(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
 
-  out->tag = INOX_TAG_BYTES;
-  out->as.ref = &bytes->header;
-
-  return INOX_OK;
+Uint8Array Uint8Array::create(size_t length) {
+  return create(&inox_default_allocator, length);
 }
 
-inox_status inox_bytes_from_data(inox_allocator* allocator, const uint8_t* data, size_t len, inox_value* out) {
-  if (out == 0 || (data == 0 && len != 0)) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
-  inox_bytes* bytes = 0;
-  inox_status status = inox_bytes_allocate(allocator, len, &bytes);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (len != 0) {
-    memcpy(bytes->bytes, data, len);
-  }
-
-  out->tag = INOX_TAG_BYTES;
-  out->as.ref = &bytes->header;
-
-  return INOX_OK;
+Uint8Array Uint8Array::create(inox_allocator* allocator, size_t length) {
+  return make_bytes(allocator, nullptr, length, true, "TypeError: Uint8Array allocation failed");
 }
 
-inox_status inox_bytes_get(inox_value value, size_t index, uint8_t* out) {
-  if (out == 0 || value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_bytes* bytes = (inox_bytes*)value.as.ref;
-
-  if (index >= bytes->len) {
-    *out = 0;
-    return INOX_ERR_FIELD;
-  }
-
-  *out = bytes->bytes[index];
-
-  return INOX_OK;
+Uint8Array Uint8Array::from(const uint8_t* bytes, size_t length) {
+  return from(&inox_default_allocator, bytes, length);
 }
 
-inox_status inox_bytes_len(inox_value value, size_t* out) {
-  if (out == 0 || value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_bytes* bytes = (inox_bytes*)value.as.ref;
-  *out = bytes->len;
-
-  return INOX_OK;
+Uint8Array Uint8Array::from(inox_allocator* allocator, const uint8_t* bytes, size_t length) {
+  return make_bytes(allocator, bytes, length, false, "TypeError: Uint8Array allocation failed");
 }
 
-inox_status inox_bytes_set(inox_value value, size_t index, uint8_t byte) {
-  if (value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
-    return INOX_ERR_TYPE;
-  }
+bool Uint8Array::valid() const {
+  inox_value value = raw();
 
-  inox_bytes* bytes = (inox_bytes*)value.as.ref;
-
-  if (index >= bytes->len) {
-    return INOX_ERR_FIELD;
-  }
-
-  bytes->bytes[index] = byte;
-
-  return INOX_OK;
+  return value.tag == INOX_TAG_BYTES && value.as.ref != nullptr;
 }
 
-inox_status inox_bytes_slice(inox_value value, size_t start, size_t end, inox_value* out) {
-  if (out == 0 || value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
-    return INOX_ERR_TYPE;
+size_t Uint8Array::length() const {
+  inox_bytes* instance = data();
+
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array.length receiver is not a Uint8Array");
+    return 0;
   }
 
-  *out = inox_undefined_value();
+  return instance->len;
+}
 
-  inox_bytes* source = (inox_bytes*)value.as.ref;
+const uint8_t* Uint8Array::bytes() const {
+  inox_bytes* instance = data();
 
-  if (start > source->len) {
-    start = source->len;
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array bytes receiver is not a Uint8Array");
+    return nullptr;
   }
 
-  if (end > source->len) {
-    end = source->len;
+  return instance->bytes;
+}
+
+uint8_t* Uint8Array::bytes() {
+  inox_bytes* instance = data();
+
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array bytes receiver is not a Uint8Array");
+    return nullptr;
+  }
+
+  return instance->bytes;
+}
+
+uint8_t Uint8Array::get(size_t index) const {
+  inox_bytes* instance = data();
+
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array index receiver is not a Uint8Array");
+    return 0;
+  }
+
+  if (index >= instance->len) {
+    throw_bytes_error("TypeError: Uint8Array index is out of bounds");
+    return 0;
+  }
+
+  return instance->bytes[index];
+}
+
+void Uint8Array::set(size_t index, uint8_t byte) const {
+  inox_bytes* instance = data();
+
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array index receiver is not a Uint8Array");
+    return;
+  }
+
+  if (index >= instance->len) {
+    throw_bytes_error("TypeError: Uint8Array index is out of bounds");
+    return;
+  }
+
+  instance->bytes[index] = byte;
+}
+
+Uint8Array Uint8Array::slice(size_t start, size_t end) const {
+  inox_bytes* instance = data();
+
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array.slice receiver is not a Uint8Array");
+    return Uint8Array();
+  }
+
+  if (start > instance->len) {
+    start = instance->len;
+  }
+
+  if (end > instance->len) {
+    end = instance->len;
   }
 
   if (end < start) {
     end = start;
   }
 
-  return inox_bytes_from_data(source->header.allocator, source->bytes + start, end - start, out);
+  return Uint8Array::from(instance->header.allocator, instance->bytes + start, end - start);
 }
 
-inox_status inox_bytes_to_string(inox_allocator* allocator, inox_value value, inox_value* out) {
-  if (out == 0 || value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
-    return INOX_ERR_TYPE;
+inox::String Uint8Array::toString() const {
+  inox_bytes* instance = data();
+
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array.toString receiver is not a Uint8Array");
+    return inox::String();
   }
 
-  inox_bytes* bytes = (inox_bytes*)value.as.ref;
-
-  return inox_string_from_literal(allocator, (const char*)bytes->bytes, bytes->len, out);
-}
-
-inox_status inox_bytes_to_uint8array_string(inox_allocator* allocator, inox_value value, inox_value* out) {
-  if (out != 0) {
-    *out = inox_undefined_value();
+  if (instance->len == 0) {
+    return inox::String("", 0);
   }
 
-  if (
-    allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || out == 0 ||
-    value.tag != INOX_TAG_BYTES || value.as.ref == 0
-  ) {
-    return INOX_ERR_TYPE;
-  }
+  size_t total_length = 0;
 
-  inox_bytes* bytes = (inox_bytes*)value.as.ref;
+  for (size_t index = 0; index < instance->len; ++index) {
+    const size_t comma_length = index == 0 ? 0 : 1;
+    const size_t digit_length = uint8_decimal_length(instance->bytes[index]);
 
-  if (bytes->len == 0) {
-    return inox_string_from_literal(allocator, "", 0, out);
-  }
-
-  size_t total_len = 0;
-
-  for (size_t index = 0; index < bytes->len; index += 1) {
-    const size_t comma_len = index == 0 ? 0 : 1;
-    const size_t digit_len = inox_uint8_decimal_len(bytes->bytes[index]);
-
-    if (total_len > ((size_t)-1) - comma_len || total_len + comma_len > ((size_t)-1) - digit_len) {
-      return INOX_ERR_OOM;
+    if (
+      total_length > ((size_t)-1) - comma_length ||
+      total_length + comma_length > ((size_t)-1) - digit_length
+    ) {
+      throw_bytes_error("TypeError: Uint8Array string allocation failed");
+      return inox::String();
     }
 
-    total_len += comma_len + digit_len;
+    total_length += comma_length + digit_length;
   }
 
-  char* text = (char*)allocator->alloc(allocator->user, total_len, alignof(char));
+  inox_allocator* allocator = instance->header.allocator;
 
-  if (text == 0) {
-    return INOX_ERR_OOM;
+  if (allocator == nullptr || allocator->alloc == nullptr || allocator->free == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array allocator is not available");
+    return inox::String();
+  }
+
+  char* text = (char*)allocator->alloc(allocator->user, total_length, alignof(char));
+
+  if (text == nullptr) {
+    throw_bytes_error("TypeError: Uint8Array string allocation failed");
+    return inox::String();
   }
 
   size_t offset = 0;
 
-  for (size_t index = 0; index < bytes->len; index += 1) {
+  for (size_t index = 0; index < instance->len; ++index) {
     if (index > 0) {
       text[offset] = ',';
       offset += 1;
     }
 
-    offset += inox_uint8_write_decimal(bytes->bytes[index], text + offset);
+    offset += write_uint8_decimal(instance->bytes[index], text + offset);
   }
 
-  inox_status status = inox_string_from_literal(allocator, text, total_len, out);
-  allocator->free(allocator->user, text, total_len, alignof(char));
+  inox::String result(text, total_length);
+  allocator->free(allocator->user, text, total_length, alignof(char));
 
-  return status;
+  return result;
 }
 
-static inox_status inox_bytes_allocate(inox_allocator* allocator, size_t len, inox_bytes** out) {
-  if (out == 0 || allocator == 0 || allocator->alloc == 0) {
+inox_bytes* Uint8Array::data() const {
+  inox_value value = raw();
+
+  if (value.tag != INOX_TAG_BYTES || value.as.ref == nullptr) {
+    return nullptr;
+  }
+
+  return (inox_bytes*)value.as.ref;
+}
+
+Buffer::Buffer() : Uint8Array() {}
+
+Buffer::Buffer(inox_value value) : Uint8Array(value) {}
+
+Buffer::Buffer(const inox::Value& value) : Uint8Array(value) {}
+
+Buffer::Buffer(inox::Value&& value) : Uint8Array(std::move(value)) {}
+
+Buffer::Buffer(const Uint8Array& value) : Uint8Array(value) {}
+
+Buffer::Buffer(Uint8Array&& value) : Uint8Array(std::move(value)) {}
+
+Buffer::Buffer(inox::AdoptValue adopt, inox_value value) : Uint8Array(adopt, value) {}
+
+Buffer Buffer::alloc(size_t length) {
+  return Buffer(Uint8Array::create(length));
+}
+
+Buffer Buffer::from(const char* text) {
+  return from(inox::StringView(text, text == nullptr ? 0 : strlen(text)));
+}
+
+Buffer Buffer::from(inox::StringView text) {
+  return from((const uint8_t*)text.bytes, text.len);
+}
+
+Buffer Buffer::from(const uint8_t* bytes, size_t length) {
+  return from(&inox_default_allocator, bytes, length);
+}
+
+Buffer Buffer::from(inox_allocator* allocator, const uint8_t* bytes, size_t length) {
+  return Buffer(Uint8Array::from(allocator, bytes, length));
+}
+
+bool Buffer::isBuffer(inox_value value) {
+  return value.tag == INOX_TAG_BYTES && value.as.ref != nullptr;
+}
+
+bool Buffer::isBuffer(const inox::Value& value) {
+  return isBuffer(value.raw());
+}
+
+Buffer Buffer::slice(size_t start, size_t end) const {
+  return Buffer(Uint8Array::slice(start, end));
+}
+
+inox::String Buffer::toString() const {
+  inox_bytes* instance = data();
+
+  if (instance == nullptr) {
+    throw_bytes_error("TypeError: Buffer.toString receiver is not a Buffer");
+    return inox::String();
+  }
+
+  return inox::String((const char*)instance->bytes, instance->len);
+}
+
+static inox_status make_bytes_value(
+  inox_allocator* allocator,
+  const uint8_t* data,
+  size_t length,
+  bool zero_fill,
+  inox_value* out
+) {
+  if (out == nullptr || allocator == nullptr || allocator->alloc == nullptr || (data == nullptr && length != 0 && !zero_fill)) {
     return INOX_ERR_TYPE;
   }
 
-  *out = 0;
+  *out = inox_undefined_value();
 
-  if (len > ((size_t)-1) - sizeof(inox_bytes)) {
+  inox_bytes* bytes = nullptr;
+  inox_status status = allocate_bytes(allocator, length, &bytes);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  if (data != nullptr && length != 0) {
+    memcpy(bytes->bytes, data, length);
+  } else if (zero_fill && length != 0) {
+    memset(bytes->bytes, 0, length);
+  }
+
+  out->tag = INOX_TAG_BYTES;
+  out->as.ref = &bytes->header;
+
+  return INOX_OK;
+}
+
+static Uint8Array make_bytes(
+  inox_allocator* allocator,
+  const uint8_t* data,
+  size_t length,
+  bool zero_fill,
+  const char* error
+) {
+  inox_value value = inox_undefined_value();
+  inox_status status = make_bytes_value(allocator, data, length, zero_fill, &value);
+
+  if (status != INOX_OK) {
+    throw_bytes_error(error);
+    return Uint8Array();
+  }
+
+  return Uint8Array(inox::adopt_value, value);
+}
+
+static inox_status allocate_bytes(inox_allocator* allocator, size_t length, inox_bytes** out) {
+  if (out == nullptr || allocator == nullptr || allocator->alloc == nullptr) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = nullptr;
+
+  if (length > ((size_t)-1) - sizeof(inox_bytes)) {
     return INOX_ERR_OOM;
   }
 
-  size_t size = sizeof(inox_bytes) + len;
+  size_t size = sizeof(inox_bytes) + length;
   inox_bytes* bytes = (inox_bytes*)allocator->alloc(allocator->user, size, alignof(inox_bytes));
 
-  if (bytes == 0) {
+  if (bytes == nullptr) {
     return INOX_ERR_OOM;
   }
 
@@ -215,7 +348,7 @@ static inox_status inox_bytes_allocate(inox_allocator* allocator, size_t len, in
   bytes->header.allocator = allocator;
   bytes->header.dispose = 0;
   inox_ref_init_weak(&bytes->header);
-  bytes->len = len;
+  bytes->len = length;
   *out = bytes;
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_memory_record_ref_created(INOX_REF_BYTES);
@@ -224,7 +357,11 @@ static inox_status inox_bytes_allocate(inox_allocator* allocator, size_t len, in
   return INOX_OK;
 }
 
-static size_t inox_uint8_decimal_len(uint8_t value) {
+static void throw_bytes_error(const char* message) {
+  inox::throw_value(inox::String(message));
+}
+
+static size_t uint8_decimal_length(uint8_t value) {
   if (value >= 100) {
     return 3;
   }
@@ -236,7 +373,7 @@ static size_t inox_uint8_decimal_len(uint8_t value) {
   return 1;
 }
 
-static size_t inox_uint8_write_decimal(uint8_t value, char* out) {
+static size_t write_uint8_decimal(uint8_t value, char* out) {
   if (value >= 100) {
     out[0] = (char)('0' + (value / 100));
     out[1] = (char)('0' + ((value / 10) % 10));

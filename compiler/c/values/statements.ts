@@ -5286,6 +5286,8 @@ function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
     cppType === 'Array' ||
     cppType === 'Map' ||
     cppType === 'Set' ||
+    cppType === 'Buffer' ||
+    cppType === 'Uint8Array' ||
     cppType === 'URLSearchParams'
   )
 }

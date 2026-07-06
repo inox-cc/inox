@@ -166,7 +166,7 @@ export type StringLoweringDependencies = {
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitPreparedNativeClassStringFieldExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
-  emitPreparedNodeRuntimeStringExpression?(
+  emitPreparedNodeRuntimeStringExpression(
     expression: AnyNode,
     context: StringCContext
   ): PreparedExpression | null
@@ -1529,13 +1529,7 @@ function emitPreparedNodeRuntimeStringExpression(
   expression: AnyNode,
   context: StringCContext
 ): PreparedExpression | null {
-  const emitter = stringDeps(context).emitPreparedNodeRuntimeStringExpression
-
-  if (typeof emitter !== 'function') {
-    return null
-  }
-
-  return emitter(expression, context)
+  return stringDeps(context).emitPreparedNodeRuntimeStringExpression(expression, context)
 }
 
 export function emitPreparedCppStringArgument(
