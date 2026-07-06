@@ -104,7 +104,7 @@ function pushIndentedHttpLines(target: string[], lines: string[]): void {
 }
 
 export function emitHttpHandlerHead(wrapper: CHttpHandler): string {
-  return `static inox_status ${wrapper.name}(void* user, const HttpRequestData* inox_request, inox_http_response* inox_response)`
+  return `static void ${wrapper.name}(void* user, HttpRequest inox_request, HttpResponse inox_response)`
 }
 
 export function emitHttpHandlerDeclaration(
@@ -132,7 +132,8 @@ export function emitHttpHandlerDeclaration(
     responseName: responseName,
     stringLocals: new Map()
   }
-  context.statusReturn = true
+  context.cleanupEnabled = false
+  context.statusReturn = false
 
   if (requestName !== null && typeof requestName !== 'undefined') {
     context.variables.set(requestName, 'http-request')
@@ -159,20 +160,19 @@ export function emitHttpHandlerDeclaration(
   if (requestName === null || typeof requestName === 'undefined') {
     lines.push('  (void)inox_request;')
   } else {
-    lines.push(`  const HttpRequestData* ${requestName} = inox_request;`)
+    lines.push(`  HttpRequest ${requestName} = inox_request;`)
   }
 
   if (responseName === null || typeof responseName === 'undefined') {
     lines.push('  (void)inox_response;')
   } else {
-    lines.push(`  inox_http_response* ${responseName} = inox_response;`)
+    lines.push(`  HttpResponse ${responseName} = inox_response;`)
   }
 
   for (const statement of body) {
     pushIndentedHttpLines(lines, emitHttpHandlerStatement(statement, httpContext, context, deps))
   }
 
-  lines.push('  return INOX_OK;')
   lines.push('}')
 
   return lines
@@ -295,13 +295,13 @@ function emitHttpHandlerStatement(
         const lines: string[] = []
 
         pushHttpLines(lines, responseCall)
-        lines.push('return INOX_OK;')
+        lines.push('return;')
 
         return lines
       }
     }
 
-    return ['return INOX_OK;']
+    return ['return;']
   }
 
   context.diagnostics.push(
@@ -336,8 +336,8 @@ function emitHttpStaticFsFileStatement(
   }
 
   return [
-    `if (HttpResponse(${httpContext.responseName}).sendFsFile(HttpRequest(${httpContext.requestName}), ${cStringLiteral('/')}, ${cStringLiteral(root)})) {`,
-    '  return INOX_OK;',
+    `if (${httpContext.responseName}.sendFsFile(${httpContext.requestName}, ${cStringLiteral('/')}, ${cStringLiteral(root)})) {`,
+    '  return;',
     '}'
   ]
 }
@@ -738,14 +738,14 @@ function emitHttpLogOperand(
   if (requestMember === 'method') {
     return {
       format: '%.*s',
-      args: [`(int)${httpContext.requestName}->method.len`, `${httpContext.requestName}->method.bytes`]
+      args: [`(int)${httpContext.requestName}.raw()->method.len`, `${httpContext.requestName}.raw()->method.bytes`]
     }
   }
 
   if (requestMember === 'url') {
     return {
       format: '%.*s',
-      args: [`(int)${httpContext.requestName}->url.len`, `${httpContext.requestName}->url.bytes`]
+      args: [`(int)${httpContext.requestName}.raw()->url.len`, `${httpContext.requestName}.raw()->url.bytes`]
     }
   }
 
@@ -770,7 +770,7 @@ function emitHttpResponseStatusAssignment(
   const status = emitHttpStatusCodeExpression(expression.value, context)
 
   return [
-    `HttpResponse(${httpContext.responseName}).setStatus(${status});`,
+    `${httpContext.responseName}.setStatus(${status});`,
     ...emitHttpThrownCheck(context)
   ]
 }
@@ -799,7 +799,7 @@ function emitHttpResponseCallStatement(
     pushHttpLines(lines, name.lines)
     pushHttpLines(lines, value.lines)
     lines.push(
-      `HttpResponse(${httpContext.responseName}).setHeader(inox::StringView(${name.bytes}, ${name.length}), inox::StringView(${value.bytes}, ${value.length}));`
+      `${httpContext.responseName}.setHeader(inox::StringView(${name.bytes}, ${name.length}), inox::StringView(${value.bytes}, ${value.length}));`
     )
     pushHttpLines(lines, emitHttpThrownCheck(context))
 
@@ -812,7 +812,7 @@ function emitHttpResponseCallStatement(
     const lines: string[] = []
 
     pushHttpLines(lines, headers.lines)
-    lines.push(`HttpResponse(${httpContext.responseName}).writeHead(${status}, ${headers.name}, ${headers.count});`)
+    lines.push(`${httpContext.responseName}.writeHead(${status}, ${headers.name}, ${headers.count});`)
     pushHttpLines(lines, emitHttpThrownCheck(context))
 
     return lines
@@ -828,7 +828,7 @@ function emitHttpResponseCallStatement(
     }
 
     pushHttpLines(lines, body.lines)
-    lines.push(`HttpResponse(${httpContext.responseName}).${runtime}(inox::StringView(${body.bytes}, ${body.length}));`)
+    lines.push(`${httpContext.responseName}.${runtime}(inox::StringView(${body.bytes}, ${body.length}));`)
     pushHttpLines(lines, emitHttpThrownCheck(context))
 
     return lines
@@ -990,10 +990,10 @@ function emitHttpRequestStringCompareExpression(
     return null
   }
 
-  let runtime = `HttpRequest(${httpContext.requestName}).urlEquals(${cStringLiteral(literal)})`
+  let runtime = `${httpContext.requestName}.urlEquals(${cStringLiteral(literal)})`
 
   if (member === 'method') {
-    runtime = `HttpRequest(${httpContext.requestName}).methodEquals(${cStringLiteral(literal)})`
+    runtime = `${httpContext.requestName}.methodEquals(${cStringLiteral(literal)})`
   }
 
   if (isHttpNegativeEqualityOperator(expression.operator)) {
@@ -1037,16 +1037,16 @@ function emitHttpStringBytesOperand(
   if (requestMember === 'method') {
     return {
       lines: [],
-      bytes: `${httpContext.requestName}->method.bytes`,
-      length: `${httpContext.requestName}->method.len`
+      bytes: `${httpContext.requestName}.raw()->method.bytes`,
+      length: `${httpContext.requestName}.raw()->method.len`
     }
   }
 
   if (requestMember === 'url') {
     return {
       lines: [],
-      bytes: `${httpContext.requestName}->url.bytes`,
-      length: `${httpContext.requestName}->url.len`
+      bytes: `${httpContext.requestName}.raw()->url.bytes`,
+      length: `${httpContext.requestName}.raw()->url.len`
     }
   }
 

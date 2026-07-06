@@ -22,13 +22,12 @@ struct HttpRequestData {
   inox::StringView body;
 };
 
-typedef inox_status (*HttpHandlerFn)(
-  void* user,
-  const HttpRequestData* request,
-  inox_http_response* response
-);
-
 #ifdef __cplusplus
+
+class HttpRequest;
+class HttpResponse;
+
+typedef void (*HttpHandlerFn)(void* user, HttpRequest request, HttpResponse response);
 
 class HttpServer {
 private:

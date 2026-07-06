@@ -24,6 +24,16 @@ server.listen(8080, '127.0.0.1')
 server.close()
 
 createServer().listen(8081, '127.0.0.1')
+
+createServer((request, response) => {
+  if (request.method === 'GET') {
+    response.end(request.url)
+    return
+  }
+
+  response.statusCode = 404
+  response.end('missing')
+}).listen(8082, '127.0.0.1')
 `
       }
     ],
@@ -46,8 +56,16 @@ createServer().listen(8081, '127.0.0.1')
   assert.match(source, /HttpServer inox_http_server_\d+;/)
   assert.match(source, /inox_http_server_\d+\.create\(inox::loop\(\), 0, 0\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /inox_http_server_\d+\.listen\("127\.0\.0\.1", \(int\)\(8081\), 128\);\n  if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /static void inox_http_handler_\d+\(void\* user, HttpRequest inox_request, HttpResponse inox_response\)/)
+  assert.match(source, /HttpRequest request = inox_request;/)
+  assert.match(source, /HttpResponse response = inox_response;/)
+  assert.match(source, /response\.end\(inox::StringView\(request\.raw\(\)->url\.bytes, request\.raw\(\)->url\.len\)\);\n\s+if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /inox_http_server\* inox_http_server_\d+ = 0;/)
   assert.doesNotMatch(source, /inox_http_status_\d+/)
+  assert.doesNotMatch(source, /static inox_status inox_http_handler_\d+/)
+  assert.doesNotMatch(source, /const HttpRequestData\* request = inox_request;/)
+  assert.doesNotMatch(source, /inox_http_response\* response = inox_response;/)
+  assert.doesNotMatch(source, /HttpResponse\(response\)\./)
   assert.doesNotMatch(source, /\.create\([^;]+ != INOX_OK/)
   assert.doesNotMatch(source, /\.listen\([^;]+ != INOX_OK/)
 
@@ -58,6 +76,9 @@ createServer().listen(8081, '127.0.0.1')
   assert.match(header, /inox::StringView body;/)
   assert.match(header, /inox::StringView name;/)
   assert.match(header, /inox::StringView value;/)
+  assert.match(header, /typedef void \(\*HttpHandlerFn\)\(void\* user, HttpRequest request, HttpResponse response\);/)
+  assert.doesNotMatch(header, /typedef inox_status \(\*HttpHandlerFn\)/)
+  assert.doesNotMatch(header, /HttpHandlerFn\)\(\s*void\* user,\s*const HttpRequestData\* request,\s*inox_http_response\* response/)
   assert.doesNotMatch(header, /listen\(const char\* host/)
   assert.doesNotMatch(header, /\bmethod_len\b/)
   assert.doesNotMatch(header, /\burl_len\b/)

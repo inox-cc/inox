@@ -681,10 +681,10 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
     return inox_http_response_text_status(&response, 404, "not found");
   }
 
-  inox_status status = connection->server->handler(connection->server->user, &request, &response);
+  connection->server->handler(connection->server->user, HttpRequest(&request), HttpResponse(&response));
 
-  if (status != INOX_OK) {
-    return status;
+  if (inox::thrown()) {
+    return INOX_ERR_TYPE;
   }
 
   if (!connection->responded) {
