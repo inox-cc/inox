@@ -378,22 +378,22 @@ inox::Value path::parse(inox_value path, const inox_shape* shape) const {
   inox_value ext_value = inox_undefined_value();
   inox_value name_value = inox_undefined_value();
 
-  status = inox_string_from_literal(allocator, absolute ? "/" : "", absolute ? 1 : 0, &root_value);
+  status = inox::String::fromLiteral(allocator, absolute ? "/" : "", absolute ? 1 : 0, &root_value);
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, bytes, dir_len, &dir_value);
+    status = inox::String::fromLiteral(allocator, bytes, dir_len, &dir_value);
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, base, base_len, &base_value);
+    status = inox::String::fromLiteral(allocator, base, base_len, &base_value);
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, ext_len > 0 ? bytes + ext_offset : "", ext_len, &ext_value);
+    status = inox::String::fromLiteral(allocator, ext_len > 0 ? bytes + ext_offset : "", ext_len, &ext_value);
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, base, name_len, &name_value);
+    status = inox::String::fromLiteral(allocator, base, name_len, &name_value);
   }
 
   if (status == INOX_OK) {
@@ -677,7 +677,7 @@ static inox_status inox_path_string_value_result(inox_allocator* allocator, char
     return INOX_ERR_TYPE;
   }
 
-  inox_status status = inox_string_from_literal(allocator, bytes, len, out);
+  inox_status status = inox::String::fromLiteral(allocator, bytes, len, out);
   allocator->free(allocator->user, bytes, len + 1, alignof(char));
 
   return status;

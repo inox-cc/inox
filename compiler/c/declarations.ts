@@ -1425,7 +1425,7 @@ function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: 
 
     return [
       `if (${paramName}.tag == INOX_TAG_UNDEFINED) {`,
-      `  if (inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value.value)}, ${utf8ByteLength(value.value)}, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
+      `  if (inox::String::fromLiteral(&inox_default_allocator, ${cStringLiteral(value.value)}, ${utf8ByteLength(value.value)}, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
       `  ${paramName} = ${temp};`,
       '}'
     ]

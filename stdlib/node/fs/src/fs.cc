@@ -298,7 +298,7 @@ static inox_status inox_fs_dirent_new(
   inox_status status = inox_object_new(allocator, &shape, &dirent);
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, name == 0 ? "" : name, name_len, &name_value);
+    status = inox::String::fromLiteral(allocator, name == 0 ? "" : name, name_len, &name_value);
   }
 
   if (status == INOX_OK) {
@@ -1269,7 +1269,7 @@ inox_fs_libuv_read_file(void* user, inox_allocator* allocator, const char* path,
   inox_status status = inox_fs_libuv_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, buffer == 0 ? "" : buffer, byte_len, out);
+    status = inox::String::fromLiteral(allocator, buffer == 0 ? "" : buffer, byte_len, out);
   }
 
   free(buffer);
@@ -1333,7 +1333,7 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
         &value
       );
     } else {
-      status = inox_string_from_literal(allocator, entry.name, name_len, &value);
+      status = inox::String::fromLiteral(allocator, entry.name, name_len, &value);
     }
 
     if (status != INOX_OK) {
@@ -1499,7 +1499,7 @@ static inox_status inox_fs_libuv_string_path_result(
   }
 
   const char* text = (const char*)req.ptr;
-  status = inox_string_from_literal(allocator, text == 0 ? "" : text, text == 0 ? 0 : strlen(text), out);
+  status = inox::String::fromLiteral(allocator, text == 0 ? "" : text, text == 0 ? 0 : strlen(text), out);
   uv_fs_req_cleanup(&req);
 
   return status;
@@ -2236,7 +2236,7 @@ static inox_status inox_fs_libuv_settle(inox_fs_libuv_request* request, inox_sta
   inox_value result = inox_undefined_value();
 
   if (request->kind == INOX_FS_REQUEST_READ_FILE) {
-    status = inox_string_from_literal(
+    status = inox::String::fromLiteral(
       request->loop->allocator, request->data == 0 ? "" : request->data, request->data_len, &result
     );
   } else if (request->kind == INOX_FS_REQUEST_READ_FILE_BYTES) {
@@ -2329,7 +2329,7 @@ static void inox_fs_libuv_cb(uv_fs_t* req) {
 
     if (status == INOX_OK) {
       const char* result_text = (const char*)req->ptr;
-      status = inox_string_from_literal(
+      status = inox::String::fromLiteral(
         request->loop->allocator, result_text == 0 ? "" : result_text, result_text == 0 ? 0 : strlen(result_text), &text
       );
     }
@@ -2599,7 +2599,7 @@ inox_fs_default_read_file(void* user, inox_allocator* allocator, const char* pat
   inox_status status = inox_fs_default_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, buffer == 0 ? "" : buffer, byte_len, out);
+    status = inox::String::fromLiteral(allocator, buffer == 0 ? "" : buffer, byte_len, out);
   }
 
   free(buffer);
@@ -2670,7 +2670,7 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
     if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
       inox_value value = inox_undefined_value();
       size_t name_len = strlen(name);
-      status = inox_string_from_literal(allocator, name, name_len, &value);
+      status = inox::String::fromLiteral(allocator, name, name_len, &value);
 
       if (status != INOX_OK) {
         closedir(dir);
@@ -2921,7 +2921,7 @@ static inox_status inox_fs_default_realpath(void* user, inox_allocator* allocato
     return INOX_ERR_FIELD;
   }
 
-  status = inox_string_from_literal(allocator, resolved, strlen(resolved), out);
+  status = inox::String::fromLiteral(allocator, resolved, strlen(resolved), out);
   free(resolved);
 
   return status;
@@ -2970,7 +2970,7 @@ static inox_status inox_fs_default_readlink(void* user, inox_allocator* allocato
 
     if ((size_t)len < cap) {
       buffer[len] = '\0';
-      status = inox_string_from_literal(allocator, buffer, (size_t)len, out);
+      status = inox::String::fromLiteral(allocator, buffer, (size_t)len, out);
       free(buffer);
       free(path_copy);
       return status;
@@ -3629,19 +3629,19 @@ static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_sta
   inox_status result = inox_object_new(allocator, &shape, &error);
 
   if (result == INOX_OK) {
-    result = inox_string_from_literal(allocator, "FsError", 7, &name);
+    result = inox::String::fromLiteral(allocator, "FsError", 7, &name);
   }
 
   const char* message_text = inox_fs_error_message(status);
 
   if (result == INOX_OK) {
-    result = inox_string_from_literal(allocator, message_text, strlen(message_text), &message);
+    result = inox::String::fromLiteral(allocator, message_text, strlen(message_text), &message);
   }
 
   const char* code_text = inox_fs_error_code(status);
 
   if (result == INOX_OK) {
-    result = inox_string_from_literal(allocator, code_text, strlen(code_text), &code);
+    result = inox::String::fromLiteral(allocator, code_text, strlen(code_text), &code);
   }
 
   if (result == INOX_OK) {

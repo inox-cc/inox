@@ -127,7 +127,7 @@ inox::String child_process::execSync(inox_value command, inox_value options) con
   inox_value out = inox_undefined_value();
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, result.stdout_bytes, result.stdout_len, &out);
+    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_len, &out);
   }
 
   inox_child_process_result_dispose(allocator, &result);
@@ -161,7 +161,7 @@ inox::String child_process::execFileSync(
   inox_value out = inox_undefined_value();
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, result.stdout_bytes, result.stdout_len, &out);
+    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_len, &out);
   }
 
   inox_child_process_result_dispose(allocator, &result);
@@ -841,7 +841,7 @@ static inox_status inox_child_process_spawn_result_object(
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, result->stdout_bytes, result->stdout_len, &stdout_value);
+    status = inox::String::fromLiteral(allocator, result->stdout_bytes, result->stdout_len, &stdout_value);
   }
 
   if (status == INOX_OK) {
@@ -849,7 +849,7 @@ static inox_status inox_child_process_spawn_result_object(
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, result->stderr_bytes, result->stderr_len, &stderr_value);
+    status = inox::String::fromLiteral(allocator, result->stderr_bytes, result->stderr_len, &stderr_value);
   }
 
   if (status == INOX_OK) {

@@ -413,7 +413,7 @@ inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value head
   size_t value_len = 0;
 
   if (fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len)) {
-    status = inox_string_from_literal(allocator, value, value_len, out);
+    status = inox::String::fromLiteral(allocator, value, value_len, out);
   } else {
     *out = inox_null_value();
     status = INOX_OK;
@@ -1655,7 +1655,7 @@ static inox_status fetch_response_new(
   inox_status status = inox_object_new(allocator, &shape, &object);
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(
+    status = inox::String::fromLiteral(
       allocator,
       response->url == 0 ? (url == 0 ? "" : url) : response->url,
       response->url == 0 ? url_len : response->url_len,
@@ -1664,7 +1664,7 @@ static inox_status fetch_response_new(
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(
+    status = inox::String::fromLiteral(
       allocator,
       response->status_text == 0 ? "" : response->status_text,
       response->status_text == 0 ? 0 : response->status_text_len,
@@ -1682,7 +1682,7 @@ static inox_status fetch_response_new(
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(
+    status = inox::String::fromLiteral(
       allocator,
       response->body == 0 ? "" : response->body,
       response->body == 0 ? 0 : response->body_len,
@@ -1747,7 +1747,7 @@ static inox_status fetch_headers_new(inox_allocator* allocator, const char* head
   inox_status status = inox_object_new(allocator, &shape, &object);
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, headers == 0 ? "" : headers, headers == 0 ? 0 : headers_len, &raw);
+    status = inox::String::fromLiteral(allocator, headers == 0 ? "" : headers, headers == 0 ? 0 : headers_len, &raw);
   }
 
   if (status == INOX_OK) {
@@ -1831,7 +1831,7 @@ static inox_status fetch_error_field(
   size_t value_len
 ) {
   inox_value field = inox_undefined_value();
-  inox_status status = inox_string_from_literal(allocator, value, value_len, &field);
+  inox_status status = inox::String::fromLiteral(allocator, value, value_len, &field);
 
   if (status == INOX_OK) {
     status = inox_object_init_known(error, index, field);

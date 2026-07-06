@@ -206,7 +206,7 @@ ArrayClass crypto::getHashes() const {
   }
 
   inox_value sha256 = inox_undefined_value();
-  inox_status status = inox_string_from_literal(allocator, "sha256", 6, &sha256);
+  inox_status status = inox::String::fromLiteral(allocator, "sha256", 6, &sha256);
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.getHashes failed");
@@ -616,7 +616,7 @@ static inox_status CryptoHashState_digest_hex(inox_allocator* allocator, CryptoH
     hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
   }
 
-  return inox_string_from_literal(allocator, hex, len * 2, out);
+  return inox::String::fromLiteral(allocator, hex, len * 2, out);
 #else
   (void)hash;
 
@@ -769,7 +769,7 @@ static inox_status CryptoHmacState_digest_hex(inox_allocator* allocator, CryptoH
     hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
   }
 
-  return inox_string_from_literal(allocator, hex, len * 2, out);
+  return inox::String::fromLiteral(allocator, hex, len * 2, out);
 #else
   (void)hmac;
 

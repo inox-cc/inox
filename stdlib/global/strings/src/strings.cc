@@ -48,7 +48,7 @@ static inox_value inox_string_adopt_storage(inox_string* string) {
   return value;
 }
 
-inox_status inox_string_from_literal(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out) {
+inox_status inox::String::fromLiteral(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || bytes == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -81,7 +81,7 @@ inox_status inox_string_from_literal(inox_allocator* allocator, const char* byte
   return INOX_OK;
 }
 
-inox_status inox_string_from_number(inox_allocator* allocator, double value, inox_value* out) {
+inox_status inox::String::fromNumber(inox_allocator* allocator, double value, inox_value* out) {
   char buffer[64];
   const int len = snprintf(buffer, sizeof(buffer), "%.17g", value);
 
@@ -93,12 +93,12 @@ inox_status inox_string_from_number(inox_allocator* allocator, double value, ino
     return INOX_ERR_TYPE;
   }
 
-  return inox_string_from_literal(allocator, buffer, (size_t)len, out);
+  return inox::String::fromLiteral(allocator, buffer, (size_t)len, out);
 }
 
-inox_status inox_string_from_number_radix(inox_allocator* allocator, double value, int radix, inox_value* out) {
+inox_status inox::String::fromNumberRadix(inox_allocator* allocator, double value, int radix, inox_value* out) {
   if (radix == 10) {
-    return inox_string_from_number(allocator, value, out);
+    return inox::String::fromNumber(allocator, value, out);
   }
 
   if (allocator == 0 || out == 0 || radix < 2 || radix > 36) {
@@ -110,7 +110,7 @@ inox_status inox_string_from_number_radix(inox_allocator* allocator, double valu
   }
 
   if (value != value || isinf(value) || floor(value) != value) {
-    return inox_string_from_number(allocator, value, out);
+    return inox::String::fromNumber(allocator, value, out);
   }
 
   const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -136,10 +136,10 @@ inox_status inox_string_from_number_radix(inox_allocator* allocator, double valu
     buffer[--index] = '-';
   }
 
-  return inox_string_from_literal(allocator, buffer + index, sizeof(buffer) - index - 1, out);
+  return inox::String::fromLiteral(allocator, buffer + index, sizeof(buffer) - index - 1, out);
 }
 
-inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, const char* format, ...) {
+inox_status inox::String::fromFormat(inox_allocator* allocator, inox_value* out, const char* format, ...) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -206,26 +206,26 @@ inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, 
   return INOX_OK;
 }
 
-inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, inox_value* out) {
+inox_status inox::String::fromValue(inox_allocator* allocator, inox_value value, inox_value* out) {
   if (value.tag == INOX_TAG_UNDEFINED) {
-    return inox_string_from_literal(allocator, "undefined", 9, out);
+    return inox::String::fromLiteral(allocator, "undefined", 9, out);
   }
 
   if (value.tag == INOX_TAG_NULL) {
-    return inox_string_from_literal(allocator, "null", 4, out);
+    return inox::String::fromLiteral(allocator, "null", 4, out);
   }
 
   if (value.tag == INOX_TAG_BOOL) {
-    return inox_string_from_literal(allocator, value.as.boolean ? "true" : "false", value.as.boolean ? 4 : 5, out);
+    return inox::String::fromLiteral(allocator, value.as.boolean ? "true" : "false", value.as.boolean ? 4 : 5, out);
   }
 
   if (value.tag == INOX_TAG_NUMBER) {
-    return inox_string_from_number(allocator, value.as.number, out);
+    return inox::String::fromNumber(allocator, value.as.number, out);
   }
 
   if (value.tag == INOX_TAG_STRING && value.as.ref != 0) {
     inox_string* string = (inox_string*)value.as.ref;
-    return inox_string_from_literal(allocator, string->bytes, string->len, out);
+    return inox::String::fromLiteral(allocator, string->bytes, string->len, out);
   }
 
   if (value.tag == INOX_TAG_ARRAY) {
@@ -239,23 +239,23 @@ inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, 
   }
 
   if (value.tag == INOX_TAG_OBJECT) {
-    return inox_string_from_literal(allocator, "[object Object]", 15, out);
+    return inox::String::fromLiteral(allocator, "[object Object]", 15, out);
   }
 
   if (value.tag == INOX_TAG_MAP) {
-    return inox_string_from_literal(allocator, "[object Map]", 12, out);
+    return inox::String::fromLiteral(allocator, "[object Map]", 12, out);
   }
 
   if (value.tag == INOX_TAG_SET) {
-    return inox_string_from_literal(allocator, "[object Set]", 12, out);
+    return inox::String::fromLiteral(allocator, "[object Set]", 12, out);
   }
 
   if (value.tag == INOX_TAG_BYTES) {
-    return inox_string_from_literal(allocator, "[object Uint8Array]", 19, out);
+    return inox::String::fromLiteral(allocator, "[object Uint8Array]", 19, out);
   }
 
   if (value.tag == INOX_TAG_FUNCTION) {
-    return inox_string_from_literal(allocator, "[object Function]", 17, out);
+    return inox::String::fromLiteral(allocator, "[object Function]", 17, out);
   }
 
   return INOX_ERR_TYPE;
@@ -509,7 +509,7 @@ static size_t inox_string_code_unit_index_of_byte_offset(const char* bytes, size
   return current;
 }
 
-inox_status inox_string_to_number(const char* value_bytes, size_t value_len, inox_value* out) {
+inox_status inox::String::toNumber(const char* value_bytes, size_t value_len, inox_value* out) {
   if (out != 0) {
     *out = inox_null_value();
   }

@@ -2495,7 +2495,7 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
     pushAllLines(lines, formatted.lines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
-      emitStatusCheck(`inox_string_from_format(&inox_default_allocator, &${temp}, ${joinStrings(args, ', ')})`, context)
+      emitStatusCheck(`inox::String::fromFormat(&inox_default_allocator, &${temp}, ${joinStrings(args, ', ')})`, context)
     )
 
     return {
@@ -2512,7 +2512,7 @@ export function emitCTemplateLiteralValueExpression(expression: AnyNode, context
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
   lines.push(
     emitStatusCheck(
-      `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${temp})`,
+      `inox::String::fromLiteral(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${temp})`,
       context
     )
   )
@@ -2778,7 +2778,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
       emitStatusCheck(
-        `inox_string_from_literal(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
+        `inox::String::fromLiteral(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
         context
       )
     )
@@ -2793,7 +2793,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
     const lines: string[] = []
 
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`inox_string_from_literal(&inox_default_allocator, "null", 4, &${temp})`, context))
+    lines.push(emitStatusCheck(`inox::String::fromLiteral(&inox_default_allocator, "null", 4, &${temp})`, context))
 
     return {
       lines,
@@ -2808,7 +2808,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
     pushAllLines(lines, value.lines)
     pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
-      emitStatusCheck(`inox_string_from_value(&inox_default_allocator, ${value.expression}, &${temp})`, context)
+      emitStatusCheck(`inox::String::fromValue(&inox_default_allocator, ${value.expression}, &${temp})`, context)
     )
 
     return {
@@ -2818,7 +2818,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
   }
 
   const value = stringDeps(context).emitPreparedNumberExpression(arg, context)
-  let helper = `inox_string_from_number(&inox_default_allocator, ${value.expression}, &${temp})`
+  let helper = `inox::String::fromNumber(&inox_default_allocator, ${value.expression}, &${temp})`
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
@@ -2827,7 +2827,7 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
     const boolValue = nextCName(context, 'inox_string_bool')
 
     lines.push(`bool ${boolValue} = (${value.expression}) != 0;`)
-    helper = `inox_string_from_literal(&inox_default_allocator, ${boolValue} ? "true" : "false", ${boolValue} ? 4 : 5, &${temp})`
+    helper = `inox::String::fromLiteral(&inox_default_allocator, ${boolValue} ? "true" : "false", ${boolValue} ? 4 : 5, &${temp})`
   }
 
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
@@ -2850,7 +2850,7 @@ export function emitCNumberToStringValueExpression(expression: AnyNode, context:
 
   if (expression.args.length === 0) {
     lines.push(
-      emitStatusCheck(`inox_string_from_number(&inox_default_allocator, ${value.expression}, &${temp})`, context)
+      emitStatusCheck(`inox::String::fromNumber(&inox_default_allocator, ${value.expression}, &${temp})`, context)
     )
 
     return {
@@ -2864,7 +2864,7 @@ export function emitCNumberToStringValueExpression(expression: AnyNode, context:
   pushAllLines(lines, radix.lines)
   lines.push(
     emitStatusCheck(
-      `inox_string_from_number_radix(&inox_default_allocator, ${value.expression}, (int)(${radix.expression}), &${temp})`,
+      `inox::String::fromNumberRadix(&inox_default_allocator, ${value.expression}, (int)(${radix.expression}), &${temp})`,
       context
     )
   )
@@ -2890,7 +2890,7 @@ export function emitCNumberConversionValueExpression(
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox_string_to_number(${value.bytes}, ${value.length}, &${temp})`, context))
+  lines.push(emitStatusCheck(`inox::String::toNumber(${value.bytes}, ${value.length}, &${temp})`, context))
 
   return {
     lines,

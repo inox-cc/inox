@@ -332,7 +332,7 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
     if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
       status = INOX_ERR_TYPE;
     } else {
-      status = inox_string_from_literal(allocator, key_bytes, (size_t)key_len, &key);
+      status = inox::String::fromLiteral(allocator, key_bytes, (size_t)key_len, &key);
     }
 
     if (status == INOX_OK) {
@@ -390,7 +390,7 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     }
 
     if (status == INOX_OK) {
-      status = inox_string_from_literal(allocator, key_bytes, (size_t)key_len, &key);
+      status = inox::String::fromLiteral(allocator, key_bytes, (size_t)key_len, &key);
     }
 
     if (status == INOX_OK) {
@@ -455,7 +455,7 @@ static inox_status inox_object_entry_from_key_value(
   }
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(allocator, key_bytes, key_len, &key);
+    status = inox::String::fromLiteral(allocator, key_bytes, key_len, &key);
   }
 
   if (status == INOX_OK) {
@@ -538,7 +538,7 @@ inox_status inox_class_instance_keys(
 
     const char* name = field->name == 0 ? "" : field->name;
     inox_value key = inox_undefined_value();
-    inox_status status = inox_string_from_literal(allocator, name, strlen(name), &key);
+    inox_status status = inox::String::fromLiteral(allocator, name, strlen(name), &key);
 
     if (status == INOX_OK) {
       result.set(output_index, key);
@@ -662,7 +662,7 @@ inox_status inox_class_instance_entries(
     }
 
     if (status == INOX_OK) {
-      status = inox_string_from_literal(allocator, name, strlen(name), &key);
+      status = inox::String::fromLiteral(allocator, name, strlen(name), &key);
     }
 
     if (status == INOX_OK) {
@@ -831,7 +831,7 @@ inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_
   for (uint32_t index = 0; index < instance->shape->field_count; index += 1) {
     const char* name = instance->shape->fields[index].name == 0 ? "" : instance->shape->fields[index].name;
     inox_value key = inox_undefined_value();
-    inox_status status = inox_string_from_literal(allocator, name, strlen(name), &key);
+    inox_status status = inox::String::fromLiteral(allocator, name, strlen(name), &key);
 
     if (status == INOX_OK) {
       result.set(index, key);
@@ -941,7 +941,7 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
     }
 
     if (status == INOX_OK) {
-      status = inox_string_from_literal(allocator, name, strlen(name), &key);
+      status = inox::String::fromLiteral(allocator, name, strlen(name), &key);
     }
 
     if (status == INOX_OK) {

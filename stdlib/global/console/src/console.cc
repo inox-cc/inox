@@ -700,7 +700,7 @@ inox_status console_format_class_instance(
   inox_status status = inox_console_format_class_instance_into(&buffer, &descriptor, instance, 0);
 
   if (status == INOX_OK) {
-    status = inox_string_from_literal(&inox_default_allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, raw_out);
+    status = inox::String::fromLiteral(&inox_default_allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, raw_out);
   }
 
   inox_console_format_buffer_dispose(&buffer);

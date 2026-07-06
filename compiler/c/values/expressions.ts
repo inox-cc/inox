@@ -5436,7 +5436,7 @@ export function emitCValueExpression(
     appendLines(lines, emitPrepareOwnedValueWrite(temp))
     lines.push(
       emitStatusCheck(
-        `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
+        `inox::String::fromLiteral(&inox_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
         context
       )
     )
@@ -5525,7 +5525,7 @@ export function emitCValueExpression(
         appendLines(lines, emitPrepareOwnedValueWrite(temp))
         lines.push(
           emitStatusCheck(
-            `inox_string_from_literal(&inox_default_allocator, ${moduleValueName}, strlen(${moduleValueName}), &${temp})`,
+            `inox::String::fromLiteral(&inox_default_allocator, ${moduleValueName}, strlen(${moduleValueName}), &${temp})`,
             context
           )
         )
@@ -5638,7 +5638,7 @@ export function emitCValueExpression(
       appendLines(lines, emitPrepareOwnedValueWrite(temp))
       lines.push(
         emitStatusCheck(
-          `inox_string_from_literal(&inox_default_allocator, ${reference}, strlen(${reference}), &${temp})`,
+          `inox::String::fromLiteral(&inox_default_allocator, ${reference}, strlen(${reference}), &${temp})`,
           context
         )
       )

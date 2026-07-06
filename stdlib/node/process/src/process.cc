@@ -64,7 +64,7 @@ static inox_status process_value(inox_allocator* allocator, inox_value* out) {
   }
 
   inox_value version = inox_undefined_value();
-  status = inox_string_from_literal(
+  status = inox::String::fromLiteral(
     allocator,
     "v" INOX_PACKAGE_VERSION,
     sizeof("v" INOX_PACKAGE_VERSION) - 1,
@@ -379,7 +379,7 @@ static inox_status process_versions_value(inox_allocator* allocator, inox_value*
   }
 
   inox_value node = inox_undefined_value();
-  status = inox_string_from_literal(allocator, INOX_PACKAGE_VERSION, sizeof(INOX_PACKAGE_VERSION) - 1, &node);
+  status = inox::String::fromLiteral(allocator, INOX_PACKAGE_VERSION, sizeof(INOX_PACKAGE_VERSION) - 1, &node);
 
   if (status == INOX_OK) {
     status = inox_object_init_known(*out, 0, node);

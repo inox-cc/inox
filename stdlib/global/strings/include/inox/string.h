@@ -6,26 +6,11 @@
 #include "inox/allocator.h"
 #include "inox/value.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct inox_string {
   inox_ref header;
   size_t len;
   char bytes[];
 } inox_string;
-
-inox_status inox_string_from_literal(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out);
-inox_status inox_string_from_number(inox_allocator* allocator, double value, inox_value* out);
-inox_status inox_string_from_number_radix(inox_allocator* allocator, double value, int radix, inox_value* out);
-inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, const char* format, ...);
-inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, inox_value* out);
-inox_status inox_string_to_number(const char* value_bytes, size_t value_len, inox_value* out);
-
-#ifdef __cplusplus
-}
-#endif
 
 #ifdef __cplusplus
 
@@ -43,6 +28,13 @@ private:
   static size_t slice_index(double raw, size_t length);
 
 public:
+  static inox_status fromLiteral(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out);
+  static inox_status fromNumber(inox_allocator* allocator, double value, inox_value* out);
+  static inox_status fromNumberRadix(inox_allocator* allocator, double value, int radix, inox_value* out);
+  static inox_status fromFormat(inox_allocator* allocator, inox_value* out, const char* format, ...);
+  static inox_status fromValue(inox_allocator* allocator, inox_value value, inox_value* out);
+  static inox_status toNumber(const char* value_bytes, size_t value_len, inox_value* out);
+
   String();
   String(const char* bytes);
   String(const char* bytes, size_t len);

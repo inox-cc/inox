@@ -3339,7 +3339,7 @@ function emitPreparedAsyncTaskRejectedPromiseSourceExpression(
     const lines: string[] = []
 
     lines.push(`inox_value ${value} = inox_undefined_value();`)
-    lines.push(`status = inox_string_from_literal(&inox_default_allocator, ${bytes}, ${length}, &${value});`)
+    lines.push(`status = inox::String::fromLiteral(&inox_default_allocator, ${bytes}, ${length}, &${value});`)
     appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, [`inox_release(${value});`]))
     lines.push(`status = inox_promise_rejected(inox_loop, ${value}, &frame->awaited);`)
     lines.push(`inox_release(${value});`)
