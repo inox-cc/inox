@@ -74,8 +74,7 @@ public:
 
   void init();
   inox::String cwd() const;
-  void exit() const;
-  void exit(int code) const;
+  void exit(int code = 0) const;
   inox::Value hrtime() const;
   inox::Value hrtime(inox_value previous) const;
   inox::Value hrtime(const inox::Value& previous) const;

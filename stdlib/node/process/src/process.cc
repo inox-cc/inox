@@ -511,10 +511,6 @@ inox::String process::cwd() const {
   return inox::String(cwd);
 }
 
-void process::exit() const {
-  exit(0);
-}
-
 void process::exit(int code) const {
   ::exit(code);
 }
