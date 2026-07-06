@@ -1,14 +1,12 @@
 #ifndef INOX_PROCESS_H
 #define INOX_PROCESS_H
 
-#include <stddef.h>
-#include "inox/allocator.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
 
 #include "inox/main.h"
-#include "inox/string_view.h"
+#include "inox/string.h"
 
 enum class process_number_reader {
   argvLength,

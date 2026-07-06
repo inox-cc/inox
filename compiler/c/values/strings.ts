@@ -166,6 +166,10 @@ export type StringLoweringDependencies = {
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: AnyNode, context: StringCContext): PreparedExpression
   emitPreparedNativeClassStringFieldExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
+  emitPreparedNodeRuntimeStringExpression?(
+    expression: AnyNode,
+    context: StringCContext
+  ): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValue(
     expression: AnyNode,
     element: CRuntimeArrayElement,
@@ -1094,7 +1098,11 @@ export function emitPreparedStringBytesOperand(
     typeof expression !== 'undefined' &&
     stringDeps(context).isNodeRuntimeProducedStringExpression(expression)
   ) {
-    const value = stringDeps(context).emitCValueExpression(expression, context)
+    const nodeRuntimeString = emitPreparedNodeRuntimeStringExpression(expression, context)
+    const value =
+      nodeRuntimeString !== null && typeof nodeRuntimeString !== 'undefined'
+        ? nodeRuntimeString
+        : stringDeps(context).emitCValueExpression(expression, context)
 
     return emitPreparedRuntimeStringValueBytesOperand(value, context, tempPrefix)
   }
@@ -1420,6 +1428,18 @@ function emitPreparedCppStringExpression(
     }
   }
 
+  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
+    const nodeRuntimeString = emitPreparedNodeRuntimeStringExpression(expression, context)
+    const value =
+      nodeRuntimeString !== null && typeof nodeRuntimeString !== 'undefined'
+        ? nodeRuntimeString
+        : stringDeps(context).emitCValueExpression(expression, context)
+
+    if (value.cppType === 'inox::String') {
+      return value
+    }
+  }
+
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
     const reference = stringDeps(context).emitReference(expression, context)
@@ -1502,15 +1522,20 @@ function emitPreparedCppStringExpression(
     }
   }
 
-  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
-    const value = stringDeps(context).emitCValueExpression(expression, context)
+  return null
+}
 
-    if (value.cppType === 'inox::String') {
-      return value
-    }
+function emitPreparedNodeRuntimeStringExpression(
+  expression: AnyNode,
+  context: StringCContext
+): PreparedExpression | null {
+  const emitter = stringDeps(context).emitPreparedNodeRuntimeStringExpression
+
+  if (typeof emitter !== 'function') {
+    return null
   }
 
-  return null
+  return emitter(expression, context)
 }
 
 export function emitPreparedCppStringArgument(

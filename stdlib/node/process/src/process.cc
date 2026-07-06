@@ -19,10 +19,9 @@
 #define INOX_PACKAGE_VERSION "0.0.0"
 #endif
 
-static inox_status process_argv_value(inox_allocator* allocator, int index, inox_value* out);
-static inox_status process_version(inox_allocator* allocator, inox_value* out);
+static const char* process_arch_name(void);
+static const char* process_platform_name(void);
 static inox_status process_versions_value(inox_allocator* allocator, inox_value* out);
-static inox_status process_versions_node(inox_allocator* allocator, inox_value* out);
 
 static int process_argc = 0;
 static char** process_argv_values = 0;
@@ -52,28 +51,6 @@ static const inox_field_info process_fields[] = {
 
 static const inox_shape process_shape = { 2, process_fields };
 
-static inox_status process_string(inox_allocator* allocator, const char* value, inox_value* out) {
-  return inox_string_from_literal(allocator, value == 0 ? "" : value, value == 0 ? 0 : strlen(value), out);
-}
-
-static inox_status process_init_object_field(
-  inox_value object,
-  uint32_t index,
-  inox_status (*init)(inox_allocator* allocator, inox_value* out),
-  inox_allocator* allocator
-) {
-  inox_value value = inox_undefined_value();
-  inox_status status = init(allocator, &value);
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(object, index, value);
-  }
-
-  inox_release(value);
-
-  return status;
-}
-
 static inox_status process_value(inox_allocator* allocator, inox_value* out) {
   if (allocator == 0 || out == 0) {
     return INOX_ERR_TYPE;
@@ -85,10 +62,29 @@ static inox_status process_value(inox_allocator* allocator, inox_value* out) {
     return status;
   }
 
-  status = process_init_object_field(*out, 0, process_version, allocator);
+  inox_value version = inox_undefined_value();
+  status = inox_string_from_literal(
+    allocator,
+    "v" INOX_PACKAGE_VERSION,
+    sizeof("v" INOX_PACKAGE_VERSION) - 1,
+    &version
+  );
 
   if (status == INOX_OK) {
-    status = process_init_object_field(*out, 1, process_versions_value, allocator);
+    status = inox_object_init_known(*out, 0, version);
+  }
+
+  inox_release(version);
+
+  if (status == INOX_OK) {
+    inox_value versions = inox_undefined_value();
+    status = process_versions_value(allocator, &versions);
+
+    if (status == INOX_OK) {
+      status = inox_object_init_known(*out, 1, versions);
+    }
+
+    inox_release(versions);
   }
 
   if (status != INOX_OK) {
@@ -141,38 +137,24 @@ static const char* process_argv_value_at(int index) {
   return process_argv_values[native_index];
 }
 
-static inox_status process_arch(inox_allocator* allocator, inox_value* out) {
+static const char* process_arch_name(void) {
 #if defined(__aarch64__) || defined(_M_ARM64)
-  return process_string(allocator, "arm64", out);
+  return "arm64";
 #elif defined(__x86_64__) || defined(_M_X64)
-  return process_string(allocator, "x64", out);
+  return "x64";
 #elif defined(__i386__) || defined(_M_IX86)
-  return process_string(allocator, "ia32", out);
+  return "ia32";
 #elif defined(__arm__) || defined(_M_ARM)
-  return process_string(allocator, "arm", out);
+  return "arm";
 #elif defined(__riscv) && __riscv_xlen == 64
-  return process_string(allocator, "riscv64", out);
+  return "riscv64";
 #elif defined(__powerpc64__) || defined(__ppc64__)
-  return process_string(allocator, "ppc64", out);
+  return "ppc64";
 #elif defined(__s390x__)
-  return process_string(allocator, "s390x", out);
+  return "s390x";
 #else
-  return process_string(allocator, "unknown", out);
+  return "unknown";
 #endif
-}
-
-static inox_status process_argv_value(inox_allocator* allocator, int index, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  const char* value = process_argv_value_at(index);
-
-  if (value == 0) {
-    return inox_string_from_literal(allocator, "", 0, out);
-  }
-
-  return inox_string_from_literal(allocator, value, strlen(value), out);
 }
 
 static int process_argv_length(void) {
@@ -183,44 +165,27 @@ static int process_argv_length(void) {
   return process_argc;
 }
 
-static inox_status process_argv0(inox_allocator* allocator, inox_value* out) {
-  return process_argv_value(allocator, 0, out);
-}
-
-static inox_status process_cwd(inox_allocator* allocator, inox_value* out) {
-  char cwd[4096];
-
-  if (getcwd(cwd, sizeof(cwd)) == 0) {
-    return INOX_ERR_UNSUPPORTED;
+static inox::String process_env_string(const char* name, size_t name_len) {
+  if (name == 0) {
+    return inox::String();
   }
 
-  return inox_string_from_literal(allocator, cwd, strlen(cwd), out);
-}
-
-static inox_status process_env_value(inox_allocator* allocator, const char* name, size_t name_len, inox_value* out) {
-  if (name == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
+  inox_allocator* allocator = &inox_default_allocator;
   char* key = (char*)allocator->alloc(allocator->user, name_len + 1, alignof(char));
 
   if (key == 0) {
-    return INOX_ERR_OOM;
+    return inox::String();
   }
 
   memcpy(key, name, name_len);
   key[name_len] = 0;
 
   const char* value = getenv(key);
-  inox_status status = inox_string_from_literal(allocator, value == 0 ? "" : value, value == 0 ? 0 : strlen(value), out);
+  inox::String out(value == 0 ? "" : value);
 
   allocator->free(allocator->user, key, name_len + 1, alignof(char));
 
-  return status;
-}
-
-static inox_status process_execPath(inox_allocator* allocator, inox_value* out) {
-  return process_argv_value(allocator, 0, out);
+  return out;
 }
 
 static int process_get_exit_code(void) {
@@ -414,28 +379,24 @@ static int process_pid(void) {
 #endif
 }
 
-static inox_status process_platform(inox_allocator* allocator, inox_value* out) {
+static const char* process_platform_name(void) {
 #if defined(__APPLE__)
-  return process_string(allocator, "darwin", out);
+  return "darwin";
 #elif defined(__linux__)
-  return process_string(allocator, "linux", out);
+  return "linux";
 #elif defined(_WIN32)
-  return process_string(allocator, "win32", out);
+  return "win32";
 #elif defined(__FreeBSD__)
-  return process_string(allocator, "freebsd", out);
+  return "freebsd";
 #elif defined(__OpenBSD__)
-  return process_string(allocator, "openbsd", out);
+  return "openbsd";
 #elif defined(__sun)
-  return process_string(allocator, "sunos", out);
+  return "sunos";
 #elif defined(_AIX)
-  return process_string(allocator, "aix", out);
+  return "aix";
 #else
-  return process_string(allocator, "unknown", out);
+  return "unknown";
 #endif
-}
-
-static inox_status process_version(inox_allocator* allocator, inox_value* out) {
-  return process_string(allocator, "v" INOX_PACKAGE_VERSION, out);
 }
 
 static inox_status process_versions_value(inox_allocator* allocator, inox_value* out) {
@@ -450,7 +411,7 @@ static inox_status process_versions_value(inox_allocator* allocator, inox_value*
   }
 
   inox_value node = inox_undefined_value();
-  status = process_versions_node(allocator, &node);
+  status = inox_string_from_literal(allocator, INOX_PACKAGE_VERSION, sizeof(INOX_PACKAGE_VERSION) - 1, &node);
 
   if (status == INOX_OK) {
     status = inox_object_init_known(*out, 0, node);
@@ -464,10 +425,6 @@ static inox_status process_versions_value(inox_allocator* allocator, inox_value*
   }
 
   return status;
-}
-
-static inox_status process_versions_node(inox_allocator* allocator, inox_value* out) {
-  return process_string(allocator, INOX_PACKAGE_VERSION, out);
 }
 
 static void process_set_exit_code(int code) {
@@ -515,43 +472,21 @@ process_exit_code_property& process_exit_code_property::operator=(double code) {
 }
 
 inox::String process_argv::operator[](int index) const {
-  inox_value value = inox_undefined_value();
+  const char* value = process_argv_value_at(index);
 
-  if (process_argv_value(&inox_default_allocator, index, &value) != INOX_OK) {
-    return inox::String();
-  }
-
-  return inox::String(inox::adopt(value));
+  return inox::String(value == 0 ? "" : value);
 }
 
 inox::String process_env::get(const char* name, size_t name_len) const {
-  inox_value value = inox_undefined_value();
-
-  if (process_env_value(&inox_default_allocator, name, name_len, &value) != INOX_OK) {
-    return inox::String();
-  }
-
-  return inox::String(inox::adopt(value));
+  return process_env_string(name, name_len);
 }
 
 inox::String process_env::get(inox::StringView name) const {
-  inox_value value = inox_undefined_value();
-
-  if (process_env_value(&inox_default_allocator, name.bytes, name.len, &value) != INOX_OK) {
-    return inox::String();
-  }
-
-  return inox::String(inox::adopt(value));
+  return process_env_string(name.bytes, name.len);
 }
 
 void process_versions::init() {
-  inox_value value = inox_undefined_value();
-
-  if (process_versions_node(&inox_default_allocator, &value) != INOX_OK) {
-    node = inox::String();
-  } else {
-    node = inox::String(inox::adopt(value));
-  }
+  node = inox::String(INOX_PACKAGE_VERSION);
 
   inox_value object = inox_undefined_value();
 
@@ -567,46 +502,11 @@ inox::Value process_versions::value() const {
 }
 
 void process::init() {
-  inox_value arch_value = inox_undefined_value();
-
-  if (process_arch(&inox_default_allocator, &arch_value) == INOX_OK) {
-    arch = inox::String(inox::adopt(arch_value));
-  } else {
-    arch = inox::String();
-  }
-
-  inox_value argv0_value = inox_undefined_value();
-
-  if (process_argv0(&inox_default_allocator, &argv0_value) == INOX_OK) {
-    argv0 = inox::String(inox::adopt(argv0_value));
-  } else {
-    argv0 = inox::String();
-  }
-
-  inox_value exec_path_value = inox_undefined_value();
-
-  if (process_execPath(&inox_default_allocator, &exec_path_value) == INOX_OK) {
-    execPath = inox::String(inox::adopt(exec_path_value));
-  } else {
-    execPath = inox::String();
-  }
-
-  inox_value platform_value = inox_undefined_value();
-
-  if (process_platform(&inox_default_allocator, &platform_value) == INOX_OK) {
-    platform = inox::String(inox::adopt(platform_value));
-  } else {
-    platform = inox::String();
-  }
-
-  inox_value version_value = inox_undefined_value();
-
-  if (process_version(&inox_default_allocator, &version_value) == INOX_OK) {
-    version = inox::String(inox::adopt(version_value));
-  } else {
-    version = inox::String();
-  }
-
+  arch = inox::String(process_arch_name());
+  argv0 = argv[0];
+  execPath = argv[0];
+  platform = inox::String(process_platform_name());
+  version = inox::String("v" INOX_PACKAGE_VERSION);
   versions.init();
 
   inox_value object = inox_undefined_value();
@@ -619,13 +519,13 @@ void process::init() {
 }
 
 inox::String process::cwd() const {
-  inox_value value = inox_undefined_value();
+  char cwd[4096];
 
-  if (process_cwd(&inox_default_allocator, &value) != INOX_OK) {
+  if (getcwd(cwd, sizeof(cwd)) == 0) {
     return inox::String();
   }
 
-  return inox::String(inox::adopt(value));
+  return inox::String(cwd);
 }
 
 void process::exit(int code) const {

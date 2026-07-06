@@ -1005,6 +1005,7 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   emitCallExpression,
   emitCValueExpression,
   emitObjectValueReference,
+  emitPreparedNodeRuntimeStringExpression,
   emitPreparedObjectExpressionIndexValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -1033,6 +1034,37 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   resolveKnownObjectMember,
   resolveNodeNetworkAddressStringMember,
   resolveRuntimeArrayIndex
+}
+
+function emitPreparedNodeRuntimeStringExpression(
+  expression: AnyNode,
+  context: CFunctionContext
+): PreparedExpression | null {
+  const osConstant = emitPreparedOsConstantExpression(expression, context)
+
+  if (osConstant !== null && typeof osConstant !== 'undefined') {
+    return osConstant
+  }
+
+  const osCall = emitPreparedOsStringCallExpression(expression, context)
+
+  if (osCall !== null && typeof osCall !== 'undefined') {
+    return osCall
+  }
+
+  const pathConstant = emitPreparedPathConstantExpression(expression, context)
+
+  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
+    return pathConstant
+  }
+
+  const pathCall = emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, null)
+
+  if (pathCall !== null && typeof pathCall !== 'undefined') {
+    return pathCall
+  }
+
+  return emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null)
 }
 
 cryptoLoweringDependencies = {

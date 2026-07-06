@@ -1,35 +1,30 @@
 #include "inox/os.h"
 
 #include <stdlib.h>
-#include <string.h>
 #ifndef _WIN32
 #include <sys/utsname.h>
 #include <unistd.h>
 #endif
 
-static inox::String os_string(const char* value) {
-  return inox::String(value == 0 ? "" : value);
-}
-
 os::os() : EOL("\n") {}
 
 inox::String os::arch() const {
 #if defined(__aarch64__) || defined(_M_ARM64)
-  return os_string("arm64");
+  return inox::String("arm64");
 #elif defined(__x86_64__) || defined(_M_X64)
-  return os_string("x64");
+  return inox::String("x64");
 #elif defined(__i386__) || defined(_M_IX86)
-  return os_string("ia32");
+  return inox::String("ia32");
 #elif defined(__arm__) || defined(_M_ARM)
-  return os_string("arm");
+  return inox::String("arm");
 #elif defined(__riscv) && __riscv_xlen == 64
-  return os_string("riscv64");
+  return inox::String("riscv64");
 #elif defined(__powerpc64__) || defined(__ppc64__)
-  return os_string("ppc64");
+  return inox::String("ppc64");
 #elif defined(__s390x__)
-  return os_string("s390x");
+  return inox::String("s390x");
 #else
-  return os_string("unknown");
+  return inox::String("unknown");
 #endif
 }
 
@@ -42,55 +37,55 @@ inox::String os::homedir() const {
   }
 #endif
 
-  return os_string(home);
+  return inox::String(home == 0 ? "" : home);
 }
 
 inox::String os::hostname() const {
 #ifdef _WIN32
-  return os_string("");
+  return inox::String("");
 #else
   char name[256];
 
   if (gethostname(name, sizeof(name)) != 0) {
-    return os_string("");
+    return inox::String("");
   }
 
   name[sizeof(name) - 1] = 0;
-  return os_string(name);
+  return inox::String(name);
 #endif
 }
 
 inox::String os::platform() const {
 #if defined(__APPLE__)
-  return os_string("darwin");
+  return inox::String("darwin");
 #elif defined(__linux__)
-  return os_string("linux");
+  return inox::String("linux");
 #elif defined(_WIN32)
-  return os_string("win32");
+  return inox::String("win32");
 #elif defined(__FreeBSD__)
-  return os_string("freebsd");
+  return inox::String("freebsd");
 #elif defined(__OpenBSD__)
-  return os_string("openbsd");
+  return inox::String("openbsd");
 #elif defined(__sun)
-  return os_string("sunos");
+  return inox::String("sunos");
 #elif defined(_AIX)
-  return os_string("aix");
+  return inox::String("aix");
 #else
-  return os_string("unknown");
+  return inox::String("unknown");
 #endif
 }
 
 inox::String os::release() const {
 #ifdef _WIN32
-  return os_string("");
+  return inox::String("");
 #else
   struct utsname info;
 
   if (uname(&info) != 0) {
-    return os_string("");
+    return inox::String("");
   }
 
-  return os_string(info.release);
+  return inox::String(info.release);
 #endif
 }
 
@@ -113,20 +108,20 @@ inox::String os::tmpdir() const {
 #endif
   }
 
-  return os_string(value);
+  return inox::String(value);
 }
 
 inox::String os::type() const {
 #ifdef _WIN32
-  return os_string("Windows_NT");
+  return inox::String("Windows_NT");
 #else
   struct utsname info;
 
   if (uname(&info) != 0) {
-    return os_string("");
+    return inox::String("");
   }
 
-  return os_string(info.sysname);
+  return inox::String(info.sysname);
 #endif
 }
 
