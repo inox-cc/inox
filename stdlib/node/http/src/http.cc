@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "inox/string.h"
+
 HttpServer::HttpServer() : server_(0) {}
 
 HttpServer::HttpServer(inox_http_server* server) : server_(server) {}
@@ -29,6 +31,10 @@ const HttpRequestData* HttpRequest::raw() const {
 }
 
 HttpResponse::HttpResponse(inox_http_response* response) : response_(response) {}
+
+static void inox_http_throw_failed(const char* message) {
+  inox::throw_value(inox::String(message == 0 ? "HTTP operation failed" : message));
+}
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "inox/binary.h"
@@ -82,6 +88,9 @@ static inox_status inox_http_on_data(void* user, inox_net_socket* socket, const 
 static void inox_http_on_close(void* user, inox_net_socket* socket);
 static inox_status inox_http_try_handle(HttpConnection* connection);
 static inox_status inox_http_response_init(inox_http_response* response, HttpConnection* connection);
+static inox_status inox_http_response_status_from_throw(void);
+static inox_status inox_http_response_text_status(inox_http_response* response, int status, inox::StringView body);
+static int inox_http_response_succeeded(void);
 static int HttpHeader_name_equals(const char* left, size_t left_len, const char* right, size_t right_len);
 static int inox_http_has_response_header(inox_http_response* response, const char* name, size_t len);
 static const char* inox_http_local_file_content_type(const char* path, size_t path_len, size_t* out_len);
@@ -169,18 +178,18 @@ void HttpServer::close() const {
   NetServer(server->net_server).close();
 }
 
-inox_status HttpResponse::setStatus(int status) const {
+void HttpResponse::setStatus(int status) const {
   inox_http_response* response = response_;
 
   if (response == 0 || response->connection == 0 || response->sent) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpResponse.setStatus failed");
+    return;
   }
 
   response->status = status;
-  return INOX_OK;
 }
 
-inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView value) const {
+void HttpResponse::setHeader(inox::StringView name, inox::StringView value) const {
   inox_http_response* response = response_;
 
   if (
@@ -191,7 +200,8 @@ inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView valu
     name.len >= INOX_HTTP_MAX_HEADER_NAME ||
     value.len >= INOX_HTTP_MAX_HEADER_VALUE
   ) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpResponse.setHeader failed");
+    return;
   }
 
   HttpResponseHeader* header = 0;
@@ -205,7 +215,8 @@ inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView valu
 
   if (header == 0) {
     if (response->header_count >= INOX_HTTP_MAX_RESPONSE_HEADERS) {
-      return INOX_ERR_FIELD;
+      inox_http_throw_failed("TypeError: HttpResponse header limit exceeded");
+      return;
     }
 
     header = &response->headers[response->header_count];
@@ -218,69 +229,68 @@ inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView valu
   memcpy(header->value, value.bytes, value.len);
   header->value[value.len] = '\0';
   header->value_length = value.len;
-
-  return INOX_OK;
 }
 
-inox_status HttpResponse::writeHead(int status, const HttpHeader* headers, size_t header_count) const {
-  inox_status result = setStatus(status);
+void HttpResponse::writeHead(int status, const HttpHeader* headers, size_t header_count) const {
+  setStatus(status);
 
-  if (result != INOX_OK) {
-    return result;
+  if (inox::thrown()) {
+    return;
   }
 
   if (headers == 0 && header_count != 0) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpResponse.writeHead failed");
+    return;
   }
 
   for (size_t index = 0; index < header_count; index += 1) {
-    result = setHeader(
+    setHeader(
       inox::StringView(headers[index].name, headers[index].name_len),
       inox::StringView(headers[index].value, headers[index].value_len)
     );
 
-    if (result != INOX_OK) {
-      return result;
+    if (inox::thrown()) {
+      return;
     }
   }
-
-  return INOX_OK;
 }
 
-inox_status HttpResponse::write(inox::StringView bytes) const {
+void HttpResponse::write(inox::StringView bytes) const {
   inox_http_response* response = response_;
 
   if (response == 0 || response->connection == 0 || response->sent) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpResponse.write failed");
+    return;
   }
 
   if (bytes.len > sizeof(response->body) - response->body_length) {
-    return INOX_ERR_FIELD;
+    inox_http_throw_failed("TypeError: HttpResponse body is too large");
+    return;
   }
 
   if (bytes.len != 0) {
     memcpy(response->body + response->body_length, bytes.bytes, bytes.len);
     response->body_length += bytes.len;
   }
-
-  return INOX_OK;
 }
 
-inox_status HttpResponse::end(inox::StringView bytes) const {
+void HttpResponse::end(inox::StringView bytes) const {
   inox_http_response* response = response_;
 
   if (response == 0 || response->connection == 0) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpResponse.end failed");
+    return;
   }
 
   if (response->sent || response->connection->responded) {
-    return INOX_ERR_FIELD;
+    inox_http_throw_failed("TypeError: HttpResponse has already ended");
+    return;
   }
 
-  inox_status append_status = write(bytes);
+  write(bytes);
 
-  if (append_status != INOX_OK) {
-    return append_status;
+  if (inox::thrown()) {
+    return;
   }
 
   HttpConnection* connection = response->connection;
@@ -297,7 +307,8 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
   );
 
   if (header_len < 0 || (size_t)header_len >= sizeof(header)) {
-    return INOX_ERR_FIELD;
+    inox_http_throw_failed("TypeError: HttpResponse header is too large");
+    return;
   }
 
   size_t header_size = (size_t)header_len;
@@ -314,7 +325,8 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
     );
 
     if (header_len < 0 || (size_t)header_len >= sizeof(header) - header_size) {
-      return INOX_ERR_FIELD;
+      inox_http_throw_failed("TypeError: HttpResponse header is too large");
+      return;
     }
 
     header_size += (size_t)header_len;
@@ -324,7 +336,8 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
     header_len = snprintf(header + header_size, sizeof(header) - header_size, "Content-Length: %zu\r\n", response->body_length);
 
     if (header_len < 0 || (size_t)header_len >= sizeof(header) - header_size) {
-      return INOX_ERR_FIELD;
+      inox_http_throw_failed("TypeError: HttpResponse header is too large");
+      return;
     }
 
     header_size += (size_t)header_len;
@@ -334,14 +347,16 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
     header_len = snprintf(header + header_size, sizeof(header) - header_size, "Connection: close\r\n");
 
     if (header_len < 0 || (size_t)header_len >= sizeof(header) - header_size) {
-      return INOX_ERR_FIELD;
+      inox_http_throw_failed("TypeError: HttpResponse header is too large");
+      return;
     }
 
     header_size += (size_t)header_len;
   }
 
   if (header_size + 2 > sizeof(header)) {
-    return INOX_ERR_FIELD;
+    inox_http_throw_failed("TypeError: HttpResponse header is too large");
+    return;
   }
 
   header[header_size] = '\r';
@@ -353,7 +368,8 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
     (char*)connection->server->allocator->alloc(connection->server->allocator->user, total_len, alignof(char));
 
   if (response_bytes == 0) {
-    return INOX_ERR_OOM;
+    inox_http_throw_failed("TypeError: HttpResponse allocation failed");
+    return;
   }
 
   memcpy(response_bytes, header, header_size);
@@ -365,11 +381,13 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
   inox_status write_status = NetSocket(connection->socket).end(inox::StringView(response_bytes, total_len));
   connection->server->allocator->free(connection->server->allocator->user, response_bytes, total_len, alignof(char));
 
-  return write_status;
+  if (write_status != INOX_OK) {
+    inox_http_throw_failed("TypeError: HttpResponse socket write failed");
+  }
 }
 
-inox_status HttpResponse::text(int status, inox::StringView body) const {
-  inox_status result = writeHead(
+void HttpResponse::text(int status, inox::StringView body) const {
+  writeHead(
     status,
     (const HttpHeader[]){
       { "Content-Type", 12, "text/plain; charset=utf-8", 25 }
@@ -377,11 +395,11 @@ inox_status HttpResponse::text(int status, inox::StringView body) const {
     1
   );
 
-  if (result != INOX_OK) {
-    return result;
+  if (inox::thrown()) {
+    return;
   }
 
-  return end(body);
+  end(body);
 }
 
 int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_prefix, inox::StringView root) const {
@@ -460,16 +478,18 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
 
   BytesStorage* bytes = file.data();
   if (bytes == nullptr) {
-    return text(500, "internal server error") == INOX_OK ? 1 : 0;
+    text(500, "internal server error");
+    return inox_http_response_succeeded();
   }
 
   if (bytes->length > INOX_HTTP_MAX_RESPONSE_BODY) {
-    return text(413, "payload too large") == INOX_OK ? 1 : 0;
+    text(413, "payload too large");
+    return inox_http_response_succeeded();
   }
 
   size_t content_type_len = 0;
   const char* content_type = inox_http_local_file_content_type(path, path_len, &content_type_len);
-  inox_status result = writeHead(
+  writeHead(
     200,
     (const HttpHeader[]){
       { "Content-Type", 12, content_type, content_type_len }
@@ -477,11 +497,35 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
     1
   );
 
-  if (result == INOX_OK) {
-    result = end(inox::StringView((const char*)bytes->bytes, bytes->length));
+  if (inox::thrown()) {
+    return inox_http_response_succeeded();
   }
 
-  return result == INOX_OK ? 1 : 0;
+  end(inox::StringView((const char*)bytes->bytes, bytes->length));
+  return inox_http_response_succeeded();
+}
+
+static inox_status inox_http_response_status_from_throw(void) {
+  if (!inox::thrown()) {
+    return INOX_OK;
+  }
+
+  inox::take_exception();
+  return INOX_ERR_TYPE;
+}
+
+static inox_status inox_http_response_text_status(inox_http_response* response, int status, inox::StringView body) {
+  HttpResponse(response).text(status, body);
+  return inox_http_response_status_from_throw();
+}
+
+static int inox_http_response_succeeded(void) {
+  if (!inox::thrown()) {
+    return 1;
+  }
+
+  inox::take_exception();
+  return 0;
 }
 
 static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket) {
@@ -513,7 +557,7 @@ static inox_status inox_http_on_data(void* user, inox_net_socket* socket, const 
   if (connection->length + len > sizeof(connection->buffer)) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return HttpResponse(&response).text(413, "payload too large");
+    return inox_http_response_text_status(&response, 413, "payload too large");
   }
 
   memcpy(connection->buffer + connection->length, bytes, len);
@@ -550,7 +594,7 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   if (line_end == 0 || line_end > header_end) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return HttpResponse(&response).text(400, "bad request");
+    return inox_http_response_text_status(&response, 400, "bad request");
   }
 
   const char* method_end = (const char*)memchr(connection->buffer, ' ', (size_t)(line_end - connection->buffer));
@@ -558,7 +602,7 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   if (method_end == 0) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return HttpResponse(&response).text(400, "bad request");
+    return inox_http_response_text_status(&response, 400, "bad request");
   }
 
   const char* url_start = method_end + 1;
@@ -567,7 +611,7 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   if (url_end == 0) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return HttpResponse(&response).text(400, "bad request");
+    return inox_http_response_text_status(&response, 400, "bad request");
   }
 
   HttpHeader headers[INOX_HTTP_MAX_HEADERS];
@@ -578,7 +622,7 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   if (parse_status != INOX_OK) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return HttpResponse(&response).text(400, "bad request");
+    return inox_http_response_text_status(&response, 400, "bad request");
   }
 
   size_t header_bytes = (size_t)(header_end - connection->buffer);
@@ -586,7 +630,7 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   if (content_length > sizeof(connection->buffer) - header_bytes) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return HttpResponse(&response).text(413, "payload too large");
+    return inox_http_response_text_status(&response, 413, "payload too large");
   }
 
   if (connection->length < header_bytes + content_length) {
@@ -606,7 +650,7 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   inox_http_response response;
   inox_http_response_init(&response, connection);
   if (connection->server->handler == 0) {
-    return HttpResponse(&response).text(404, "not found");
+    return inox_http_response_text_status(&response, 404, "not found");
   }
 
   inox_status status = connection->server->handler(connection->server->user, &request, &response);
@@ -616,7 +660,7 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   }
 
   if (!connection->responded) {
-    return HttpResponse(&response).text(204, "");
+    return inox_http_response_text_status(&response, 204, "");
   }
 
   return INOX_OK;
@@ -898,44 +942,44 @@ void HttpServer::close() const {
   (void)server_;
 }
 
-inox_status HttpResponse::setStatus(int status) const {
+void HttpResponse::setStatus(int status) const {
   (void)response_;
   (void)status;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpResponse.setStatus is unsupported");
 }
 
-inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView value) const {
+void HttpResponse::setHeader(inox::StringView name, inox::StringView value) const {
   (void)response_;
   (void)name;
   (void)value;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpResponse.setHeader is unsupported");
 }
 
-inox_status HttpResponse::writeHead(int status, const HttpHeader* headers, size_t header_count) const {
+void HttpResponse::writeHead(int status, const HttpHeader* headers, size_t header_count) const {
   (void)response_;
   (void)status;
   (void)headers;
   (void)header_count;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpResponse.writeHead is unsupported");
 }
 
-inox_status HttpResponse::write(inox::StringView bytes) const {
+void HttpResponse::write(inox::StringView bytes) const {
   (void)response_;
   (void)bytes;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpResponse.write is unsupported");
 }
 
-inox_status HttpResponse::end(inox::StringView bytes) const {
+void HttpResponse::end(inox::StringView bytes) const {
   (void)response_;
   (void)bytes;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpResponse.end is unsupported");
 }
 
-inox_status HttpResponse::text(int status, inox::StringView body) const {
+void HttpResponse::text(int status, inox::StringView body) const {
   (void)response_;
   (void)status;
   (void)body;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpResponse.text is unsupported");
 }
 
 int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_prefix, inox::StringView root) const {

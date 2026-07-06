@@ -72,12 +72,12 @@ private:
 public:
   explicit HttpResponse(inox_http_response* response);
 
-  inox_status setStatus(int status) const;
-  inox_status setHeader(inox::StringView name, inox::StringView value) const;
-  inox_status writeHead(int status, const HttpHeader* headers, size_t header_count) const;
-  inox_status write(inox::StringView bytes) const;
-  inox_status end(inox::StringView bytes) const;
-  inox_status text(int status, inox::StringView body) const;
+  void setStatus(int status) const;
+  void setHeader(inox::StringView name, inox::StringView value) const;
+  void writeHead(int status, const HttpHeader* headers, size_t header_count) const;
+  void write(inox::StringView bytes) const;
+  void end(inox::StringView bytes) const;
+  void text(int status, inox::StringView body) const;
   int sendFsFile(const HttpRequest& request, inox::StringView url_prefix, inox::StringView root) const;
 };
 

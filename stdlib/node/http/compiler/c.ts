@@ -769,7 +769,10 @@ function emitHttpResponseStatusAssignment(
 
   const status = emitHttpStatusCodeExpression(expression.value, context)
 
-  return emitHttpStatusCheck(`HttpResponse(${httpContext.responseName}).setStatus(${status})`, context)
+  return [
+    `HttpResponse(${httpContext.responseName}).setStatus(${status});`,
+    ...emitHttpResponseThrownCheck()
+  ]
 }
 
 function emitHttpResponseCallStatement(
@@ -795,13 +798,10 @@ function emitHttpResponseCallStatement(
 
     pushHttpLines(lines, name.lines)
     pushHttpLines(lines, value.lines)
-    pushHttpLines(
-      lines,
-      emitHttpStatusCheck(
-        `HttpResponse(${httpContext.responseName}).setHeader(inox::StringView(${name.bytes}, ${name.length}), inox::StringView(${value.bytes}, ${value.length}))`,
-        context
-      )
+    lines.push(
+      `HttpResponse(${httpContext.responseName}).setHeader(inox::StringView(${name.bytes}, ${name.length}), inox::StringView(${value.bytes}, ${value.length}));`
     )
+    pushHttpLines(lines, emitHttpResponseThrownCheck())
 
     return lines
   }
@@ -812,13 +812,8 @@ function emitHttpResponseCallStatement(
     const lines: string[] = []
 
     pushHttpLines(lines, headers.lines)
-    pushHttpLines(
-      lines,
-      emitHttpStatusCheck(
-        `HttpResponse(${httpContext.responseName}).writeHead(${status}, ${headers.name}, ${headers.count})`,
-        context
-      )
-    )
+    lines.push(`HttpResponse(${httpContext.responseName}).writeHead(${status}, ${headers.name}, ${headers.count});`)
+    pushHttpLines(lines, emitHttpResponseThrownCheck())
 
     return lines
   }
@@ -833,18 +828,17 @@ function emitHttpResponseCallStatement(
     }
 
     pushHttpLines(lines, body.lines)
-    pushHttpLines(
-      lines,
-      emitHttpStatusCheck(
-        `HttpResponse(${httpContext.responseName}).${runtime}(inox::StringView(${body.bytes}, ${body.length}))`,
-        context
-      )
-    )
+    lines.push(`HttpResponse(${httpContext.responseName}).${runtime}(inox::StringView(${body.bytes}, ${body.length}));`)
+    pushHttpLines(lines, emitHttpResponseThrownCheck())
 
     return lines
   }
 
   return null
+}
+
+function emitHttpResponseThrownCheck(): string[] {
+  return ['if (inox::thrown()) return INOX_ERR_TYPE;']
 }
 
 function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CFunctionContext): HttpHeaderArray {
