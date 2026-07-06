@@ -11,11 +11,11 @@
 typedef struct inox_net_server inox_net_server;
 typedef struct inox_net_socket inox_net_socket;
 
-typedef struct NetAddress {
+struct NetAddress {
   char address[64];
   const char* family;
   int port;
-} NetAddress;
+};
 
 typedef inox_status (*NetConnectionFn)(void* user, inox_net_server* server, inox_net_socket* socket);
 typedef inox_status (*NetServerFn)(void* user, inox_net_server* server);

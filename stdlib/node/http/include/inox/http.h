@@ -11,14 +11,14 @@
 typedef struct inox_http_server inox_http_server;
 typedef struct inox_http_response inox_http_response;
 
-typedef struct HttpHeader {
+struct HttpHeader {
   const char* name;
   size_t name_len;
   const char* value;
   size_t value_len;
-} HttpHeader;
+};
 
-typedef struct HttpRequestData {
+struct HttpRequestData {
   const char* method;
   size_t method_len;
   const char* url;
@@ -27,7 +27,7 @@ typedef struct HttpRequestData {
   size_t header_count;
   const char* body;
   size_t body_len;
-} HttpRequestData;
+};
 
 typedef inox_status (*HttpHandlerFn)(
   void* user,

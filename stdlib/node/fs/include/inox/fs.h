@@ -84,7 +84,7 @@ typedef inox_status (*FsRenameFn)(
 );
 typedef inox_status (*FsWriteFileFn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 
-typedef struct FsAdapter {
+struct FsAdapter {
   void* user;
   FsReadFileFn read_file;
   FsWriteFileFn write_file;
@@ -103,7 +103,7 @@ typedef struct FsAdapter {
   FsCopyFileFn copy_file;
   FsSymlinkFn symlink;
   FsRenameFn rename;
-} FsAdapter;
+};
 #ifdef __cplusplus
 
 class fs_promises {

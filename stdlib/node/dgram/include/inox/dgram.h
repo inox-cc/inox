@@ -10,11 +10,11 @@
 
 typedef struct inox_dgram_socket inox_dgram_socket;
 
-typedef struct DgramAddress {
+struct DgramAddress {
   char address[64];
   const char* family;
   int port;
-} DgramAddress;
+};
 
 typedef inox_status (*DgramRecvFn)(
   void* user,
