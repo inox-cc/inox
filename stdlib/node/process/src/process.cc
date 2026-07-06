@@ -22,7 +22,6 @@
 
 static const char* process_arch_name(void);
 static const char* process_platform_name(void);
-static inox_status process_versions_value(inox_allocator* allocator, inox_value* out);
 
 static int process_argc = 0;
 static char** process_argv_values = 0;
@@ -52,43 +51,6 @@ static const inox_field_info process_fields[] = {
 };
 
 static const inox_shape process_shape = { 2, process_fields };
-
-static inox_status process_value(inox_allocator* allocator, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_status status = inox_object_new(allocator, &process_shape, out);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  auto version = inox::String("v" INOX_PACKAGE_VERSION, sizeof("v" INOX_PACKAGE_VERSION) - 1);
-  status = version.valid() ? INOX_OK : INOX_ERR_OOM;
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(*out, 0, version);
-  }
-
-  if (status == INOX_OK) {
-    inox_value versions = inox_undefined_value();
-    status = process_versions_value(allocator, &versions);
-
-    if (status == INOX_OK) {
-      status = inox_object_init_known(*out, 1, versions);
-    }
-
-    inox_release(versions);
-  }
-
-  if (status != INOX_OK) {
-    inox_release(*out);
-    *out = inox_undefined_value();
-  }
-
-  return status;
-}
 
 static void process_init(int argc, char** argv) {
   process_argc = argc;
@@ -267,32 +229,6 @@ static const char* process_platform_name(void) {
 #endif
 }
 
-static inox_status process_versions_value(inox_allocator* allocator, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_status status = inox_object_new(allocator, &process_versions_shape, out);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  auto node = inox::String(INOX_PACKAGE_VERSION, sizeof(INOX_PACKAGE_VERSION) - 1);
-  status = node.valid() ? INOX_OK : INOX_ERR_OOM;
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(*out, 0, node);
-  }
-
-  if (status != INOX_OK) {
-    inox_release(*out);
-    *out = inox_undefined_value();
-  }
-
-  return status;
-}
-
 process_number_property::process_number_property(process_number_reader read) : read_(read) {}
 
 double process_number_property::value() const {
@@ -370,14 +306,24 @@ inox::String process_env::get(inox::StringView name) const {
 
 void process_versions::init() {
   node = inox::String(INOX_PACKAGE_VERSION);
+  inox::Value object;
 
-  inox_value object = inox_undefined_value();
-
-  if (process_versions_value(&inox_default_allocator, &object) == INOX_OK) {
-    static_cast<inox::Value&>(*this) = inox::adopt(object);
-  } else {
+  if (!node.valid()) {
     static_cast<inox::Value&>(*this) = inox::Value();
+    return;
   }
+
+  if (inox_object_new(&inox_default_allocator, &process_versions_shape, object.out()) != INOX_OK) {
+    static_cast<inox::Value&>(*this) = inox::Value();
+    return;
+  }
+
+  if (inox_object_init_known(object, 0, node) != INOX_OK) {
+    static_cast<inox::Value&>(*this) = inox::Value();
+    return;
+  }
+
+  static_cast<inox::Value&>(*this) = std::move(object);
 }
 
 process::process() : pid(process_number_reader::pid) {}
@@ -389,14 +335,29 @@ void process::init() {
   platform = inox::String(process_platform_name());
   version = inox::String("v" INOX_PACKAGE_VERSION);
   versions.init();
+  inox::Value object;
 
-  inox_value object = inox_undefined_value();
-
-  if (process_value(&inox_default_allocator, &object) == INOX_OK) {
-    static_cast<inox::Value&>(*this) = inox::adopt(object);
-  } else {
+  if (!version.valid() || versions.raw().tag != INOX_TAG_OBJECT || versions.raw().as.ref == 0) {
     static_cast<inox::Value&>(*this) = inox::Value();
+    return;
   }
+
+  if (inox_object_new(&inox_default_allocator, &process_shape, object.out()) != INOX_OK) {
+    static_cast<inox::Value&>(*this) = inox::Value();
+    return;
+  }
+
+  if (inox_object_init_known(object, 0, version) != INOX_OK) {
+    static_cast<inox::Value&>(*this) = inox::Value();
+    return;
+  }
+
+  if (inox_object_init_known(object, 1, versions) != INOX_OK) {
+    static_cast<inox::Value&>(*this) = inox::Value();
+    return;
+  }
+
+  static_cast<inox::Value&>(*this) = std::move(object);
 }
 
 inox::String process::cwd() const {
