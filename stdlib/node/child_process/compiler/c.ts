@@ -1,6 +1,6 @@
 import type { AnyNode } from '../../../../compiler/types.ts'
 import type { CFunctionContext } from '../../../../compiler/c/context.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
+import { emitRuntimeTypeCheck, nextCName } from '../../../../compiler/c/context.ts'
 import type {
   CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,
@@ -68,25 +68,18 @@ export function emitPreparedChildProcessCallExpression(
   const lines: string[] = []
 
   pushChildProcessLines(lines, command.lines)
-  pushChildProcessLines(lines, emitPrepareOwnedValueWrite(out))
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
 
   if (method === 'execSync') {
     const childOptions = dependencies.emitCValueExpression(expression.args[1], context)
     pushChildProcessLines(lines, childOptions.lines)
-    lines.push(
-      emitStatusCheck(
-        `inox_child_process_exec_sync(&inox_default_allocator, ${command.expression}, ${childOptions.expression}, &${out})`,
-        context
-      )
-    )
+    lines.push(`auto ${out} = child_process.execSync(${command.expression}, ${childOptions.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: out
+      expression: out,
+      cppType: 'inox::String',
+      valueType: 'string'
     }
   }
 
@@ -138,54 +131,44 @@ export function emitPreparedChildProcessCallExpression(
     pushChildProcessLines(lines, shape.lines)
 
     if (args.length === 0) {
-      lines.push(
-        emitStatusCheck(
-          `inox_child_process_spawn_sync(&inox_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, ${shape.expression}, &${out})`,
-          context
-        )
-      )
+      lines.push(`auto ${out} = child_process.spawnSync(${command.expression}, 0, 0, ${childOptions.expression}, ${shape.expression});`)
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
     } else {
       const argsName = nextCName(context, 'inox_child_process_args')
       const argsValue = emitChildProcessArgumentArray(args)
 
       lines.push(`inox_value ${argsName}[] = { ${argsValue} };`)
       lines.push(
-        emitStatusCheck(
-          `inox_child_process_spawn_sync(&inox_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression}, &${out})`,
-          context
-        )
+        `auto ${out} = child_process.spawnSync(${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression});`
       )
+      lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
     }
 
     return {
       lines,
-      expression: out
+      expression: out,
+      cppType: 'inox::Value',
+      valueType: 'object'
     }
   }
 
   if (args.length === 0) {
-    lines.push(
-      emitStatusCheck(
-        `inox_child_process_exec_file_sync(&inox_default_allocator, ${command.expression}, 0, 0, ${childOptions.expression}, &${out})`,
-        context
-      )
-    )
+    lines.push(`auto ${out} = child_process.execFileSync(${command.expression}, 0, 0, ${childOptions.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   } else {
     const argsName = nextCName(context, 'inox_child_process_args')
     const argsValue = emitChildProcessArgumentArray(args)
 
     lines.push(`inox_value ${argsName}[] = { ${argsValue} };`)
-    lines.push(
-      emitStatusCheck(
-        `inox_child_process_exec_file_sync(&inox_default_allocator, ${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, &${out})`,
-        context
-      )
-    )
+    lines.push(`auto ${out} = child_process.execFileSync(${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
   return {
     lines,
-    expression: out
+    expression: out,
+    cppType: 'inox::String',
+    valueType: 'string'
   }
 }
 

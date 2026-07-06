@@ -2,35 +2,27 @@
 #define INOX_CHILD_PROCESS_H
 
 #include <stddef.h>
-#include "inox/allocator.h"
 #include "inox/object.h"
+#include "inox/string.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
-extern "C" {
-#endif
 
-inox_status inox_child_process_exec_sync(inox_allocator* allocator, inox_value command, inox_value options, inox_value* out);
-inox_status inox_child_process_exec_file_sync(
-  inox_allocator* allocator,
-  inox_value file,
-  const inox_value* args,
-  size_t arg_count,
-  inox_value options,
-  inox_value* out
-);
-inox_status inox_child_process_spawn_sync(
-  inox_allocator* allocator,
-  inox_value file,
-  const inox_value* args,
-  size_t arg_count,
-  inox_value options,
-  const inox_shape* shape,
-  inox_value* out
-);
+class child_process {
+public:
+  inox::String execSync(inox_value command, inox_value options) const;
+  inox::String execFileSync(inox_value file, const inox_value* args, size_t arg_count, inox_value options) const;
+  inox::Value spawnSync(
+    inox_value file,
+    const inox_value* args,
+    size_t arg_count,
+    inox_value options,
+    const inox_shape* shape
+  ) const;
+};
 
-#ifdef __cplusplus
-}
+extern child_process child_process;
+
 #endif
 
 #endif

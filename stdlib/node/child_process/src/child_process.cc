@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "inox/loop.h"
 #include "inox/string.h"
 
 typedef struct inox_child_process_options {
@@ -111,12 +112,12 @@ static long inox_child_process_now_ms(void);
 static char* inox_child_process_alloc(inox_allocator* allocator, size_t len);
 static char* inox_child_process_copy_nul(inox_allocator* allocator, const char* bytes, size_t len);
 
-inox_status inox_child_process_exec_sync(
-  inox_allocator* allocator,
-  inox_value command,
-  inox_value options,
-  inox_value* out
-) {
+static void inox_child_process_throw_failed(const char* message) {
+  inox::throw_value(inox::String(message == 0 ? "child_process operation failed" : message));
+}
+
+inox::String child_process::execSync(inox_value command, inox_value options) const {
+  inox_allocator* allocator = &inox_default_allocator;
   inox_child_process_result result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
@@ -128,23 +129,29 @@ inox_status inox_child_process_exec_sync(
     status = INOX_ERR_UNSUPPORTED;
   }
 
+  inox_value out = inox_undefined_value();
+
   if (status == INOX_OK) {
-    status = inox_child_process_stdout_string(allocator, &result, out);
+    status = inox_child_process_stdout_string(allocator, &result, &out);
   }
 
   inox_child_process_result_dispose(allocator, &result);
 
-  return status;
+  if (status != INOX_OK) {
+    inox_child_process_throw_failed("child_process.execSync failed");
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt_value, out);
 }
 
-inox_status inox_child_process_exec_file_sync(
-  inox_allocator* allocator,
+inox::String child_process::execFileSync(
   inox_value file,
   const inox_value* args,
   size_t arg_count,
-  inox_value options,
-  inox_value* out
-) {
+  inox_value options
+) const {
+  inox_allocator* allocator = &inox_default_allocator;
   inox_child_process_result result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
@@ -156,24 +163,30 @@ inox_status inox_child_process_exec_file_sync(
     status = INOX_ERR_UNSUPPORTED;
   }
 
+  inox_value out = inox_undefined_value();
+
   if (status == INOX_OK) {
-    status = inox_child_process_stdout_string(allocator, &result, out);
+    status = inox_child_process_stdout_string(allocator, &result, &out);
   }
 
   inox_child_process_result_dispose(allocator, &result);
 
-  return status;
+  if (status != INOX_OK) {
+    inox_child_process_throw_failed("child_process.execFileSync failed");
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt_value, out);
 }
 
-inox_status inox_child_process_spawn_sync(
-  inox_allocator* allocator,
+inox::Value child_process::spawnSync(
   inox_value file,
   const inox_value* args,
   size_t arg_count,
   inox_value options,
-  const inox_shape* shape,
-  inox_value* out
-) {
+  const inox_shape* shape
+) const {
+  inox_allocator* allocator = &inox_default_allocator;
   inox_child_process_result result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
@@ -181,14 +194,23 @@ inox_status inox_child_process_spawn_sync(
     status = inox_child_process_run_file(allocator, file, args, arg_count, options, &result);
   }
 
+  inox_value out = inox_undefined_value();
+
   if (status == INOX_OK) {
-    status = inox_child_process_spawn_result_object(allocator, &result, shape, out);
+    status = inox_child_process_spawn_result_object(allocator, &result, shape, &out);
   }
 
   inox_child_process_result_dispose(allocator, &result);
 
-  return status;
+  if (status != INOX_OK) {
+    inox_child_process_throw_failed("child_process.spawnSync failed");
+    return inox::Value();
+  }
+
+  return inox::adopt(out);
 }
+
+class child_process child_process;
 
 static inox_status inox_child_process_string(inox_value value, const char** bytes, size_t* len) {
   if (bytes == 0 || len == 0 || value.tag != INOX_TAG_STRING || value.as.ref == 0) {
