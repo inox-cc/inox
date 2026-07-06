@@ -225,65 +225,6 @@ static inox_status process_hrtime_component(inox_value previous, size_t index, i
   return INOX_OK;
 }
 
-static inox_status process_hrtime(inox_allocator* allocator, inox_value previous, int has_previous, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  int64_t seconds = 0;
-  int64_t nanoseconds = 0;
-  inox_status status = process_now(&seconds, &nanoseconds);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (has_previous) {
-    int64_t previous_seconds = 0;
-    int64_t previous_nanoseconds = 0;
-
-    status = process_hrtime_component(previous, 0, &previous_seconds);
-
-    if (status != INOX_OK) {
-      return status;
-    }
-
-    status = process_hrtime_component(previous, 1, &previous_nanoseconds);
-
-    if (status != INOX_OK) {
-      return status;
-    }
-
-    seconds -= previous_seconds;
-    nanoseconds -= previous_nanoseconds;
-
-    if (nanoseconds < 0) {
-      seconds -= 1;
-      nanoseconds += 1000000000ll;
-    }
-  }
-
-  ArrayClass result = ArrayClass::create(allocator, 2);
-
-  if (inox::thrown() || !result.valid()) {
-    return INOX_ERR_TYPE;
-  }
-
-  result.set(0, inox_number_value((inox_number)seconds));
-
-  if (!inox::thrown()) {
-    result.set(1, inox_number_value((inox_number)nanoseconds));
-  }
-
-  if (inox::thrown()) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = result.release();
-
-  return INOX_OK;
-}
-
 static inox_number process_rss_bytes(void) {
 #if defined(_WIN32)
   return 0;
@@ -300,43 +241,6 @@ static inox_number process_rss_bytes(void) {
   return (inox_number)usage.ru_maxrss * 1024.0;
 #endif
 #endif
-}
-
-static inox_status process_memoryUsage(inox_allocator* allocator, inox_value* out) {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_status status = inox_object_new(allocator, &process_memory_usage_shape, out);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  status = inox_object_init_known(*out, 0, inox_number_value(process_rss_bytes()));
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(*out, 1, inox_number_value(0));
-  }
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(*out, 2, inox_number_value(0));
-  }
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(*out, 3, inox_number_value(0));
-  }
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(*out, 4, inox_number_value(0));
-  }
-
-  if (status != INOX_OK) {
-    inox_release(*out);
-    *out = inox_undefined_value();
-  }
-
-  return status;
 }
 
 static int process_pid(void) {
@@ -516,39 +420,104 @@ void process::exit(int code) const {
 }
 
 inox::Value process::hrtime() const {
-  inox_value value = inox_undefined_value();
+  int64_t seconds = 0;
+  int64_t nanoseconds = 0;
 
-  if (process_hrtime(&inox_default_allocator, inox_undefined_value(), 0, &value) != INOX_OK) {
+  if (process_now(&seconds, &nanoseconds) != INOX_OK) {
     return inox::Value();
   }
 
-  return inox::adopt(value);
+  ArrayClass result = ArrayClass::create(&inox_default_allocator, 2);
+
+  if (inox::thrown() || !result.valid()) {
+    return inox::Value();
+  }
+
+  result.set(0, inox_number_value((inox_number)seconds));
+
+  if (!inox::thrown()) {
+    result.set(1, inox_number_value((inox_number)nanoseconds));
+  }
+
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  return inox::adopt(result.release());
 }
 
 inox::Value process::hrtime(inox_value previous) const {
-  inox_value value = inox_undefined_value();
+  int64_t seconds = 0;
+  int64_t nanoseconds = 0;
 
-  if (process_hrtime(&inox_default_allocator, previous, 1, &value) != INOX_OK) {
+  if (process_now(&seconds, &nanoseconds) != INOX_OK) {
     return inox::Value();
   }
 
-  return inox::adopt(value);
-}
+  int64_t previous_seconds = 0;
+  int64_t previous_nanoseconds = 0;
 
-inox::Value process::hrtime(const inox::Value& previous) const {
-  inox_value value = inox_undefined_value();
-
-  if (process_hrtime(&inox_default_allocator, previous.raw(), 1, &value) != INOX_OK) {
+  if (
+    process_hrtime_component(previous, 0, &previous_seconds) != INOX_OK ||
+    process_hrtime_component(previous, 1, &previous_nanoseconds) != INOX_OK
+  ) {
     return inox::Value();
   }
 
-  return inox::adopt(value);
+  seconds -= previous_seconds;
+  nanoseconds -= previous_nanoseconds;
+
+  if (nanoseconds < 0) {
+    seconds -= 1;
+    nanoseconds += 1000000000ll;
+  }
+
+  ArrayClass result = ArrayClass::create(&inox_default_allocator, 2);
+
+  if (inox::thrown() || !result.valid()) {
+    return inox::Value();
+  }
+
+  result.set(0, inox_number_value((inox_number)seconds));
+
+  if (!inox::thrown()) {
+    result.set(1, inox_number_value((inox_number)nanoseconds));
+  }
+
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  return inox::adopt(result.release());
 }
 
 inox::Value process::memoryUsage() const {
   inox_value value = inox_undefined_value();
 
-  if (process_memoryUsage(&inox_default_allocator, &value) != INOX_OK) {
+  inox_status status = inox_object_new(&inox_default_allocator, &process_memory_usage_shape, &value);
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(value, 0, inox_number_value(process_rss_bytes()));
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(value, 1, inox_number_value(0));
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(value, 2, inox_number_value(0));
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(value, 3, inox_number_value(0));
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(value, 4, inox_number_value(0));
+  }
+
+  if (status != INOX_OK) {
+    inox_release(value);
     return inox::Value();
   }
 
