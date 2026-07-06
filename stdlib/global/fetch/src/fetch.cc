@@ -1965,6 +1965,22 @@ static inox_status fetch_backend_signal_aborted(inox_value signal, int* out) {
 
 namespace inox {
 
+FetchInit::FetchInit() : method(), headers(nullptr), header_count(0), body(), signal(), redirect() {}
+
+FetchInit::FetchInit(
+  StringView method,
+  const FetchHeader* headers,
+  size_t header_count,
+  StringView body,
+  Value signal,
+  StringView redirect
+) : method(method),
+    headers(headers),
+    header_count(header_count),
+    body(body),
+    signal(std::move(signal)),
+    redirect(redirect) {}
+
 FetchResponse::FetchResponse() : value_() {}
 
 FetchResponse::FetchResponse(Value value) : value_(std::move(value)) {}

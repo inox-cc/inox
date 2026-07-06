@@ -21,6 +21,13 @@ async function checkFetch() {
     console.log('Status', res.status)
     const txt = await res.text()
     console.log('Text', txt)
+    const post = await fetch('http://example.com/post', {
+      method: 'POST',
+      headers: { Accept: 'text/plain' },
+      body: 'ping',
+      redirect: 'follow'
+    })
+    console.log('Post', post.ok)
   } catch (error) {
     console.log('#error:', error)
   }
@@ -56,6 +63,15 @@ await checkFetch()
     checkFetch,
     /auto txt = inox::await_value<inox::String>\(res\.text\(\)\);/
   )
+  assert.match(checkFetch, /inox::FetchHeader inox_fetch_headers_\d+\[1\] = \{ \{ "Accept", "text\/plain" \} \};/)
+  assert.match(
+    checkFetch,
+    /inox::FetchInit inox_fetch_init_\d+ = \{ "POST", inox_fetch_headers_\d+, 1, "ping", inox_undefined_value\(\), "follow" \};/
+  )
+  assert.match(
+    checkFetch,
+    /auto post = inox::await_value<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/post", &inox_fetch_init_\d+\)\);/
+  )
   assert.match(
     checkFetch,
     /auto res = inox::await_value<inox::FetchResponse>\(inox::fetch\("http:\/\/example.com\/"\)\);\n\s+if \(inox::thrown\(\)\) goto catch_0;\n\n\s+console\.log\("Status %\.17g", res\.status\(\)\);/
@@ -72,7 +88,7 @@ await checkFetch()
   assert.match(checkFetch, /console\.log\("Text %s", txt\);/)
   assert.match(
     checkFetch,
-    /console\.log\("Text %s", txt\);\n    goto end_0;\n  \} catch_0: \{/
+    /console\.log\("Post %d", post\.ok\(\)\);\n    goto end_0;\n  \} catch_0: \{/
   )
   assert.match(checkFetch, /\} end_0:;/)
   assert.match(checkFetch, /\} end_0:;\n\}/)

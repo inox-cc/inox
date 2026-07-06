@@ -22,11 +22,21 @@ struct FetchHeader {
 
 struct FetchInit {
   StringView method;
-  const FetchHeader* headers = nullptr;
-  size_t header_count = 0;
+  const FetchHeader* headers;
+  size_t header_count;
   StringView body;
   Value signal;
   StringView redirect;
+
+  FetchInit();
+  FetchInit(
+    StringView method,
+    const FetchHeader* headers,
+    size_t header_count,
+    StringView body,
+    Value signal,
+    StringView redirect
+  );
 };
 
 class FetchResponse {
