@@ -14,49 +14,49 @@
 
 #define INOX_JSON_MAX_DEPTH 64
 
-typedef struct inox_json_buffer {
+struct JsonBuffer {
   inox_allocator* allocator;
   char* bytes;
-  size_t len;
-  size_t cap;
-} inox_json_buffer;
+  size_t length;
+  size_t capacity;
+};
 
-typedef struct inox_json_parser {
+struct JsonParser {
   inox_allocator* allocator;
   const char* bytes;
-  size_t len;
-  size_t pos;
+  size_t length;
+  size_t position;
   const char* error_message;
-  size_t error_pos;
+  size_t errorPosition;
   bool has_error;
-} inox_json_parser;
+};
 
-typedef struct inox_json_stringify_stack {
+struct JsonStringifyStack {
   const inox_ref* refs[INOX_JSON_MAX_DEPTH + 1];
-  size_t len;
-} inox_json_stringify_stack;
+  size_t length;
+};
 
-static void inox_json_buffer_dispose(inox_json_buffer* buffer) {
+static void inox_json_buffer_dispose(JsonBuffer* buffer) {
   if (buffer == 0 || buffer->allocator == 0 || buffer->allocator->free == 0 || buffer->bytes == 0) {
     return;
   }
 
-  buffer->allocator->free(buffer->allocator->user, buffer->bytes, buffer->cap, alignof(char));
+  buffer->allocator->free(buffer->allocator->user, buffer->bytes, buffer->capacity, alignof(char));
   buffer->bytes = 0;
-  buffer->len = 0;
-  buffer->cap = 0;
+  buffer->length = 0;
+  buffer->capacity = 0;
 }
 
-static inox_status inox_json_buffer_reserve(inox_json_buffer* buffer, size_t needed) {
+static inox_status inox_json_buffer_reserve(JsonBuffer* buffer, size_t needed) {
   if (buffer == 0 || buffer->allocator == 0 || buffer->allocator->realloc == 0) {
     return INOX_ERR_TYPE;
   }
 
-  if (needed <= buffer->cap) {
+  if (needed <= buffer->capacity) {
     return INOX_OK;
   }
 
-  size_t next_cap = buffer->cap == 0 ? 64 : buffer->cap;
+  size_t next_cap = buffer->capacity == 0 ? 64 : buffer->capacity;
 
   while (next_cap < needed) {
     if (next_cap > ((size_t)-1) / 2) {
@@ -69,7 +69,7 @@ static inox_status inox_json_buffer_reserve(inox_json_buffer* buffer, size_t nee
   char* next = (char*)buffer->allocator->realloc(
     buffer->allocator->user,
     buffer->bytes,
-    buffer->cap,
+    buffer->capacity,
     next_cap,
     alignof(char)
   );
@@ -79,92 +79,92 @@ static inox_status inox_json_buffer_reserve(inox_json_buffer* buffer, size_t nee
   }
 
   buffer->bytes = next;
-  buffer->cap = next_cap;
+  buffer->capacity = next_cap;
 
   return INOX_OK;
 }
 
-static inox_status inox_json_buffer_push_char(inox_json_buffer* buffer, char value) {
-  inox_status status = inox_json_buffer_reserve(buffer, buffer->len + 1);
+static inox_status inox_json_buffer_push_char(JsonBuffer* buffer, char value) {
+  inox_status status = inox_json_buffer_reserve(buffer, buffer->length + 1);
 
   if (status != INOX_OK) {
     return status;
   }
 
-  buffer->bytes[buffer->len] = value;
-  buffer->len += 1;
+  buffer->bytes[buffer->length] = value;
+  buffer->length += 1;
 
   return INOX_OK;
 }
 
-static inox_status inox_json_buffer_push_bytes(inox_json_buffer* buffer, const char* bytes, size_t len) {
+static inox_status inox_json_buffer_push_bytes(JsonBuffer* buffer, const char* bytes, size_t len) {
   if (bytes == 0 && len != 0) {
     return INOX_ERR_TYPE;
   }
 
-  inox_status status = inox_json_buffer_reserve(buffer, buffer->len + len);
+  inox_status status = inox_json_buffer_reserve(buffer, buffer->length + len);
 
   if (status != INOX_OK) {
     return status;
   }
 
   if (len != 0) {
-    memcpy(buffer->bytes + buffer->len, bytes, len);
+    memcpy(buffer->bytes + buffer->length, bytes, len);
   }
 
-  buffer->len += len;
+  buffer->length += len;
 
   return INOX_OK;
 }
 
-static void inox_json_skip_ws(inox_json_parser* parser) {
-  while (parser->pos < parser->len) {
-    char value = parser->bytes[parser->pos];
+static void inox_json_skip_ws(JsonParser* parser) {
+  while (parser->position < parser->length) {
+    char value = parser->bytes[parser->position];
 
     if (value != ' ' && value != '\n' && value != '\r' && value != '\t') {
       return;
     }
 
-    parser->pos += 1;
+    parser->position += 1;
   }
 }
 
-static bool inox_json_match_byte(inox_json_parser* parser, char value) {
-  if (parser->pos >= parser->len || parser->bytes[parser->pos] != value) {
+static bool inox_json_match_byte(JsonParser* parser, char value) {
+  if (parser->position >= parser->length || parser->bytes[parser->position] != value) {
     return false;
   }
 
-  parser->pos += 1;
+  parser->position += 1;
 
   return true;
 }
 
-static bool inox_json_match_literal(inox_json_parser* parser, const char* literal, size_t len) {
-  if (parser->pos + len > parser->len || memcmp(parser->bytes + parser->pos, literal, len) != 0) {
+static bool inox_json_match_literal(JsonParser* parser, const char* literal, size_t len) {
+  if (parser->position + len > parser->length || memcmp(parser->bytes + parser->position, literal, len) != 0) {
     return false;
   }
 
-  parser->pos += len;
+  parser->position += len;
 
   return true;
 }
 
-static void inox_json_set_error_at(inox_json_parser* parser, const char* message, size_t pos) {
+static void inox_json_set_error_at(JsonParser* parser, const char* message, size_t pos) {
   if (parser == 0 || parser->has_error) {
     return;
   }
 
   parser->error_message = message;
-  parser->error_pos = pos > parser->len ? parser->len : pos;
+  parser->errorPosition = pos > parser->length ? parser->length : pos;
   parser->has_error = true;
 }
 
-static void inox_json_set_error(inox_json_parser* parser, const char* message) {
+static void inox_json_set_error(JsonParser* parser, const char* message) {
   if (parser == 0) {
     return;
   }
 
-  inox_json_set_error_at(parser, message, parser->pos);
+  inox_json_set_error_at(parser, message, parser->position);
 }
 
 static void inox_json_error_location(const char* bytes, size_t len, size_t pos, size_t* line_out, size_t* column_out) {
@@ -190,22 +190,22 @@ static void inox_json_error_location(const char* bytes, size_t len, size_t pos, 
   }
 }
 
-static inox_status inox_json_make_syntax_error(inox_allocator* allocator, const inox_json_parser* parser, inox_value* out) {
+static inox_status inox_json_make_syntax_error(inox_allocator* allocator, const JsonParser* parser, inox_value* out) {
   if (allocator == 0 || parser == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
   const char* message = parser->has_error ? parser->error_message : "Unexpected token";
-  size_t position = parser->has_error ? parser->error_pos : parser->pos;
+  size_t position = parser->has_error ? parser->errorPosition : parser->position;
   size_t line = 1;
   size_t column = 1;
   char buffer[256];
 
-  if (position > parser->len) {
-    position = parser->len;
+  if (position > parser->length) {
+    position = parser->length;
   }
 
-  inox_json_error_location(parser->bytes, parser->len, position, &line, &column);
+  inox_json_error_location(parser->bytes, parser->length, position, &line, &column);
 
   int written = snprintf(
     buffer,
@@ -259,7 +259,7 @@ static bool inox_json_parse_hex4(const char* bytes, uint32_t* out) {
   return true;
 }
 
-static inox_status inox_json_buffer_push_utf8(inox_json_buffer* buffer, uint32_t codepoint) {
+static inox_status inox_json_buffer_push_utf8(JsonBuffer* buffer, uint32_t codepoint) {
   if (codepoint <= 0x7f) {
     return inox_json_buffer_push_char(buffer, (char)codepoint);
   }
@@ -292,17 +292,17 @@ static inox_status inox_json_buffer_push_utf8(inox_json_buffer* buffer, uint32_t
 }
 
 static inox_status
-inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
+inox_json_parse_string_bytes(JsonParser* parser, char** out_bytes, size_t* out_len, bool nul_terminated) {
   if (parser == 0 || out_bytes == 0 || out_len == 0 || !inox_json_match_byte(parser, '"')) {
     inox_json_set_error(parser, "Expected string");
     return INOX_ERR_TYPE;
   }
 
-  inox_json_buffer buffer = { parser->allocator, 0, 0, 0 };
+  JsonBuffer buffer = { parser->allocator, 0, 0, 0 };
 
-  while (parser->pos < parser->len) {
-    unsigned char value = (unsigned char)parser->bytes[parser->pos];
-    parser->pos += 1;
+  while (parser->position < parser->length) {
+    unsigned char value = (unsigned char)parser->bytes[parser->position];
+    parser->position += 1;
 
     if (value == '"') {
       if (nul_terminated) {
@@ -313,17 +313,17 @@ inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t*
           return status;
         }
 
-        buffer.len -= 1;
+        buffer.length -= 1;
       }
 
       *out_bytes = buffer.bytes;
-      *out_len = buffer.len;
+      *out_len = buffer.length;
       return INOX_OK;
     }
 
     if (value < 0x20) {
       inox_json_buffer_dispose(&buffer);
-      inox_json_set_error_at(parser, "Bad control character in string literal", parser->pos - 1);
+      inox_json_set_error_at(parser, "Bad control character in string literal", parser->position - 1);
       return INOX_ERR_TYPE;
     }
 
@@ -338,14 +338,14 @@ inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t*
       continue;
     }
 
-    if (parser->pos >= parser->len) {
+    if (parser->position >= parser->length) {
       inox_json_buffer_dispose(&buffer);
       inox_json_set_error(parser, "Unterminated string");
       return INOX_ERR_TYPE;
     }
 
-    char escaped = parser->bytes[parser->pos];
-    parser->pos += 1;
+    char escaped = parser->bytes[parser->position];
+    parser->position += 1;
     char output = 0;
     bool has_output = true;
 
@@ -362,7 +362,7 @@ inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t*
     } else if (escaped == 't') {
       output = '\t';
     } else if (escaped == 'u') {
-      if (parser->pos + 4 > parser->len) {
+      if (parser->position + 4 > parser->length) {
         inox_json_buffer_dispose(&buffer);
         inox_json_set_error(parser, "Bad Unicode escape");
         return INOX_ERR_TYPE;
@@ -370,16 +370,16 @@ inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t*
 
       uint32_t codepoint = 0;
 
-      if (!inox_json_parse_hex4(parser->bytes + parser->pos, &codepoint)) {
+      if (!inox_json_parse_hex4(parser->bytes + parser->position, &codepoint)) {
         inox_json_buffer_dispose(&buffer);
         inox_json_set_error(parser, "Bad Unicode escape");
         return INOX_ERR_TYPE;
       }
 
-      parser->pos += 4;
+      parser->position += 4;
 
       if (codepoint >= 0xd800 && codepoint <= 0xdbff) {
-        if (parser->pos + 6 > parser->len || parser->bytes[parser->pos] != '\\' || parser->bytes[parser->pos + 1] != 'u') {
+        if (parser->position + 6 > parser->length || parser->bytes[parser->position] != '\\' || parser->bytes[parser->position + 1] != 'u') {
           inox_json_buffer_dispose(&buffer);
           inox_json_set_error(parser, "Bad Unicode escape");
           return INOX_ERR_TYPE;
@@ -387,13 +387,13 @@ inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t*
 
         uint32_t low = 0;
 
-        if (!inox_json_parse_hex4(parser->bytes + parser->pos + 2, &low) || low < 0xdc00 || low > 0xdfff) {
+        if (!inox_json_parse_hex4(parser->bytes + parser->position + 2, &low) || low < 0xdc00 || low > 0xdfff) {
           inox_json_buffer_dispose(&buffer);
           inox_json_set_error(parser, "Bad Unicode escape");
           return INOX_ERR_TYPE;
         }
 
-        parser->pos += 6;
+        parser->position += 6;
         codepoint = 0x10000 + ((codepoint - 0xd800) << 10) + (low - 0xdc00);
       } else if (codepoint >= 0xdc00 && codepoint <= 0xdfff) {
         inox_json_buffer_dispose(&buffer);
@@ -411,7 +411,7 @@ inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t*
       has_output = false;
     } else {
       inox_json_buffer_dispose(&buffer);
-      inox_json_set_error_at(parser, "Bad escaped character in JSON string", parser->pos - 1);
+      inox_json_set_error_at(parser, "Bad escaped character in JSON string", parser->position - 1);
       return INOX_ERR_TYPE;
     }
 
@@ -432,9 +432,9 @@ inox_json_parse_string_bytes(inox_json_parser* parser, char** out_bytes, size_t*
   return INOX_ERR_TYPE;
 }
 
-static inox_status inox_json_parse_value(inox_json_parser* parser, size_t depth, inox_value* out);
+static inox_status inox_json_parse_value(JsonParser* parser, size_t depth, inox_value* out);
 
-static inox_status inox_json_parse_string(inox_json_parser* parser, inox_value* out) {
+static inox_status inox_json_parse_string(JsonParser* parser, inox_value* out) {
   char* bytes = 0;
   size_t len = 0;
   inox_status status = inox_json_parse_string_bytes(parser, &bytes, &len, false);
@@ -452,60 +452,60 @@ static inox_status inox_json_parse_string(inox_json_parser* parser, inox_value* 
   return status;
 }
 
-static inox_status inox_json_parse_number(inox_json_parser* parser, inox_value* out) {
-  size_t start = parser->pos;
+static inox_status inox_json_parse_number(JsonParser* parser, inox_value* out) {
+  size_t start = parser->position;
 
-  if (parser->pos < parser->len && parser->bytes[parser->pos] == '-') {
-    parser->pos += 1;
+  if (parser->position < parser->length && parser->bytes[parser->position] == '-') {
+    parser->position += 1;
   }
 
-  if (parser->pos >= parser->len) {
+  if (parser->position >= parser->length) {
     inox_json_set_error(parser, "No number after minus sign");
     return INOX_ERR_TYPE;
   }
 
-  if (parser->bytes[parser->pos] == '0') {
-    parser->pos += 1;
-  } else if (parser->bytes[parser->pos] >= '1' && parser->bytes[parser->pos] <= '9') {
-    while (parser->pos < parser->len && parser->bytes[parser->pos] >= '0' && parser->bytes[parser->pos] <= '9') {
-      parser->pos += 1;
+  if (parser->bytes[parser->position] == '0') {
+    parser->position += 1;
+  } else if (parser->bytes[parser->position] >= '1' && parser->bytes[parser->position] <= '9') {
+    while (parser->position < parser->length && parser->bytes[parser->position] >= '0' && parser->bytes[parser->position] <= '9') {
+      parser->position += 1;
     }
   } else {
     inox_json_set_error(parser, "Unexpected token");
     return INOX_ERR_TYPE;
   }
 
-  if (parser->pos < parser->len && parser->bytes[parser->pos] == '.') {
-    parser->pos += 1;
+  if (parser->position < parser->length && parser->bytes[parser->position] == '.') {
+    parser->position += 1;
 
-    if (parser->pos >= parser->len || parser->bytes[parser->pos] < '0' || parser->bytes[parser->pos] > '9') {
+    if (parser->position >= parser->length || parser->bytes[parser->position] < '0' || parser->bytes[parser->position] > '9') {
       inox_json_set_error(parser, "Unterminated fractional number");
       return INOX_ERR_TYPE;
     }
 
-    while (parser->pos < parser->len && parser->bytes[parser->pos] >= '0' && parser->bytes[parser->pos] <= '9') {
-      parser->pos += 1;
+    while (parser->position < parser->length && parser->bytes[parser->position] >= '0' && parser->bytes[parser->position] <= '9') {
+      parser->position += 1;
     }
   }
 
-  if (parser->pos < parser->len && (parser->bytes[parser->pos] == 'e' || parser->bytes[parser->pos] == 'E')) {
-    parser->pos += 1;
+  if (parser->position < parser->length && (parser->bytes[parser->position] == 'e' || parser->bytes[parser->position] == 'E')) {
+    parser->position += 1;
 
-    if (parser->pos < parser->len && (parser->bytes[parser->pos] == '+' || parser->bytes[parser->pos] == '-')) {
-      parser->pos += 1;
+    if (parser->position < parser->length && (parser->bytes[parser->position] == '+' || parser->bytes[parser->position] == '-')) {
+      parser->position += 1;
     }
 
-    if (parser->pos >= parser->len || parser->bytes[parser->pos] < '0' || parser->bytes[parser->pos] > '9') {
+    if (parser->position >= parser->length || parser->bytes[parser->position] < '0' || parser->bytes[parser->position] > '9') {
       inox_json_set_error(parser, "Exponent part is missing a number");
       return INOX_ERR_TYPE;
     }
 
-    while (parser->pos < parser->len && parser->bytes[parser->pos] >= '0' && parser->bytes[parser->pos] <= '9') {
-      parser->pos += 1;
+    while (parser->position < parser->length && parser->bytes[parser->position] >= '0' && parser->bytes[parser->position] <= '9') {
+      parser->position += 1;
     }
   }
 
-  size_t len = parser->pos - start;
+  size_t len = parser->position - start;
   char* temp = (char*)parser->allocator->alloc(parser->allocator->user, len + 1, alignof(char));
 
   if (temp == 0) {
@@ -541,7 +541,7 @@ static void inox_json_free_names(inox_allocator* allocator, char** names, size_t
   }
 }
 
-static inox_status inox_json_parse_object(inox_json_parser* parser, size_t depth, inox_value* out) {
+static inox_status inox_json_parse_object(JsonParser* parser, size_t depth, inox_value* out) {
   if (!inox_json_match_byte(parser, '{')) {
     inox_json_set_error(parser, "Expected object");
     return INOX_ERR_TYPE;
@@ -598,7 +598,7 @@ static inox_status inox_json_parse_object(inox_json_parser* parser, size_t depth
       char* key = 0;
       size_t key_len = 0;
 
-      if (parser->pos >= parser->len || parser->bytes[parser->pos] != '"') {
+      if (parser->position >= parser->length || parser->bytes[parser->position] != '"') {
         inox_json_set_error(parser, "Expected property name or '}'");
         status = INOX_ERR_TYPE;
         break;
@@ -744,7 +744,7 @@ static inox_status inox_json_parse_object(inox_json_parser* parser, size_t depth
   return status;
 }
 
-static inox_status inox_json_parse_array(inox_json_parser* parser, size_t depth, inox_value* out) {
+static inox_status inox_json_parse_array(JsonParser* parser, size_t depth, inox_value* out) {
   if (!inox_json_match_byte(parser, '[')) {
     inox_json_set_error(parser, "Expected array");
     return INOX_ERR_TYPE;
@@ -799,19 +799,19 @@ static inox_status inox_json_parse_array(inox_json_parser* parser, size_t depth,
   }
 }
 
-static inox_status inox_json_parse_value(inox_json_parser* parser, size_t depth, inox_value* out) {
+static inox_status inox_json_parse_value(JsonParser* parser, size_t depth, inox_value* out) {
   if (depth > INOX_JSON_MAX_DEPTH) {
     return INOX_ERR_UNSUPPORTED;
   }
 
   inox_json_skip_ws(parser);
 
-  if (parser->pos >= parser->len) {
+  if (parser->position >= parser->length) {
     inox_json_set_error(parser, "Unexpected end of JSON input");
     return INOX_ERR_TYPE;
   }
 
-  char value = parser->bytes[parser->pos];
+  char value = parser->bytes[parser->position];
 
   if (value == '"') {
     return inox_json_parse_string(parser, out);
@@ -868,7 +868,7 @@ static inox_status json_parse_with_error(
     *error_out = inox_undefined_value();
   }
 
-  inox_json_parser parser = { allocator, bytes == 0 ? "" : bytes, len, 0, 0, 0, false };
+  JsonParser parser = { allocator, bytes == 0 ? "" : bytes, len, 0, 0, 0, false };
   inox_status status = inox_json_parse_value(&parser, 0, out);
 
   if (status != INOX_OK) {
@@ -888,7 +888,7 @@ static inox_status json_parse_with_error(
 
   inox_json_skip_ws(&parser);
 
-  if (parser.pos != parser.len) {
+  if (parser.position != parser.length) {
     inox_release(*out);
     *out = inox_undefined_value();
     inox_json_set_error(&parser, "Unexpected non-whitespace character after JSON");
@@ -908,21 +908,21 @@ static inox_status json_parse_with_error(
 }
 
 static inox_status
-inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth);
+inox_json_stringify_value(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth);
 static inox_status inox_json_stringify_class_instance_value(
-  inox_json_buffer* buffer,
-  inox_json_stringify_stack* stack,
+  JsonBuffer* buffer,
+  JsonStringifyStack* stack,
   const inox_class_descriptor* descriptor,
   const void* instance,
   size_t depth
 );
 
-static bool inox_json_stringify_stack_contains(const inox_json_stringify_stack* stack, const inox_ref* ref) {
+static bool inox_json_stringify_stack_contains(const JsonStringifyStack* stack, const inox_ref* ref) {
   if (stack == 0 || ref == 0) {
     return false;
   }
 
-  for (size_t index = 0; index < stack->len; index += 1) {
+  for (size_t index = 0; index < stack->length; index += 1) {
     if (stack->refs[index] == ref) {
       return true;
     }
@@ -931,7 +931,7 @@ static bool inox_json_stringify_stack_contains(const inox_json_stringify_stack* 
   return false;
 }
 
-static inox_status inox_json_stringify_stack_push(inox_json_stringify_stack* stack, const inox_ref* ref) {
+static inox_status inox_json_stringify_stack_push(JsonStringifyStack* stack, const inox_ref* ref) {
   if (stack == 0 || ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -940,27 +940,27 @@ static inox_status inox_json_stringify_stack_push(inox_json_stringify_stack* sta
     return INOX_ERR_UNSUPPORTED;
   }
 
-  if (stack->len >= INOX_JSON_MAX_DEPTH + 1) {
+  if (stack->length >= INOX_JSON_MAX_DEPTH + 1) {
     return INOX_ERR_UNSUPPORTED;
   }
 
-  stack->refs[stack->len] = ref;
-  stack->len += 1;
+  stack->refs[stack->length] = ref;
+  stack->length += 1;
 
   return INOX_OK;
 }
 
-static void inox_json_stringify_stack_pop(inox_json_stringify_stack* stack, const inox_ref* ref) {
-  if (stack == 0 || ref == 0 || stack->len == 0) {
+static void inox_json_stringify_stack_pop(JsonStringifyStack* stack, const inox_ref* ref) {
+  if (stack == 0 || ref == 0 || stack->length == 0) {
     return;
   }
 
-  if (stack->refs[stack->len - 1] == ref) {
-    stack->len -= 1;
+  if (stack->refs[stack->length - 1] == ref) {
+    stack->length -= 1;
   }
 }
 
-static inox_status inox_json_stringify_string_bytes(inox_json_buffer* buffer, const char* bytes, size_t len) {
+static inox_status inox_json_stringify_string_bytes(JsonBuffer* buffer, const char* bytes, size_t len) {
   inox_status status = inox_json_buffer_push_char(buffer, '"');
 
   if (status != INOX_OK) {
@@ -1003,7 +1003,7 @@ static inox_status inox_json_stringify_string_bytes(inox_json_buffer* buffer, co
   return inox_json_buffer_push_char(buffer, '"');
 }
 
-static inox_status inox_json_stringify_number(inox_json_buffer* buffer, double number) {
+static inox_status inox_json_stringify_number(JsonBuffer* buffer, double number) {
   char temp[64];
   int written = snprintf(temp, sizeof(temp), "%.17g", number);
 
@@ -1015,7 +1015,7 @@ static inox_status inox_json_stringify_number(inox_json_buffer* buffer, double n
 }
 
 static inox_status
-inox_json_stringify_array(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth) {
+inox_json_stringify_array(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
   ArrayStorage* array = (ArrayStorage*)value.as.ref;
   inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
 
@@ -1053,7 +1053,7 @@ done:
 }
 
 static inox_status
-inox_json_stringify_object(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth) {
+inox_json_stringify_object(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
   inox_object* object = (inox_object*)value.as.ref;
   inox_status status = inox_json_stringify_stack_push(stack, value.as.ref);
 
@@ -1107,7 +1107,7 @@ done:
 }
 
 static inox_status
-inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* stack, inox_value value, size_t depth) {
+inox_json_stringify_value(JsonBuffer* buffer, JsonStringifyStack* stack, inox_value value, size_t depth) {
   if (depth > INOX_JSON_MAX_DEPTH) {
     return INOX_ERR_UNSUPPORTED;
   }
@@ -1148,8 +1148,8 @@ inox_json_stringify_value(inox_json_buffer* buffer, inox_json_stringify_stack* s
 }
 
 static inox_status inox_json_stringify_class_instance_value(
-  inox_json_buffer* buffer,
-  inox_json_stringify_stack* stack,
+  JsonBuffer* buffer,
+  JsonStringifyStack* stack,
   const inox_class_descriptor* descriptor,
   const void* instance,
   size_t depth
@@ -1271,23 +1271,6 @@ inox::Value Json::parse(const char* text) const {
   return inox::adopt(out);
 }
 
-static inox::String inox_json_finish_stringify(inox_status status, inox_json_buffer* buffer) {
-  inox::String out;
-
-  if (status == INOX_OK) {
-    out = inox::String(buffer->bytes == 0 ? "" : buffer->bytes, buffer->len);
-  }
-
-  inox_json_buffer_dispose(buffer);
-
-  if (status != INOX_OK || !out.valid()) {
-    inox::throw_value(inox::String("JSON.stringify failed"));
-    return inox::String();
-  }
-
-  return out;
-}
-
 inox::String Json::stringify(inox_value value) const {
   inox_allocator* allocator = &inox_default_allocator;
 
@@ -1296,11 +1279,24 @@ inox::String Json::stringify(inox_value value) const {
     return inox::String();
   }
 
-  inox_json_buffer buffer = { allocator, 0, 0, 0 };
-  inox_json_stringify_stack stack = { 0 };
+  JsonBuffer buffer = { allocator, 0, 0, 0 };
+  JsonStringifyStack stack = { 0 };
   inox_status status = inox_json_stringify_value(&buffer, &stack, value, 0);
 
-  return inox_json_finish_stringify(status, &buffer);
+  inox::String out;
+
+  if (status == INOX_OK) {
+    out = inox::String(buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
+  }
+
+  inox_json_buffer_dispose(&buffer);
+
+  if (status != INOX_OK || !out.valid()) {
+    inox::throw_value(inox::String("JSON.stringify failed"));
+    return inox::String();
+  }
+
+  return out;
 }
 
 inox::String Json::stringify(const inox_class_descriptor& descriptor, const void* instance) const {
@@ -1311,11 +1307,24 @@ inox::String Json::stringify(const inox_class_descriptor& descriptor, const void
     return inox::String();
   }
 
-  inox_json_buffer buffer = { allocator, 0, 0, 0 };
-  inox_json_stringify_stack stack = { 0 };
+  JsonBuffer buffer = { allocator, 0, 0, 0 };
+  JsonStringifyStack stack = { 0 };
   inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, &descriptor, instance, 0);
 
-  return inox_json_finish_stringify(status, &buffer);
+  inox::String out;
+
+  if (status == INOX_OK) {
+    out = inox::String(buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
+  }
+
+  inox_json_buffer_dispose(&buffer);
+
+  if (status != INOX_OK || !out.valid()) {
+    inox::throw_value(inox::String("JSON.stringify failed"));
+    return inox::String();
+  }
+
+  return out;
 }
 
 inox::String Json::stringify(const inox_class_descriptor* descriptor, const void* instance) const {
@@ -1326,11 +1335,24 @@ inox::String Json::stringify(const inox_class_descriptor* descriptor, const void
     return inox::String();
   }
 
-  inox_json_buffer buffer = { allocator, 0, 0, 0 };
-  inox_json_stringify_stack stack = { 0 };
+  JsonBuffer buffer = { allocator, 0, 0, 0 };
+  JsonStringifyStack stack = { 0 };
   inox_status status = inox_json_stringify_class_instance_value(&buffer, &stack, descriptor, instance, 0);
 
-  return inox_json_finish_stringify(status, &buffer);
+  inox::String out;
+
+  if (status == INOX_OK) {
+    out = inox::String(buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
+  }
+
+  inox_json_buffer_dispose(&buffer);
+
+  if (status != INOX_OK || !out.valid()) {
+    inox::throw_value(inox::String("JSON.stringify failed"));
+    return inox::String();
+  }
+
+  return out;
 }
 
 Json JSON;
