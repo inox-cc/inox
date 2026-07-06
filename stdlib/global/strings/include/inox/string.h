@@ -22,16 +22,6 @@ inox_status inox_string_from_number_radix(inox_allocator* allocator, double valu
 inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, const char* format, ...);
 inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, inox_value* out);
 inox_status inox_string_to_number(const char* value_bytes, size_t value_len, inox_value* out);
-size_t inox_string_code_unit_length_parts(const char* value_bytes, size_t value_len);
-double inox_string_char_code_at_parts(const char* value_bytes, size_t value_len, size_t offset);
-inox_status inox_string_concat_parts(
-  inox_allocator* allocator,
-  const char* left_bytes,
-  size_t left_len,
-  const char* right_bytes,
-  size_t right_len,
-  inox_value* out
-);
 
 #ifdef __cplusplus
 }
@@ -67,6 +57,7 @@ public:
 
   bool valid() const;
   size_t length() const;
+  size_t codeUnitLength() const;
   const char* bytes() const;
   operator StringView() const;
   String trim() const;
@@ -80,6 +71,8 @@ public:
   String slice(double start) const;
   String slice(double start, double end) const;
   ::Array split(StringView separator) const;
+  String concat(StringView right) const;
+  double charCodeAt(double offset) const;
   bool includes(StringView search) const;
   bool includes(StringView search, double start) const;
   bool startsWith(StringView search) const;

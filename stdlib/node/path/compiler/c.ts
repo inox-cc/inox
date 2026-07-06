@@ -1,7 +1,7 @@
 import { pathRuntimeConstantValue } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
-import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
+import { emitPrepareOwnedValueWrite, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
+import { cStringLiteral } from '../../../../compiler/c/identifiers.ts'
 import type {
   CObjectShape,
   CObjectShapeField,
@@ -68,6 +68,8 @@ export function emitPreparedPathConstantExpression(
   expression: AnyNode,
   context: PathCContext
 ): PreparedExpression | null {
+  void context
+
   const constant = cPathRuntimeConstantName(expression)
   let value: string | null = null
 
@@ -79,20 +81,11 @@ export function emitPreparedPathConstantExpression(
     return null
   }
 
-  const out = nextCName(context, 'inox_path_constant')
-  registerOwnedValue(context, out)
-
-  const lines = emitPrepareOwnedValueWrite(out)
-  lines.push(
-    emitStatusCheck(
-      `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
-      context
-    )
-  )
-
   return {
-    lines,
-    expression: out
+    lines: [],
+    expression: value === '/' ? 'path.sep' : 'path.delimiter',
+    cppType: 'inox::String',
+    owned: false
   }
 }
 
@@ -132,16 +125,12 @@ export function emitPreparedPathObjectCallExpression(
   context.variables.set(out, 'object')
   dependencies.registerObjectShape(context, out, expression.shape)
 
-  lines.push(
-    emitStatusCheck(
-      `inox_path_parse(&inox_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
-      context
-    )
-  )
+  lines.push(`${out} = path.parse(${input.expression}, ${shape.expression});`)
 
   return {
     lines,
-    expression: out
+    expression: out,
+    cppType: 'inox::Value'
   }
 }
 
@@ -157,21 +146,8 @@ export function emitPreparedPathStringCallExpression(
     return null
   }
 
-  let out = nextCName(context, 'inox_path_value')
   const lines: string[] = []
-
-  if (
-    options !== null &&
-    typeof options !== 'undefined' &&
-    options.out !== null &&
-    typeof options.out !== 'undefined'
-  ) {
-    out = options.out
-  }
-
-  if (options === null || typeof options === 'undefined' || options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
+  void options
 
   if (method === 'join' || method === 'resolve') {
     const args: PreparedExpression[] = []
@@ -186,10 +162,13 @@ export function emitPreparedPathStringCallExpression(
       pushLines(lines, arg.lines)
     }
 
-    pushLines(lines, emitPrepareOwnedValueWrite(out))
-
     if (args.length === 0) {
-      lines.push(emitStatusCheck(`inox_path_${method}(&inox_default_allocator, 0, 0, &${out})`, context))
+      return {
+        lines,
+        expression: `path.${method}(nullptr, 0)`,
+        cppType: 'inox::String',
+        owned: false
+      }
     } else {
       const argArray = nextCName(context, 'inox_path_args')
       const expressions: string[] = []
@@ -199,15 +178,14 @@ export function emitPreparedPathStringCallExpression(
         expressions.push(arg.expression)
       }
 
-      lines.push(`inox_value ${argArray}[] = { ${joinStrings(expressions, ', ')} };`)
-      lines.push(
-        emitStatusCheck(`inox_path_${method}(&inox_default_allocator, ${argArray}, ${args.length}, &${out})`, context)
-      )
-    }
+      lines.push(`const inox_value ${argArray}[] = { ${joinStrings(expressions, ', ')} };`)
 
-    return {
-      lines,
-      expression: out
+      return {
+        lines,
+        expression: `path.${method}(${argArray}, ${args.length})`,
+        cppType: 'inox::String',
+        owned: false
+      }
     }
   }
 
@@ -215,19 +193,18 @@ export function emitPreparedPathStringCallExpression(
     const object = dependencies.emitCValueExpression(expression.args[0], context)
 
     pushLines(lines, object.lines)
-    pushLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_path_format(&inox_default_allocator, ${object.expression}, &${out})`, context))
 
     return {
       lines,
-      expression: out
+      expression: `path.format(${object.expression})`,
+      cppType: 'inox::String',
+      owned: false
     }
   }
 
   const first = dependencies.emitCValueExpression(expression.args[0], context)
 
   pushLines(lines, first.lines)
-  pushLines(lines, emitPrepareOwnedValueWrite(out))
 
   if (method === 'basename') {
     let suffix: PreparedExpression = {
@@ -242,16 +219,12 @@ export function emitPreparedPathStringCallExpression(
     }
 
     pushLines(lines, suffix.lines)
-    lines.push(
-      emitStatusCheck(
-        `inox_path_basename(&inox_default_allocator, ${first.expression}, ${suffix.expression}, ${suffixPresent}, &${out})`,
-        context
-      )
-    )
 
     return {
       lines,
-      expression: out
+      expression: `path.basename(${first.expression}, ${suffix.expression}, ${suffixPresent === '1' ? 'true' : 'false'})`,
+      cppType: 'inox::String',
+      owned: false
     }
   }
 
@@ -259,24 +232,20 @@ export function emitPreparedPathStringCallExpression(
     const to = dependencies.emitCValueExpression(expression.args[1], context)
 
     pushLines(lines, to.lines)
-    lines.push(
-      emitStatusCheck(
-        `inox_path_relative(&inox_default_allocator, ${first.expression}, ${to.expression}, &${out})`,
-        context
-      )
-    )
 
     return {
       lines,
-      expression: out
+      expression: `path.relative(${first.expression}, ${to.expression})`,
+      cppType: 'inox::String',
+      owned: false
     }
   }
 
-  lines.push(emitStatusCheck(`inox_path_${method}(&inox_default_allocator, ${first.expression}, &${out})`, context))
-
   return {
     lines,
-    expression: out
+    expression: `path.${method}(${first.expression})`,
+    cppType: 'inox::String',
+    owned: false
   }
 }
 
@@ -290,16 +259,13 @@ export function emitPreparedPathBooleanCallExpression(
   }
 
   const value = dependencies.emitCValueExpression(expression.args[0], context)
-  const out = nextCName(context, 'inox_path_is_absolute')
   const lines: string[] = []
 
   pushLines(lines, value.lines)
-  lines.push(`int ${out} = 0;`)
-  lines.push(emitStatusCheck(`inox_path_is_absolute(${value.expression}, &${out})`, context))
 
   return {
     lines,
-    expression: `(${out} ? 1 : 0)`
+    expression: `path.isAbsolute(${value.expression})`
   }
 }
 

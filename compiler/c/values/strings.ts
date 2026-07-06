@@ -484,16 +484,25 @@ export function emitPreparedStringLengthExpression(
     return null
   }
 
-  const operand = emitPreparedStringBytesOperand(object, context, 'inox_length_string')
-  const length = nextCName(context, 'inox_string_length')
   const lines: string[] = []
+  const cppValue = emitPreparedCppStringExpression(object, context)
+
+  if (cppValue !== null && typeof cppValue !== 'undefined') {
+    pushAllLines(lines, cppValue.lines)
+
+    return {
+      lines,
+      expression: `((double)${cppValue.expression}.codeUnitLength())`
+    }
+  }
+
+  const operand = emitPreparedStringBytesOperand(object, context, 'inox_length_string')
 
   pushAllLines(lines, operand.lines)
-  lines.push(`size_t ${length} = inox_string_code_unit_length_parts(${operand.bytes}, ${operand.length});`)
 
   return {
     lines,
-    expression: `((double)${length})`
+    expression: `((double)inox::String(${operand.bytes}, ${operand.length}).codeUnitLength())`
   }
 }
 
@@ -783,18 +792,28 @@ export function emitPreparedStringCharCodeAtExpression(
     return null
   }
 
-  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_char_code_value')
   const index = stringDeps(context).emitPreparedNumberExpression(indexArgument, context)
-  const offset = nextCName(context, 'inox_string_char_code_index')
+  const cppValue = emitPreparedCppStringExpression(object, context)
   const lines: string[] = []
+
+  if (cppValue !== null && typeof cppValue !== 'undefined') {
+    pushAllLines(lines, cppValue.lines)
+    pushAllLines(lines, index.lines)
+
+    return {
+      lines,
+      expression: `${cppValue.expression}.charCodeAt(${index.expression})`
+    }
+  }
+
+  const value = emitPreparedStringBytesOperand(object, context, 'inox_string_char_code_value')
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, index.lines)
-  lines.push(`size_t ${offset} = (size_t)(${index.expression});`)
 
   return {
     lines,
-    expression: `inox_string_char_code_at_parts(${value.bytes}, ${value.length}, ${offset})`
+    expression: `inox::String(${value.bytes}, ${value.length}).charCodeAt(${index.expression})`
   }
 }
 
@@ -1479,6 +1498,14 @@ function emitPreparedCppStringExpression(
     const value = emitRuntimeStringValueCallExpression(expression, context)
 
     if (value !== null && typeof value !== 'undefined' && value.cppType === 'inox::String') {
+      return value
+    }
+  }
+
+  if (stringDeps(context).isNodeRuntimeProducedStringExpression(expression)) {
+    const value = stringDeps(context).emitCValueExpression(expression, context)
+
+    if (value.cppType === 'inox::String') {
       return value
     }
   }
@@ -2393,25 +2420,44 @@ function referencePathObjectExpression(expression: AnyNode): AnyNode {
 }
 
 export function emitCStringConcatValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const left = emitPreparedStringBytesOperand(expression.left, context, 'inox_cmp_string')
-  const right = emitPreparedStringBytesOperand(expression.right, context, 'inox_cmp_string')
-  const temp = nextCName(context, 'inox_value')
+  const leftCpp = emitPreparedCppStringExpression(expression.left, context)
+  const right = emitPreparedCppStringArgument(expression.right, context, 'inox_concat_string')
   const lines: string[] = []
-  registerOwnedValue(context, temp)
+
+  if (right === null || typeof right === 'undefined') {
+    return {
+      lines,
+      expression: 'inox::String()',
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
+    }
+  }
+
+  if (leftCpp !== null && typeof leftCpp !== 'undefined') {
+    pushAllLines(lines, leftCpp.lines)
+    pushAllLines(lines, right.lines)
+
+    return {
+      lines,
+      expression: `${leftCpp.expression}.concat(${right.expression})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
+    }
+  }
+
+  const left = emitPreparedStringBytesOperand(expression.left, context, 'inox_concat_string')
 
   pushAllLines(lines, left.lines)
   pushAllLines(lines, right.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox_string_concat_parts(&inox_default_allocator, ${left.bytes}, ${left.length}, ${right.bytes}, ${right.length}, &${temp})`,
-      context
-    )
-  )
 
   return {
     lines,
-    expression: temp
+    expression: `inox::String(${left.bytes}, ${left.length}).concat(${right.expression})`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
   }
 }
 

@@ -2,27 +2,33 @@
 #define INOX_PATH_H
 
 #include <stddef.h>
-#include "inox/allocator.h"
 #include "inox/object.h"
+#include "inox/string.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
-extern "C" {
-#endif
 
-inox_status inox_path_basename(inox_allocator* allocator, inox_value path, inox_value suffix, int has_suffix, inox_value* out);
-inox_status inox_path_dirname(inox_allocator* allocator, inox_value path, inox_value* out);
-inox_status inox_path_extname(inox_allocator* allocator, inox_value path, inox_value* out);
-inox_status inox_path_is_absolute(inox_value path, int* out);
-inox_status inox_path_join(inox_allocator* allocator, const inox_value* paths, size_t path_count, inox_value* out);
-inox_status inox_path_format(inox_allocator* allocator, inox_value path_object, inox_value* out);
-inox_status inox_path_normalize(inox_allocator* allocator, inox_value path, inox_value* out);
-inox_status inox_path_parse(inox_allocator* allocator, inox_value path, const inox_shape* shape, inox_value* out);
-inox_status inox_path_relative(inox_allocator* allocator, inox_value from, inox_value to, inox_value* out);
-inox_status inox_path_resolve(inox_allocator* allocator, const inox_value* paths, size_t path_count, inox_value* out);
+class path {
+public:
+  inox::String delimiter;
+  inox::String sep;
+  const path& posix;
 
-#ifdef __cplusplus
-}
+  path();
+  inox::String basename(inox_value value, inox_value suffix, bool has_suffix) const;
+  inox::String dirname(inox_value value) const;
+  inox::String extname(inox_value value) const;
+  inox::String format(inox_value path_object) const;
+  bool isAbsolute(inox_value value) const;
+  inox::String join(const inox_value* values, size_t count) const;
+  inox::String normalize(inox_value value) const;
+  inox::Value parse(inox_value value, const inox_shape* shape) const;
+  inox::String relative(inox_value from, inox_value to) const;
+  inox::String resolve(const inox_value* values, size_t count) const;
+};
+
+extern path path;
+
 #endif
 
 #endif

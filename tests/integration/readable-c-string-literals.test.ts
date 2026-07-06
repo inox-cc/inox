@@ -123,7 +123,7 @@ f.test()
   const entryLocalSource = generatedTextFile(entryLocalFiles, 'src/index.cc').code
 
   assert.match(entryLocalSource, /double v = 123;/)
-  assert.match(entryLocalSource, /Foo f\{inox::String\(inox::string\("x", 1\)\)\};/)
+  assert.match(entryLocalSource, /Foo f\{inox::String\("x", 1\)\};/)
   assert.doesNotMatch(entryLocalSource, /static double v/)
   assert.doesNotMatch(entryLocalSource, /static Foo f/)
 

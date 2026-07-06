@@ -423,7 +423,7 @@ static void inox_string_trim_span(const char* bytes, size_t len, size_t* start_o
   }
 }
 
-size_t inox_string_code_unit_length_parts(const char* value_bytes, size_t value_len) {
+static size_t inox_string_code_unit_length(const char* value_bytes, size_t value_len) {
   if (value_bytes == 0 && value_len != 0) {
     return 0;
   }
@@ -441,35 +441,6 @@ size_t inox_string_code_unit_length_parts(const char* value_bytes, size_t value_
   }
 
   return length;
-}
-
-double inox_string_char_code_at_parts(const char* value_bytes, size_t value_len, size_t offset) {
-  if (value_bytes == 0 && value_len != 0) {
-    return 0;
-  }
-
-  const char* bytes = value_bytes == 0 ? "" : value_bytes;
-  const size_t byte_offset = inox_string_code_unit_to_byte_offset_floor(bytes, value_len, offset);
-
-  if (byte_offset >= value_len) {
-    return 0;
-  }
-
-  size_t step = 0;
-  const uint32_t code_point = inox_utf8_code_point_at(bytes, value_len, byte_offset, &step);
-
-  if (code_point <= 0xffffu) {
-    return (double)code_point;
-  }
-
-  const size_t code_unit_offset = inox_string_code_unit_index_of_byte_offset(bytes, value_len, byte_offset);
-  const uint32_t surrogate = code_point - 0x10000u;
-
-  if (offset > code_unit_offset) {
-    return (double)(0xdc00u + (surrogate & 0x3ffu));
-  }
-
-  return (double)(0xd800u + (surrogate >> 10));
 }
 
 static size_t inox_string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset) {
@@ -646,69 +617,6 @@ inox_status inox_string_to_number(const char* value_bytes, size_t value_len, ino
   return INOX_OK;
 }
 
-inox_status inox_string_concat_parts(
-  inox_allocator* allocator,
-  const char* left_bytes,
-  size_t left_len,
-  const char* right_bytes,
-  size_t right_len,
-  inox_value* out
-) {
-  if (out != 0) {
-    *out = inox_undefined_value();
-  }
-
-  if (left_len > ((size_t)-1) - right_len) {
-    return INOX_ERR_OOM;
-  }
-
-  const size_t len = left_len + right_len;
-
-  if (
-    allocator == 0 || allocator->alloc == 0 || out == 0 || (left_bytes == 0 && left_len != 0) ||
-    (right_bytes == 0 && right_len != 0)
-  ) {
-    return INOX_ERR_TYPE;
-  }
-
-  if (len > ((size_t)-1) - sizeof(inox_string)) {
-    return INOX_ERR_OOM;
-  }
-
-  const size_t size = sizeof(inox_string) + len;
-  inox_string* string = (inox_string*)allocator->alloc(allocator->user, size, alignof(inox_string));
-
-  if (string == 0) {
-    return INOX_ERR_OOM;
-  }
-
-  string->header.kind = INOX_REF_STRING;
-  string->header.ref_count = 1;
-  string->header.flags = 0;
-  string->header.size = size;
-  string->header.align = alignof(inox_string);
-  string->header.allocator = allocator;
-  string->header.dispose = 0;
-  inox_ref_init_weak(&string->header);
-  string->len = len;
-
-  if (left_len != 0) {
-    memcpy(string->bytes, left_bytes, left_len);
-  }
-
-  if (right_len != 0) {
-    memcpy(string->bytes + left_len, right_bytes, right_len);
-  }
-
-  out->tag = INOX_TAG_STRING;
-  out->as.ref = &string->header;
-#ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_STRING);
-#endif
-
-  return INOX_OK;
-}
-
 static inox_status inox_string_split_push(inox_allocator* allocator, inox_value array, const char* bytes, size_t len) {
   inox_value item = inox_undefined_value();
   inox_status status = inox_string_from_literal(allocator, bytes == 0 ? "" : bytes, len, &item);
@@ -817,6 +725,14 @@ size_t String::length() const {
   }
 
   return ((inox_string*)raw().as.ref)->len;
+}
+
+size_t String::codeUnitLength() const {
+  if (!valid()) {
+    return 0;
+  }
+
+  return inox_string_code_unit_length(bytes(), length());
 }
 
 const char* String::bytes() const {
@@ -930,8 +846,8 @@ String String::padStart(double target_len) const {
 
   StringView pad(" ");
   size_t target = non_negative_index(target_len);
-  const size_t value_units = inox_string_code_unit_length_parts(bytes(), length());
-  const size_t pad_units = inox_string_code_unit_length_parts(pad.bytes, pad.len);
+  const size_t value_units = inox_string_code_unit_length(bytes(), length());
+  const size_t pad_units = inox_string_code_unit_length(pad.bytes, pad.len);
 
   if (target <= value_units || pad.len == 0 || pad_units == 0) {
     return String(*this);
@@ -1001,8 +917,8 @@ String String::padStart(double target_len, StringView pad) const {
   }
 
   size_t target = non_negative_index(target_len);
-  const size_t value_units = inox_string_code_unit_length_parts(bytes(), length());
-  const size_t pad_units = inox_string_code_unit_length_parts(pad.bytes, pad.len);
+  const size_t value_units = inox_string_code_unit_length(bytes(), length());
+  const size_t pad_units = inox_string_code_unit_length(pad.bytes, pad.len);
 
   if (target <= value_units || pad.len == 0 || pad_units == 0) {
     return String(*this);
@@ -1071,7 +987,7 @@ String String::slice(double start) const {
     return String();
   }
 
-  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
   size_t start_index = slice_index(start, code_unit_length);
   const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
 
@@ -1083,7 +999,7 @@ String String::slice(double start, double end) const {
     return String();
   }
 
-  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
   size_t start_index = slice_index(start, code_unit_length);
   size_t end_index = slice_index(end, code_unit_length);
 
@@ -1164,6 +1080,58 @@ ArrayClass String::split(StringView separator) const {
   return ArrayClass(inox::adopt_value, out);
 }
 
+String String::concat(StringView right) const {
+  if (!valid() || length() > ((size_t)-1) - right.len) {
+    return String();
+  }
+
+  const size_t len = length() + right.len;
+  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+
+  if (string == 0) {
+    return String();
+  }
+
+  if (length() != 0) {
+    memcpy(string->bytes, bytes(), length());
+  }
+
+  if (right.len != 0) {
+    memcpy(string->bytes + length(), right.bytes, right.len);
+  }
+
+  return String(adopt_value, inox_string_adopt_storage(string));
+}
+
+double String::charCodeAt(double offset) const {
+  if (!valid()) {
+    return 0;
+  }
+
+  const size_t index = non_negative_index(offset);
+  const size_t byte_offset = inox_string_code_unit_to_byte_offset_floor(bytes(), length(), index);
+
+  if (byte_offset >= length()) {
+    return 0;
+  }
+
+  size_t step = 0;
+  const uint32_t code_point = inox_utf8_code_point_at(bytes(), length(), byte_offset, &step);
+
+  if (code_point <= 0xffffu) {
+    return (double)code_point;
+  }
+
+  const size_t code_unit_offset = inox_string_code_unit_index_of_byte_offset(bytes(), length(), byte_offset);
+  const uint32_t surrogate = code_point - 0x10000u;
+
+  if (index > code_unit_offset) {
+    return (double)(0xdc00u + (surrogate & 0x3ffu));
+  }
+
+  return (double)(0xd800u + (surrogate >> 10));
+}
+
 bool String::includes(StringView search) const {
   if (!valid()) {
     return false;
@@ -1202,7 +1170,7 @@ bool String::includes(StringView search, double start) const {
   }
 
   size_t start_index = non_negative_index(start);
-  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
 
   if (start_index > code_unit_length) {
     start_index = code_unit_length;
@@ -1291,7 +1259,7 @@ double String::indexOf(StringView search, double start) const {
   }
 
   size_t start_index = non_negative_index(start);
-  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
 
   if (start_index > code_unit_length) {
     start_index = code_unit_length;
@@ -1331,7 +1299,7 @@ double String::lastIndexOf(StringView search) const {
     return -1;
   }
 
-  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
 
   if (search.len == 0) {
     return (double)code_unit_length;
@@ -1367,7 +1335,7 @@ double String::lastIndexOf(StringView search, double start) const {
   }
 
   size_t start_index = non_negative_index(start);
-  const size_t code_unit_length = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
 
   if (start_index > code_unit_length) {
     start_index = code_unit_length;

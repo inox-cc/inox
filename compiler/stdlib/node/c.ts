@@ -527,7 +527,17 @@ export function isNodeRuntimeProducedStringExpression(expression: AnyNode | null
     return true
   }
 
+  if (cOsRuntimeMethodName(expression)) {
+    return true
+  }
+
   if (cPathRuntimeConstantName(expression)) {
+    return true
+  }
+
+  const pathMethod = cPathRuntimeMethodName(expression)
+
+  if (pathMethod !== null && typeof pathMethod !== 'undefined' && pathMethod !== 'isAbsolute' && pathMethod !== 'parse') {
     return true
   }
 
