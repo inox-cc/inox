@@ -1246,31 +1246,6 @@ inox::Value Json::parse(inox::StringView text) const {
   return inox::adopt(out);
 }
 
-inox::Value Json::parse(const char* text) const {
-  const char* bytes = text == 0 ? "" : text;
-  inox_value out = inox_undefined_value();
-  inox::Value error;
-  inox_status status = json_parse_with_error(&inox_default_allocator, bytes, strlen(bytes), &out, error.out());
-
-  if (status != INOX_OK) {
-    inox_release(out);
-
-    if (inox::thrown()) {
-      return inox::Value();
-    }
-
-    if (error.tag == INOX_TAG_STRING && error.as.ref != 0) {
-      inox::throw_value(error);
-    } else {
-      inox::throw_value(inox::String("JSON.parse failed"));
-    }
-
-    return inox::Value();
-  }
-
-  return inox::adopt(out);
-}
-
 inox::String Json::stringify(inox_value value) const {
   inox_allocator* allocator = &inox_default_allocator;
 
