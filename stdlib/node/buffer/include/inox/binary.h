@@ -5,19 +5,11 @@
 #include <stdint.h>
 #include "inox/value.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct inox_bytes {
   inox_ref header;
   size_t len;
   uint8_t bytes[];
 } inox_bytes;
-
-#ifdef __cplusplus
-}
-#endif
 
 #ifdef __cplusplus
 
