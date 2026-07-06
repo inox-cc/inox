@@ -7,10 +7,6 @@
 #include "inox/allocator.h"
 #include "inox/value.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef enum inox_set_slot_state { INOX_SET_SLOT_EMPTY, INOX_SET_SLOT_OCCUPIED, INOX_SET_SLOT_TOMBSTONE } inox_set_slot_state;
 
 typedef struct inox_set_entry {
@@ -27,16 +23,30 @@ typedef struct inox_set {
   inox_set_entry* entries;
 } inox_set;
 
-inox_status inox_set_add(inox_value set, inox_value value);
-inox_status inox_set_clear(inox_value set);
-inox_status inox_set_delete(inox_value set, inox_value value, bool* out);
-void inox_set_dispose(inox_set* set);
-inox_status inox_set_has(inox_value set, inox_value value, bool* out);
-inox_status inox_set_new(inox_allocator* allocator, inox_value* out);
-inox_status inox_set_size(inox_value set, size_t* out);
-
 #ifdef __cplusplus
-}
+
+class Set : public inox::Value {
+public:
+  Set();
+  explicit Set(inox_value value);
+  explicit Set(const inox::Value& value);
+  explicit Set(inox::Value&& value);
+  Set(inox::AdoptValue adopt, inox_value value);
+
+  using inox::Value::operator=;
+  using inox::Value::raw;
+
+  static Set create();
+
+  Set add(inox_value value) const;
+  void clear() const;
+  bool deleteValue(inox_value value) const;
+  bool has(inox_value value) const;
+  size_t size() const;
+  bool valid() const;
+  inox_set* data() const;
+};
+
 #endif
 
 #endif

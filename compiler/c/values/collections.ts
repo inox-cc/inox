@@ -2,7 +2,7 @@ import { diagnostic } from '../../diagnostics.ts'
 import { collectionConstructorNameFromPath } from '../../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, SourceLocation } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../context.ts'
+import { emitRuntimeTypeCheck, nextCName } from '../context.ts'
 import { emitRuntimeNullableValueCheck } from '../runtime-values.ts'
 import type {
   CFunctionReturnMapType,
@@ -38,6 +38,7 @@ type PreparedCollectionReceiver = {
   type: 'map' | 'set'
   lines: string[]
   expression: string
+  cppObject: boolean
 }
 
 type PreparedMapIndexReceiver = {
@@ -54,6 +55,7 @@ type RuntimeForOfSet = {
   name: string
   elementType: string
   lines: string[]
+  cppObject: boolean
 }
 
 type RuntimeForOfMap = {
@@ -61,6 +63,7 @@ type RuntimeForOfMap = {
   keyType: string
   valueType: string
   lines: string[]
+  cppObject: boolean
 }
 
 type RuntimeForOfMapValues = {
@@ -68,6 +71,19 @@ type RuntimeForOfMapValues = {
   elementType: string
   lines: string[]
   useKey: boolean
+  cppObject: boolean
+}
+
+function collectionThrownCheck(context: CollectionFunctionContext): string {
+  return emitRuntimeTypeCheck('inox::thrown()', context)
+}
+
+function mapFacade(expression: string, cppObject: boolean = false): string {
+  return cppObject ? expression : `Map(${expression})`
+}
+
+function setFacade(expression: string, cppObject: boolean = false): string {
+  return cppObject ? expression : `Set(${expression})`
 }
 
 function emitFallbackCollectionValueExpression(
@@ -292,7 +308,8 @@ export function emitPreparedCollectionReceiver(
       return {
         type: receiverType,
         lines: [],
-        expression: name
+        expression: name,
+        cppObject: receiverType === 'map' ? context.cppMapValues.has(name) : context.cppSetValues.has(name)
       }
     }
 
@@ -318,7 +335,8 @@ export function emitPreparedCollectionReceiver(
       return {
         type: valueType,
         lines: call.lines,
-        expression: call.expression
+        expression: call.expression,
+        cppObject: call.cppType === 'Map' || call.cppType === 'Set'
       }
     }
 
@@ -327,7 +345,8 @@ export function emitPreparedCollectionReceiver(
     return {
       type: valueType,
       lines: value.lines,
-      expression: value.expression
+      expression: value.expression,
+      cppObject: value.cppType === 'Map' || value.cppType === 'Set'
     }
   }
 
@@ -339,7 +358,8 @@ export function emitPreparedCollectionReceiver(
     return {
       type: knownField,
       lines: value.lines,
-      expression: value.expression
+      expression: value.expression,
+      cppObject: value.cppType === 'Map' || value.cppType === 'Set'
     }
   }
 
@@ -358,7 +378,8 @@ export function emitPreparedCollectionReceiver(
     return {
       type: valueType,
       lines: value.lines,
-      expression: value.expression
+      expression: value.expression,
+      cppObject: value.cppType === 'Map' || value.cppType === 'Set'
     }
   }
 
@@ -453,12 +474,10 @@ export function emitPreparedCollectionConstructorValueExpression(
   const temp = nextCName(context, tempPrefix)
   const lines: string[] = []
 
-  registerOwnedValue(context, temp)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-
   if (collectionConstructor === 'Map') {
     reportCollectionHashability(expression.mapKeyType, 'Map keys', expression.loc, context)
-    lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${temp})`, context))
+    lines.push(`auto ${temp} = Map::create();`)
+    lines.push(emitRuntimeTypeCheck(`!${temp}.valid()`, context))
     if (expression.args.length > 0) {
       pushAllLines(
         lines,
@@ -468,12 +487,14 @@ export function emitPreparedCollectionConstructorValueExpression(
 
     return {
       lines,
-      expression: temp
+      expression: temp,
+      cppType: 'Map'
     }
   }
 
   reportCollectionHashability(expression.setElementType, 'Set values', expression.loc, context)
-  lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${temp})`, context))
+  lines.push(`auto ${temp} = Set::create();`)
+  lines.push(emitRuntimeTypeCheck(`!${temp}.valid()`, context))
   if (expression.args.length > 0) {
     pushAllLines(
       lines,
@@ -483,7 +504,8 @@ export function emitPreparedCollectionConstructorValueExpression(
 
   return {
     lines,
-    expression: temp
+    expression: temp,
+    cppType: 'Set'
   }
 }
 
@@ -542,7 +564,8 @@ function emitMapConstructorValueEntries(
 
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+    lines.push(`${mapFacade(name, true)}.set(${key.expression}, ${value.expression});`)
+    lines.push(collectionThrownCheck(context))
   }
 
   return lines
@@ -556,16 +579,17 @@ function emitMapConstructorCopiedEntries(
   const sourceMap = nextCName(context, 'inox_map_source')
   const index = nextCName(context, 'inox_map_source_index')
   const sourceExpression = source.expression
-  const setCall = `inox_map_set(${name}, ${sourceMap}->entries[${index}].key, ${sourceMap}->entries[${index}].value)`
   const lines: string[] = []
 
   pushAllLines(lines, source.lines)
-  lines.push(`inox_map* ${sourceMap} = (inox_map*)${sourceExpression}.as.ref;`)
+  lines.push(`inox_map* ${sourceMap} = ${mapFacade(sourceExpression, source.cppObject)}.data();`)
+  lines.push(emitRuntimeTypeCheck(`${sourceMap} == nullptr`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${sourceMap}->cap; ++${index}) {`)
   lines.push(`  if (${sourceMap}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) {`)
   lines.push('    continue;')
   lines.push('  }')
-  lines.push(`  ${emitStatusCheck(setCall, context)}`)
+  lines.push(`  ${mapFacade(name, true)}.set(${sourceMap}->entries[${index}].key, ${sourceMap}->entries[${index}].value);`)
+  lines.push(`  ${collectionThrownCheck(context)}`)
   lines.push('}')
 
   return lines
@@ -611,7 +635,8 @@ function emitSetConstructorValueElements(
     )
 
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_set_add(${name}, ${value.expression})`, context))
+    lines.push(`${setFacade(name, true)}.add(${value.expression});`)
+    lines.push(collectionThrownCheck(context))
   }
 
   return lines
@@ -625,16 +650,17 @@ function emitSetConstructorCopiedElements(
   const sourceSet = nextCName(context, 'inox_set_source')
   const index = nextCName(context, 'inox_set_source_index')
   const sourceExpression = source.expression
-  const addCall = `inox_set_add(${name}, ${sourceSet}->entries[${index}].value)`
   const lines: string[] = []
 
   pushAllLines(lines, source.lines)
-  lines.push(`inox_set* ${sourceSet} = (inox_set*)${sourceExpression}.as.ref;`)
+  lines.push(`inox_set* ${sourceSet} = ${setFacade(sourceExpression, source.cppObject)}.data();`)
+  lines.push(emitRuntimeTypeCheck(`${sourceSet} == nullptr`, context))
   lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->cap; ++${index}) {`)
   lines.push(`  if (${sourceSet}->entries[${index}].state != INOX_SET_SLOT_OCCUPIED) {`)
   lines.push('    continue;')
   lines.push('  }')
-  lines.push(`  ${emitStatusCheck(addCall, context)}`)
+  lines.push(`  ${setFacade(name, true)}.add(${sourceSet}->entries[${index}].value);`)
+  lines.push(`  ${collectionThrownCheck(context)}`)
   lines.push('}')
 
   return lines
@@ -657,12 +683,12 @@ export function emitPreparedCollectionCallExpression(
 
   if (receiver !== null && typeof receiver !== 'undefined') {
     if (receiver.type === 'map') {
-      const call = emitPreparedMapMethodCall(receiver.expression, expression, context)
+      const call = emitPreparedMapMethodCall(receiver, expression, context)
 
       return createPreparedCollectionMethodCall(receiver, call)
     }
 
-    const call = emitPreparedSetMethodCall(receiver.expression, expression, context)
+    const call = emitPreparedSetMethodCall(receiver, expression, context)
 
     return createPreparedCollectionMethodCall(receiver, call)
   }
@@ -685,15 +711,17 @@ function createPreparedCollectionMethodCall(
 }
 
 function emitPreparedMapMethodCall(
-  name: string,
+  receiver: PreparedCollectionReceiver,
   expression: AnyNode,
   context: CollectionFunctionContext
 ): PreparedExpression {
   const method = expression.callee.property
+  const name = receiver.expression
+  const facade = mapFacade(name, receiver.cppObject)
 
   if (method === 'clear') {
     return {
-      lines: [emitStatusCheck(`inox_map_clear(${name})`, context)],
+      lines: [`${facade}.clear();`, collectionThrownCheck(context)],
       expression: ''
     }
   }
@@ -712,7 +740,8 @@ function emitPreparedMapMethodCall(
     const lines: string[] = []
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+    lines.push(`${facade}.set(${key.expression}, ${value.expression});`)
+    lines.push(collectionThrownCheck(context))
 
     return {
       lines,
@@ -732,12 +761,11 @@ function emitPreparedMapMethodCall(
     const valueType = inferCollectionExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
     const out = nextCName(context, 'inox_map_value')
-    registerOwnedValue(context, out)
 
     const lines: string[] = []
     pushAllLines(lines, key.lines)
-    pushAllLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_map_get(${name}, ${key.expression}, &${out})`, context))
+    lines.push(`auto ${out} = ${facade}.get(${key.expression});`)
+    lines.push(collectionThrownCheck(context))
     pushAllLines(lines, emitRuntimeNullableValueCheck(out, expectedTag, context))
 
     return {
@@ -747,12 +775,12 @@ function emitPreparedMapMethodCall(
   }
 
   if (method === 'delete' || method === 'has') {
-    let callName = 'inox_map_has'
     let tempPrefix = 'inox_map_has'
+    let methodName = 'has'
 
     if (method === 'delete') {
-      callName = 'inox_map_delete'
       tempPrefix = 'inox_map_delete'
+      methodName = 'deleteKey'
     }
 
     const keyArg = collectionNodeAt(expression.args, 0)
@@ -766,8 +794,8 @@ function emitPreparedMapMethodCall(
     const out = nextCName(context, tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, key.lines)
-    lines.push(`bool ${out} = false;`)
-    lines.push(emitStatusCheck(`${callName}(${name}, ${key.expression}, &${out})`, context))
+    lines.push(`bool ${out} = ${facade}.${methodName}(${key.expression});`)
+    lines.push(collectionThrownCheck(context))
 
     return {
       lines,
@@ -802,13 +830,12 @@ export function emitPreparedMapIndexGetExpression(
     const valueType = inferCollectionExpressionType(expression, context)
     const expectedTag = cRuntimeValueTag(valueType)
     const out = nextCName(context, 'inox_map_value')
-    registerOwnedValue(context, out)
 
     const lines: string[] = []
     pushAllLines(lines, mapIndex.receiver.lines)
     pushAllLines(lines, key.lines)
-    pushAllLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`inox_map_get(${mapIndex.receiver.expression}, ${key.expression}, &${out})`, context))
+    lines.push(`auto ${out} = ${mapFacade(mapIndex.receiver.expression, mapIndex.receiver.cppObject)}.get(${key.expression});`)
+    lines.push(collectionThrownCheck(context))
     pushAllLines(lines, emitRuntimeNullableValueCheck(out, expectedTag, context))
 
     return {
@@ -843,9 +870,8 @@ export function emitPreparedMapIndexAssignment(
     pushAllLines(lines, mapIndex.receiver.lines)
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(
-      emitStatusCheck(`inox_map_set(${mapIndex.receiver.expression}, ${key.expression}, ${value.expression})`, context)
-    )
+    lines.push(`${mapFacade(mapIndex.receiver.expression, mapIndex.receiver.cppObject)}.set(${key.expression}, ${value.expression});`)
+    lines.push(collectionThrownCheck(context))
 
     return {
       lines,
@@ -877,15 +903,17 @@ function emitPreparedMapIndexReceiver(
 }
 
 function emitPreparedSetMethodCall(
-  name: string,
+  receiver: PreparedCollectionReceiver,
   expression: AnyNode,
   context: CollectionFunctionContext
 ): PreparedExpression {
   const method = expression.callee.property
+  const name = receiver.expression
+  const facade = setFacade(name, receiver.cppObject)
 
   if (method === 'clear') {
     return {
-      lines: [emitStatusCheck(`inox_set_clear(${name})`, context)],
+      lines: [`${facade}.clear();`, collectionThrownCheck(context)],
       expression: ''
     }
   }
@@ -901,7 +929,8 @@ function emitPreparedSetMethodCall(
     const value = emitCollectionValueExpression(valueArg, context)
     const lines: string[] = []
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_set_add(${name}, ${value.expression})`, context))
+    lines.push(`${facade}.add(${value.expression});`)
+    lines.push(collectionThrownCheck(context))
 
     return {
       lines,
@@ -910,12 +939,12 @@ function emitPreparedSetMethodCall(
   }
 
   if (method === 'delete' || method === 'has') {
-    let callName = 'inox_set_has'
     let tempPrefix = 'inox_set_has'
+    let methodName = 'has'
 
     if (method === 'delete') {
-      callName = 'inox_set_delete'
       tempPrefix = 'inox_set_delete'
+      methodName = 'deleteValue'
     }
 
     const valueArg = collectionNodeAt(expression.args, 0)
@@ -929,8 +958,8 @@ function emitPreparedSetMethodCall(
     const out = nextCName(context, tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, value.lines)
-    lines.push(`bool ${out} = false;`)
-    lines.push(emitStatusCheck(`${callName}(${name}, ${value.expression}, &${out})`, context))
+    lines.push(`bool ${out} = ${facade}.${methodName}(${value.expression});`)
+    lines.push(collectionThrownCheck(context))
 
     return {
       lines,
@@ -959,19 +988,19 @@ export function emitPreparedCollectionSizeExpression(
   const receiver = emitPreparedCollectionReceiver(expression.object, context)
 
   if (receiver !== null && typeof receiver !== 'undefined') {
-    let callName = 'inox_set_size'
     let tempPrefix = 'inox_set_size'
+    let facade = setFacade(receiver.expression, receiver.cppObject)
 
     if (receiver.type === 'map') {
-      callName = 'inox_map_size'
       tempPrefix = 'inox_map_size'
+      facade = mapFacade(receiver.expression, receiver.cppObject)
     }
 
     const out = nextCName(context, tempPrefix)
     const lines: string[] = []
     pushAllLines(lines, receiver.lines)
-    lines.push(`size_t ${out} = 0;`)
-    lines.push(emitStatusCheck(`${callName}(${receiver.expression}, &${out})`, context))
+    lines.push(`size_t ${out} = ${facade}.size();`)
+    lines.push(collectionThrownCheck(context))
 
     return {
       lines,
@@ -1229,7 +1258,8 @@ export function resolveRuntimeForOfSet(
       return {
         name: receiver.expression,
         elementType,
-        lines: receiver.lines
+        lines: receiver.lines,
+        cppObject: receiver.cppObject
       }
     }
   }
@@ -1257,7 +1287,8 @@ export function resolveRuntimeForOfMapKeys(
     name: keysReceiver.expression,
     elementType: stringOrUnknown(mapType.key),
     lines: keysReceiver.lines,
-    useKey: true
+    useKey: true,
+    cppObject: keysReceiver.cppObject
   }
 }
 
@@ -1281,7 +1312,8 @@ export function resolveRuntimeForOfMapEntries(
     name: entriesReceiver.expression,
     keyType: stringOrUnknown(mapType.key),
     valueType: stringOrUnknown(mapType.value),
-    lines: entriesReceiver.lines
+    lines: entriesReceiver.lines,
+    cppObject: entriesReceiver.cppObject
   }
 }
 
@@ -1305,7 +1337,8 @@ export function resolveRuntimeForOfMapValues(
     name: valuesReceiver.expression,
     elementType: stringOrUnknown(mapType.value),
     lines: valuesReceiver.lines,
-    useKey: false
+    useKey: false,
+    cppObject: valuesReceiver.cppObject
   }
 }
 
@@ -1327,7 +1360,8 @@ export function resolveRuntimeForOfMap(
           name: receiver.expression,
           keyType,
           valueType,
-          lines: receiver.lines
+          lines: receiver.lines,
+          cppObject: receiver.cppObject
         }
       }
     }

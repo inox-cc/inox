@@ -7,10 +7,6 @@
 #include "inox/allocator.h"
 #include "inox/value.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef enum inox_map_slot_state { INOX_MAP_SLOT_EMPTY, INOX_MAP_SLOT_OCCUPIED, INOX_MAP_SLOT_TOMBSTONE } inox_map_slot_state;
 
 typedef struct inox_map_entry {
@@ -28,17 +24,31 @@ typedef struct inox_map {
   inox_map_entry* entries;
 } inox_map;
 
-inox_status inox_map_new(inox_allocator* allocator, inox_value* out);
-inox_status inox_map_clear(inox_value map);
-inox_status inox_map_delete(inox_value map, inox_value key, bool* out);
-void inox_map_dispose(inox_map* map);
-inox_status inox_map_get(inox_value map, inox_value key, inox_value* out);
-inox_status inox_map_has(inox_value map, inox_value key, bool* out);
-inox_status inox_map_set(inox_value map, inox_value key, inox_value value);
-inox_status inox_map_size(inox_value map, size_t* out);
-
 #ifdef __cplusplus
-}
+
+class Map : public inox::Value {
+public:
+  Map();
+  explicit Map(inox_value value);
+  explicit Map(const inox::Value& value);
+  explicit Map(inox::Value&& value);
+  Map(inox::AdoptValue adopt, inox_value value);
+
+  using inox::Value::operator=;
+  using inox::Value::raw;
+
+  static Map create();
+
+  bool valid() const;
+  void clear() const;
+  bool deleteKey(inox_value key) const;
+  inox::Value get(inox_value key) const;
+  bool has(inox_value key) const;
+  Map set(inox_value key, inox_value value) const;
+  size_t size() const;
+  inox_map* data() const;
+};
+
 #endif
 
 #endif

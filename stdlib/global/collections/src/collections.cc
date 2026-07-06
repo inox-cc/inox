@@ -1,10 +1,17 @@
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
 #endif
+#include <utility>
 #include "inox/hash.h"
+#include "inox/loop.h"
 #include "inox/map.h"
+#include "inox/string.h"
 
 static void inox_map_dispose_ref(inox_ref* ref);
+
+static void inox_collection_throw(const char* message) {
+  inox::throw_value(inox::String(message));
+}
 
 static void inox_map_init_entries(inox_map_entry* entries, size_t cap) {
   for (size_t index = 0; index < cap; index += 1) {
@@ -154,16 +161,29 @@ static inox_status inox_map_find(inox_map* map, inox_value key, uint64_t hash, s
   return INOX_ERR_TYPE;
 }
 
-inox_status inox_map_new(inox_allocator* allocator, inox_value* out) {
-  if (allocator == 0 || allocator->alloc == 0 || out == 0) {
-    return INOX_ERR_TYPE;
+Map::Map() : inox::Value() {}
+
+Map::Map(inox_value value) : inox::Value(value) {}
+
+Map::Map(const inox::Value& value) : inox::Value(value) {}
+
+Map::Map(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+Map::Map(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
+
+Map Map::create() {
+  if (inox_default_allocator.alloc == 0) {
+    inox_collection_throw("TypeError: Map allocator is not available");
+    return Map();
   }
 
-  inox_map* map = (inox_map*)allocator->alloc(allocator->user, sizeof(inox_map), alignof(inox_map));
+  inox_map* map = (inox_map*)inox_default_allocator.alloc(
+    inox_default_allocator.user, sizeof(inox_map), alignof(inox_map)
+  );
 
   if (map == 0) {
-    *out = inox_undefined_value();
-    return INOX_ERR_OOM;
+    inox_collection_throw("TypeError: Map allocation failed");
+    return Map();
   }
 
   map->header.kind = INOX_REF_MAP;
@@ -171,7 +191,7 @@ inox_status inox_map_new(inox_allocator* allocator, inox_value* out) {
   map->header.flags = 0;
   map->header.size = sizeof(inox_map);
   map->header.align = alignof(inox_map);
-  map->header.allocator = allocator;
+  map->header.allocator = &inox_default_allocator;
   map->header.dispose = inox_map_dispose_ref;
   inox_ref_init_weak(&map->header);
   map->len = 0;
@@ -179,21 +199,37 @@ inox_status inox_map_new(inox_allocator* allocator, inox_value* out) {
   map->tombstones = 0;
   map->entries = 0;
 
-  out->tag = INOX_TAG_MAP;
-  out->as.ref = &map->header;
+  inox_value out = inox_undefined_value();
+  out.tag = INOX_TAG_MAP;
+  out.as.ref = &map->header;
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_memory_record_ref_created(INOX_REF_MAP);
 #endif
 
-  return INOX_OK;
+  return Map(inox::adopt_value, out);
 }
 
-inox_status inox_map_clear(inox_value map) {
-  if (map.tag != INOX_TAG_MAP || map.as.ref == 0) {
-    return INOX_ERR_TYPE;
+bool Map::valid() const {
+  inox_value value = inox::Value::raw();
+
+  return value.tag == INOX_TAG_MAP && value.as.ref != 0;
+}
+
+inox_map* Map::data() const {
+  if (!valid()) {
+    return 0;
   }
 
-  inox_map* instance = (inox_map*)map.as.ref;
+  return (inox_map*)inox::Value::raw().as.ref;
+}
+
+void Map::clear() const {
+  inox_map* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Map.clear receiver is not a Map");
+    return;
+  }
 
   for (size_t index = 0; index < instance->cap; index += 1) {
     inox_map_entry* entry = &instance->entries[index];
@@ -211,21 +247,22 @@ inox_status inox_map_clear(inox_value map) {
 
   instance->len = 0;
   instance->tombstones = 0;
-
-  return INOX_OK;
 }
 
-inox_status inox_map_delete(inox_value map, inox_value key, bool* out) {
-  if (out == 0 || map.tag != INOX_TAG_MAP || map.as.ref == 0) {
-    return INOX_ERR_TYPE;
+bool Map::deleteKey(inox_value key) const {
+  inox_map* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Map.delete receiver is not a Map");
+    return false;
   }
 
-  inox_map* instance = (inox_map*)map.as.ref;
   uint64_t hash = 0;
   inox_status status = inox_hash_value(key, &hash);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map key is not hashable");
+    return false;
   }
 
   size_t index = 0;
@@ -233,12 +270,12 @@ inox_status inox_map_delete(inox_value map, inox_value key, bool* out) {
   status = inox_map_find(instance, key, hash, &index, &found);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map lookup failed");
+    return false;
   }
 
   if (!found) {
-    *out = false;
-    return INOX_OK;
+    return false;
   }
 
   inox_map_entry* entry = &instance->entries[index];
@@ -250,12 +287,11 @@ inox_status inox_map_delete(inox_value map, inox_value key, bool* out) {
   entry->state = INOX_MAP_SLOT_TOMBSTONE;
   instance->len -= 1;
   instance->tombstones += 1;
-  *out = true;
 
-  return INOX_OK;
+  return true;
 }
 
-void inox_map_dispose(inox_map* map) {
+static void inox_map_dispose(inox_map* map) {
   if (map == 0) {
     return;
   }
@@ -280,17 +316,20 @@ static void inox_map_dispose_ref(inox_ref* ref) {
   inox_map_dispose((inox_map*)ref);
 }
 
-inox_status inox_map_get(inox_value map, inox_value key, inox_value* out) {
-  if (out == 0 || map.tag != INOX_TAG_MAP || map.as.ref == 0) {
-    return INOX_ERR_TYPE;
+inox::Value Map::get(inox_value key) const {
+  inox_map* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Map.get receiver is not a Map");
+    return inox::Value();
   }
 
-  inox_map* instance = (inox_map*)map.as.ref;
   uint64_t hash = 0;
   inox_status status = inox_hash_value(key, &hash);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map key is not hashable");
+    return inox::Value();
   }
 
   size_t index = 0;
@@ -298,55 +337,69 @@ inox_status inox_map_get(inox_value map, inox_value key, inox_value* out) {
   status = inox_map_find(instance, key, hash, &index, &found);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map lookup failed");
+    return inox::Value();
   }
 
   if (!found) {
-    *out = inox_undefined_value();
-    return INOX_OK;
+    return inox::Value();
   }
 
-  *out = instance->entries[index].value;
-  inox_retain(*out);
+  inox_value out = instance->entries[index].value;
+  inox_retain(out);
 
-  return INOX_OK;
+  return inox::adopt(out);
 }
 
-inox_status inox_map_has(inox_value map, inox_value key, bool* out) {
-  if (out == 0 || map.tag != INOX_TAG_MAP || map.as.ref == 0) {
-    return INOX_ERR_TYPE;
+bool Map::has(inox_value key) const {
+  inox_map* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Map.has receiver is not a Map");
+    return false;
   }
 
-  inox_map* instance = (inox_map*)map.as.ref;
   uint64_t hash = 0;
   inox_status status = inox_hash_value(key, &hash);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map key is not hashable");
+    return false;
   }
 
   size_t index = 0;
+  bool found = false;
+  status = inox_map_find(instance, key, hash, &index, &found);
 
-  return inox_map_find(instance, key, hash, &index, out);
-}
-
-inox_status inox_map_set(inox_value map, inox_value key, inox_value value) {
-  if (map.tag != INOX_TAG_MAP || map.as.ref == 0) {
-    return INOX_ERR_TYPE;
+  if (status != INOX_OK) {
+    inox_collection_throw("TypeError: Map lookup failed");
+    return false;
   }
 
-  inox_map* instance = (inox_map*)map.as.ref;
+  return found;
+}
+
+Map Map::set(inox_value key, inox_value value) const {
+  inox_map* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Map.set receiver is not a Map");
+    return Map();
+  }
+
   uint64_t hash = 0;
   inox_status status = inox_hash_value(key, &hash);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map key is not hashable");
+    return Map();
   }
 
   status = inox_map_reserve(instance, instance->len + 1);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map allocation failed");
+    return Map();
   }
 
   size_t index = 0;
@@ -354,7 +407,8 @@ inox_status inox_map_set(inox_value map, inox_value key, inox_value value) {
   status = inox_map_find(instance, key, hash, &index, &found);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Map lookup failed");
+    return Map();
   }
 
   inox_map_entry* entry = &instance->entries[index];
@@ -363,7 +417,7 @@ inox_status inox_map_set(inox_value map, inox_value key, inox_value value) {
     inox_retain(value);
     inox_release(entry->value);
     entry->value = value;
-    return INOX_OK;
+    return Map(*this);
   }
 
   if (entry->state == INOX_MAP_SLOT_TOMBSTONE) {
@@ -378,18 +432,18 @@ inox_status inox_map_set(inox_value map, inox_value key, inox_value value) {
   entry->state = INOX_MAP_SLOT_OCCUPIED;
   instance->len += 1;
 
-  return INOX_OK;
+  return Map(*this);
 }
 
-inox_status inox_map_size(inox_value map, size_t* out) {
-  if (out == 0 || map.tag != INOX_TAG_MAP || map.as.ref == 0) {
-    return INOX_ERR_TYPE;
+size_t Map::size() const {
+  inox_map* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Map.size receiver is not a Map");
+    return 0;
   }
 
-  inox_map* instance = (inox_map*)map.as.ref;
-  *out = instance->len;
-
-  return INOX_OK;
+  return instance->len;
 }
 
 #ifdef INOX_DEBUG_MEMORY
@@ -545,23 +599,51 @@ static inox_status inox_set_find(inox_set* set, inox_value value, uint64_t hash,
   return INOX_ERR_TYPE;
 }
 
-inox_status inox_set_add(inox_value set, inox_value value) {
-  if (set.tag != INOX_TAG_SET || set.as.ref == 0) {
-    return INOX_ERR_TYPE;
+Set::Set() : inox::Value() {}
+
+Set::Set(inox_value value) : inox::Value(value) {}
+
+Set::Set(const inox::Value& value) : inox::Value(value) {}
+
+Set::Set(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+Set::Set(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
+
+bool Set::valid() const {
+  inox_value value = inox::Value::raw();
+
+  return value.tag == INOX_TAG_SET && value.as.ref != 0;
+}
+
+inox_set* Set::data() const {
+  if (!valid()) {
+    return 0;
   }
 
-  inox_set* instance = (inox_set*)set.as.ref;
+  return (inox_set*)inox::Value::raw().as.ref;
+}
+
+Set Set::add(inox_value value) const {
+  inox_set* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Set.add receiver is not a Set");
+    return Set();
+  }
+
   uint64_t hash = 0;
   inox_status status = inox_hash_value(value, &hash);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Set value is not hashable");
+    return Set();
   }
 
   status = inox_set_reserve(instance, instance->len + 1);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Set allocation failed");
+    return Set();
   }
 
   size_t index = 0;
@@ -569,7 +651,12 @@ inox_status inox_set_add(inox_value set, inox_value value) {
   status = inox_set_find(instance, value, hash, &index, &found);
 
   if (status != INOX_OK || found) {
-    return status;
+    if (status != INOX_OK) {
+      inox_collection_throw("TypeError: Set lookup failed");
+      return Set();
+    }
+
+    return Set(*this);
   }
 
   inox_set_entry* entry = &instance->entries[index];
@@ -584,15 +671,16 @@ inox_status inox_set_add(inox_value set, inox_value value) {
   entry->state = INOX_SET_SLOT_OCCUPIED;
   instance->len += 1;
 
-  return INOX_OK;
+  return Set(*this);
 }
 
-inox_status inox_set_clear(inox_value set) {
-  if (set.tag != INOX_TAG_SET || set.as.ref == 0) {
-    return INOX_ERR_TYPE;
-  }
+void Set::clear() const {
+  inox_set* instance = data();
 
-  inox_set* instance = (inox_set*)set.as.ref;
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Set.clear receiver is not a Set");
+    return;
+  }
 
   for (size_t index = 0; index < instance->cap; index += 1) {
     inox_set_entry* entry = &instance->entries[index];
@@ -608,21 +696,22 @@ inox_status inox_set_clear(inox_value set) {
 
   instance->len = 0;
   instance->tombstones = 0;
-
-  return INOX_OK;
 }
 
-inox_status inox_set_delete(inox_value set, inox_value value, bool* out) {
-  if (out == 0 || set.tag != INOX_TAG_SET || set.as.ref == 0) {
-    return INOX_ERR_TYPE;
+bool Set::deleteValue(inox_value value) const {
+  inox_set* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Set.delete receiver is not a Set");
+    return false;
   }
 
-  inox_set* instance = (inox_set*)set.as.ref;
   uint64_t hash = 0;
   inox_status status = inox_hash_value(value, &hash);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Set value is not hashable");
+    return false;
   }
 
   size_t index = 0;
@@ -630,12 +719,12 @@ inox_status inox_set_delete(inox_value set, inox_value value, bool* out) {
   status = inox_set_find(instance, value, hash, &index, &found);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Set lookup failed");
+    return false;
   }
 
   if (!found) {
-    *out = false;
-    return INOX_OK;
+    return false;
   }
 
   inox_set_entry* entry = &instance->entries[index];
@@ -645,12 +734,11 @@ inox_status inox_set_delete(inox_value set, inox_value value, bool* out) {
   entry->state = INOX_SET_SLOT_TOMBSTONE;
   instance->len -= 1;
   instance->tombstones += 1;
-  *out = true;
 
-  return INOX_OK;
+  return true;
 }
 
-void inox_set_dispose(inox_set* set) {
+static void inox_set_dispose(inox_set* set) {
   if (set == 0) {
     return;
   }
@@ -674,34 +762,47 @@ static void inox_set_dispose_ref(inox_ref* ref) {
   inox_set_dispose((inox_set*)ref);
 }
 
-inox_status inox_set_has(inox_value set, inox_value value, bool* out) {
-  if (out == 0 || set.tag != INOX_TAG_SET || set.as.ref == 0) {
-    return INOX_ERR_TYPE;
+bool Set::has(inox_value value) const {
+  inox_set* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Set.has receiver is not a Set");
+    return false;
   }
 
-  inox_set* instance = (inox_set*)set.as.ref;
   uint64_t hash = 0;
   inox_status status = inox_hash_value(value, &hash);
 
   if (status != INOX_OK) {
-    return status;
+    inox_collection_throw("TypeError: Set value is not hashable");
+    return false;
   }
 
   size_t index = 0;
+  bool found = false;
+  status = inox_set_find(instance, value, hash, &index, &found);
 
-  return inox_set_find(instance, value, hash, &index, out);
-}
-
-inox_status inox_set_new(inox_allocator* allocator, inox_value* out) {
-  if (allocator == 0 || allocator->alloc == 0 || out == 0) {
-    return INOX_ERR_TYPE;
+  if (status != INOX_OK) {
+    inox_collection_throw("TypeError: Set lookup failed");
+    return false;
   }
 
-  inox_set* set = (inox_set*)allocator->alloc(allocator->user, sizeof(inox_set), alignof(inox_set));
+  return found;
+}
+
+Set Set::create() {
+  if (inox_default_allocator.alloc == 0) {
+    inox_collection_throw("TypeError: Set allocator is not available");
+    return Set();
+  }
+
+  inox_set* set = (inox_set*)inox_default_allocator.alloc(
+    inox_default_allocator.user, sizeof(inox_set), alignof(inox_set)
+  );
 
   if (set == 0) {
-    *out = inox_undefined_value();
-    return INOX_ERR_OOM;
+    inox_collection_throw("TypeError: Set allocation failed");
+    return Set();
   }
 
   set->header.kind = INOX_REF_SET;
@@ -709,7 +810,7 @@ inox_status inox_set_new(inox_allocator* allocator, inox_value* out) {
   set->header.flags = 0;
   set->header.size = sizeof(inox_set);
   set->header.align = alignof(inox_set);
-  set->header.allocator = allocator;
+  set->header.allocator = &inox_default_allocator;
   set->header.dispose = inox_set_dispose_ref;
   inox_ref_init_weak(&set->header);
   set->len = 0;
@@ -717,24 +818,25 @@ inox_status inox_set_new(inox_allocator* allocator, inox_value* out) {
   set->tombstones = 0;
   set->entries = 0;
 
-  out->tag = INOX_TAG_SET;
-  out->as.ref = &set->header;
+  inox_value out = inox_undefined_value();
+  out.tag = INOX_TAG_SET;
+  out.as.ref = &set->header;
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_memory_record_ref_created(INOX_REF_SET);
 #endif
 
-  return INOX_OK;
+  return Set(inox::adopt_value, out);
 }
 
-inox_status inox_set_size(inox_value set, size_t* out) {
-  if (out == 0 || set.tag != INOX_TAG_SET || set.as.ref == 0) {
-    return INOX_ERR_TYPE;
+size_t Set::size() const {
+  inox_set* instance = data();
+
+  if (instance == 0) {
+    inox_collection_throw("TypeError: Set.size receiver is not a Set");
+    return 0;
   }
 
-  inox_set* instance = (inox_set*)set.as.ref;
-  *out = instance->len;
-
-  return INOX_OK;
+  return instance->len;
 }
 
 #include <stddef.h>

@@ -134,6 +134,8 @@ type CFunctionContext = {
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
   cppArrayValues: CStringSet
+  cppMapValues: CStringSet
+  cppSetValues: CStringSet
   cppStringValues: CStringSet
   cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
@@ -247,6 +249,7 @@ type RuntimeForOfArray = {
 }
 
 type RuntimeForOfMap = {
+  cppObject: boolean
   keyType: string
   lines: string[]
   name: string
@@ -254,6 +257,7 @@ type RuntimeForOfMap = {
 }
 
 type RuntimeForOfMapValues = {
+  cppObject: boolean
   elementType: string
   lines: string[]
   name: string
@@ -266,6 +270,7 @@ type RuntimeMapMetadata = {
 }
 
 type RuntimeForOfSet = {
+  cppObject: boolean
   elementType: string
   lines: string[]
   name: string
@@ -2456,12 +2461,11 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
     constructorArg = args[0]
   }
 
-  registerOwnedValue(context, statement.name)
-
   if (collectionConstructor === 'Map') {
     const mapKeyType = stringOrUnknown(statement.mapKeyType)
     const mapValueType = stringOrUnknown(statement.mapValueType)
     context.variables.set(statement.name, 'map')
+    context.cppMapValues.add(statement.name)
     context.mapTypes.set(statement.name, runtimeMapMetadata(mapKeyType, mapValueType))
     reportCCollectionHashability(statement.mapKeyType, 'Map keys', statement.loc, context)
 
@@ -2472,8 +2476,8 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
     }
 
     const lines: string[] = []
-    pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-    lines.push(emitStatusCheck(`inox_map_new(&inox_default_allocator, &${emitCIdentifier(statement.name)})`, context))
+    lines.push(`auto ${emitCIdentifier(statement.name)} = Map::create();`)
+    lines.push(emitRuntimeTypeCheck(`!${emitCIdentifier(statement.name)}.valid()`, context))
 
     pushAllLines(lines, emitMapConstructorEntries(statement.name, constructorArg, context, statement.init.loc))
 
@@ -2481,6 +2485,7 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   }
 
   context.variables.set(statement.name, 'set')
+  context.cppSetValues.add(statement.name)
   context.setElementTypes.set(statement.name, stringOrUnknown(statement.setElementType))
   reportCCollectionHashability(statement.setElementType, 'Set values', statement.loc, context)
 
@@ -2491,8 +2496,8 @@ function emitCollectionVariableDeclaration(statement: StatementNode, context: CF
   }
 
   const lines: string[] = []
-  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(emitStatusCheck(`inox_set_new(&inox_default_allocator, &${emitCIdentifier(statement.name)})`, context))
+  lines.push(`auto ${emitCIdentifier(statement.name)} = Set::create();`)
+  lines.push(emitRuntimeTypeCheck(`!${emitCIdentifier(statement.name)}.valid()`, context))
 
   pushAllLines(lines, emitSetConstructorValues(statement.name, constructorArg, context, statement.init.loc))
 
@@ -2515,8 +2520,7 @@ function emitCollectionVariableCopyConstructor(statement: StatementNode, context
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
-  lines.push(`${emitCIdentifier(statement.name)} = ${value.expression};`)
-  pushPreparedRuntimeValueOwnershipLines(lines, emitCIdentifier(statement.name), value)
+  lines.push(`auto ${emitCIdentifier(statement.name)} = ${value.expression};`)
 
   return lines
 }
@@ -2574,7 +2578,8 @@ function emitMapConstructorEntries(
 
     pushAllLines(lines, key.lines)
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_map_set(${name}, ${key.expression}, ${value.expression})`, context))
+    lines.push(`${emitCIdentifier(name)}.set(${key.expression}, ${value.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
   return lines
@@ -2616,7 +2621,8 @@ function emitSetConstructorValues(
     )
 
     pushAllLines(lines, value.lines)
-    lines.push(emitStatusCheck(`inox_set_add(${name}, ${value.expression})`, context))
+    lines.push(`${emitCIdentifier(name)}.add(${value.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
   return lines
@@ -3351,7 +3357,8 @@ function emitRuntimeMapForOfStatement(
 
     const lines: string[] = []
     pushAllLines(lines, runtimeMap.lines)
-    lines.push(`inox_map* ${map} = (inox_map*)${runtimeMap.name}.as.ref;`)
+    lines.push(`inox_map* ${map} = ${runtimeMap.cppObject ? runtimeMap.name : `Map(${runtimeMap.name})`}.data();`)
+    lines.push(emitRuntimeTypeCheck(`${map} == nullptr`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ++${index}) {`)
     lines.push(`  if (${map}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) continue;`)
     const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
@@ -3389,6 +3396,7 @@ function emitRuntimeMapValuesForOfStatement(
     runtimeMapValues.lines,
     'map',
     runtimeMapValues.useKey,
+    runtimeMapValues.cppObject,
     context
   )
 }
@@ -3405,6 +3413,7 @@ function emitRuntimeSetForOfStatement(
     runtimeSet.lines,
     'set',
     false,
+    runtimeSet.cppObject,
     context
   )
 }
@@ -3416,6 +3425,7 @@ function emitRuntimeCollectionValueForOfStatement(
   setupLines: string[],
   collectionKind: string,
   useKey: boolean,
+  cppObject: boolean,
   context: CFunctionContext
 ): string[] {
   const isMap = collectionKind === 'map'
@@ -3471,7 +3481,9 @@ function emitRuntimeCollectionValueForOfStatement(
 
     const lines: string[] = []
     pushAllLines(lines, setupLines)
-    lines.push(`${collectionType}* ${collection} = (${collectionType}*)${collectionName}.as.ref;`)
+    const collectionData = cppObject ? `${collectionName}.data()` : isMap ? `Map(${collectionName}).data()` : `Set(${collectionName}).data()`
+    lines.push(`${collectionType}* ${collection} = ${collectionData};`)
+    lines.push(emitRuntimeTypeCheck(`${collection} == nullptr`, context))
     lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->cap; ++${index}) {`)
     lines.push(`  if (${collection}->entries[${index}].state != ${slotState}) continue;`)
     const loopBody: string[] = []
@@ -5268,7 +5280,14 @@ function pushRuntimeValueReturnAssignment(
 }
 
 function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
-  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array' || cppType === 'URLSearchParams'
+  return (
+    cppType === 'inox::String' ||
+    cppType === 'inox::Value' ||
+    cppType === 'Array' ||
+    cppType === 'Map' ||
+    cppType === 'Set' ||
+    cppType === 'URLSearchParams'
+  )
 }
 
 export function registerErrorChannel(context: CFunctionContext): void {

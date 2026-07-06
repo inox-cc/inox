@@ -3610,7 +3610,14 @@ function pushModuleRuntimeValueAssignment(
 }
 
 function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
-  return cppType === 'inox::String' || cppType === 'inox::Value' || cppType === 'Array' || cppType === 'URLSearchParams'
+  return (
+    cppType === 'inox::String' ||
+    cppType === 'inox::Value' ||
+    cppType === 'Array' ||
+    cppType === 'Map' ||
+    cppType === 'Set' ||
+    cppType === 'URLSearchParams'
+  )
 }
 
 function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {

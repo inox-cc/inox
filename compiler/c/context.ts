@@ -249,6 +249,8 @@ type CVariableScopeContext = {
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
+  cppMapValues: CStringSet
+  cppSetValues: CStringSet
   cppStringValues: CStringSet
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
@@ -286,6 +288,8 @@ export type CFunctionContext = CEmitContext & {
   continueFlowUsed: boolean
   continueTargets: CLoopFlowTarget[]
   cppArrayValues: CStringSet
+  cppMapValues: CStringSet
+  cppSetValues: CStringSet
   cppStringValues: CStringSet
   dgramBoundSockets: CStringSet
   dgramMessageSockets: CStringSet
@@ -347,6 +351,8 @@ export type CVariableScopeSnapshot = {
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
+  cppMapValues: CStringSet
+  cppSetValues: CStringSet
   cppStringValues: CStringSet
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
@@ -446,6 +452,8 @@ export function createFunctionContext(
     boxedVariables: new Set(),
     classInstanceTypes: new Map(),
     cppArrayValues: new Set(),
+    cppMapValues: new Set(),
+    cppSetValues: new Set(),
     cppStringValues: new Set(),
     continueFlowUsed: false,
     continueTargets: [],
@@ -988,6 +996,8 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
   const previousCppArrayValues = context.cppArrayValues
+  const previousCppMapValues = context.cppMapValues
+  const previousCppSetValues = context.cppSetValues
   const previousCppStringValues = context.cppStringValues
   const previousErrorObjectNames = context.errorObjectNames
   const previousFunctionTypes = context.functionTypes
@@ -1015,6 +1025,8 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.cppArrayValues = cloneCStringSet(previousCppArrayValues)
+  context.cppMapValues = cloneCStringSet(previousCppMapValues)
+  context.cppSetValues = cloneCStringSet(previousCppSetValues)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
   context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
   context.functionTypes = cloneCFunctionTypeMap(previousFunctionTypes)
@@ -1042,6 +1054,8 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     boxedVariables: previousBoxedVariables,
     classInstanceTypes: previousClassInstanceTypes,
     cppArrayValues: previousCppArrayValues,
+    cppMapValues: previousCppMapValues,
+    cppSetValues: previousCppSetValues,
     cppStringValues: previousCppStringValues,
     errorObjectNames: previousErrorObjectNames,
     functionTypes: previousFunctionTypes,
@@ -1075,6 +1089,8 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.cppArrayValues = snapshot.cppArrayValues
+  context.cppMapValues = snapshot.cppMapValues
+  context.cppSetValues = snapshot.cppSetValues
   context.cppStringValues = snapshot.cppStringValues
   context.errorObjectNames = snapshot.errorObjectNames
   context.functionTypes = snapshot.functionTypes
