@@ -32,6 +32,7 @@ public:
   static Array create(size_t len);
 
   bool valid() const;
+  void push(inox_value value) const;
   void set(size_t index, inox_value value) const;
 
   inox_status make(inox_allocator* allocator, size_t len, inox_value* out) const;

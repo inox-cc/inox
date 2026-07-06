@@ -1151,6 +1151,24 @@ static inox_status inox_array_set_item(inox_array* array, size_t index, inox_val
   return INOX_OK;
 }
 
+static inox_status inox_array_push_item(inox_array* array, inox_value value) {
+  if (array == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  inox_status status = inox_array_reserve(array, array->length + 1);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  inox_retain(value);
+  array->items[array->length] = value;
+  array->length += 1;
+
+  return INOX_OK;
+}
+
 static inox_status inox_array_join_part(inox_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
   if (bytes == 0 || len == 0) {
     return INOX_ERR_TYPE;
@@ -1215,6 +1233,21 @@ class Array Array::create(size_t len) {
   }
 
   return Array(inox::adopt_value, inox_array_adopt_storage(array));
+}
+
+void Array::push(inox_value value) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array push receiver is not an Array");
+    return;
+  }
+
+  inox_status status = inox_array_push_item((inox_array*)array.as.ref, value);
+
+  if (status != INOX_OK) {
+    inox_collection_throw("TypeError: Array push failed");
+  }
 }
 
 void Array::set(size_t index, inox_value value) const {
@@ -1303,17 +1336,7 @@ inox_status Array::push(inox_value array, inox_value value) const {
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  inox_status status = inox_array_reserve(instance, instance->length + 1);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  inox_retain(value);
-  instance->items[instance->length] = value;
-  instance->length += 1;
-
-  return INOX_OK;
+  return inox_array_push_item(instance, value);
 }
 
 inox_status Array::set(inox_value array, size_t index, inox_value value) const {

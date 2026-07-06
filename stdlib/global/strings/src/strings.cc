@@ -10,6 +10,7 @@
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
 #endif
+#include "inox/loop.h"
 #include "inox/string.h"
 
 static inox_string* inox_string_alloc_storage(inox_allocator* allocator, size_t len) {
@@ -1027,10 +1028,9 @@ ArrayClass String::split(StringView separator) const {
     return ArrayClass();
   }
 
-  inox_value out = inox_undefined_value();
-  inox_status status = Array.make(&inox_default_allocator, 0, &out);
+  ArrayClass out = ArrayClass::create(0);
 
-  if (status != INOX_OK) {
+  if (inox::thrown() || !out.valid()) {
     return ArrayClass();
   }
 
@@ -1044,15 +1044,20 @@ ArrayClass String::split(StringView separator) const {
 
       String item(bytes() + index, step);
 
-      if (!item.valid() || Array.push(out, item.raw()) != INOX_OK) {
-        inox_release(out);
+      if (!item.valid()) {
+        return ArrayClass();
+      }
+
+      out.push(item.raw());
+
+      if (inox::thrown()) {
         return ArrayClass();
       }
 
       index += step;
     }
 
-    return ArrayClass(inox::adopt_value, out);
+    return out;
   }
 
   size_t start = 0;
@@ -1066,8 +1071,13 @@ ArrayClass String::split(StringView separator) const {
 
     String item(bytes() + start, index - start);
 
-    if (!item.valid() || Array.push(out, item.raw()) != INOX_OK) {
-      inox_release(out);
+    if (!item.valid()) {
+      return ArrayClass();
+    }
+
+    out.push(item.raw());
+
+    if (inox::thrown()) {
       return ArrayClass();
     }
 
@@ -1077,12 +1087,17 @@ ArrayClass String::split(StringView separator) const {
 
   String item(bytes() + start, length() - start);
 
-  if (!item.valid() || Array.push(out, item.raw()) != INOX_OK) {
-    inox_release(out);
+  if (!item.valid()) {
     return ArrayClass();
   }
 
-  return ArrayClass(inox::adopt_value, out);
+  out.push(item.raw());
+
+  if (inox::thrown()) {
+    return ArrayClass();
+  }
+
+  return out;
 }
 
 String String::concat(StringView right) const {
