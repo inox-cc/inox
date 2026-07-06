@@ -165,10 +165,6 @@ static int process_argv_length(void) {
   return process_argc;
 }
 
-static int process_get_exit_code(void) {
-  return process_exit_code;
-}
-
 static inox_status process_now(int64_t* seconds, int64_t* nanoseconds) {
   if (seconds == 0 || nanoseconds == 0) {
     return INOX_ERR_TYPE;
@@ -307,10 +303,6 @@ static inox_number process_rss_bytes(void) {
 #endif
 }
 
-static inox_status process_memory_usage_set(inox_value object, uint32_t index, inox_number value) {
-  return inox_object_init_known(object, index, inox_number_value(value));
-}
-
 static inox_status process_memoryUsage(inox_allocator* allocator, inox_value* out) {
   if (allocator == 0 || out == 0) {
     return INOX_ERR_TYPE;
@@ -322,22 +314,22 @@ static inox_status process_memoryUsage(inox_allocator* allocator, inox_value* ou
     return status;
   }
 
-  status = process_memory_usage_set(*out, 0, process_rss_bytes());
+  status = inox_object_init_known(*out, 0, inox_number_value(process_rss_bytes()));
 
   if (status == INOX_OK) {
-    status = process_memory_usage_set(*out, 1, 0);
+    status = inox_object_init_known(*out, 1, inox_number_value(0));
   }
 
   if (status == INOX_OK) {
-    status = process_memory_usage_set(*out, 2, 0);
+    status = inox_object_init_known(*out, 2, inox_number_value(0));
   }
 
   if (status == INOX_OK) {
-    status = process_memory_usage_set(*out, 3, 0);
+    status = inox_object_init_known(*out, 3, inox_number_value(0));
   }
 
   if (status == INOX_OK) {
-    status = process_memory_usage_set(*out, 4, 0);
+    status = inox_object_init_known(*out, 4, inox_number_value(0));
   }
 
   if (status != INOX_OK) {
@@ -404,14 +396,6 @@ static inox_status process_versions_value(inox_allocator* allocator, inox_value*
   return status;
 }
 
-static void process_set_exit_code(int code) {
-  process_exit_code = code;
-}
-
-static void process_exit(int code) {
-  exit(code);
-}
-
 process_number_property::process_number_property(process_number_reader read) : read_(read) {}
 
 double process_number_property::value() const {
@@ -439,20 +423,20 @@ process_number_property::operator double() const {
 }
 
 double process_exit_code_property::value() const {
-  return (double)process_get_exit_code();
+  return (double)process_exit_code;
 }
 
 process_exit_code_property::operator double() const {
-  return (double)process_get_exit_code();
+  return (double)process_exit_code;
 }
 
 process_exit_code_property& process_exit_code_property::operator=(int code) {
-  process_set_exit_code(code);
+  process_exit_code = code;
   return *this;
 }
 
 process_exit_code_property& process_exit_code_property::operator=(double code) {
-  process_set_exit_code((int)code);
+  process_exit_code = (int)code;
   return *this;
 }
 
@@ -552,7 +536,7 @@ inox::String process::cwd() const {
 }
 
 void process::exit(int code) const {
-  process_exit(code);
+  ::exit(code);
 }
 
 inox::Value process::hrtime() const {
@@ -602,7 +586,7 @@ inox::Value process::value() const {
 class process process;
 
 int inox::return_code() {
-  return !inox_promise_has_unhandled_rejection() ? process_get_exit_code() : 1;
+  return !inox_promise_has_unhandled_rejection() ? process_exit_code : 1;
 }
 
 int inox::main(int argc, char** argv, AppMain app_main) {
