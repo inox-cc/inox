@@ -111,8 +111,10 @@ export function assertStringRuntimeMethodsStayDirect(): void {
   assert.doesNotMatch(source, /return\s+inox::String::from(?:Literal|Number|NumberRadix|Value)\(/)
   assert.doesNotMatch(header, /String::fromLiteral|fromLiteral\(inox_allocator/)
   assert.doesNotMatch(header, /from(?:Number|NumberRadix|Format|Value)\(inox_allocator/)
+  assert.doesNotMatch(header, /fromValue\(inox_value/)
   assert.doesNotMatch(header, /toNumber\([^)]*inox_value\* out/)
   assert.doesNotMatch(source, /inox_status inox::String::from(?:Literal|Number|NumberRadix|Format|Value)\(/)
+  assert.doesNotMatch(source, /String String::fromValue\(inox_value/)
   assert.doesNotMatch(source, /inox_status inox::String::toNumber\(/)
 }
 

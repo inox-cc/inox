@@ -579,7 +579,9 @@ String String::fromFormat(const char* format, ...) {
   return String(adopt_value, out);
 }
 
-String String::fromValue(inox_value value) {
+String String::fromValue(const Value& input) {
+  inox_value value = input.raw();
+
   if (value.tag == INOX_TAG_UNDEFINED) {
     return String("undefined");
   }

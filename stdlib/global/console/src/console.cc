@@ -620,16 +620,6 @@ ConsoleArg::ConsoleArg(const String& value)
     string(std::addressof(value)),
     value(inox_undefined_value()) {}
 
-ConsoleArg::ConsoleArg(inox_value value)
-  : kind(ConsoleArgKind::value),
-    signed_integer(0),
-    unsigned_integer(0),
-    number(0),
-    bytes(nullptr),
-    len(0),
-    string(nullptr),
-    value(value) {}
-
 ConsoleArg::ConsoleArg(const Value& value)
   : kind(ConsoleArgKind::value),
     signed_integer(0),

@@ -56,7 +56,6 @@ public:
   ConsoleArg(const char* value);
   ConsoleArg(StringView value);
   ConsoleArg(const String& value);
-  ConsoleArg(inox_value value);
   ConsoleArg(const Value& value);
 };
 

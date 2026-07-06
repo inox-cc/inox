@@ -30,7 +30,7 @@ public:
   static String fromNumber(double value);
   static String fromNumberRadix(double value, int radix);
   static String fromFormat(const char* format, ...);
-  static String fromValue(inox_value value);
+  static String fromValue(const Value& value);
   static inox_value toNumber(StringView value);
 
   String();
