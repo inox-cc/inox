@@ -77,22 +77,23 @@ inox_status inox_tls_connect(
     return status;
   }
 
-  status = NetSocket::connect(
+  NetSocket socket = NetSocket::connect(
     loop,
     host,
     port,
     inox_tls_on_tcp_connect,
     inox_tls_on_tcp_data,
     inox_tls_on_tcp_close,
-    client,
-    &client->socket
+    client
   );
 
-  if (status != INOX_OK) {
+  if (inox::thrown()) {
+    inox::take_exception();
     inox_tls_client_free(client);
-    return status;
+    return INOX_ERR_TYPE;
   }
 
+  client->socket = socket.raw();
   *out = client;
   return INOX_OK;
 }
@@ -286,7 +287,10 @@ static inox_status inox_tls_on_tcp_connect(void* user, inox_net_socket* socket, 
     return inox_tls_fail_async(client, status);
   }
 
-  if (NetSocket(socket).readStart() != INOX_OK) {
+  NetSocket(socket).readStart();
+
+  if (inox::thrown()) {
+    inox::take_exception();
     return inox_tls_fail_async(client, INOX_ERR_FIELD);
   }
 
@@ -428,10 +432,11 @@ static inox_status inox_tls_flush_net_bio(inox_tls_client* client) {
         return INOX_ERR_FIELD;
       }
 
-      inox_status status = NetSocket(client->socket).write(inox::StringView(buffer, (size_t)read));
+      NetSocket(client->socket).write(inox::StringView(buffer, (size_t)read));
 
-      if (status != INOX_OK) {
-        return status;
+      if (inox::thrown()) {
+        inox::take_exception();
+        return INOX_ERR_TYPE;
       }
 
       continue;

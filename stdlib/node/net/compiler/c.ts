@@ -2,7 +2,12 @@ import { diagnostic } from '../../../../compiler/diagnostics.ts'
 import { collectIrTopLevelNodeEntries } from '../../../../compiler/ir.ts'
 import type { AnyNode, IrProgram, SourceLocation } from '../../../../compiler/types.ts'
 import type { CEmitContext, CFunctionContext } from '../../../../compiler/c/context.ts'
-import { emitEventLoopReference, emitStatusCheck, nextCName, registerEventLoop } from '../../../../compiler/c/context.ts'
+import {
+  emitEventLoopReference,
+  emitRuntimeTypeCheck,
+  nextCName,
+  registerEventLoop
+} from '../../../../compiler/c/context.ts'
 import {
   collectStdlibRuntimeImportNames,
   irProgramsUseStdlibRuntimeImport
@@ -447,13 +452,13 @@ function emitNetHandlerSocketCallStatement(
     const lines: string[] = []
 
     pushNetLines(lines, body.lines)
-    pushNetLines(lines, emitNetStatusCheck(call, context))
+    pushNetLines(lines, emitNetThrownCheck(call, context))
 
     return lines
   }
 
   if (method === 'destroy') {
-    return emitNetStatusCheck('NetSocket(inox_socket).destroy()', context)
+    return emitNetThrownCheck('NetSocket(inox_socket).destroy()', context)
   }
 
   if (method === 'close') {
@@ -568,17 +573,17 @@ export function emitNetAddressVariableDeclaration(statement: AnyNode, context: C
     return null
   }
 
-  let call = `NetServer(${receiverName}).address(&${statement.name})`
+  let call = `${receiverName}.address()`
 
   if (context.variables.get(receiverName) === 'net-socket') {
-    call = `NetSocket(${receiverName}).address(&${statement.name})`
+    call = `${receiverName}.address()`
   }
 
   context.variables.set(statement.name, 'net-address')
 
   return [
-    `NetAddress ${statement.name};`,
-    emitStatusCheck(call, context)
+    `NetAddress ${statement.name} = ${call};`,
+    emitRuntimeTypeCheck('inox::thrown()', context)
   ]
 }
 
@@ -593,21 +598,19 @@ export function emitNetAddressMemberVariableDeclaration(
       context.variables.set(statement.name, 'string')
 
       return [
-        `NetAddress ${member.tempName};`,
-        emitStatusCheck(`NetSocket(${member.socketName}).${member.runtime}(&${member.tempName})`, context),
+        `NetAddress ${member.tempName} = ${member.socketName}.${member.runtime}();`,
+        emitRuntimeTypeCheck('inox::thrown()', context),
         `const char *${statement.name} = ${member.tempName}.${member.field};`
       ]
     }
 
     context.variables.set(statement.name, 'number')
 
-    const statusCall = `NetSocket(${member.socketName}).${member.runtime}(&${member.tempName})`
-
     return [
       `double ${statement.name} = 0;`,
       '{',
-      `  NetAddress ${member.tempName};`,
-      `  ${emitStatusCheck(statusCall, context)}`,
+      `  NetAddress ${member.tempName} = ${member.socketName}.${member.runtime}();`,
+      `  ${emitRuntimeTypeCheck('inox::thrown()', context)}`,
       `  ${statement.name} = (double)${member.tempName}.${member.field};`,
       '}'
     ]
@@ -625,15 +628,9 @@ export function emitNetNumberVariableDeclaration(statement: AnyNode, context: CF
 
   context.variables.set(statement.name, 'number')
 
-  const statusCall = `NetSocket(${counter.socketName}).${counter.runtime}(&inox_net_counter)`
-
   return [
-    `double ${statement.name} = 0;`,
-    '{',
-    `  size_t inox_net_counter = 0;`,
-    `  ${emitStatusCheck(statusCall, context)}`,
-    `  ${statement.name} = (double)inox_net_counter;`,
-    '}'
+    `double ${statement.name} = (double)${counter.socketName}.${counter.runtime}();`,
+    emitRuntimeTypeCheck('inox::thrown()', context)
   ]
 }
 
@@ -673,7 +670,7 @@ export function emitNetSocketCallStatement(
       return null
     }
 
-    return [emitStatusCheck(`NetSocket(${socketName}).destroy()`, context)]
+    return [`${socketName}.destroy();`, emitRuntimeTypeCheck('inox::thrown()', context)]
   }
 
   if (isNetSocketMethodCall(expression, 'close', context)) {
@@ -681,7 +678,7 @@ export function emitNetSocketCallStatement(
       return null
     }
 
-    return [`NetSocket(${socketName}).close();`]
+    return [`${socketName}.close();`]
   }
 
   if (isNetSocketMethodCall(expression, 'setEncoding', context)) {
@@ -735,7 +732,7 @@ export function emitNetServerCallStatement(
     isNetCreateServerCall(callee.object, context)
   ) {
     const serverName = nextCName(context, 'inox_net_server')
-    const lines = [`inox_net_server* ${serverName} = 0;`]
+    const lines = [`NetServer ${serverName};`]
     registerEventLoop(context)
 
     pushNetLines(
@@ -872,19 +869,18 @@ function emitNetSocketConnectLines(
   const lines: string[] = []
 
   if (options === null || typeof options === 'undefined' || options.declare !== false) {
-    lines.push(`inox_net_socket* ${socketName} = 0;`)
+    lines.push(`NetSocket ${socketName};`)
   }
 
   pushNetLines(lines, port.lines)
   lines.push(
-    emitStatusCheck(
-      `NetSocket::connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`,
-      context
-    )
+    `${socketName} = NetSocket::connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0);`
   )
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   if (wrapper !== null && typeof wrapper !== 'undefined') {
-    lines.push(emitStatusCheck(`NetSocket(${socketName}).onConnect(${wrapper.name}, 0)`, context))
+    lines.push(`${socketName}.onConnect(${wrapper.name}, 0);`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
   return lines
@@ -965,7 +961,7 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
     runtime = 'onError'
   }
 
-  const lines = [emitStatusCheck(`NetSocket(${socketName}).${runtime}(${wrapper.name}, 0)`, context)]
+  const lines = [`${socketName}.${runtime}(${wrapper.name}, 0);`, emitRuntimeTypeCheck('inox::thrown()', context)]
 
   if (eventName === 'data' || eventName === 'end') {
     pushNetLines(lines, emitNetMaybeReadStartLines(socketName, context))
@@ -996,14 +992,14 @@ function emitNetSocketWriteLines(
 
   const body = emitNetBytesOperand(bodyArg, null, context, deps)
   const wrapper = findNetHandler(context, callback, 'socket-write')
-  let call = `NetSocket(${socketName}).write(inox::StringView(${body.bytes}, ${body.length}))`
+  let call = `${socketName}.write(inox::StringView(${body.bytes}, ${body.length}))`
 
   if (method === 'write' && wrapper !== null && typeof wrapper !== 'undefined') {
-    call = `NetSocket(${socketName}).write(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
+    call = `${socketName}.write(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
   } else if (method === 'end' && (wrapper === null || typeof wrapper === 'undefined')) {
-    call = `NetSocket(${socketName}).end(inox::StringView(${body.bytes}, ${body.length}))`
+    call = `${socketName}.end(inox::StringView(${body.bytes}, ${body.length}))`
   } else if (method === 'end' && wrapper !== null && typeof wrapper !== 'undefined') {
-    call = `NetSocket(${socketName}).end(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
+    call = `${socketName}.end(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
   }
 
   if (callback !== null && typeof callback !== 'undefined' && (wrapper === null || typeof wrapper === 'undefined')) {
@@ -1019,7 +1015,8 @@ function emitNetSocketWriteLines(
   const lines: string[] = []
 
   pushNetLines(lines, body.lines)
-  lines.push(emitStatusCheck(call, context))
+  lines.push(`${call};`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return lines
 }
@@ -1045,10 +1042,8 @@ function emitNetSocketSetEncodingLines(socketName: string, args: AnyNode[], cont
   }
 
   return [
-    emitStatusCheck(
-      `NetSocket(${socketName}).setEncoding(inox::StringView(${cStringLiteral(value)}, ${utf8ByteLength(value)}))`,
-      context
-    )
+    `${socketName}.setEncoding(inox::StringView(${cStringLiteral(value)}, ${utf8ByteLength(value)}));`,
+    emitRuntimeTypeCheck('inox::thrown()', context)
   ]
 }
 
@@ -1082,7 +1077,8 @@ function emitNetSocketOptionCallStatement(
     const lines: string[] = []
 
     pushNetLines(lines, enabled.lines)
-    lines.push(emitStatusCheck(`NetSocket(${socketName}).setNoDelay(${enabled.expression} != 0)`, context))
+    lines.push(`${socketName}.setNoDelay(${enabled.expression} != 0);`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return lines
   }
@@ -1109,12 +1105,8 @@ function emitNetSocketOptionCallStatement(
 
     pushNetLines(lines, enabled.lines)
     pushNetLines(lines, delay.lines)
-    lines.push(
-      emitStatusCheck(
-        `NetSocket(${socketName}).setKeepAlive(${enabled.expression} != 0, (unsigned int)(${delay.expression}))`,
-        context
-      )
-    )
+    lines.push(`${socketName}.setKeepAlive(${enabled.expression} != 0, (unsigned int)(${delay.expression}));`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return lines
   }
@@ -1136,7 +1128,7 @@ function emitNetSocketOptionCallStatement(
       runtime = 'ref'
     }
 
-    return [emitStatusCheck(`NetSocket(${socketName}).${runtime}()`, context)]
+    return [`${socketName}.${runtime}();`, emitRuntimeTypeCheck('inox::thrown()', context)]
   }
 
   if (method === 'setTimeout') {
@@ -1162,7 +1154,7 @@ function emitNetMaybeReadStartLines(socketName: string, context: CFunctionContex
   }
 
   context.netReadingSockets.add(socketName)
-  return [emitStatusCheck(`NetSocket(${socketName}).readStart()`, context)]
+  return [`${socketName}.readStart();`, emitRuntimeTypeCheck('inox::thrown()', context)]
 }
 
 function emitNetServerCreateLines(
@@ -1191,7 +1183,7 @@ function emitNetServerCreateLines(
   const lines: string[] = []
 
   if (options === null || typeof options === 'undefined' || options.declare !== false) {
-    lines.push(`inox_net_server* ${serverName} = 0;`)
+    lines.push(`NetServer ${serverName};`)
   }
 
   let wrapperName = '0'
@@ -1200,12 +1192,8 @@ function emitNetServerCreateLines(
     wrapperName = wrapper.name
   }
 
-  lines.push(
-    emitStatusCheck(
-      `NetServer::create(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
-      context
-    )
-  )
+  lines.push(`${serverName} = NetServer::create(${emitEventLoopReference(context)}, ${wrapperName}, 0);`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return lines
 }
@@ -1272,12 +1260,8 @@ function emitNetServerListenLines(
 
   pushNetLines(lines, port.lines)
   pushNetLines(lines, backlog.lines)
-  lines.push(
-    emitStatusCheck(
-      `NetServer(${serverName}).listen(${host}, (int)(${port.expression}), (int)(${backlog.expression}))`,
-      context
-    )
-  )
+  lines.push(`${serverName}.listen(${host}, (int)(${port.expression}), (int)(${backlog.expression}));`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   pushNetLines(lines, emitNetZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -1352,7 +1336,7 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
     runtime = 'onClose'
   }
 
-  return [emitStatusCheck(`NetServer(${serverName}).${runtime}(${wrapper.name}, 0)`, context)]
+  return [`${serverName}.${runtime}(${wrapper.name}, 0);`, emitRuntimeTypeCheck('inox::thrown()', context)]
 }
 
 function emitNetServerCloseLines(
@@ -1371,7 +1355,7 @@ function emitNetServerCloseLines(
     )
   }
 
-  const lines = [`NetServer(${serverName}).close();`]
+  const lines = [`${serverName}.close();`]
   let callback: AnyNode | null = null
 
   if (args.length > 0) {
@@ -1592,10 +1576,8 @@ function emitNetStaticStringValue(
   return null
 }
 
-function emitNetStatusCheck(call: string, context: CFunctionContext): string[] {
-  const status = nextCName(context, 'inox_net_status')
-
-  return ['{', `  inox_status ${status} = ${call};`, `  if (${status} != INOX_OK) return ${status};`, '}']
+function emitNetThrownCheck(call: string, context: CFunctionContext): string[] {
+  return [`${call};`, emitRuntimeTypeCheck('inox::thrown()', context)]
 }
 
 export function emitPreparedNetAddressPortExpression(

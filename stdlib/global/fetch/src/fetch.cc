@@ -694,16 +694,23 @@ static inox_status fetch_start_connection(FetchOperation* request) {
     );
   }
 
-  return NetSocket::connect(
+  NetSocket socket = NetSocket::connect(
     request->loop,
     request->host,
     request->port,
     fetch_on_connect,
     fetch_on_data,
     fetch_on_close,
-    request,
-    &request->socket
+    request
   );
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    return INOX_ERR_TYPE;
+  }
+
+  request->socket = socket.raw();
+  return INOX_OK;
 }
 
 static inox_status fetch_build_request(FetchOperation* request, const FetchNativeInit* init) {
@@ -927,7 +934,10 @@ static inox_status fetch_on_connect(void* user, inox_net_socket* socket, inox_st
     return fetch_on_transport_connect(request, status);
   }
 
-  if (NetSocket(socket).readStart() != INOX_OK) {
+  NetSocket(socket).readStart();
+
+  if (inox::thrown()) {
+    inox::take_exception();
     return fetch_finish(request, INOX_ERR_FIELD, 0);
   }
 
@@ -1037,7 +1047,18 @@ static inox_status fetch_transport_write(FetchOperation* request, const char* by
     return request->tls == 0 ? INOX_ERR_TYPE : inox_tls_client_write(request->tls, bytes, len);
   }
 
-  return request->socket == 0 ? INOX_ERR_TYPE : NetSocket(request->socket).write(inox::StringView(bytes, len));
+  if (request->socket == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  NetSocket(request->socket).write(inox::StringView(bytes, len));
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    return INOX_ERR_TYPE;
+  }
+
+  return INOX_OK;
 }
 
 static void fetch_transport_close(FetchOperation* request) {

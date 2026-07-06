@@ -133,14 +133,15 @@ void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   server->handler = handler;
   server->user = user;
 
-  inox_status status = NetServer::create(loop, inox_http_on_connection, server, &server->net_server);
+  NetServer net_server = NetServer::create(loop, inox_http_on_connection, server);
 
-  if (status != INOX_OK) {
+  if (inox::thrown()) {
     allocator->free(allocator->user, server, sizeof(inox_http_server), alignof(inox_http_server));
     inox_http_throw_failed("TypeError: HttpServer.create failed");
     return;
   }
 
+  server->net_server = net_server.raw();
   server_ = server;
 }
 
@@ -152,10 +153,12 @@ void HttpServer::listen(const char* host, int port, int backlog) const {
     return;
   }
 
-  inox_http_throw_status(
-    NetServer(server->net_server).listen(host, port, backlog),
-    "TypeError: HttpServer.listen failed"
-  );
+  NetServer(server->net_server).listen(host, port, backlog);
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    inox_http_throw_failed("TypeError: HttpServer.listen failed");
+  }
 }
 
 int HttpServer::localPort() const {
@@ -166,11 +169,15 @@ int HttpServer::localPort() const {
     return 0;
   }
 
-  int port = 0;
-  inox_status status = NetServer(server->net_server).localPort(&port);
-  inox_http_throw_status(status, "TypeError: HttpServer.localPort failed");
+  int port = NetServer(server->net_server).localPort();
 
-  return status == INOX_OK ? port : 0;
+  if (inox::thrown()) {
+    inox::take_exception();
+    inox_http_throw_failed("TypeError: HttpServer.localPort failed");
+    return 0;
+  }
+
+  return port;
 }
 
 void HttpServer::onRequest(HttpHandlerFn handler, void* user) const {
@@ -395,10 +402,11 @@ void HttpResponse::end(inox::StringView bytes) const {
     memcpy(response_bytes + header_size, response->body, response->body_length);
   }
 
-  inox_status write_status = NetSocket(connection->socket).end(inox::StringView(response_bytes, total_len));
+  NetSocket(connection->socket).end(inox::StringView(response_bytes, total_len));
   connection->server->allocator->free(connection->server->allocator->user, response_bytes, total_len, alignof(char));
 
-  if (write_status != INOX_OK) {
+  if (inox::thrown()) {
+    inox::take_exception();
     inox_http_throw_failed("TypeError: HttpResponse socket write failed");
   }
 }
@@ -563,8 +571,19 @@ static inox_status inox_http_on_connection(void* user, inox_net_server* server, 
   connection->server = http_server;
   connection->socket = socket;
   NetSocket(socket).setCallbacks(inox_http_on_data, inox_http_on_close, connection);
+  if (inox::thrown()) {
+    inox::take_exception();
+    return INOX_ERR_TYPE;
+  }
 
-  return NetSocket(socket).readStart();
+  NetSocket(socket).readStart();
+
+  if (inox::thrown()) {
+    inox::take_exception();
+    return INOX_ERR_TYPE;
+  }
+
+  return INOX_OK;
 }
 
 static inox_status inox_http_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {

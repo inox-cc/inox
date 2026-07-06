@@ -34,17 +34,19 @@ private:
   inox_net_server* server_;
 
 public:
+  NetServer();
   explicit NetServer(inox_net_server* server);
 
-  static inox_status create(inox_loop* loop, NetConnectionFn connection, void* user, inox_net_server** out);
+  static NetServer create(inox_loop* loop, NetConnectionFn connection, void* user);
 
-  inox_status onConnection(NetConnectionFn connection, void* user) const;
-  inox_status onListening(NetServerFn listening, void* user) const;
-  inox_status onClose(NetServerFn close, void* user) const;
-  inox_status onError(NetServerErrorFn error, void* user) const;
-  inox_status listen(const char* host, int port, int backlog) const;
-  inox_status address(NetAddress* out) const;
-  inox_status localPort(int* out_port) const;
+  inox_net_server* raw() const;
+  void onConnection(NetConnectionFn connection, void* user) const;
+  void onListening(NetServerFn listening, void* user) const;
+  void onClose(NetServerFn close, void* user) const;
+  void onError(NetServerErrorFn error, void* user) const;
+  void listen(const char* host, int port, int backlog) const;
+  NetAddress address() const;
+  int localPort() const;
   void close() const;
 };
 
@@ -53,41 +55,42 @@ private:
   inox_net_socket* socket_;
 
 public:
+  NetSocket();
   explicit NetSocket(inox_net_socket* socket);
 
-  static inox_status connect(
+  static NetSocket connect(
     inox_loop* loop,
     const char* host,
     int port,
     NetConnectFn connect,
     NetDataFn data,
     NetCloseFn close,
-    void* user,
-    inox_net_socket** out
+    void* user
   );
 
+  inox_net_socket* raw() const;
   void setCallbacks(NetDataFn data, NetCloseFn close, void* user) const;
-  inox_status onConnect(NetSocketFn connect, void* user) const;
-  inox_status onReady(NetSocketFn ready, void* user) const;
-  inox_status onData(NetDataFn data, void* user) const;
-  inox_status onEnd(NetSocketFn end, void* user) const;
-  inox_status onClose(NetSocketFn close, void* user) const;
-  inox_status onError(NetSocketErrorFn error, void* user) const;
-  inox_status onDrain(NetSocketFn drain, void* user) const;
-  inox_status readStart() const;
-  inox_status readStop() const;
-  inox_status setEncoding(inox::StringView encoding) const;
-  inox_status address(NetAddress* out) const;
-  inox_status remoteAddress(NetAddress* out) const;
-  inox_status bytesRead(size_t* out_bytes) const;
-  inox_status bytesWritten(size_t* out_bytes) const;
-  inox_status setNoDelay(bool enabled) const;
-  inox_status setKeepAlive(bool enabled, unsigned int initial_delay) const;
-  inox_status ref() const;
-  inox_status unref() const;
-  inox_status write(inox::StringView bytes, NetSocketWriteFn callback = nullptr, void* user = nullptr) const;
-  inox_status end(inox::StringView bytes = inox::StringView(), NetSocketWriteFn callback = nullptr, void* user = nullptr) const;
-  inox_status destroy() const;
+  void onConnect(NetSocketFn connect, void* user) const;
+  void onReady(NetSocketFn ready, void* user) const;
+  void onData(NetDataFn data, void* user) const;
+  void onEnd(NetSocketFn end, void* user) const;
+  void onClose(NetSocketFn close, void* user) const;
+  void onError(NetSocketErrorFn error, void* user) const;
+  void onDrain(NetSocketFn drain, void* user) const;
+  void readStart() const;
+  void readStop() const;
+  void setEncoding(inox::StringView encoding) const;
+  NetAddress address() const;
+  NetAddress remoteAddress() const;
+  size_t bytesRead() const;
+  size_t bytesWritten() const;
+  void setNoDelay(bool enabled) const;
+  void setKeepAlive(bool enabled, unsigned int initial_delay) const;
+  void ref() const;
+  void unref() const;
+  void write(inox::StringView bytes, NetSocketWriteFn callback = nullptr, void* user = nullptr) const;
+  void end(inox::StringView bytes = inox::StringView(), NetSocketWriteFn callback = nullptr, void* user = nullptr) const;
+  void destroy() const;
   void close() const;
 };
 
