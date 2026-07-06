@@ -161,8 +161,6 @@ public:
   FsAdapter getAdapter();
   void clearAdapter();
 
-  inox::String readFileSync(const char* path);
-  inox::String readFileSync(const inox::String& path);
   inox::String readFileSync(inox::StringView path);
   ArrayClass readdirSync(inox::StringView path);
   ArrayClass readdirDirentsSync(inox::StringView path);

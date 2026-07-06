@@ -379,14 +379,6 @@ static bool inox_fs_throw_sync_status(inox_status status, inox_value* value) {
   return true;
 }
 
-inox::String fs::readFileSync(const char* path) {
-  return readFileSync(inox::StringView(path, path == 0 ? 0 : strlen(path)));
-}
-
-inox::String fs::readFileSync(const inox::String& path) {
-  return readFileSync(inox::StringView(path.bytes(), path.length()));
-}
-
 inox::String fs::readFileSync(inox::StringView path) {
   inox_value out = inox_undefined_value();
   inox_status status = INOX_ERR_UNSUPPORTED;
