@@ -18,13 +18,9 @@ class Array : public inox::Value {
 public:
   Array();
 
-  explicit Array(inox_value value);
-
   explicit Array(const inox::Value& value);
 
   explicit Array(inox::Value&& value);
-
-  Array(inox::AdoptValue, inox_value value);
 
   using inox::Value::operator=;
   using inox::Value::raw;

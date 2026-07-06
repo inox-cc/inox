@@ -520,7 +520,7 @@ ArrayClass fs::readdirSync(inox::StringView path) {
     return ArrayClass();
   }
 
-  return ArrayClass(inox::adopt_value, out);
+  return ArrayClass(inox::adopt(out));
 }
 
 ArrayClass fs::readdirDirentsSync(inox::StringView path) {
@@ -554,7 +554,7 @@ ArrayClass fs::readdirDirentsSync(inox::StringView path) {
     return ArrayClass();
   }
 
-  return ArrayClass(inox::adopt_value, out);
+  return ArrayClass(inox::adopt(out));
 }
 
 FsStats fs::statSync(inox::StringView path) {

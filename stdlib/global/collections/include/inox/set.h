@@ -28,10 +28,8 @@ struct SetStorage {
 class Set : public inox::Value {
 public:
   Set();
-  explicit Set(inox_value value);
   explicit Set(const inox::Value& value);
   explicit Set(inox::Value&& value);
-  Set(inox::AdoptValue adopt, inox_value value);
 
   using inox::Value::operator=;
   using inox::Value::raw;

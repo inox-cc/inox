@@ -163,13 +163,9 @@ static inox_status inox_map_find(MapStorage* map, inox_value key, uint64_t hash,
 
 Map::Map() : inox::Value() {}
 
-Map::Map(inox_value value) : inox::Value(value) {}
-
 Map::Map(const inox::Value& value) : inox::Value(value) {}
 
 Map::Map(inox::Value&& value) : inox::Value(std::move(value)) {}
-
-Map::Map(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
 
 Map Map::create() {
   if (inox_default_allocator.alloc == 0) {
@@ -206,7 +202,7 @@ Map Map::create() {
   inox::debugMemory.recordRefCreated(INOX_REF_MAP);
 #endif
 
-  return Map(inox::adopt_value, out);
+  return Map(inox::adopt(out));
 }
 
 bool Map::valid() const {
@@ -606,13 +602,9 @@ static inox_status inox_set_find(SetStorage* set, inox_value value, uint64_t has
 
 Set::Set() : inox::Value() {}
 
-Set::Set(inox_value value) : inox::Value(value) {}
-
 Set::Set(const inox::Value& value) : inox::Value(value) {}
 
 Set::Set(inox::Value&& value) : inox::Value(std::move(value)) {}
-
-Set::Set(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
 
 bool Set::valid() const {
   inox_value value = inox::Value::raw();
@@ -833,7 +825,7 @@ Set Set::create() {
   inox::debugMemory.recordRefCreated(INOX_REF_SET);
 #endif
 
-  return Set(inox::adopt_value, out);
+  return Set(inox::adopt(out));
 }
 
 size_t Set::size() const {
@@ -1184,13 +1176,9 @@ static inox_status inox_array_join_part(inox_value value, char* buffer, size_t b
 
 Array::Array() : inox::Value() {}
 
-Array::Array(inox_value value) : inox::Value(value) {}
-
 Array::Array(const inox::Value& value) : inox::Value(value) {}
 
 Array::Array(inox::Value&& value) : inox::Value(std::move(value)) {}
-
-Array::Array(inox::AdoptValue, inox_value value) : inox::Value(inox::adopt_value, value) {}
 
 bool Array::valid() const {
   inox_value value = inox::Value::raw();
@@ -1234,7 +1222,7 @@ class Array Array::create(size_t len) {
     return Array();
   }
 
-  return Array(inox::adopt_value, inox_array_adopt_storage(array));
+  return Array(inox::adopt(inox_array_adopt_storage(array)));
 }
 
 inox::Value Array::pop() const {
@@ -1335,7 +1323,7 @@ class Array Array::slice(size_t start, size_t end) const {
     target->items[index] = value;
   }
 
-  return Array(inox::adopt_value, inox_array_adopt_storage(target));
+  return Array(inox::adopt(inox_array_adopt_storage(target)));
 }
 
 class Array Array::sort() const {

@@ -29,10 +29,8 @@ struct MapStorage {
 class Map : public inox::Value {
 public:
   Map();
-  explicit Map(inox_value value);
   explicit Map(const inox::Value& value);
   explicit Map(inox::Value&& value);
-  Map(inox::AdoptValue adopt, inox_value value);
 
   using inox::Value::operator=;
   using inox::Value::raw;
