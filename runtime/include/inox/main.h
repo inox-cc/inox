@@ -1,45 +1,20 @@
 #ifndef INOX_MAIN_H
 #define INOX_MAIN_H
 
-#include "inox/allocator.h"
-#include "inox/loop.h"
-#include "inox/promise.h"
-#include "inox/time.h"
-#include "inox/value.h"
-
 #ifdef __cplusplus
+
+#include "inox/loop.h"
+#include "inox/string_view.h"
 
 namespace inox {
 
 using AppMain = void (*)(void);
 
-inline int run_app(AppMain app_main) {
-  RuntimeContext runtime(&inox_default_allocator, ::performance.now());
-
-  if (!runtime) {
-    return 1;
-  }
-
-  app_main();
-
-  if (thrown()) {
-    return 1;
-  }
-
-  if (run() != INOX_OK) {
-    return 1;
-  }
-
-  if (thrown()) {
-    return 1;
-  }
-
-  return 0;
-}
-
-inline int main(AppMain app_main) {
-  return return_code(run_app(app_main));
-}
+int return_code();
+int run_app(AppMain app_main);
+int main(AppMain app_main);
+int main(int argc, char** argv, AppMain app_main);
+int main(int argc, char** argv, StringView entry_path, AppMain app_main);
 
 } // namespace inox
 

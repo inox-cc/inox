@@ -14,7 +14,9 @@
 #include "inox/array.h"
 #include "inox/loop.h"
 #include "inox/object.h"
+#include "inox/promise.h"
 #include "inox/string.h"
+#include "inox/time.h"
 
 #ifndef INOX_PACKAGE_VERSION
 #define INOX_PACKAGE_VERSION "0.0.0"
@@ -483,6 +485,34 @@ class process process;
 
 int inox::return_code() {
   return !inox_promise_has_unhandled_rejection() ? process_exit_code : 1;
+}
+
+int inox::run_app(AppMain app_main) {
+  RuntimeContext runtime(&inox_default_allocator, ::performance.now());
+
+  if (!runtime) {
+    return 1;
+  }
+
+  app_main();
+
+  if (thrown()) {
+    return 1;
+  }
+
+  if (run() != INOX_OK) {
+    return 1;
+  }
+
+  if (thrown()) {
+    return 1;
+  }
+
+  return 0;
+}
+
+int inox::main(AppMain app_main) {
+  return return_code(run_app(app_main));
 }
 
 int inox::main(int argc, char** argv, AppMain app_main) {

@@ -82,14 +82,6 @@ public:
 
 extern process process;
 
-namespace inox {
-
-int return_code();
-int main(int argc, char** argv, AppMain app_main);
-int main(int argc, char** argv, inox::StringView entry_path, AppMain app_main);
-
-} // namespace inox
-
 #endif
 
 #endif
