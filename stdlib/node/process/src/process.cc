@@ -427,7 +427,15 @@ double process_number_property::value() const {
 }
 
 process_number_property::operator double() const {
-  return value();
+  if (read_ == process_number_reader::argvLength) {
+    return (double)process_argv_length();
+  }
+
+  if (read_ == process_number_reader::pid) {
+    return (double)process_pid();
+  }
+
+  return 0;
 }
 
 double process_exit_code_property::value() const {
@@ -435,7 +443,7 @@ double process_exit_code_property::value() const {
 }
 
 process_exit_code_property::operator double() const {
-  return value();
+  return (double)process_get_exit_code();
 }
 
 process_exit_code_property& process_exit_code_property::operator=(int code) {
