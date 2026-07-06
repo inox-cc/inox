@@ -37,11 +37,8 @@ public:
   String(const char* bytes);
   String(const char* bytes, size_t len);
   String(StringView view);
-  explicit String(inox_string* string);
   explicit String(const Value& value);
   explicit String(Value&& value);
-  explicit String(inox_value value);
-  String(AdoptValue, inox_value value);
 
   using Value::operator=;
 

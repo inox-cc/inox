@@ -422,7 +422,7 @@ inox::String fs::readFileSync(inox::StringView path) {
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return inox::String(inox::adopt(out));
 }
 
 static inox_status fs_read_file_bytes_sync_status(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
@@ -656,7 +656,7 @@ inox::String fs::realpathSync(inox::StringView path) {
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return inox::String(inox::adopt(out));
 }
 
 inox::String fs::readlinkSync(inox::StringView path) {
@@ -690,7 +690,7 @@ inox::String fs::readlinkSync(inox::StringView path) {
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return inox::String(inox::adopt(out));
 }
 
 static inox_status fs_access_sync_status(const char* path, size_t path_len, int mode) {

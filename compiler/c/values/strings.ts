@@ -1477,13 +1477,25 @@ function emitPreparedCppStringExpression(
       }
 
       if (hasRuntimeValue) {
+        const string = nextCName(context, 'inox_string_value')
+
         return {
-          lines: [],
-          expression: `inox::String(${runtimeValue})`,
+          lines: [
+            `inox_string* ${string} = ${runtimeValue}.tag == INOX_TAG_STRING && ${runtimeValue}.as.ref != 0 ? (inox_string*)${runtimeValue}.as.ref : nullptr;`
+          ],
+          expression: `(${string} == nullptr ? inox::String() : inox::String(${string}->bytes, ${string}->len))`,
           cppType: 'inox::String',
           runtimeTypeChecked: true,
           valueType: 'string'
         }
+      }
+
+      return {
+        lines: [],
+        expression: `(${reference} == nullptr ? inox::String() : inox::String(${reference}->bytes, ${reference}->len))`,
+        cppType: 'inox::String',
+        runtimeTypeChecked: true,
+        valueType: 'string'
       }
     }
 

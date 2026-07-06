@@ -27,9 +27,13 @@ function words(value: string): string[] {
 function defaulted(value: string = 'fallback'): string {
   return value
 }
+function hasSemi(statement: string): boolean {
+  return statement.endsWith(';')
+}
 console.log(trimmed.toUpperCase(), trimmed.slice(0, 4))
 console.log(first(trimmed))
 console.log(defaulted())
+console.log(hasSemi('a;'))
 console.log(trimmed.slice(0, 4) === 'Inox')
 console.log(trimmed.includes('std'), trimmed.startsWith('In'), trimmed.endsWith('lib'))
 console.log(trimmed.indexOf('o'), trimmed.lastIndexOf('i'))
@@ -62,14 +66,22 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.doesNotMatch(source, /trimmed\.valid\(\)/)
   assert.match(source, /trimmed\.toUpperCase\(\)/)
   assert.match(source, /trimmed\.slice\(0, 4\)/)
-  assert.match(source, /auto inox_return_value_\d+ = inox::String\(inox_param_value\)\.slice\(0, 4\);/)
+  assert.match(
+    source,
+    /auto inox_return_value_\d+ = \(inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)\)\.slice\(0, 4\);/
+  )
   assert.match(source, /inox_return = inox_return_value_\d+;/)
   assert.doesNotMatch(source, /inox_return = inox::String\([^\n]+\)\.slice\([^\n]*\);/)
-  assert.match(source, /auto inox_return_value_\d+ = inox::String\(inox_param_value\)\.split\(","\);/)
+  assert.match(
+    source,
+    /auto inox_return_value_\d+ = \(inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)\)\.split\(","\);/
+  )
   assert.doesNotMatch(source, /inox_return = inox::String\([^\n]+\)\.split\([^\n]*\);/)
   assert.doesNotMatch(source, /inox::String\([^\n]+\)\.slice\([^\n]*\)\.(tag|as\.ref)/)
   assert.match(source, /auto value_default_\d+ = inox::String\("fallback", 8\);/)
   assert.match(source, /inox_retain\(inox_param_value\);/)
+  assert.match(source, /inox_string_value_\d+ == nullptr \? inox::String\(\) : inox::String\(inox_string_value_\d+->bytes, inox_string_value_\d+->len\)/)
+  assert.doesNotMatch(source, /inox::String\(statement\)\.endsWith/)
   assert.match(source, /trimmed\.includes\("std"\)/)
   assert.match(source, /trimmed\.startsWith\("In"\)/)
   assert.match(source, /trimmed\.endsWith\("lib"\)/)
@@ -113,10 +125,18 @@ export function assertStringRuntimeMethodsStayDirect(): void {
   assert.doesNotMatch(header, /String::fromLiteral|fromLiteral\(inox_allocator/)
   assert.doesNotMatch(header, /from(?:Number|NumberRadix|Format|Value)\(inox_allocator/)
   assert.doesNotMatch(header, /fromValue\(inox_value/)
+  assert.doesNotMatch(header, /String\(inox_string\*/)
+  assert.doesNotMatch(header, /String\(inox_value/)
+  assert.doesNotMatch(header, /String\(AdoptValue/)
   assert.doesNotMatch(header, /static inox_value toNumber/)
   assert.doesNotMatch(header, /toNumber\([^)]*inox_value\* out/)
   assert.doesNotMatch(source, /inox_status inox::String::from(?:Literal|Number|NumberRadix|Format|Value)\(/)
   assert.doesNotMatch(source, /String String::fromValue\(inox_value/)
+  assert.doesNotMatch(source, /String::String\(inox_string\*/)
+  assert.doesNotMatch(source, /String::String\(inox_value/)
+  assert.doesNotMatch(source, /String::String\(AdoptValue/)
+  assert.doesNotMatch(source, /String\(adopt_value/)
+  assert.doesNotMatch(source, /String\(inox::adopt_value/)
   assert.doesNotMatch(source, /inox_value inox::String::toNumber\(/)
   assert.doesNotMatch(source, /inox_status inox::String::toNumber\(/)
 }

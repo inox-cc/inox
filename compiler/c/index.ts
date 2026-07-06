@@ -5984,7 +5984,7 @@ function emitConsolePreparedStringValue(value: PreparedExpression): string {
     return value.expression
   }
 
-  return `inox::String(${value.expression})`
+  return `inox::String(inox::Value(${value.expression}))`
 }
 
 function emitConsoleLogStatement(method: string, args: AnyNode[], context: CFunctionContext): string[] {
@@ -6653,7 +6653,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
           emitRuntimeTypeCheck(`(*${emittedName}).tag != INOX_TAG_STRING || (*${emittedName}).as.ref == 0`, context)
         ],
         format: consoleLogStringFormat,
-        values: [`inox::String(*${emittedName})`]
+        values: [`inox::String(inox::Value(*${emittedName}))`]
       }
     }
 
@@ -6679,7 +6679,7 @@ function emitStringLogValue(expression: AnyNode, context: CFunctionContext): Con
           emitRuntimeTypeCheck(`${reference}.tag != INOX_TAG_STRING || ${reference}.as.ref == 0`, context)
         ],
         format: consoleLogStringFormat,
-        values: [`inox::String(${reference})`]
+        values: [`inox::String(inox::Value(${reference}))`]
       }
     }
 
@@ -6915,7 +6915,7 @@ function emitModuleRuntimeStringLogValue(expression: AnyNode, context: CFunction
       emitRuntimeTypeCheck(`${storage}.tag != INOX_TAG_STRING || ${storage}.as.ref == 0`, context)
     ],
     format: consoleLogStringFormat,
-    values: [`inox::String(${storage})`]
+    values: [`inox::String(inox::Value(${storage}))`]
   }
 }
 
@@ -7267,7 +7267,7 @@ function emitRuntimeStringLogValue(source: RuntimeLogGetSource, context: CFuncti
   return {
     lines,
     format: consoleLogStringFormat,
-    values: [`inox::String(${value})`]
+    values: [`inox::String(inox::Value(${value}))`]
   }
 }
 

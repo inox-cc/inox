@@ -576,7 +576,7 @@ String String::fromFormat(const char* format, ...) {
   inox_value out = { INOX_TAG_STRING };
   out.as.ref = &string->header;
 
-  return String(adopt_value, out);
+  return String(adopt(out));
 }
 
 String String::fromValue(const Value& input) {
@@ -638,23 +638,9 @@ String::String(const char* bytes, size_t len) : Value(make(bytes, len)) {}
 
 String::String(StringView view) : Value(make(view.bytes, view.len)) {}
 
-String::String(inox_string* string) : Value() {
-  if (string == nullptr) {
-    return;
-  }
-
-  inox_value value = { INOX_TAG_STRING };
-  value.as.ref = &string->header;
-  *this = value;
-}
-
 String::String(const Value& value) : Value(value) {}
 
 String::String(Value&& value) : Value(std::move(value)) {}
-
-String::String(inox_value value) : Value(value) {}
-
-String::String(AdoptValue, inox_value value) : Value(adopt_value, value) {}
 
 bool String::valid() const {
   inox_value value = raw();
@@ -867,7 +853,7 @@ String String::padStart(double target_len) const {
   inox_value value = { INOX_TAG_STRING };
   value.as.ref = &string->header;
 
-  return String(adopt_value, value);
+  return String(adopt(value));
 }
 
 String String::padStart(double target_len, StringView pad) const {
@@ -941,7 +927,7 @@ String String::padStart(double target_len, StringView pad) const {
   inox_value value = { INOX_TAG_STRING };
   value.as.ref = &string->header;
 
-  return String(adopt_value, value);
+  return String(adopt(value));
 }
 
 String String::slice(double start) const {
@@ -1079,7 +1065,7 @@ String String::concat(StringView right) const {
   inox_value value = { INOX_TAG_STRING };
   value.as.ref = &string->header;
 
-  return String(adopt_value, value);
+  return String(adopt(value));
 }
 
 double String::charCodeAt(double offset) const {
