@@ -626,12 +626,8 @@ export function emitPreparedFsSyncStatementExpression(
   }
 
   if (method === 'mkdirSync') {
-    lines.push(
-      emitStatusCheck(
-        `fs.mkdirSync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')})`,
-        context
-      )
-    )
+    lines.push(`fs.mkdirSync(${emitFsStringArgument(path)}, ${emitFsBooleanFlag(expression, 'fsRecursive')});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines
@@ -640,11 +636,9 @@ export function emitPreparedFsSyncStatementExpression(
 
   if (method === 'rmSync') {
     lines.push(
-      emitStatusCheck(
-        `fs.rmSync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')})`,
-        context
-      )
+      `fs.rmSync(${emitFsStringArgument(path)}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')});`
     )
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines
@@ -663,7 +657,8 @@ function emitPreparedFsSyncStatementDescriptor(
   descriptor: FsSyncStatementDescriptor
 ): PreparedStatement {
   if (descriptor.kind === 'path') {
-    lines.push(emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length})`, context))
+    lines.push(`${descriptor.callName}(${emitFsStringArgument(path)});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   } else if (descriptor.kind === 'bytes-value') {
     const bytes = dependencies.emitCValueExpression(expression.args[1], context)
 
@@ -688,9 +683,8 @@ function emitPreparedFsSyncStatementDescriptor(
     const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
 
     appendLines(lines, bytes.lines)
-    lines.push(
-      emitStatusCheck(`${descriptor.callName}(${path.bytes}, ${path.length}, ${bytes.bytes}, ${bytes.length})`, context)
-    )
+    lines.push(`${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(bytes)});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 
   return {

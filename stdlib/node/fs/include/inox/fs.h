@@ -157,6 +157,11 @@ public:
   inox::String readFileSync(const char* path);
   inox::String readFileSync(const inox::String& path);
   inox::String readFileSync(inox::StringView path);
+  void mkdirSync(inox::StringView path, bool recursive);
+  void unlinkSync(inox::StringView path);
+  void rmSync(inox::StringView path, bool recursive, bool force);
+  void appendFileSync(inox::StringView path, inox::StringView bytes);
+  void writeFileSync(inox::StringView path, inox::StringView bytes);
   inox_status readFileSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status readdirSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);

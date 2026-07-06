@@ -169,6 +169,11 @@ static const char* inox_fs_error_message(inox_status status);
 static void inox_fs_request_finalizer(void* context);
 static inox_status inox_fs_read_file_sync_raw(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
 static inox::String inox_fs_read_file_sync_string(const char* path, size_t path_len);
+static inox_status inox_fs_mkdir_sync_raw(const char* path, size_t path_len, bool recursive);
+static inox_status inox_fs_unlink_sync_raw(const char* path, size_t path_len);
+static inox_status inox_fs_rm_sync_raw(const char* path, size_t path_len, bool recursive, bool force);
+static inox_status inox_fs_append_file_sync_raw(const char* path, size_t path_len, const char* bytes, size_t byte_len);
+static inox_status inox_fs_write_file_sync_raw(const char* path, size_t path_len, const char* bytes, size_t byte_len);
 
 void fs::setAdapter(FsAdapter adapter) {
   fs_active_adapter = adapter;
@@ -604,7 +609,19 @@ inox_status fs::accessSync(const char* path, size_t path_len, int mode) {
 #endif
 }
 
+void fs::mkdirSync(inox::StringView path, bool recursive) {
+  inox_status status = inox_fs_mkdir_sync_raw(path.bytes, path.len, recursive);
+
+  if (status != INOX_OK) {
+    inox_fs_throw_status(status);
+  }
+}
+
 inox_status fs::mkdirSync(const char* path, size_t path_len, bool recursive) {
+  return inox_fs_mkdir_sync_raw(path, path_len, recursive);
+}
+
+static inox_status inox_fs_mkdir_sync_raw(const char* path, size_t path_len, bool recursive) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -624,7 +641,19 @@ inox_status fs::mkdirSync(const char* path, size_t path_len, bool recursive) {
 #endif
 }
 
+void fs::unlinkSync(inox::StringView path) {
+  inox_status status = inox_fs_unlink_sync_raw(path.bytes, path.len);
+
+  if (status != INOX_OK) {
+    inox_fs_throw_status(status);
+  }
+}
+
 inox_status fs::unlinkSync(const char* path, size_t path_len) {
+  return inox_fs_unlink_sync_raw(path, path_len);
+}
+
+static inox_status inox_fs_unlink_sync_raw(const char* path, size_t path_len) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -644,7 +673,19 @@ inox_status fs::unlinkSync(const char* path, size_t path_len) {
 #endif
 }
 
+void fs::rmSync(inox::StringView path, bool recursive, bool force) {
+  inox_status status = inox_fs_rm_sync_raw(path.bytes, path.len, recursive, force);
+
+  if (status != INOX_OK) {
+    inox_fs_throw_status(status);
+  }
+}
+
 inox_status fs::rmSync(const char* path, size_t path_len, bool recursive, bool force) {
+  return inox_fs_rm_sync_raw(path, path_len, recursive, force);
+}
+
+static inox_status inox_fs_rm_sync_raw(const char* path, size_t path_len, bool recursive, bool force) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -664,7 +705,19 @@ inox_status fs::rmSync(const char* path, size_t path_len, bool recursive, bool f
 #endif
 }
 
+void fs::appendFileSync(inox::StringView path, inox::StringView bytes) {
+  inox_status status = inox_fs_append_file_sync_raw(path.bytes, path.len, bytes.bytes, bytes.len);
+
+  if (status != INOX_OK) {
+    inox_fs_throw_status(status);
+  }
+}
+
 inox_status fs::appendFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
+  return inox_fs_append_file_sync_raw(path, path_len, bytes, byte_len);
+}
+
+static inox_status inox_fs_append_file_sync_raw(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -754,7 +807,19 @@ inox_status fs::renameSync(const char* old_path, size_t old_path_len, const char
 #endif
 }
 
+void fs::writeFileSync(inox::StringView path, inox::StringView bytes) {
+  inox_status status = inox_fs_write_file_sync_raw(path.bytes, path.len, bytes.bytes, bytes.len);
+
+  if (status != INOX_OK) {
+    inox_fs_throw_status(status);
+  }
+}
+
 inox_status fs::writeFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
+  return inox_fs_write_file_sync_raw(path, path_len, bytes, byte_len);
+}
+
+static inox_status inox_fs_write_file_sync_raw(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
     return INOX_ERR_TYPE;
   }

@@ -17,9 +17,15 @@ export function assertFsReadFileSyncLowersToCppObject(): void {
         source: `
 import fs from 'node:fs'
 
+const dir = '/tmp/inox-fs-dir'
 const path = '/tmp/inox-fs.txt'
+fs.mkdirSync(dir, { recursive: true })
+fs.writeFileSync(path, 'hello')
+fs.appendFileSync(path, '!')
 const text = fs.readFileSync(path, 'utf8')
 console.log(text)
+fs.unlinkSync(path)
+fs.rmSync(dir, { recursive: true, force: true })
 `
       }
     ],
@@ -34,9 +40,15 @@ console.log(text)
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
+  assert.match(source, /fs\.mkdirSync\(dir, true\);/)
+  assert.match(source, /fs\.writeFileSync\(path, "hello"\);/)
+  assert.match(source, /fs\.appendFileSync\(path, "!"\);/)
   assert.match(source, /auto text_\d+ = fs\.readFileSync\(path\);/)
+  assert.match(source, /fs\.unlinkSync\(path\);/)
+  assert.match(source, /fs\.rmSync\(dir, true, true\);/)
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /fs\.readFileSync\(&inox_default_allocator/)
+  assert.doesNotMatch(source, /fs\.(mkdirSync|writeFileSync|appendFileSync|unlinkSync|rmSync)\([^;\n]*\.bytes\(\)/)
   assert.doesNotMatch(source, /fs\.readFileSync\(inox::StringView/)
   assert.doesNotMatch(source, /inox_fs_value_\d+/)
 }
