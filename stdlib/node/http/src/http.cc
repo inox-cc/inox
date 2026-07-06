@@ -89,7 +89,7 @@ struct inox_http_response {
   int sent;
 };
 
-static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket);
+static void inox_http_on_connection(void* user, NetServer server, NetSocket socket);
 static void inox_http_on_data(void* user, NetSocket socket, inox::StringView bytes);
 static void inox_http_on_close(void* user, NetSocket socket);
 static inox_status inox_http_try_handle(HttpConnection* connection);
@@ -550,7 +550,7 @@ static int inox_http_response_succeeded(void) {
   return 0;
 }
 
-static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket) {
+static void inox_http_on_connection(void* user, NetServer server, NetSocket socket) {
   (void)server;
   inox_http_server* http_server = (inox_http_server*)user;
   HttpConnection* connection = (HttpConnection*)http_server->allocator->alloc(
@@ -560,27 +560,24 @@ static inox_status inox_http_on_connection(void* user, inox_net_server* server, 
   );
 
   if (connection == 0) {
-    NetSocket(socket).close();
-    return INOX_ERR_OOM;
+    socket.close();
+    inox_http_throw_failed("TypeError: HTTP connection failed");
+    return;
   }
 
   memset(connection, 0, sizeof(HttpConnection));
   connection->server = http_server;
-  connection->socket = socket;
-  NetSocket(socket).setCallbacks(inox_http_on_data, inox_http_on_close, connection);
+  connection->socket = socket.raw();
+  socket.setCallbacks(inox_http_on_data, inox_http_on_close, connection);
   if (inox::thrown()) {
-    inox::take_exception();
-    return INOX_ERR_TYPE;
+    return;
   }
 
-  NetSocket(socket).readStart();
+  socket.readStart();
 
   if (inox::thrown()) {
-    inox::take_exception();
-    return INOX_ERR_TYPE;
+    return;
   }
-
-  return INOX_OK;
 }
 
 static void inox_http_on_data(void* user, NetSocket socket, inox::StringView bytes) {

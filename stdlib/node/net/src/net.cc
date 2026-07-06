@@ -997,10 +997,10 @@ static void inox_net_connection_cb(uv_stream_t* server_handle, int status) {
     return;
   }
 
-  inox_status_value = server->connection(server->user, server, socket);
+  server->connection(server->user, NetServer(server), NetSocket(socket));
 
-  if (inox_status_value != INOX_OK) {
-    inox_net_server_report_status(server, inox_status_value);
+  if (inox::thrown()) {
+    inox_net_server_report_status(server, INOX_ERR_TYPE);
   }
 }
 

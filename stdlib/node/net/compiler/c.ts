@@ -163,11 +163,23 @@ function isNetSocketLifecycleEvent(eventName: string): boolean {
 }
 
 function netHandlerUsesStatusReturn(kind: string): boolean {
-  return kind !== 'socket-data' && kind !== 'socket-event' && kind !== 'socket-write' && kind !== 'socket-error'
+  return (
+    kind !== 'connection' &&
+    kind !== 'socket-data' &&
+    kind !== 'socket-event' &&
+    kind !== 'socket-write' &&
+    kind !== 'socket-error'
+  )
 }
 
 function netHandlerSocketExpression(kind: string): string {
-  return kind === 'socket-data' || kind === 'socket-event' || kind === 'socket-write' || kind === 'socket-error'
+  return (
+    kind === 'connection' ||
+    kind === 'socket-data' ||
+    kind === 'socket-event' ||
+    kind === 'socket-write' ||
+    kind === 'socket-error'
+  )
     ? 'inox_socket'
     : 'NetSocket(inox_socket)'
 }
@@ -190,7 +202,7 @@ function replaceNetKindSeparator(kind: string): string {
 
 export function emitNetHandlerHead(wrapper: CNetHandler): string {
   if (wrapper.kind === 'connection') {
-    return `static inox_status ${wrapper.name}(void* user, inox_net_server* inox_server, inox_net_socket* inox_socket)`
+    return `static void ${wrapper.name}(void* user, NetServer inox_server, NetSocket inox_socket)`
   }
 
   if (wrapper.kind === 'socket-data') {
@@ -242,6 +254,7 @@ export function emitNetHandlerDeclaration(
     stringLocals: new Map()
   }
   const context = deps.createFunctionContext(baseContext, 'void', false)
+  context.cleanupEnabled = false
   context.statusReturn = netHandlerUsesStatusReturn(wrapper.kind)
 
   if (socketName !== null && typeof socketName !== 'undefined') {
