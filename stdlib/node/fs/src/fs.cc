@@ -486,7 +486,7 @@ Buffer fs::readFileBytesSync(inox::StringView path) {
     return Buffer();
   }
 
-  return Buffer(inox::adopt_value, out);
+  return Buffer(inox::adopt(out));
 }
 
 ArrayClass fs::readdirSync(inox::StringView path) {

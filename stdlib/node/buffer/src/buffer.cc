@@ -19,13 +19,9 @@ static size_t write_uint8_decimal(uint8_t value, char* out);
 
 Uint8Array::Uint8Array() : inox::Value() {}
 
-Uint8Array::Uint8Array(inox_value value) : inox::Value(value) {}
-
 Uint8Array::Uint8Array(const inox::Value& value) : inox::Value(value) {}
 
 Uint8Array::Uint8Array(inox::Value&& value) : inox::Value(std::move(value)) {}
-
-Uint8Array::Uint8Array(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
 
 Uint8Array Uint8Array::create(size_t length) {
   Uint8Array result = make_bytes(&inox_default_allocator, nullptr, length, true);
@@ -222,8 +218,6 @@ BytesStorage* Uint8Array::data() const {
 
 Buffer::Buffer() : Uint8Array() {}
 
-Buffer::Buffer(inox_value value) : Uint8Array(value) {}
-
 Buffer::Buffer(const inox::Value& value) : Uint8Array(value) {}
 
 Buffer::Buffer(inox::Value&& value) : Uint8Array(std::move(value)) {}
@@ -231,8 +225,6 @@ Buffer::Buffer(inox::Value&& value) : Uint8Array(std::move(value)) {}
 Buffer::Buffer(const Uint8Array& value) : Uint8Array(value) {}
 
 Buffer::Buffer(Uint8Array&& value) : Uint8Array(std::move(value)) {}
-
-Buffer::Buffer(inox::AdoptValue adopt, inox_value value) : Uint8Array(adopt, value) {}
 
 Buffer Buffer::alloc(size_t length) {
   Uint8Array result = make_bytes(&inox_default_allocator, nullptr, length, true);
@@ -340,7 +332,7 @@ static Uint8Array make_bytes(
   inox_value value = { INOX_TAG_BYTES };
   value.as.ref = &bytes->header;
 
-  return Uint8Array(inox::adopt_value, value);
+  return Uint8Array(inox::adopt(value));
 }
 
 static inox_status allocate_bytes(inox_allocator* allocator, size_t length, BytesStorage** out) {

@@ -45,13 +45,25 @@ console.log(text.toString(), allocated.toString(), Buffer.isBuffer(text))
 export function assertBufferNativeFacadeHidesAllocatorOverloads(): void {
   const header = readFileSync(resolve('stdlib/node/buffer/include/inox/binary.h'), 'utf8')
   const source = readFileSync(resolve('stdlib/node/buffer/src/buffer.cc'), 'utf8')
+  const fsSource = readFileSync(resolve('stdlib/node/fs/src/fs.cc'), 'utf8')
 
   assert.doesNotMatch(header, /(?:Uint8Array\s+)?(?:create|from)\(inox_allocator/)
   assert.doesNotMatch(header, /(?:Buffer\s+)?from\(inox_allocator/)
   assert.doesNotMatch(header, /isBuffer\(inox_value value\)/)
+  assert.doesNotMatch(header, /Uint8Array\(inox_value/)
+  assert.doesNotMatch(header, /Uint8Array\(inox::AdoptValue/)
+  assert.doesNotMatch(header, /Buffer\(inox_value/)
+  assert.doesNotMatch(header, /Buffer\(inox::AdoptValue/)
   assert.doesNotMatch(source, /Uint8Array Uint8Array::(?:create|from)\(inox_allocator/)
   assert.doesNotMatch(source, /Buffer Buffer::from\(inox_allocator/)
   assert.doesNotMatch(source, /Buffer::isBuffer\(inox_value value\)/)
+  assert.doesNotMatch(source, /Uint8Array::Uint8Array\(inox_value/)
+  assert.doesNotMatch(source, /Uint8Array::Uint8Array\(inox::AdoptValue/)
+  assert.doesNotMatch(source, /Uint8Array\(inox::adopt_value/)
+  assert.doesNotMatch(source, /Buffer::Buffer\(inox_value/)
+  assert.doesNotMatch(source, /Buffer::Buffer\(inox::AdoptValue/)
+  assert.doesNotMatch(source, /Buffer\(inox::adopt_value/)
+  assert.doesNotMatch(fsSource, /Buffer\(inox::adopt_value/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

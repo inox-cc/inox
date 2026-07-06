@@ -19,10 +19,8 @@ struct BytesStorage {
 class Uint8Array : public inox::Value {
 public:
   Uint8Array();
-  explicit Uint8Array(inox_value value);
   explicit Uint8Array(const inox::Value& value);
   explicit Uint8Array(inox::Value&& value);
-  Uint8Array(inox::AdoptValue adopt, inox_value value);
 
   using inox::Value::operator=;
   using inox::Value::raw;
@@ -45,12 +43,10 @@ public:
 class Buffer : public Uint8Array {
 public:
   Buffer();
-  explicit Buffer(inox_value value);
   explicit Buffer(const inox::Value& value);
   explicit Buffer(inox::Value&& value);
   explicit Buffer(const Uint8Array& value);
   explicit Buffer(Uint8Array&& value);
-  Buffer(inox::AdoptValue adopt, inox_value value);
 
   using Uint8Array::operator=;
   using Uint8Array::raw;
