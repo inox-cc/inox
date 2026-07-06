@@ -18,7 +18,7 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../../../../compiler/c/types.ts'
 import { cookTemplateLiteralText } from '../../../../compiler/c/values/strings.ts'
-import { isConsoleLog } from '../../../global/console/compiler/c.ts'
+import { isConsoleLog } from '../../../global/compiler/c.ts'
 
 type NetAstNode = AnyNode
 

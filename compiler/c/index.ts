@@ -205,14 +205,14 @@ import {
   resolveNodeNetworkAddressStringMember,
   timerCallbackFunctionType
 } from '../stdlib/node/c.ts'
-import { isConsoleLog } from '../../stdlib/global/console/compiler/c.ts'
 import type { FetchLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
   cFetchRuntimeExpressionMethod,
   emitFetchHeadersBooleanVariableDeclaration,
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
-  emitPreparedFetchInitOperand
+  emitPreparedFetchInitOperand,
+  isConsoleLog
 } from '../../stdlib/global/compiler/c.ts'
 import type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
 import {

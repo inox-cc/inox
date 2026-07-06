@@ -15,9 +15,7 @@ import {
 import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
 import type { CHttpHandler, CPreparedExpression as PreparedExpression } from '../../../../compiler/c/types.ts'
 import { cookTemplateLiteralText } from '../../../../compiler/c/values/strings.ts'
-import { isConsoleLog } from '../../../global/console/compiler/c.ts'
-import { cJsonRuntimeCallName } from '../../../global/compiler/c.ts'
-import { cTimeRuntimeCallName } from '../../../global/compiler/c.ts'
+import { cJsonRuntimeCallName, cTimeRuntimeCallName, isConsoleLog } from '../../../global/compiler/c.ts'
 
 type HttpAstNode = AnyNode
 
