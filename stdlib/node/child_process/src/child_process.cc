@@ -111,13 +111,14 @@ static void inox_child_process_throw_failed(const char* message) {
   inox::throw_value(inox::String(message == 0 ? "child_process operation failed" : message));
 }
 
-inox::String child_process::execSync(inox::StringView command, inox_value options) const {
+inox::String child_process::execSync(inox::StringView command, const inox::Value& options) const {
   inox_allocator* allocator = &inox_default_allocator;
+  inox_value raw_options = options.raw();
   ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
   if (status == INOX_OK) {
-    status = inox_child_process_run_shell(allocator, command, options, &result);
+    status = inox_child_process_run_shell(allocator, command, raw_options, &result);
   }
 
   if (status == INOX_OK && result.status != 0) {
@@ -145,14 +146,15 @@ inox::String child_process::execFileSync(
   inox::StringView file,
   const inox::StringView* args,
   size_t arg_count,
-  inox_value options
+  const inox::Value& options
 ) const {
   inox_allocator* allocator = &inox_default_allocator;
+  inox_value raw_options = options.raw();
   ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
   if (status == INOX_OK) {
-    status = inox_child_process_run_file(allocator, file, args, arg_count, options, &result);
+    status = inox_child_process_run_file(allocator, file, args, arg_count, raw_options, &result);
   }
 
   if (status == INOX_OK && result.status != 0) {
@@ -180,15 +182,16 @@ inox::Value child_process::spawnSync(
   inox::StringView file,
   const inox::StringView* args,
   size_t arg_count,
-  inox_value options,
+  const inox::Value& options,
   const inox_shape* shape
 ) const {
   inox_allocator* allocator = &inox_default_allocator;
+  inox_value raw_options = options.raw();
   ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
   if (status == INOX_OK) {
-    status = inox_child_process_run_file(allocator, file, args, arg_count, options, &result);
+    status = inox_child_process_run_file(allocator, file, args, arg_count, raw_options, &result);
   }
 
   inox_value out = inox_undefined_value();

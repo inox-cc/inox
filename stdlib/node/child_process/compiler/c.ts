@@ -111,7 +111,7 @@ export function emitPreparedChildProcessCallExpression(
 
   let childOptions: PreparedExpression = {
     lines: [],
-    expression: 'inox_undefined_value()'
+    expression: 'inox::Value()'
   }
 
   if (optionsArg !== null && typeof optionsArg !== 'undefined') {

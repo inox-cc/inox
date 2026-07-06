@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -10,6 +12,8 @@ type GeneratedTextFile = {
 }
 
 export function assertChildProcessLowersToCppObject(): void {
+  const header = readFileSync(resolve('stdlib/node/child_process/include/inox/child_process.h'), 'utf8')
+  const runtime = readFileSync(resolve('stdlib/node/child_process/src/child_process.cc'), 'utf8')
   const host = createMemoryCompilerHost(
     [
       {
@@ -40,6 +44,8 @@ console.log(result.stdout.trim())
   assert.match(source, /child_process\.execFileSync\("\/bin\/echo", inox_child_process_args_\d+, 1, inox_object_\d+\);/)
   assert.match(source, /child_process\.spawnSync\("\/bin\/echo", inox_child_process_args_\d+, 1, inox_object_\d+, &inox_shape_spawn_sync_\d+\);/)
   assert.doesNotMatch(source, /inox_value inox_child_process_args_\d+\[\]/)
+  assert.doesNotMatch(header, /(?:execSync|execFileSync|spawnSync)\([^)]*inox_value/)
+  assert.doesNotMatch(runtime, /child_process::(?:execSync|execFileSync|spawnSync)\([^)]*inox_value/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
