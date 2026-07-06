@@ -26,7 +26,8 @@ static inox_status process_versions_value(inox_allocator* allocator, inox_value*
 
 static int process_argc = 0;
 static char** process_argv_values = 0;
-static const char* process_entry_path = 0;
+static bool process_has_entry_path = false;
+static inox::StringView process_entry_path;
 static int process_exit_code = 0;
 
 static const inox_field_info process_memory_usage_fields[] = {
@@ -92,43 +93,45 @@ static inox_status process_value(inox_allocator* allocator, inox_value* out) {
 static void process_init(int argc, char** argv) {
   process_argc = argc;
   process_argv_values = argv;
-  process_entry_path = 0;
+  process_has_entry_path = false;
+  process_entry_path = inox::StringView();
 }
 
-static void process_init_with_entry(int argc, char** argv, const char* entry_path) {
+static void process_init_with_entry(int argc, char** argv, inox::StringView entry_path) {
   process_argc = argc;
   process_argv_values = argv;
+  process_has_entry_path = true;
   process_entry_path = entry_path;
 }
 
 static int process_argv_native_index(int index) {
-  if (process_entry_path != 0 && index > 1) {
+  if (process_has_entry_path && index > 1) {
     return index - 1;
   }
 
   return index;
 }
 
-static const char* process_argv_value_at(int index) {
+static inox::StringView process_argv_value_at(int index) {
   if (index < 0) {
-    return 0;
+    return inox::StringView();
   }
 
-  if (process_entry_path != 0 && index == 1) {
+  if (process_has_entry_path && index == 1) {
     return process_entry_path;
   }
 
   if (process_argv_values == 0) {
-    return 0;
+    return inox::StringView();
   }
 
   int native_index = process_argv_native_index(index);
 
   if (native_index < 0 || native_index >= process_argc || process_argv_values[native_index] == 0) {
-    return 0;
+    return inox::StringView();
   }
 
-  return process_argv_values[native_index];
+  return inox::StringView(process_argv_values[native_index]);
 }
 
 static const char* process_arch_name(void) {
@@ -152,7 +155,7 @@ static const char* process_arch_name(void) {
 }
 
 static int process_argv_length(void) {
-  if (process_entry_path != 0) {
+  if (process_has_entry_path) {
     return process_argc + 1;
   }
 
@@ -337,9 +340,9 @@ process_exit_code_property& process_exit_code_property::operator=(double code) {
 process_argv::process_argv() : length(process_number_reader::argvLength) {}
 
 inox::String process_argv::operator[](int index) const {
-  const char* value = process_argv_value_at(index);
+  inox::StringView value = process_argv_value_at(index);
 
-  return inox::String(value == 0 ? "" : value);
+  return inox::String(value);
 }
 
 inox::String process_env::get(inox::StringView name) const {
@@ -533,7 +536,7 @@ int inox::main(int argc, char** argv, AppMain app_main) {
   return return_code();
 }
 
-int inox::main(int argc, char** argv, const char* entry_path, AppMain app_main) {
+int inox::main(int argc, char** argv, inox::StringView entry_path, AppMain app_main) {
   process_init_with_entry(argc, argv, entry_path);
   ::process.init();
   const int code = run_app(app_main);

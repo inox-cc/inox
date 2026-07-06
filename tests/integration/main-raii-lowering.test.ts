@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
@@ -82,6 +83,13 @@ console.log(value)
   assert.doesNotMatch(main, /return !inox_promise_has_unhandled_rejection/)
   assert.doesNotMatch(main, /return inox_process_get_exit_code\(\)/)
   assert.match(main, /return inox::main\(argc, argv, "src\/index\.ts", inox_main\);/)
+}
+
+export function assertProcessMainEntryPathUsesStringView(): void {
+  const header = readFileSync(new URL('../../stdlib/node/process/include/inox/process.h', import.meta.url), 'utf8')
+
+  assert.match(header, /int main\(int argc, char\*\* argv, inox::StringView entry_path, AppMain app_main\);/)
+  assert.doesNotMatch(header, /const char\* entry_path/)
 }
 
 export function assertGeneratedMainDoesNotCollideWithUserMain(): void {
@@ -196,4 +204,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertGeneratedMainDoesNotCollideWithUserMain()
   assertAwaitFunctionUsesExternalLoopRuntime()
   assertProcessMainUsesReturnCodeHelper()
+  assertProcessMainEntryPathUsesStringView()
 }
