@@ -33,6 +33,10 @@ public:
   static inox_status fromFormat(inox_allocator* allocator, inox_value* out, const char* format, ...);
   static inox_status fromValue(inox_allocator* allocator, inox_value value, inox_value* out);
   static inox_status toNumber(const char* value_bytes, size_t value_len, inox_value* out);
+  static String fromNumber(double value);
+  static String fromNumberRadix(double value, int radix);
+  static String fromFormat(const char* format, ...);
+  static String fromValue(inox_value value);
 
   String();
   String(const char* bytes);

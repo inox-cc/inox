@@ -33,6 +33,13 @@ const parts = 'alpha,beta'.split(',')
 console.log(parts)
 console.log(parts.join('|'))
 console.log(words('left,right'))
+const strNum = String(12)
+const strBool = String(true)
+const strNull = String(null)
+const strTpl = \`value \${12}\`
+const numText = (12).toString()
+const hexText = (255).toString(16)
+console.log(strNum, strBool, strNull, strTpl, numText, hexText)
 `
       }
     ],
@@ -73,8 +80,14 @@ console.log(words('left,right'))
   assert.match(source, /auto parts = inox::String\("alpha,beta"\)\.split\(","\);/)
   assert.match(source, /parts\.join\("\|"\)/)
   assert.match(source, /inox::String\("alpha,beta"\)\.split\(","\)/)
+  assert.match(source, /auto strNum = inox::String::fromNumber\(12\);/)
+  assert.match(source, /auto strNull = inox::String\("null"\);/)
+  assert.match(source, /auto strTpl = inox::String::fromFormat\("value %.17g", \(\(double\)12\)\);/)
+  assert.match(source, /auto numText = inox::String::fromNumber\(12\);/)
+  assert.match(source, /auto hexText = inox::String::fromNumberRadix\(255, \(int\)\(16\)\);/)
   assert.doesNotMatch(source, /inox::Value parts = inox::String\("alpha,beta"\)\.split\(","\);/)
   assert.doesNotMatch(source, /inox_array_join\(&inox_default_allocator, parts/)
+  assert.doesNotMatch(source, /inox::String::from(?:Literal|Number|NumberRadix|Format|Value)\(&inox_default_allocator/)
   assert.doesNotMatch(
     source,
     /inox_string_(trim|to_upper_case|slice|includes|starts_with|ends_with|index_of|last_index_of|split)_parts/

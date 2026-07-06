@@ -749,6 +749,168 @@ size_t String::slice_index(double raw, size_t length) {
   return (size_t)index;
 }
 
+String String::fromNumber(double value) {
+  char buffer[64];
+  size_t len = 0;
+
+  if (inox_string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
+    return String();
+  }
+
+  return String(buffer, len);
+}
+
+String String::fromNumberRadix(double value, int radix) {
+  if (radix == 10) {
+    char buffer[64];
+    size_t len = 0;
+
+    if (inox_string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
+      return String();
+    }
+
+    return String(buffer, len);
+  }
+
+  if (radix < 2 || radix > 36) {
+    return String();
+  }
+
+  if (value != value || isinf(value) || floor(value) != value) {
+    char buffer[64];
+    size_t len = 0;
+
+    if (inox_string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
+      return String();
+    }
+
+    return String(buffer, len);
+  }
+
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  char buffer[80];
+  size_t index = sizeof(buffer);
+  bool negative = value < 0;
+  double remaining = negative ? -value : value;
+
+  buffer[--index] = '\0';
+
+  if (remaining == 0) {
+    buffer[--index] = '0';
+  } else {
+    while (remaining > 0 && index > 0) {
+      double quotient = floor(remaining / (double)radix);
+      int digit = (int)(remaining - quotient * (double)radix);
+      buffer[--index] = digits[digit];
+      remaining = quotient;
+    }
+  }
+
+  if (negative && index > 0) {
+    buffer[--index] = '-';
+  }
+
+  return String(buffer + index, sizeof(buffer) - index - 1);
+}
+
+String String::fromFormat(const char* format, ...) {
+  if (format == 0) {
+    return String();
+  }
+
+  va_list args;
+  va_start(args, format);
+
+  va_list length_args;
+  va_copy(length_args, args);
+  const int written_len = vsnprintf(0, 0, format, length_args);
+  va_end(length_args);
+
+  if (written_len < 0) {
+    va_end(args);
+    return String();
+  }
+
+  const size_t len = (size_t)written_len;
+
+  if (len > ((size_t)-1) - 1) {
+    va_end(args);
+    return String();
+  }
+
+  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len + 1);
+
+  if (string == 0) {
+    va_end(args);
+    return String();
+  }
+
+  string->len = len;
+  const int written = vsnprintf(string->bytes, len + 1, format, args);
+  va_end(args);
+
+  if (written < 0 || (size_t)written != len) {
+    inox_value failed = { INOX_TAG_STRING };
+    failed.as.ref = &string->header;
+    inox_release(failed);
+    return String();
+  }
+
+  inox_value out = { INOX_TAG_STRING };
+  out.as.ref = &string->header;
+
+  return String(adopt_value, out);
+}
+
+String String::fromValue(inox_value value) {
+  if (value.tag == INOX_TAG_UNDEFINED) {
+    return String("undefined");
+  }
+
+  if (value.tag == INOX_TAG_NULL) {
+    return String("null");
+  }
+
+  if (value.tag == INOX_TAG_BOOL) {
+    return String(value.as.boolean ? "true" : "false");
+  }
+
+  if (value.tag == INOX_TAG_NUMBER) {
+    return fromNumber(value.as.number);
+  }
+
+  if (value.tag == INOX_TAG_STRING && value.as.ref != 0) {
+    inox_string* string = (inox_string*)value.as.ref;
+    return String(string->bytes, string->len);
+  }
+
+  if (value.tag == INOX_TAG_ARRAY) {
+    return ArrayClass(value).join(",");
+  }
+
+  if (value.tag == INOX_TAG_OBJECT) {
+    return String("[object Object]");
+  }
+
+  if (value.tag == INOX_TAG_MAP) {
+    return String("[object Map]");
+  }
+
+  if (value.tag == INOX_TAG_SET) {
+    return String("[object Set]");
+  }
+
+  if (value.tag == INOX_TAG_BYTES) {
+    return String("[object Uint8Array]");
+  }
+
+  if (value.tag == INOX_TAG_FUNCTION) {
+    return String("[object Function]");
+  }
+
+  return String();
+}
+
 String::String() : Value() {}
 
 String::String(const char* bytes) : Value(make(bytes, bytes == nullptr ? 0 : strlen(bytes))) {}

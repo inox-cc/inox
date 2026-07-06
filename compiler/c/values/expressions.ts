@@ -5429,21 +5429,12 @@ export function emitCValueExpression(
   }
 
   if (expression.type === 'StringLiteral') {
-    const temp = nextCName(context, 'inox_value')
-    registerOwnedValue(context, temp)
-    const lines: string[] = []
-
-    appendLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(
-      emitStatusCheck(
-        `inox::String::fromLiteral(&inox_default_allocator, ${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)}, &${temp})`,
-        context
-      )
-    )
-
     return {
-      lines,
-      expression: temp
+      lines: [],
+      expression: `inox::String(${cStringLiteral(expression.value)}, ${utf8ByteLength(expression.value)})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
@@ -5518,21 +5509,12 @@ export function emitCValueExpression(
       }
 
       if (moduleValueType === 'string') {
-        const temp = nextCName(context, 'inox_value')
-        const lines: string[] = []
-
-        registerOwnedValue(context, temp)
-        appendLines(lines, emitPrepareOwnedValueWrite(temp))
-        lines.push(
-          emitStatusCheck(
-            `inox::String::fromLiteral(&inox_default_allocator, ${moduleValueName}, strlen(${moduleValueName}), &${temp})`,
-            context
-          )
-        )
-
         return {
-          lines,
-          expression: temp
+          lines: [],
+          expression: `inox::String(${moduleValueName})`,
+          cppType: 'inox::String',
+          runtimeTypeChecked: true,
+          valueType: 'string'
         }
       }
 
@@ -5631,21 +5613,12 @@ export function emitCValueExpression(
     }
 
     if (valueType === 'string') {
-      const temp = nextCName(context, 'inox_value')
-      const lines: string[] = []
-
-      registerOwnedValue(context, temp)
-      appendLines(lines, emitPrepareOwnedValueWrite(temp))
-      lines.push(
-        emitStatusCheck(
-          `inox::String::fromLiteral(&inox_default_allocator, ${reference}, strlen(${reference}), &${temp})`,
-          context
-        )
-      )
-
       return {
-        lines,
-        expression: temp
+        lines: [],
+        expression: `inox::String(${reference})`,
+        cppType: 'inox::String',
+        runtimeTypeChecked: true,
+        valueType: 'string'
       }
     }
 

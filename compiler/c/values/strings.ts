@@ -2489,43 +2489,29 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: S
 export function emitCTemplateLiteralValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   if (expression.raw.includes('${')) {
     const formatted = emitCTemplateLiteralFormatExpression(expression, context)
-    const temp = nextCName(context, 'inox_value')
     const args = [cStringLiteral(formatted.format)]
-    const lines: string[] = []
 
     for (const value of formatted.values) {
       args.push(value)
     }
 
-    registerOwnedValue(context, temp)
-    pushAllLines(lines, formatted.lines)
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(
-      emitStatusCheck(`inox::String::fromFormat(&inox_default_allocator, &${temp}, ${joinStrings(args, ', ')})`, context)
-    )
-
     return {
-      lines,
-      expression: temp
+      lines: formatted.lines,
+      expression: `inox::String::fromFormat(${joinStrings(args, ', ')})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
   const value = cookTemplateLiteralText(expression.raw.slice(1, -1))
-  const lines: string[] = []
-  const temp = nextCName(context, 'inox_value')
-  registerOwnedValue(context, temp)
-
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(
-      `inox::String::fromLiteral(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${temp})`,
-      context
-    )
-  )
 
   return {
-    lines,
-    expression: temp
+    lines: [],
+    expression: `inox::String(${cStringLiteral(value)}, ${utf8ByteLength(value)})`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
   }
 }
 
@@ -2774,37 +2760,29 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
   }
 
   const valueType = stringDeps(context).inferExpressionType(arg, context)
-  const temp = nextCName(context, 'inox_value')
-  registerOwnedValue(context, temp)
 
   if (valueType === 'string') {
     const value = emitPreparedStringBytesOperand(arg, context, 'inox_string_conversion')
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(
-      emitStatusCheck(
-        `inox::String::fromLiteral(&inox_default_allocator, ${value.bytes}, ${value.length}, &${temp})`,
-        context
-      )
-    )
 
     return {
       lines,
-      expression: temp
+      expression: `inox::String(${value.bytes}, ${value.length})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
   if (valueType === 'null') {
-    const lines: string[] = []
-
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(emitStatusCheck(`inox::String::fromLiteral(&inox_default_allocator, "null", 4, &${temp})`, context))
-
     return {
-      lines,
-      expression: temp
+      lines: [],
+      expression: 'inox::String("null")',
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
@@ -2813,72 +2791,61 @@ export function emitCStringConversionValueExpression(expression: AnyNode, contex
     const lines: string[] = []
 
     pushAllLines(lines, value.lines)
-    pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-    lines.push(
-      emitStatusCheck(`inox::String::fromValue(&inox_default_allocator, ${value.expression}, &${temp})`, context)
-    )
 
     return {
       lines,
-      expression: temp
+      expression: `inox::String::fromValue(${value.expression})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
   const value = stringDeps(context).emitPreparedNumberExpression(arg, context)
-  let helper = `inox::String::fromNumber(&inox_default_allocator, ${value.expression}, &${temp})`
+  let helper = `inox::String::fromNumber(${value.expression})`
   const lines: string[] = []
 
   pushAllLines(lines, value.lines)
 
   if (valueType === 'boolean') {
-    const boolValue = nextCName(context, 'inox_string_bool')
-
-    lines.push(`bool ${boolValue} = (${value.expression}) != 0;`)
-    helper = `inox::String::fromLiteral(&inox_default_allocator, ${boolValue} ? "true" : "false", ${boolValue} ? 4 : 5, &${temp})`
+    helper = `inox::String((${value.expression}) != 0 ? "true" : "false")`
   }
-
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(helper, context))
 
   return {
     lines,
-    expression: temp
+    expression: helper,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
   }
 }
 
 export function emitCNumberToStringValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
   const value = stringDeps(context).emitPreparedNumberExpression(expression.callee.object, context)
-  const temp = nextCName(context, 'inox_value')
   const lines: string[] = []
-  registerOwnedValue(context, temp)
 
   pushAllLines(lines, value.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
 
   if (expression.args.length === 0) {
-    lines.push(
-      emitStatusCheck(`inox::String::fromNumber(&inox_default_allocator, ${value.expression}, &${temp})`, context)
-    )
-
     return {
       lines,
-      expression: temp
+      expression: `inox::String::fromNumber(${value.expression})`,
+      cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueType: 'string'
     }
   }
 
   const radix = stringDeps(context).emitPreparedNumberExpression(stringNodeAt(expression.args, 0), context)
 
   pushAllLines(lines, radix.lines)
-  lines.push(
-    emitStatusCheck(
-      `inox::String::fromNumberRadix(&inox_default_allocator, ${value.expression}, (int)(${radix.expression}), &${temp})`,
-      context
-    )
-  )
 
   return {
     lines,
-    expression: temp
+    expression: `inox::String::fromNumberRadix(${value.expression}, (int)(${radix.expression}))`,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
   }
 }
 
