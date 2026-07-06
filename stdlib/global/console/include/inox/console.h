@@ -174,40 +174,6 @@ public:
     inox::ConsoleArg arg14 = inox::ConsoleArg(),
     inox::ConsoleArg arg15 = inox::ConsoleArg()
   ) const;
-
-private:
-  static inox_status printf_line(
-    inox::ConsoleStream stream,
-    const char* format,
-    const inox::ConsoleArg* args,
-    size_t arg_count
-  );
-
-  static bool is_string_format_spec(const char* spec, size_t len);
-  static bool is_value_format_spec(const char* spec, size_t len);
-  static const char* next_format_spec(const char* format, const char** spec_end);
-  static bool format_uses_dynamic_width_or_precision(const char* format);
-
-  static inox_status write_format_literal(inox::ConsoleStream stream, const char* begin, const char* end);
-  static inox_status write_format_arg(
-    inox::ConsoleStream stream,
-    const char* spec,
-    size_t spec_len,
-    const inox::ConsoleArg& value
-  );
-  static inox_status write_unformatted_arg(inox::ConsoleStream stream, const inox::ConsoleArg& value);
-  static inox_status write_unformatted(
-    inox::ConsoleStream stream,
-    const char* format,
-    const inox::ConsoleArg* args,
-    size_t arg_count
-  );
-  static inox_status write_formatted(
-    inox::ConsoleStream stream,
-    const char* format,
-    const inox::ConsoleArg* args,
-    size_t arg_count
-  );
 };
 
 extern console console;
