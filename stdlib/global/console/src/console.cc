@@ -18,11 +18,11 @@
 #include <uv.h>
 #endif
 
-typedef struct inox_console_format_buffer {
+struct ConsoleFormatBuffer {
   char* bytes;
-  size_t len;
-  size_t cap;
-} inox_console_format_buffer;
+  size_t length;
+  size_t capacity;
+};
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 static inox_status inox_console_libuv_write(inox::ConsoleStream stream, const char* bytes, size_t len);
@@ -32,35 +32,35 @@ static inox_status inox_console_libuv_write(inox::ConsoleStream stream, const ch
 static inox_status inox_console_host_write(inox::ConsoleStream stream, const char* bytes, size_t len);
 #endif
 
-static inox_status inox_console_format_value_into(inox_console_format_buffer* buffer, inox_value value, unsigned int depth);
+static inox_status inox_console_format_value_into(ConsoleFormatBuffer* buffer, inox_value value, unsigned int depth);
 
-static void inox_console_format_buffer_dispose(inox_console_format_buffer* buffer) {
+static void inox_console_format_buffer_dispose(ConsoleFormatBuffer* buffer) {
   if (buffer == 0) {
     return;
   }
 
   free(buffer->bytes);
   buffer->bytes = 0;
-  buffer->len = 0;
-  buffer->cap = 0;
+  buffer->length = 0;
+  buffer->capacity = 0;
 }
 
-static inox_status inox_console_format_buffer_reserve(inox_console_format_buffer* buffer, size_t additional) {
+static inox_status inox_console_format_buffer_reserve(ConsoleFormatBuffer* buffer, size_t additional) {
   if (buffer == 0) {
     return INOX_ERR_TYPE;
   }
 
-  if (additional > ((size_t)-1) - buffer->len - 1) {
+  if (additional > ((size_t)-1) - buffer->length - 1) {
     return INOX_ERR_OOM;
   }
 
-  size_t needed = buffer->len + additional + 1;
+  size_t needed = buffer->length + additional + 1;
 
-  if (needed <= buffer->cap) {
+  if (needed <= buffer->capacity) {
     return INOX_OK;
   }
 
-  size_t cap = buffer->cap == 0 ? 64 : buffer->cap;
+  size_t cap = buffer->capacity == 0 ? 64 : buffer->capacity;
 
   while (cap < needed) {
     if (cap > ((size_t)-1) / 2) {
@@ -77,12 +77,12 @@ static inox_status inox_console_format_buffer_reserve(inox_console_format_buffer
   }
 
   buffer->bytes = bytes;
-  buffer->cap = cap;
+  buffer->capacity = cap;
 
   return INOX_OK;
 }
 
-static inox_status inox_console_format_append(inox_console_format_buffer* buffer, const char* bytes, size_t len) {
+static inox_status inox_console_format_append(ConsoleFormatBuffer* buffer, const char* bytes, size_t len) {
   if (buffer == 0 || (bytes == 0 && len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -94,20 +94,20 @@ static inox_status inox_console_format_append(inox_console_format_buffer* buffer
   }
 
   if (len != 0) {
-    memcpy(buffer->bytes + buffer->len, bytes, len);
+    memcpy(buffer->bytes + buffer->length, bytes, len);
   }
 
-  buffer->len += len;
-  buffer->bytes[buffer->len] = 0;
+  buffer->length += len;
+  buffer->bytes[buffer->length] = 0;
 
   return INOX_OK;
 }
 
-static inox_status inox_console_format_append_literal(inox_console_format_buffer* buffer, const char* bytes) {
+static inox_status inox_console_format_append_literal(ConsoleFormatBuffer* buffer, const char* bytes) {
   return inox_console_format_append(buffer, bytes, bytes == 0 ? 0 : strlen(bytes));
 }
 
-static inox_status inox_console_format_append_number(inox_console_format_buffer* buffer, double value) {
+static inox_status inox_console_format_append_number(ConsoleFormatBuffer* buffer, double value) {
   char bytes[64];
   int len = snprintf(bytes, sizeof(bytes), "%.17g", value);
 
@@ -154,7 +154,7 @@ static bool inox_console_object_get_string_field(
 }
 
 static inox_status inox_console_format_error_object(
-  inox_console_format_buffer* buffer,
+  ConsoleFormatBuffer* buffer,
   inox_value object_value,
   inox_object* object
 ) {
@@ -189,7 +189,7 @@ static inox_status inox_console_format_error_object(
   return status;
 }
 
-static inox_status inox_console_format_array(inox_console_format_buffer* buffer, inox_value value, unsigned int depth) {
+static inox_status inox_console_format_array(ConsoleFormatBuffer* buffer, inox_value value, unsigned int depth) {
   if (value.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -221,7 +221,7 @@ static inox_status inox_console_format_array(inox_console_format_buffer* buffer,
 }
 
 static inox_status inox_console_format_class_instance_into(
-  inox_console_format_buffer* buffer,
+  ConsoleFormatBuffer* buffer,
   const inox_class_descriptor* descriptor,
   const void* instance,
   unsigned int depth
@@ -300,7 +300,7 @@ static inox_status inox_console_format_class_instance_into(
   return inox_console_format_append_literal(buffer, " }");
 }
 
-static inox_status inox_console_format_object(inox_console_format_buffer* buffer, inox_value value, unsigned int depth) {
+static inox_status inox_console_format_object(ConsoleFormatBuffer* buffer, inox_value value, unsigned int depth) {
   if (value.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
@@ -366,7 +366,7 @@ static inox_status inox_console_format_object(inox_console_format_buffer* buffer
   return inox_console_format_append_literal(buffer, " }");
 }
 
-static inox_status inox_console_format_value_into(inox_console_format_buffer* buffer, inox_value value, unsigned int depth) {
+static inox_status inox_console_format_value_into(ConsoleFormatBuffer* buffer, inox_value value, unsigned int depth) {
   if (depth > 8) {
     return inox_console_format_append_literal(buffer, "[Object]");
   }
@@ -665,11 +665,11 @@ inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t l
 }
 
 inox_status console_print_value(ConsoleStream stream, inox_value value) {
-  inox_console_format_buffer buffer = { 0 };
+  ConsoleFormatBuffer buffer = { 0 };
   inox_status status = inox_console_format_value_into(&buffer, value, 0);
 
   if (status == INOX_OK) {
-    status = console_write(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
+    status = console_write(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
   }
 
   inox_console_format_buffer_dispose(&buffer);
@@ -678,11 +678,11 @@ inox_status console_print_value(ConsoleStream stream, inox_value value) {
 }
 
 inox_status console_print_value_line(ConsoleStream stream, inox_value value) {
-  inox_console_format_buffer buffer = { 0 };
+  ConsoleFormatBuffer buffer = { 0 };
   inox_status status = inox_console_format_value_into(&buffer, value, 0);
 
   if (status == INOX_OK) {
-    status = console_write_line(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len);
+    status = console_write_line(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
   }
 
   inox_console_format_buffer_dispose(&buffer);
@@ -696,11 +696,11 @@ inox_status console_format_class_instance(
   Value& out
 ) {
   inox_value* raw_out = out.out();
-  inox_console_format_buffer buffer = { 0 };
+  ConsoleFormatBuffer buffer = { 0 };
   inox_status status = inox_console_format_class_instance_into(&buffer, &descriptor, instance, 0);
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(&inox_default_allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.len, raw_out);
+    status = inox::String::fromLiteral(&inox_default_allocator, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length, raw_out);
   }
 
   inox_console_format_buffer_dispose(&buffer);
