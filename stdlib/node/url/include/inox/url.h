@@ -1,34 +1,28 @@
 #ifndef INOX_URL_H
 #define INOX_URL_H
 
-#include "inox/allocator.h"
 #include "inox/object.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
-extern "C" {
-#endif
-
-inox_status inox_url_file_url_to_path(inox_allocator* allocator, inox_value url, inox_value* out);
-inox_status inox_url_path_to_file_url(inox_allocator* allocator, inox_value path, const inox_shape* shape, inox_value* out);
-inox_status inox_url_new(
-  inox_allocator* allocator,
-  inox_value input,
-  inox_value base,
-  int has_base,
-  const inox_shape* shape,
-  inox_value* out
-);
-inox_status inox_url_set_field(inox_allocator* allocator, inox_value url, uint32_t field_index, inox_value value);
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifdef __cplusplus
-
 #include "inox/string.h"
 #include "inox/string_view.h"
+
+class URL : public inox::Value {
+public:
+  URL();
+  explicit URL(inox_value value);
+  explicit URL(const inox::Value& value);
+  explicit URL(inox::Value&& value);
+  URL(inox::AdoptValue adopt, inox_value value);
+
+  using inox::Value::operator=;
+
+  static URL from(inox_value input, inox_value base, bool has_base, const inox_shape* shape);
+
+  bool valid() const;
+  void setField(uint32_t field_index, inox_value value);
+};
 
 class URLSearchParams : public inox::Value {
 private:
@@ -55,6 +49,14 @@ public:
   void set(inox::StringView name, inox::StringView value);
   inox::String toString() const;
 };
+
+class url {
+public:
+  inox::String fileURLToPath(inox_value value) const;
+  URL pathToFileURL(inox_value path, const inox_shape* shape) const;
+};
+
+extern url url;
 
 #endif
 

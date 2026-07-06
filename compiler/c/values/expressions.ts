@@ -5500,6 +5500,15 @@ export function emitCValueExpression(
 
       const moduleValueType = context.moduleValueTypes.get(name)
 
+      if (moduleValueType === 'url.URL') {
+        return {
+          lines: [],
+          expression: moduleValueName,
+          cppType: 'URL',
+          valueType: 'object'
+        }
+      }
+
       if (moduleValueType === 'url.URLSearchParams') {
         return {
           lines: [],
@@ -5601,6 +5610,15 @@ export function emitCValueExpression(
         cppType: 'inox::String',
         runtimeTypeChecked: true,
         valueType: 'string'
+      }
+    }
+
+    if (valueType === 'url.URL') {
+      return {
+        lines: [],
+        expression: reference,
+        cppType: 'URL',
+        valueType: 'object'
       }
     }
 

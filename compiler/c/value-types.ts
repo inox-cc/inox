@@ -96,6 +96,10 @@ export function emitCType(valueType: CValueTypeInput): string {
     return 'URLSearchParams'
   }
 
+  if (valueType === 'url.URL') {
+    return 'URL'
+  }
+
   if (valueType === 'date') {
     return 'double'
   }

@@ -1510,12 +1510,16 @@ function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePl
 
   for (let index = 0; index < values.length; index = index + 1) {
     const item = cModuleValueDeclarationAt(values, index)
+    let valueType = item.valueType
+
+    if (item.shapeBuiltin === 'url.URL') {
+      valueType = 'url.URL'
+    } else if (item.shapeBuiltin === 'url.URLSearchParams') {
+      valueType = 'url.URLSearchParams'
+    }
 
     context.moduleValueNames.set(item.name, item.symbolName)
-    context.moduleValueTypes.set(
-      item.name,
-      item.shapeBuiltin === 'url.URLSearchParams' ? 'url.URLSearchParams' : item.valueType
-    )
+    context.moduleValueTypes.set(item.name, valueType)
   }
 }
 
@@ -1596,8 +1600,10 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
 
     let valueType = cModuleValueType(item, context)
 
-    if (cModuleUrlSearchParamsValueType(item) !== null) {
-      valueType = 'url.URLSearchParams'
+    const urlObjectValueType = cModuleUrlObjectValueType(item)
+
+    if (urlObjectValueType !== null) {
+      valueType = urlObjectValueType
     }
 
     values.push({
@@ -1995,15 +2001,15 @@ function emitCModuleObjectFunctionFieldDefinitions(
 function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cModuleTimeExpressionValueType(node.init)
-  const urlSearchParamsValueType = cModuleUrlSearchParamsValueType(node)
+  const urlObjectValueType = cModuleUrlObjectValueType(node)
   const classValueType = cModuleNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
   }
 
-  if (urlSearchParamsValueType !== null && typeof urlSearchParamsValueType !== 'undefined') {
-    return urlSearchParamsValueType
+  if (urlObjectValueType !== null && typeof urlObjectValueType !== 'undefined') {
+    return urlObjectValueType
   }
 
   if (
@@ -2042,7 +2048,11 @@ function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   return valueType
 }
 
-function cModuleUrlSearchParamsValueType(node: AnyNode): string | null {
+function cModuleUrlObjectValueType(node: AnyNode): string | null {
+  if (node.shape !== null && typeof node.shape !== 'undefined' && node.shape.builtin === 'url.URL') {
+    return 'url.URL'
+  }
+
   if (
     node.shape !== null &&
     typeof node.shape !== 'undefined' &&
@@ -2057,12 +2067,23 @@ function cModuleUrlSearchParamsValueType(node: AnyNode): string | null {
     return null
   }
 
+  if (expression.shape !== null && typeof expression.shape !== 'undefined' && expression.shape.builtin === 'url.URL') {
+    return 'url.URL'
+  }
+
   if (
     expression.shape !== null &&
     typeof expression.shape !== 'undefined' &&
     expression.shape.builtin === 'url.URLSearchParams'
   ) {
     return 'url.URLSearchParams'
+  }
+
+  if (
+    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
+    (expression.urlRuntimeMethod === 'URL' || expression.urlRuntimeMethod === 'pathToFileURL')
+  ) {
+    return 'url.URL'
   }
 
   if (
@@ -2283,6 +2304,10 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
 }
 
 function cModuleValueDeclarationCType(item: CModuleValueDeclaration, context: CEmitContext): string {
+  if (item.shapeBuiltin === 'url.URL') {
+    return 'URL'
+  }
+
   if (item.shapeBuiltin === 'url.URLSearchParams') {
     return 'URLSearchParams'
   }
@@ -2299,7 +2324,7 @@ function cModuleValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'regexp' || valueType === 'url.URLSearchParams') {
+  if (valueType === 'regexp' || valueType === 'url.URL' || valueType === 'url.URLSearchParams') {
     return ''
   }
 
@@ -2311,6 +2336,10 @@ function cModuleValueGlobalInitializer(valueType: string): string {
 }
 
 function cModuleValueDeclarationGlobalInitializer(item: CModuleValueDeclaration): string {
+  if (item.shapeBuiltin === 'url.URL') {
+    return ''
+  }
+
   if (item.shapeBuiltin === 'url.URLSearchParams') {
     return ''
   }

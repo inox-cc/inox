@@ -2,11 +2,8 @@ import { urlMutableObjectFields, urlObjectFields } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
 import type { CFunctionContext } from '../../../../compiler/c/context.ts'
 import {
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
+  nextCName
 } from '../../../../compiler/c/context.ts'
 import { cStringLiteral } from '../../../../compiler/c/identifiers.ts'
 import type {
@@ -162,17 +159,15 @@ export function emitPreparedUrlStringCallExpression(
   const out = urlOutName(options, context, 'inox_url_path')
   const lines: string[] = []
 
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
-
   pushUrlLines(lines, arg.lines)
-  pushUrlLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`inox_url_file_url_to_path(&inox_default_allocator, ${arg.expression}, &${out})`, context))
+  lines.push(`auto ${out} = url.fileURLToPath(${arg.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,
-    expression: out
+    expression: out,
+    cppType: 'inox::String',
+    valueType: 'string'
   }
 }
 
@@ -195,26 +190,20 @@ export function emitPreparedUrlObjectExpression(
 
   pushUrlLines(lines, input.lines)
   pushUrlLines(lines, shape.lines)
-  pushUrlLines(lines, emitPrepareOwnedValueWrite(out))
-
-  if (options.owned !== false) {
-    registerOwnedValue(context, out)
-  }
 
   context.variables.set(out, 'object')
+  context.objectDeclaredTypes.set(out, 'url.URL')
   dependencies.registerObjectShape(context, out, expression.shape)
 
   if (method === 'pathToFileURL') {
-    lines.push(
-      emitStatusCheck(
-        `inox_url_path_to_file_url(&inox_default_allocator, ${input.expression}, ${shape.expression}, &${out})`,
-        context
-      )
-    )
+    lines.push(`auto ${out} = url.pathToFileURL(${input.expression}, ${shape.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: out
+      expression: out,
+      cppType: 'URL',
+      valueType: 'object'
     }
   }
 
@@ -227,16 +216,14 @@ export function emitPreparedUrlObjectExpression(
   }
 
   pushUrlLines(lines, base.lines)
-  lines.push(
-    emitStatusCheck(
-      `inox_url_new(&inox_default_allocator, ${input.expression}, ${base.expression}, ${hasBase}, ${shape.expression}, &${out})`,
-      context
-    )
-  )
+  lines.push(`auto ${out} = URL::from(${input.expression}, ${base.expression}, ${hasBase === '1' ? 'true' : 'false'}, ${shape.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,
-    expression: out
+    expression: out,
+    cppType: 'URL',
+    valueType: 'object'
   }
 }
 
@@ -417,12 +404,8 @@ export function emitUrlObjectFieldAssignment(
 
   pushUrlLines(lines, object.lines)
   pushUrlLines(lines, value.lines)
-  lines.push(
-    emitStatusCheck(
-      `inox_url_set_field(&inox_default_allocator, ${object.expression}, ${fieldIndex}, ${value.expression})`,
-      context
-    )
-  )
+  lines.push(`URL(${object.expression}).setField(${fieldIndex}, ${value.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return lines
 }

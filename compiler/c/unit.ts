@@ -276,8 +276,10 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
 
     let valueType = cUnitValueType(item, context)
 
-    if (cUnitUrlSearchParamsValueType(item) !== null) {
-      valueType = 'url.URLSearchParams'
+    const urlObjectValueType = cUnitUrlObjectValueType(item)
+
+    if (urlObjectValueType !== null) {
+      valueType = urlObjectValueType
     }
 
     values.push({
@@ -297,7 +299,9 @@ function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValu
     const item = unitValueDeclarationAt(values, index)
     let valueType = item.valueType
 
-    if (item.shapeBuiltin === 'url.URLSearchParams') {
+    if (item.shapeBuiltin === 'url.URL') {
+      valueType = 'url.URL'
+    } else if (item.shapeBuiltin === 'url.URLSearchParams') {
       valueType = 'url.URLSearchParams'
     }
 
@@ -461,15 +465,15 @@ function emitCUnitObjectFunctionFieldDefinitions(
 function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cUnitTimeExpressionValueType(node.init)
-  const urlSearchParamsValueType = cUnitUrlSearchParamsValueType(node)
+  const urlObjectValueType = cUnitUrlObjectValueType(node)
   const classValueType = cUnitNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
   }
 
-  if (urlSearchParamsValueType !== null && typeof urlSearchParamsValueType !== 'undefined') {
-    return urlSearchParamsValueType
+  if (urlObjectValueType !== null && typeof urlObjectValueType !== 'undefined') {
+    return urlObjectValueType
   }
 
   if (
@@ -508,7 +512,11 @@ function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   return valueType
 }
 
-function cUnitUrlSearchParamsValueType(node: AnyNode): string | null {
+function cUnitUrlObjectValueType(node: AnyNode): string | null {
+  if (node.shape !== null && typeof node.shape !== 'undefined' && node.shape.builtin === 'url.URL') {
+    return 'url.URL'
+  }
+
   if (
     node.shape !== null &&
     typeof node.shape !== 'undefined' &&
@@ -523,12 +531,23 @@ function cUnitUrlSearchParamsValueType(node: AnyNode): string | null {
     return null
   }
 
+  if (expression.shape !== null && typeof expression.shape !== 'undefined' && expression.shape.builtin === 'url.URL') {
+    return 'url.URL'
+  }
+
   if (
     expression.shape !== null &&
     typeof expression.shape !== 'undefined' &&
     expression.shape.builtin === 'url.URLSearchParams'
   ) {
     return 'url.URLSearchParams'
+  }
+
+  if (
+    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
+    (expression.urlRuntimeMethod === 'URL' || expression.urlRuntimeMethod === 'pathToFileURL')
+  ) {
+    return 'url.URL'
   }
 
   if (
@@ -739,6 +758,10 @@ function cUnitValueCType(valueType: string): string {
 }
 
 function cUnitValueDeclarationCType(item: CUnitValueDeclaration): string {
+  if (item.shapeBuiltin === 'url.URL') {
+    return 'URL'
+  }
+
   if (item.shapeBuiltin === 'url.URLSearchParams') {
     return 'URLSearchParams'
   }
@@ -755,7 +778,7 @@ function cUnitValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'regexp' || valueType === 'url.URLSearchParams') {
+  if (valueType === 'regexp' || valueType === 'url.URL' || valueType === 'url.URLSearchParams') {
     return ''
   }
 
@@ -767,6 +790,10 @@ function cUnitValueGlobalInitializer(valueType: string): string {
 }
 
 function cUnitValueDeclarationGlobalInitializer(item: CUnitValueDeclaration): string {
+  if (item.shapeBuiltin === 'url.URL') {
+    return ''
+  }
+
   if (item.shapeBuiltin === 'url.URLSearchParams') {
     return ''
   }
