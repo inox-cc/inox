@@ -1177,26 +1177,17 @@ static inox_status inox_array_join_part(inox_value value, char* buffer, size_t b
   return INOX_ERR_TYPE;
 }
 
-static inox_status array_join(
-  inox_allocator* allocator,
-  inox_value array,
-  const char* separator_bytes,
-  size_t separator_len,
-  inox_value* out
-) {
-  if (out != 0) {
-    *out = inox_undefined_value();
-  }
-
+static inox::String array_join_string(inox_value array, inox::StringView separator_view) {
   if (
-    allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || out == 0 ||
-    array.tag != INOX_TAG_ARRAY || array.as.ref == 0 || (separator_bytes == 0 && separator_len != 0)
+    inox_default_allocator.alloc == 0 || inox_default_allocator.free == 0 ||
+    array.tag != INOX_TAG_ARRAY || array.as.ref == 0 || (separator_view.bytes == 0 && separator_view.len != 0)
   ) {
-    return INOX_ERR_TYPE;
+    return inox::String();
   }
 
   inox_array* instance = (inox_array*)array.as.ref;
-  const char* separator = separator_bytes == 0 ? "" : separator_bytes;
+  const char* separator = separator_view.bytes == 0 ? "" : separator_view.bytes;
+  const size_t separator_len = separator_view.len;
   size_t total_len = 0;
 
   for (size_t index = 0; index < instance->length; index += 1) {
@@ -1206,32 +1197,32 @@ static inox_status array_join(
     inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
 
     if (status != INOX_OK) {
-      return status;
+      return inox::String();
     }
 
     if (index > 0) {
       if (total_len > (size_t)-1 - separator_len) {
-        return INOX_ERR_OOM;
+        return inox::String();
       }
 
       total_len += separator_len;
     }
 
     if (total_len > (size_t)-1 - len) {
-      return INOX_ERR_OOM;
+      return inox::String();
     }
 
     total_len += len;
   }
 
   if (total_len == 0) {
-    return inox_string_from_literal(allocator, "", 0, out);
+    return inox::String("");
   }
 
-  char* joined = (char*)allocator->alloc(allocator->user, total_len, alignof(char));
+  char* joined = (char*)inox_default_allocator.alloc(inox_default_allocator.user, total_len, alignof(char));
 
   if (joined == 0) {
-    return INOX_ERR_OOM;
+    return inox::String();
   }
 
   size_t offset = 0;
@@ -1243,8 +1234,8 @@ static inox_status array_join(
     inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
 
     if (status != INOX_OK) {
-      allocator->free(allocator->user, joined, total_len, alignof(char));
-      return status;
+      inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
+      return inox::String();
     }
 
     if (index > 0 && separator_len > 0) {
@@ -1258,10 +1249,10 @@ static inox_status array_join(
     }
   }
 
-  inox_status status = inox_string_from_literal(allocator, joined, total_len, out);
-  allocator->free(allocator->user, joined, total_len, alignof(char));
+  inox::String result(joined, total_len);
+  inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
 
-  return status;
+  return result;
 }
 
 static inox_status array_slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) {
@@ -1407,93 +1398,6 @@ inox_status Array::get(inox_value array, size_t index, inox_value* out) const {
   inox_retain(*out);
 
   return INOX_OK;
-}
-
-inox_status Array::join(
-  inox_allocator* allocator,
-  inox_value array,
-  const char* separator_bytes,
-  size_t separator_len,
-  inox_value* out
-) const {
-  if (out != 0) {
-    *out = inox_undefined_value();
-  }
-
-  if (
-    allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || out == 0 ||
-    array.tag != INOX_TAG_ARRAY || array.as.ref == 0 || (separator_bytes == 0 && separator_len != 0)
-  ) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_array* instance = (inox_array*)array.as.ref;
-  const char* separator = separator_bytes == 0 ? "" : separator_bytes;
-  size_t total_len = 0;
-
-  for (size_t index = 0; index < instance->length; index += 1) {
-    char buffer[64];
-    const char* bytes = "";
-    size_t len = 0;
-    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
-
-    if (status != INOX_OK) {
-      return status;
-    }
-
-    if (index > 0) {
-      if (total_len > (size_t)-1 - separator_len) {
-        return INOX_ERR_OOM;
-      }
-
-      total_len += separator_len;
-    }
-
-    if (total_len > (size_t)-1 - len) {
-      return INOX_ERR_OOM;
-    }
-
-    total_len += len;
-  }
-
-  if (total_len == 0) {
-    return inox_string_from_literal(allocator, "", 0, out);
-  }
-
-  char* joined = (char*)allocator->alloc(allocator->user, total_len, alignof(char));
-
-  if (joined == 0) {
-    return INOX_ERR_OOM;
-  }
-
-  size_t offset = 0;
-
-  for (size_t index = 0; index < instance->length; index += 1) {
-    char buffer[64];
-    const char* bytes = "";
-    size_t len = 0;
-    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
-
-    if (status != INOX_OK) {
-      allocator->free(allocator->user, joined, total_len, alignof(char));
-      return status;
-    }
-
-    if (index > 0 && separator_len > 0) {
-      memcpy(joined + offset, separator, separator_len);
-      offset += separator_len;
-    }
-
-    if (len > 0) {
-      memcpy(joined + offset, bytes, len);
-      offset += len;
-    }
-  }
-
-  inox_status status = inox_string_from_literal(allocator, joined, total_len, out);
-  allocator->free(allocator->user, joined, total_len, alignof(char));
-
-  return status;
 }
 
 inox_status Array::length(inox_value array, size_t* out) const {
@@ -1656,13 +1560,7 @@ inox::String Array::join(inox::StringView separator) const {
     return inox::String();
   }
 
-  inox_value out = inox_undefined_value();
-
-  if (join(&inox_default_allocator, inox::Value::raw(), separator.bytes, separator.len, &out) != INOX_OK) {
-    return inox::String();
-  }
-
-  return inox::String(inox::adopt_value, out);
+  return array_join_string(inox::Value::raw(), separator);
 }
 
 bool Array::isArray(inox_value value) const {

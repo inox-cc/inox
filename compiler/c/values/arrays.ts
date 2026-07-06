@@ -1971,35 +1971,36 @@ export function emitPreparedArrayJoinCallExpression(
   }
 
   const out = nextCName(context, 'inox_array_join')
-  let separator: PreparedStringBytesOperand = {
+  let separator: PreparedExpression = {
     lines: [],
-    bytes: '","',
-    length: '1'
+    expression: '","'
   }
   const lines: string[] = []
-  registerOwnedValue(context, out)
 
   if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-    separator = arrayDeps(context).emitPreparedStringBytesOperand(
+    const preparedSeparator = arrayDeps(context).emitPreparedCppStringArgument(
       expression.args[0],
       context,
       'inox_array_join_separator'
     )
+
+    if (preparedSeparator !== null && typeof preparedSeparator !== 'undefined') {
+      separator = preparedSeparator
+    }
   }
 
   appendLines(lines, receiver.lines)
   appendLines(lines, separator.lines)
-  appendLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(
-    emitStatusCheck(
-      `Array.join(&inox_default_allocator, ${receiver.expression}, ${separator.bytes}, ${separator.length}, &${out})`,
-      context
-    )
-  )
+  lines.push(`auto ${out} = ArrayClass(${receiver.expression}).join(${separator.expression});`)
+  lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
 
   return {
     lines,
-    expression: out
+    expression: out,
+    cppDeclaredName: out,
+    cppType: 'inox::String',
+    runtimeTypeChecked: true,
+    valueType: 'string'
   }
 }
 

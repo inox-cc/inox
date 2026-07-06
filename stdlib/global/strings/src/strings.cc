@@ -228,7 +228,13 @@ inox_status inox_string_from_value(inox_allocator* allocator, inox_value value, 
   }
 
   if (value.tag == INOX_TAG_ARRAY) {
-    return Array.join(allocator, value, ",", 1, out);
+    inox::String joined = ArrayClass(value).join(",");
+
+    if (!joined.valid()) {
+      return INOX_ERR_TYPE;
+    }
+
+    return joined.copy_to(out);
   }
 
   if (value.tag == INOX_TAG_OBJECT) {
