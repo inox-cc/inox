@@ -111,7 +111,9 @@ static inox_status inox_http_parse_headers(
 static const char* inox_http_find_header_end(const char* bytes, size_t len);
 static const char* inox_http_status_text(int status);
 
-void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
+void HttpServer::create(HttpHandlerFn handler, void* user) {
+  inox_loop* loop = inox::loop();
+
   if (loop == 0 || loop->allocator == 0) {
     inox_http_throw_failed("TypeError: HttpServer.create failed");
     return;
@@ -929,8 +931,7 @@ struct inox_http_response {
   int unused;
 };
 
-void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
-  (void)loop;
+void HttpServer::create(HttpHandlerFn handler, void* user) {
   (void)handler;
   (void)user;
 

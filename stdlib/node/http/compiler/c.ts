@@ -8,7 +8,6 @@ import {
 } from '../../../../compiler/c/runtime-imports.ts'
 import {
   createFunctionContext,
-  emitEventLoopReference,
   emitRuntimeTypeCheck,
   nextCName,
   registerEventLoop
@@ -1435,7 +1434,7 @@ function emitHttpServerCreateLines(
     wrapperName = wrapper.name
   }
 
-  lines.push(`${serverName}.create(${emitEventLoopReference(context)}, ${wrapperName}, 0);`)
+  lines.push(`${serverName}.create(${wrapperName}, 0);`)
   pushHttpLines(lines, emitHttpThrownCheck(context))
 
   return lines
