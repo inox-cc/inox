@@ -825,7 +825,7 @@ function emitDgramMessageHandlerSocketCallStatement(
   }
 
   if (expression.callee.property === 'close') {
-    return ['inox_dgram_close(inox_socket);']
+    return ['DgramSocket(inox_socket).close();']
   }
 
   return null
@@ -1106,7 +1106,7 @@ function emitDgramConnectLines(
   const lines: string[] = []
 
   pushDgramLines(lines, port.lines)
-  lines.push(emitStatusCheck(`inox_dgram_socket_connect(${socketName}, ${host}, (int)(${port.expression}))`, context))
+  lines.push(emitStatusCheck(`DgramSocket(${socketName}).connect(${host}, (int)(${port.expression}))`, context))
   pushDgramLines(lines, emitDgramZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -1123,7 +1123,7 @@ function emitDgramDisconnectLines(socketName: string, args: AnyNode[], context: 
     )
   }
 
-  return [emitStatusCheck(`inox_dgram_socket_disconnect(${socketName})`, context)]
+  return [emitStatusCheck(`DgramSocket(${socketName}).disconnect()`, context)]
 }
 
 function emitDgramSocketOptionCallStatement(
@@ -1321,7 +1321,7 @@ function emitDgramCloseLines(
     )
   }
 
-  const lines = [`inox_dgram_close(${socketName});`]
+  const lines = [`DgramSocket(${socketName}).close();`]
 
   pushDgramLines(lines, emitDgramZeroArgCallbackLines(args[0], context, deps))
 
@@ -1333,7 +1333,7 @@ function emitDgramMaybeRecvStartLines(socketName: string, context: CFunctionCont
     return []
   }
 
-  return [emitStatusCheck(`inox_dgram_recv_start(${socketName})`, context)]
+  return [emitStatusCheck(`DgramSocket(${socketName}).recvStart()`, context)]
 }
 
 function emitDgramStatusCheck(

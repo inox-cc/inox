@@ -148,7 +148,9 @@ inox_status inox_dgram_socket_on_close(inox_dgram_socket* socket, inox_dgram_clo
   return INOX_OK;
 }
 
-inox_status inox_dgram_socket_connect(inox_dgram_socket* socket, const char* host, int port) {
+inox_status DgramSocket::connect(const char* host, int port) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || host == 0) {
     return INOX_ERR_TYPE;
   }
@@ -163,7 +165,13 @@ inox_status inox_dgram_socket_connect(inox_dgram_socket* socket, const char* hos
   return uv_udp_connect(&socket->handle, (const struct sockaddr*)&addr) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_socket_disconnect(inox_dgram_socket* socket) {
+inox_status DgramSocket::connect(inox::StringView host, int port) const {
+  return connect(host.bytes, port);
+}
+
+inox_status DgramSocket::disconnect() const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -171,7 +179,9 @@ inox_status inox_dgram_socket_disconnect(inox_dgram_socket* socket) {
   return uv_udp_connect(&socket->handle, 0) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_recv_start(inox_dgram_socket* socket) {
+inox_status DgramSocket::recvStart() const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || socket->recv == 0) {
     return INOX_ERR_TYPE;
   }
@@ -179,7 +189,9 @@ inox_status inox_dgram_recv_start(inox_dgram_socket* socket) {
   return uv_udp_recv_start(&socket->handle, inox_dgram_alloc_cb, inox_dgram_recv_cb) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_recv_stop(inox_dgram_socket* socket) {
+inox_status DgramSocket::recvStop() const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0) {
     return INOX_ERR_TYPE;
   }
@@ -394,7 +406,9 @@ inox_status DgramSocket::unref() const {
   return INOX_OK;
 }
 
-void inox_dgram_close(inox_dgram_socket* socket) {
+void DgramSocket::close() const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return;
   }
@@ -651,25 +665,29 @@ inox_status inox_dgram_socket_on_close(inox_dgram_socket* socket, inox_dgram_clo
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_socket_connect(inox_dgram_socket* socket, const char* host, int port) {
-  (void)socket;
+inox_status DgramSocket::connect(const char* host, int port) const {
+  (void)socket_;
   (void)host;
   (void)port;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_socket_disconnect(inox_dgram_socket* socket) {
-  (void)socket;
+inox_status DgramSocket::connect(inox::StringView host, int port) const {
+  return connect(host.bytes, port);
+}
+
+inox_status DgramSocket::disconnect() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_recv_start(inox_dgram_socket* socket) {
-  (void)socket;
+inox_status DgramSocket::recvStart() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_recv_stop(inox_dgram_socket* socket) {
-  (void)socket;
+inox_status DgramSocket::recvStop() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
@@ -812,8 +830,8 @@ inox_status DgramSocket::unref() const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-void inox_dgram_close(inox_dgram_socket* socket) {
-  (void)socket;
+void DgramSocket::close() const {
+  (void)socket_;
 }
 
 #endif

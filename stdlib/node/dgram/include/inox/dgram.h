@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include "inox/loop.h"
 
+#ifdef __cplusplus
+#include "inox/string_view.h"
+#endif
+
 typedef struct inox_dgram_socket inox_dgram_socket;
 
 typedef struct inox_dgram_address {
@@ -35,10 +39,6 @@ inox_status inox_dgram_bind(inox_dgram_socket* socket, const char* host, int por
 inox_status inox_dgram_bind_flags(inox_dgram_socket* socket, const char* host, int port, unsigned int flags);
 inox_status inox_dgram_socket_on_message(inox_dgram_socket* socket, inox_dgram_recv_fn recv, void* user);
 inox_status inox_dgram_socket_on_close(inox_dgram_socket* socket, inox_dgram_close_fn close, void* user);
-inox_status inox_dgram_socket_connect(inox_dgram_socket* socket, const char* host, int port);
-inox_status inox_dgram_socket_disconnect(inox_dgram_socket* socket);
-inox_status inox_dgram_recv_start(inox_dgram_socket* socket);
-inox_status inox_dgram_recv_stop(inox_dgram_socket* socket);
 inox_status inox_dgram_send(inox_dgram_socket* socket, const char* bytes, size_t len, const char* host, int port);
 inox_status inox_dgram_send_with_callback(
   inox_dgram_socket* socket,
@@ -57,7 +57,6 @@ inox_status inox_dgram_send_connected_with_callback(
   inox_dgram_send_fn callback,
   void* user
 );
-void inox_dgram_close(inox_dgram_socket* socket);
 
 #ifdef __cplusplus
 
@@ -68,6 +67,12 @@ private:
 public:
   explicit DgramSocket(inox_dgram_socket* socket);
 
+  inox_status connect(const char* host, int port) const;
+  inox_status connect(inox::StringView host, int port) const;
+  inox_status disconnect() const;
+  inox_status recvStart() const;
+  inox_status recvStop() const;
+  void close() const;
   inox_status address(inox_dgram_address* out) const;
   inox_status remoteAddress(inox_dgram_address* out) const;
   inox_status localPort(int* out_port) const;
