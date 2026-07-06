@@ -1029,18 +1029,18 @@ static void inox_net_connect_cb(uv_connect_t* request, int status) {
     NetSocket(socket).close();
   } else {
     if (socket->connect_event != 0) {
-      inox_status callback_status = socket->connect_event(socket->connect_user, socket);
+      socket->connect_event(socket->connect_user, NetSocket(socket));
 
-      if (callback_status != INOX_OK) {
-        inox_net_socket_report_status(socket, callback_status);
+      if (inox::thrown()) {
+        inox_net_socket_report_status(socket, INOX_ERR_TYPE);
       }
     }
 
     if (socket->ready != 0) {
-      inox_status callback_status = socket->ready(socket->ready_user, socket);
+      socket->ready(socket->ready_user, NetSocket(socket));
 
-      if (callback_status != INOX_OK) {
-        inox_net_socket_report_status(socket, callback_status);
+      if (inox::thrown()) {
+        inox_net_socket_report_status(socket, INOX_ERR_TYPE);
       }
     }
   }
@@ -1076,10 +1076,10 @@ static void inox_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
 
   if (nread < 0) {
     if (nread == UV_EOF && socket->end != 0) {
-      inox_status status = socket->end(socket->end_user, socket);
+      socket->end(socket->end_user, NetSocket(socket));
 
-      if (status != INOX_OK) {
-        inox_net_socket_report_status(socket, status);
+      if (inox::thrown()) {
+        inox_net_socket_report_status(socket, INOX_ERR_TYPE);
       }
     } else if (nread != UV_EOF) {
       inox_net_socket_report_status(socket, INOX_ERR_FIELD);
@@ -1126,10 +1126,10 @@ static void inox_net_write_cb(uv_write_t* request, int status) {
   }
 
   if (status == 0 && socket->drain != 0) {
-    inox_status callback_status = socket->drain(socket->drain_user, socket);
+    socket->drain(socket->drain_user, NetSocket(socket));
 
-    if (callback_status != INOX_OK) {
-      inox_net_socket_report_status(socket, callback_status);
+    if (inox::thrown()) {
+      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
     }
   }
 
@@ -1178,10 +1178,10 @@ static void inox_net_socket_close_cb(uv_handle_t* handle) {
   }
 
   if (socket->close_event != 0) {
-    inox_status status = socket->close_event(socket->close_event_user, socket);
+    socket->close_event(socket->close_event_user, NetSocket(socket));
 
-    if (status != INOX_OK) {
-      inox_net_socket_report_status(socket, status);
+    if (inox::thrown()) {
+      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
     }
   }
 

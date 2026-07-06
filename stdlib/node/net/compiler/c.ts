@@ -162,6 +162,14 @@ function isNetSocketLifecycleEvent(eventName: string): boolean {
   )
 }
 
+function netHandlerUsesStatusReturn(kind: string): boolean {
+  return kind !== 'socket-data' && kind !== 'socket-event'
+}
+
+function netHandlerSocketExpression(kind: string): string {
+  return kind === 'socket-data' || kind === 'socket-event' ? 'inox_socket' : 'NetSocket(inox_socket)'
+}
+
 function replaceNetKindSeparator(kind: string): string {
   let value = ''
 
@@ -192,7 +200,7 @@ export function emitNetHandlerHead(wrapper: CNetHandler): string {
   }
 
   if (wrapper.kind === 'socket-event') {
-    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket)`
+    return `static void ${wrapper.name}(void* user, NetSocket inox_socket)`
   }
 
   if (wrapper.kind === 'socket-error') {
@@ -232,7 +240,7 @@ export function emitNetHandlerDeclaration(
     stringLocals: new Map()
   }
   const context = deps.createFunctionContext(baseContext, 'void', false)
-  context.statusReturn = wrapper.kind !== 'socket-data'
+  context.statusReturn = netHandlerUsesStatusReturn(wrapper.kind)
 
   if (socketName !== null && typeof socketName !== 'undefined') {
     context.variables.set(socketName, 'net-socket')
@@ -280,7 +288,7 @@ export function emitNetHandlerDeclaration(
     pushIndentedNetLines(lines, emitNetHandlerStatement(statement, netContext, context, deps))
   }
 
-  if (wrapper.kind !== 'socket-data') {
+  if (netHandlerUsesStatusReturn(wrapper.kind)) {
     lines.push('  return INOX_OK;')
   }
   lines.push('}')
@@ -365,13 +373,13 @@ function emitNetHandlerStatement(
         const lines: string[] = []
 
         pushNetLines(lines, socketCall)
-        lines.push(netContext.kind === 'socket-data' ? 'return;' : 'return INOX_OK;')
+        lines.push(netHandlerUsesStatusReturn(netContext.kind) ? 'return INOX_OK;' : 'return;')
 
         return lines
       }
     }
 
-    return [netContext.kind === 'socket-data' ? 'return;' : 'return INOX_OK;']
+    return [netHandlerUsesStatusReturn(netContext.kind) ? 'return INOX_OK;' : 'return;']
   }
 
   context.diagnostics.push(
@@ -422,6 +430,7 @@ function emitNetHandlerSocketCallStatement(
   const method = callee.property
 
   if (method === 'write' || method === 'end') {
+    const socketExpression = netHandlerSocketExpression(netContext.kind)
     const lastArg = lastNetArgument(expression.args)
     let callback: AnyNode | null = null
 
@@ -440,14 +449,14 @@ function emitNetHandlerSocketCallStatement(
 
     const body = emitNetBytesOperand(bodyArg, netContext, context, deps)
     const wrapper = findNetHandler(context, callback, 'socket-write')
-    let call = `NetSocket(inox_socket).write(inox::StringView(${body.bytes}, ${body.length}))`
+    let call = `${socketExpression}.write(inox::StringView(${body.bytes}, ${body.length}))`
 
     if (method === 'write' && wrapper !== null && typeof wrapper !== 'undefined') {
-      call = `NetSocket(inox_socket).write(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
+      call = `${socketExpression}.write(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
     } else if (method === 'end' && (wrapper === null || typeof wrapper === 'undefined')) {
-      call = `NetSocket(inox_socket).end(inox::StringView(${body.bytes}, ${body.length}))`
+      call = `${socketExpression}.end(inox::StringView(${body.bytes}, ${body.length}))`
     } else if (method === 'end' && wrapper !== null && typeof wrapper !== 'undefined') {
-      call = `NetSocket(inox_socket).end(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
+      call = `${socketExpression}.end(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
     }
 
     const lines: string[] = []
@@ -459,11 +468,11 @@ function emitNetHandlerSocketCallStatement(
   }
 
   if (method === 'destroy') {
-    return emitNetThrownCheck('NetSocket(inox_socket).destroy()', context)
+    return emitNetThrownCheck(`${netHandlerSocketExpression(netContext.kind)}.destroy()`, context)
   }
 
   if (method === 'close') {
-    return ['NetSocket(inox_socket).close();']
+    return [`${netHandlerSocketExpression(netContext.kind)}.close();`]
   }
 
   context.diagnostics.push(
