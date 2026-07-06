@@ -564,7 +564,7 @@ inox::String fs::readlinkSync(inox::StringView path) {
   return inox::String(inox::adopt_value, out);
 }
 
-inox_status fs::accessSync(const char* path, size_t path_len, int mode) {
+static inox_status fs_access_sync_status(const char* path, size_t path_len, int mode) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -582,6 +582,14 @@ inox_status fs::accessSync(const char* path, size_t path_len, int mode) {
 #else
   return INOX_ERR_UNSUPPORTED;
 #endif
+}
+
+void fs::accessSync(inox::StringView path, int mode) {
+  inox_status status = fs_access_sync_status(path.bytes, path.len, mode);
+
+  if (status != INOX_OK) {
+    inox_fs_throw_status(status);
+  }
 }
 
 void fs::mkdirSync(inox::StringView path, bool recursive) {
@@ -3702,7 +3710,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_ACCESS) {
-    inox_status status = fs.accessSync(request->path, request->path_len, request->mode);
+    inox_status status = fs_access_sync_status(request->path, request->path_len, request->mode);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);

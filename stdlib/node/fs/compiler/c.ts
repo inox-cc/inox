@@ -693,7 +693,8 @@ export function emitPreparedFsSyncStatementExpression(
     const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
 
     appendLines(lines, mode.lines)
-    lines.push(emitStatusCheck(`fs.accessSync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
+    lines.push(`fs.accessSync(${emitFsStringArgument(path)}, ${mode.expression});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines

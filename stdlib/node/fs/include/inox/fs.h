@@ -168,13 +168,13 @@ public:
   FsStats lstatSync(inox::StringView path);
   inox::String realpathSync(inox::StringView path);
   inox::String readlinkSync(inox::StringView path);
+  void accessSync(inox::StringView path, int mode);
   void mkdirSync(inox::StringView path, bool recursive);
   void unlinkSync(inox::StringView path);
   void rmSync(inox::StringView path, bool recursive, bool force);
   void appendFileSync(inox::StringView path, inox::StringView bytes);
   void writeFileSync(inox::StringView path, inox::StringView bytes);
   inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-  inox_status accessSync(const char* path, size_t path_len, int mode);
   inox_status mkdirSync(const char* path, size_t path_len, bool recursive);
   inox_status unlinkSync(const char* path, size_t path_len);
   inox_status rmSync(const char* path, size_t path_len, bool recursive, bool force);
