@@ -1627,7 +1627,7 @@ export function resolveNetAddressStringMember(expression: AnyNode, context: CFun
   }
 
   if (expression.property === 'family') {
-    return `${name}.family`
+    return `${name}.family.bytes`
   }
 
   return `${name}.address`

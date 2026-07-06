@@ -518,7 +518,9 @@ static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, D
     return INOX_ERR_TYPE;
   }
 
-  memset(out, 0, sizeof(DgramAddress));
+  memset(out->address, 0, sizeof(out->address));
+  out->family = inox::StringView();
+  out->port = 0;
 
   if (addr->sa_family != AF_INET) {
     return INOX_ERR_UNSUPPORTED;
@@ -526,7 +528,7 @@ static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, D
 
   const struct sockaddr_in* ip4 = (const struct sockaddr_in*)addr;
   uv_ip4_name(ip4, out->address, sizeof(out->address));
-  out->family = "IPv4";
+  out->family = inox::StringView("IPv4");
   out->port = ntohs(ip4->sin_port);
 
   return INOX_OK;

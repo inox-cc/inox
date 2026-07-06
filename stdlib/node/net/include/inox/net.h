@@ -11,7 +11,7 @@ struct inox_net_socket;
 
 struct NetAddress {
   char address[64];
-  const char* family;
+  inox::StringView family;
   int port;
 };
 

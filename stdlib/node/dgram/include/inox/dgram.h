@@ -10,7 +10,7 @@ struct inox_dgram_socket;
 
 struct DgramAddress {
   char address[64];
-  const char* family;
+  inox::StringView family;
   int port;
 };
 

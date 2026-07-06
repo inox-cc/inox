@@ -1463,7 +1463,7 @@ function resolveDgramAddressStringMember(expression: AnyNode, context: CFunction
   }
 
   if (expression.property === 'family') {
-    return `${addressName}.family`
+    return `${addressName}.family.bytes`
   }
 
   return `${addressName}.address`
