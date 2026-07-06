@@ -165,7 +165,6 @@ static inox_status inox_fs_reject_request_status(FsRequest* request, inox_status
 static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out);
 static void inox_fs_throw_status(inox_status status);
 static void inox_fs_throw_status_if_needed(inox_status status);
-static inox_status inox_fs_status_from_thrown(void);
 static inox_status inox_fs_reject_thrown(inox_promise* promise);
 static const char* inox_fs_error_code(inox_status status);
 static const char* inox_fs_error_message(inox_status status);
@@ -382,14 +381,6 @@ static bool inox_fs_throw_sync_status(inox_status status, inox_value* value) {
 }
 
 static inox_status fs_read_file_bytes_sync_status(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-static inox_status fs_mkdir_sync_status(const char* path, size_t path_len, bool recursive);
-static inox_status fs_unlink_sync_status(const char* path, size_t path_len);
-static inox_status fs_rm_sync_status(const char* path, size_t path_len, bool recursive, bool force);
-static inox_status fs_append_file_sync_status(const char* path, size_t path_len, const char* bytes, size_t byte_len);
-static inox_status fs_copy_file_sync_status(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len);
-static inox_status fs_symlink_sync_status(const char* target, size_t target_len, const char* path, size_t path_len);
-static inox_status fs_rename_sync_status(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
-static inox_status fs_write_file_sync_status(const char* path, size_t path_len, const char* bytes, size_t byte_len);
 
 inox::String fs::readFileSync(inox::StringView path) {
   inox_value out = inox_undefined_value();
@@ -693,42 +684,23 @@ inox::String fs::readlinkSync(inox::StringView path) {
   return inox::String(inox::adopt(out));
 }
 
-static inox_status fs_access_sync_status(const char* path, size_t path_len, int mode) {
-  if (path == 0 && path_len != 0) {
-    return INOX_ERR_TYPE;
+void fs::accessSync(inox::StringView path, int mode) {
+  if (path.bytes == 0 && path.len != 0) {
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
 
   if (fs_active_adapter.access != 0) {
-    fs_active_adapter.access(fs_active_adapter.user, inox::StringView(path, path_len), mode);
-    return inox_fs_status_from_thrown();
-  }
-
-#ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_access(0, path, path_len, mode);
-#endif
-
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_access(0, path, path_len, mode);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
-}
-
-void fs::accessSync(inox::StringView path, int mode) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
-  if (path.bytes == 0 && path.len != 0) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.access != 0) {
     fs_active_adapter.access(fs_active_adapter.user, path, mode);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_access(0, path.bytes, path.len, mode);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_access(0, path.bytes, path.len, mode);
-#endif
+    return;
   }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_access(0, path.bytes, path.len, mode);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_access(0, path.bytes, path.len, mode);
+#endif
 
   if (status != INOX_OK) {
     inox_fs_throw_status_if_needed(status);
@@ -736,329 +708,187 @@ void fs::accessSync(inox::StringView path, int mode) {
 }
 
 void fs::mkdirSync(inox::StringView path, bool recursive) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
   if (path.bytes == 0 && path.len != 0) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.mkdir != 0) {
-    fs_active_adapter.mkdir(fs_active_adapter.user, path, recursive);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_mkdir(0, path.bytes, path.len, recursive);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_mkdir(0, path.bytes, path.len, recursive);
-#endif
-  }
-
-  if (status != INOX_OK) {
-    inox_fs_throw_status_if_needed(status);
-  }
-}
-
-static inox_status fs_mkdir_sync_status(const char* path, size_t path_len, bool recursive) {
-  if (path == 0 && path_len != 0) {
-    return INOX_ERR_TYPE;
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
 
   if (fs_active_adapter.mkdir != 0) {
-    fs_active_adapter.mkdir(fs_active_adapter.user, inox::StringView(path, path_len), recursive);
-    return inox_fs_status_from_thrown();
+    fs_active_adapter.mkdir(fs_active_adapter.user, path, recursive);
+    return;
   }
 
+  inox_status status = INOX_ERR_UNSUPPORTED;
 #ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_mkdir(0, path, path_len, recursive);
+  status = inox_fs_libuv_mkdir(0, path.bytes, path.len, recursive);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_mkdir(0, path.bytes, path.len, recursive);
 #endif
 
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_mkdir(0, path, path_len, recursive);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
+  if (status != INOX_OK) {
+    inox_fs_throw_status_if_needed(status);
+  }
 }
 
 void fs::unlinkSync(inox::StringView path) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
   if (path.bytes == 0 && path.len != 0) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.unlink != 0) {
-    fs_active_adapter.unlink(fs_active_adapter.user, path);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_unlink(0, path.bytes, path.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_unlink(0, path.bytes, path.len);
-#endif
-  }
-
-  if (status != INOX_OK) {
-    inox_fs_throw_status_if_needed(status);
-  }
-}
-
-static inox_status fs_unlink_sync_status(const char* path, size_t path_len) {
-  if (path == 0 && path_len != 0) {
-    return INOX_ERR_TYPE;
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
 
   if (fs_active_adapter.unlink != 0) {
-    fs_active_adapter.unlink(fs_active_adapter.user, inox::StringView(path, path_len));
-    return inox_fs_status_from_thrown();
+    fs_active_adapter.unlink(fs_active_adapter.user, path);
+    return;
   }
 
+  inox_status status = INOX_ERR_UNSUPPORTED;
 #ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_unlink(0, path, path_len);
+  status = inox_fs_libuv_unlink(0, path.bytes, path.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_unlink(0, path.bytes, path.len);
 #endif
 
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_unlink(0, path, path_len);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
+  if (status != INOX_OK) {
+    inox_fs_throw_status_if_needed(status);
+  }
 }
 
 void fs::rmSync(inox::StringView path, bool recursive, bool force) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
   if (path.bytes == 0 && path.len != 0) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.rm != 0) {
-    fs_active_adapter.rm(fs_active_adapter.user, path, recursive, force);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_rm(0, path.bytes, path.len, recursive, force);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_rm(0, path.bytes, path.len, recursive, force);
-#else
-    status = force ? INOX_OK : INOX_ERR_UNSUPPORTED;
-#endif
-  }
-
-  if (status != INOX_OK) {
-    inox_fs_throw_status_if_needed(status);
-  }
-}
-
-static inox_status fs_rm_sync_status(const char* path, size_t path_len, bool recursive, bool force) {
-  if (path == 0 && path_len != 0) {
-    return INOX_ERR_TYPE;
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
 
   if (fs_active_adapter.rm != 0) {
-    fs_active_adapter.rm(fs_active_adapter.user, inox::StringView(path, path_len), recursive, force);
-    return inox_fs_status_from_thrown();
+    fs_active_adapter.rm(fs_active_adapter.user, path, recursive, force);
+    return;
   }
 
+  inox_status status = INOX_ERR_UNSUPPORTED;
 #ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_rm(0, path, path_len, recursive, force);
+  status = inox_fs_libuv_rm(0, path.bytes, path.len, recursive, force);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_rm(0, path.bytes, path.len, recursive, force);
 #endif
 
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_rm(0, path, path_len, recursive, force);
-#else
-  return force ? INOX_OK : INOX_ERR_UNSUPPORTED;
-#endif
+  if (status != INOX_OK && !(status == INOX_ERR_UNSUPPORTED && force)) {
+    inox_fs_throw_status_if_needed(status);
+  }
 }
 
 void fs::appendFileSync(inox::StringView path, inox::StringView bytes) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
   if ((path.bytes == 0 && path.len != 0) || (bytes.bytes == 0 && bytes.len != 0)) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.append_file != 0) {
-    fs_active_adapter.append_file(fs_active_adapter.user, path, bytes);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_append_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_append_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
-#endif
-  }
-
-  if (status != INOX_OK) {
-    inox_fs_throw_status_if_needed(status);
-  }
-}
-
-static inox_status fs_append_file_sync_status(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
-  if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
-    return INOX_ERR_TYPE;
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
 
   if (fs_active_adapter.append_file != 0) {
-    fs_active_adapter.append_file(fs_active_adapter.user, inox::StringView(path, path_len), inox::StringView(bytes, byte_len));
-    return inox_fs_status_from_thrown();
+    fs_active_adapter.append_file(fs_active_adapter.user, path, bytes);
+    return;
   }
 
+  inox_status status = INOX_ERR_UNSUPPORTED;
 #ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_append_file(0, path, path_len, bytes, byte_len);
+  status = inox_fs_libuv_append_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_append_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
 #endif
 
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_append_file(0, path, path_len, bytes, byte_len);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
+  if (status != INOX_OK) {
+    inox_fs_throw_status_if_needed(status);
+  }
 }
 
 void fs::appendFileSync(inox::StringView path, Buffer bytes) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
   BytesStorage* data = bytes.data();
 
   if (data == nullptr || (path.bytes == 0 && path.len != 0)) {
-    status = INOX_ERR_TYPE;
-  } else {
-    inox::StringView byte_view((const char*)data->bytes, data->length);
-
-    if (fs_active_adapter.append_file != 0) {
-      fs_active_adapter.append_file(fs_active_adapter.user, path, byte_view);
-      status = inox_fs_status_from_thrown();
-    } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-      status = inox_fs_libuv_append_file(0, path.bytes, path.len, byte_view.bytes, byte_view.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-      status = inox_fs_default_append_file(0, path.bytes, path.len, byte_view.bytes, byte_view.len);
-#endif
-    }
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
+
+  inox::StringView bytes_view((const char*)data->bytes, data->length);
+
+  if (fs_active_adapter.append_file != 0) {
+    fs_active_adapter.append_file(fs_active_adapter.user, path, bytes_view);
+    return;
+  }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_append_file(0, path.bytes, path.len, bytes_view.bytes, bytes_view.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_append_file(0, path.bytes, path.len, bytes_view.bytes, bytes_view.len);
+#endif
 
   if (status != INOX_OK) {
     inox_fs_throw_status_if_needed(status);
   }
-}
-
-static inox_status fs_copy_file_sync_status(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len) {
-  if ((src_path == 0 && src_path_len != 0) || (dest_path == 0 && dest_path_len != 0)) {
-    return INOX_ERR_TYPE;
-  }
-
-  if (fs_active_adapter.copy_file != 0) {
-    fs_active_adapter.copy_file(
-      fs_active_adapter.user,
-      inox::StringView(src_path, src_path_len),
-      inox::StringView(dest_path, dest_path_len)
-    );
-    return inox_fs_status_from_thrown();
-  }
-
-#ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_copy_file(0, src_path, src_path_len, dest_path, dest_path_len);
-#endif
-
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_copy_file(0, src_path, src_path_len, dest_path, dest_path_len);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
 }
 
 void fs::copyFileSync(inox::StringView src_path, inox::StringView dest_path) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
   if ((src_path.bytes == 0 && src_path.len != 0) || (dest_path.bytes == 0 && dest_path.len != 0)) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.copy_file != 0) {
-    fs_active_adapter.copy_file(fs_active_adapter.user, src_path, dest_path);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_copy_file(0, src_path.bytes, src_path.len, dest_path.bytes, dest_path.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_copy_file(0, src_path.bytes, src_path.len, dest_path.bytes, dest_path.len);
-#endif
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
+
+  if (fs_active_adapter.copy_file != 0) {
+    fs_active_adapter.copy_file(fs_active_adapter.user, src_path, dest_path);
+    return;
+  }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_copy_file(0, src_path.bytes, src_path.len, dest_path.bytes, dest_path.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_copy_file(0, src_path.bytes, src_path.len, dest_path.bytes, dest_path.len);
+#endif
 
   if (status != INOX_OK) {
     inox_fs_throw_status_if_needed(status);
   }
-}
-
-static inox_status fs_symlink_sync_status(const char* target, size_t target_len, const char* path, size_t path_len) {
-  if ((target == 0 && target_len != 0) || (path == 0 && path_len != 0)) {
-    return INOX_ERR_TYPE;
-  }
-
-  if (fs_active_adapter.symlink != 0) {
-    fs_active_adapter.symlink(fs_active_adapter.user, inox::StringView(target, target_len), inox::StringView(path, path_len));
-    return inox_fs_status_from_thrown();
-  }
-
-#ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_symlink(0, target, target_len, path, path_len);
-#endif
-
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_symlink(0, target, target_len, path, path_len);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
 }
 
 void fs::symlinkSync(inox::StringView target, inox::StringView path) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
   if ((target.bytes == 0 && target.len != 0) || (path.bytes == 0 && path.len != 0)) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.symlink != 0) {
-    fs_active_adapter.symlink(fs_active_adapter.user, target, path);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_symlink(0, target.bytes, target.len, path.bytes, path.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_symlink(0, target.bytes, target.len, path.bytes, path.len);
-#endif
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
+
+  if (fs_active_adapter.symlink != 0) {
+    fs_active_adapter.symlink(fs_active_adapter.user, target, path);
+    return;
+  }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_symlink(0, target.bytes, target.len, path.bytes, path.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_symlink(0, target.bytes, target.len, path.bytes, path.len);
+#endif
 
   if (status != INOX_OK) {
     inox_fs_throw_status_if_needed(status);
   }
 }
 
-static inox_status fs_rename_sync_status(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len) {
-  if ((old_path == 0 && old_path_len != 0) || (new_path == 0 && new_path_len != 0)) {
-    return INOX_ERR_TYPE;
+void fs::renameSync(inox::StringView old_path, inox::StringView new_path) {
+  if ((old_path.bytes == 0 && old_path.len != 0) || (new_path.bytes == 0 && new_path.len != 0)) {
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
 
   if (fs_active_adapter.rename != 0) {
-    fs_active_adapter.rename(
-      fs_active_adapter.user,
-      inox::StringView(old_path, old_path_len),
-      inox::StringView(new_path, new_path_len)
-    );
-    return inox_fs_status_from_thrown();
-  }
-
-#ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_rename(0, old_path, old_path_len, new_path, new_path_len);
-#endif
-
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_rename(0, old_path, old_path_len, new_path, new_path_len);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
-}
-
-void fs::renameSync(inox::StringView old_path, inox::StringView new_path) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
-  if ((old_path.bytes == 0 && old_path.len != 0) || (new_path.bytes == 0 && new_path.len != 0)) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.rename != 0) {
     fs_active_adapter.rename(fs_active_adapter.user, old_path, new_path);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_rename(0, old_path.bytes, old_path.len, new_path.bytes, new_path.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_rename(0, old_path.bytes, old_path.len, new_path.bytes, new_path.len);
-#endif
+    return;
   }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_rename(0, old_path.bytes, old_path.len, new_path.bytes, new_path.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_rename(0, old_path.bytes, old_path.len, new_path.bytes, new_path.len);
+#endif
 
   if (status != INOX_OK) {
     inox_fs_throw_status_if_needed(status);
@@ -1066,67 +896,49 @@ void fs::renameSync(inox::StringView old_path, inox::StringView new_path) {
 }
 
 void fs::writeFileSync(inox::StringView path, inox::StringView bytes) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
   if ((path.bytes == 0 && path.len != 0) || (bytes.bytes == 0 && bytes.len != 0)) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.write_file != 0) {
-    fs_active_adapter.write_file(fs_active_adapter.user, path, bytes);
-    status = inox_fs_status_from_thrown();
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_write_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_write_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
-#endif
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
+
+  if (fs_active_adapter.write_file != 0) {
+    fs_active_adapter.write_file(fs_active_adapter.user, path, bytes);
+    return;
+  }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_write_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_write_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
+#endif
 
   if (status != INOX_OK) {
     inox_fs_throw_status_if_needed(status);
   }
 }
 
-static inox_status fs_write_file_sync_status(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
-  if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
-    return INOX_ERR_TYPE;
-  }
-
-  if (fs_active_adapter.write_file != 0) {
-    fs_active_adapter.write_file(fs_active_adapter.user, inox::StringView(path, path_len), inox::StringView(bytes, byte_len));
-    return inox_fs_status_from_thrown();
-  }
-
-#ifdef INOX_LOOP_BACKEND_LIBUV
-  return inox_fs_libuv_write_file(0, path, path_len, bytes, byte_len);
-#endif
-
-#ifndef INOX_FS_DISABLE_HOST
-  return inox_fs_default_write_file(0, path, path_len, bytes, byte_len);
-#else
-  return INOX_ERR_UNSUPPORTED;
-#endif
-}
-
 void fs::writeFileSync(inox::StringView path, Buffer bytes) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
   BytesStorage* data = bytes.data();
 
   if (data == nullptr || (path.bytes == 0 && path.len != 0)) {
-    status = INOX_ERR_TYPE;
-  } else {
-    inox::StringView byte_view((const char*)data->bytes, data->length);
-
-    if (fs_active_adapter.write_file != 0) {
-      fs_active_adapter.write_file(fs_active_adapter.user, path, byte_view);
-      status = inox_fs_status_from_thrown();
-    } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-      status = inox_fs_libuv_write_file(0, path.bytes, path.len, byte_view.bytes, byte_view.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-      status = inox_fs_default_write_file(0, path.bytes, path.len, byte_view.bytes, byte_view.len);
-#endif
-    }
+    inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
+    return;
   }
+
+  inox::StringView bytes_view((const char*)data->bytes, data->length);
+
+  if (fs_active_adapter.write_file != 0) {
+    fs_active_adapter.write_file(fs_active_adapter.user, path, bytes_view);
+    return;
+  }
+
+  inox_status status = INOX_ERR_UNSUPPORTED;
+#ifdef INOX_LOOP_BACKEND_LIBUV
+  status = inox_fs_libuv_write_file(0, path.bytes, path.len, bytes_view.bytes, bytes_view.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+  status = inox_fs_default_write_file(0, path.bytes, path.len, bytes_view.bytes, bytes_view.len);
+#endif
 
   if (status != INOX_OK) {
     inox_fs_throw_status_if_needed(status);
@@ -4187,89 +3999,104 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_ACCESS) {
-    inox_status status = fs_access_sync_status(request->path, request->path_len, request->mode);
+    fs.accessSync(inox::StringView(request->path, request->path_len), request->mode);
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
   if (request->kind == INOX_FS_REQUEST_MKDIR) {
-    inox_status status = fs_mkdir_sync_status(request->path, request->path_len, request->recursive);
+    fs.mkdirSync(inox::StringView(request->path, request->path_len), request->recursive);
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
   if (request->kind == INOX_FS_REQUEST_UNLINK) {
-    inox_status status = fs_unlink_sync_status(request->path, request->path_len);
+    fs.unlinkSync(inox::StringView(request->path, request->path_len));
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
   if (request->kind == INOX_FS_REQUEST_RM) {
-    inox_status status = fs_rm_sync_status(request->path, request->path_len, request->recursive, request->force);
+    fs.rmSync(inox::StringView(request->path, request->path_len), request->recursive, request->force);
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
   if (request->kind == INOX_FS_REQUEST_RENAME) {
-    inox_status status = fs_rename_sync_status(request->path, request->path_len, request->path2, request->path2_len);
+    fs.renameSync(
+      inox::StringView(request->path, request->path_len),
+      inox::StringView(request->path2, request->path2_len)
+    );
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
   if (request->kind == INOX_FS_REQUEST_APPEND_FILE) {
-    inox_status status = fs_append_file_sync_status(request->path, request->path_len, request->bytes, request->byte_len);
+    fs.appendFileSync(
+      inox::StringView(request->path, request->path_len),
+      inox::StringView(request->bytes, request->byte_len)
+    );
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
   if (request->kind == INOX_FS_REQUEST_COPY_FILE) {
-    inox_status status = fs_copy_file_sync_status(request->path, request->path_len, request->path2, request->path2_len);
+    fs.copyFileSync(
+      inox::StringView(request->path, request->path_len),
+      inox::StringView(request->path2, request->path2_len)
+    );
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
   if (request->kind == INOX_FS_REQUEST_SYMLINK) {
-    inox_status status = fs_symlink_sync_status(request->path, request->path_len, request->path2, request->path2_len);
+    fs.symlinkSync(
+      inox::StringView(request->path, request->path_len),
+      inox::StringView(request->path2, request->path2_len)
+    );
 
-    if (status != INOX_OK) {
-      return inox_fs_reject_request_status(request, status);
+    if (inox::thrown()) {
+      return inox_fs_reject_thrown(request->promise);
     }
 
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
-  inox_status status = fs_write_file_sync_status(request->path, request->path_len, request->bytes, request->byte_len);
+  fs.writeFileSync(
+    inox::StringView(request->path, request->path_len),
+    inox::StringView(request->bytes, request->byte_len)
+  );
 
-  if (status != INOX_OK) {
-    return inox_fs_reject_request_status(request, status);
+  if (inox::thrown()) {
+    return inox_fs_reject_thrown(request->promise);
   }
 
   return inox_promise_resolve(request->promise, inox_undefined_value());
@@ -4331,10 +4158,6 @@ static void inox_fs_throw_status_if_needed(inox_status status) {
   }
 
   inox_fs_throw_status(status);
-}
-
-static inox_status inox_fs_status_from_thrown(void) {
-  return inox::thrown() ? INOX_ERR_THROW : INOX_OK;
 }
 
 static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out) {
