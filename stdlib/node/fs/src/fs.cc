@@ -585,7 +585,19 @@ inox_status fs::accessSync(const char* path, size_t path_len, int mode) {
 }
 
 void fs::mkdirSync(inox::StringView path, bool recursive) {
-  inox_status status = mkdirSync(path.bytes, path.len, recursive);
+  inox_status status = INOX_ERR_UNSUPPORTED;
+
+  if (path.bytes == 0 && path.len != 0) {
+    status = INOX_ERR_TYPE;
+  } else if (fs_active_adapter.mkdir != 0) {
+    status = fs_active_adapter.mkdir(fs_active_adapter.user, path.bytes, path.len, recursive);
+  } else {
+#ifdef INOX_LOOP_BACKEND_LIBUV
+    status = inox_fs_libuv_mkdir(0, path.bytes, path.len, recursive);
+#elif !defined(INOX_FS_DISABLE_HOST)
+    status = inox_fs_default_mkdir(0, path.bytes, path.len, recursive);
+#endif
+  }
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
@@ -613,7 +625,19 @@ inox_status fs::mkdirSync(const char* path, size_t path_len, bool recursive) {
 }
 
 void fs::unlinkSync(inox::StringView path) {
-  inox_status status = unlinkSync(path.bytes, path.len);
+  inox_status status = INOX_ERR_UNSUPPORTED;
+
+  if (path.bytes == 0 && path.len != 0) {
+    status = INOX_ERR_TYPE;
+  } else if (fs_active_adapter.unlink != 0) {
+    status = fs_active_adapter.unlink(fs_active_adapter.user, path.bytes, path.len);
+  } else {
+#ifdef INOX_LOOP_BACKEND_LIBUV
+    status = inox_fs_libuv_unlink(0, path.bytes, path.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+    status = inox_fs_default_unlink(0, path.bytes, path.len);
+#endif
+  }
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
@@ -641,7 +665,19 @@ inox_status fs::unlinkSync(const char* path, size_t path_len) {
 }
 
 void fs::rmSync(inox::StringView path, bool recursive, bool force) {
-  inox_status status = rmSync(path.bytes, path.len, recursive, force);
+  inox_status status = force ? INOX_OK : INOX_ERR_UNSUPPORTED;
+
+  if (path.bytes == 0 && path.len != 0) {
+    status = INOX_ERR_TYPE;
+  } else if (fs_active_adapter.rm != 0) {
+    status = fs_active_adapter.rm(fs_active_adapter.user, path.bytes, path.len, recursive, force);
+  } else {
+#ifdef INOX_LOOP_BACKEND_LIBUV
+    status = inox_fs_libuv_rm(0, path.bytes, path.len, recursive, force);
+#elif !defined(INOX_FS_DISABLE_HOST)
+    status = inox_fs_default_rm(0, path.bytes, path.len, recursive, force);
+#endif
+  }
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
@@ -669,7 +705,19 @@ inox_status fs::rmSync(const char* path, size_t path_len, bool recursive, bool f
 }
 
 void fs::appendFileSync(inox::StringView path, inox::StringView bytes) {
-  inox_status status = appendFileSync(path.bytes, path.len, bytes.bytes, bytes.len);
+  inox_status status = INOX_ERR_UNSUPPORTED;
+
+  if ((path.bytes == 0 && path.len != 0) || (bytes.bytes == 0 && bytes.len != 0)) {
+    status = INOX_ERR_TYPE;
+  } else if (fs_active_adapter.append_file != 0) {
+    status = fs_active_adapter.append_file(fs_active_adapter.user, path.bytes, path.len, bytes.bytes, bytes.len);
+  } else {
+#ifdef INOX_LOOP_BACKEND_LIBUV
+    status = inox_fs_libuv_append_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+    status = inox_fs_default_append_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
+#endif
+  }
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
@@ -767,7 +815,19 @@ inox_status fs::renameSync(const char* old_path, size_t old_path_len, const char
 }
 
 void fs::writeFileSync(inox::StringView path, inox::StringView bytes) {
-  inox_status status = writeFileSync(path.bytes, path.len, bytes.bytes, bytes.len);
+  inox_status status = INOX_ERR_UNSUPPORTED;
+
+  if ((path.bytes == 0 && path.len != 0) || (bytes.bytes == 0 && bytes.len != 0)) {
+    status = INOX_ERR_TYPE;
+  } else if (fs_active_adapter.write_file != 0) {
+    status = fs_active_adapter.write_file(fs_active_adapter.user, path.bytes, path.len, bytes.bytes, bytes.len);
+  } else {
+#ifdef INOX_LOOP_BACKEND_LIBUV
+    status = inox_fs_libuv_write_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
+#elif !defined(INOX_FS_DISABLE_HOST)
+    status = inox_fs_default_write_file(0, path.bytes, path.len, bytes.bytes, bytes.len);
+#endif
+  }
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
