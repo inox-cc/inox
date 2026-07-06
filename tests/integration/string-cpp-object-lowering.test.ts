@@ -24,8 +24,12 @@ function first(value: string): string {
 function words(value: string): string[] {
   return value.split(',')
 }
+function defaulted(value: string = 'fallback'): string {
+  return value
+}
 console.log(trimmed.toUpperCase(), trimmed.slice(0, 4))
 console.log(first(trimmed))
+console.log(defaulted())
 console.log(trimmed.slice(0, 4) === 'Inox')
 console.log(trimmed.includes('std'), trimmed.startsWith('In'), trimmed.endsWith('lib'))
 console.log(trimmed.indexOf('o'), trimmed.lastIndexOf('i'))
@@ -64,6 +68,8 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
   assert.match(source, /auto inox_return_value_\d+ = inox::String\(inox_param_value\)\.split\(","\);/)
   assert.doesNotMatch(source, /inox_return = inox::String\([^\n]+\)\.split\([^\n]*\);/)
   assert.doesNotMatch(source, /inox::String\([^\n]+\)\.slice\([^\n]*\)\.(tag|as\.ref)/)
+  assert.match(source, /auto value_default_\d+ = inox::String\("fallback", 8\);/)
+  assert.match(source, /inox_retain\(inox_param_value\);/)
   assert.match(source, /trimmed\.includes\("std"\)/)
   assert.match(source, /trimmed\.startsWith\("In"\)/)
   assert.match(source, /trimmed\.endsWith\("lib"\)/)

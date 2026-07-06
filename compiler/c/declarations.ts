@@ -1421,12 +1421,13 @@ function emitDefaultRuntimeParamPreludeForParam(param: CFunctionParam, context: 
   ) {
     const paramName = emitCStringParamName(param.name)
     const temp = nextCName(context, `${param.name}_default`)
-    registerOwnedValue(context, temp)
 
     return [
       `if (${paramName}.tag == INOX_TAG_UNDEFINED) {`,
-      `  if (inox::String::fromLiteral(&inox_default_allocator, ${cStringLiteral(value.value)}, ${utf8ByteLength(value.value)}, &${temp}) != INOX_OK) ${emitFailureStatement(context)}`,
+      `  auto ${temp} = inox::String(${cStringLiteral(value.value)}, ${utf8ByteLength(value.value)});`,
+      `  if (!${temp}.valid()) ${emitFailureStatement(context)}`,
       `  ${paramName} = ${temp};`,
+      `  inox_retain(${paramName});`,
       '}'
     ]
   }
