@@ -3353,15 +3353,7 @@ function emitRuntimeMapForOfStatement(
     const body = emitScopedStatementBody(statement.body, context, [], [], [], [])
     popFlowTarget(context.continueTargets)
     popFlowTarget(context.breakTargets)
-    const createEntryStatus = emitStatusCheck(`Array.make(&inox_default_allocator, 2, &${emitCIdentifier(statement.name)})`, context)
-    const initKeyStatus = emitStatusCheck(
-      `Array.set(${emitCIdentifier(statement.name)}, 0, ${map}->entries[${index}].key)`,
-      context
-    )
-    const initValueStatus = emitStatusCheck(
-      `Array.set(${emitCIdentifier(statement.name)}, 1, ${map}->entries[${index}].value)`,
-      context
-    )
+    const entryName = emitCIdentifier(statement.name)
 
     const lines: string[] = []
     pushAllLines(lines, runtimeMap.lines)
@@ -3372,9 +3364,12 @@ function emitRuntimeMapForOfStatement(
     const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
     const loopBody: string[] = []
     pushAllLines(loopBody, emitPrepareOwnedValueWrite(statement.name))
-    loopBody.push(createEntryStatus)
-    loopBody.push(initKeyStatus)
-    loopBody.push(initValueStatus)
+    loopBody.push(`${entryName} = ArrayClass::create(2);`)
+    loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    loopBody.push(`ArrayClass(${entryName}).set(0, ${map}->entries[${index}].key);`)
+    loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    loopBody.push(`ArrayClass(${entryName}).set(1, ${map}->entries[${index}].value);`)
+    loopBody.push(emitRuntimeTypeCheck('inox::thrown()', context))
     pushAllLines(loopBody, body)
     pushLoopBodyLines(lines, loopBody, '  ', hasContinueLabel)
     if (hasContinueLabel) {
