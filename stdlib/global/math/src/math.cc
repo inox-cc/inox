@@ -16,6 +16,8 @@
 #endif
 #endif
 
+Math::Math() : random_state_(0x6d2b79f5u), random_backend_(MathRandomBackend::Simple) {}
+
 void Math::init(uint32_t seed) const {
   random_state_ = seed;
   random_backend_ = MathRandomBackend::Simple;

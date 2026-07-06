@@ -12,7 +12,9 @@ static int regexp_native_flags(RegExpFlags flags) {
   return 0;
 }
 
-RegExp::RegExp() = default;
+RegExp::RegExp() : pattern_(""), flags_(RegExpFlags::None) {}
+
+RegExp::RegExp(const char* pattern) : pattern_(pattern), flags_(RegExpFlags::None) {}
 
 RegExp::RegExp(const char* pattern, RegExpFlags flags) : pattern_(pattern), flags_(flags) {}
 

@@ -12,6 +12,8 @@ enum class MathRandomBackend {
 
 class Math {
 public:
+  Math();
+
   void init(uint32_t seed) const;
   void init(uint32_t seed, MathRandomBackend backend) const;
 
@@ -29,8 +31,8 @@ public:
   double random() const;
 
 private:
-  mutable uint32_t random_state_ = 0x6d2b79f5u;
-  mutable MathRandomBackend random_backend_ = MathRandomBackend::Simple;
+  mutable uint32_t random_state_;
+  mutable MathRandomBackend random_backend_;
 
   double reduce_radians(double value) const;
   int os_random_bytes(uint8_t* out, size_t len) const;

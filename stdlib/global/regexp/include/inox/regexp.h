@@ -13,13 +13,14 @@ enum class RegExpFlags {
 
 class RegExp {
 private:
-  const char* pattern_ = "";
-  RegExpFlags flags_ = RegExpFlags::None;
+  const char* pattern_;
+  RegExpFlags flags_;
 
 public:
   RegExp();
 
-  RegExp(const char* pattern, RegExpFlags flags = RegExpFlags::None);
+  explicit RegExp(const char* pattern);
+  RegExp(const char* pattern, RegExpFlags flags);
 
   bool test(const char* value) const;
   bool test(inox::StringView value) const;
