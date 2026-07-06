@@ -257,10 +257,10 @@ void NetServer::listen(inox::StringView host, int port, int backlog) const {
   }
 
   if (server->listening != 0) {
-    inox_status callback_status = server->listening(server->listening_user, server);
+    server->listening(server->listening_user, NetServer(server));
 
-    if (callback_status != INOX_OK) {
-      inox_net_server_report_status(server, callback_status);
+    if (inox::thrown()) {
+      inox_net_server_report_status(server, INOX_ERR_TYPE);
       inox_net_throw_failed("TypeError: NetServer.listen callback failed");
       return;
     }
@@ -936,10 +936,10 @@ static void inox_net_server_report_status(inox_net_server* server, inox_status s
   }
 
   if (server->error != 0) {
-    inox_status callback_status = server->error(server->error_user, server, status);
+    server->error(server->error_user, NetServer(server), status);
 
-    if (callback_status != INOX_OK) {
-      inox_libuv_loop_report_status(server->loop, callback_status);
+    if (inox::thrown()) {
+      inox_libuv_loop_report_status(server->loop, INOX_ERR_TYPE);
     }
 
     return;
@@ -1153,10 +1153,10 @@ static void inox_net_server_close_cb(uv_handle_t* handle) {
   }
 
   if (server->close != 0) {
-    inox_status status = server->close(server->close_user, server);
+    server->close(server->close_user, NetServer(server));
 
-    if (status != INOX_OK) {
-      inox_net_server_report_status(server, status);
+    if (inox::thrown()) {
+      inox_net_server_report_status(server, INOX_ERR_TYPE);
     }
   }
 

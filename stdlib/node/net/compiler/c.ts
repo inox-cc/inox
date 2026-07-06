@@ -165,6 +165,8 @@ function isNetSocketLifecycleEvent(eventName: string): boolean {
 function netHandlerUsesStatusReturn(kind: string): boolean {
   return (
     kind !== 'connection' &&
+    kind !== 'event' &&
+    kind !== 'error' &&
     kind !== 'socket-data' &&
     kind !== 'socket-event' &&
     kind !== 'socket-write' &&
@@ -222,10 +224,10 @@ export function emitNetHandlerHead(wrapper: CNetHandler): string {
   }
 
   if (wrapper.kind === 'error') {
-    return `static inox_status ${wrapper.name}(void* user, inox_net_server* inox_server, inox_status inox_error_status)`
+    return `static void ${wrapper.name}(void* user, NetServer inox_server, inox_status inox_error_status)`
   }
 
-  return `static inox_status ${wrapper.name}(void* user, inox_net_server* inox_server)`
+  return `static void ${wrapper.name}(void* user, NetServer inox_server)`
 }
 
 export function emitNetHandlerDeclaration(
