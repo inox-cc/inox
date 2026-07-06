@@ -461,12 +461,12 @@ export function emitPreparedFetchBodyOperand(
 
     appendLines(lines, value.lines)
     lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_BYTES', context))
-    lines.push(`inox_bytes* ${bytes} = (inox_bytes*)${value.expression}.as.ref;`)
+    lines.push(`BytesStorage* ${bytes} = (BytesStorage*)${value.expression}.as.ref;`)
 
     return {
       lines,
       bytes: `(const char*)${bytes}->bytes`,
-      length: `${bytes}->len`
+      length: `${bytes}->length`
     }
   }
 

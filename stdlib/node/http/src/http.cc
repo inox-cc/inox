@@ -465,9 +465,9 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
     return text(500, "internal server error") == INOX_OK ? 1 : 0;
   }
 
-  inox_bytes* bytes = (inox_bytes*)file.as.ref;
+  BytesStorage* bytes = (BytesStorage*)file.as.ref;
 
-  if (bytes->len > INOX_HTTP_MAX_RESPONSE_BODY) {
+  if (bytes->length > INOX_HTTP_MAX_RESPONSE_BODY) {
     inox_release(file);
 
     return text(413, "payload too large") == INOX_OK ? 1 : 0;
@@ -484,7 +484,7 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
   );
 
   if (result == INOX_OK) {
-    result = end(inox::StringView((const char*)bytes->bytes, bytes->len));
+    result = end(inox::StringView((const char*)bytes->bytes, bytes->length));
   }
 
   inox_release(file);

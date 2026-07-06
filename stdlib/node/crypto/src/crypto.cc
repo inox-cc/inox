@@ -234,8 +234,8 @@ Uint8Array crypto::getRandomValues(inox_value value) const {
     return Uint8Array();
   }
 
-  inox_bytes* bytes = (inox_bytes*)value.as.ref;
-  inox_status status = inox_crypto_random_bytes_raw(bytes->bytes, bytes->len);
+  BytesStorage* bytes = (BytesStorage*)value.as.ref;
+  inox_status status = inox_crypto_random_bytes_raw(bytes->bytes, bytes->length);
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.getRandomValues failed");
@@ -283,9 +283,9 @@ Uint8Array crypto::randomFillSync(inox_value value, inox_number offset_value, in
     return Uint8Array();
   }
 
-  inox_bytes* bytes = (inox_bytes*)value.as.ref;
+  BytesStorage* bytes = (BytesStorage*)value.as.ref;
 
-  if (offset > bytes->len) {
+  if (offset > bytes->length) {
     inox_crypto_throw_failed("crypto.randomFillSync failed");
     return Uint8Array();
   }
@@ -296,10 +296,10 @@ Uint8Array crypto::randomFillSync(inox_value value, inox_number offset_value, in
       return Uint8Array();
     }
   } else {
-    size = bytes->len - offset;
+    size = bytes->length - offset;
   }
 
-  if (size > bytes->len - offset) {
+  if (size > bytes->length - offset) {
     inox_crypto_throw_failed("crypto.randomFillSync failed");
     return Uint8Array();
   }
@@ -899,10 +899,10 @@ static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, 
       return INOX_ERR_TYPE;
     }
 
-    inox_bytes* buffer = (inox_bytes*)data.as.ref;
+    BytesStorage* buffer = (BytesStorage*)data.as.ref;
 
     *bytes = buffer->bytes;
-    *len = buffer->len;
+    *len = buffer->length;
 
     return INOX_OK;
   }

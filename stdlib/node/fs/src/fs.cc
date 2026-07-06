@@ -658,9 +658,9 @@ inox_status fs::appendFileBytesSync(const char* path, size_t path_len, inox_valu
     return INOX_ERR_TYPE;
   }
 
-  inox_bytes* data = (inox_bytes*)bytes.as.ref;
+  BytesStorage* data = (BytesStorage*)bytes.as.ref;
 
-  return this->appendFileSync(path, path_len, (const char*)data->bytes, data->len);
+  return this->appendFileSync(path, path_len, (const char*)data->bytes, data->length);
 }
 
 inox_status fs::copyFileSync(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len) {
@@ -748,9 +748,9 @@ inox_status fs::writeFileBytesSync(const char* path, size_t path_len, inox_value
     return INOX_ERR_TYPE;
   }
 
-  inox_bytes* data = (inox_bytes*)bytes.as.ref;
+  BytesStorage* data = (BytesStorage*)bytes.as.ref;
 
-  return this->writeFileSync(path, path_len, (const char*)data->bytes, data->len);
+  return this->writeFileSync(path, path_len, (const char*)data->bytes, data->length);
 }
 
 inox_status fs_promises::readFile(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
@@ -892,18 +892,18 @@ inox_status fs_promises::appendFileBytes(inox_loop* loop, const char* path, size
     return INOX_ERR_TYPE;
   }
 
-  inox_bytes* data = (inox_bytes*)bytes.as.ref;
+  BytesStorage* data = (BytesStorage*)bytes.as.ref;
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.append_file == 0) {
     return inox_fs_libuv_queue_request(
-      loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->len, 0, false, false, out
+      loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->length, 0, false, false, out
     );
   }
 #endif
 
   return inox_fs_queue_request(
-    loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->len, 0, false, false, out
+    loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->length, 0, false, false, out
   );
 }
 
@@ -969,18 +969,18 @@ inox_status fs_promises::writeFileBytes(inox_loop* loop, const char* path, size_
     return INOX_ERR_TYPE;
   }
 
-  inox_bytes* data = (inox_bytes*)bytes.as.ref;
+  BytesStorage* data = (BytesStorage*)bytes.as.ref;
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.write_file == 0) {
     return inox_fs_libuv_queue_request(
-      loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->len, 0, false, false, out
+      loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->length, 0, false, false, out
     );
   }
 #endif
 
   return inox_fs_queue_request(
-    loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->len, 0, false, false, out
+    loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, (const char*)data->bytes, data->length, 0, false, false, out
   );
 }
 

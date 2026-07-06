@@ -13,7 +13,7 @@ static inox_status make_bytes_value(
   bool zero_fill,
   inox_value* out
 );
-static inox_status allocate_bytes(inox_allocator* allocator, size_t length, inox_bytes** out);
+static inox_status allocate_bytes(inox_allocator* allocator, size_t length, BytesStorage** out);
 static void throw_bytes_error(const char* message);
 static size_t uint8_decimal_length(uint8_t value);
 static size_t write_uint8_decimal(uint8_t value, char* out);
@@ -83,18 +83,18 @@ bool Uint8Array::valid() const {
 }
 
 size_t Uint8Array::length() const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Uint8Array.length receiver is not a Uint8Array");
     return 0;
   }
 
-  return instance->len;
+  return instance->length;
 }
 
 const uint8_t* Uint8Array::bytes() const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Uint8Array bytes receiver is not a Uint8Array");
@@ -105,7 +105,7 @@ const uint8_t* Uint8Array::bytes() const {
 }
 
 uint8_t* Uint8Array::bytes() {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Uint8Array bytes receiver is not a Uint8Array");
@@ -116,14 +116,14 @@ uint8_t* Uint8Array::bytes() {
 }
 
 uint8_t Uint8Array::get(size_t index) const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Uint8Array index receiver is not a Uint8Array");
     return 0;
   }
 
-  if (index >= instance->len) {
+  if (index >= instance->length) {
     throw_bytes_error("TypeError: Uint8Array index is out of bounds");
     return 0;
   }
@@ -132,14 +132,14 @@ uint8_t Uint8Array::get(size_t index) const {
 }
 
 void Uint8Array::set(size_t index, uint8_t byte) const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Uint8Array index receiver is not a Uint8Array");
     return;
   }
 
-  if (index >= instance->len) {
+  if (index >= instance->length) {
     throw_bytes_error("TypeError: Uint8Array index is out of bounds");
     return;
   }
@@ -148,19 +148,19 @@ void Uint8Array::set(size_t index, uint8_t byte) const {
 }
 
 Uint8Array Uint8Array::slice(size_t start, size_t end) const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Uint8Array.slice receiver is not a Uint8Array");
     return Uint8Array();
   }
 
-  if (start > instance->len) {
-    start = instance->len;
+  if (start > instance->length) {
+    start = instance->length;
   }
 
-  if (end > instance->len) {
-    end = instance->len;
+  if (end > instance->length) {
+    end = instance->length;
   }
 
   if (end < start) {
@@ -179,20 +179,20 @@ Uint8Array Uint8Array::slice(size_t start, size_t end) const {
 }
 
 inox::String Uint8Array::toString() const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Uint8Array.toString receiver is not a Uint8Array");
     return inox::String();
   }
 
-  if (instance->len == 0) {
+  if (instance->length == 0) {
     return inox::String("", 0);
   }
 
   size_t total_length = 0;
 
-  for (size_t index = 0; index < instance->len; ++index) {
+  for (size_t index = 0; index < instance->length; ++index) {
     const size_t comma_length = index == 0 ? 0 : 1;
     const size_t digit_length = uint8_decimal_length(instance->bytes[index]);
 
@@ -223,7 +223,7 @@ inox::String Uint8Array::toString() const {
 
   size_t offset = 0;
 
-  for (size_t index = 0; index < instance->len; ++index) {
+  for (size_t index = 0; index < instance->length; ++index) {
     if (index > 0) {
       text[offset] = ',';
       offset += 1;
@@ -238,14 +238,14 @@ inox::String Uint8Array::toString() const {
   return result;
 }
 
-inox_bytes* Uint8Array::data() const {
+BytesStorage* Uint8Array::data() const {
   inox_value value = raw();
 
   if (value.tag != INOX_TAG_BYTES || value.as.ref == nullptr) {
     return nullptr;
   }
 
-  return (inox_bytes*)value.as.ref;
+  return (BytesStorage*)value.as.ref;
 }
 
 Buffer::Buffer() : Uint8Array() {}
@@ -340,19 +340,19 @@ bool Buffer::isBuffer(const inox::Value& value) {
 }
 
 Buffer Buffer::slice(size_t start, size_t end) const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Buffer.slice receiver is not a Buffer");
     return Buffer();
   }
 
-  if (start > instance->len) {
-    start = instance->len;
+  if (start > instance->length) {
+    start = instance->length;
   }
 
-  if (end > instance->len) {
-    end = instance->len;
+  if (end > instance->length) {
+    end = instance->length;
   }
 
   if (end < start) {
@@ -371,14 +371,14 @@ Buffer Buffer::slice(size_t start, size_t end) const {
 }
 
 inox::String Buffer::toString() const {
-  inox_bytes* instance = data();
+  BytesStorage* instance = data();
 
   if (instance == nullptr) {
     throw_bytes_error("TypeError: Buffer.toString receiver is not a Buffer");
     return inox::String();
   }
 
-  return inox::String((const char*)instance->bytes, instance->len);
+  return inox::String((const char*)instance->bytes, instance->length);
 }
 
 static inox_status make_bytes_value(
@@ -394,7 +394,7 @@ static inox_status make_bytes_value(
 
   *out = inox_undefined_value();
 
-  inox_bytes* bytes = nullptr;
+  BytesStorage* bytes = nullptr;
   inox_status status = allocate_bytes(allocator, length, &bytes);
 
   if (status != INOX_OK) {
@@ -413,19 +413,19 @@ static inox_status make_bytes_value(
   return INOX_OK;
 }
 
-static inox_status allocate_bytes(inox_allocator* allocator, size_t length, inox_bytes** out) {
+static inox_status allocate_bytes(inox_allocator* allocator, size_t length, BytesStorage** out) {
   if (out == nullptr || allocator == nullptr || allocator->alloc == nullptr) {
     return INOX_ERR_TYPE;
   }
 
   *out = nullptr;
 
-  if (length > ((size_t)-1) - sizeof(inox_bytes)) {
+  if (length > ((size_t)-1) - sizeof(BytesStorage)) {
     return INOX_ERR_OOM;
   }
 
-  size_t size = sizeof(inox_bytes) + length;
-  inox_bytes* bytes = (inox_bytes*)allocator->alloc(allocator->user, size, alignof(inox_bytes));
+  size_t size = sizeof(BytesStorage) + length;
+  BytesStorage* bytes = (BytesStorage*)allocator->alloc(allocator->user, size, alignof(BytesStorage));
 
   if (bytes == nullptr) {
     return INOX_ERR_OOM;
@@ -435,11 +435,11 @@ static inox_status allocate_bytes(inox_allocator* allocator, size_t length, inox
   bytes->header.ref_count = 1;
   bytes->header.flags = 0;
   bytes->header.size = size;
-  bytes->header.align = alignof(inox_bytes);
+  bytes->header.align = alignof(BytesStorage);
   bytes->header.allocator = allocator;
   bytes->header.dispose = 0;
   inox_ref_init_weak(&bytes->header);
-  bytes->len = length;
+  bytes->length = length;
   *out = bytes;
 #ifdef INOX_DEBUG_MEMORY
   inox::debugMemory.recordRefCreated(INOX_REF_BYTES);

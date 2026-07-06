@@ -5,11 +5,11 @@
 #include <stdint.h>
 #include "inox/value.h"
 
-typedef struct inox_bytes {
+struct BytesStorage {
   inox_ref header;
-  size_t len;
+  size_t length;
   uint8_t bytes[];
-} inox_bytes;
+};
 
 #ifdef __cplusplus
 
@@ -41,7 +41,7 @@ public:
   void set(size_t index, uint8_t byte) const;
   Uint8Array slice(size_t start, size_t end) const;
   inox::String toString() const;
-  inox_bytes* data() const;
+  BytesStorage* data() const;
 };
 
 class Buffer : public Uint8Array {
