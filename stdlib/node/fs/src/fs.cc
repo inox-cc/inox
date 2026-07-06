@@ -251,6 +251,12 @@ FsStats::FsStats(inox::Value&& value) : inox::Value(std::move(value)) {}
 
 FsStats::FsStats(inox::AdoptValue, inox_value value) : inox::Value(inox::adopt_value, value) {}
 
+bool FsStats::valid() const {
+  inox_value value = raw();
+
+  return (value.tag == INOX_TAG_OBJECT || value.tag == INOX_TAG_CLASS_INSTANCE) && value.as.ref != 0;
+}
+
 bool FsStats::isFile() const {
   inox_value value = inox_undefined_value();
 
@@ -578,7 +584,18 @@ FsStats fs::statSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.stat != 0) {
-    status = fs_active_adapter.stat(fs_active_adapter.user, &inox_default_allocator, path, &out);
+    FsStats result = fs_active_adapter.stat(fs_active_adapter.user, path);
+
+    if (inox::thrown()) {
+      return FsStats();
+    }
+
+    if (!result.valid()) {
+      inox_fs_throw_status(INOX_ERR_TYPE);
+      return FsStats();
+    }
+
+    return result;
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_stat(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -601,7 +618,18 @@ FsStats fs::lstatSync(inox::StringView path) {
   if (path.bytes == 0 && path.len != 0) {
     status = INOX_ERR_TYPE;
   } else if (fs_active_adapter.lstat != 0) {
-    status = fs_active_adapter.lstat(fs_active_adapter.user, &inox_default_allocator, path, &out);
+    FsStats result = fs_active_adapter.lstat(fs_active_adapter.user, path);
+
+    if (inox::thrown()) {
+      return FsStats();
+    }
+
+    if (!result.valid()) {
+      inox_fs_throw_status(INOX_ERR_TYPE);
+      return FsStats();
+    }
+
+    return result;
   } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
     status = inox_fs_libuv_lstat(0, &inox_default_allocator, path.bytes, path.len, &out);
@@ -3914,12 +3942,20 @@ static inox_status inox_fs_run_request(void* context) {
 
     if (request->kind == INOX_FS_REQUEST_STAT) {
       if (fs_active_adapter.stat != 0) {
-        status = fs_active_adapter.stat(
+        FsStats stats_result = fs_active_adapter.stat(
           fs_active_adapter.user,
-          request->loop->allocator,
-          inox::StringView(request->path, request->path_len),
-          &result
+          inox::StringView(request->path, request->path_len)
         );
+
+        if (inox::thrown()) {
+          return inox_fs_reject_thrown(request->promise);
+        }
+
+        if (!stats_result.valid()) {
+          return inox_fs_reject_status(request->loop, request->promise, INOX_ERR_TYPE);
+        }
+
+        return inox_promise_resolve(request->promise, stats_result.raw());
       } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
         status = inox_fs_libuv_stat(0, request->loop->allocator, request->path, request->path_len, &result);
@@ -3928,12 +3964,20 @@ static inox_status inox_fs_run_request(void* context) {
 #endif
       }
     } else if (fs_active_adapter.lstat != 0) {
-      status = fs_active_adapter.lstat(
+      FsStats stats_result = fs_active_adapter.lstat(
         fs_active_adapter.user,
-        request->loop->allocator,
-        inox::StringView(request->path, request->path_len),
-        &result
+        inox::StringView(request->path, request->path_len)
       );
+
+      if (inox::thrown()) {
+        return inox_fs_reject_thrown(request->promise);
+      }
+
+      if (!stats_result.valid()) {
+        return inox_fs_reject_status(request->loop, request->promise, INOX_ERR_TYPE);
+      }
+
+      return inox_promise_resolve(request->promise, stats_result.raw());
     } else {
 #ifdef INOX_LOOP_BACKEND_LIBUV
       status = inox_fs_libuv_lstat(0, request->loop->allocator, request->path, request->path_len, &result);

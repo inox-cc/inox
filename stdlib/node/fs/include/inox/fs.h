@@ -18,16 +18,13 @@ enum {
   INOX_FS_R_OK = 4
 };
 
+class FsStats;
+
 typedef inox::String (*FsReadFileFn)(void* user, inox::StringView path);
 typedef Buffer (*FsReadFileBytesFn)(void* user, inox::StringView path);
 typedef ArrayClass (*FsReadDirFn)(void* user, inox::StringView path);
 typedef ArrayClass (*FsReadDirDirentsFn)(void* user, inox::StringView path);
-typedef inox_status (*FsStatFn)(
-  void* user,
-  inox_allocator* allocator,
-  inox::StringView path,
-  inox_value* out
-);
+typedef FsStats (*FsStatFn)(void* user, inox::StringView path);
 typedef inox::String (*FsStringPathFn)(
   void* user,
   inox::StringView path
@@ -64,7 +61,6 @@ struct FsAdapter {
 };
 #ifdef __cplusplus
 
-class FsStats;
 class fs_promises {
 public:
   inox::Promise readFile(inox::StringView path);
@@ -125,6 +121,7 @@ public:
   explicit FsStats(inox::Value&& value);
   FsStats(inox::AdoptValue, inox_value value);
 
+  bool valid() const;
   bool isFile() const;
   bool isDirectory() const;
 };
