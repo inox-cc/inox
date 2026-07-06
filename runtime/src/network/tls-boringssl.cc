@@ -77,7 +77,7 @@ inox_status inox_tls_connect(
     return status;
   }
 
-  status = inox_net_connect(
+  status = NetSocket::connect(
     loop,
     host,
     port,
@@ -205,7 +205,7 @@ void inox_tls_client_close(inox_tls_client* client) {
   client->closing = 1;
 
   if (client->socket != 0) {
-    inox_net_socket_close(client->socket);
+    NetSocket(client->socket).close();
   }
 }
 
@@ -286,7 +286,7 @@ static inox_status inox_tls_on_tcp_connect(void* user, inox_net_socket* socket, 
     return inox_tls_fail_async(client, status);
   }
 
-  if (inox_net_socket_read_start(socket) != INOX_OK) {
+  if (NetSocket(socket).readStart() != INOX_OK) {
     return inox_tls_fail_async(client, INOX_ERR_FIELD);
   }
 
@@ -428,7 +428,7 @@ static inox_status inox_tls_flush_net_bio(inox_tls_client* client) {
         return INOX_ERR_FIELD;
       }
 
-      inox_status status = inox_net_socket_write(client->socket, buffer, (size_t)read);
+      inox_status status = NetSocket(client->socket).write(inox::StringView(buffer, (size_t)read));
 
       if (status != INOX_OK) {
         return status;

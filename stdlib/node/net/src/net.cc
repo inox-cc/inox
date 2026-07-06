@@ -1,5 +1,9 @@
 #include "inox/net.h"
 
+NetServer::NetServer(inox_net_server* server) : server_(server) {}
+
+NetSocket::NetSocket(inox_net_socket* socket) : socket_(socket) {}
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
 
@@ -89,7 +93,7 @@ static void inox_net_write_cb(uv_write_t* request, int status);
 static void inox_net_server_close_cb(uv_handle_t* handle);
 static void inox_net_socket_close_cb(uv_handle_t* handle);
 
-inox_status inox_net_server_new(
+inox_status NetServer::create(
   inox_loop* loop,
   inox_net_connection_fn connection,
   void* user,
@@ -138,7 +142,9 @@ inox_status inox_net_server_new(
   return INOX_OK;
 }
 
-inox_status inox_net_server_on_connection(inox_net_server* server, inox_net_connection_fn connection, void* user) {
+inox_status NetServer::onConnection(inox_net_connection_fn connection, void* user) const {
+  inox_net_server* server = server_;
+
   if (server == 0 || server->closing) {
     return INOX_ERR_TYPE;
   }
@@ -149,7 +155,9 @@ inox_status inox_net_server_on_connection(inox_net_server* server, inox_net_conn
   return INOX_OK;
 }
 
-inox_status inox_net_server_on_listening(inox_net_server* server, inox_net_server_fn listening, void* user) {
+inox_status NetServer::onListening(inox_net_server_fn listening, void* user) const {
+  inox_net_server* server = server_;
+
   if (server == 0 || server->closing) {
     return INOX_ERR_TYPE;
   }
@@ -160,7 +168,9 @@ inox_status inox_net_server_on_listening(inox_net_server* server, inox_net_serve
   return INOX_OK;
 }
 
-inox_status inox_net_server_on_close(inox_net_server* server, inox_net_server_fn close, void* user) {
+inox_status NetServer::onClose(inox_net_server_fn close, void* user) const {
+  inox_net_server* server = server_;
+
   if (server == 0 || server->closing) {
     return INOX_ERR_TYPE;
   }
@@ -171,7 +181,9 @@ inox_status inox_net_server_on_close(inox_net_server* server, inox_net_server_fn
   return INOX_OK;
 }
 
-inox_status inox_net_server_on_error(inox_net_server* server, inox_net_server_error_fn error, void* user) {
+inox_status NetServer::onError(inox_net_server_error_fn error, void* user) const {
+  inox_net_server* server = server_;
+
   if (server == 0 || server->closing) {
     return INOX_ERR_TYPE;
   }
@@ -182,7 +194,9 @@ inox_status inox_net_server_on_error(inox_net_server* server, inox_net_server_er
   return INOX_OK;
 }
 
-inox_status inox_net_server_listen(inox_net_server* server, const char* host, int port, int backlog) {
+inox_status NetServer::listen(const char* host, int port, int backlog) const {
+  inox_net_server* server = server_;
+
   if (server == 0 || server->closing) {
     return INOX_ERR_TYPE;
   }
@@ -214,7 +228,9 @@ inox_status inox_net_server_listen(inox_net_server* server, const char* host, in
   return INOX_OK;
 }
 
-inox_status inox_net_server_address(inox_net_server* server, inox_net_address* out) {
+inox_status NetServer::address(inox_net_address* out) const {
+  inox_net_server* server = server_;
+
   if (server == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -229,13 +245,15 @@ inox_status inox_net_server_address(inox_net_server* server, inox_net_address* o
   return inox_net_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
-inox_status inox_net_server_local_port(inox_net_server* server, int* out_port) {
+inox_status NetServer::localPort(int* out_port) const {
+  inox_net_server* server = server_;
+
   if (server == 0 || out_port == 0) {
     return INOX_ERR_TYPE;
   }
 
   inox_net_address address;
-  inox_status status = inox_net_server_address(server, &address);
+  inox_status status = this->address(&address);
 
   if (status != INOX_OK) {
     return status;
@@ -246,7 +264,9 @@ inox_status inox_net_server_local_port(inox_net_server* server, int* out_port) {
   return INOX_OK;
 }
 
-void inox_net_server_close(inox_net_server* server) {
+void NetServer::close() const {
+  inox_net_server* server = server_;
+
   if (server == 0 || server->closing) {
     return;
   }
@@ -255,7 +275,7 @@ void inox_net_server_close(inox_net_server* server) {
   uv_close((uv_handle_t*)&server->handle, inox_net_server_close_cb);
 }
 
-inox_status inox_net_connect(
+inox_status NetSocket::connect(
   inox_loop* loop,
   const char* host,
   int port,
@@ -282,7 +302,7 @@ inox_status inox_net_connect(
     (inox_net_connect_request*)allocator->alloc(allocator->user, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
 
   if (request == 0) {
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
     return INOX_ERR_OOM;
   }
 
@@ -296,7 +316,7 @@ inox_status inox_net_connect(
 
   if (status != INOX_OK) {
     allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
     return status;
   }
 
@@ -304,7 +324,7 @@ inox_status inox_net_connect(
 
   if (status != INOX_OK) {
     allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
     return status;
   }
 
@@ -313,7 +333,7 @@ inox_status inox_net_connect(
   if (uv_tcp_connect(&request->request, &socket->handle, (const struct sockaddr*)&addr, inox_net_connect_cb) != 0) {
     inox_libuv_loop_release_request(loop);
     allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
     return INOX_ERR_FIELD;
   }
 
@@ -327,12 +347,9 @@ inox_status inox_net_connect(
   return INOX_OK;
 }
 
-void inox_net_socket_set_callbacks(
-  inox_net_socket* socket,
-  inox_net_data_fn data,
-  inox_net_close_fn close,
-  void* user
-) {
+void NetSocket::setCallbacks(inox_net_data_fn data, inox_net_close_fn close, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0) {
     return;
   }
@@ -344,7 +361,9 @@ void inox_net_socket_set_callbacks(
   socket->user = user;
 }
 
-inox_status inox_net_socket_on_connect(inox_net_socket* socket, inox_net_socket_fn connect, void* user) {
+inox_status NetSocket::onConnect(inox_net_socket_fn connect, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -355,7 +374,9 @@ inox_status inox_net_socket_on_connect(inox_net_socket* socket, inox_net_socket_
   return INOX_OK;
 }
 
-inox_status inox_net_socket_on_ready(inox_net_socket* socket, inox_net_socket_fn ready, void* user) {
+inox_status NetSocket::onReady(inox_net_socket_fn ready, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -366,7 +387,9 @@ inox_status inox_net_socket_on_ready(inox_net_socket* socket, inox_net_socket_fn
   return INOX_OK;
 }
 
-inox_status inox_net_socket_on_data(inox_net_socket* socket, inox_net_data_fn data, void* user) {
+inox_status NetSocket::onData(inox_net_data_fn data, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -377,7 +400,9 @@ inox_status inox_net_socket_on_data(inox_net_socket* socket, inox_net_data_fn da
   return INOX_OK;
 }
 
-inox_status inox_net_socket_on_end(inox_net_socket* socket, inox_net_socket_fn end, void* user) {
+inox_status NetSocket::onEnd(inox_net_socket_fn end, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -388,7 +413,9 @@ inox_status inox_net_socket_on_end(inox_net_socket* socket, inox_net_socket_fn e
   return INOX_OK;
 }
 
-inox_status inox_net_socket_on_close(inox_net_socket* socket, inox_net_socket_fn close, void* user) {
+inox_status NetSocket::onClose(inox_net_socket_fn close, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -399,7 +426,9 @@ inox_status inox_net_socket_on_close(inox_net_socket* socket, inox_net_socket_fn
   return INOX_OK;
 }
 
-inox_status inox_net_socket_on_error(inox_net_socket* socket, inox_net_socket_error_fn error, void* user) {
+inox_status NetSocket::onError(inox_net_socket_error_fn error, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -410,7 +439,9 @@ inox_status inox_net_socket_on_error(inox_net_socket* socket, inox_net_socket_er
   return INOX_OK;
 }
 
-inox_status inox_net_socket_on_drain(inox_net_socket* socket, inox_net_socket_fn drain, void* user) {
+inox_status NetSocket::onDrain(inox_net_socket_fn drain, void* user) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -421,7 +452,9 @@ inox_status inox_net_socket_on_drain(inox_net_socket* socket, inox_net_socket_fn
   return INOX_OK;
 }
 
-inox_status inox_net_socket_read_start(inox_net_socket* socket) {
+inox_status NetSocket::readStart() const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || (socket->data == 0 && socket->end == 0)) {
     return INOX_ERR_TYPE;
   }
@@ -429,7 +462,9 @@ inox_status inox_net_socket_read_start(inox_net_socket* socket) {
   return uv_read_start((uv_stream_t*)&socket->handle, inox_net_alloc_cb, inox_net_read_cb) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_net_socket_read_stop(inox_net_socket* socket) {
+inox_status NetSocket::readStop() const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0) {
     return INOX_ERR_TYPE;
   }
@@ -437,19 +472,21 @@ inox_status inox_net_socket_read_stop(inox_net_socket* socket) {
   return uv_read_stop((uv_stream_t*)&socket->handle) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_net_socket_set_encoding(inox_net_socket* socket, const char* encoding, size_t encoding_len) {
+inox_status NetSocket::setEncoding(inox::StringView encoding) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
 
-  if (encoding == 0 || encoding_len == 0) {
+  if (encoding.len == 0) {
     socket->utf8_encoding = 0;
     return INOX_OK;
   }
 
   if (
-    (encoding_len == 4 && memcmp(encoding, "utf8", 4) == 0) ||
-    (encoding_len == 5 && memcmp(encoding, "utf-8", 5) == 0)
+    (encoding.len == 4 && memcmp(encoding.bytes, "utf8", 4) == 0) ||
+    (encoding.len == 5 && memcmp(encoding.bytes, "utf-8", 5) == 0)
   ) {
     socket->utf8_encoding = 1;
     return INOX_OK;
@@ -458,7 +495,9 @@ inox_status inox_net_socket_set_encoding(inox_net_socket* socket, const char* en
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_address(inox_net_socket* socket, inox_net_address* out) {
+inox_status NetSocket::address(inox_net_address* out) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -473,7 +512,9 @@ inox_status inox_net_socket_address(inox_net_socket* socket, inox_net_address* o
   return inox_net_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
-inox_status inox_net_socket_remote_address(inox_net_socket* socket, inox_net_address* out) {
+inox_status NetSocket::remoteAddress(inox_net_address* out) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -488,7 +529,9 @@ inox_status inox_net_socket_remote_address(inox_net_socket* socket, inox_net_add
   return inox_net_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
-inox_status inox_net_socket_get_bytes_read(inox_net_socket* socket, size_t* out_bytes) {
+inox_status NetSocket::bytesRead(size_t* out_bytes) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || out_bytes == 0) {
     return INOX_ERR_TYPE;
   }
@@ -498,7 +541,9 @@ inox_status inox_net_socket_get_bytes_read(inox_net_socket* socket, size_t* out_
   return INOX_OK;
 }
 
-inox_status inox_net_socket_get_bytes_written(inox_net_socket* socket, size_t* out_bytes) {
+inox_status NetSocket::bytesWritten(size_t* out_bytes) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || out_bytes == 0) {
     return INOX_ERR_TYPE;
   }
@@ -508,7 +553,9 @@ inox_status inox_net_socket_get_bytes_written(inox_net_socket* socket, size_t* o
   return INOX_OK;
 }
 
-inox_status inox_net_socket_set_no_delay(inox_net_socket* socket, int enabled) {
+inox_status NetSocket::setNoDelay(bool enabled) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -516,7 +563,9 @@ inox_status inox_net_socket_set_no_delay(inox_net_socket* socket, int enabled) {
   return uv_tcp_nodelay(&socket->handle, enabled ? 1 : 0) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_net_socket_set_keep_alive(inox_net_socket* socket, int enabled, unsigned int initial_delay) {
+inox_status NetSocket::setKeepAlive(bool enabled, unsigned int initial_delay) const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -524,7 +573,9 @@ inox_status inox_net_socket_set_keep_alive(inox_net_socket* socket, int enabled,
   return uv_tcp_keepalive(&socket->handle, enabled ? 1 : 0, initial_delay) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_net_socket_ref(inox_net_socket* socket) {
+inox_status NetSocket::ref() const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0) {
     return INOX_ERR_TYPE;
   }
@@ -534,7 +585,9 @@ inox_status inox_net_socket_ref(inox_net_socket* socket) {
   return INOX_OK;
 }
 
-inox_status inox_net_socket_unref(inox_net_socket* socket) {
+inox_status NetSocket::unref() const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0) {
     return INOX_ERR_TYPE;
   }
@@ -544,36 +597,24 @@ inox_status inox_net_socket_unref(inox_net_socket* socket) {
   return INOX_OK;
 }
 
-inox_status inox_net_socket_write(inox_net_socket* socket, const char* bytes, size_t len) {
-  return inox_net_socket_write_internal(socket, bytes, len, 0, 0, 0);
+inox_status NetSocket::write(inox::StringView bytes) const {
+  return inox_net_socket_write_internal(socket_, bytes.bytes, bytes.len, 0, 0, 0);
 }
 
-inox_status inox_net_socket_write_and_close(inox_net_socket* socket, const char* bytes, size_t len) {
-  return inox_net_socket_write_internal(socket, bytes, len, 1, 0, 0);
+inox_status NetSocket::writeAndClose(inox::StringView bytes) const {
+  return inox_net_socket_write_internal(socket_, bytes.bytes, bytes.len, 1, 0, 0);
 }
 
-inox_status inox_net_socket_write_with_callback(
-  inox_net_socket* socket,
-  const char* bytes,
-  size_t len,
-  inox_net_socket_write_fn callback,
-  void* user
-) {
-  return inox_net_socket_write_internal(socket, bytes, len, 0, callback, user);
+inox_status NetSocket::write(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+  return inox_net_socket_write_internal(socket_, bytes.bytes, bytes.len, 0, callback, user);
 }
 
-inox_status inox_net_socket_end(inox_net_socket* socket, const char* bytes, size_t len) {
-  return inox_net_socket_write_internal(socket, bytes == 0 ? "" : bytes, bytes == 0 ? 0 : len, 1, 0, 0);
+inox_status NetSocket::end(inox::StringView bytes) const {
+  return inox_net_socket_write_internal(socket_, bytes.bytes, bytes.len, 1, 0, 0);
 }
 
-inox_status inox_net_socket_end_with_callback(
-  inox_net_socket* socket,
-  const char* bytes,
-  size_t len,
-  inox_net_socket_write_fn callback,
-  void* user
-) {
-  return inox_net_socket_write_internal(socket, bytes == 0 ? "" : bytes, bytes == 0 ? 0 : len, 1, callback, user);
+inox_status NetSocket::end(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+  return inox_net_socket_write_internal(socket_, bytes.bytes, bytes.len, 1, callback, user);
 }
 
 static inox_status inox_net_socket_write_internal(
@@ -642,7 +683,9 @@ static inox_status inox_net_socket_write_internal(
   return INOX_OK;
 }
 
-void inox_net_socket_close(inox_net_socket* socket) {
+void NetSocket::close() const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return;
   }
@@ -652,12 +695,14 @@ void inox_net_socket_close(inox_net_socket* socket) {
   uv_close((uv_handle_t*)&socket->handle, inox_net_socket_close_cb);
 }
 
-inox_status inox_net_socket_destroy(inox_net_socket* socket) {
+inox_status NetSocket::destroy() const {
+  inox_net_socket* socket = socket_;
+
   if (socket == 0) {
     return INOX_ERR_TYPE;
   }
 
-  inox_net_socket_close(socket);
+  close();
 
   return INOX_OK;
 }
@@ -835,13 +880,13 @@ static void inox_net_connection_cb(uv_stream_t* server_handle, int status) {
   }
 
   if (uv_accept(server_handle, (uv_stream_t*)&socket->handle) != 0) {
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
     inox_net_server_report_status(server, INOX_ERR_FIELD);
     return;
   }
 
   if (server->connection == 0) {
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
     return;
   }
 
@@ -874,7 +919,7 @@ static void inox_net_connect_cb(uv_connect_t* request, int status) {
   }
   if (connect_status != INOX_OK) {
     inox_net_socket_report_status(socket, connect_status);
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
   } else {
     if (socket->connect_event != 0) {
       inox_status callback_status = socket->connect_event(socket->connect_user, socket);
@@ -933,7 +978,7 @@ static void inox_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
       inox_net_socket_report_status(socket, INOX_ERR_FIELD);
     }
 
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
   } else if (nread > 0 && socket->data != 0) {
     socket->bytes_read += (size_t)nread;
     inox_status status = socket->data(socket->data_user, socket, buf->base, (size_t)nread);
@@ -982,7 +1027,7 @@ static void inox_net_write_cb(uv_write_t* request, int status) {
   }
 
   if (write->close_after) {
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
   }
 
   if (write->bytes != 0) {
@@ -1050,7 +1095,7 @@ struct inox_net_socket {
   int unused;
 };
 
-inox_status inox_net_server_new(
+inox_status NetServer::create(
   inox_loop* loop,
   inox_net_connection_fn connection,
   void* user,
@@ -1068,44 +1113,44 @@ inox_status inox_net_server_new(
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_server_on_connection(inox_net_server* server, inox_net_connection_fn connection, void* user) {
-  (void)server;
+inox_status NetServer::onConnection(inox_net_connection_fn connection, void* user) const {
+  (void)server_;
   (void)connection;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_server_on_listening(inox_net_server* server, inox_net_server_fn listening, void* user) {
-  (void)server;
+inox_status NetServer::onListening(inox_net_server_fn listening, void* user) const {
+  (void)server_;
   (void)listening;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_server_on_close(inox_net_server* server, inox_net_server_fn close, void* user) {
-  (void)server;
+inox_status NetServer::onClose(inox_net_server_fn close, void* user) const {
+  (void)server_;
   (void)close;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_server_on_error(inox_net_server* server, inox_net_server_error_fn error, void* user) {
-  (void)server;
+inox_status NetServer::onError(inox_net_server_error_fn error, void* user) const {
+  (void)server_;
   (void)error;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_server_listen(inox_net_server* server, const char* host, int port, int backlog) {
-  (void)server;
+inox_status NetServer::listen(const char* host, int port, int backlog) const {
+  (void)server_;
   (void)host;
   (void)port;
   (void)backlog;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_server_address(inox_net_server* server, inox_net_address* out) {
-  (void)server;
+inox_status NetServer::address(inox_net_address* out) const {
+  (void)server_;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
@@ -1117,8 +1162,8 @@ inox_status inox_net_server_address(inox_net_server* server, inox_net_address* o
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_server_local_port(inox_net_server* server, int* out_port) {
-  (void)server;
+inox_status NetServer::localPort(int* out_port) const {
+  (void)server_;
 
   if (out_port == 0) {
     return INOX_ERR_TYPE;
@@ -1128,11 +1173,11 @@ inox_status inox_net_server_local_port(inox_net_server* server, int* out_port) {
   return INOX_ERR_UNSUPPORTED;
 }
 
-void inox_net_server_close(inox_net_server* server) {
-  (void)server;
+void NetServer::close() const {
+  (void)server_;
 }
 
-inox_status inox_net_connect(
+inox_status NetSocket::connect(
   inox_loop* loop,
   const char* host,
   int port,
@@ -1158,86 +1203,80 @@ inox_status inox_net_connect(
   return INOX_ERR_UNSUPPORTED;
 }
 
-void inox_net_socket_set_callbacks(
-  inox_net_socket* socket,
-  inox_net_data_fn data,
-  inox_net_close_fn close,
-  void* user
-) {
-  (void)socket;
+void NetSocket::setCallbacks(inox_net_data_fn data, inox_net_close_fn close, void* user) const {
+  (void)socket_;
   (void)data;
   (void)close;
   (void)user;
 }
 
-inox_status inox_net_socket_on_connect(inox_net_socket* socket, inox_net_socket_fn connect, void* user) {
-  (void)socket;
+inox_status NetSocket::onConnect(inox_net_socket_fn connect, void* user) const {
+  (void)socket_;
   (void)connect;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_on_ready(inox_net_socket* socket, inox_net_socket_fn ready, void* user) {
-  (void)socket;
+inox_status NetSocket::onReady(inox_net_socket_fn ready, void* user) const {
+  (void)socket_;
   (void)ready;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_on_data(inox_net_socket* socket, inox_net_data_fn data, void* user) {
-  (void)socket;
+inox_status NetSocket::onData(inox_net_data_fn data, void* user) const {
+  (void)socket_;
   (void)data;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_on_end(inox_net_socket* socket, inox_net_socket_fn end, void* user) {
-  (void)socket;
+inox_status NetSocket::onEnd(inox_net_socket_fn end, void* user) const {
+  (void)socket_;
   (void)end;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_on_close(inox_net_socket* socket, inox_net_socket_fn close, void* user) {
-  (void)socket;
+inox_status NetSocket::onClose(inox_net_socket_fn close, void* user) const {
+  (void)socket_;
   (void)close;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_on_error(inox_net_socket* socket, inox_net_socket_error_fn error, void* user) {
-  (void)socket;
+inox_status NetSocket::onError(inox_net_socket_error_fn error, void* user) const {
+  (void)socket_;
   (void)error;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_on_drain(inox_net_socket* socket, inox_net_socket_fn drain, void* user) {
-  (void)socket;
+inox_status NetSocket::onDrain(inox_net_socket_fn drain, void* user) const {
+  (void)socket_;
   (void)drain;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_read_start(inox_net_socket* socket) {
-  (void)socket;
+inox_status NetSocket::readStart() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_read_stop(inox_net_socket* socket) {
-  (void)socket;
+inox_status NetSocket::readStop() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_set_encoding(inox_net_socket* socket, const char* encoding, size_t encoding_len) {
-  (void)socket;
+inox_status NetSocket::setEncoding(inox::StringView encoding) const {
+  (void)socket_;
   (void)encoding;
-  (void)encoding_len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_address(inox_net_socket* socket, inox_net_address* out) {
-  (void)socket;
+inox_status NetSocket::address(inox_net_address* out) const {
+  (void)socket_;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
@@ -1249,8 +1288,8 @@ inox_status inox_net_socket_address(inox_net_socket* socket, inox_net_address* o
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_remote_address(inox_net_socket* socket, inox_net_address* out) {
-  (void)socket;
+inox_status NetSocket::remoteAddress(inox_net_address* out) const {
+  (void)socket_;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
@@ -1262,8 +1301,8 @@ inox_status inox_net_socket_remote_address(inox_net_socket* socket, inox_net_add
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_get_bytes_read(inox_net_socket* socket, size_t* out_bytes) {
-  (void)socket;
+inox_status NetSocket::bytesRead(size_t* out_bytes) const {
+  (void)socket_;
 
   if (out_bytes == 0) {
     return INOX_ERR_TYPE;
@@ -1273,8 +1312,8 @@ inox_status inox_net_socket_get_bytes_read(inox_net_socket* socket, size_t* out_
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_get_bytes_written(inox_net_socket* socket, size_t* out_bytes) {
-  (void)socket;
+inox_status NetSocket::bytesWritten(size_t* out_bytes) const {
+  (void)socket_;
 
   if (out_bytes == 0) {
     return INOX_ERR_TYPE;
@@ -1284,87 +1323,70 @@ inox_status inox_net_socket_get_bytes_written(inox_net_socket* socket, size_t* o
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_set_no_delay(inox_net_socket* socket, int enabled) {
-  (void)socket;
+inox_status NetSocket::setNoDelay(bool enabled) const {
+  (void)socket_;
   (void)enabled;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_set_keep_alive(inox_net_socket* socket, int enabled, unsigned int initial_delay) {
-  (void)socket;
+inox_status NetSocket::setKeepAlive(bool enabled, unsigned int initial_delay) const {
+  (void)socket_;
   (void)enabled;
   (void)initial_delay;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_ref(inox_net_socket* socket) {
-  (void)socket;
+inox_status NetSocket::ref() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_unref(inox_net_socket* socket) {
-  (void)socket;
+inox_status NetSocket::unref() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_write(inox_net_socket* socket, const char* bytes, size_t len) {
-  (void)socket;
+inox_status NetSocket::write(inox::StringView bytes) const {
+  (void)socket_;
   (void)bytes;
-  (void)len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_write_with_callback(
-  inox_net_socket* socket,
-  const char* bytes,
-  size_t len,
-  inox_net_socket_write_fn callback,
-  void* user
-) {
-  (void)socket;
+inox_status NetSocket::write(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+  (void)socket_;
   (void)bytes;
-  (void)len;
   (void)callback;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_end(inox_net_socket* socket, const char* bytes, size_t len) {
-  (void)socket;
+inox_status NetSocket::end(inox::StringView bytes) const {
+  (void)socket_;
   (void)bytes;
-  (void)len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_end_with_callback(
-  inox_net_socket* socket,
-  const char* bytes,
-  size_t len,
-  inox_net_socket_write_fn callback,
-  void* user
-) {
-  (void)socket;
+inox_status NetSocket::end(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+  (void)socket_;
   (void)bytes;
-  (void)len;
   (void)callback;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_write_and_close(inox_net_socket* socket, const char* bytes, size_t len) {
-  (void)socket;
+inox_status NetSocket::writeAndClose(inox::StringView bytes) const {
+  (void)socket_;
   (void)bytes;
-  (void)len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_net_socket_destroy(inox_net_socket* socket) {
-  (void)socket;
+inox_status NetSocket::destroy() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-void inox_net_socket_close(inox_net_socket* socket) {
-  (void)socket;
+void NetSocket::close() const {
+  (void)socket_;
 }
 
 #endif

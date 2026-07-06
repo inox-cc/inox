@@ -434,39 +434,30 @@ function emitNetHandlerSocketCallStatement(
 
     const body = emitNetBytesOperand(bodyArg, netContext, context, deps)
     const wrapper = findNetHandler(context, callback, 'socket-write')
-    let runtime = 'inox_net_socket_write'
+    let call = `NetSocket(inox_socket).write(inox::StringView(${body.bytes}, ${body.length}))`
 
     if (method === 'write' && wrapper !== null && typeof wrapper !== 'undefined') {
-      runtime = 'inox_net_socket_write_with_callback'
+      call = `NetSocket(inox_socket).write(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
     } else if (method === 'end' && (wrapper === null || typeof wrapper === 'undefined')) {
-      runtime = 'inox_net_socket_end'
-    } else if (method === 'end') {
-      runtime = 'inox_net_socket_end_with_callback'
-    }
-
-    let callbackArgs = ''
-
-    if (wrapper !== null && typeof wrapper !== 'undefined') {
-      callbackArgs = `, ${wrapper.name}, 0`
+      call = `NetSocket(inox_socket).end(inox::StringView(${body.bytes}, ${body.length}))`
+    } else if (method === 'end' && wrapper !== null && typeof wrapper !== 'undefined') {
+      call = `NetSocket(inox_socket).end(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
     }
 
     const lines: string[] = []
 
     pushNetLines(lines, body.lines)
-    pushNetLines(
-      lines,
-      emitNetStatusCheck(`${runtime}(inox_socket, ${body.bytes}, ${body.length}${callbackArgs})`, context)
-    )
+    pushNetLines(lines, emitNetStatusCheck(call, context))
 
     return lines
   }
 
   if (method === 'destroy') {
-    return emitNetStatusCheck('inox_net_socket_destroy(inox_socket)', context)
+    return emitNetStatusCheck('NetSocket(inox_socket).destroy()', context)
   }
 
   if (method === 'close') {
-    return ['inox_net_socket_close(inox_socket);']
+    return ['NetSocket(inox_socket).close();']
   }
 
   context.diagnostics.push(
@@ -537,7 +528,7 @@ function emitNetHandlerServerCallStatement(expression: AnyNode): string[] | null
     return null
   }
 
-  return ['inox_net_server_close(inox_server);']
+  return ['NetServer(inox_server).close();']
 }
 
 export function emitNetSocketVariableDeclaration(
@@ -577,17 +568,17 @@ export function emitNetAddressVariableDeclaration(statement: AnyNode, context: C
     return null
   }
 
-  let runtime = 'inox_net_server_address'
+  let call = `NetServer(${receiverName}).address(&${statement.name})`
 
   if (context.variables.get(receiverName) === 'net-socket') {
-    runtime = 'inox_net_socket_address'
+    call = `NetSocket(${receiverName}).address(&${statement.name})`
   }
 
   context.variables.set(statement.name, 'net-address')
 
   return [
     `inox_net_address ${statement.name};`,
-    emitStatusCheck(`${runtime}(${receiverName}, &${statement.name})`, context)
+    emitStatusCheck(call, context)
   ]
 }
 
@@ -603,14 +594,14 @@ export function emitNetAddressMemberVariableDeclaration(
 
       return [
         `inox_net_address ${member.tempName};`,
-        emitStatusCheck(`${member.runtime}(${member.socketName}, &${member.tempName})`, context),
+        emitStatusCheck(`NetSocket(${member.socketName}).${member.runtime}(&${member.tempName})`, context),
         `const char *${statement.name} = ${member.tempName}.${member.field};`
       ]
     }
 
     context.variables.set(statement.name, 'number')
 
-    const statusCall = `${member.runtime}(${member.socketName}, &${member.tempName})`
+    const statusCall = `NetSocket(${member.socketName}).${member.runtime}(&${member.tempName})`
 
     return [
       `double ${statement.name} = 0;`,
@@ -634,7 +625,7 @@ export function emitNetNumberVariableDeclaration(statement: AnyNode, context: CF
 
   context.variables.set(statement.name, 'number')
 
-  const statusCall = `${counter.runtime}(${counter.socketName}, &inox_net_counter)`
+  const statusCall = `NetSocket(${counter.socketName}).${counter.runtime}(&inox_net_counter)`
 
   return [
     `double ${statement.name} = 0;`,
@@ -682,7 +673,7 @@ export function emitNetSocketCallStatement(
       return null
     }
 
-    return [emitStatusCheck(`inox_net_socket_destroy(${socketName})`, context)]
+    return [emitStatusCheck(`NetSocket(${socketName}).destroy()`, context)]
   }
 
   if (isNetSocketMethodCall(expression, 'close', context)) {
@@ -690,7 +681,7 @@ export function emitNetSocketCallStatement(
       return null
     }
 
-    return [`inox_net_socket_close(${socketName});`]
+    return [`NetSocket(${socketName}).close();`]
   }
 
   if (isNetSocketMethodCall(expression, 'setEncoding', context)) {
@@ -887,13 +878,13 @@ function emitNetSocketConnectLines(
   pushNetLines(lines, port.lines)
   lines.push(
     emitStatusCheck(
-      `inox_net_connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`,
+      `NetSocket::connect(${emitEventLoopReference(context)}, ${host}, (int)(${port.expression}), 0, 0, 0, 0, &${socketName})`,
       context
     )
   )
 
   if (wrapper !== null && typeof wrapper !== 'undefined') {
-    lines.push(emitStatusCheck(`inox_net_socket_on_connect(${socketName}, ${wrapper.name}, 0)`, context))
+    lines.push(emitStatusCheck(`NetSocket(${socketName}).onConnect(${wrapper.name}, 0)`, context))
   }
 
   return lines
@@ -958,23 +949,23 @@ function emitNetSocketOnLines(socketName: string, args: AnyNode[], context: CFun
     return []
   }
 
-  let runtime = 'inox_net_socket_on_drain'
+  let runtime = 'onDrain'
 
   if (eventName === 'connect') {
-    runtime = 'inox_net_socket_on_connect'
+    runtime = 'onConnect'
   } else if (eventName === 'ready') {
-    runtime = 'inox_net_socket_on_ready'
+    runtime = 'onReady'
   } else if (eventName === 'data') {
-    runtime = 'inox_net_socket_on_data'
+    runtime = 'onData'
   } else if (eventName === 'end') {
-    runtime = 'inox_net_socket_on_end'
+    runtime = 'onEnd'
   } else if (eventName === 'close') {
-    runtime = 'inox_net_socket_on_close'
+    runtime = 'onClose'
   } else if (eventName === 'error') {
-    runtime = 'inox_net_socket_on_error'
+    runtime = 'onError'
   }
 
-  const lines = [emitStatusCheck(`${runtime}(${socketName}, ${wrapper.name}, 0)`, context)]
+  const lines = [emitStatusCheck(`NetSocket(${socketName}).${runtime}(${wrapper.name}, 0)`, context)]
 
   if (eventName === 'data' || eventName === 'end') {
     pushNetLines(lines, emitNetMaybeReadStartLines(socketName, context))
@@ -1005,20 +996,14 @@ function emitNetSocketWriteLines(
 
   const body = emitNetBytesOperand(bodyArg, null, context, deps)
   const wrapper = findNetHandler(context, callback, 'socket-write')
-  let runtime = 'inox_net_socket_write'
+  let call = `NetSocket(${socketName}).write(inox::StringView(${body.bytes}, ${body.length}))`
 
   if (method === 'write' && wrapper !== null && typeof wrapper !== 'undefined') {
-    runtime = 'inox_net_socket_write_with_callback'
+    call = `NetSocket(${socketName}).write(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
   } else if (method === 'end' && (wrapper === null || typeof wrapper === 'undefined')) {
-    runtime = 'inox_net_socket_end'
-  } else if (method === 'end') {
-    runtime = 'inox_net_socket_end_with_callback'
-  }
-
-  let callbackArgs = ''
-
-  if (wrapper !== null && typeof wrapper !== 'undefined') {
-    callbackArgs = `, ${wrapper.name}, 0`
+    call = `NetSocket(${socketName}).end(inox::StringView(${body.bytes}, ${body.length}))`
+  } else if (method === 'end' && wrapper !== null && typeof wrapper !== 'undefined') {
+    call = `NetSocket(${socketName}).end(inox::StringView(${body.bytes}, ${body.length}), ${wrapper.name}, 0)`
   }
 
   if (callback !== null && typeof callback !== 'undefined' && (wrapper === null || typeof wrapper === 'undefined')) {
@@ -1034,7 +1019,7 @@ function emitNetSocketWriteLines(
   const lines: string[] = []
 
   pushNetLines(lines, body.lines)
-  lines.push(emitStatusCheck(`${runtime}(${socketName}, ${body.bytes}, ${body.length}${callbackArgs})`, context))
+  lines.push(emitStatusCheck(call, context))
 
   return lines
 }
@@ -1061,7 +1046,7 @@ function emitNetSocketSetEncodingLines(socketName: string, args: AnyNode[], cont
 
   return [
     emitStatusCheck(
-      `inox_net_socket_set_encoding(${socketName}, ${cStringLiteral(value)}, ${utf8ByteLength(value)})`,
+      `NetSocket(${socketName}).setEncoding(inox::StringView(${cStringLiteral(value)}, ${utf8ByteLength(value)}))`,
       context
     )
   ]
@@ -1097,7 +1082,7 @@ function emitNetSocketOptionCallStatement(
     const lines: string[] = []
 
     pushNetLines(lines, enabled.lines)
-    lines.push(emitStatusCheck(`inox_net_socket_set_no_delay(${socketName}, ${enabled.expression} ? 1 : 0)`, context))
+    lines.push(emitStatusCheck(`NetSocket(${socketName}).setNoDelay(${enabled.expression} != 0)`, context))
 
     return lines
   }
@@ -1126,7 +1111,7 @@ function emitNetSocketOptionCallStatement(
     pushNetLines(lines, delay.lines)
     lines.push(
       emitStatusCheck(
-        `inox_net_socket_set_keep_alive(${socketName}, ${enabled.expression} ? 1 : 0, (unsigned int)(${delay.expression}))`,
+        `NetSocket(${socketName}).setKeepAlive(${enabled.expression} != 0, (unsigned int)(${delay.expression}))`,
         context
       )
     )
@@ -1145,13 +1130,13 @@ function emitNetSocketOptionCallStatement(
       )
     }
 
-    let runtime = 'inox_net_socket_unref'
+    let runtime = 'unref'
 
     if (method === 'ref') {
-      runtime = 'inox_net_socket_ref'
+      runtime = 'ref'
     }
 
-    return [emitStatusCheck(`${runtime}(${socketName})`, context)]
+    return [emitStatusCheck(`NetSocket(${socketName}).${runtime}()`, context)]
   }
 
   if (method === 'setTimeout') {
@@ -1177,7 +1162,7 @@ function emitNetMaybeReadStartLines(socketName: string, context: CFunctionContex
   }
 
   context.netReadingSockets.add(socketName)
-  return [emitStatusCheck(`inox_net_socket_read_start(${socketName})`, context)]
+  return [emitStatusCheck(`NetSocket(${socketName}).readStart()`, context)]
 }
 
 function emitNetServerCreateLines(
@@ -1217,7 +1202,7 @@ function emitNetServerCreateLines(
 
   lines.push(
     emitStatusCheck(
-      `inox_net_server_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
+      `NetServer::create(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
       context
     )
   )
@@ -1289,7 +1274,7 @@ function emitNetServerListenLines(
   pushNetLines(lines, backlog.lines)
   lines.push(
     emitStatusCheck(
-      `inox_net_server_listen(${serverName}, ${host}, (int)(${port.expression}), (int)(${backlog.expression}))`,
+      `NetServer(${serverName}).listen(${host}, (int)(${port.expression}), (int)(${backlog.expression}))`,
       context
     )
   )
@@ -1357,17 +1342,17 @@ function emitNetServerOnLines(serverName: string, args: AnyNode[], context: CFun
     return []
   }
 
-  let runtime = 'inox_net_server_on_error'
+  let runtime = 'onError'
 
   if (eventName === 'connection') {
-    runtime = 'inox_net_server_on_connection'
+    runtime = 'onConnection'
   } else if (eventName === 'listening') {
-    runtime = 'inox_net_server_on_listening'
+    runtime = 'onListening'
   } else if (eventName === 'close') {
-    runtime = 'inox_net_server_on_close'
+    runtime = 'onClose'
   }
 
-  return [emitStatusCheck(`${runtime}(${serverName}, ${wrapper.name}, 0)`, context)]
+  return [emitStatusCheck(`NetServer(${serverName}).${runtime}(${wrapper.name}, 0)`, context)]
 }
 
 function emitNetServerCloseLines(
@@ -1386,7 +1371,7 @@ function emitNetServerCloseLines(
     )
   }
 
-  const lines = [`inox_net_server_close(${serverName});`]
+  const lines = [`NetServer(${serverName}).close();`]
   let callback: AnyNode | null = null
 
   if (args.length > 0) {
@@ -1731,10 +1716,10 @@ function resolveNetSocketAddressMember(
     return null
   }
 
-  let runtime = 'inox_net_socket_address'
+  let runtime = 'address'
 
   if (isRemote) {
-    runtime = 'inox_net_socket_remote_address'
+    runtime = 'remoteAddress'
   }
 
   let field: 'address' | 'port' = 'address'
@@ -1782,14 +1767,14 @@ function resolveNetSocketCounterMember(
   if (expression.property === 'bytesRead') {
     return {
       socketName,
-      runtime: 'inox_net_socket_get_bytes_read'
+      runtime: 'bytesRead'
     }
   }
 
   if (expression.property === 'bytesWritten') {
     return {
       socketName,
-      runtime: 'inox_net_socket_get_bytes_written'
+      runtime: 'bytesWritten'
     }
   }
 

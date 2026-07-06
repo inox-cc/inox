@@ -116,7 +116,7 @@ inox_status HttpServer::create(inox_loop* loop, inox_http_handler_fn handler, vo
   server->handler = handler;
   server->user = user;
 
-  inox_status status = inox_net_server_new(loop, inox_http_on_connection, server, &server->net_server);
+  inox_status status = NetServer::create(loop, inox_http_on_connection, server, &server->net_server);
 
   if (status != INOX_OK) {
     allocator->free(allocator->user, server, sizeof(inox_http_server), alignof(inox_http_server));
@@ -134,7 +134,7 @@ inox_status HttpServer::listen(const char* host, int port, int backlog) const {
     return INOX_ERR_TYPE;
   }
 
-  return inox_net_server_listen(server->net_server, host, port, backlog);
+  return NetServer(server->net_server).listen(host, port, backlog);
 }
 
 inox_status HttpServer::listen(inox::StringView host, int port, int backlog) const {
@@ -148,7 +148,7 @@ inox_status HttpServer::localPort(int* out_port) const {
     return INOX_ERR_TYPE;
   }
 
-  return inox_net_server_local_port(server->net_server, out_port);
+  return NetServer(server->net_server).localPort(out_port);
 }
 
 inox_status HttpServer::onRequest(inox_http_handler_fn handler, void* user) const {
@@ -170,7 +170,7 @@ void HttpServer::close() const {
     return;
   }
 
-  inox_net_server_close(server->net_server);
+  NetServer(server->net_server).close();
 }
 
 inox_status HttpResponse::setStatus(int status) const {
@@ -366,7 +366,7 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
     memcpy(response_bytes + header_size, response->body, response->body_len);
   }
 
-  inox_status write_status = inox_net_socket_write_and_close(connection->socket, response_bytes, total_len);
+  inox_status write_status = NetSocket(connection->socket).writeAndClose(inox::StringView(response_bytes, total_len));
   connection->server->allocator->free(connection->server->allocator->user, response_bytes, total_len, alignof(char));
 
   return write_status;
@@ -506,16 +506,16 @@ static inox_status inox_http_on_connection(void* user, inox_net_server* server, 
   );
 
   if (connection == 0) {
-    inox_net_socket_close(socket);
+    NetSocket(socket).close();
     return INOX_ERR_OOM;
   }
 
   memset(connection, 0, sizeof(inox_http_connection));
   connection->server = http_server;
   connection->socket = socket;
-  inox_net_socket_set_callbacks(socket, inox_http_on_data, inox_http_on_close, connection);
+  NetSocket(socket).setCallbacks(inox_http_on_data, inox_http_on_close, connection);
 
-  return inox_net_socket_read_start(socket);
+  return NetSocket(socket).readStart();
 }
 
 static inox_status inox_http_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
