@@ -19,29 +19,29 @@ enum {
 
 enum { INOX_URL_SEARCH_PARAMS_QUERY_INDEX = 0 };
 
-typedef struct inox_url_slice {
+struct UrlSlice {
   const char* bytes;
-  size_t len;
-} inox_url_slice;
+  size_t length;
+};
 
-typedef struct inox_url_parts {
-  inox_url_slice href;
-  inox_url_slice protocol;
-  inox_url_slice hostname;
-  inox_url_slice port;
-  inox_url_slice pathname;
-  inox_url_slice search;
-  inox_url_slice hash;
-} inox_url_parts;
+struct UrlParts {
+  UrlSlice href;
+  UrlSlice protocol;
+  UrlSlice hostname;
+  UrlSlice port;
+  UrlSlice pathname;
+  UrlSlice search;
+  UrlSlice hash;
+};
 
 static inox_status inox_url_string(inox_value value, const char** bytes, size_t* len);
 static inox_status inox_url_value_string(inox_value value, uint32_t object_field, inox_value* retained, const char** bytes, size_t* len);
-static inox_status inox_url_parse(const char* bytes, size_t len, inox_url_parts* out);
+static inox_status inox_url_parse(const char* bytes, size_t len, UrlParts* out);
 static int inox_url_is_absolute(const char* bytes, size_t len);
 static inox_status inox_url_object_from_parts(
   inox_allocator* allocator,
   const inox_shape* shape,
-  const inox_url_parts* parts,
+  const UrlParts* parts,
   inox_value* out
 );
 static inox_status inox_url_init_string_field(
@@ -56,7 +56,7 @@ static inox_status inox_url_build_relative_href(
   inox_allocator* allocator,
   const char* input,
   size_t input_len,
-  const inox_url_parts* base,
+  const UrlParts* base,
   char** out,
   size_t* out_len
 );
@@ -238,7 +238,7 @@ URL url::pathToFileURL(inox_value path, const inox_shape* shape) const {
   }
 
   inox_value out = inox_undefined_value();
-  inox_url_parts parts;
+  UrlParts parts;
   status = inox_url_parse(href, href_len, &parts);
 
   if (status == INOX_OK) {
@@ -267,7 +267,7 @@ URL URL::from(inox_value input, inox_value base, bool has_base, const inox_shape
 
   if (inox_url_is_absolute(input_bytes, input_len)) {
     inox_value out = inox_undefined_value();
-    inox_url_parts parts;
+    UrlParts parts;
     status = inox_url_parse(input_bytes, input_len, &parts);
 
     if (status == INOX_OK) {
@@ -290,7 +290,7 @@ URL URL::from(inox_value input, inox_value base, bool has_base, const inox_shape
   const char* base_bytes = 0;
   size_t base_len = 0;
   inox_value retained_base = inox_undefined_value();
-  inox_url_parts base_parts;
+  UrlParts base_parts;
 
   status = inox_url_value_string(base, INOX_URL_HREF_INDEX, &retained_base, &base_bytes, &base_len);
 
@@ -319,7 +319,7 @@ URL URL::from(inox_value input, inox_value base, bool has_base, const inox_shape
   }
 
   inox_value out = inox_undefined_value();
-  inox_url_parts parts;
+  UrlParts parts;
   status = inox_url_parse(href, href_len, &parts);
 
   if (status == INOX_OK) {
@@ -763,7 +763,7 @@ static inox_status inox_url_value_string(inox_value value, uint32_t object_field
   return inox_url_string(value, bytes, len);
 }
 
-static inox_status inox_url_parse(const char* bytes, size_t len, inox_url_parts* out) {
+static inox_status inox_url_parse(const char* bytes, size_t len, UrlParts* out) {
   if (bytes == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -826,19 +826,19 @@ static inox_status inox_url_parse(const char* bytes, size_t len, inox_url_parts*
   }
 
   out->href.bytes = bytes;
-  out->href.len = len;
+  out->href.length = len;
   out->protocol.bytes = bytes;
-  out->protocol.len = scheme_len + 1;
+  out->protocol.length = scheme_len + 1;
   out->hostname.bytes = authority;
-  out->hostname.len = (size_t)(port - authority);
+  out->hostname.length = (size_t)(port - authority);
   out->port.bytes = port < host_end ? port + 1 : "";
-  out->port.len = port < host_end ? (size_t)(host_end - port - 1) : 0;
+  out->port.length = port < host_end ? (size_t)(host_end - port - 1) : 0;
   out->pathname.bytes = path;
-  out->pathname.len = path_len;
+  out->pathname.length = path_len;
   out->search.bytes = search < end ? search : "";
-  out->search.len = search < end ? (size_t)((hash < end ? hash : end) - search) : 0;
+  out->search.length = search < end ? (size_t)((hash < end ? hash : end) - search) : 0;
   out->hash.bytes = hash < end ? hash : "";
-  out->hash.len = hash < end ? (size_t)(end - hash) : 0;
+  out->hash.length = hash < end ? (size_t)(end - hash) : 0;
 
   return INOX_OK;
 }
@@ -862,38 +862,38 @@ static int inox_url_is_absolute(const char* bytes, size_t len) {
 static inox_status inox_url_object_from_parts(
   inox_allocator* allocator,
   const inox_shape* shape,
-  const inox_url_parts* parts,
+  const UrlParts* parts,
   inox_value* out
 ) {
   inox_value object = inox_undefined_value();
   inox_status status = inox_object_new(allocator, shape, &object);
 
   if (status == INOX_OK) {
-    status = inox_url_init_string_field(allocator, object, INOX_URL_HREF_INDEX, parts->href.bytes, parts->href.len);
+    status = inox_url_init_string_field(allocator, object, INOX_URL_HREF_INDEX, parts->href.bytes, parts->href.length);
   }
 
   if (status == INOX_OK) {
-    status = inox_url_init_string_field(allocator, object, INOX_URL_PROTOCOL_INDEX, parts->protocol.bytes, parts->protocol.len);
+    status = inox_url_init_string_field(allocator, object, INOX_URL_PROTOCOL_INDEX, parts->protocol.bytes, parts->protocol.length);
   }
 
   if (status == INOX_OK) {
-    status = inox_url_init_string_field(allocator, object, INOX_URL_HOSTNAME_INDEX, parts->hostname.bytes, parts->hostname.len);
+    status = inox_url_init_string_field(allocator, object, INOX_URL_HOSTNAME_INDEX, parts->hostname.bytes, parts->hostname.length);
   }
 
   if (status == INOX_OK) {
-    status = inox_url_init_string_field(allocator, object, INOX_URL_PORT_INDEX, parts->port.bytes, parts->port.len);
+    status = inox_url_init_string_field(allocator, object, INOX_URL_PORT_INDEX, parts->port.bytes, parts->port.length);
   }
 
   if (status == INOX_OK) {
-    status = inox_url_init_string_field(allocator, object, INOX_URL_PATHNAME_INDEX, parts->pathname.bytes, parts->pathname.len);
+    status = inox_url_init_string_field(allocator, object, INOX_URL_PATHNAME_INDEX, parts->pathname.bytes, parts->pathname.length);
   }
 
   if (status == INOX_OK) {
-    status = inox_url_init_string_field(allocator, object, INOX_URL_SEARCH_INDEX, parts->search.bytes, parts->search.len);
+    status = inox_url_init_string_field(allocator, object, INOX_URL_SEARCH_INDEX, parts->search.bytes, parts->search.length);
   }
 
   if (status == INOX_OK) {
-    status = inox_url_init_string_field(allocator, object, INOX_URL_HASH_INDEX, parts->hash.bytes, parts->hash.len);
+    status = inox_url_init_string_field(allocator, object, INOX_URL_HASH_INDEX, parts->hash.bytes, parts->hash.length);
   }
 
   if (status == INOX_OK) {
@@ -995,7 +995,7 @@ static inox_status inox_url_build_relative_href(
   inox_allocator* allocator,
   const char* input,
   size_t input_len,
-  const inox_url_parts* base,
+  const UrlParts* base,
   char** out,
   size_t* out_len
 ) {
@@ -1004,11 +1004,11 @@ static inox_status inox_url_build_relative_href(
   const char* suffix = query != 0 && (hash == 0 || query < hash) ? query : hash;
   size_t path_len = suffix == 0 ? input_len : (size_t)(suffix - input);
   size_t suffix_len = suffix == 0 ? 0 : input_len - path_len;
-  size_t base_origin_len = base->protocol.len + 2 + base->hostname.len + (base->port.len == 0 ? 0 : 1 + base->port.len);
+  size_t base_origin_len = base->protocol.length + 2 + base->hostname.length + (base->port.length == 0 ? 0 : 1 + base->port.length);
   size_t base_dir_len = 1;
 
   if (path_len == 0 || input[0] != '/') {
-    base_dir_len = base->pathname.len;
+    base_dir_len = base->pathname.length;
 
     while (base_dir_len > 0 && base->pathname.bytes[base_dir_len - 1] != '/') {
       base_dir_len -= 1;
@@ -1023,17 +1023,17 @@ static inox_status inox_url_build_relative_href(
   }
 
   size_t offset = 0;
-  memcpy(href + offset, base->protocol.bytes, base->protocol.len);
-  offset += base->protocol.len;
+  memcpy(href + offset, base->protocol.bytes, base->protocol.length);
+  offset += base->protocol.length;
   href[offset++] = '/';
   href[offset++] = '/';
-  memcpy(href + offset, base->hostname.bytes, base->hostname.len);
-  offset += base->hostname.len;
+  memcpy(href + offset, base->hostname.bytes, base->hostname.length);
+  offset += base->hostname.length;
 
-  if (base->port.len != 0) {
+  if (base->port.length != 0) {
     href[offset++] = ':';
-    memcpy(href + offset, base->port.bytes, base->port.len);
-    offset += base->port.len;
+    memcpy(href + offset, base->port.bytes, base->port.length);
+    offset += base->port.length;
   }
 
   if (path_len != 0 && input[0] == '/') {
