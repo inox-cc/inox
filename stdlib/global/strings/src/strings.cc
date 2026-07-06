@@ -41,13 +41,6 @@ static inox_string* inox_string_alloc_storage(inox_allocator* allocator, size_t 
   return string;
 }
 
-static inox_value inox_string_adopt_storage(inox_string* string) {
-  inox_value value = { INOX_TAG_STRING };
-  value.as.ref = &string->header;
-
-  return value;
-}
-
 inox_status inox::String::fromLiteral(inox_allocator* allocator, const char* bytes, size_t len, inox_value* out) {
   if (allocator == 0 || allocator->alloc == 0 || bytes == 0 || out == 0) {
     return INOX_ERR_TYPE;
@@ -638,19 +631,10 @@ Value String::make(const char* bytes, size_t len) {
   }
 
   memcpy(string->bytes, bytes, len);
-
-  return adopt(inox_string_adopt_storage(string));
-}
-
-inox_value String::from_ref(inox_string* string) {
-  if (string == nullptr) {
-    return inox_undefined_value();
-  }
-
   inox_value value = { INOX_TAG_STRING };
-  value.as.ref = (inox_ref*)&string->header;
+  value.as.ref = &string->header;
 
-  return value;
+  return Value(adopt_value, value);
 }
 
 size_t String::non_negative_index(double raw) {
@@ -696,7 +680,15 @@ String::String(const char* bytes, size_t len) : Value(make(bytes, len)) {}
 
 String::String(StringView view) : Value(make(view.bytes, view.len)) {}
 
-String::String(inox_string* string) : Value(from_ref(string)) {}
+String::String(inox_string* string) : Value() {
+  if (string == nullptr) {
+    return;
+  }
+
+  inox_value value = { INOX_TAG_STRING };
+  value.as.ref = &string->header;
+  *this = value;
+}
 
 String::String(const Value& value) : Value(value) {}
 
@@ -914,7 +906,10 @@ String String::padStart(double target_len) const {
     memcpy(string->bytes + offset, bytes(), length());
   }
 
-  return String(adopt_value, inox_string_adopt_storage(string));
+  inox_value value = { INOX_TAG_STRING };
+  value.as.ref = &string->header;
+
+  return String(adopt_value, value);
 }
 
 String String::padStart(double target_len, StringView pad) const {
@@ -985,7 +980,10 @@ String String::padStart(double target_len, StringView pad) const {
     memcpy(string->bytes + offset, bytes(), length());
   }
 
-  return String(adopt_value, inox_string_adopt_storage(string));
+  inox_value value = { INOX_TAG_STRING };
+  value.as.ref = &string->header;
+
+  return String(adopt_value, value);
 }
 
 String String::slice(double start) const {
@@ -1120,7 +1118,10 @@ String String::concat(StringView right) const {
     memcpy(string->bytes + length(), right.bytes, right.len);
   }
 
-  return String(adopt_value, inox_string_adopt_storage(string));
+  inox_value value = { INOX_TAG_STRING };
+  value.as.ref = &string->header;
+
+  return String(adopt_value, value);
 }
 
 double String::charCodeAt(double offset) const {

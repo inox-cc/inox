@@ -23,7 +23,6 @@ namespace inox {
 class String : public Value {
 private:
   static Value make(const char* bytes, size_t len);
-  static inox_value from_ref(inox_string* string);
   static size_t non_negative_index(double raw);
   static size_t slice_index(double raw, size_t length);
 
