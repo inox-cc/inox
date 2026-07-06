@@ -22,7 +22,7 @@ typedef inox_status (*NetServerFn)(void* user, inox_net_server* server);
 typedef inox_status (*NetServerErrorFn)(void* user, inox_net_server* server, inox_status status);
 typedef inox_status (*NetConnectFn)(void* user, inox_net_socket* socket, inox_status status);
 typedef void (*NetDataFn)(void* user, NetSocket socket, inox::StringView bytes);
-typedef void (*NetCloseFn)(void* user, inox_net_socket* socket);
+typedef void (*NetCloseFn)(void* user, NetSocket socket);
 typedef inox_status (*NetSocketFn)(void* user, inox_net_socket* socket);
 typedef inox_status (*NetSocketErrorFn)(void* user, inox_net_socket* socket, inox_status status);
 typedef inox_status (*NetSocketWriteFn)(void* user, inox_net_socket* socket, inox_status status);

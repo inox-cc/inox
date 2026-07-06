@@ -1174,7 +1174,7 @@ static void inox_net_socket_close_cb(uv_handle_t* handle) {
   }
 
   if (socket->close != 0) {
-    socket->close(socket->close_user, socket);
+    socket->close(socket->close_user, NetSocket(socket));
   }
 
   if (socket->close_event != 0) {

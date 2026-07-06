@@ -91,7 +91,7 @@ struct inox_http_response {
 
 static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket);
 static void inox_http_on_data(void* user, NetSocket socket, inox::StringView bytes);
-static void inox_http_on_close(void* user, inox_net_socket* socket);
+static void inox_http_on_close(void* user, NetSocket socket);
 static inox_status inox_http_try_handle(HttpConnection* connection);
 static inox_status inox_http_response_init(inox_http_response* response, HttpConnection* connection);
 static inox_status inox_http_response_status_from_throw(void);
@@ -600,7 +600,7 @@ static void inox_http_on_data(void* user, NetSocket socket, inox::StringView byt
   (void)inox_http_try_handle(connection);
 }
 
-static void inox_http_on_close(void* user, inox_net_socket* socket) {
+static void inox_http_on_close(void* user, NetSocket socket) {
   (void)socket;
   HttpConnection* connection = (HttpConnection*)user;
 

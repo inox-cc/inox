@@ -29,7 +29,7 @@ static inox_status inox_tls_configure_verify(SSL_CTX* ctx);
 static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername);
 static inox_status inox_tls_on_tcp_connect(void* user, inox_net_socket* socket, inox_status status);
 static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes);
-static void inox_tls_on_tcp_close(void* user, inox_net_socket* socket);
+static void inox_tls_on_tcp_close(void* user, NetSocket socket);
 static inox_status inox_tls_drive_handshake(inox_tls_client* client);
 static inox_status inox_tls_drain_plaintext(inox_tls_client* client);
 static inox_status inox_tls_flush_net_bio(inox_tls_client* client);
@@ -326,7 +326,7 @@ static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView 
   (void)inox_tls_drain_plaintext(client);
 }
 
-static void inox_tls_on_tcp_close(void* user, inox_net_socket* socket) {
+static void inox_tls_on_tcp_close(void* user, NetSocket socket) {
   (void)socket;
   inox_tls_client* client = (inox_tls_client*)user;
 
