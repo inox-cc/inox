@@ -69,6 +69,8 @@ console.log('entries', Object.entries(parsed), process.versions, process)
   assert.doesNotMatch(header, /ConsoleArg\(inox_value value\)/)
   assert.doesNotMatch(header, /const char\* format/)
   assert.doesNotMatch(runtime, /ConsoleArg::ConsoleArg\(inox_value value\)/)
+  assert.doesNotMatch(runtime, /console_write_line/)
+  assert.doesNotMatch(runtime, /console_print_value_line/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

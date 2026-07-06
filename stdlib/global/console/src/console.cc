@@ -435,9 +435,7 @@ static inox_status inox_console_format_value_into(ConsoleFormatBuffer* buffer, i
 namespace inox {
 
 static inox_status console_write(ConsoleStream stream, const char* bytes, size_t len);
-static inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len);
 static inox_status console_print_value(ConsoleStream stream, inox_value value);
-static inox_status console_print_value_line(ConsoleStream stream, inox_value value);
 static int console_printf(ConsoleStream stream, const char* format, ...);
 
 ConsoleArg::ConsoleArg()
@@ -644,35 +642,12 @@ static inox_status console_write(ConsoleStream stream, const char* bytes, size_t
 #endif
 }
 
-static inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len) {
-  inox_status status = console_write(stream, bytes, len);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  return console_write(stream, "\n", 1);
-}
-
 static inox_status console_print_value(ConsoleStream stream, inox_value value) {
   ConsoleFormatBuffer buffer = { 0 };
   inox_status status = inox_console_format_value_into(&buffer, value, 0);
 
   if (status == INOX_OK) {
     status = console_write(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
-  }
-
-  inox_console_format_buffer_dispose(&buffer);
-
-  return status;
-}
-
-static inox_status console_print_value_line(ConsoleStream stream, inox_value value) {
-  ConsoleFormatBuffer buffer = { 0 };
-  inox_status status = inox_console_format_value_into(&buffer, value, 0);
-
-  if (status == INOX_OK) {
-    status = console_write_line(stream, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length);
   }
 
   inox_console_format_buffer_dispose(&buffer);
@@ -802,7 +777,9 @@ void console::log(inox::StringView text) const {
     return;
   }
 
-  inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
+  if (inox::console_write(inox::ConsoleStream::stdout, text.bytes, text.len) == INOX_OK) {
+    inox::console_write(inox::ConsoleStream::stdout, "\n", 1);
+  }
 }
 
 void console::log(const inox::Value& value) const {
@@ -810,7 +787,17 @@ void console::log(const inox::Value& value) const {
     return;
   }
 
-  inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
+  ConsoleFormatBuffer buffer = { 0 };
+  inox_status status = inox_console_format_value_into(&buffer, value.raw(), 0);
+
+  if (
+    status == INOX_OK &&
+    inox::console_write(inox::ConsoleStream::stdout, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length) == INOX_OK
+  ) {
+    inox::console_write(inox::ConsoleStream::stdout, "\n", 1);
+  }
+
+  inox_console_format_buffer_dispose(&buffer);
 }
 
 void console::log(
@@ -867,7 +854,9 @@ void console::info(inox::StringView text) const {
     return;
   }
 
-  inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
+  if (inox::console_write(inox::ConsoleStream::stdout, text.bytes, text.len) == INOX_OK) {
+    inox::console_write(inox::ConsoleStream::stdout, "\n", 1);
+  }
 }
 
 void console::info(const inox::Value& value) const {
@@ -875,7 +864,17 @@ void console::info(const inox::Value& value) const {
     return;
   }
 
-  inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
+  ConsoleFormatBuffer buffer = { 0 };
+  inox_status status = inox_console_format_value_into(&buffer, value.raw(), 0);
+
+  if (
+    status == INOX_OK &&
+    inox::console_write(inox::ConsoleStream::stdout, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length) == INOX_OK
+  ) {
+    inox::console_write(inox::ConsoleStream::stdout, "\n", 1);
+  }
+
+  inox_console_format_buffer_dispose(&buffer);
 }
 
 void console::info(
@@ -932,7 +931,9 @@ void console::warn(inox::StringView text) const {
     return;
   }
 
-  inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
+  if (inox::console_write(inox::ConsoleStream::stderr, text.bytes, text.len) == INOX_OK) {
+    inox::console_write(inox::ConsoleStream::stderr, "\n", 1);
+  }
 }
 
 void console::warn(const inox::Value& value) const {
@@ -940,7 +941,17 @@ void console::warn(const inox::Value& value) const {
     return;
   }
 
-  inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
+  ConsoleFormatBuffer buffer = { 0 };
+  inox_status status = inox_console_format_value_into(&buffer, value.raw(), 0);
+
+  if (
+    status == INOX_OK &&
+    inox::console_write(inox::ConsoleStream::stderr, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length) == INOX_OK
+  ) {
+    inox::console_write(inox::ConsoleStream::stderr, "\n", 1);
+  }
+
+  inox_console_format_buffer_dispose(&buffer);
 }
 
 void console::warn(
@@ -997,7 +1008,9 @@ void console::error(inox::StringView text) const {
     return;
   }
 
-  inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
+  if (inox::console_write(inox::ConsoleStream::stderr, text.bytes, text.len) == INOX_OK) {
+    inox::console_write(inox::ConsoleStream::stderr, "\n", 1);
+  }
 }
 
 void console::error(const inox::Value& value) const {
@@ -1005,7 +1018,17 @@ void console::error(const inox::Value& value) const {
     return;
   }
 
-  inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
+  ConsoleFormatBuffer buffer = { 0 };
+  inox_status status = inox_console_format_value_into(&buffer, value.raw(), 0);
+
+  if (
+    status == INOX_OK &&
+    inox::console_write(inox::ConsoleStream::stderr, buffer.bytes == 0 ? "" : buffer.bytes, buffer.length) == INOX_OK
+  ) {
+    inox::console_write(inox::ConsoleStream::stderr, "\n", 1);
+  }
+
+  inox_console_format_buffer_dispose(&buffer);
 }
 
 void console::error(
