@@ -800,54 +800,6 @@ static int console_printf(ConsoleStream stream, const char* format, ...) {
 
 } // namespace inox
 
-inox_status console::write_prefix_value_line(
-  inox::ConsoleStream stream,
-  const char* prefix,
-  inox_value value
-) {
-  if (inox::thrown()) {
-    return INOX_OK;
-  }
-
-  const char* text = prefix == nullptr ? "" : prefix;
-  const char* spec_end = nullptr;
-
-  if (next_format_spec(text, &spec_end) != nullptr) {
-    if (value.tag == INOX_TAG_STRING && value.as.ref != nullptr) {
-      const inox::String string(value);
-      const inox::ConsoleArg args[] = { inox::ConsoleArg(string) };
-
-      return printf_line(stream, text, args, 1);
-    }
-
-    const inox::ConsoleArg args[] = { inox::ConsoleArg(value) };
-
-    return printf_line(stream, text, args, 1);
-  }
-
-  if (text[0] != '\0') {
-    inox_status status = inox::console_write(stream, text, strlen(text));
-
-    if (status != INOX_OK) {
-      return status;
-    }
-
-    status = inox::console_write(stream, " ", 1);
-
-    if (status != INOX_OK) {
-      return status;
-    }
-  }
-
-  inox_status status = inox::console_print_value(stream, value);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  return inox::console_newline(stream);
-}
-
 void console::log() const {
   if (inox::thrown()) {
     return;
@@ -899,14 +851,6 @@ void console::log(const inox::Value& value) const {
   }
 
   inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
-}
-
-void console::log(const char* prefix, inox_value value) const {
-  write_prefix_value_line(inox::ConsoleStream::stdout, prefix, value);
-}
-
-void console::log(const char* prefix, const inox::Value& value) const {
-  write_prefix_value_line(inox::ConsoleStream::stdout, prefix, value.raw());
 }
 
 void console::log(
@@ -1003,14 +947,6 @@ void console::info(const inox::Value& value) const {
   inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
 }
 
-void console::info(const char* prefix, inox_value value) const {
-  write_prefix_value_line(inox::ConsoleStream::stdout, prefix, value);
-}
-
-void console::info(const char* prefix, const inox::Value& value) const {
-  write_prefix_value_line(inox::ConsoleStream::stdout, prefix, value.raw());
-}
-
 void console::info(
   const char* format,
   inox::ConsoleArg arg0,
@@ -1105,14 +1041,6 @@ void console::warn(const inox::Value& value) const {
   inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
 }
 
-void console::warn(const char* prefix, inox_value value) const {
-  write_prefix_value_line(inox::ConsoleStream::stderr, prefix, value);
-}
-
-void console::warn(const char* prefix, const inox::Value& value) const {
-  write_prefix_value_line(inox::ConsoleStream::stderr, prefix, value.raw());
-}
-
 void console::warn(
   const char* format,
   inox::ConsoleArg arg0,
@@ -1205,14 +1133,6 @@ void console::error(const inox::Value& value) const {
   }
 
   inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
-}
-
-void console::error(const char* prefix, inox_value value) const {
-  write_prefix_value_line(inox::ConsoleStream::stderr, prefix, value);
-}
-
-void console::error(const char* prefix, const inox::Value& value) const {
-  write_prefix_value_line(inox::ConsoleStream::stderr, prefix, value.raw());
 }
 
 void console::error(
@@ -1531,6 +1451,85 @@ inox_status console::write_format_arg(
   return INOX_ERR_TYPE;
 }
 
+inox_status console::write_unformatted_arg(inox::ConsoleStream stream, const inox::ConsoleArg& value) {
+  if (value.kind == inox::ConsoleArgKind::empty) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (value.kind == inox::ConsoleArgKind::string) {
+    if (value.string == nullptr) {
+      return INOX_ERR_TYPE;
+    }
+
+    return inox::console_write(stream, value.string->bytes(), value.string->length());
+  }
+
+  if (value.kind == inox::ConsoleArgKind::string_view || value.kind == inox::ConsoleArgKind::c_string) {
+    const char* bytes = value.bytes == nullptr ? "" : value.bytes;
+    const size_t len = value.kind == inox::ConsoleArgKind::c_string ? strlen(bytes) : value.len;
+
+    return inox::console_write(stream, bytes, len);
+  }
+
+  if (value.kind == inox::ConsoleArgKind::value) {
+    return inox::console_print_value(stream, value.value);
+  }
+
+  if (value.kind == inox::ConsoleArgKind::number) {
+    return inox::console_printf(stream, "%.17g", value.number) < 0 ? INOX_ERR_TYPE : INOX_OK;
+  }
+
+  if (value.kind == inox::ConsoleArgKind::signed_integer) {
+    return inox::console_printf(stream, "%lld", value.signed_integer) < 0 ? INOX_ERR_TYPE : INOX_OK;
+  }
+
+  if (value.kind == inox::ConsoleArgKind::unsigned_integer) {
+    return inox::console_printf(stream, "%llu", value.unsigned_integer) < 0 ? INOX_ERR_TYPE : INOX_OK;
+  }
+
+  return INOX_ERR_TYPE;
+}
+
+inox_status console::write_unformatted(
+  inox::ConsoleStream stream,
+  const char* format,
+  const inox::ConsoleArg* args,
+  size_t arg_count
+) {
+  const char* text = format == nullptr ? "" : format;
+  bool needs_space = false;
+
+  if (text[0] != '\0') {
+    inox_status status = write_format_literal(stream, text, text + strlen(text));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    needs_space = true;
+  }
+
+  for (size_t index = 0; index < arg_count; ++index) {
+    if (needs_space) {
+      inox_status status = inox::console_write(stream, " ", 1);
+
+      if (status != INOX_OK) {
+        return status;
+      }
+    }
+
+    inox_status status = write_unformatted_arg(stream, args[index]);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    needs_space = true;
+  }
+
+  return INOX_OK;
+}
+
 inox_status console::write_formatted(
   inox::ConsoleStream stream,
   const char* format,
@@ -1596,7 +1595,10 @@ inox_status console::printf_line(
     arg_count -= 1;
   }
 
-  inox_status status = write_formatted(stream, safe_format, args, arg_count);
+  const char* spec_end = nullptr;
+  inox_status status = next_format_spec(safe_format, &spec_end) == nullptr
+    ? write_unformatted(stream, safe_format, args, arg_count)
+    : write_formatted(stream, safe_format, args, arg_count);
 
   if (status != INOX_OK) {
     return status;

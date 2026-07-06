@@ -77,8 +77,6 @@ public:
   void log(const inox::String& value) const;
   void log(inox_value value) const;
   void log(const inox::Value& value) const;
-  void log(const char* prefix, inox_value value) const;
-  void log(const char* prefix, const inox::Value& value) const;
   void log(
     const char* format,
     inox::ConsoleArg arg0,
@@ -105,8 +103,6 @@ public:
   void info(const inox::String& value) const;
   void info(inox_value value) const;
   void info(const inox::Value& value) const;
-  void info(const char* prefix, inox_value value) const;
-  void info(const char* prefix, const inox::Value& value) const;
   void info(
     const char* format,
     inox::ConsoleArg arg0,
@@ -133,8 +129,6 @@ public:
   void warn(const inox::String& value) const;
   void warn(inox_value value) const;
   void warn(const inox::Value& value) const;
-  void warn(const char* prefix, inox_value value) const;
-  void warn(const char* prefix, const inox::Value& value) const;
   void warn(
     const char* format,
     inox::ConsoleArg arg0,
@@ -161,8 +155,6 @@ public:
   void error(const inox::String& value) const;
   void error(inox_value value) const;
   void error(const inox::Value& value) const;
-  void error(const char* prefix, inox_value value) const;
-  void error(const char* prefix, const inox::Value& value) const;
   void error(
     const char* format,
     inox::ConsoleArg arg0,
@@ -203,10 +195,12 @@ private:
     size_t spec_len,
     const inox::ConsoleArg& value
   );
-  static inox_status write_prefix_value_line(
+  static inox_status write_unformatted_arg(inox::ConsoleStream stream, const inox::ConsoleArg& value);
+  static inox_status write_unformatted(
     inox::ConsoleStream stream,
-    const char* prefix,
-    inox_value value
+    const char* format,
+    const inox::ConsoleArg* args,
+    size_t arg_count
   );
   static inox_status write_formatted(
     inox::ConsoleStream stream,
