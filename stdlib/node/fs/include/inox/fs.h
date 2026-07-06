@@ -14,100 +14,96 @@ enum {
   INOX_FS_R_OK = 4
 };
 
-typedef inox_status (*inox_fs_read_file_fn)(
+typedef inox_status (*FsReadFileFn)(
   void* user,
   inox_allocator* allocator,
   const char* path,
   size_t path_len,
   inox_value* out
 );
-typedef inox_status (*inox_fs_read_file_bytes_fn)(
+typedef inox_status (*FsReadFileBytesFn)(
   void* user,
   inox_allocator* allocator,
   const char* path,
   size_t path_len,
   inox_value* out
 );
-typedef inox_status (*inox_fs_read_dir_fn)(
+typedef inox_status (*FsReadDirFn)(
   void* user,
   inox_allocator* allocator,
   const char* path,
   size_t path_len,
   inox_value* out
 );
-typedef inox_status (*inox_fs_read_dir_dirents_fn)(
+typedef inox_status (*FsReadDirDirentsFn)(
   void* user,
   inox_allocator* allocator,
   const char* path,
   size_t path_len,
   inox_value* out
 );
-typedef inox_status (*inox_fs_stat_fn)(
+typedef inox_status (*FsStatFn)(
   void* user,
   inox_allocator* allocator,
   const char* path,
   size_t path_len,
   inox_value* out
 );
-typedef inox_status (*inox_fs_string_path_fn)(
+typedef inox_status (*FsStringPathFn)(
   void* user,
   inox_allocator* allocator,
   const char* path,
   size_t path_len,
   inox_value* out
 );
-typedef inox_status (*inox_fs_access_fn)(void* user, const char* path, size_t path_len, int mode);
-typedef inox_status (*inox_fs_mkdir_fn)(void* user, const char* path, size_t path_len, bool recursive);
-typedef inox_status (*inox_fs_unlink_fn)(void* user, const char* path, size_t path_len);
-typedef inox_status (*inox_fs_rm_fn)(void* user, const char* path, size_t path_len, bool recursive, bool force);
-typedef inox_status (*inox_fs_append_file_fn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
-typedef inox_status (*inox_fs_copy_file_fn)(
+typedef inox_status (*FsAccessFn)(void* user, const char* path, size_t path_len, int mode);
+typedef inox_status (*FsMkdirFn)(void* user, const char* path, size_t path_len, bool recursive);
+typedef inox_status (*FsUnlinkFn)(void* user, const char* path, size_t path_len);
+typedef inox_status (*FsRmFn)(void* user, const char* path, size_t path_len, bool recursive, bool force);
+typedef inox_status (*FsAppendFileFn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
+typedef inox_status (*FsCopyFileFn)(
   void* user,
   const char* src_path,
   size_t src_path_len,
   const char* dest_path,
   size_t dest_path_len
 );
-typedef inox_status (*inox_fs_symlink_fn)(
+typedef inox_status (*FsSymlinkFn)(
   void* user,
   const char* target,
   size_t target_len,
   const char* path,
   size_t path_len
 );
-typedef inox_status (*inox_fs_rename_fn)(
+typedef inox_status (*FsRenameFn)(
   void* user,
   const char* old_path,
   size_t old_path_len,
   const char* new_path,
   size_t new_path_len
 );
-typedef inox_status (*inox_fs_write_file_fn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
+typedef inox_status (*FsWriteFileFn)(void* user, const char* path, size_t path_len, const char* bytes, size_t byte_len);
 
-typedef struct inox_fs_adapter {
+typedef struct FsAdapter {
   void* user;
-  inox_fs_read_file_fn read_file;
-  inox_fs_write_file_fn write_file;
-  inox_fs_read_dir_fn read_dir;
-  inox_fs_read_dir_dirents_fn read_dir_dirents;
-  inox_fs_read_file_bytes_fn read_file_bytes;
-  inox_fs_stat_fn stat;
-  inox_fs_stat_fn lstat;
-  inox_fs_string_path_fn realpath;
-  inox_fs_string_path_fn readlink;
-  inox_fs_access_fn access;
-  inox_fs_mkdir_fn mkdir;
-  inox_fs_unlink_fn unlink;
-  inox_fs_rm_fn rm;
-  inox_fs_append_file_fn append_file;
-  inox_fs_copy_file_fn copy_file;
-  inox_fs_symlink_fn symlink;
-  inox_fs_rename_fn rename;
-} inox_fs_adapter;
-
-void inox_fs_set_adapter(inox_fs_adapter adapter);
-inox_fs_adapter inox_fs_get_adapter(void);
-void inox_fs_clear_adapter(void);
+  FsReadFileFn read_file;
+  FsWriteFileFn write_file;
+  FsReadDirFn read_dir;
+  FsReadDirDirentsFn read_dir_dirents;
+  FsReadFileBytesFn read_file_bytes;
+  FsStatFn stat;
+  FsStatFn lstat;
+  FsStringPathFn realpath;
+  FsStringPathFn readlink;
+  FsAccessFn access;
+  FsMkdirFn mkdir;
+  FsUnlinkFn unlink;
+  FsRmFn rm;
+  FsAppendFileFn append_file;
+  FsCopyFileFn copy_file;
+  FsSymlinkFn symlink;
+  FsRenameFn rename;
+} FsAdapter;
 #ifdef __cplusplus
 
 class fs_promises {
@@ -150,6 +146,10 @@ public:
 class fs {
 public:
   fs_promises promises;
+
+  void setAdapter(FsAdapter adapter);
+  FsAdapter getAdapter();
+  void clearAdapter();
 
   inox_status readFileSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
