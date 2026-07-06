@@ -25,7 +25,7 @@ typedef void (*NetDataFn)(void* user, NetSocket socket, inox::StringView bytes);
 typedef void (*NetCloseFn)(void* user, NetSocket socket);
 typedef void (*NetSocketFn)(void* user, NetSocket socket);
 typedef inox_status (*NetSocketErrorFn)(void* user, inox_net_socket* socket, inox_status status);
-typedef inox_status (*NetSocketWriteFn)(void* user, inox_net_socket* socket, inox_status status);
+typedef void (*NetSocketWriteFn)(void* user, NetSocket socket, inox_status status);
 
 #ifdef __cplusplus
 

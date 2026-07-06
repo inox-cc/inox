@@ -1118,10 +1118,10 @@ static void inox_net_write_cb(uv_write_t* request, int status) {
   inox_libuv_loop_release_request(socket->loop);
 
   if (write->callback != 0) {
-    inox_status callback_status = write->callback(write->user, socket, status == 0 ? INOX_OK : INOX_ERR_FIELD);
+    write->callback(write->user, NetSocket(socket), status == 0 ? INOX_OK : INOX_ERR_FIELD);
 
-    if (callback_status != INOX_OK) {
-      inox_net_socket_report_status(socket, callback_status);
+    if (inox::thrown()) {
+      inox_net_socket_report_status(socket, INOX_ERR_TYPE);
     }
   }
 
