@@ -6,7 +6,8 @@ import type {
   CObjectShape,
   CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../../../../compiler/c/types.ts'
 
 type PathCContext = {
@@ -25,7 +26,16 @@ type PathCContext = {
 
 export type PathLoweringDependencies = {
   emitCValueExpression(expression: AnyNode, context: PathCContext): PreparedExpression
+  emitPreparedStringBytesOperand(
+    expression: AnyNode,
+    context: PathCContext,
+    tempPrefix?: string
+  ): PreparedStringBytesOperand
   registerObjectShape(context: PathCContext, name: string, shape: CObjectShape | null | undefined): void
+}
+
+function emitPathStringArgument(operand: PreparedStringBytesOperand): string {
+  return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
 export function cPathRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
@@ -108,7 +118,7 @@ export function emitPreparedPathObjectCallExpression(
     out = options.out
   }
 
-  const input = dependencies.emitCValueExpression(expression.args[0], context)
+  const input = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_path_value')
   const shape = emitPathParseObjectShape(context)
   const lines: string[] = []
 
@@ -123,7 +133,7 @@ export function emitPreparedPathObjectCallExpression(
   context.variables.set(out, 'object')
   dependencies.registerObjectShape(context, out, expression.shape)
 
-  lines.push(`${out} = path.parse(${input.expression}, ${shape.expression});`)
+  lines.push(`${out} = path.parse(${emitPathStringArgument(input)}, ${shape.expression});`)
 
   return {
     lines,
@@ -147,11 +157,11 @@ export function emitPreparedPathStringCallExpression(
   const lines: string[] = []
 
   if (method === 'join' || method === 'resolve') {
-    const args: PreparedExpression[] = []
+    const args: PreparedStringBytesOperand[] = []
 
     for (let index = 0; index < expression.args.length; index = index + 1) {
       const arg = expression.args[index]
-      args.push(dependencies.emitCValueExpression(arg, context))
+      args.push(dependencies.emitPreparedStringBytesOperand(arg, context, 'inox_path_arg'))
     }
 
     for (let index = 0; index < args.length; index = index + 1) {
@@ -172,10 +182,10 @@ export function emitPreparedPathStringCallExpression(
 
       for (let index = 0; index < args.length; index = index + 1) {
         const arg = args[index]
-        expressions.push(arg.expression)
+        expressions.push(emitPathStringArgument(arg))
       }
 
-      lines.push(`const inox_value ${argArray}[] = { ${joinStrings(expressions, ', ')} };`)
+      lines.push(`const inox::StringView ${argArray}[] = { ${joinStrings(expressions, ', ')} };`)
 
       return {
         lines,
@@ -199,19 +209,21 @@ export function emitPreparedPathStringCallExpression(
     }
   }
 
-  const first = dependencies.emitCValueExpression(expression.args[0], context)
+  const first = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_path_value')
 
   pushLines(lines, first.lines)
 
   if (method === 'basename') {
-    let suffix: PreparedExpression = {
+    let suffix: PreparedStringBytesOperand = {
       lines: [],
-      expression: 'inox_undefined_value()'
+      bytes: '""',
+      length: '0',
+      cppExpression: 'inox::StringView("", 0)'
     }
     let suffixPresent = '0'
 
     if (expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-      suffix = dependencies.emitCValueExpression(expression.args[1], context)
+      suffix = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_path_suffix')
       suffixPresent = '1'
     }
 
@@ -219,20 +231,20 @@ export function emitPreparedPathStringCallExpression(
 
     return {
       lines,
-      expression: `path.basename(${first.expression}, ${suffix.expression}, ${suffixPresent === '1' ? 'true' : 'false'})`,
+      expression: `path.basename(${emitPathStringArgument(first)}, ${emitPathStringArgument(suffix)}, ${suffixPresent === '1' ? 'true' : 'false'})`,
       cppType: 'inox::String',
       owned: false
     }
   }
 
   if (method === 'relative') {
-    const to = dependencies.emitCValueExpression(expression.args[1], context)
+    const to = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_path_to')
 
     pushLines(lines, to.lines)
 
     return {
       lines,
-      expression: `path.relative(${first.expression}, ${to.expression})`,
+      expression: `path.relative(${emitPathStringArgument(first)}, ${emitPathStringArgument(to)})`,
       cppType: 'inox::String',
       owned: false
     }
@@ -240,7 +252,7 @@ export function emitPreparedPathStringCallExpression(
 
   return {
     lines,
-    expression: `path.${method}(${first.expression})`,
+    expression: `path.${method}(${emitPathStringArgument(first)})`,
     cppType: 'inox::String',
     owned: false
   }
@@ -255,14 +267,14 @@ export function emitPreparedPathBooleanCallExpression(
     return null
   }
 
-  const value = dependencies.emitCValueExpression(expression.args[0], context)
+  const value = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_path_value')
   const lines: string[] = []
 
   pushLines(lines, value.lines)
 
   return {
     lines,
-    expression: `path.isAbsolute(${value.expression})`
+    expression: `path.isAbsolute(${emitPathStringArgument(value)})`
   }
 }
 

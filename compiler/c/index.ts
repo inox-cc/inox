@@ -944,6 +944,7 @@ childProcessLoweringDependencies = {
 
 pathLoweringDependencies = {
   emitCValueExpression,
+  emitPreparedStringBytesOperand,
   registerObjectShape
 }
 
