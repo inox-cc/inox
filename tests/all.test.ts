@@ -122,7 +122,8 @@ async function runIntegrationTests(): Promise<void> {
     assertFinallyStillEmitsErrorActiveState
   } =
     await import('./integration/error-flow-state-lowering.test.ts')
-  const { assertFetchAwaitUsesCppWrappers } = await import('./integration/fetch-await-cpp-lowering.test.ts')
+  const { assertFetchAwaitUsesCppWrappers, assertFetchRuntimeFacadesUseCppObjects } =
+    await import('./integration/fetch-await-cpp-lowering.test.ts')
   const { assertGeneratedLabelsHaveLeadingBlankOnly } =
     await import('./integration/generated-label-spacing.test.ts')
   const {
@@ -255,9 +256,10 @@ async function runIntegrationTests(): Promise<void> {
       assertFinallyStillEmitsErrorActiveState()
     })
 
-    await t.test('fetch-await-cpp-lowering', () => {
-      assertFetchAwaitUsesCppWrappers()
-    })
+  await t.test('fetch-await-cpp-lowering', () => {
+    assertFetchAwaitUsesCppWrappers()
+    assertFetchRuntimeFacadesUseCppObjects()
+  })
 
     await t.test('generated-label-spacing', () => {
       assertGeneratedLabelsHaveLeadingBlankOnly()

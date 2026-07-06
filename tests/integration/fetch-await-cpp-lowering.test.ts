@@ -116,6 +116,45 @@ await checkFetch()
   assert.doesNotMatch(checkFetch, /inox_string\* txt/)
 }
 
+export function assertFetchRuntimeFacadesUseCppObjects(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+async function checkFetchFacade() {
+  const controller = new AbortController()
+  controller.abort()
+  const res = await fetch('http://example.com/', { signal: controller.signal })
+  console.log(res.headers.has('content-type'), res.headers.get('content-type'))
+}
+
+await checkFetchFacade()
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+  const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
+    callMain: true,
+    host,
+    loopBackend: 'libuv',
+    sourceRoot: '/pkg'
+  }) as GeneratedTextFile[]
+  const source = generatedTextFile(files, 'src/index.cc').code
+  const checkFetchFacade = functionSource(source, 'static void checkFetchFacade(void) {')
+
+  assert.match(checkFetchFacade, /inox::AbortController controller;/)
+  assert.match(checkFetchFacade, /inox::AbortController\(controller\)\.abort\(\);/)
+  assert.match(checkFetchFacade, /inox::AbortController\(controller\)\.signal\(\)/)
+  assert.match(checkFetchFacade, /inox::FetchHeaders\([^)]+\)\.has\("content-type"\)/)
+  assert.match(checkFetchFacade, /inox::FetchHeaders\([^)]+\)\.get\("content-type"\)/)
+  assert.doesNotMatch(source, /fetch_abort_controller/)
+  assert.doesNotMatch(source, /fetch_headers_(?:get|has)/)
+}
+
 function functionSource(source: string, signatureStart: string): string {
   const start = source.indexOf(signatureStart)
 
@@ -144,4 +183,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertFetchAwaitUsesCppWrappers()
+  assertFetchRuntimeFacadesUseCppObjects()
 }

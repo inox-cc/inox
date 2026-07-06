@@ -57,15 +57,31 @@ public:
   operator inox_value() const;
 };
 
+class FetchHeaders : public Value {
+public:
+  FetchHeaders();
+  explicit FetchHeaders(inox_value value);
+  explicit FetchHeaders(const Value& value);
+
+  bool has(StringView name) const;
+  Value get(StringView name) const;
+};
+
+class AbortController : public Value {
+public:
+  AbortController();
+  explicit AbortController(inox_value value);
+  explicit AbortController(const Value& value);
+
+  using Value::operator=;
+
+  Value signal() const;
+  void abort() const;
+};
+
 Promise fetch(StringView url);
 
 Promise fetch(StringView url, const FetchInit* init);
-
-bool fetch_headers_has(inox_value headers, StringView name);
-Value fetch_headers_get(inox_value headers, StringView name);
-Value fetch_abort_controller();
-Value fetch_abort_controller_signal(inox_value controller);
-void fetch_abort_controller_abort(inox_value controller);
 
 } // namespace inox
 #endif

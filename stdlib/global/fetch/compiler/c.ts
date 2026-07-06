@@ -267,9 +267,6 @@ export function emitPreparedFetchHeadersCallExpression(
     const lines: string[] = []
 
     appendLines(lines, headers.lines)
-    lines.push(
-      emitRuntimeTypeCheck(`${headers.expression}.tag != INOX_TAG_OBJECT || ${headers.expression}.as.ref == 0`, context)
-    )
     appendLines(lines, name.lines)
 
     if (method === 'headersHas') {
@@ -277,7 +274,7 @@ export function emitPreparedFetchHeadersCallExpression(
       lines.push(`int ${out} = 0;`)
       lines.push(
         emitStatusCheck(
-          `(${out} = inox::fetch_headers_has(${headers.expression}, ${emitFetchStringArgument(name)}), inox::thrown() ? INOX_ERR_TYPE : INOX_OK)`,
+          `(${out} = inox::FetchHeaders(${headers.expression}).has(${emitFetchStringArgument(name)}), inox::thrown() ? INOX_ERR_TYPE : INOX_OK)`,
           context
         )
       )
@@ -296,7 +293,7 @@ export function emitPreparedFetchHeadersCallExpression(
     }
 
     appendLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(`${out} = inox::fetch_headers_get(${headers.expression}, ${emitFetchStringArgument(name)});`)
+    lines.push(`${out} = inox::FetchHeaders(${headers.expression}).get(${emitFetchStringArgument(name)});`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
@@ -419,14 +416,8 @@ export function emitPreparedFetchSignalOperand(
 
     registerOwnedValue(context, signal)
     appendLines(lines, controller.lines)
-    lines.push(
-      emitRuntimeTypeCheck(
-        `${controller.expression}.tag != INOX_TAG_OBJECT || ${controller.expression}.as.ref == 0`,
-        context
-      )
-    )
     appendLines(lines, emitPrepareOwnedValueWrite(signal))
-    lines.push(`${signal} = inox::fetch_abort_controller_signal(${controller.expression});`)
+    lines.push(`${signal} = inox::AbortController(${controller.expression}).signal();`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {

@@ -7548,14 +7548,12 @@ function emitFetchAbortControllerVariableDeclaration(statement: AnyNode, context
     return null
   }
 
-  registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'object')
   registerObjectShape(context, statement.name, statement.shape)
 
   const lines: string[] = []
 
-  pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(`${emitCIdentifier(statement.name)} = inox::fetch_abort_controller();`)
+  lines.push(`inox::AbortController ${emitCIdentifier(statement.name)};`)
   pushAll(lines, emitThrownCheckLines(context))
 
   return lines
@@ -7573,7 +7571,7 @@ function emitFetchAbortControllerAbortStatement(expression: AnyNode, context: CF
   lines.push(
     emitRuntimeTypeCheck(runtimeFetchAbortControllerValueMismatchCondition(controller.expression), context)
   )
-  lines.push(`inox::fetch_abort_controller_abort(${controller.expression});`)
+  lines.push(`inox::AbortController(${controller.expression}).abort();`)
   pushAll(lines, emitThrownCheckLines(context))
 
   return lines

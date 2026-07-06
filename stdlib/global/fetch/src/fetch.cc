@@ -1860,6 +1860,128 @@ FetchResponse::operator inox_value() const {
   return value_.raw();
 }
 
+FetchHeaders::FetchHeaders() : Value() {}
+
+FetchHeaders::FetchHeaders(inox_value value) : Value(value) {}
+
+FetchHeaders::FetchHeaders(const Value& value) : Value(value) {}
+
+bool FetchHeaders::has(StringView name) const {
+  if (name.bytes == nullptr || name.len == 0) {
+    throw_value(Value());
+    return false;
+  }
+
+  Value raw;
+
+  if (
+    inox_object_get_known(Value::raw(), INOX_FETCH_HEADERS_RAW_INDEX, raw.out()) != INOX_OK ||
+    raw.tag != INOX_TAG_STRING ||
+    raw.as.ref == nullptr
+  ) {
+    throw_value(Value());
+    return false;
+  }
+
+  inox_string* raw_string = (inox_string*)raw.as.ref;
+  const char* value = nullptr;
+  size_t value_len = 0;
+
+  return fetch_find_header_value(raw_string->bytes, raw_string->len, name.bytes, name.len, &value, &value_len) != 0;
+}
+
+Value FetchHeaders::get(StringView name) const {
+  if (name.bytes == nullptr || name.len == 0) {
+    throw_value(Value());
+    return Value();
+  }
+
+  Value raw;
+
+  if (
+    inox_object_get_known(Value::raw(), INOX_FETCH_HEADERS_RAW_INDEX, raw.out()) != INOX_OK ||
+    raw.tag != INOX_TAG_STRING ||
+    raw.as.ref == nullptr
+  ) {
+    throw_value(Value());
+    return Value();
+  }
+
+  inox_string* raw_string = (inox_string*)raw.as.ref;
+  const char* value = nullptr;
+  size_t value_len = 0;
+
+  if (!fetch_find_header_value(raw_string->bytes, raw_string->len, name.bytes, name.len, &value, &value_len)) {
+    return Value(inox_null_value());
+  }
+
+  String header(value, value_len);
+
+  if (!header.valid()) {
+    throw_value(Value());
+    return Value();
+  }
+
+  return header;
+}
+
+AbortController::AbortController() : Value() {
+  static const inox_field_info signal_fields[] = { { "aborted", 0 } };
+  static const inox_shape signal_shape = { 1, signal_fields };
+  static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
+  static const inox_shape controller_shape = { 1, controller_fields };
+
+  Value signal;
+  Value controller;
+  inox_status status = inox_object_new(&inox_default_allocator, &signal_shape, signal.out());
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(false));
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_new(&inox_default_allocator, &controller_shape, controller.out());
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
+  }
+
+  if (status != INOX_OK) {
+    throw_value(Value());
+    return;
+  }
+
+  Value::operator=(std::move(controller));
+}
+
+AbortController::AbortController(inox_value value) : Value(value) {}
+
+AbortController::AbortController(const Value& value) : Value(value) {}
+
+Value AbortController::signal() const {
+  Value out;
+
+  if (inox_object_get_known(Value::raw(), INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out.out()) != INOX_OK) {
+    throw_value(Value());
+  }
+
+  return out;
+}
+
+void AbortController::abort() const {
+  Value signal;
+  inox_status status = inox_object_get_known(Value::raw(), INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal.out());
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
+  }
+
+  if (status != INOX_OK) {
+    throw_value(Value());
+  }
+}
+
 Promise fetch(StringView url) {
   inox_promise* promise = nullptr;
 
@@ -1906,118 +2028,6 @@ Promise fetch(StringView url, const FetchInit* init) {
   }
 
   return adopt(promise);
-}
-
-bool fetch_headers_has(inox_value headers, StringView name) {
-  if (name.bytes == nullptr || name.len == 0) {
-    throw_value(Value());
-    return false;
-  }
-
-  Value raw;
-
-  if (
-    inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, raw.out()) != INOX_OK ||
-    raw.tag != INOX_TAG_STRING ||
-    raw.as.ref == nullptr
-  ) {
-    throw_value(Value());
-    return false;
-  }
-
-  inox_string* raw_string = (inox_string*)raw.as.ref;
-  const char* value = nullptr;
-  size_t value_len = 0;
-
-  return fetch_find_header_value(raw_string->bytes, raw_string->len, name.bytes, name.len, &value, &value_len) != 0;
-}
-
-Value fetch_headers_get(inox_value headers, StringView name) {
-  if (name.bytes == nullptr || name.len == 0) {
-    throw_value(Value());
-    return Value();
-  }
-
-  Value raw;
-
-  if (
-    inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, raw.out()) != INOX_OK ||
-    raw.tag != INOX_TAG_STRING ||
-    raw.as.ref == nullptr
-  ) {
-    throw_value(Value());
-    return Value();
-  }
-
-  inox_string* raw_string = (inox_string*)raw.as.ref;
-  const char* value = nullptr;
-  size_t value_len = 0;
-
-  if (!fetch_find_header_value(raw_string->bytes, raw_string->len, name.bytes, name.len, &value, &value_len)) {
-    return Value(inox_null_value());
-  }
-
-  String header(value, value_len);
-
-  if (!header.valid()) {
-    throw_value(Value());
-    return Value();
-  }
-
-  return header;
-}
-
-Value fetch_abort_controller() {
-  static const inox_field_info signal_fields[] = { { "aborted", 0 } };
-  static const inox_shape signal_shape = { 1, signal_fields };
-  static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
-  static const inox_shape controller_shape = { 1, controller_fields };
-
-  Value signal;
-  Value controller;
-  inox_status status = inox_object_new(&inox_default_allocator, &signal_shape, signal.out());
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(false));
-  }
-
-  if (status == INOX_OK) {
-    status = inox_object_new(&inox_default_allocator, &controller_shape, controller.out());
-  }
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
-  }
-
-  if (status != INOX_OK) {
-    throw_value(Value());
-    return Value();
-  }
-
-  return controller;
-}
-
-Value fetch_abort_controller_signal(inox_value controller) {
-  Value out;
-
-  if (inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out.out()) != INOX_OK) {
-    throw_value(Value());
-  }
-
-  return out;
-}
-
-void fetch_abort_controller_abort(inox_value controller) {
-  Value signal;
-  inox_status status = inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal.out());
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
-  }
-
-  if (status != INOX_OK) {
-    throw_value(Value());
-  }
 }
 
 } // namespace inox
