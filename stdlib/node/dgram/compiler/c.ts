@@ -121,7 +121,7 @@ function pushIndentedDgramLines(target: string[], lines: string[]): void {
 }
 
 export function emitDgramMessageHandlerHead(wrapper: CDgramMessageHandler): string {
-  return `static inox_status ${wrapper.name}(void* user, inox_dgram_socket* inox_socket, const char* inox_bytes, size_t inox_len, const char* inox_host, int inox_port)`
+  return `static inox_status ${wrapper.name}(void* user, inox_dgram_socket* inox_socket, inox::StringView inox_bytes, inox::StringView inox_host, int inox_port)`
 }
 
 export function emitDgramMessageHandlerDeclaration(
@@ -175,7 +175,6 @@ export function emitDgramMessageHandlerDeclaration(
 
   if (messageName === null || typeof messageName === 'undefined') {
     lines.push('  (void)inox_bytes;')
-    lines.push('  (void)inox_len;')
   }
 
   if (rinfoName === null || typeof rinfoName === 'undefined') {
@@ -1350,8 +1349,8 @@ function emitDgramBytesOperand(
   ) {
     return {
       lines: [],
-      bytes: 'inox_bytes',
-      length: 'inox_len'
+      bytes: 'inox_bytes.bytes',
+      length: 'inox_bytes.len'
     }
   }
 
@@ -1405,7 +1404,7 @@ function emitDgramHostExpression(
   const rinfo = resolveDgramRinfoMember(expression, dgramContext)
 
   if (rinfo === 'address') {
-    return 'inox_host'
+    return 'inox_host.bytes'
   }
 
   const addressMember = resolveDgramAddressStringMember(expression, context)

@@ -2,11 +2,9 @@
 #define INOX_DGRAM_H
 
 #include <stddef.h>
-#include "inox/loop.h"
 
-#ifdef __cplusplus
+#include "inox/loop.h"
 #include "inox/string_view.h"
-#endif
 
 struct inox_dgram_socket;
 
@@ -19,9 +17,8 @@ struct DgramAddress {
 typedef inox_status (*DgramRecvFn)(
   void* user,
   inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  const char* host,
+  inox::StringView bytes,
+  inox::StringView host,
   int port
 );
 typedef void (*DgramCloseFn)(void* user, inox_dgram_socket* socket);
