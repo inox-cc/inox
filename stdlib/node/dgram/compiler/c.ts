@@ -258,22 +258,22 @@ export function emitDgramNumberVariableDeclaration(statement: AnyNode, context: 
   }
 
   const method = init.callee.property
-  let runtime: string | null = null
+  let facadeMethod: string | null = null
 
   if (method === 'getSendBufferSize') {
-    runtime = 'inox_dgram_get_send_buffer_size'
+    facadeMethod = 'getSendBufferSize'
   } else if (method === 'getRecvBufferSize') {
-    runtime = 'inox_dgram_get_recv_buffer_size'
+    facadeMethod = 'getRecvBufferSize'
   }
 
-  if (runtime === null || typeof runtime === 'undefined') {
+  if (facadeMethod === null || typeof facadeMethod === 'undefined') {
     return null
   }
 
   context.variables.set(statement.name, 'number')
 
   const size = nextCName(context, 'inox_dgram_buffer_size')
-  const statusCall = `${runtime}(${socketName}, &${size})`
+  const statusCall = `DgramSocket(${socketName}).${facadeMethod}(&${size})`
 
   return [
     `double ${statement.name} = 0;`,
@@ -1152,7 +1152,7 @@ function emitDgramSocketOptionCallStatement(
     const lines: string[] = []
 
     pushDgramLines(lines, enabled.lines)
-    lines.push(emitStatusCheck(`inox_dgram_set_broadcast(${socketName}, ${enabled.expression} ? 1 : 0)`, context))
+    lines.push(emitStatusCheck(`DgramSocket(${socketName}).setBroadcast(${enabled.expression} != 0)`, context))
 
     return lines
   }
@@ -1162,23 +1162,23 @@ function emitDgramSocketOptionCallStatement(
     const lines: string[] = []
 
     pushDgramLines(lines, ttl.lines)
-    lines.push(emitStatusCheck(`inox_dgram_set_ttl(${socketName}, (int)(${ttl.expression}))`, context))
+    lines.push(emitStatusCheck(`DgramSocket(${socketName}).setTTL((int)(${ttl.expression}))`, context))
 
     return lines
   }
 
   if (method === 'setSendBufferSize' || method === 'setRecvBufferSize') {
-    let runtime = 'inox_dgram_set_recv_buffer_size'
+    let facadeMethod = 'setRecvBufferSize'
 
     if (method === 'setSendBufferSize') {
-      runtime = 'inox_dgram_set_send_buffer_size'
+      facadeMethod = 'setSendBufferSize'
     }
 
     const size = deps.emitPreparedNumberExpression(expression.args[0], context)
     const lines: string[] = []
 
     pushDgramLines(lines, size.lines)
-    lines.push(emitStatusCheck(`${runtime}(${socketName}, (int)(${size.expression}))`, context))
+    lines.push(emitStatusCheck(`DgramSocket(${socketName}).${facadeMethod}((int)(${size.expression}))`, context))
 
     return lines
   }
@@ -1194,13 +1194,13 @@ function emitDgramSocketOptionCallStatement(
       )
     }
 
-    let runtime = 'inox_dgram_unref'
+    let facadeMethod = 'unref'
 
     if (method === 'ref') {
-      runtime = 'inox_dgram_ref'
+      facadeMethod = 'ref'
     }
 
-    return [emitStatusCheck(`${runtime}(${socketName})`, context)]
+    return [emitStatusCheck(`DgramSocket(${socketName}).${facadeMethod}()`, context)]
   }
 
   return null

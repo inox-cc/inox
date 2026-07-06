@@ -296,7 +296,9 @@ inox_status DgramSocket::localPort(int* out_port) const {
   return INOX_OK;
 }
 
-inox_status inox_dgram_set_broadcast(inox_dgram_socket* socket, int enabled) {
+inox_status DgramSocket::setBroadcast(bool enabled) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -304,7 +306,9 @@ inox_status inox_dgram_set_broadcast(inox_dgram_socket* socket, int enabled) {
   return uv_udp_set_broadcast(&socket->handle, enabled ? 1 : 0) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_set_ttl(inox_dgram_socket* socket, int ttl) {
+inox_status DgramSocket::setTTL(int ttl) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -312,7 +316,9 @@ inox_status inox_dgram_set_ttl(inox_dgram_socket* socket, int ttl) {
   return uv_udp_set_ttl(&socket->handle, ttl) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_get_send_buffer_size(inox_dgram_socket* socket, int* out_size) {
+inox_status DgramSocket::getSendBufferSize(int* out_size) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || out_size == 0) {
     return INOX_ERR_TYPE;
   }
@@ -327,7 +333,9 @@ inox_status inox_dgram_get_send_buffer_size(inox_dgram_socket* socket, int* out_
   return INOX_OK;
 }
 
-inox_status inox_dgram_set_send_buffer_size(inox_dgram_socket* socket, int size) {
+inox_status DgramSocket::setSendBufferSize(int size) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || size <= 0) {
     return INOX_ERR_TYPE;
   }
@@ -337,7 +345,9 @@ inox_status inox_dgram_set_send_buffer_size(inox_dgram_socket* socket, int size)
   return uv_send_buffer_size((uv_handle_t*)&socket->handle, &value) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_get_recv_buffer_size(inox_dgram_socket* socket, int* out_size) {
+inox_status DgramSocket::getRecvBufferSize(int* out_size) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || out_size == 0) {
     return INOX_ERR_TYPE;
   }
@@ -352,7 +362,9 @@ inox_status inox_dgram_get_recv_buffer_size(inox_dgram_socket* socket, int* out_
   return INOX_OK;
 }
 
-inox_status inox_dgram_set_recv_buffer_size(inox_dgram_socket* socket, int size) {
+inox_status DgramSocket::setRecvBufferSize(int size) const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing || size <= 0) {
     return INOX_ERR_TYPE;
   }
@@ -362,7 +374,9 @@ inox_status inox_dgram_set_recv_buffer_size(inox_dgram_socket* socket, int size)
   return uv_recv_buffer_size((uv_handle_t*)&socket->handle, &value) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status inox_dgram_ref(inox_dgram_socket* socket) {
+inox_status DgramSocket::ref() const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -370,7 +384,9 @@ inox_status inox_dgram_ref(inox_dgram_socket* socket) {
   return INOX_OK;
 }
 
-inox_status inox_dgram_unref(inox_dgram_socket* socket) {
+inox_status DgramSocket::unref() const {
+  inox_dgram_socket* socket = socket_;
+
   if (socket == 0 || socket->closing) {
     return INOX_ERR_TYPE;
   }
@@ -740,20 +756,20 @@ inox_status DgramSocket::localPort(int* out_port) const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_set_broadcast(inox_dgram_socket* socket, int enabled) {
-  (void)socket;
+inox_status DgramSocket::setBroadcast(bool enabled) const {
+  (void)socket_;
   (void)enabled;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_set_ttl(inox_dgram_socket* socket, int ttl) {
-  (void)socket;
+inox_status DgramSocket::setTTL(int ttl) const {
+  (void)socket_;
   (void)ttl;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_get_send_buffer_size(inox_dgram_socket* socket, int* out_size) {
-  (void)socket;
+inox_status DgramSocket::getSendBufferSize(int* out_size) const {
+  (void)socket_;
 
   if (out_size == 0) {
     return INOX_ERR_TYPE;
@@ -763,14 +779,14 @@ inox_status inox_dgram_get_send_buffer_size(inox_dgram_socket* socket, int* out_
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_set_send_buffer_size(inox_dgram_socket* socket, int size) {
-  (void)socket;
+inox_status DgramSocket::setSendBufferSize(int size) const {
+  (void)socket_;
   (void)size;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_get_recv_buffer_size(inox_dgram_socket* socket, int* out_size) {
-  (void)socket;
+inox_status DgramSocket::getRecvBufferSize(int* out_size) const {
+  (void)socket_;
 
   if (out_size == 0) {
     return INOX_ERR_TYPE;
@@ -780,19 +796,19 @@ inox_status inox_dgram_get_recv_buffer_size(inox_dgram_socket* socket, int* out_
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_set_recv_buffer_size(inox_dgram_socket* socket, int size) {
-  (void)socket;
+inox_status DgramSocket::setRecvBufferSize(int size) const {
+  (void)socket_;
   (void)size;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_ref(inox_dgram_socket* socket) {
-  (void)socket;
+inox_status DgramSocket::ref() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_dgram_unref(inox_dgram_socket* socket) {
-  (void)socket;
+inox_status DgramSocket::unref() const {
+  (void)socket_;
   return INOX_ERR_UNSUPPORTED;
 }
 

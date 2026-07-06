@@ -57,14 +57,6 @@ inox_status inox_dgram_send_connected_with_callback(
   inox_dgram_send_fn callback,
   void* user
 );
-inox_status inox_dgram_set_broadcast(inox_dgram_socket* socket, int enabled);
-inox_status inox_dgram_set_ttl(inox_dgram_socket* socket, int ttl);
-inox_status inox_dgram_get_send_buffer_size(inox_dgram_socket* socket, int* out_size);
-inox_status inox_dgram_set_send_buffer_size(inox_dgram_socket* socket, int size);
-inox_status inox_dgram_get_recv_buffer_size(inox_dgram_socket* socket, int* out_size);
-inox_status inox_dgram_set_recv_buffer_size(inox_dgram_socket* socket, int size);
-inox_status inox_dgram_ref(inox_dgram_socket* socket);
-inox_status inox_dgram_unref(inox_dgram_socket* socket);
 void inox_dgram_close(inox_dgram_socket* socket);
 
 #ifdef __cplusplus
@@ -79,6 +71,14 @@ public:
   inox_status address(inox_dgram_address* out) const;
   inox_status remoteAddress(inox_dgram_address* out) const;
   inox_status localPort(int* out_port) const;
+  inox_status setBroadcast(bool enabled) const;
+  inox_status setTTL(int ttl) const;
+  inox_status getSendBufferSize(int* out_size) const;
+  inox_status setSendBufferSize(int size) const;
+  inox_status getRecvBufferSize(int* out_size) const;
+  inox_status setRecvBufferSize(int size) const;
+  inox_status ref() const;
+  inox_status unref() const;
 };
 
 #endif
