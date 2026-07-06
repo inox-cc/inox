@@ -115,10 +115,8 @@ public:
 class FsStats : public inox::Value {
 public:
   FsStats();
-  explicit FsStats(inox_value value);
   explicit FsStats(const inox::Value& value);
   explicit FsStats(inox::Value&& value);
-  FsStats(inox::AdoptValue, inox_value value);
 
   bool valid() const;
   bool isFile() const;
@@ -128,7 +126,6 @@ public:
 class FsDirent : public inox::Value {
 public:
   FsDirent();
-  explicit FsDirent(inox_value value);
   explicit FsDirent(const inox::Value& value);
   explicit FsDirent(inox::Value&& value);
 

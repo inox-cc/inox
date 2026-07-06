@@ -106,6 +106,15 @@ fs.rmSync(dir, { recursive: true, force: true })
   assert.doesNotMatch(header, /typedef inox_status \(\*Fs(?:Access|Mkdir|Unlink|Rm|AppendFile|CopyFile|Symlink|Rename|WriteFile)Fn\)/)
   assert.doesNotMatch(header, /const char\* path,[\s\S]*?size_t path_len,[\s\S]*?inox_value\* out/)
   assert.doesNotMatch(header, /const char\* bytes, size_t byte_len/)
+  assert.doesNotMatch(header, /FsStats\(inox_value/)
+  assert.doesNotMatch(header, /FsStats\(inox::AdoptValue/)
+  assert.doesNotMatch(header, /FsDirent\(inox_value/)
+
+  const fsSource = readFileSync(resolve('stdlib/node/fs/src/fs.cc'), 'utf8')
+  assert.doesNotMatch(fsSource, /FsStats::FsStats\(inox_value/)
+  assert.doesNotMatch(fsSource, /FsStats::FsStats\(inox::AdoptValue/)
+  assert.doesNotMatch(fsSource, /FsStats\(inox::adopt_value/)
+  assert.doesNotMatch(fsSource, /FsDirent::FsDirent\(inox_value/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

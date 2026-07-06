@@ -242,13 +242,9 @@ inox_fs_stats_new(inox_allocator* allocator, double size, double mode, double mt
 
 FsStats::FsStats() : inox::Value() {}
 
-FsStats::FsStats(inox_value value) : inox::Value(value) {}
-
 FsStats::FsStats(const inox::Value& value) : inox::Value(value) {}
 
 FsStats::FsStats(inox::Value&& value) : inox::Value(std::move(value)) {}
-
-FsStats::FsStats(inox::AdoptValue, inox_value value) : inox::Value(inox::adopt_value, value) {}
 
 bool FsStats::valid() const {
   inox_value value = raw();
@@ -338,8 +334,6 @@ static inox_status inox_fs_dirent_new(
 }
 
 FsDirent::FsDirent() : inox::Value() {}
-
-FsDirent::FsDirent(inox_value value) : inox::Value(value) {}
 
 FsDirent::FsDirent(const inox::Value& value) : inox::Value(value) {}
 
@@ -594,7 +588,7 @@ FsStats fs::statSync(inox::StringView path) {
     return FsStats();
   }
 
-  return FsStats(inox::adopt_value, out);
+  return FsStats(inox::adopt(out));
 }
 
 FsStats fs::lstatSync(inox::StringView path) {
@@ -628,7 +622,7 @@ FsStats fs::lstatSync(inox::StringView path) {
     return FsStats();
   }
 
-  return FsStats(inox::adopt_value, out);
+  return FsStats(inox::adopt(out));
 }
 
 inox::String fs::realpathSync(inox::StringView path) {
