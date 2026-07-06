@@ -7,21 +7,21 @@
 #include "inox/allocator.h"
 #include "inox/value.h"
 
-typedef enum inox_set_slot_state { INOX_SET_SLOT_EMPTY, INOX_SET_SLOT_OCCUPIED, INOX_SET_SLOT_TOMBSTONE } inox_set_slot_state;
+enum SetSlotState { SetSlotEmpty, SetSlotOccupied, SetSlotTombstone };
 
-typedef struct inox_set_entry {
+struct SetEntry {
   inox_value value;
   uint64_t hash;
-  inox_set_slot_state state;
-} inox_set_entry;
+  SetSlotState state;
+};
 
-typedef struct inox_set {
+struct SetStorage {
   inox_ref header;
-  size_t len;
-  size_t cap;
+  size_t length;
+  size_t capacity;
   size_t tombstones;
-  inox_set_entry* entries;
-} inox_set;
+  SetEntry* entries;
+};
 
 #ifdef __cplusplus
 
@@ -44,7 +44,7 @@ public:
   bool has(inox_value value) const;
   size_t size() const;
   bool valid() const;
-  inox_set* data() const;
+  SetStorage* data() const;
 };
 
 #endif

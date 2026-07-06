@@ -465,10 +465,10 @@ export function emitPreparedCollectionConstructorValueExpression(
     )
   }
 
-  let tempPrefix = 'inox_set'
+  let tempPrefix = 'set_storage'
 
   if (collectionConstructor === 'Map') {
-    tempPrefix = 'inox_map'
+    tempPrefix = 'map_storage'
   }
 
   const temp = nextCName(context, tempPrefix)
@@ -582,10 +582,10 @@ function emitMapConstructorCopiedEntries(
   const lines: string[] = []
 
   pushAllLines(lines, source.lines)
-  lines.push(`inox_map* ${sourceMap} = ${mapFacade(sourceExpression, source.cppObject)}.data();`)
+  lines.push(`MapStorage* ${sourceMap} = ${mapFacade(sourceExpression, source.cppObject)}.data();`)
   lines.push(emitRuntimeTypeCheck(`${sourceMap} == nullptr`, context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceMap}->cap; ++${index}) {`)
-  lines.push(`  if (${sourceMap}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) {`)
+  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceMap}->capacity; ++${index}) {`)
+  lines.push(`  if (${sourceMap}->entries[${index}].state != MapSlotOccupied) {`)
   lines.push('    continue;')
   lines.push('  }')
   lines.push(`  ${mapFacade(name, true)}.set(${sourceMap}->entries[${index}].key, ${sourceMap}->entries[${index}].value);`)
@@ -653,10 +653,10 @@ function emitSetConstructorCopiedElements(
   const lines: string[] = []
 
   pushAllLines(lines, source.lines)
-  lines.push(`inox_set* ${sourceSet} = ${setFacade(sourceExpression, source.cppObject)}.data();`)
+  lines.push(`SetStorage* ${sourceSet} = ${setFacade(sourceExpression, source.cppObject)}.data();`)
   lines.push(emitRuntimeTypeCheck(`${sourceSet} == nullptr`, context))
-  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->cap; ++${index}) {`)
-  lines.push(`  if (${sourceSet}->entries[${index}].state != INOX_SET_SLOT_OCCUPIED) {`)
+  lines.push(`for (size_t ${index} = 0; ${index} < ${sourceSet}->capacity; ++${index}) {`)
+  lines.push(`  if (${sourceSet}->entries[${index}].state != SetSlotOccupied) {`)
   lines.push('    continue;')
   lines.push('  }')
   lines.push(`  ${setFacade(name, true)}.add(${sourceSet}->entries[${index}].value);`)

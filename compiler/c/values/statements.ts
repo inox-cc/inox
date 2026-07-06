@@ -3358,10 +3358,10 @@ function emitRuntimeMapForOfStatement(
 
     const lines: string[] = []
     pushAllLines(lines, runtimeMap.lines)
-    lines.push(`inox_map* ${map} = ${runtimeMap.cppObject ? runtimeMap.name : `Map(${runtimeMap.name})`}.data();`)
+    lines.push(`MapStorage* ${map} = ${runtimeMap.cppObject ? runtimeMap.name : `Map(${runtimeMap.name})`}.data();`)
     lines.push(emitRuntimeTypeCheck(`${map} == nullptr`, context))
-    lines.push(`for (size_t ${index} = 0; ${index} < ${map}->cap; ++${index}) {`)
-    lines.push(`  if (${map}->entries[${index}].state != INOX_MAP_SLOT_OCCUPIED) continue;`)
+    lines.push(`for (size_t ${index} = 0; ${index} < ${map}->capacity; ++${index}) {`)
+    lines.push(`  if (${map}->entries[${index}].state != MapSlotOccupied) continue;`)
     const hasContinueLabel = shouldEmitFlowTargetLabel(continueTarget)
     const loopBody: string[] = []
     pushAllLines(loopBody, emitPrepareOwnedValueWrite(statement.name))
@@ -3454,14 +3454,14 @@ function emitRuntimeCollectionValueForOfStatement(
 
   let indexPrefix = 'inox_for_set_index'
   let collectionPrefix = 'inox_for_set'
-  let collectionType = 'inox_set'
-  let slotState = 'INOX_SET_SLOT_OCCUPIED'
+  let collectionType = 'SetStorage'
+  let slotState = 'SetSlotOccupied'
 
   if (isMap) {
     indexPrefix = 'inox_for_map_index'
     collectionPrefix = 'inox_for_map'
-    collectionType = 'inox_map'
-    slotState = 'INOX_MAP_SLOT_OCCUPIED'
+    collectionType = 'MapStorage'
+    slotState = 'MapSlotOccupied'
   }
 
   const index = nextCName(context, indexPrefix)
@@ -3488,7 +3488,7 @@ function emitRuntimeCollectionValueForOfStatement(
     const collectionData = cppObject ? `${collectionName}.data()` : isMap ? `Map(${collectionName}).data()` : `Set(${collectionName}).data()`
     lines.push(`${collectionType}* ${collection} = ${collectionData};`)
     lines.push(emitRuntimeTypeCheck(`${collection} == nullptr`, context))
-    lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->cap; ++${index}) {`)
+    lines.push(`for (size_t ${index} = 0; ${index} < ${collection}->capacity; ++${index}) {`)
     lines.push(`  if (${collection}->entries[${index}].state != ${slotState}) continue;`)
     const loopBody: string[] = []
     pushAllLines(loopBody, emitPrepareOwnedValueWrite(value))

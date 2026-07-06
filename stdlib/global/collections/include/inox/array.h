@@ -8,7 +8,7 @@
 struct ArrayStorage {
   inox_ref header;
   size_t length;
-  size_t cap;
+  size_t capacity;
   inox_value* items;
 };
 

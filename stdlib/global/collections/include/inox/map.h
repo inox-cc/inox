@@ -7,22 +7,22 @@
 #include "inox/allocator.h"
 #include "inox/value.h"
 
-typedef enum inox_map_slot_state { INOX_MAP_SLOT_EMPTY, INOX_MAP_SLOT_OCCUPIED, INOX_MAP_SLOT_TOMBSTONE } inox_map_slot_state;
+enum MapSlotState { MapSlotEmpty, MapSlotOccupied, MapSlotTombstone };
 
-typedef struct inox_map_entry {
+struct MapEntry {
   inox_value key;
   inox_value value;
   uint64_t hash;
-  inox_map_slot_state state;
-} inox_map_entry;
+  MapSlotState state;
+};
 
-typedef struct inox_map {
+struct MapStorage {
   inox_ref header;
-  size_t len;
-  size_t cap;
+  size_t length;
+  size_t capacity;
   size_t tombstones;
-  inox_map_entry* entries;
-} inox_map;
+  MapEntry* entries;
+};
 
 #ifdef __cplusplus
 
@@ -46,7 +46,7 @@ public:
   bool has(inox_value key) const;
   Map set(inox_value key, inox_value value) const;
   size_t size() const;
-  inox_map* data() const;
+  MapStorage* data() const;
 };
 
 #endif
