@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include "inox/loop.h"
 
+#ifdef __cplusplus
+#include "inox/string_view.h"
+#endif
+
 typedef struct inox_http_server inox_http_server;
 typedef struct inox_http_response inox_http_response;
 
@@ -41,8 +45,6 @@ inox_status inox_http_server_listen(inox_http_server* server, const char* host, 
 inox_status inox_http_server_local_port(inox_http_server* server, int* out_port);
 inox_status inox_http_server_on_request(inox_http_server* server, inox_http_handler_fn handler, void* user);
 void inox_http_server_close(inox_http_server* server);
-int inox_http_request_method_equals(const inox_http_request* request, const char* method, size_t len);
-int inox_http_request_url_equals(const inox_http_request* request, const char* url, size_t len);
 inox_status inox_http_response_set_status(inox_http_response* response, int status);
 inox_status inox_http_response_set_header(
   inox_http_response* response,
@@ -68,5 +70,20 @@ int inox_http_response_send_fs_file(
   const char* root,
   size_t root_len
 );
+
+#ifdef __cplusplus
+
+class HttpRequest {
+private:
+  const inox_http_request* request_;
+
+public:
+  explicit HttpRequest(const inox_http_request* request);
+
+  bool methodEquals(inox::StringView method) const;
+  bool urlEquals(inox::StringView url) const;
+};
+
+#endif
 
 #endif

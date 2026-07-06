@@ -995,10 +995,10 @@ function emitHttpRequestStringCompareExpression(
     return null
   }
 
-  let runtime = `inox_http_request_url_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
+  let runtime = `HttpRequest(${httpContext.requestName}).urlEquals(${cStringLiteral(literal)})`
 
   if (member === 'method') {
-    runtime = `inox_http_request_method_equals(${httpContext.requestName}, ${cStringLiteral(literal)}, ${utf8ByteLength(literal)})`
+    runtime = `HttpRequest(${httpContext.requestName}).methodEquals(${cStringLiteral(literal)})`
   }
 
   if (isHttpNegativeEqualityOperator(expression.operator)) {

@@ -2,18 +2,18 @@
 
 #include <string.h>
 
-int inox_http_request_method_equals(const inox_http_request* request, const char* method, size_t len) {
-  return request != 0 &&
-         method != 0 &&
-         request->method_len == len &&
-         memcmp(request->method, method, len) == 0;
+HttpRequest::HttpRequest(const inox_http_request* request) : request_(request) {}
+
+bool HttpRequest::methodEquals(inox::StringView method) const {
+  return request_ != 0 &&
+         request_->method_len == method.len &&
+         memcmp(request_->method, method.bytes, method.len) == 0;
 }
 
-int inox_http_request_url_equals(const inox_http_request* request, const char* url, size_t len) {
-  return request != 0 &&
-         url != 0 &&
-         request->url_len == len &&
-         memcmp(request->url, url, len) == 0;
+bool HttpRequest::urlEquals(inox::StringView url) const {
+  return request_ != 0 &&
+         request_->url_len == url.len &&
+         memcmp(request_->url, url.bytes, url.len) == 0;
 }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -396,7 +396,7 @@ int inox_http_response_send_fs_file(
     return 0;
   }
 
-  if (!inox_http_request_method_equals(request, "GET", 3)) {
+  if (!HttpRequest(request).methodEquals("GET")) {
     return 0;
   }
 
