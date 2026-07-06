@@ -188,30 +188,6 @@ enum {
   INOX_FS_STATS_IS_DIRECTORY_INDEX = 4
 };
 
-static inox_status inox_fs_bool_field(inox_value object, uint32_t index, bool* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = false;
-  inox_value value = inox_undefined_value();
-  inox_status status = inox_object_get_known(object, index, &value);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (value.tag != INOX_TAG_BOOL) {
-    inox_release(value);
-    return INOX_ERR_TYPE;
-  }
-
-  *out = value.as.boolean;
-  inox_release(value);
-
-  return INOX_OK;
-}
-
 static inox_status
 inox_fs_stats_new(inox_allocator* allocator, double size, double mode, double mtime_ms, bool is_file, bool is_directory, inox_value* out) {
   static const inox_field_info fields[] = { { "size", INOX_FIELD_READONLY },
@@ -268,15 +244,29 @@ FsStats::FsStats(const inox::Value& value) : inox::Value(value) {}
 FsStats::FsStats(inox::Value&& value) : inox::Value(std::move(value)) {}
 
 bool FsStats::isFile() const {
-  bool result = false;
+  inox_value value = inox_undefined_value();
 
-  return inox_fs_bool_field(raw(), INOX_FS_STATS_IS_FILE_INDEX, &result) == INOX_OK && result;
+  if (inox_object_get_known(raw(), INOX_FS_STATS_IS_FILE_INDEX, &value) != INOX_OK) {
+    return false;
+  }
+
+  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  inox_release(value);
+
+  return result;
 }
 
 bool FsStats::isDirectory() const {
-  bool result = false;
+  inox_value value = inox_undefined_value();
 
-  return inox_fs_bool_field(raw(), INOX_FS_STATS_IS_DIRECTORY_INDEX, &result) == INOX_OK && result;
+  if (inox_object_get_known(raw(), INOX_FS_STATS_IS_DIRECTORY_INDEX, &value) != INOX_OK) {
+    return false;
+  }
+
+  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  inox_release(value);
+
+  return result;
 }
 
 enum {
@@ -344,15 +334,29 @@ FsDirent::FsDirent(const inox::Value& value) : inox::Value(value) {}
 FsDirent::FsDirent(inox::Value&& value) : inox::Value(std::move(value)) {}
 
 bool FsDirent::isFile() const {
-  bool result = false;
+  inox_value value = inox_undefined_value();
 
-  return inox_fs_bool_field(raw(), INOX_FS_DIRENT_IS_FILE_INDEX, &result) == INOX_OK && result;
+  if (inox_object_get_known(raw(), INOX_FS_DIRENT_IS_FILE_INDEX, &value) != INOX_OK) {
+    return false;
+  }
+
+  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  inox_release(value);
+
+  return result;
 }
 
 bool FsDirent::isDirectory() const {
-  bool result = false;
+  inox_value value = inox_undefined_value();
 
-  return inox_fs_bool_field(raw(), INOX_FS_DIRENT_IS_DIRECTORY_INDEX, &result) == INOX_OK && result;
+  if (inox_object_get_known(raw(), INOX_FS_DIRENT_IS_DIRECTORY_INDEX, &value) != INOX_OK) {
+    return false;
+  }
+
+  const bool result = value.tag == INOX_TAG_BOOL && value.as.boolean;
+  inox_release(value);
+
+  return result;
 }
 
 inox_status inox_fs_read_file_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
