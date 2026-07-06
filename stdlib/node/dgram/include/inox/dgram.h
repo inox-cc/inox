@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 
-#include "inox/loop.h"
 #include "inox/string_view.h"
 
 struct inox_dgram_socket;
@@ -37,7 +36,7 @@ public:
   DgramSocket();
   explicit DgramSocket(inox_dgram_socket* socket);
 
-  static DgramSocket create(inox_loop* loop, DgramRecvFn recv, void* user);
+  static DgramSocket create(DgramRecvFn recv, void* user);
 
   void bind(inox::StringView host, int port, unsigned int flags = 0) const;
   void onMessage(DgramRecvFn recv, void* user) const;

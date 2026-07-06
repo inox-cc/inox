@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "inox/loop.h"
 #include "inox/string.h"
 
 DgramSocket::DgramSocket() : socket_(0) {}
@@ -67,10 +68,11 @@ static void inox_dgram_send_cb(uv_udp_send_t* request, int status);
 static void inox_dgram_close_cb(uv_handle_t* handle);
 
 DgramSocket DgramSocket::create(
-  inox_loop* loop,
   DgramRecvFn recv,
   void* user
 ) {
+  inox_loop* loop = inox::loop();
+
   if (loop == 0 || loop->allocator == 0) {
     inox_dgram_throw_failed("TypeError: DgramSocket.create failed");
     return DgramSocket();
@@ -704,11 +706,9 @@ struct inox_dgram_socket {
 };
 
 DgramSocket DgramSocket::create(
-  inox_loop* loop,
   DgramRecvFn recv,
   void* user
 ) {
-  (void)loop;
   (void)recv;
   (void)user;
 

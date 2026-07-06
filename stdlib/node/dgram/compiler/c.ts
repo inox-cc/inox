@@ -8,7 +8,6 @@ import {
 } from '../../../../compiler/c/runtime-imports.ts'
 import {
   createFunctionContext,
-  emitEventLoopReference,
   emitRuntimeTypeCheck,
   nextCName,
   registerEventLoop
@@ -866,7 +865,7 @@ function emitDgramSocketCreateLines(
     wrapperName = wrapper.name
   }
 
-  lines.push(`${socketName} = DgramSocket::create(${emitEventLoopReference(context)}, ${wrapperName}, 0);`)
+  lines.push(`${socketName} = DgramSocket::create(${wrapperName}, 0);`)
   pushDgramLines(lines, emitDgramThrownCheck(context))
 
   if (wrapper !== null && typeof wrapper !== 'undefined') {
