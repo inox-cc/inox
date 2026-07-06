@@ -336,7 +336,7 @@ function emitHttpStaticFsFileStatement(
   }
 
   return [
-    `if (inox_http_response_send_fs_file(${httpContext.responseName}, ${httpContext.requestName}, ${cStringLiteral('/')}, 1, ${cStringLiteral(root)}, ${utf8ByteLength(root)})) {`,
+    `if (HttpResponse(${httpContext.responseName}).sendFsFile(HttpRequest(${httpContext.requestName}), ${cStringLiteral('/')}, ${cStringLiteral(root)})) {`,
     '  return INOX_OK;',
     '}'
   ]
@@ -769,7 +769,7 @@ function emitHttpResponseStatusAssignment(
 
   const status = emitHttpStatusCodeExpression(expression.value, context)
 
-  return emitHttpStatusCheck(`inox_http_response_set_status(${httpContext.responseName}, ${status})`, context)
+  return emitHttpStatusCheck(`HttpResponse(${httpContext.responseName}).setStatus(${status})`, context)
 }
 
 function emitHttpResponseCallStatement(
@@ -798,7 +798,7 @@ function emitHttpResponseCallStatement(
     pushHttpLines(
       lines,
       emitHttpStatusCheck(
-        `inox_http_response_set_header(${httpContext.responseName}, ${name.bytes}, ${name.length}, ${value.bytes}, ${value.length})`,
+        `HttpResponse(${httpContext.responseName}).setHeader(inox::StringView(${name.bytes}, ${name.length}), inox::StringView(${value.bytes}, ${value.length}))`,
         context
       )
     )
@@ -815,7 +815,7 @@ function emitHttpResponseCallStatement(
     pushHttpLines(
       lines,
       emitHttpStatusCheck(
-        `inox_http_response_write_head(${httpContext.responseName}, ${status}, ${headers.name}, ${headers.count})`,
+        `HttpResponse(${httpContext.responseName}).writeHead(${status}, ${headers.name}, ${headers.count})`,
         context
       )
     )
@@ -825,17 +825,20 @@ function emitHttpResponseCallStatement(
 
   if (method === 'write' || method === 'end') {
     const body = emitHttpStringBytesOperand(expression.args[0], httpContext, context)
-    let runtime = 'inox_http_response_end'
+    let runtime = 'end'
     const lines: string[] = []
 
     if (method === 'write') {
-      runtime = 'inox_http_response_write'
+      runtime = 'write'
     }
 
     pushHttpLines(lines, body.lines)
     pushHttpLines(
       lines,
-      emitHttpStatusCheck(`${runtime}(${httpContext.responseName}, ${body.bytes}, ${body.length})`, context)
+      emitHttpStatusCheck(
+        `HttpResponse(${httpContext.responseName}).${runtime}(inox::StringView(${body.bytes}, ${body.length}))`,
+        context
+      )
     )
 
     return lines

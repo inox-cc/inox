@@ -16,6 +16,12 @@ bool HttpRequest::urlEquals(inox::StringView url) const {
          memcmp(request_->url, url.bytes, url.len) == 0;
 }
 
+const inox_http_request* HttpRequest::raw() const {
+  return request_;
+}
+
+HttpResponse::HttpResponse(inox_http_response* response) : response_(response) {}
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "inox/binary.h"
 #include "inox/fs.h"
@@ -152,7 +158,9 @@ void inox_http_server_close(inox_http_server* server) {
   inox_net_server_close(server->net_server);
 }
 
-inox_status inox_http_response_set_status(inox_http_response* response, int status) {
+inox_status HttpResponse::setStatus(int status) const {
+  inox_http_response* response = response_;
+
   if (response == 0 || response->connection == 0 || response->sent) {
     return INOX_ERR_TYPE;
   }
@@ -161,22 +169,16 @@ inox_status inox_http_response_set_status(inox_http_response* response, int stat
   return INOX_OK;
 }
 
-inox_status inox_http_response_set_header(
-  inox_http_response* response,
-  const char* name,
-  size_t name_len,
-  const char* value,
-  size_t value_len
-) {
+inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView value) const {
+  inox_http_response* response = response_;
+
   if (
     response == 0 ||
     response->connection == 0 ||
     response->sent ||
-    name == 0 ||
-    value == 0 ||
-    name_len == 0 ||
-    name_len >= INOX_HTTP_MAX_HEADER_NAME ||
-    value_len >= INOX_HTTP_MAX_HEADER_VALUE
+    name.len == 0 ||
+    name.len >= INOX_HTTP_MAX_HEADER_NAME ||
+    value.len >= INOX_HTTP_MAX_HEADER_VALUE
   ) {
     return INOX_ERR_TYPE;
   }
@@ -184,7 +186,7 @@ inox_status inox_http_response_set_header(
   inox_http_response_header* header = 0;
 
   for (size_t index = 0; index < response->header_count; index += 1) {
-    if (inox_http_header_name_equals(response->headers[index].name, response->headers[index].name_len, name, name_len)) {
+    if (inox_http_header_name_equals(response->headers[index].name, response->headers[index].name_len, name.bytes, name.len)) {
       header = &response->headers[index];
       break;
     }
@@ -199,23 +201,18 @@ inox_status inox_http_response_set_header(
     response->header_count += 1;
   }
 
-  memcpy(header->name, name, name_len);
-  header->name[name_len] = '\0';
-  header->name_len = name_len;
-  memcpy(header->value, value, value_len);
-  header->value[value_len] = '\0';
-  header->value_len = value_len;
+  memcpy(header->name, name.bytes, name.len);
+  header->name[name.len] = '\0';
+  header->name_len = name.len;
+  memcpy(header->value, value.bytes, value.len);
+  header->value[value.len] = '\0';
+  header->value_len = value.len;
 
   return INOX_OK;
 }
 
-inox_status inox_http_response_write_head(
-  inox_http_response* response,
-  int status,
-  const inox_http_header* headers,
-  size_t header_count
-) {
-  inox_status result = inox_http_response_set_status(response, status);
+inox_status HttpResponse::writeHead(int status, const inox_http_header* headers, size_t header_count) const {
+  inox_status result = setStatus(status);
 
   if (result != INOX_OK) {
     return result;
@@ -226,12 +223,9 @@ inox_status inox_http_response_write_head(
   }
 
   for (size_t index = 0; index < header_count; index += 1) {
-    result = inox_http_response_set_header(
-      response,
-      headers[index].name,
-      headers[index].name_len,
-      headers[index].value,
-      headers[index].value_len
+    result = setHeader(
+      inox::StringView(headers[index].name, headers[index].name_len),
+      inox::StringView(headers[index].value, headers[index].value_len)
     );
 
     if (result != INOX_OK) {
@@ -242,25 +236,29 @@ inox_status inox_http_response_write_head(
   return INOX_OK;
 }
 
-inox_status inox_http_response_write(inox_http_response* response, const char* bytes, size_t len) {
-  if (response == 0 || response->connection == 0 || response->sent || (bytes == 0 && len != 0)) {
+inox_status HttpResponse::write(inox::StringView bytes) const {
+  inox_http_response* response = response_;
+
+  if (response == 0 || response->connection == 0 || response->sent) {
     return INOX_ERR_TYPE;
   }
 
-  if (len > sizeof(response->body) - response->body_len) {
+  if (bytes.len > sizeof(response->body) - response->body_len) {
     return INOX_ERR_FIELD;
   }
 
-  if (len != 0) {
-    memcpy(response->body + response->body_len, bytes, len);
-    response->body_len += len;
+  if (bytes.len != 0) {
+    memcpy(response->body + response->body_len, bytes.bytes, bytes.len);
+    response->body_len += bytes.len;
   }
 
   return INOX_OK;
 }
 
-inox_status inox_http_response_end(inox_http_response* response, const char* bytes, size_t len) {
-  if (response == 0 || response->connection == 0 || (bytes == 0 && len != 0)) {
+inox_status HttpResponse::end(inox::StringView bytes) const {
+  inox_http_response* response = response_;
+
+  if (response == 0 || response->connection == 0) {
     return INOX_ERR_TYPE;
   }
 
@@ -268,7 +266,7 @@ inox_status inox_http_response_end(inox_http_response* response, const char* byt
     return INOX_ERR_FIELD;
   }
 
-  inox_status append_status = inox_http_response_write(response, bytes, len);
+  inox_status append_status = write(bytes);
 
   if (append_status != INOX_OK) {
     return append_status;
@@ -359,9 +357,8 @@ inox_status inox_http_response_end(inox_http_response* response, const char* byt
   return write_status;
 }
 
-inox_status inox_http_response_text(inox_http_response* response, int status, const char* body, size_t len) {
-  inox_status result = inox_http_response_write_head(
-    response,
+inox_status HttpResponse::text(int status, inox::StringView body) const {
+  inox_status result = writeHead(
     status,
     (const inox_http_header[]){
       { "Content-Type", 12, "text/plain; charset=utf-8", 25 }
@@ -373,39 +370,33 @@ inox_status inox_http_response_text(inox_http_response* response, int status, co
     return result;
   }
 
-  return inox_http_response_end(response, body, len);
+  return end(body);
 }
 
-int inox_http_response_send_fs_file(
-  inox_http_response* response,
-  const inox_http_request* request,
-  const char* url_prefix,
-  size_t url_prefix_len,
-  const char* root,
-  size_t root_len
-) {
+int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_prefix, inox::StringView root) const {
+  inox_http_response* response = response_;
+  const inox_http_request* raw_request = request.raw();
+
   if (
     response == 0 ||
     response->connection == 0 ||
-    request == 0 ||
-    url_prefix == 0 ||
-    root == 0 ||
-    url_prefix_len == 0 ||
-    root_len == 0
+    raw_request == 0 ||
+    url_prefix.len == 0 ||
+    root.len == 0
   ) {
     return 0;
   }
 
-  if (!HttpRequest(request).methodEquals("GET")) {
+  if (!request.methodEquals("GET")) {
     return 0;
   }
 
-  if (request->url_len < url_prefix_len || memcmp(request->url, url_prefix, url_prefix_len) != 0) {
+  if (raw_request->url_len < url_prefix.len || memcmp(raw_request->url, url_prefix.bytes, url_prefix.len) != 0) {
     return 0;
   }
 
-  const char* relative_path = request->url + url_prefix_len;
-  size_t relative_path_len = request->url_len - url_prefix_len;
+  const char* relative_path = raw_request->url + url_prefix.len;
+  size_t relative_path_len = raw_request->url_len - url_prefix.len;
 
   for (size_t index = 0; index < relative_path_len; index += 1) {
     if (relative_path[index] == '?' || relative_path[index] == '#') {
@@ -424,13 +415,13 @@ int inox_http_response_send_fs_file(
   }
 
   char path[4096];
-  size_t path_len = root_len;
+  size_t path_len = root.len;
 
   if (path_len >= sizeof(path)) {
     return 0;
   }
 
-  memcpy(path, root, root_len);
+  memcpy(path, root.bytes, root.len);
 
   if (path_len > 0 && path[path_len - 1] != '/') {
     if (path_len + 1 >= sizeof(path)) {
@@ -460,7 +451,7 @@ int inox_http_response_send_fs_file(
   if (file.tag != INOX_TAG_BYTES) {
     inox_release(file);
 
-    return inox_http_response_text(response, 500, "internal server error", 21) == INOX_OK ? 1 : 0;
+    return text(500, "internal server error") == INOX_OK ? 1 : 0;
   }
 
   inox_bytes* bytes = (inox_bytes*)file.as.ref;
@@ -468,13 +459,12 @@ int inox_http_response_send_fs_file(
   if (bytes->len > INOX_HTTP_MAX_RESPONSE_BODY) {
     inox_release(file);
 
-    return inox_http_response_text(response, 413, "payload too large", 17) == INOX_OK ? 1 : 0;
+    return text(413, "payload too large") == INOX_OK ? 1 : 0;
   }
 
   size_t content_type_len = 0;
   const char* content_type = inox_http_local_file_content_type(path, path_len, &content_type_len);
-  inox_status result = inox_http_response_write_head(
-    response,
+  inox_status result = writeHead(
     200,
     (const inox_http_header[]){
       { "Content-Type", 12, content_type, content_type_len }
@@ -483,7 +473,7 @@ int inox_http_response_send_fs_file(
   );
 
   if (result == INOX_OK) {
-    result = inox_http_response_end(response, (const char*)bytes->bytes, bytes->len);
+    result = end(inox::StringView((const char*)bytes->bytes, bytes->len));
   }
 
   inox_release(file);
@@ -520,7 +510,7 @@ static inox_status inox_http_on_data(void* user, inox_net_socket* socket, const 
   if (connection->len + len > sizeof(connection->buffer)) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return inox_http_response_text(&response, 413, "payload too large", 17);
+    return HttpResponse(&response).text(413, "payload too large");
   }
 
   memcpy(connection->buffer + connection->len, bytes, len);
@@ -557,7 +547,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   if (line_end == 0 || line_end > header_end) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return inox_http_response_text(&response, 400, "bad request", 11);
+    return HttpResponse(&response).text(400, "bad request");
   }
 
   const char* method_end = (const char*)memchr(connection->buffer, ' ', (size_t)(line_end - connection->buffer));
@@ -565,7 +555,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   if (method_end == 0) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return inox_http_response_text(&response, 400, "bad request", 11);
+    return HttpResponse(&response).text(400, "bad request");
   }
 
   const char* url_start = method_end + 1;
@@ -574,7 +564,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   if (url_end == 0) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return inox_http_response_text(&response, 400, "bad request", 11);
+    return HttpResponse(&response).text(400, "bad request");
   }
 
   inox_http_header headers[INOX_HTTP_MAX_HEADERS];
@@ -585,7 +575,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   if (parse_status != INOX_OK) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return inox_http_response_text(&response, 400, "bad request", 11);
+    return HttpResponse(&response).text(400, "bad request");
   }
 
   size_t header_bytes = (size_t)(header_end - connection->buffer);
@@ -593,7 +583,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   if (content_length > sizeof(connection->buffer) - header_bytes) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return inox_http_response_text(&response, 413, "payload too large", 17);
+    return HttpResponse(&response).text(413, "payload too large");
   }
 
   if (connection->len < header_bytes + content_length) {
@@ -613,7 +603,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   inox_http_response response;
   inox_http_response_init(&response, connection);
   if (connection->server->handler == 0) {
-    return inox_http_response_text(&response, 404, "not found", 9);
+    return HttpResponse(&response).text(404, "not found");
   }
 
   inox_status status = connection->server->handler(connection->server->user, &request, &response);
@@ -623,7 +613,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   }
 
   if (!connection->responded) {
-    return inox_http_response_text(&response, 204, "", 0);
+    return HttpResponse(&response).text(204, "");
   }
 
   return INOX_OK;
@@ -914,76 +904,51 @@ void inox_http_server_close(inox_http_server* server) {
   (void)server;
 }
 
-inox_status inox_http_response_set_status(inox_http_response* response, int status) {
-  (void)response;
+inox_status HttpResponse::setStatus(int status) const {
+  (void)response_;
   (void)status;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_response_set_header(
-  inox_http_response* response,
-  const char* name,
-  size_t name_len,
-  const char* value,
-  size_t value_len
-) {
-  (void)response;
+inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView value) const {
+  (void)response_;
   (void)name;
-  (void)name_len;
   (void)value;
-  (void)value_len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_response_write_head(
-  inox_http_response* response,
-  int status,
-  const inox_http_header* headers,
-  size_t header_count
-) {
-  (void)response;
+inox_status HttpResponse::writeHead(int status, const inox_http_header* headers, size_t header_count) const {
+  (void)response_;
   (void)status;
   (void)headers;
   (void)header_count;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_response_write(inox_http_response* response, const char* bytes, size_t len) {
-  (void)response;
+inox_status HttpResponse::write(inox::StringView bytes) const {
+  (void)response_;
   (void)bytes;
-  (void)len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_response_end(inox_http_response* response, const char* bytes, size_t len) {
-  (void)response;
+inox_status HttpResponse::end(inox::StringView bytes) const {
+  (void)response_;
   (void)bytes;
-  (void)len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_response_text(inox_http_response* response, int status, const char* body, size_t len) {
-  (void)response;
+inox_status HttpResponse::text(int status, inox::StringView body) const {
+  (void)response_;
   (void)status;
   (void)body;
-  (void)len;
   return INOX_ERR_UNSUPPORTED;
 }
 
-int inox_http_response_send_fs_file(
-  inox_http_response* response,
-  const inox_http_request* request,
-  const char* url_prefix,
-  size_t url_prefix_len,
-  const char* root,
-  size_t root_len
-) {
-  (void)response;
+int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_prefix, inox::StringView root) const {
+  (void)response_;
   (void)request;
   (void)url_prefix;
-  (void)url_prefix_len;
   (void)root;
-  (void)root_len;
   return 0;
 }
 

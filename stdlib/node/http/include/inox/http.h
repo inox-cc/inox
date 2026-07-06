@@ -45,31 +45,6 @@ inox_status inox_http_server_listen(inox_http_server* server, const char* host, 
 inox_status inox_http_server_local_port(inox_http_server* server, int* out_port);
 inox_status inox_http_server_on_request(inox_http_server* server, inox_http_handler_fn handler, void* user);
 void inox_http_server_close(inox_http_server* server);
-inox_status inox_http_response_set_status(inox_http_response* response, int status);
-inox_status inox_http_response_set_header(
-  inox_http_response* response,
-  const char* name,
-  size_t name_len,
-  const char* value,
-  size_t value_len
-);
-inox_status inox_http_response_write_head(
-  inox_http_response* response,
-  int status,
-  const inox_http_header* headers,
-  size_t header_count
-);
-inox_status inox_http_response_write(inox_http_response* response, const char* bytes, size_t len);
-inox_status inox_http_response_end(inox_http_response* response, const char* bytes, size_t len);
-inox_status inox_http_response_text(inox_http_response* response, int status, const char* body, size_t len);
-int inox_http_response_send_fs_file(
-  inox_http_response* response,
-  const inox_http_request* request,
-  const char* url_prefix,
-  size_t url_prefix_len,
-  const char* root,
-  size_t root_len
-);
 
 #ifdef __cplusplus
 
@@ -82,6 +57,23 @@ public:
 
   bool methodEquals(inox::StringView method) const;
   bool urlEquals(inox::StringView url) const;
+  const inox_http_request* raw() const;
+};
+
+class HttpResponse {
+private:
+  inox_http_response* response_;
+
+public:
+  explicit HttpResponse(inox_http_response* response);
+
+  inox_status setStatus(int status) const;
+  inox_status setHeader(inox::StringView name, inox::StringView value) const;
+  inox_status writeHead(int status, const inox_http_header* headers, size_t header_count) const;
+  inox_status write(inox::StringView bytes) const;
+  inox_status end(inox::StringView bytes) const;
+  inox_status text(int status, inox::StringView body) const;
+  int sendFsFile(const HttpRequest& request, inox::StringView url_prefix, inox::StringView root) const;
 };
 
 #endif
