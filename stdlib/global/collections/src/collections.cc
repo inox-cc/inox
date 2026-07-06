@@ -249,7 +249,7 @@ void Map::clear() const {
   instance->tombstones = 0;
 }
 
-bool Map::deleteKey(inox_value key) const {
+bool Map::deleteKey(const inox::Value& key) const {
   MapStorage* instance = data();
 
   if (instance == 0) {
@@ -257,8 +257,9 @@ bool Map::deleteKey(inox_value key) const {
     return false;
   }
 
+  inox_value raw_key = key.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(key, hash);
+  bool hash_ok = inox::hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -267,7 +268,7 @@ bool Map::deleteKey(inox_value key) const {
 
   size_t index = 0;
   bool found = false;
-  inox_status status = inox_map_find(instance, key, hash, &index, &found);
+  inox_status status = inox_map_find(instance, raw_key, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map lookup failed");
@@ -316,7 +317,7 @@ static void inox_map_dispose_ref(inox_ref* ref) {
   inox_map_dispose((MapStorage*)ref);
 }
 
-inox::Value Map::get(inox_value key) const {
+inox::Value Map::get(const inox::Value& key) const {
   MapStorage* instance = data();
 
   if (instance == 0) {
@@ -324,8 +325,9 @@ inox::Value Map::get(inox_value key) const {
     return inox::Value();
   }
 
+  inox_value raw_key = key.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(key, hash);
+  bool hash_ok = inox::hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -334,7 +336,7 @@ inox::Value Map::get(inox_value key) const {
 
   size_t index = 0;
   bool found = false;
-  inox_status status = inox_map_find(instance, key, hash, &index, &found);
+  inox_status status = inox_map_find(instance, raw_key, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map lookup failed");
@@ -351,7 +353,7 @@ inox::Value Map::get(inox_value key) const {
   return inox::adopt(out);
 }
 
-bool Map::has(inox_value key) const {
+bool Map::has(const inox::Value& key) const {
   MapStorage* instance = data();
 
   if (instance == 0) {
@@ -359,8 +361,9 @@ bool Map::has(inox_value key) const {
     return false;
   }
 
+  inox_value raw_key = key.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(key, hash);
+  bool hash_ok = inox::hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -369,7 +372,7 @@ bool Map::has(inox_value key) const {
 
   size_t index = 0;
   bool found = false;
-  inox_status status = inox_map_find(instance, key, hash, &index, &found);
+  inox_status status = inox_map_find(instance, raw_key, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map lookup failed");
@@ -379,7 +382,7 @@ bool Map::has(inox_value key) const {
   return found;
 }
 
-Map Map::set(inox_value key, inox_value value) const {
+Map Map::set(const inox::Value& key, const inox::Value& value) const {
   MapStorage* instance = data();
 
   if (instance == 0) {
@@ -387,8 +390,10 @@ Map Map::set(inox_value key, inox_value value) const {
     return Map();
   }
 
+  inox_value raw_key = key.raw();
+  inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(key, hash);
+  bool hash_ok = inox::hash_value(raw_key, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Map key is not hashable");
@@ -404,7 +409,7 @@ Map Map::set(inox_value key, inox_value value) const {
 
   size_t index = 0;
   bool found = false;
-  status = inox_map_find(instance, key, hash, &index, &found);
+  status = inox_map_find(instance, raw_key, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Map lookup failed");
@@ -414,9 +419,9 @@ Map Map::set(inox_value key, inox_value value) const {
   MapEntry* entry = &instance->entries[index];
 
   if (found) {
-    inox_retain(value);
+    inox_retain(raw_value);
     inox_release(entry->value);
-    entry->value = value;
+    entry->value = raw_value;
     return Map(*this);
   }
 
@@ -424,10 +429,10 @@ Map Map::set(inox_value key, inox_value value) const {
     instance->tombstones -= 1;
   }
 
-  inox_retain(key);
-  inox_retain(value);
-  entry->key = key;
-  entry->value = value;
+  inox_retain(raw_key);
+  inox_retain(raw_value);
+  entry->key = raw_key;
+  entry->value = raw_value;
   entry->hash = hash;
   entry->state = MapSlotOccupied;
   instance->length += 1;
@@ -623,7 +628,7 @@ SetStorage* Set::data() const {
   return (SetStorage*)inox::Value::raw().as.ref;
 }
 
-Set Set::add(inox_value value) const {
+Set Set::add(const inox::Value& value) const {
   SetStorage* instance = data();
 
   if (instance == 0) {
@@ -631,8 +636,9 @@ Set Set::add(inox_value value) const {
     return Set();
   }
 
+  inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(value, hash);
+  bool hash_ok = inox::hash_value(raw_value, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
@@ -648,7 +654,7 @@ Set Set::add(inox_value value) const {
 
   size_t index = 0;
   bool found = false;
-  status = inox_set_find(instance, value, hash, &index, &found);
+  status = inox_set_find(instance, raw_value, hash, &index, &found);
 
   if (status != INOX_OK || found) {
     if (status != INOX_OK) {
@@ -665,8 +671,8 @@ Set Set::add(inox_value value) const {
     instance->tombstones -= 1;
   }
 
-  inox_retain(value);
-  entry->value = value;
+  inox_retain(raw_value);
+  entry->value = raw_value;
   entry->hash = hash;
   entry->state = SetSlotOccupied;
   instance->length += 1;
@@ -698,7 +704,7 @@ void Set::clear() const {
   instance->tombstones = 0;
 }
 
-bool Set::deleteValue(inox_value value) const {
+bool Set::deleteValue(const inox::Value& value) const {
   SetStorage* instance = data();
 
   if (instance == 0) {
@@ -706,8 +712,9 @@ bool Set::deleteValue(inox_value value) const {
     return false;
   }
 
+  inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(value, hash);
+  bool hash_ok = inox::hash_value(raw_value, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
@@ -716,7 +723,7 @@ bool Set::deleteValue(inox_value value) const {
 
   size_t index = 0;
   bool found = false;
-  inox_status status = inox_set_find(instance, value, hash, &index, &found);
+  inox_status status = inox_set_find(instance, raw_value, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Set lookup failed");
@@ -762,7 +769,7 @@ static void inox_set_dispose_ref(inox_ref* ref) {
   inox_set_dispose((SetStorage*)ref);
 }
 
-bool Set::has(inox_value value) const {
+bool Set::has(const inox::Value& value) const {
   SetStorage* instance = data();
 
   if (instance == 0) {
@@ -770,8 +777,9 @@ bool Set::has(inox_value value) const {
     return false;
   }
 
+  inox_value raw_value = value.raw();
   uint64_t hash = 0;
-  bool hash_ok = inox::hash_value(value, hash);
+  bool hash_ok = inox::hash_value(raw_value, hash);
 
   if (!hash_ok) {
     inox_collection_throw("TypeError: Set value is not hashable");
@@ -780,7 +788,7 @@ bool Set::has(inox_value value) const {
 
   size_t index = 0;
   bool found = false;
-  inox_status status = inox_set_find(instance, value, hash, &index, &found);
+  inox_status status = inox_set_find(instance, raw_value, hash, &index, &found);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Set lookup failed");
@@ -1135,40 +1143,6 @@ static inox_value inox_array_adopt_storage(ArrayStorage* array) {
   return value;
 }
 
-static inox_status inox_array_set_item(ArrayStorage* array, size_t index, inox_value value) {
-  if (array == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  if (index >= array->length) {
-    return INOX_ERR_FIELD;
-  }
-
-  inox_retain(value);
-  inox_release(array->items[index]);
-  array->items[index] = value;
-
-  return INOX_OK;
-}
-
-static inox_status inox_array_push_item(ArrayStorage* array, inox_value value) {
-  if (array == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_status status = inox_array_reserve(array, array->length + 1);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  inox_retain(value);
-  array->items[array->length] = value;
-  array->length += 1;
-
-  return INOX_OK;
-}
-
 static inox_status inox_array_join_part(inox_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
   if (bytes == 0 || len == 0) {
     return INOX_ERR_TYPE;
@@ -1281,7 +1255,7 @@ inox::Value Array::pop() const {
   return inox::adopt(std::exchange(instance->items[instance->length], inox_undefined_value()));
 }
 
-void Array::push(inox_value value) const {
+void Array::push(const inox::Value& value) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
@@ -1289,14 +1263,21 @@ void Array::push(inox_value value) const {
     return;
   }
 
-  inox_status status = inox_array_push_item((ArrayStorage*)array.as.ref, value);
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
+  inox_status status = inox_array_reserve(instance, instance->length + 1);
 
   if (status != INOX_OK) {
     inox_collection_throw("TypeError: Array push failed");
+    return;
   }
+
+  inox_value item = value.raw();
+  inox_retain(item);
+  instance->items[instance->length] = item;
+  instance->length += 1;
 }
 
-void Array::set(size_t index, inox_value value) const {
+void Array::set(size_t index, const inox::Value& value) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
@@ -1304,11 +1285,17 @@ void Array::set(size_t index, inox_value value) const {
     return;
   }
 
-  inox_status status = inox_array_set_item((ArrayStorage*)array.as.ref, index, value);
+  ArrayStorage* instance = (ArrayStorage*)array.as.ref;
 
-  if (status != INOX_OK) {
+  if (index >= instance->length) {
     inox_collection_throw("TypeError: Array assignment failed");
+    return;
   }
+
+  inox_value item = value.raw();
+  inox_retain(item);
+  inox_release(instance->items[index]);
+  instance->items[index] = item;
 }
 
 class Array Array::slice(size_t start, size_t end) const {
@@ -1380,7 +1367,7 @@ class Array Array::sort() const {
   return Array(*this);
 }
 
-double Array::unshift(inox_value value) const {
+double Array::unshift(const inox::Value& value) const {
   inox_value array = inox::Value::raw();
 
   if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
@@ -1400,8 +1387,9 @@ double Array::unshift(inox_value value) const {
     instance->items[index] = instance->items[index - 1];
   }
 
-  inox_retain(value);
-  instance->items[0] = value;
+  inox_value item = value.raw();
+  inox_retain(item);
+  instance->items[0] = item;
   instance->length += 1;
 
   return (double)instance->length;
@@ -1490,20 +1478,8 @@ inox::String Array::join(inox::StringView separator) const {
   return result;
 }
 
-bool Array::isArray(inox_value value) const {
-  return value.tag == INOX_TAG_ARRAY;
-}
-
 bool Array::isArray(const inox::Value& value) const {
   return value.raw().tag == INOX_TAG_ARRAY;
-}
-
-ArrayStorage* Array::raw(inox_value value) const {
-  if (value.tag != INOX_TAG_ARRAY || value.as.ref == 0) {
-    return 0;
-  }
-
-  return (ArrayStorage*)value.as.ref;
 }
 
 ArrayStorage* Array::raw(const inox::Value& value) const {

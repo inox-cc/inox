@@ -35,16 +35,14 @@ public:
   size_t length() const;
   inox::Value get(size_t index) const;
   inox::Value pop() const;
-  void push(inox_value value) const;
-  void set(size_t index, inox_value value) const;
+  void push(const inox::Value& value) const;
+  void set(size_t index, const inox::Value& value) const;
   Array slice(size_t start, size_t end) const;
   Array sort() const;
-  double unshift(inox_value value) const;
+  double unshift(const inox::Value& value) const;
 
   inox::String join(inox::StringView separator) const;
-  bool isArray(inox_value value) const;
   bool isArray(const inox::Value& value) const;
-  ArrayStorage* raw(inox_value value) const;
   ArrayStorage* raw(const inox::Value& value) const;
 };
 

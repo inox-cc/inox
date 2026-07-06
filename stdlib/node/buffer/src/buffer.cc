@@ -267,10 +267,6 @@ Buffer Buffer::from(const uint8_t* bytes, size_t length) {
   return Buffer(std::move(result));
 }
 
-bool Buffer::isBuffer(inox_value value) {
-  return value.tag == INOX_TAG_BYTES && value.as.ref != nullptr;
-}
-
 bool Buffer::isBuffer(const inox::Value& value) {
   inox_value raw = value.raw();
 

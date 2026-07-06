@@ -815,14 +815,6 @@ void console::log(inox::StringView text) const {
   inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
 }
 
-void console::log(inox_value value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_print_value_line(inox::ConsoleStream::stdout, value);
-}
-
 void console::log(const inox::Value& value) const {
   if (inox::thrown()) {
     return;
@@ -886,14 +878,6 @@ void console::info(inox::StringView text) const {
   }
 
   inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
-}
-
-void console::info(inox_value value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_print_value_line(inox::ConsoleStream::stdout, value);
 }
 
 void console::info(const inox::Value& value) const {
@@ -961,14 +945,6 @@ void console::warn(inox::StringView text) const {
   inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
 }
 
-void console::warn(inox_value value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_print_value_line(inox::ConsoleStream::stderr, value);
-}
-
 void console::warn(const inox::Value& value) const {
   if (inox::thrown()) {
     return;
@@ -1032,14 +1008,6 @@ void console::error(inox::StringView text) const {
   }
 
   inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
-}
-
-void console::error(inox_value value) const {
-  if (inox::thrown()) {
-    return;
-  }
-
-  inox::console_print_value_line(inox::ConsoleStream::stderr, value);
 }
 
 void console::error(const inox::Value& value) const {

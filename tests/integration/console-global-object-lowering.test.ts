@@ -64,6 +64,7 @@ console.log('entries', Object.entries(parsed), process.versions, process)
   assert.match(header, /void error\(inox::StringView text\) const;/)
   assert.match(header, /void error\(\n    inox::StringView format,/)
   assert.doesNotMatch(header, /void (?:log|info|warn|error)\(const char\* text\) const;/)
+  assert.doesNotMatch(header, /void (?:log|info|warn|error)\(inox_value value\) const;/)
   assert.doesNotMatch(header, /const char\* format/)
 }
 

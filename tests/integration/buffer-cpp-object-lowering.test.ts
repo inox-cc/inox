@@ -48,8 +48,10 @@ export function assertBufferNativeFacadeHidesAllocatorOverloads(): void {
 
   assert.doesNotMatch(header, /(?:Uint8Array\s+)?(?:create|from)\(inox_allocator/)
   assert.doesNotMatch(header, /(?:Buffer\s+)?from\(inox_allocator/)
+  assert.doesNotMatch(header, /isBuffer\(inox_value value\)/)
   assert.doesNotMatch(source, /Uint8Array Uint8Array::(?:create|from)\(inox_allocator/)
   assert.doesNotMatch(source, /Buffer Buffer::from\(inox_allocator/)
+  assert.doesNotMatch(source, /Buffer::isBuffer\(inox_value value\)/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

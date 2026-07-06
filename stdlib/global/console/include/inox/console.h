@@ -71,7 +71,6 @@ class console {
 public:
   void log() const;
   void log(inox::StringView text) const;
-  void log(inox_value value) const;
   void log(const inox::Value& value) const;
   void log(
     inox::StringView format,
@@ -95,7 +94,6 @@ public:
 
   void info() const;
   void info(inox::StringView text) const;
-  void info(inox_value value) const;
   void info(const inox::Value& value) const;
   void info(
     inox::StringView format,
@@ -119,7 +117,6 @@ public:
 
   void warn() const;
   void warn(inox::StringView text) const;
-  void warn(inox_value value) const;
   void warn(const inox::Value& value) const;
   void warn(
     inox::StringView format,
@@ -143,7 +140,6 @@ public:
 
   void error() const;
   void error(inox::StringView text) const;
-  void error(inox_value value) const;
   void error(const inox::Value& value) const;
   void error(
     inox::StringView format,

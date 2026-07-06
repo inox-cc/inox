@@ -59,7 +59,6 @@ public:
   static Buffer alloc(size_t length);
   static Buffer from(inox::StringView text);
   static Buffer from(const uint8_t* bytes, size_t length);
-  static bool isBuffer(inox_value value);
   static bool isBuffer(const inox::Value& value);
 
   Buffer slice(size_t start, size_t end) const;

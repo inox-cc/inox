@@ -41,10 +41,10 @@ public:
 
   bool valid() const;
   void clear() const;
-  bool deleteKey(inox_value key) const;
-  inox::Value get(inox_value key) const;
-  bool has(inox_value key) const;
-  Map set(inox_value key, inox_value value) const;
+  bool deleteKey(const inox::Value& key) const;
+  inox::Value get(const inox::Value& key) const;
+  bool has(const inox::Value& key) const;
+  Map set(const inox::Value& key, const inox::Value& value) const;
   size_t size() const;
   MapStorage* data() const;
 };

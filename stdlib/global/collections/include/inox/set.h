@@ -38,10 +38,10 @@ public:
 
   static Set create();
 
-  Set add(inox_value value) const;
+  Set add(const inox::Value& value) const;
   void clear() const;
-  bool deleteValue(inox_value value) const;
-  bool has(inox_value value) const;
+  bool deleteValue(const inox::Value& value) const;
+  bool has(const inox::Value& value) const;
   size_t size() const;
   bool valid() const;
   SetStorage* data() const;

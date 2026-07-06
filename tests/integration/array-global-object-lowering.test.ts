@@ -74,10 +74,18 @@ console.log(Array.isArray([1]))
   assert.doesNotMatch(source, /inox_number_value\(1\)\.tag == INOX_TAG_ARRAY/)
 
   const header = readFileSync(resolve('stdlib/global/collections/include/inox/array.h'), 'utf8')
+  const mapHeader = readFileSync(resolve('stdlib/global/collections/include/inox/map.h'), 'utf8')
+  const setHeader = readFileSync(resolve('stdlib/global/collections/include/inox/set.h'), 'utf8')
   const runtime = readFileSync(resolve('stdlib/global/collections/src/collections.cc'), 'utf8')
 
   assert.doesNotMatch(header, /create\(inox_allocator/)
+  assert.doesNotMatch(header, /(?:push|set|unshift|isArray|raw)\([^)]*inox_value/)
+  assert.doesNotMatch(mapHeader, /(?:deleteKey|get|has|set)\([^)]*inox_value/)
+  assert.doesNotMatch(setHeader, /(?:add|deleteValue|has)\([^)]*inox_value/)
   assert.doesNotMatch(runtime, /Array Array::create\(inox_allocator/)
+  assert.doesNotMatch(runtime, /Array::(?:push|set|unshift|isArray|raw)\([^)]*inox_value/)
+  assert.doesNotMatch(runtime, /Map::(?:deleteKey|get|has|set)\([^)]*inox_value/)
+  assert.doesNotMatch(runtime, /Set::(?:add|deleteValue|has)\([^)]*inox_value/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
