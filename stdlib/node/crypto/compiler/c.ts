@@ -6,7 +6,6 @@ import {
   nextCName
 } from '../../../../compiler/c/context.ts'
 import { collectStdlibRuntimeImportNames } from '../../../../compiler/c/runtime-imports.ts'
-import { cStringLiteral } from '../../../../compiler/c/identifiers.ts'
 import { isCryptoRuntimeMethod } from './descriptor.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
@@ -29,6 +28,11 @@ export type CryptoLoweringDependencies = {
 type CryptoRandomFillCall = {
   lines: string[]
   call: string
+}
+
+type CryptoDataArgument = {
+  lines: string[]
+  expression: string
 }
 
 export function registerCryptoRuntimeImportNames(context: CEmitContext, irPrograms: IrProgram[]): void {
@@ -83,11 +87,30 @@ function cryptoResultWrite(out: string, expression: string, options: PreparedCal
 }
 
 function cryptoStringViewExpression(operand: PreparedStringBytesOperand): string {
-  if (operand.literalValue !== null && typeof operand.literalValue !== 'undefined') {
-    return cStringLiteral(operand.literalValue)
+  return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
+}
+
+function cryptoDataArgument(
+  expression: AnyNode,
+  context: CFunctionContext,
+  deps: CryptoLoweringDependencies,
+  tempPrefix: string
+): CryptoDataArgument {
+  if (deps.inferExpressionType(expression, context) === 'string') {
+    const data = deps.emitPreparedStringBytesOperand(expression, context, tempPrefix)
+
+    return {
+      lines: data.lines,
+      expression: cryptoStringViewExpression(data)
+    }
   }
 
-  return `inox::StringView(${operand.bytes}, ${operand.length})`
+  const data = deps.emitCValueExpression(expression, context)
+
+  return {
+    lines: data.lines,
+    expression: data.expression
+  }
 }
 
 export function cryptoRuntimeMethodName(
@@ -252,7 +275,7 @@ export function emitPreparedCryptoHashCallExpression(
 
   const handle = emitPreparedCryptoHashHandleExpression(expression.callee.object, context, deps)
   const dataArg = cryptoArgOrEmptyString(expression, 0, deps)
-  const data = deps.emitCValueExpression(dataArg, context)
+  const data = cryptoDataArgument(dataArg, context, deps, 'inox_crypto_data')
   const lines: string[] = []
 
   pushCryptoLines(lines, handle.lines)
@@ -278,7 +301,7 @@ export function emitPreparedCryptoHmacCallExpression(
     const algorithmArg = cryptoArgOrEmptyString(expression, 0, deps)
     const algorithm = deps.emitPreparedStringBytesOperand(algorithmArg, context, 'inox_crypto_algorithm')
     const keyArg = cryptoArgOrEmptyString(expression, 1, deps)
-    const key = deps.emitCValueExpression(keyArg, context)
+    const key = cryptoDataArgument(keyArg, context, deps, 'inox_crypto_key')
     const out = cryptoOutName(options, context, 'inox_crypto_hmac')
 
     context.variables.set(out, 'crypto-hmac')
@@ -301,7 +324,7 @@ export function emitPreparedCryptoHmacCallExpression(
 
   const handle = emitPreparedCryptoHmacHandleExpression(expression.callee.object, context, deps)
   const dataArg = cryptoArgOrEmptyString(expression, 0, deps)
-  const data = deps.emitCValueExpression(dataArg, context)
+  const data = cryptoDataArgument(dataArg, context, deps, 'inox_crypto_data')
   const lines: string[] = []
 
   pushCryptoLines(lines, handle.lines)
@@ -350,7 +373,7 @@ export function emitPreparedCryptoCallExpression(
     const algorithmArg = cryptoArgOrEmptyString(expression, 0, deps)
     const algorithm = deps.emitPreparedStringBytesOperand(algorithmArg, context, 'inox_crypto_algorithm')
     const dataArg = cryptoArgOrEmptyString(expression, 1, deps)
-    const data = deps.emitCValueExpression(dataArg, context)
+    const data = cryptoDataArgument(dataArg, context, deps, 'inox_crypto_data')
     const out = cryptoOutName(options, context, 'inox_crypto_digest')
     let encoding = 'hex'
     let digestCall = `crypto.hash(${cryptoStringViewExpression(algorithm)}, ${data.expression})`

@@ -41,6 +41,7 @@ static inox_status CryptoHashState_create(
   size_t algorithm_len,
   CryptoHashState** out
 );
+static inox_status CryptoHashState_update_bytes(CryptoHashState* hash, const uint8_t* bytes, size_t len);
 static inox_status CryptoHashState_update(CryptoHashState* hash, inox_value data);
 static inox_status CryptoHashState_digest_bytes(inox_allocator* allocator, CryptoHashState* hash, inox_value* out);
 static inox_status CryptoHashState_digest_hex(inox_allocator* allocator, CryptoHashState* hash, inox_value* out);
@@ -49,9 +50,18 @@ static inox_status CryptoHmacState_create(
   inox_allocator* allocator,
   const char* algorithm,
   size_t algorithm_len,
+  const uint8_t* key_bytes,
+  size_t key_len,
+  CryptoHmacState** out
+);
+static inox_status CryptoHmacState_create(
+  inox_allocator* allocator,
+  const char* algorithm,
+  size_t algorithm_len,
   inox_value key,
   CryptoHmacState** out
 );
+static inox_status CryptoHmacState_update_bytes(CryptoHmacState* hmac, const uint8_t* bytes, size_t len);
 static inox_status CryptoHmacState_update(CryptoHmacState* hmac, inox_value data);
 static inox_status CryptoHmacState_digest_bytes(inox_allocator* allocator, CryptoHmacState* hmac, inox_value* out);
 static inox_status CryptoHmacState_digest_hex(inox_allocator* allocator, CryptoHmacState* hmac, inox_value* out);
@@ -102,6 +112,14 @@ Hash& Hash::operator=(Hash&& other) noexcept {
 
 bool Hash::valid() const {
   return handle_ != 0;
+}
+
+Hash& Hash::update(inox::StringView data) {
+  if (CryptoHashState_update_bytes(handle_, (const uint8_t*)data.bytes, data.len) != INOX_OK) {
+    inox_crypto_throw_failed("crypto.Hash.update failed");
+  }
+
+  return *this;
 }
 
 Hash& Hash::update(inox_value data) {
@@ -160,6 +178,14 @@ Hmac& Hmac::operator=(Hmac&& other) noexcept {
 
 bool Hmac::valid() const {
   return handle_ != 0;
+}
+
+Hmac& Hmac::update(inox::StringView data) {
+  if (CryptoHmacState_update_bytes(handle_, (const uint8_t*)data.bytes, data.len) != INOX_OK) {
+    inox_crypto_throw_failed("crypto.Hmac.update failed");
+  }
+
+  return *this;
 }
 
 Hmac& Hmac::update(inox_value data) {
@@ -427,6 +453,27 @@ Hash crypto::createHash(inox::StringView algorithm) const {
   return Hash(hash);
 }
 
+Hmac crypto::createHmac(inox::StringView algorithm, inox::StringView key) const {
+  CryptoHmacState* hmac = 0;
+
+  if (
+    CryptoHmacState_create(
+      &inox_default_allocator,
+      algorithm.bytes,
+      algorithm.len,
+      (const uint8_t*)key.bytes,
+      key.len,
+      &hmac
+    ) != INOX_OK
+  ) {
+    CryptoHmacState_free(hmac);
+    inox_crypto_throw_failed("crypto.createHmac failed");
+    return Hmac();
+  }
+
+  return Hmac(hmac);
+}
+
 Hmac crypto::createHmac(inox::StringView algorithm, inox_value key) const {
   CryptoHmacState* hmac = 0;
 
@@ -437,6 +484,22 @@ Hmac crypto::createHmac(inox::StringView algorithm, inox_value key) const {
   }
 
   return Hmac(hmac);
+}
+
+Buffer crypto::hash(inox::StringView algorithm, inox::StringView data) const {
+  Hash hash = createHash(algorithm);
+
+  if (inox::thrown()) {
+    return Buffer();
+  }
+
+  hash.update(data);
+
+  if (inox::thrown()) {
+    return Buffer();
+  }
+
+  return hash.digest();
 }
 
 Buffer crypto::hash(inox::StringView algorithm, inox_value data) const {
@@ -453,6 +516,22 @@ Buffer crypto::hash(inox::StringView algorithm, inox_value data) const {
   }
 
   return hash.digest();
+}
+
+inox::String crypto::hashHex(inox::StringView algorithm, inox::StringView data) const {
+  Hash hash = createHash(algorithm);
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  hash.update(data);
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return hash.digestHex();
 }
 
 inox::String crypto::hashHex(inox::StringView algorithm, inox_value data) const {
@@ -548,12 +627,30 @@ static inox_status CryptoHashState_create(
 #endif
 }
 
+static inox_status CryptoHashState_update_bytes(CryptoHashState* hash, const uint8_t* bytes, size_t len) {
+  if (hash == 0 || hash->finalized) {
+    return INOX_ERR_FIELD;
+  }
+
+  if (bytes == 0 && len != 0) {
+    return INOX_ERR_TYPE;
+  }
+
+#if INOX_CRYPTO_HASH_HAS_EVP
+  return EVP_DigestUpdate(hash->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
+#else
+  (void)bytes;
+  (void)len;
+
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
 static inox_status CryptoHashState_update(CryptoHashState* hash, inox_value data) {
   if (hash == 0 || hash->finalized) {
     return INOX_ERR_FIELD;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
   const uint8_t* bytes = 0;
   size_t len = 0;
   inox_status status = CryptoHashState_data(data, &bytes, &len);
@@ -562,12 +659,7 @@ static inox_status CryptoHashState_update(CryptoHashState* hash, inox_value data
     return status;
   }
 
-  return EVP_DigestUpdate(hash->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
-#else
-  (void)data;
-
-  return INOX_ERR_UNSUPPORTED;
-#endif
+  return CryptoHashState_update_bytes(hash, bytes, len);
 }
 
 static inox_status CryptoHashState_digest_bytes(inox_allocator* allocator, CryptoHashState* hash, inox_value* out) {
@@ -644,7 +736,8 @@ static inox_status CryptoHmacState_create(
   inox_allocator* allocator,
   const char* algorithm,
   size_t algorithm_len,
-  inox_value key,
+  const uint8_t* key_bytes,
+  size_t key_len,
   CryptoHmacState** out
 ) {
   if (allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || algorithm == 0 || out == 0) {
@@ -657,19 +750,15 @@ static inox_status CryptoHmacState_create(
     return INOX_ERR_UNSUPPORTED;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
-  const uint8_t* key_bytes = 0;
-  size_t key_len = 0;
-  inox_status status = CryptoHashState_data(key, &key_bytes, &key_len);
-
-  if (status != INOX_OK) {
-    return status;
+  if (key_bytes == 0 && key_len != 0) {
+    return INOX_ERR_TYPE;
   }
 
   if (key_len > (size_t)INT_MAX) {
     return INOX_ERR_TYPE;
   }
 
+#if INOX_CRYPTO_HASH_HAS_EVP
   CryptoHmacState* hmac = (CryptoHmacState*)allocator->alloc(allocator->user, sizeof(CryptoHmacState), alignof(CryptoHmacState));
 
   if (hmac == 0) {
@@ -695,7 +784,55 @@ static inox_status CryptoHmacState_create(
   return INOX_OK;
 #else
   (void)allocator;
-  (void)key;
+  (void)key_bytes;
+  (void)key_len;
+
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static inox_status CryptoHmacState_create(
+  inox_allocator* allocator,
+  const char* algorithm,
+  size_t algorithm_len,
+  inox_value key,
+  CryptoHmacState** out
+) {
+  if (allocator == 0 || allocator->alloc == 0 || allocator->free == 0 || algorithm == 0 || out == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = 0;
+
+  if (!CryptoHashState_algorithm_is_sha256(algorithm, algorithm_len)) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  const uint8_t* key_bytes = 0;
+  size_t key_len = 0;
+  inox_status status = CryptoHashState_data(key, &key_bytes, &key_len);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return CryptoHmacState_create(allocator, algorithm, algorithm_len, key_bytes, key_len, out);
+}
+
+static inox_status CryptoHmacState_update_bytes(CryptoHmacState* hmac, const uint8_t* bytes, size_t len) {
+  if (hmac == 0 || hmac->finalized) {
+    return INOX_ERR_FIELD;
+  }
+
+  if (bytes == 0 && len != 0) {
+    return INOX_ERR_TYPE;
+  }
+
+#if INOX_CRYPTO_HASH_HAS_EVP
+  return HMAC_Update(hmac->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
+#else
+  (void)bytes;
+  (void)len;
 
   return INOX_ERR_UNSUPPORTED;
 #endif
@@ -706,7 +843,6 @@ static inox_status CryptoHmacState_update(CryptoHmacState* hmac, inox_value data
     return INOX_ERR_FIELD;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
   const uint8_t* bytes = 0;
   size_t len = 0;
   inox_status status = CryptoHashState_data(data, &bytes, &len);
@@ -715,12 +851,7 @@ static inox_status CryptoHmacState_update(CryptoHmacState* hmac, inox_value data
     return status;
   }
 
-  return HMAC_Update(hmac->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
-#else
-  (void)data;
-
-  return INOX_ERR_UNSUPPORTED;
-#endif
+  return CryptoHmacState_update_bytes(hmac, bytes, len);
 }
 
 static inox_status CryptoHmacState_digest_bytes(inox_allocator* allocator, CryptoHmacState* hmac, inox_value* out) {

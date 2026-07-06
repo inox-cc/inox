@@ -30,6 +30,7 @@ public:
   Hash& operator=(Hash&& other) noexcept;
 
   bool valid() const;
+  Hash& update(inox::StringView data);
   Hash& update(inox_value data);
   Buffer digest();
   inox::String digestHex();
@@ -52,6 +53,7 @@ public:
   Hmac& operator=(Hmac&& other) noexcept;
 
   bool valid() const;
+  Hmac& update(inox::StringView data);
   Hmac& update(inox_value data);
   Buffer digest();
   inox::String digestHex();
@@ -67,8 +69,11 @@ public:
   inox_number randomInt(inox_number min, inox_number max) const;
   inox::String randomUUID() const;
   Hash createHash(inox::StringView algorithm) const;
+  Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
   Hmac createHmac(inox::StringView algorithm, inox_value key) const;
+  Buffer hash(inox::StringView algorithm, inox::StringView data) const;
   Buffer hash(inox::StringView algorithm, inox_value data) const;
+  inox::String hashHex(inox::StringView algorithm, inox::StringView data) const;
   inox::String hashHex(inox::StringView algorithm, inox_value data) const;
   bool timingSafeEqual(inox_value left, inox_value right) const;
 };
