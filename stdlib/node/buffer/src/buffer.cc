@@ -142,7 +142,13 @@ Uint8Array Uint8Array::slice(size_t start, size_t end) const {
     end = start;
   }
 
-  return Uint8Array::from(instance->header.allocator, instance->bytes + start, end - start);
+  return make_bytes(
+    instance->header.allocator,
+    instance->bytes + start,
+    end - start,
+    false,
+    "TypeError: Uint8Array allocation failed"
+  );
 }
 
 inox::String Uint8Array::toString() const {
