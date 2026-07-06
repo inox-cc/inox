@@ -14,9 +14,11 @@ struct DgramAddress {
   int port;
 };
 
+class DgramSocket;
+
 typedef void (*DgramRecvFn)(
   void* user,
-  inox_dgram_socket* socket,
+  DgramSocket socket,
   inox::StringView bytes,
   inox::StringView host,
   int port

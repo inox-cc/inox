@@ -641,7 +641,7 @@ static void inox_dgram_recv_cb(
 
     socket->recv(
       socket->recv_user,
-      socket,
+      DgramSocket(socket),
       inox::StringView(buf->base, (size_t)nread),
       inox::StringView(host),
       port

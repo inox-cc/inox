@@ -121,7 +121,7 @@ function pushIndentedDgramLines(target: string[], lines: string[]): void {
 }
 
 export function emitDgramMessageHandlerHead(wrapper: CDgramMessageHandler): string {
-  return `static void ${wrapper.name}(void* user, inox_dgram_socket* inox_socket, inox::StringView inox_bytes, inox::StringView inox_host, int inox_port)`
+  return `static void ${wrapper.name}(void* user, DgramSocket inox_socket, inox::StringView inox_bytes, inox::StringView inox_host, int inox_port)`
 }
 
 export function emitDgramMessageHandlerDeclaration(
@@ -814,7 +814,7 @@ function emitDgramMessageHandlerSocketCallStatement(
   }
 
   if (expression.callee.property === 'close') {
-    return ['DgramSocket(inox_socket).close();']
+    return ['inox_socket.close();']
   }
 
   return null
@@ -1210,7 +1210,7 @@ function emitDgramSendLines(
 ): string[] {
   const socketExpression = dgramContext === null || typeof dgramContext === 'undefined'
     ? socketName
-    : `DgramSocket(${socketName})`
+    : socketName
   const lastArg = lastDgramArgument(args)
   let callback: AnyNode | null = null
 

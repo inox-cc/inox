@@ -67,10 +67,11 @@ dgram.createSocket('udp4').bind(0, '127.0.0.1')
   assert.match(source, /connected\.send\(inox::StringView\("ping", 4\)\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(
     source,
-    /static void inox_dgram_message_handler_\d+\(\n  void\* user,\n  inox_dgram_socket\* inox_socket,\n  inox::StringView inox_bytes,\n  inox::StringView inox_host,\n  int inox_port\n\)/
+    /static void inox_dgram_message_handler_\d+\(\n  void\* user,\n  DgramSocket inox_socket,\n  inox::StringView inox_bytes,\n  inox::StringView inox_host,\n  int inox_port\n\)/
   )
   assert.match(source, /return;/)
   assert.doesNotMatch(source, /static inox_status inox_dgram_message_handler_/)
+  assert.doesNotMatch(source, /static void inox_dgram_message_handler_\d+\(\n  void\* user,\n  inox_dgram_socket\* inox_socket/)
   assert.doesNotMatch(source, /return INOX_OK;/)
   assert.match(source, /DgramSocket inox_dgram_socket_\d+;/)
   assert.match(source, /inox_dgram_socket_\d+ = DgramSocket::create\(inox::loop\(\), 0, 0\);/)
@@ -84,6 +85,8 @@ dgram.createSocket('udp4').bind(0, '127.0.0.1')
   const header = readFileSync(resolve('stdlib/node/dgram/include/inox/dgram.h'), 'utf8')
   assert.match(header, /typedef void \(\*DgramRecvFn\)\(/)
   assert.doesNotMatch(header, /typedef inox_status \(\*DgramRecvFn\)/)
+  assert.match(header, /DgramSocket socket,\n  inox::StringView bytes,/)
+  assert.doesNotMatch(header, /DgramRecvFn\)\(\n  void\* user,\n  inox_dgram_socket\* socket,/)
   assert.match(header, /inox::StringView family;/)
   assert.match(header, /inox::StringView bytes,/)
   assert.match(header, /inox::StringView host,/)
