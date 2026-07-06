@@ -16,12 +16,7 @@ enum {
   INOX_FS_R_OK = 4
 };
 
-typedef inox_status (*FsReadFileFn)(
-  void* user,
-  inox_allocator* allocator,
-  inox::StringView path,
-  inox_value* out
-);
+typedef inox::String (*FsReadFileFn)(void* user, inox::StringView path);
 typedef inox_status (*FsReadFileBytesFn)(
   void* user,
   inox_allocator* allocator,
