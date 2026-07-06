@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -40,6 +42,16 @@ console.log(text.toString(), allocated.toString(), Buffer.isBuffer(text))
   assert.doesNotMatch(source, /Buffer::from\(inox::StringView\("inox", 4\)\)/)
 }
 
+export function assertBufferNativeFacadeHidesAllocatorOverloads(): void {
+  const header = readFileSync(resolve('stdlib/node/buffer/include/inox/binary.h'), 'utf8')
+  const source = readFileSync(resolve('stdlib/node/buffer/src/buffer.cc'), 'utf8')
+
+  assert.doesNotMatch(header, /(?:Uint8Array\s+)?(?:create|from)\(inox_allocator/)
+  assert.doesNotMatch(header, /(?:Buffer\s+)?from\(inox_allocator/)
+  assert.doesNotMatch(source, /Uint8Array Uint8Array::(?:create|from)\(inox_allocator/)
+  assert.doesNotMatch(source, /Buffer Buffer::from\(inox_allocator/)
+}
+
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
   for (const file of files) {
     if (file.path === path) {
@@ -52,4 +64,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertBufferLowersToCppObject()
+  assertBufferNativeFacadeHidesAllocatorOverloads()
 }

@@ -106,7 +106,8 @@ async function runIntegrationTests(): Promise<void> {
   const { assertArrayLowersToGlobalObject } =
     await import('./integration/array-global-object-lowering.test.ts')
   const { assertBuildCMakeConfigureIsQuiet } = await import('./integration/build-cmake-log-level.test.ts')
-  const { assertBufferLowersToCppObject } = await import('./integration/buffer-cpp-object-lowering.test.ts')
+  const { assertBufferLowersToCppObject, assertBufferNativeFacadeHidesAllocatorOverloads } =
+    await import('./integration/buffer-cpp-object-lowering.test.ts')
   const { assertCPreludeIncludeOrder } = await import('./integration/c-prelude-include-order.test.ts')
   const { assertCliEntryModuleMain } = await import('./integration/cli-entry-module-main.test.ts')
   const { assertConsoleLowersToGlobalObject } =
@@ -419,6 +420,7 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('buffer-cpp-object-lowering', () => {
       assertBufferLowersToCppObject()
+      assertBufferNativeFacadeHidesAllocatorOverloads()
     })
 
     await t.test('path-cpp-object-lowering', () => {

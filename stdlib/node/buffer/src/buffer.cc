@@ -40,33 +40,9 @@ Uint8Array Uint8Array::create(size_t length) {
   return Uint8Array(inox::adopt_value, value);
 }
 
-Uint8Array Uint8Array::create(inox_allocator* allocator, size_t length) {
-  inox_value value = inox_undefined_value();
-  inox_status status = make_bytes_value(allocator, nullptr, length, true, &value);
-
-  if (status != INOX_OK) {
-    throw_bytes_error("TypeError: Uint8Array allocation failed");
-    return Uint8Array();
-  }
-
-  return Uint8Array(inox::adopt_value, value);
-}
-
 Uint8Array Uint8Array::from(const uint8_t* bytes, size_t length) {
   inox_value value = inox_undefined_value();
   inox_status status = make_bytes_value(&inox_default_allocator, bytes, length, false, &value);
-
-  if (status != INOX_OK) {
-    throw_bytes_error("TypeError: Uint8Array allocation failed");
-    return Uint8Array();
-  }
-
-  return Uint8Array(inox::adopt_value, value);
-}
-
-Uint8Array Uint8Array::from(inox_allocator* allocator, const uint8_t* bytes, size_t length) {
-  inox_value value = inox_undefined_value();
-  inox_status status = make_bytes_value(allocator, bytes, length, false, &value);
 
   if (status != INOX_OK) {
     throw_bytes_error("TypeError: Uint8Array allocation failed");
@@ -289,18 +265,6 @@ Buffer Buffer::from(inox::StringView text) {
 Buffer Buffer::from(const uint8_t* bytes, size_t length) {
   inox_value value = inox_undefined_value();
   inox_status status = make_bytes_value(&inox_default_allocator, bytes, length, false, &value);
-
-  if (status != INOX_OK) {
-    throw_bytes_error("TypeError: Buffer allocation failed");
-    return Buffer();
-  }
-
-  return Buffer(inox::adopt_value, value);
-}
-
-Buffer Buffer::from(inox_allocator* allocator, const uint8_t* bytes, size_t length) {
-  inox_value value = inox_undefined_value();
-  inox_status status = make_bytes_value(allocator, bytes, length, false, &value);
 
   if (status != INOX_OK) {
     throw_bytes_error("TypeError: Buffer allocation failed");

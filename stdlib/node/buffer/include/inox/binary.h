@@ -29,9 +29,7 @@ public:
   using inox::Value::release;
 
   static Uint8Array create(size_t length);
-  static Uint8Array create(inox_allocator* allocator, size_t length);
   static Uint8Array from(const uint8_t* bytes, size_t length);
-  static Uint8Array from(inox_allocator* allocator, const uint8_t* bytes, size_t length);
 
   bool valid() const;
   size_t length() const;
@@ -61,7 +59,6 @@ public:
   static Buffer alloc(size_t length);
   static Buffer from(inox::StringView text);
   static Buffer from(const uint8_t* bytes, size_t length);
-  static Buffer from(inox_allocator* allocator, const uint8_t* bytes, size_t length);
   static bool isBuffer(inox_value value);
   static bool isBuffer(const inox::Value& value);
 
