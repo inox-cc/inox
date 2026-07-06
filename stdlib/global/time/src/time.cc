@@ -297,43 +297,6 @@ inox_number Date::parse(inox::StringView text) const {
   return inox_date_nan();
 }
 
-inox_number Date::UTC(inox_number year) const {
-  return UTC(year, 0, 1, 0, 0, 0, 0);
-}
-
-inox_number Date::UTC(inox_number year, inox_number month) const {
-  return UTC(year, month, 1, 0, 0, 0, 0);
-}
-
-inox_number Date::UTC(inox_number year, inox_number month, inox_number day) const {
-  return UTC(year, month, day, 0, 0, 0, 0);
-}
-
-inox_number Date::UTC(inox_number year, inox_number month, inox_number day, inox_number hour) const {
-  return UTC(year, month, day, hour, 0, 0, 0);
-}
-
-inox_number Date::UTC(
-  inox_number year,
-  inox_number month,
-  inox_number day,
-  inox_number hour,
-  inox_number minute
-) const {
-  return UTC(year, month, day, hour, minute, 0, 0);
-}
-
-inox_number Date::UTC(
-  inox_number year,
-  inox_number month,
-  inox_number day,
-  inox_number hour,
-  inox_number minute,
-  inox_number second
-) const {
-  return UTC(year, month, day, hour, minute, second, 0);
-}
-
 inox_number Date::UTC(
   inox_number year,
   inox_number month,
@@ -368,43 +331,6 @@ inox_number Date::UTC(
     (long long)((int)millisecond);
 
   return (inox_number)total_ms;
-}
-
-inox_number Date::fromLocal(inox_number year) const {
-  return fromLocal(year, 0, 1, 0, 0, 0, 0);
-}
-
-inox_number Date::fromLocal(inox_number year, inox_number month) const {
-  return fromLocal(year, month, 1, 0, 0, 0, 0);
-}
-
-inox_number Date::fromLocal(inox_number year, inox_number month, inox_number day) const {
-  return fromLocal(year, month, day, 0, 0, 0, 0);
-}
-
-inox_number Date::fromLocal(inox_number year, inox_number month, inox_number day, inox_number hour) const {
-  return fromLocal(year, month, day, hour, 0, 0, 0);
-}
-
-inox_number Date::fromLocal(
-  inox_number year,
-  inox_number month,
-  inox_number day,
-  inox_number hour,
-  inox_number minute
-) const {
-  return fromLocal(year, month, day, hour, minute, 0, 0);
-}
-
-inox_number Date::fromLocal(
-  inox_number year,
-  inox_number month,
-  inox_number day,
-  inox_number hour,
-  inox_number minute,
-  inox_number second
-) const {
-  return fromLocal(year, month, day, hour, minute, second, 0);
 }
 
 inox_number Date::fromLocal(
