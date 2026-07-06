@@ -45,7 +45,10 @@ for (const a of foo.v) {
   )
   assert.doesNotMatch(source, /if \(inox_object_entry_\d+\.tag != INOX_TAG_UNDEFINED/)
   assert.match(source, /ArrayStorage\* inox_for_array_\d+ = Array\.raw\(inox_value_\d+\);/)
-  assert.match(source, /if \(inox_for_array_\d+ == nullptr\) \{\n\s+Array\.throwNotIterable\(\);\n\s+return;\n\s+\}/)
+  assert.match(
+    source,
+    /if \(inox_for_array_\d+ == nullptr\) \{\n\s+inox::throw_value\(inox::String\("TypeError: value is not iterable"\)\);\n\s+return;\n\s+\}/
+  )
   assert.match(
     source,
     /for \(size_t inox_for_index_\d+ = 0; inox_for_index_\d+ < inox_for_array_\d+->length; \+\+inox_for_index_\d+\) \{\n\s+inox::Value a = inox_for_array_\d+->items\[inox_for_index_\d+\];/

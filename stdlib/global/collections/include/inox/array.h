@@ -46,7 +46,6 @@ public:
   bool isArray(const inox::Value& value) const;
   ArrayStorage* raw(inox_value value) const;
   ArrayStorage* raw(const inox::Value& value) const;
-  void throwNotIterable() const;
 };
 
 using ArrayClass = Array;

@@ -3263,7 +3263,7 @@ export function emitForOfStatement(statement: StatementNode, context: CFunctionC
       lines.push(`ArrayStorage* ${rawArray} = Array.raw(${arrayName});`)
       if (!context.cleanupEnabled && !context.statusReturn) {
         lines.push(`if (${rawArray} == nullptr) {`)
-        lines.push('  Array.throwNotIterable();')
+        lines.push('  inox::throw_value(inox::String("TypeError: value is not iterable"));')
         lines.push('  ' + failureStatement)
         lines.push('}')
       } else {

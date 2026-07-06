@@ -1516,8 +1516,4 @@ ArrayStorage* Array::raw(const inox::Value& value) const {
   return (ArrayStorage*)raw_value.as.ref;
 }
 
-void Array::throwNotIterable() const {
-  inox::throw_value(inox::String("TypeError: value is not iterable"));
-}
-
 class Array Array;
