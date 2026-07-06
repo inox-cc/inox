@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -27,6 +29,11 @@ console.log(sendSize)
 socket.unref()
 socket.close()
 
+const connected = dgram.createSocket('udp4')
+connected.connect(1234, '127.0.0.1')
+connected.send('ping')
+connected.close()
+
 dgram.createSocket('udp4').bind(0, '127.0.0.1')
 `
       }
@@ -51,6 +58,8 @@ dgram.createSocket('udp4').bind(0, '127.0.0.1')
   assert.match(source, /double sendSize = \(double\)socket\.getSendBufferSize\(\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /socket\.unref\(\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /socket\.close\(\);/)
+  assert.match(source, /connected\.connect\("127\.0\.0\.1", \(int\)\(1234\)\);\n  if \(inox::thrown\(\)\) return;/)
+  assert.match(source, /connected\.send\(inox::StringView\("ping", 4\)\);\n  if \(inox::thrown\(\)\) return;/)
   assert.match(source, /DgramSocket inox_dgram_socket_\d+;/)
   assert.match(source, /inox_dgram_socket_\d+ = DgramSocket::create\(inox::loop\(\), 0, 0\);/)
   assert.match(source, /inox_dgram_socket_\d+\.bind\("127\.0\.0\.1", \(int\)\(0\), 0\);/)
@@ -59,6 +68,15 @@ dgram.createSocket('udp4').bind(0, '127.0.0.1')
   assert.doesNotMatch(source, /DgramSocket\(socket\)/)
   assert.doesNotMatch(source, /getSendBufferSize\(&/)
   assert.doesNotMatch(source, /address\(&/)
+
+  const header = readFileSync(resolve('stdlib/node/dgram/include/inox/dgram.h'), 'utf8')
+  assert.match(header, /void bind\(inox::StringView host, int port, unsigned int flags = 0\) const;/)
+  assert.match(header, /void connect\(inox::StringView host, int port\) const;/)
+  assert.match(header, /void send\(inox::StringView bytes\) const;/)
+  assert.match(header, /void send\(inox::StringView bytes, inox::StringView host, int port\) const;/)
+  assert.doesNotMatch(header, /bind\(const char\* host/)
+  assert.doesNotMatch(header, /connect\(const char\* host/)
+  assert.doesNotMatch(header, /send\(inox::StringView bytes, const char\* host/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

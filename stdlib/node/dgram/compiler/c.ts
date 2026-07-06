@@ -1233,7 +1233,7 @@ function emitDgramSendLines(
     const lines: string[] = []
 
     pushDgramLines(lines, body.lines)
-    lines.push(`${socketExpression}.send(inox::StringView(${body.bytes}, ${body.length}), 0, 0);`)
+    lines.push(`${socketExpression}.send(inox::StringView(${body.bytes}, ${body.length}));`)
     pushDgramLines(lines, emitDgramThrownCheck(context))
     pushDgramLines(lines, emitDgramZeroArgCallbackLines(callback, context, deps))
 

@@ -18,6 +18,22 @@ static void inox_dgram_throw_status(inox_status status, const char* message) {
   }
 }
 
+static bool inox_dgram_copy_host(inox::StringView host, const char* fallback, char* out, size_t out_len) {
+  const char* bytes = host.len == 0 && fallback != 0 ? fallback : host.bytes;
+  size_t len = host.len == 0 && fallback != 0 ? strlen(fallback) : host.len;
+
+  if (bytes == 0 || out == 0 || out_len == 0 || len >= out_len) {
+    return false;
+  }
+
+  if (len != 0) {
+    memcpy(out, bytes, len);
+  }
+
+  out[len] = '\0';
+  return true;
+}
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
 
@@ -44,6 +60,7 @@ struct inox_dgram_socket {
 
 static inox_status inox_dgram_ip4_addr(const char* host, int port, struct sockaddr_in* out);
 static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, DgramAddress* out);
+static void inox_dgram_send_bytes(inox_dgram_socket* socket, inox::StringView bytes, const struct sockaddr* addr);
 static void inox_dgram_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 static void inox_dgram_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned flags);
 static void inox_dgram_send_cb(uv_udp_send_t* request, int status);
@@ -101,7 +118,7 @@ DgramSocket DgramSocket::create(
   return DgramSocket(socket);
 }
 
-void DgramSocket::bind(const char* host, int port, unsigned int flags) const {
+void DgramSocket::bind(inox::StringView host, int port, unsigned int flags) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -110,7 +127,14 @@ void DgramSocket::bind(const char* host, int port, unsigned int flags) const {
   }
 
   struct sockaddr_in addr;
-  inox_status status = inox_dgram_ip4_addr(host == 0 ? "0.0.0.0" : host, port, &addr);
+  char host_buffer[256];
+
+  if (!inox_dgram_copy_host(host, "0.0.0.0", host_buffer, sizeof(host_buffer))) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.bind failed");
+    return;
+  }
+
+  inox_status status = inox_dgram_ip4_addr(host_buffer, port, &addr);
 
   if (status != INOX_OK) {
     inox_dgram_throw_failed("TypeError: DgramSocket.bind failed");
@@ -148,16 +172,23 @@ void DgramSocket::onClose(DgramCloseFn close, void* user) const {
   socket->close_user = user;
 }
 
-void DgramSocket::connect(const char* host, int port) const {
+void DgramSocket::connect(inox::StringView host, int port) const {
   inox_dgram_socket* socket = socket_;
 
-  if (socket == 0 || socket->closing || host == 0) {
+  if (socket == 0 || socket->closing) {
     inox_dgram_throw_failed("TypeError: DgramSocket.connect failed");
     return;
   }
 
   struct sockaddr_in addr;
-  inox_status status = inox_dgram_ip4_addr(host, port, &addr);
+  char host_buffer[256];
+
+  if (!inox_dgram_copy_host(host, 0, host_buffer, sizeof(host_buffer))) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.connect failed");
+    return;
+  }
+
+  inox_status status = inox_dgram_ip4_addr(host_buffer, port, &addr);
 
   if (status != INOX_OK) {
     inox_dgram_throw_failed("TypeError: DgramSocket.connect failed");
@@ -208,26 +239,10 @@ void DgramSocket::recvStop() const {
   }
 }
 
-void DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
-  inox_dgram_socket* socket = socket_;
-
+static void inox_dgram_send_bytes(inox_dgram_socket* socket, inox::StringView bytes, const struct sockaddr* addr) {
   if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
     inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
     return;
-  }
-
-  struct sockaddr_in addr;
-  const struct sockaddr* send_addr = 0;
-
-  if (host != 0) {
-    inox_status status = inox_dgram_ip4_addr(host, port, &addr);
-
-    if (status != INOX_OK) {
-      inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
-      return;
-    }
-
-    send_addr = (const struct sockaddr*)&addr;
   }
 
   inox_allocator* allocator = socket->allocator;
@@ -270,7 +285,7 @@ void DgramSocket::send(inox::StringView bytes, const char* host, int port) const
   uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)bytes.len);
   request->request.data = request;
 
-  if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, send_addr, inox_dgram_send_cb) != 0) {
+  if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, addr, inox_dgram_send_cb) != 0) {
     inox_libuv_loop_release_request(socket->loop);
 
     if (request->bytes != 0) {
@@ -281,6 +296,29 @@ void DgramSocket::send(inox::StringView bytes, const char* host, int port) const
     inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
     return;
   }
+}
+
+void DgramSocket::send(inox::StringView bytes) const {
+  inox_dgram_send_bytes(socket_, bytes, 0);
+}
+
+void DgramSocket::send(inox::StringView bytes, inox::StringView host, int port) const {
+  struct sockaddr_in addr;
+  char host_buffer[256];
+
+  if (!inox_dgram_copy_host(host, 0, host_buffer, sizeof(host_buffer))) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
+  }
+
+  inox_status status = inox_dgram_ip4_addr(host_buffer, port, &addr);
+
+  if (status != INOX_OK) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
+  }
+
+  inox_dgram_send_bytes(socket_, bytes, (const struct sockaddr*)&addr);
 }
 
 DgramAddress DgramSocket::address() const {
@@ -613,7 +651,7 @@ DgramSocket DgramSocket::create(
   return DgramSocket();
 }
 
-void DgramSocket::bind(const char* host, int port, unsigned int flags) const {
+void DgramSocket::bind(inox::StringView host, int port, unsigned int flags) const {
   (void)socket_;
   (void)host;
   (void)port;
@@ -635,7 +673,7 @@ void DgramSocket::onClose(DgramCloseFn close, void* user) const {
   inox_dgram_throw_failed("TypeError: DgramSocket.onClose is unsupported");
 }
 
-void DgramSocket::connect(const char* host, int port) const {
+void DgramSocket::connect(inox::StringView host, int port) const {
   (void)socket_;
   (void)host;
   (void)port;
@@ -657,7 +695,13 @@ void DgramSocket::recvStop() const {
   inox_dgram_throw_failed("TypeError: DgramSocket.recvStop is unsupported");
 }
 
-void DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
+void DgramSocket::send(inox::StringView bytes) const {
+  (void)socket_;
+  (void)bytes;
+  inox_dgram_throw_failed("TypeError: DgramSocket.send is unsupported");
+}
+
+void DgramSocket::send(inox::StringView bytes, inox::StringView host, int port) const {
   (void)socket_;
   (void)bytes;
   (void)host;

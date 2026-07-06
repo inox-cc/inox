@@ -47,7 +47,7 @@ public:
 
   inox_http_server* raw() const;
   void create(inox_loop* loop, HttpHandlerFn handler, void* user);
-  void listen(const char* host, int port, int backlog) const;
+  void listen(inox::StringView host, int port, int backlog) const;
   int localPort() const;
   void onRequest(HttpHandlerFn handler, void* user) const;
   void close() const;

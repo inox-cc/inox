@@ -1,5 +1,7 @@
 #include "inox/net.h"
 
+#include <string.h>
+
 #include "inox/string.h"
 
 NetServer::NetServer() : server_(0) {}
@@ -22,12 +24,27 @@ static void inox_net_throw_failed(const char* message) {
   inox::throw_value(inox::String(message == 0 ? "TypeError: net operation failed" : message));
 }
 
+static bool inox_net_copy_host(inox::StringView host, const char* fallback, char* out, size_t out_len) {
+  const char* bytes = host.len == 0 && fallback != 0 ? fallback : host.bytes;
+  size_t len = host.len == 0 && fallback != 0 ? strlen(fallback) : host.len;
+
+  if (bytes == 0 || out == 0 || out_len == 0 || len >= out_len) {
+    return false;
+  }
+
+  if (len != 0) {
+    memcpy(out, bytes, len);
+  }
+
+  out[len] = '\0';
+  return true;
+}
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 struct NetWriteRequest {
   uv_write_t request;
@@ -206,7 +223,7 @@ void NetServer::onError(NetServerErrorFn error, void* user) const {
 
 }
 
-void NetServer::listen(const char* host, int port, int backlog) const {
+void NetServer::listen(inox::StringView host, int port, int backlog) const {
   inox_net_server* server = server_;
 
   if (server == 0 || server->closing) {
@@ -215,7 +232,14 @@ void NetServer::listen(const char* host, int port, int backlog) const {
   }
 
   struct sockaddr_in addr;
-  inox_status status = inox_net_ip4_addr(host == 0 ? "0.0.0.0" : host, port, &addr);
+  char host_buffer[256];
+
+  if (!inox_net_copy_host(host, "0.0.0.0", host_buffer, sizeof(host_buffer))) {
+    inox_net_throw_failed("TypeError: NetServer.listen failed");
+    return;
+  }
+
+  inox_status status = inox_net_ip4_addr(host_buffer, port, &addr);
 
   if (status != INOX_OK) {
     inox_net_throw_failed("TypeError: NetServer.listen failed");
@@ -284,14 +308,21 @@ void NetServer::close() const {
 
 NetSocket NetSocket::connect(
   inox_loop* loop,
-  const char* host,
+  inox::StringView host,
   int port,
   NetConnectFn connect,
   NetDataFn data,
   NetCloseFn close,
   void* user
 ) {
-  if (loop == 0 || host == 0) {
+  if (loop == 0) {
+    inox_net_throw_failed("TypeError: NetSocket.connect failed");
+    return NetSocket();
+  }
+
+  char host_buffer[256];
+
+  if (!inox_net_copy_host(host, 0, host_buffer, sizeof(host_buffer))) {
     inox_net_throw_failed("TypeError: NetSocket.connect failed");
     return NetSocket();
   }
@@ -320,7 +351,7 @@ NetSocket NetSocket::connect(
   request->request.data = request;
 
   struct sockaddr_in addr;
-  status = inox_net_resolve_ip4_addr(loop, host, port, &addr);
+  status = inox_net_resolve_ip4_addr(loop, host_buffer, port, &addr);
 
   if (status != INOX_OK) {
     allocator->free(allocator->user, request, sizeof(NetConnectRequest), alignof(NetConnectRequest));
@@ -1210,7 +1241,7 @@ void NetServer::onError(NetServerErrorFn error, void* user) const {
   inox_net_throw_failed("TypeError: NetServer is unsupported without libuv");
 }
 
-void NetServer::listen(const char* host, int port, int backlog) const {
+void NetServer::listen(inox::StringView host, int port, int backlog) const {
   (void)server_;
   (void)host;
   (void)port;
@@ -1237,7 +1268,7 @@ void NetServer::close() const {
 
 NetSocket NetSocket::connect(
   inox_loop* loop,
-  const char* host,
+  inox::StringView host,
   int port,
   NetConnectFn connect,
   NetDataFn data,

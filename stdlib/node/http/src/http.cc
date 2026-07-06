@@ -145,7 +145,7 @@ void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   server_ = server;
 }
 
-void HttpServer::listen(const char* host, int port, int backlog) const {
+void HttpServer::listen(inox::StringView host, int port, int backlog) const {
   inox_http_server* server = server_;
 
   if (server == 0) {
@@ -948,7 +948,7 @@ void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   inox_http_throw_failed("TypeError: HttpServer.create is unsupported");
 }
 
-void HttpServer::listen(const char* host, int port, int backlog) const {
+void HttpServer::listen(inox::StringView host, int port, int backlog) const {
   (void)server_;
   (void)host;
   (void)port;

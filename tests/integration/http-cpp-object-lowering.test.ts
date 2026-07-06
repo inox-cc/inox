@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -48,6 +50,10 @@ createServer().listen(8081, '127.0.0.1')
   assert.doesNotMatch(source, /inox_http_status_\d+/)
   assert.doesNotMatch(source, /\.create\([^;]+ != INOX_OK/)
   assert.doesNotMatch(source, /\.listen\([^;]+ != INOX_OK/)
+
+  const header = readFileSync(resolve('stdlib/node/http/include/inox/http.h'), 'utf8')
+  assert.match(header, /void listen\(inox::StringView host, int port, int backlog\) const;/)
+  assert.doesNotMatch(header, /listen\(const char\* host/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

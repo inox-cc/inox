@@ -40,14 +40,15 @@ public:
 
   static DgramSocket create(inox_loop* loop, DgramRecvFn recv, void* user);
 
-  void bind(const char* host, int port, unsigned int flags = 0) const;
+  void bind(inox::StringView host, int port, unsigned int flags = 0) const;
   void onMessage(DgramRecvFn recv, void* user) const;
   void onClose(DgramCloseFn close, void* user) const;
-  void connect(const char* host, int port) const;
+  void connect(inox::StringView host, int port) const;
   void disconnect() const;
   void recvStart() const;
   void recvStop() const;
-  void send(inox::StringView bytes, const char* host, int port) const;
+  void send(inox::StringView bytes) const;
+  void send(inox::StringView bytes, inox::StringView host, int port) const;
   void close() const;
   DgramAddress address() const;
   DgramAddress remoteAddress() const;

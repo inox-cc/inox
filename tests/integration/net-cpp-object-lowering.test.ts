@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -52,6 +54,12 @@ server.close()
   assert.doesNotMatch(source, /NetSocket\([a-zA-Z_][a-zA-Z0-9_]*\)\.write/)
   assert.doesNotMatch(source, /\.address\(&/)
   assert.doesNotMatch(source, /\.bytesRead\(&/)
+
+  const header = readFileSync(resolve('stdlib/node/net/include/inox/net.h'), 'utf8')
+  assert.match(header, /void listen\(inox::StringView host, int port, int backlog\) const;/)
+  assert.match(header, /static NetSocket connect\([\s\S]*?inox_loop\* loop,[\s\S]*?inox::StringView host,/)
+  assert.doesNotMatch(header, /listen\(const char\* host/)
+  assert.doesNotMatch(header, /connect\([\s\S]*?inox_loop\* loop,[\s\S]*?const char\* host,/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

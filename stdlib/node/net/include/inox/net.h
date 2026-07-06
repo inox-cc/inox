@@ -44,7 +44,7 @@ public:
   void onListening(NetServerFn listening, void* user) const;
   void onClose(NetServerFn close, void* user) const;
   void onError(NetServerErrorFn error, void* user) const;
-  void listen(const char* host, int port, int backlog) const;
+  void listen(inox::StringView host, int port, int backlog) const;
   NetAddress address() const;
   int localPort() const;
   void close() const;
@@ -60,7 +60,7 @@ public:
 
   static NetSocket connect(
     inox_loop* loop,
-    const char* host,
+    inox::StringView host,
     int port,
     NetConnectFn connect,
     NetDataFn data,
