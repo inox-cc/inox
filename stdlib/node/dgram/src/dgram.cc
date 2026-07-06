@@ -4,10 +4,6 @@
 
 DgramSocket::DgramSocket(inox_dgram_socket* socket) : socket_(socket) {}
 
-inox_status DgramSocket::bind(const char* host, int port) const {
-  return bind(host, port, 0);
-}
-
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
 
