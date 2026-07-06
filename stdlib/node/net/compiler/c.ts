@@ -163,11 +163,11 @@ function isNetSocketLifecycleEvent(eventName: string): boolean {
 }
 
 function netHandlerUsesStatusReturn(kind: string): boolean {
-  return kind !== 'socket-data' && kind !== 'socket-event' && kind !== 'socket-write'
+  return kind !== 'socket-data' && kind !== 'socket-event' && kind !== 'socket-write' && kind !== 'socket-error'
 }
 
 function netHandlerSocketExpression(kind: string): string {
-  return kind === 'socket-data' || kind === 'socket-event' || kind === 'socket-write'
+  return kind === 'socket-data' || kind === 'socket-event' || kind === 'socket-write' || kind === 'socket-error'
     ? 'inox_socket'
     : 'NetSocket(inox_socket)'
 }
@@ -206,7 +206,7 @@ export function emitNetHandlerHead(wrapper: CNetHandler): string {
   }
 
   if (wrapper.kind === 'socket-error') {
-    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket, inox_status inox_error_status)`
+    return `static void ${wrapper.name}(void* user, NetSocket inox_socket, inox_status inox_error_status)`
   }
 
   if (wrapper.kind === 'error') {

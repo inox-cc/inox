@@ -954,10 +954,10 @@ static void inox_net_socket_report_status(inox_net_socket* socket, inox_status s
   }
 
   if (socket->error != 0) {
-    inox_status callback_status = socket->error(socket->error_user, socket, status);
+    socket->error(socket->error_user, NetSocket(socket), status);
 
-    if (callback_status != INOX_OK) {
-      inox_libuv_loop_report_status(socket->loop, callback_status);
+    if (inox::thrown()) {
+      inox_libuv_loop_report_status(socket->loop, INOX_ERR_TYPE);
     }
 
     return;
