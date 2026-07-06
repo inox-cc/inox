@@ -13,37 +13,37 @@
 #include "inox/loop.h"
 #include "inox/string.h"
 
-typedef struct inox_child_process_options {
+struct ChildProcessOptions {
   int ignore_stdio;
   int has_timeout;
   long timeout_ms;
   inox_value cwd_value;
   const char* cwd;
-  size_t cwd_len;
+  size_t cwd_length;
   char* cwd_nul;
   inox_value env_value;
   char** envp;
   size_t env_count;
-} inox_child_process_options;
+};
 
-typedef struct inox_child_process_result {
+struct ChildProcessResult {
   int status;
   char* stdout_bytes;
-  size_t stdout_len;
-  size_t stdout_cap;
+  size_t stdout_length;
+  size_t stdout_capacity;
   char* stderr_bytes;
-  size_t stderr_len;
-  size_t stderr_cap;
-} inox_child_process_result;
+  size_t stderr_length;
+  size_t stderr_capacity;
+};
 
 static inox_status inox_child_process_string(inox_value value, const char** bytes, size_t* len);
 static inox_status inox_child_process_number(inox_value value, long* out);
 static inox_status inox_child_process_options_init(
   inox_allocator* allocator,
   inox_value options,
-  inox_child_process_options* out
+  ChildProcessOptions* out
 );
-static void inox_child_process_options_dispose(inox_allocator* allocator, inox_child_process_options* options);
+static void inox_child_process_options_dispose(inox_allocator* allocator, ChildProcessOptions* options);
 static inox_status inox_child_process_option_get(
   inox_value options,
   const char* name,
@@ -62,7 +62,7 @@ static inox_status inox_child_process_run_shell(
   inox_allocator* allocator,
   inox_value command,
   inox_value options,
-  inox_child_process_result* result
+  ChildProcessResult* result
 );
 static inox_status inox_child_process_run_file(
   inox_allocator* allocator,
@@ -70,13 +70,13 @@ static inox_status inox_child_process_run_file(
   const inox_value* args,
   size_t arg_count,
   inox_value options,
-  inox_child_process_result* result
+  ChildProcessResult* result
 );
 static inox_status inox_child_process_run_argv(
   inox_allocator* allocator,
   char** argv,
   inox_value options,
-  inox_child_process_result* result
+  ChildProcessResult* result
 );
 static inox_status inox_child_process_build_argv(
   inox_allocator* allocator,
@@ -86,8 +86,8 @@ static inox_status inox_child_process_build_argv(
   char*** out
 );
 static void inox_child_process_free_argv(inox_allocator* allocator, char** argv);
-static inox_status inox_child_process_result_init(inox_allocator* allocator, inox_child_process_result* result);
-static void inox_child_process_result_dispose(inox_allocator* allocator, inox_child_process_result* result);
+static inox_status inox_child_process_result_init(inox_allocator* allocator, ChildProcessResult* result);
+static void inox_child_process_result_dispose(inox_allocator* allocator, ChildProcessResult* result);
 static inox_status inox_child_process_result_append(
   inox_allocator* allocator,
   char** bytes,
@@ -98,11 +98,11 @@ static inox_status inox_child_process_result_append(
 );
 static inox_status inox_child_process_spawn_result_object(
   inox_allocator* allocator,
-  const inox_child_process_result* result,
+  const ChildProcessResult* result,
   const inox_shape* shape,
   inox_value* out
 );
-static void inox_child_process_exec_child(char** argv, const inox_child_process_options* options);
+static void inox_child_process_exec_child(char** argv, const ChildProcessOptions* options);
 static long inox_child_process_now_ms(void);
 static char* inox_child_process_alloc(inox_allocator* allocator, size_t len);
 static char* inox_child_process_copy_nul(inox_allocator* allocator, const char* bytes, size_t len);
@@ -113,7 +113,7 @@ static void inox_child_process_throw_failed(const char* message) {
 
 inox::String child_process::execSync(inox_value command, inox_value options) const {
   inox_allocator* allocator = &inox_default_allocator;
-  inox_child_process_result result;
+  ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
   if (status == INOX_OK) {
@@ -127,7 +127,7 @@ inox::String child_process::execSync(inox_value command, inox_value options) con
   inox_value out = inox_undefined_value();
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_len, &out);
+    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_length, &out);
   }
 
   inox_child_process_result_dispose(allocator, &result);
@@ -147,7 +147,7 @@ inox::String child_process::execFileSync(
   inox_value options
 ) const {
   inox_allocator* allocator = &inox_default_allocator;
-  inox_child_process_result result;
+  ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
   if (status == INOX_OK) {
@@ -161,7 +161,7 @@ inox::String child_process::execFileSync(
   inox_value out = inox_undefined_value();
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_len, &out);
+    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_length, &out);
   }
 
   inox_child_process_result_dispose(allocator, &result);
@@ -182,7 +182,7 @@ inox::Value child_process::spawnSync(
   const inox_shape* shape
 ) const {
   inox_allocator* allocator = &inox_default_allocator;
-  inox_child_process_result result;
+  ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
 
   if (status == INOX_OK) {
@@ -232,14 +232,14 @@ static inox_status inox_child_process_number(inox_value value, long* out) {
 static inox_status inox_child_process_options_init(
   inox_allocator* allocator,
   inox_value options,
-  inox_child_process_options* out
+  ChildProcessOptions* out
 ) {
   out->ignore_stdio = 0;
   out->has_timeout = 0;
   out->timeout_ms = 0;
   out->cwd_value = inox_undefined_value();
   out->cwd = 0;
-  out->cwd_len = 0;
+  out->cwd_length = 0;
   out->cwd_nul = 0;
   out->env_value = inox_undefined_value();
   out->envp = 0;
@@ -262,14 +262,14 @@ static inox_status inox_child_process_options_init(
   }
 
   if (found) {
-    status = inox_child_process_string(value, &out->cwd, &out->cwd_len);
+    status = inox_child_process_string(value, &out->cwd, &out->cwd_length);
 
     if (status != INOX_OK) {
       inox_release(value);
       return status;
     }
 
-    out->cwd_nul = inox_child_process_copy_nul(allocator, out->cwd, out->cwd_len);
+    out->cwd_nul = inox_child_process_copy_nul(allocator, out->cwd, out->cwd_length);
 
     if (out->cwd_nul == 0) {
       inox_release(value);
@@ -344,9 +344,9 @@ static inox_status inox_child_process_options_init(
   return INOX_OK;
 }
 
-static void inox_child_process_options_dispose(inox_allocator* allocator, inox_child_process_options* options) {
+static void inox_child_process_options_dispose(inox_allocator* allocator, ChildProcessOptions* options) {
   if (options->cwd_nul != 0) {
-    allocator->free(allocator->user, options->cwd_nul, options->cwd_len + 1, alignof(char));
+    allocator->free(allocator->user, options->cwd_nul, options->cwd_length + 1, alignof(char));
   }
 
   inox_release(options->cwd_value);
@@ -457,7 +457,7 @@ static inox_status inox_child_process_run_shell(
   inox_allocator* allocator,
   inox_value command,
   inox_value options,
-  inox_child_process_result* result
+  ChildProcessResult* result
 ) {
   const char* command_bytes = 0;
   size_t command_len = 0;
@@ -495,7 +495,7 @@ static inox_status inox_child_process_run_file(
   const inox_value* args,
   size_t arg_count,
   inox_value options,
-  inox_child_process_result* result
+  ChildProcessResult* result
 ) {
   char** argv = 0;
   inox_status status = inox_child_process_build_argv(allocator, file, args, arg_count, &argv);
@@ -514,9 +514,9 @@ static inox_status inox_child_process_run_argv(
   inox_allocator* allocator,
   char** argv,
   inox_value options_value,
-  inox_child_process_result* result
+  ChildProcessResult* result
 ) {
-  inox_child_process_options options;
+  ChildProcessOptions options;
   inox_status status = inox_child_process_options_init(allocator, options_value, &options);
 
   if (status != INOX_OK) {
@@ -636,7 +636,7 @@ static inox_status inox_child_process_run_argv(
 
       if (count > 0) {
         status = inox_child_process_result_append(
-          allocator, &result->stdout_bytes, &result->stdout_len, &result->stdout_cap, buffer, (size_t)count
+          allocator, &result->stdout_bytes, &result->stdout_length, &result->stdout_capacity, buffer, (size_t)count
         );
 
         if (status != INOX_OK) {
@@ -653,7 +653,7 @@ static inox_status inox_child_process_run_argv(
 
       if (count > 0) {
         status = inox_child_process_result_append(
-          allocator, &result->stderr_bytes, &result->stderr_len, &result->stderr_cap, buffer, (size_t)count
+          allocator, &result->stderr_bytes, &result->stderr_length, &result->stderr_capacity, buffer, (size_t)count
         );
 
         if (status != INOX_OK) {
@@ -766,14 +766,14 @@ static void inox_child_process_free_argv(inox_allocator* allocator, char** argv)
   allocator->free(allocator->user, argv, sizeof(char*) * (index + 1), alignof(char*));
 }
 
-static inox_status inox_child_process_result_init(inox_allocator* allocator, inox_child_process_result* result) {
+static inox_status inox_child_process_result_init(inox_allocator* allocator, ChildProcessResult* result) {
   result->status = 0;
-  result->stdout_len = 0;
-  result->stdout_cap = 256;
-  result->stderr_len = 0;
-  result->stderr_cap = 256;
-  result->stdout_bytes = inox_child_process_alloc(allocator, result->stdout_cap);
-  result->stderr_bytes = inox_child_process_alloc(allocator, result->stderr_cap);
+  result->stdout_length = 0;
+  result->stdout_capacity = 256;
+  result->stderr_length = 0;
+  result->stderr_capacity = 256;
+  result->stdout_bytes = inox_child_process_alloc(allocator, result->stdout_capacity);
+  result->stderr_bytes = inox_child_process_alloc(allocator, result->stderr_capacity);
 
   if (result->stdout_bytes == 0 || result->stderr_bytes == 0) {
     inox_child_process_result_dispose(allocator, result);
@@ -783,13 +783,13 @@ static inox_status inox_child_process_result_init(inox_allocator* allocator, ino
   return INOX_OK;
 }
 
-static void inox_child_process_result_dispose(inox_allocator* allocator, inox_child_process_result* result) {
+static void inox_child_process_result_dispose(inox_allocator* allocator, ChildProcessResult* result) {
   if (result->stdout_bytes != 0) {
-    allocator->free(allocator->user, result->stdout_bytes, result->stdout_cap + 1, alignof(char));
+    allocator->free(allocator->user, result->stdout_bytes, result->stdout_capacity + 1, alignof(char));
   }
 
   if (result->stderr_bytes != 0) {
-    allocator->free(allocator->user, result->stderr_bytes, result->stderr_cap + 1, alignof(char));
+    allocator->free(allocator->user, result->stderr_bytes, result->stderr_capacity + 1, alignof(char));
   }
 }
 
@@ -827,7 +827,7 @@ static inox_status inox_child_process_result_append(
 
 static inox_status inox_child_process_spawn_result_object(
   inox_allocator* allocator,
-  const inox_child_process_result* result,
+  const ChildProcessResult* result,
   const inox_shape* shape,
   inox_value* out
 ) {
@@ -841,7 +841,7 @@ static inox_status inox_child_process_spawn_result_object(
   }
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result->stdout_bytes, result->stdout_len, &stdout_value);
+    status = inox::String::fromLiteral(allocator, result->stdout_bytes, result->stdout_length, &stdout_value);
   }
 
   if (status == INOX_OK) {
@@ -849,7 +849,7 @@ static inox_status inox_child_process_spawn_result_object(
   }
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result->stderr_bytes, result->stderr_len, &stderr_value);
+    status = inox::String::fromLiteral(allocator, result->stderr_bytes, result->stderr_length, &stderr_value);
   }
 
   if (status == INOX_OK) {
@@ -870,7 +870,7 @@ static inox_status inox_child_process_spawn_result_object(
   return status;
 }
 
-static void inox_child_process_exec_child(char** argv, const inox_child_process_options* options) {
+static void inox_child_process_exec_child(char** argv, const ChildProcessOptions* options) {
   if (options->cwd_nul != 0 && chdir(options->cwd_nul) != 0) {
     _exit(127);
   }
