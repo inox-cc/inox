@@ -5,6 +5,7 @@
 
 #ifdef __cplusplus
 
+#include "inox/string.h"
 #include "inox/string_view.h"
 
 class Date {
@@ -39,7 +40,7 @@ public:
 
   inox_number timezoneOffset(inox_number value) const;
 
-  inox_status toStringValue(inox_allocator* allocator, inox_number value, int kind, inox_value* out) const;
+  inox::String toString(inox_number value, int kind) const;
 };
 
 extern Date Date;

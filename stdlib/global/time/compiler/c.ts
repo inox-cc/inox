@@ -7,7 +7,6 @@ import {
   timeRuntimeMethodNameFromPath
 } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
-import { emitStatusCheck, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
 import type { CFunctionContext } from '../../../../compiler/c/context.ts'
 import type { CPreparedExpression, CPreparedStringBytesOperand } from '../../../../compiler/c/types.ts'
 
@@ -151,17 +150,15 @@ export function emitPreparedDateStringExpression(
   }
 
   const receiver = emitPreparedDateReceiverExpression(expression, context, deps)
-  const out = nextCName(context, 'inox_date_string')
   const kind = dateStringKind(method !== null && typeof method !== 'undefined' ? method : '')
   const lines: string[] = []
 
-  registerOwnedValue(context, out)
   pushTimeLines(lines, receiver.lines)
-  lines.push(emitStatusCheck(`Date.toStringValue(&inox_default_allocator, ${receiver.expression}, ${kind}, &${out})`, context))
 
   return {
     lines,
-    expression: out
+    expression: `Date.toString(${receiver.expression}, ${kind})`,
+    cppType: 'inox::String'
   }
 }
 

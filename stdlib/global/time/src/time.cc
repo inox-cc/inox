@@ -428,11 +428,7 @@ inox_number Date::timezoneOffset(inox_number value) const {
   return (whole_ms - local_as_utc) / 60000.0;
 }
 
-inox_status Date::toStringValue(inox_allocator* allocator, inox_number value, int kind, inox_value* out) const {
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
+inox::String Date::toString(inox_number value, int kind) const {
   static const char* weekdays[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
   static const char* months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
   struct tm time_value;
@@ -441,7 +437,7 @@ inox_status Date::toStringValue(inox_allocator* allocator, inox_number value, in
   int len = 0;
 
   if (!inox_date_time_struct(value, (kind == 0 || kind == 1) ? 1 : 0, &time_value, &millisecond)) {
-    return inox_string_from_literal(allocator, "Invalid Date", 12, out);
+    return inox::String("Invalid Date");
   }
 
   if (kind == 0) {
@@ -505,10 +501,10 @@ inox_status Date::toStringValue(inox_allocator* allocator, inox_number value, in
   }
 
   if (len < 0 || (size_t)len >= sizeof(buffer)) {
-    return INOX_ERR_TYPE;
+    return inox::String();
   }
 
-  return inox_string_from_literal(allocator, buffer, (size_t)len, out);
+  return inox::String(buffer, (size_t)len);
 }
 
 inox_number Performance::now() const {
