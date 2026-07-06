@@ -1084,6 +1084,73 @@ static void inox_array_dispose_ref(inox_ref* ref) {
   }
 }
 
+static inox_array* inox_array_alloc_storage(inox_allocator* allocator, size_t len) {
+  if (allocator == 0 || allocator->alloc == 0) {
+    return 0;
+  }
+
+  inox_array* array = (inox_array*)allocator->alloc(allocator->user, sizeof(inox_array), alignof(inox_array));
+
+  if (array == 0) {
+    return 0;
+  }
+
+  array->items =
+    len == 0 ? 0 : (inox_value*)allocator->alloc(allocator->user, sizeof(inox_value) * len, alignof(inox_value));
+
+  if (len > 0 && array->items == 0) {
+    if (allocator->free != 0) {
+      allocator->free(allocator->user, array, sizeof(inox_array), alignof(inox_array));
+    }
+
+    return 0;
+  }
+
+  array->header.kind = INOX_REF_ARRAY;
+  array->header.ref_count = 1;
+  array->header.flags = 0;
+  array->header.size = sizeof(inox_array);
+  array->header.align = alignof(inox_array);
+  array->header.allocator = allocator;
+  array->header.dispose = inox_array_dispose_ref;
+  inox_ref_init_weak(&array->header);
+  array->length = len;
+  array->cap = len;
+
+  for (size_t index = 0; index < len; index += 1) {
+    array->items[index] = inox_undefined_value();
+  }
+
+#ifdef INOX_DEBUG_MEMORY
+  inox_debug_memory_record_ref_created(INOX_REF_ARRAY);
+#endif
+
+  return array;
+}
+
+static inox_value inox_array_adopt_storage(inox_array* array) {
+  inox_value value = { INOX_TAG_ARRAY };
+  value.as.ref = &array->header;
+
+  return value;
+}
+
+static inox_status inox_array_set_item(inox_array* array, size_t index, inox_value value) {
+  if (array == 0) {
+    return INOX_ERR_TYPE;
+  }
+
+  if (index >= array->length) {
+    return INOX_ERR_FIELD;
+  }
+
+  inox_retain(value);
+  inox_release(array->items[index]);
+  array->items[index] = value;
+
+  return INOX_OK;
+}
+
 static inox_status inox_array_join_part(inox_value value, char* buffer, size_t buffer_len, const char** bytes, size_t* len) {
   if (bytes == 0 || len == 0) {
     return INOX_ERR_TYPE;
@@ -1139,49 +1206,45 @@ bool Array::valid() const {
   return value.tag == INOX_TAG_ARRAY && value.as.ref != 0;
 }
 
+class Array Array::create(size_t len) {
+  inox_array* array = inox_array_alloc_storage(&inox_default_allocator, len);
+
+  if (array == 0) {
+    inox_collection_throw("TypeError: Array allocation failed");
+    return Array();
+  }
+
+  return Array(inox::adopt_value, inox_array_adopt_storage(array));
+}
+
+void Array::set(size_t index, inox_value value) const {
+  inox_value array = inox::Value::raw();
+
+  if (array.tag != INOX_TAG_ARRAY || array.as.ref == 0) {
+    inox_collection_throw("TypeError: Array assignment receiver is not an Array");
+    return;
+  }
+
+  inox_status status = inox_array_set_item((inox_array*)array.as.ref, index, value);
+
+  if (status != INOX_OK) {
+    inox_collection_throw("TypeError: Array assignment failed");
+  }
+}
+
 inox_status Array::make(inox_allocator* allocator, size_t len, inox_value* out) const {
   if (allocator == 0 || allocator->alloc == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
-  inox_array* array = (inox_array*)allocator->alloc(allocator->user, sizeof(inox_array), alignof(inox_array));
+  inox_array* array = inox_array_alloc_storage(allocator, len);
 
   if (array == 0) {
     *out = inox_undefined_value();
     return INOX_ERR_OOM;
   }
 
-  array->items =
-    len == 0 ? 0 : (inox_value*)allocator->alloc(allocator->user, sizeof(inox_value) * len, alignof(inox_value));
-
-  if (len > 0 && array->items == 0) {
-    *out = inox_undefined_value();
-    if (allocator->free != 0) {
-      allocator->free(allocator->user, array, sizeof(inox_array), alignof(inox_array));
-    }
-    return INOX_ERR_OOM;
-  }
-
-  array->header.kind = INOX_REF_ARRAY;
-  array->header.ref_count = 1;
-  array->header.flags = 0;
-  array->header.size = sizeof(inox_array);
-  array->header.align = alignof(inox_array);
-  array->header.allocator = allocator;
-  array->header.dispose = inox_array_dispose_ref;
-  inox_ref_init_weak(&array->header);
-  array->length = len;
-  array->cap = len;
-
-  for (size_t index = 0; index < len; index += 1) {
-    array->items[index] = inox_undefined_value();
-  }
-
-  out->tag = INOX_TAG_ARRAY;
-  out->as.ref = &array->header;
-#ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_ARRAY);
-#endif
+  *out = inox_array_adopt_storage(array);
 
   return INOX_OK;
 }
@@ -1258,17 +1321,7 @@ inox_status Array::set(inox_value array, size_t index, inox_value value) const {
     return INOX_ERR_TYPE;
   }
 
-  inox_array* instance = (inox_array*)array.as.ref;
-
-  if (index >= instance->length) {
-    return INOX_ERR_FIELD;
-  }
-
-  inox_retain(value);
-  inox_release(instance->items[index]);
-  instance->items[index] = value;
-
-  return INOX_OK;
+  return inox_array_set_item((inox_array*)array.as.ref, index, value);
 }
 
 inox_status Array::slice(inox_allocator* allocator, inox_value array, size_t start, size_t end, inox_value* out) const {

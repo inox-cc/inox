@@ -3684,7 +3684,8 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
   context.arrayLengths.set(statement.name, elements.length)
   context.arrayShapes.set(statement.name, shapes)
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(emitStatusCheck(`Array.make(&inox_default_allocator, ${elements.length}, &${name})`, context))
+  lines.push(`${name} = ArrayClass::create(${elements.length}).release();`)
+  pushAll(lines, emitThrownCheckLines(context))
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const element = elements[index] as AnyNode
@@ -3699,7 +3700,8 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
     }
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`Array.set(${name}, ${index}, ${value.expression})`, context))
+    lines.push(`ArrayClass(${name}).set(${index}, ${value.expression});`)
+    pushAll(lines, emitThrownCheckLines(context))
   }
 
   return lines
@@ -4924,12 +4926,6 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   const shapes: CArrayElementInfo[] = []
 
   pushAll(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(
-    emitStatusCheck(
-      `Array.make(&inox_default_allocator, ${statement.init.elements.length}, &${emitCIdentifier(statement.name)})`,
-      context
-    )
-  )
 
   registerOwnedValue(context, statement.name)
   context.variables.set(statement.name, 'array')
@@ -4951,6 +4947,8 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
   }
   context.arrayLengths.set(statement.name, elements.length)
   context.arrayShapes.set(statement.name, shapes)
+  lines.push(`${emitCIdentifier(statement.name)} = ArrayClass::create(${elements.length});`)
+  pushAll(lines, emitThrownCheckLines(context))
 
   for (let index = 0; index < elements.length; index++) {
     const element: AnyNode = elements[index]
@@ -4965,7 +4963,8 @@ function emitArrayVariableDeclaration(statement: AnyNode, context: CFunctionCont
     }
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`Array.set(${emitCIdentifier(statement.name)}, ${index}, ${value.expression})`, context))
+    lines.push(`ArrayClass(${emitCIdentifier(statement.name)}).set(${index}, ${value.expression});`)
+    pushAll(lines, emitThrownCheckLines(context))
   }
 
   return lines
@@ -5420,9 +5419,8 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
   registerOwnedValue(context, temp)
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(
-    emitStatusCheck(`Array.make(&inox_default_allocator, ${expression.elements.length}, &${temp})`, context)
-  )
+  lines.push(`${temp} = ArrayClass::create(${expression.elements.length});`)
+  pushAll(lines, emitThrownCheckLines(context))
 
   for (let index = 0; index < expression.elements.length; index++) {
     const element = expression.elements[index]
@@ -5437,7 +5435,8 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
     }
 
     pushAll(lines, value.lines)
-    lines.push(emitStatusCheck(`Array.set(${temp}, ${index}, ${value.expression})`, context))
+    lines.push(`ArrayClass(${temp}).set(${index}, ${value.expression});`)
+    pushAll(lines, emitThrownCheckLines(context))
   }
 
   return {

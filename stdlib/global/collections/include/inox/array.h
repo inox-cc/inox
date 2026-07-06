@@ -29,7 +29,11 @@ public:
   using inox::Value::operator=;
   using inox::Value::raw;
 
+  static Array create(size_t len);
+
   bool valid() const;
+  void set(size_t index, inox_value value) const;
+
   inox_status make(inox_allocator* allocator, size_t len, inox_value* out) const;
   inox_status get(inox_value array, size_t index, inox_value* out) const;
   inox_status length(inox_value array, size_t* out) const;
