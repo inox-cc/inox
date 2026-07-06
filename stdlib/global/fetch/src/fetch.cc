@@ -4,6 +4,8 @@
 #include <utility>
 #include <vector>
 
+#include "inox/loop.h"
+
 typedef struct fetch_response {
   int status;
   bool ok;

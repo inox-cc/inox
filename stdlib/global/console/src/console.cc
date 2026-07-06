@@ -9,6 +9,7 @@
 
 #include "inox/array.h"
 #include "inox/class_descriptor.h"
+#include "inox/loop.h"
 #include "inox/object.h"
 #include "inox/string.h"
 

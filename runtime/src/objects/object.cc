@@ -7,6 +7,7 @@
 #endif
 #include "inox/array.h"
 #include "inox/class_descriptor.h"
+#include "inox/loop.h"
 #include "inox/object.h"
 #include "inox/string.h"
 #ifdef INOX_ENABLE_WEAK
@@ -987,3 +988,242 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
 
   return INOX_OK;
 }
+
+namespace inox {
+
+static Value finish_object_index_read(inox_status status, inox_value out, const char* message) {
+  if (status == INOX_OK) {
+    return adopt(out);
+  }
+
+  inox_release(out);
+
+  if (status == INOX_ERR_FIELD) {
+    return Value();
+  }
+
+  throw_value(String(message));
+
+  return Value();
+}
+
+Value object_value_at(inox_value object, size_t index) {
+  if (thrown()) {
+    return Value();
+  }
+
+  inox_value out = inox_undefined_value();
+
+  return finish_object_index_read(
+    inox_object_value_at(object, index, &out),
+    out,
+    "Object.values index failed"
+  );
+}
+
+Value object_value_at(const Value& object, size_t index) {
+  return object_value_at(object.raw(), index);
+}
+
+Value object_entry_at(inox_value object, size_t index) {
+  if (thrown()) {
+    return Value();
+  }
+
+  inox_value out = inox_undefined_value();
+
+  return finish_object_index_read(
+    inox_object_entry_at(&inox_default_allocator, object, index, &out),
+    out,
+    "Object.entries index failed"
+  );
+}
+
+Value object_entry_at(const Value& object, size_t index) {
+  return object_entry_at(object.raw(), index);
+}
+
+void throw_property_read_type_error(StringView name, const char* receiver) {
+  char message[192];
+  int written = snprintf(
+    message,
+    sizeof(message),
+    "TypeError: Cannot read properties of %s (reading '%.*s')",
+    receiver,
+    (int)name.len,
+    name.bytes
+  );
+
+  if (written > 0) {
+    throw_value(String(message));
+    return;
+  }
+
+  throw_value(String("TypeError: Cannot read property"));
+}
+
+Value get(inox_value object, StringView name) {
+  if (thrown()) {
+    return Value();
+  }
+
+  if (object.tag == INOX_TAG_NULL) {
+    throw_property_read_type_error(name, "null");
+    return Value();
+  }
+
+  if (object.tag == INOX_TAG_ARRAY) {
+    return Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_object_get(object, name.bytes, name.len, &out);
+
+  if (status == INOX_OK) {
+    return adopt(out);
+  }
+
+  inox_release(out);
+
+  if (status == INOX_ERR_FIELD) {
+    return Value();
+  }
+
+  return Value();
+}
+
+Value get(const Value& object, StringView name) {
+  return get(object.raw(), name);
+}
+
+Value get(inox_value object, const char* name) {
+  return get(object, StringView(name));
+}
+
+Value get(const Value& object, const char* name) {
+  return get(object.raw(), name);
+}
+
+} // namespace inox
+
+inox::Value Object::keys(inox_value value) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_object_keys(&inox_default_allocator, value, &out);
+
+  if (status == INOX_OK) {
+    return inox::adopt(out);
+  }
+
+  inox_release(out);
+  inox::throw_value(inox::String("Object.keys failed"));
+
+  return inox::Value();
+}
+
+inox::Value Object::keys(const inox::Value& value) const {
+  return keys(value.raw());
+}
+
+inox::Value Object::keys(const inox_class_descriptor& descriptor, const void* instance) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_class_instance_keys(&inox_default_allocator, &descriptor, instance, &out);
+
+  if (status == INOX_OK) {
+    return inox::adopt(out);
+  }
+
+  inox_release(out);
+  inox::throw_value(inox::String("Object.keys failed"));
+
+  return inox::Value();
+}
+
+inox::Value Object::values(inox_value value) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_object_values(&inox_default_allocator, value, &out);
+
+  if (status == INOX_OK) {
+    return inox::adopt(out);
+  }
+
+  inox_release(out);
+  inox::throw_value(inox::String("Object.values failed"));
+
+  return inox::Value();
+}
+
+inox::Value Object::values(const inox::Value& value) const {
+  return values(value.raw());
+}
+
+inox::Value Object::values(const inox_class_descriptor& descriptor, const void* instance) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_class_instance_values(&inox_default_allocator, &descriptor, instance, &out);
+
+  if (status == INOX_OK) {
+    return inox::adopt(out);
+  }
+
+  inox_release(out);
+  inox::throw_value(inox::String("Object.values failed"));
+
+  return inox::Value();
+}
+
+inox::Value Object::entries(inox_value value) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_object_entries(&inox_default_allocator, value, &out);
+
+  if (status == INOX_OK) {
+    return inox::adopt(out);
+  }
+
+  inox_release(out);
+  inox::throw_value(inox::String("Object.entries failed"));
+
+  return inox::Value();
+}
+
+inox::Value Object::entries(const inox::Value& value) const {
+  return entries(value.raw());
+}
+
+inox::Value Object::entries(const inox_class_descriptor& descriptor, const void* instance) const {
+  if (inox::thrown()) {
+    return inox::Value();
+  }
+
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_class_instance_entries(&inox_default_allocator, &descriptor, instance, &out);
+
+  if (status == INOX_OK) {
+    return inox::adopt(out);
+  }
+
+  inox_release(out);
+  inox::throw_value(inox::String("Object.entries failed"));
+
+  return inox::Value();
+}
+
+class Object Object;
