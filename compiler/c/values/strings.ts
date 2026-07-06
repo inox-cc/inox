@@ -14,7 +14,6 @@ import {
   emitFailureStatement,
   emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
-  emitStatusCheck,
   nextCName,
   pushDiagnostic,
   registerOwnedValue
@@ -2864,7 +2863,7 @@ export function emitCNumberConversionValueExpression(
 
   pushAllLines(lines, value.lines)
   pushAllLines(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(emitStatusCheck(`inox::String::toNumber(${value.bytes}, ${value.length}, &${temp})`, context))
+  lines.push(`${temp} = inox::String::toNumber(inox::StringView(${value.bytes}, ${value.length}));`)
 
   return {
     lines,

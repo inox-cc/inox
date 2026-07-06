@@ -913,14 +913,12 @@ static inox_status inox_url_init_string_field(
   const char* bytes,
   size_t len
 ) {
-  inox_value value = inox_undefined_value();
-  inox_status status = inox::String::fromLiteral(allocator, bytes == 0 ? "" : bytes, len, &value);
+  auto value = inox::String(bytes == 0 ? "" : bytes, len);
+  inox_status status = value.valid() ? INOX_OK : INOX_ERR_OOM;
 
   if (status == INOX_OK) {
     status = inox_object_init_known(object, index, value);
   }
-
-  inox_release(value);
 
   return status;
 }
@@ -1112,11 +1110,13 @@ static inox_status inox_url_normalized_field_value(
   }
 
   if (field_index == INOX_URL_PATHNAME_INDEX && len == 0) {
-    return inox::String::fromLiteral(allocator, "/", 1, out);
+    auto value = inox::String("/", 1);
+    return value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
   }
 
   if (prefix == 0 || len == 0 || bytes[0] == prefix) {
-    return inox::String::fromLiteral(allocator, bytes, len, out);
+    auto value = inox::String(bytes, len);
+    return value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
   }
 
   char* normalized = inox_url_alloc(allocator, len + 1);
@@ -1127,7 +1127,8 @@ static inox_status inox_url_normalized_field_value(
 
   normalized[0] = prefix;
   memcpy(normalized + 1, bytes, len);
-  inox_status status = inox::String::fromLiteral(allocator, normalized, len + 1, out);
+  auto value = inox::String(normalized, len + 1);
+  inox_status status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
   allocator->free(allocator->user, normalized, len + 2, alignof(char));
 
   return status;
@@ -1199,14 +1200,13 @@ static inox_status inox_url_rebuild_href(inox_allocator* allocator, inox_value u
   memcpy(href + offset, bytes[5], lens[5]);
   offset += lens[5];
 
-  inox_value href_value = inox_undefined_value();
-  status = inox::String::fromLiteral(allocator, href, offset, &href_value);
+  auto href_value = inox::String(href, offset);
+  status = href_value.valid() ? INOX_OK : INOX_ERR_OOM;
 
   if (status == INOX_OK) {
     status = inox_object_init_known(url, INOX_URL_HREF_INDEX, href_value);
   }
 
-  inox_release(href_value);
   allocator->free(allocator->user, href, total + 1, alignof(char));
 
   for (size_t index = 0; index < FIELD_COUNT; index += 1) {
@@ -1221,14 +1221,12 @@ static inox_status inox_url_search_params_query(inox_value params, inox_value* r
 }
 
 static inox_status inox_url_search_params_store_query(inox_allocator* allocator, inox_value params, const char* bytes, size_t len) {
-  inox_value value = inox_undefined_value();
-  inox_status status = inox::String::fromLiteral(allocator, bytes == 0 ? "" : bytes, len, &value);
+  auto value = inox::String(bytes == 0 ? "" : bytes, len);
+  inox_status status = value.valid() ? INOX_OK : INOX_ERR_OOM;
 
   if (status == INOX_OK) {
     status = inox_object_init_known(params, INOX_URL_SEARCH_PARAMS_QUERY_INDEX, value);
   }
-
-  inox_release(value);
 
   return status;
 }

@@ -102,12 +102,18 @@ console.log(strNum, strBool, strNull, strTpl, numText, hexText)
 
 export function assertStringRuntimeMethodsStayDirect(): void {
   const source = readFileSync(resolve('stdlib/global/strings/src/strings.cc'), 'utf8')
+  const header = readFileSync(resolve('stdlib/global/strings/include/inox/string.h'), 'utf8')
 
   assert.doesNotMatch(
     source,
     /inox_string_(trim|to_upper_case|slice|includes|starts_with|ends_with|index_of|last_index_of|split)_parts/
   )
   assert.doesNotMatch(source, /return\s+inox::String::from(?:Literal|Number|NumberRadix|Value)\(/)
+  assert.doesNotMatch(header, /String::fromLiteral|fromLiteral\(inox_allocator/)
+  assert.doesNotMatch(header, /from(?:Number|NumberRadix|Format|Value)\(inox_allocator/)
+  assert.doesNotMatch(header, /toNumber\([^)]*inox_value\* out/)
+  assert.doesNotMatch(source, /inox_status inox::String::from(?:Literal|Number|NumberRadix|Format|Value)\(/)
+  assert.doesNotMatch(source, /inox_status inox::String::toNumber\(/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

@@ -413,7 +413,8 @@ static inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_val
   size_t value_len = 0;
 
   if (fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len)) {
-    status = inox::String::fromLiteral(allocator, value, value_len, out);
+    auto header = inox::String(value, value_len);
+    status = header.valid() ? header.copy_to(out) : INOX_ERR_OOM;
   } else {
     *out = inox_null_value();
     status = INOX_OK;
@@ -1669,28 +1670,26 @@ static inox_status fetch_response_new(
 
   *out = inox_undefined_value();
   inox_value object = inox_undefined_value();
-  inox_value url_value = inox_undefined_value();
-  inox_value status_text_value = inox_undefined_value();
+  inox::String url_value;
+  inox::String status_text_value;
   inox_value headers_value = inox_undefined_value();
-  inox_value body_value = inox_undefined_value();
+  inox::String body_value;
   inox_status status = inox_object_new(allocator, &shape, &object);
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(
-      allocator,
+    url_value = inox::String(
       response->url == 0 ? (url == 0 ? "" : url) : response->url,
-      response->url == 0 ? url_len : response->url_len,
-      &url_value
+      response->url == 0 ? url_len : response->url_len
     );
+    status = url_value.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(
-      allocator,
+    status_text_value = inox::String(
       response->status_text == 0 ? "" : response->status_text,
-      response->status_text == 0 ? 0 : response->status_text_len,
-      &status_text_value
+      response->status_text == 0 ? 0 : response->status_text_len
     );
+    status = status_text_value.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (status == INOX_OK) {
@@ -1703,12 +1702,11 @@ static inox_status fetch_response_new(
   }
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(
-      allocator,
+    body_value = inox::String(
       response->body == 0 ? "" : response->body,
-      response->body == 0 ? 0 : response->body_len,
-      &body_value
+      response->body == 0 ? 0 : response->body_len
     );
+    status = body_value.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (status == INOX_OK) {
@@ -1739,10 +1737,7 @@ static inox_status fetch_response_new(
     status = inox_object_init_known(object, INOX_FETCH_RESPONSE_BODY_INDEX, body_value);
   }
 
-  inox_release(url_value);
-  inox_release(status_text_value);
   inox_release(headers_value);
-  inox_release(body_value);
 
   if (status != INOX_OK) {
     inox_release(object);
@@ -1764,18 +1759,17 @@ static inox_status fetch_headers_new(inox_allocator* allocator, const char* head
 
   *out = inox_undefined_value();
   inox_value object = inox_undefined_value();
-  inox_value raw = inox_undefined_value();
+  inox::String raw;
   inox_status status = inox_object_new(allocator, &shape, &object);
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, headers == 0 ? "" : headers, headers == 0 ? 0 : headers_len, &raw);
+    raw = inox::String(headers == 0 ? "" : headers, headers == 0 ? 0 : headers_len);
+    status = raw.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (status == INOX_OK) {
     status = inox_object_init_known(object, INOX_FETCH_HEADERS_RAW_INDEX, raw);
   }
-
-  inox_release(raw);
 
   if (status != INOX_OK) {
     inox_release(object);
@@ -1851,14 +1845,12 @@ static inox_status fetch_error_field(
   const char* value,
   size_t value_len
 ) {
-  inox_value field = inox_undefined_value();
-  inox_status status = inox::String::fromLiteral(allocator, value, value_len, &field);
+  auto field = inox::String(value, value_len);
+  inox_status status = field.valid() ? INOX_OK : INOX_ERR_OOM;
 
   if (status == INOX_OK) {
     status = inox_object_init_known(error, index, field);
   }
-
-  inox_release(field);
 
   return status;
 }

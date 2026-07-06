@@ -221,7 +221,14 @@ static inox_status inox_json_make_syntax_error(inox_allocator* allocator, const 
     return INOX_ERR_TYPE;
   }
 
-  return inox::String::fromLiteral(allocator, buffer, (size_t)written, out);
+  auto error = inox::String(buffer, (size_t)written);
+
+  if (!error.valid()) {
+    *out = inox_undefined_value();
+    return INOX_ERR_OOM;
+  }
+
+  return error.copy_to(out);
 }
 
 static int inox_json_hex_value(char value) {
@@ -443,7 +450,8 @@ static inox_status inox_json_parse_string(JsonParser* parser, inox_value* out) {
     return status;
   }
 
-  status = inox::String::fromLiteral(parser->allocator, bytes == 0 ? "" : bytes, len, out);
+  auto value = inox::String(bytes == 0 ? "" : bytes, len);
+  status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
 
   if (parser->allocator != 0 && parser->allocator->free != 0 && bytes != 0) {
     parser->allocator->free(parser->allocator->user, bytes, len, alignof(char));

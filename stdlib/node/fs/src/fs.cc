@@ -298,11 +298,12 @@ static inox_status inox_fs_dirent_new(
 
   *out = inox_undefined_value();
   inox_value dirent = inox_undefined_value();
-  inox_value name_value = inox_undefined_value();
+  inox::String name_value;
   inox_status status = inox_object_new(allocator, &shape, &dirent);
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, name == 0 ? "" : name, name_len, &name_value);
+    name_value = inox::String(name == 0 ? "" : name, name_len);
+    status = name_value.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (status == INOX_OK) {
@@ -316,8 +317,6 @@ static inox_status inox_fs_dirent_new(
   if (status == INOX_OK) {
     status = inox_object_init_known(dirent, INOX_FS_DIRENT_IS_DIRECTORY_INDEX, inox_bool_value(is_directory));
   }
-
-  inox_release(name_value);
 
   if (status != INOX_OK) {
     inox_release(dirent);
@@ -1566,7 +1565,8 @@ inox_fs_libuv_read_file(void* user, inox_allocator* allocator, const char* path,
   inox_status status = inox_fs_libuv_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, buffer == 0 ? "" : buffer, byte_len, out);
+    auto value = inox::String(buffer == 0 ? "" : buffer, byte_len);
+    status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
   }
 
   free(buffer);
@@ -1630,7 +1630,8 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
         &value
       );
     } else {
-      status = inox::String::fromLiteral(allocator, entry.name, name_len, &value);
+      auto name_value = inox::String(entry.name, name_len);
+      status = name_value.valid() ? name_value.copy_to(&value) : INOX_ERR_OOM;
     }
 
     if (status != INOX_OK) {
@@ -1796,7 +1797,10 @@ static inox_status inox_fs_libuv_string_path_result(
   }
 
   const char* text = (const char*)req.ptr;
-  status = inox::String::fromLiteral(allocator, text == 0 ? "" : text, text == 0 ? 0 : strlen(text), out);
+  {
+    auto value = inox::String(text == 0 ? "" : text, text == 0 ? 0 : strlen(text));
+    status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
+  }
   uv_fs_req_cleanup(&req);
 
   return status;
@@ -2533,9 +2537,8 @@ static inox_status inox_fs_libuv_settle(FsLibuvRequest* request, inox_status sta
   inox_value result = inox_undefined_value();
 
   if (request->kind == INOX_FS_REQUEST_READ_FILE) {
-    status = inox::String::fromLiteral(
-      request->loop->allocator, request->data == 0 ? "" : request->data, request->data_len, &result
-    );
+    auto value = inox::String(request->data == 0 ? "" : request->data, request->data_len);
+    status = value.valid() ? value.copy_to(&result) : INOX_ERR_OOM;
   } else if (request->kind == INOX_FS_REQUEST_READ_FILE_BYTES) {
     status = inox_fs_copy_binary_result(
       Uint8Array::from(request->loop->allocator, (const uint8_t*)request->data, request->data_len), &result
@@ -2626,9 +2629,8 @@ static void inox_fs_libuv_cb(uv_fs_t* req) {
 
     if (status == INOX_OK) {
       const char* result_text = (const char*)req->ptr;
-      status = inox::String::fromLiteral(
-        request->loop->allocator, result_text == 0 ? "" : result_text, result_text == 0 ? 0 : strlen(result_text), &text
-      );
+      auto value = inox::String(result_text == 0 ? "" : result_text, result_text == 0 ? 0 : strlen(result_text));
+      status = value.valid() ? value.copy_to(&text) : INOX_ERR_OOM;
     }
 
     uv_fs_req_cleanup(req);
@@ -2896,7 +2898,8 @@ inox_fs_default_read_file(void* user, inox_allocator* allocator, const char* pat
   inox_status status = inox_fs_default_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, buffer == 0 ? "" : buffer, byte_len, out);
+    auto value = inox::String(buffer == 0 ? "" : buffer, byte_len);
+    status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
   }
 
   free(buffer);
@@ -2967,7 +2970,8 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
     if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
       inox_value value = inox_undefined_value();
       size_t name_len = strlen(name);
-      status = inox::String::fromLiteral(allocator, name, name_len, &value);
+      auto name_value = inox::String(name, name_len);
+      status = name_value.valid() ? name_value.copy_to(&value) : INOX_ERR_OOM;
 
       if (status != INOX_OK) {
         closedir(dir);
@@ -3218,7 +3222,10 @@ static inox_status inox_fs_default_realpath(void* user, inox_allocator* allocato
     return INOX_ERR_FIELD;
   }
 
-  status = inox::String::fromLiteral(allocator, resolved, strlen(resolved), out);
+  {
+    auto value = inox::String(resolved, strlen(resolved));
+    status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
+  }
   free(resolved);
 
   return status;
@@ -3267,7 +3274,8 @@ static inox_status inox_fs_default_readlink(void* user, inox_allocator* allocato
 
     if ((size_t)len < cap) {
       buffer[len] = '\0';
-      status = inox::String::fromLiteral(allocator, buffer, (size_t)len, out);
+      auto value = inox::String(buffer, (size_t)len);
+      status = value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
       free(buffer);
       free(path_copy);
       return status;
@@ -3997,25 +4005,28 @@ static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_sta
   *out = inox_undefined_value();
 
   inox_value error = inox_undefined_value();
-  inox_value name = inox_undefined_value();
-  inox_value message = inox_undefined_value();
-  inox_value code = inox_undefined_value();
+  inox::String name;
+  inox::String message;
+  inox::String code;
   inox_status result = inox_object_new(allocator, &shape, &error);
 
   if (result == INOX_OK) {
-    result = inox::String::fromLiteral(allocator, "FsError", 7, &name);
+    name = inox::String("FsError", 7);
+    result = name.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   const char* message_text = inox_fs_error_message(status);
 
   if (result == INOX_OK) {
-    result = inox::String::fromLiteral(allocator, message_text, strlen(message_text), &message);
+    message = inox::String(message_text, strlen(message_text));
+    result = message.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   const char* code_text = inox_fs_error_code(status);
 
   if (result == INOX_OK) {
-    result = inox::String::fromLiteral(allocator, code_text, strlen(code_text), &code);
+    code = inox::String(code_text, strlen(code_text));
+    result = code.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (result == INOX_OK) {
@@ -4029,10 +4040,6 @@ static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_sta
   if (result == INOX_OK) {
     result = inox_object_init_known(error, 2, code);
   }
-
-  inox_release(code);
-  inox_release(message);
-  inox_release(name);
 
   if (result != INOX_OK) {
     inox_release(error);

@@ -124,10 +124,11 @@ inox::String child_process::execSync(inox::StringView command, inox_value option
     status = INOX_ERR_UNSUPPORTED;
   }
 
-  inox_value out = inox_undefined_value();
+  inox::String out;
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_length, &out);
+    out = inox::String(result.stdout_bytes, result.stdout_length);
+    status = out.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   inox_child_process_result_dispose(allocator, &result);
@@ -137,7 +138,7 @@ inox::String child_process::execSync(inox::StringView command, inox_value option
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return out;
 }
 
 inox::String child_process::execFileSync(
@@ -158,10 +159,11 @@ inox::String child_process::execFileSync(
     status = INOX_ERR_UNSUPPORTED;
   }
 
-  inox_value out = inox_undefined_value();
+  inox::String out;
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result.stdout_bytes, result.stdout_length, &out);
+    out = inox::String(result.stdout_bytes, result.stdout_length);
+    status = out.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   inox_child_process_result_dispose(allocator, &result);
@@ -171,7 +173,7 @@ inox::String child_process::execFileSync(
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return out;
 }
 
 inox::Value child_process::spawnSync(
@@ -821,15 +823,16 @@ static inox_status inox_child_process_spawn_result_object(
 ) {
   inox_value object = inox_undefined_value();
   inox_status status = inox_object_new(allocator, shape, &object);
-  inox_value stdout_value = inox_undefined_value();
-  inox_value stderr_value = inox_undefined_value();
+  inox::String stdout_value;
+  inox::String stderr_value;
 
   if (status == INOX_OK) {
     status = inox_object_init_known(object, 0, inox_number_value((inox_number)result->status));
   }
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result->stdout_bytes, result->stdout_length, &stdout_value);
+    stdout_value = inox::String(result->stdout_bytes, result->stdout_length);
+    status = stdout_value.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (status == INOX_OK) {
@@ -837,15 +840,13 @@ static inox_status inox_child_process_spawn_result_object(
   }
 
   if (status == INOX_OK) {
-    status = inox::String::fromLiteral(allocator, result->stderr_bytes, result->stderr_length, &stderr_value);
+    stderr_value = inox::String(result->stderr_bytes, result->stderr_length);
+    status = stderr_value.valid() ? INOX_OK : INOX_ERR_OOM;
   }
 
   if (status == INOX_OK) {
     status = inox_object_init_known(object, 2, stderr_value);
   }
-
-  inox_release(stdout_value);
-  inox_release(stderr_value);
 
   if (status == INOX_OK) {
     *out = object;
