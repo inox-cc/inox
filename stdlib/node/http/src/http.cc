@@ -44,20 +44,20 @@ HttpResponse::HttpResponse(inox_http_response* response) : response_(response) {
 #define INOX_HTTP_MAX_HEADER_VALUE 256
 #define INOX_HTTP_MAX_RESPONSE_BODY 65536
 
-typedef struct inox_http_response_header {
+struct HttpResponseHeader {
   char name[INOX_HTTP_MAX_HEADER_NAME];
-  size_t name_len;
+  size_t name_length;
   char value[INOX_HTTP_MAX_HEADER_VALUE];
-  size_t value_len;
-} inox_http_response_header;
+  size_t value_length;
+};
 
-typedef struct inox_http_connection {
+struct HttpConnection {
   inox_http_server* server;
   inox_net_socket* socket;
   char buffer[4096];
-  size_t len;
+  size_t length;
   int responded;
-} inox_http_connection;
+};
 
 struct inox_http_server {
   inox_loop* loop;
@@ -68,20 +68,20 @@ struct inox_http_server {
 };
 
 struct inox_http_response {
-  inox_http_connection* connection;
+  HttpConnection* connection;
   int status;
-  inox_http_response_header headers[INOX_HTTP_MAX_RESPONSE_HEADERS];
+  HttpResponseHeader headers[INOX_HTTP_MAX_RESPONSE_HEADERS];
   size_t header_count;
   char body[INOX_HTTP_MAX_RESPONSE_BODY];
-  size_t body_len;
+  size_t body_length;
   int sent;
 };
 
 static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket);
 static inox_status inox_http_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len);
 static void inox_http_on_close(void* user, inox_net_socket* socket);
-static inox_status inox_http_try_handle(inox_http_connection* connection);
-static inox_status inox_http_response_init(inox_http_response* response, inox_http_connection* connection);
+static inox_status inox_http_try_handle(HttpConnection* connection);
+static inox_status inox_http_response_init(inox_http_response* response, HttpConnection* connection);
 static int HttpHeader_name_equals(const char* left, size_t left_len, const char* right, size_t right_len);
 static int inox_http_has_response_header(inox_http_response* response, const char* name, size_t len);
 static const char* inox_http_local_file_content_type(const char* path, size_t path_len, size_t* out_len);
@@ -194,10 +194,10 @@ inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView valu
     return INOX_ERR_TYPE;
   }
 
-  inox_http_response_header* header = 0;
+  HttpResponseHeader* header = 0;
 
   for (size_t index = 0; index < response->header_count; index += 1) {
-    if (HttpHeader_name_equals(response->headers[index].name, response->headers[index].name_len, name.bytes, name.len)) {
+    if (HttpHeader_name_equals(response->headers[index].name, response->headers[index].name_length, name.bytes, name.len)) {
       header = &response->headers[index];
       break;
     }
@@ -214,10 +214,10 @@ inox_status HttpResponse::setHeader(inox::StringView name, inox::StringView valu
 
   memcpy(header->name, name.bytes, name.len);
   header->name[name.len] = '\0';
-  header->name_len = name.len;
+  header->name_length = name.len;
   memcpy(header->value, value.bytes, value.len);
   header->value[value.len] = '\0';
-  header->value_len = value.len;
+  header->value_length = value.len;
 
   return INOX_OK;
 }
@@ -254,13 +254,13 @@ inox_status HttpResponse::write(inox::StringView bytes) const {
     return INOX_ERR_TYPE;
   }
 
-  if (bytes.len > sizeof(response->body) - response->body_len) {
+  if (bytes.len > sizeof(response->body) - response->body_length) {
     return INOX_ERR_FIELD;
   }
 
   if (bytes.len != 0) {
-    memcpy(response->body + response->body_len, bytes.bytes, bytes.len);
-    response->body_len += bytes.len;
+    memcpy(response->body + response->body_length, bytes.bytes, bytes.len);
+    response->body_length += bytes.len;
   }
 
   return INOX_OK;
@@ -283,7 +283,7 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
     return append_status;
   }
 
-  inox_http_connection* connection = response->connection;
+  HttpConnection* connection = response->connection;
   connection->responded = 1;
   response->sent = 1;
 
@@ -307,9 +307,9 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
       header + header_size,
       sizeof(header) - header_size,
       "%.*s: %.*s\r\n",
-      (int)response->headers[index].name_len,
+      (int)response->headers[index].name_length,
       response->headers[index].name,
-      (int)response->headers[index].value_len,
+      (int)response->headers[index].value_length,
       response->headers[index].value
     );
 
@@ -321,7 +321,7 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
   }
 
   if (!inox_http_has_response_header(response, "Content-Length", 14)) {
-    header_len = snprintf(header + header_size, sizeof(header) - header_size, "Content-Length: %zu\r\n", response->body_len);
+    header_len = snprintf(header + header_size, sizeof(header) - header_size, "Content-Length: %zu\r\n", response->body_length);
 
     if (header_len < 0 || (size_t)header_len >= sizeof(header) - header_size) {
       return INOX_ERR_FIELD;
@@ -348,7 +348,7 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
   header[header_size + 1] = '\n';
   header_size += 2;
 
-  size_t total_len = header_size + response->body_len;
+  size_t total_len = header_size + response->body_length;
   char* response_bytes =
     (char*)connection->server->allocator->alloc(connection->server->allocator->user, total_len, alignof(char));
 
@@ -358,8 +358,8 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
 
   memcpy(response_bytes, header, header_size);
 
-  if (response->body_len != 0) {
-    memcpy(response_bytes + header_size, response->body, response->body_len);
+  if (response->body_length != 0) {
+    memcpy(response_bytes + header_size, response->body, response->body_length);
   }
 
   inox_status write_status = NetSocket(connection->socket).end(inox::StringView(response_bytes, total_len));
@@ -495,10 +495,10 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
 static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket) {
   (void)server;
   inox_http_server* http_server = (inox_http_server*)user;
-  inox_http_connection* connection = (inox_http_connection*)http_server->allocator->alloc(
+  HttpConnection* connection = (HttpConnection*)http_server->allocator->alloc(
     http_server->allocator->user,
-    sizeof(inox_http_connection),
-    alignof(inox_http_connection)
+    sizeof(HttpConnection),
+    alignof(HttpConnection)
   );
 
   if (connection == 0) {
@@ -506,7 +506,7 @@ static inox_status inox_http_on_connection(void* user, inox_net_server* server, 
     return INOX_ERR_OOM;
   }
 
-  memset(connection, 0, sizeof(inox_http_connection));
+  memset(connection, 0, sizeof(HttpConnection));
   connection->server = http_server;
   connection->socket = socket;
   NetSocket(socket).setCallbacks(inox_http_on_data, inox_http_on_close, connection);
@@ -516,23 +516,23 @@ static inox_status inox_http_on_connection(void* user, inox_net_server* server, 
 
 static inox_status inox_http_on_data(void* user, inox_net_socket* socket, const char* bytes, size_t len) {
   (void)socket;
-  inox_http_connection* connection = (inox_http_connection*)user;
+  HttpConnection* connection = (HttpConnection*)user;
 
-  if (connection->len + len > sizeof(connection->buffer)) {
+  if (connection->length + len > sizeof(connection->buffer)) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
     return HttpResponse(&response).text(413, "payload too large");
   }
 
-  memcpy(connection->buffer + connection->len, bytes, len);
-  connection->len += len;
+  memcpy(connection->buffer + connection->length, bytes, len);
+  connection->length += len;
 
   return inox_http_try_handle(connection);
 }
 
 static void inox_http_on_close(void* user, inox_net_socket* socket) {
   (void)socket;
-  inox_http_connection* connection = (inox_http_connection*)user;
+  HttpConnection* connection = (HttpConnection*)user;
 
   if (connection == 0 || connection->server == 0 || connection->server->allocator == 0) {
     return;
@@ -541,13 +541,13 @@ static void inox_http_on_close(void* user, inox_net_socket* socket) {
   connection->server->allocator->free(
     connection->server->allocator->user,
     connection,
-    sizeof(inox_http_connection),
-    alignof(inox_http_connection)
+    sizeof(HttpConnection),
+    alignof(HttpConnection)
   );
 }
 
-static inox_status inox_http_try_handle(inox_http_connection* connection) {
-  const char* header_end = inox_http_find_header_end(connection->buffer, connection->len);
+static inox_status inox_http_try_handle(HttpConnection* connection) {
+  const char* header_end = inox_http_find_header_end(connection->buffer, connection->length);
 
   if (header_end == 0) {
     return INOX_OK;
@@ -597,7 +597,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
     return HttpResponse(&response).text(413, "payload too large");
   }
 
-  if (connection->len < header_bytes + content_length) {
+  if (connection->length < header_bytes + content_length) {
     return INOX_OK;
   }
 
@@ -630,7 +630,7 @@ static inox_status inox_http_try_handle(inox_http_connection* connection) {
   return INOX_OK;
 }
 
-static inox_status inox_http_response_init(inox_http_response* response, inox_http_connection* connection) {
+static inox_status inox_http_response_init(inox_http_response* response, HttpConnection* connection) {
   if (response == 0 || connection == 0) {
     return INOX_ERR_TYPE;
   }
@@ -673,7 +673,7 @@ static int inox_http_has_response_header(inox_http_response* response, const cha
   }
 
   for (size_t index = 0; index < response->header_count; index += 1) {
-    if (HttpHeader_name_equals(response->headers[index].name, response->headers[index].name_len, name, len)) {
+    if (HttpHeader_name_equals(response->headers[index].name, response->headers[index].name_length, name, len)) {
       return 1;
     }
   }
