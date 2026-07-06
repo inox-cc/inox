@@ -1852,14 +1852,6 @@ Promise FetchResponse::text() const {
   return adopt(promise);
 }
 
-inox_value FetchResponse::raw() const {
-  return value_.raw();
-}
-
-FetchResponse::operator inox_value() const {
-  return value_.raw();
-}
-
 FetchHeaders::FetchHeaders() : Value() {}
 
 FetchHeaders::FetchHeaders(inox_value value) : Value(value) {}

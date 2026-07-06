@@ -53,8 +53,6 @@ public:
   bool ok() const;
   bool redirected() const;
   Promise text() const;
-  inox_value raw() const;
-  operator inox_value() const;
 };
 
 class FetchHeaders : public Value {
