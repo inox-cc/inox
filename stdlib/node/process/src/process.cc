@@ -12,6 +12,7 @@
 #endif
 
 #include "inox/array.h"
+#include "inox/loop.h"
 #include "inox/object.h"
 #include "inox/string.h"
 
@@ -209,20 +210,17 @@ static inox_status process_hrtime_component(inox_value previous, size_t index, i
     return INOX_ERR_TYPE;
   }
 
-  inox_value value = inox_undefined_value();
-  inox_status status = Array.get(previous, index, &value);
+  inox::Value value = ArrayClass(previous).get(index);
 
-  if (status != INOX_OK) {
-    return status;
+  if (inox::thrown()) {
+    return INOX_ERR_TYPE;
   }
 
   if (value.tag != INOX_TAG_NUMBER) {
-    inox_release(value);
     return INOX_ERR_TYPE;
   }
 
   *out = (int64_t)value.as.number;
-  inox_release(value);
 
   return INOX_OK;
 }
@@ -265,24 +263,25 @@ static inox_status process_hrtime(inox_allocator* allocator, inox_value previous
     }
   }
 
-  status = Array.make(allocator, 2, out);
+  ArrayClass result = ArrayClass::create(allocator, 2);
 
-  if (status != INOX_OK) {
-    return status;
+  if (inox::thrown() || !result.valid()) {
+    return INOX_ERR_TYPE;
   }
 
-  status = Array.set(*out, 0, inox_number_value((inox_number)seconds));
+  result.set(0, inox_number_value((inox_number)seconds));
 
-  if (status == INOX_OK) {
-    status = Array.set(*out, 1, inox_number_value((inox_number)nanoseconds));
+  if (!inox::thrown()) {
+    result.set(1, inox_number_value((inox_number)nanoseconds));
   }
 
-  if (status != INOX_OK) {
-    inox_release(*out);
-    *out = inox_undefined_value();
+  if (inox::thrown()) {
+    return INOX_ERR_TYPE;
   }
 
-  return status;
+  *out = result.release();
+
+  return INOX_OK;
 }
 
 static inox_number process_rss_bytes(void) {
