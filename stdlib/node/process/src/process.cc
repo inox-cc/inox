@@ -418,7 +418,7 @@ inox::Value process::hrtime() const {
     return inox::Value();
   }
 
-  ArrayClass result = ArrayClass::create(&inox_default_allocator, 2);
+  ArrayClass result = ArrayClass::create(2);
 
   if (inox::thrown() || !result.valid()) {
     return inox::Value();
@@ -463,7 +463,7 @@ inox::Value process::hrtime(inox_value previous) const {
     nanoseconds += 1000000000ll;
   }
 
-  ArrayClass result = ArrayClass::create(&inox_default_allocator, 2);
+  ArrayClass result = ArrayClass::create(2);
 
   if (inox::thrown() || !result.valid()) {
     return inox::Value();

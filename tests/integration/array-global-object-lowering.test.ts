@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -70,6 +72,12 @@ console.log(Array.isArray([1]))
   assert.doesNotMatch(source, /Array\.(make|get|length|pop|push|set|slice|unshift)\(/)
   assert.doesNotMatch(source, /foo\.tag == INOX_TAG_ARRAY/)
   assert.doesNotMatch(source, /inox_number_value\(1\)\.tag == INOX_TAG_ARRAY/)
+
+  const header = readFileSync(resolve('stdlib/global/collections/include/inox/array.h'), 'utf8')
+  const runtime = readFileSync(resolve('stdlib/global/collections/src/collections.cc'), 'utf8')
+
+  assert.doesNotMatch(header, /create\(inox_allocator/)
+  assert.doesNotMatch(runtime, /Array Array::create\(inox_allocator/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

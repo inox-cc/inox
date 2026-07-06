@@ -30,7 +30,6 @@ public:
   using inox::Value::raw;
 
   static Array create(size_t len);
-  static Array create(inox_allocator* allocator, size_t len);
 
   bool valid() const;
   size_t length() const;

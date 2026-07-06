@@ -764,7 +764,7 @@ static inox_status inox_json_parse_array(JsonParser* parser, size_t depth, inox_
 
   *out = inox_undefined_value();
 
-  ArrayClass array = ArrayClass::create(parser->allocator, 0);
+  ArrayClass array = ArrayClass::create(0);
 
   if (inox::thrown()) {
     return INOX_ERR_TYPE;

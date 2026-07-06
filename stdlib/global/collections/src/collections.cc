@@ -1263,17 +1263,6 @@ class Array Array::create(size_t len) {
   return Array(inox::adopt_value, inox_array_adopt_storage(array));
 }
 
-class Array Array::create(inox_allocator* allocator, size_t len) {
-  ArrayStorage* array = inox_array_alloc_storage(allocator, len);
-
-  if (array == 0) {
-    inox_collection_throw("TypeError: Array allocation failed");
-    return Array();
-  }
-
-  return Array(inox::adopt_value, inox_array_adopt_storage(array));
-}
-
 inox::Value Array::pop() const {
   inox_value array = inox::Value::raw();
 

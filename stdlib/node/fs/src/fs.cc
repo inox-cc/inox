@@ -1602,7 +1602,7 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
 
   *out = inox_undefined_value();
 
-  ArrayClass entries = ArrayClass::create(allocator, 0);
+  ArrayClass entries = ArrayClass::create(0);
 
   if (inox::thrown()) {
     return INOX_ERR_TYPE;
@@ -2955,7 +2955,7 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
     return INOX_ERR_FIELD;
   }
 
-  ArrayClass entries = ArrayClass::create(allocator, 0);
+  ArrayClass entries = ArrayClass::create(0);
 
   if (inox::thrown()) {
     closedir(dir);
@@ -3062,7 +3062,7 @@ inox_fs_default_read_dir_dirents(void* user, inox_allocator* allocator, const ch
     return INOX_ERR_FIELD;
   }
 
-  ArrayClass entries = ArrayClass::create(allocator, 0);
+  ArrayClass entries = ArrayClass::create(0);
 
   if (inox::thrown()) {
     free(path_copy);

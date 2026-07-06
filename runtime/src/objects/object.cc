@@ -286,7 +286,7 @@ static inox_status inox_array_object_values(inox_allocator* allocator, inox_valu
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
-  ArrayClass result = ArrayClass::create(allocator, instance->length);
+  ArrayClass result = ArrayClass::create(instance->length);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -315,7 +315,7 @@ static inox_status inox_array_object_keys(inox_allocator* allocator, inox_value 
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
-  ArrayClass result = ArrayClass::create(allocator, instance->length);
+  ArrayClass result = ArrayClass::create(instance->length);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -362,7 +362,7 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
   }
 
   ArrayStorage* instance = (ArrayStorage*)array.as.ref;
-  ArrayClass result = ArrayClass::create(allocator, instance->length);
+  ArrayClass result = ArrayClass::create(instance->length);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -380,7 +380,7 @@ static inox_status inox_array_object_entries(inox_allocator* allocator, inox_val
     if (key_len < 0 || (size_t)key_len >= sizeof(key_bytes)) {
       status = INOX_ERR_TYPE;
     } else {
-      pair = ArrayClass::create(allocator, 2);
+      pair = ArrayClass::create(2);
 
       if (inox::thrown() || !pair.valid()) {
         inox::take_exception();
@@ -445,7 +445,7 @@ static inox_status inox_object_entry_from_key_value(
     return INOX_ERR_TYPE;
   }
 
-  ArrayClass pair = ArrayClass::create(allocator, 2);
+  ArrayClass pair = ArrayClass::create(2);
   inox::String key;
   inox_status status = INOX_OK;
 
@@ -522,7 +522,7 @@ inox_status inox_class_instance_keys(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  ArrayClass result = ArrayClass::create(allocator, field_count);
+  ArrayClass result = ArrayClass::create(field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -576,7 +576,7 @@ inox_status inox_class_instance_values(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  ArrayClass result = ArrayClass::create(allocator, field_count);
+  ArrayClass result = ArrayClass::create(field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -632,7 +632,7 @@ inox_status inox_class_instance_entries(
   }
 
   uint32_t field_count = inox_class_descriptor_enumerable_count(descriptor);
-  ArrayClass result = ArrayClass::create(allocator, field_count);
+  ArrayClass result = ArrayClass::create(field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -655,7 +655,7 @@ inox_status inox_class_instance_entries(
     inox::String key;
     inox_value value = inox_undefined_value();
 
-    pair = ArrayClass::create(allocator, 2);
+    pair = ArrayClass::create(2);
 
     if (inox::thrown() || !pair.valid()) {
       inox::take_exception();
@@ -824,7 +824,7 @@ inox_status inox_object_keys(inox_allocator* allocator, inox_value object, inox_
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  ArrayClass result = ArrayClass::create(allocator, instance->shape->field_count);
+  ArrayClass result = ArrayClass::create(instance->shape->field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -871,7 +871,7 @@ inox_status inox_object_values(inox_allocator* allocator, inox_value object, ino
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  ArrayClass result = ArrayClass::create(allocator, instance->shape->field_count);
+  ArrayClass result = ArrayClass::create(instance->shape->field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -920,7 +920,7 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
   }
 
   inox_object* instance = (inox_object*)object.as.ref;
-  ArrayClass result = ArrayClass::create(allocator, instance->shape->field_count);
+  ArrayClass result = ArrayClass::create(instance->shape->field_count);
 
   if (inox::thrown() || !result.valid()) {
     inox::take_exception();
@@ -935,7 +935,7 @@ inox_status inox_object_entries(inox_allocator* allocator, inox_value object, in
     inox_value value = inox_undefined_value();
     inox_status status = INOX_OK;
 
-    pair = ArrayClass::create(allocator, 2);
+    pair = ArrayClass::create(2);
 
     if (inox::thrown() || !pair.valid()) {
       inox::take_exception();
