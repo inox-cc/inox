@@ -62,7 +62,7 @@ typedef struct inox_http_connection {
 struct inox_http_server {
   inox_loop* loop;
   inox_allocator* allocator;
-  inox_http_handler_fn handler;
+  HttpHandlerFn handler;
   void* user;
   inox_net_server* net_server;
 };
@@ -96,7 +96,7 @@ static inox_status inox_http_parse_headers(
 static const char* inox_http_find_header_end(const char* bytes, size_t len);
 static const char* inox_http_status_text(int status);
 
-inox_status HttpServer::create(inox_loop* loop, inox_http_handler_fn handler, void* user) {
+inox_status HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   if (loop == 0 || loop->allocator == 0) {
     return INOX_ERR_TYPE;
   }
@@ -147,7 +147,7 @@ inox_status HttpServer::localPort(int* out_port) const {
   return NetServer(server->net_server).localPort(out_port);
 }
 
-inox_status HttpServer::onRequest(inox_http_handler_fn handler, void* user) const {
+inox_status HttpServer::onRequest(HttpHandlerFn handler, void* user) const {
   inox_http_server* server = server_;
 
   if (server == 0 || handler == 0) {
@@ -867,7 +867,7 @@ struct inox_http_response {
   int unused;
 };
 
-inox_status HttpServer::create(inox_loop* loop, inox_http_handler_fn handler, void* user) {
+inox_status HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   (void)loop;
   (void)handler;
   (void)user;
@@ -895,7 +895,7 @@ inox_status HttpServer::localPort(int* out_port) const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status HttpServer::onRequest(inox_http_handler_fn handler, void* user) const {
+inox_status HttpServer::onRequest(HttpHandlerFn handler, void* user) const {
   (void)server_;
   (void)handler;
   (void)user;

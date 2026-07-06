@@ -16,7 +16,7 @@ typedef struct inox_dgram_address {
   int port;
 } inox_dgram_address;
 
-typedef inox_status (*inox_dgram_recv_fn)(
+typedef inox_status (*DgramRecvFn)(
   void* user,
   inox_dgram_socket* socket,
   const char* bytes,
@@ -24,7 +24,7 @@ typedef inox_status (*inox_dgram_recv_fn)(
   const char* host,
   int port
 );
-typedef void (*inox_dgram_close_fn)(void* user, inox_dgram_socket* socket);
+typedef void (*DgramCloseFn)(void* user, inox_dgram_socket* socket);
 
 #define INOX_DGRAM_BIND_REUSEADDR 1u
 
@@ -37,11 +37,11 @@ private:
 public:
   explicit DgramSocket(inox_dgram_socket* socket);
 
-  static inox_status create(inox_loop* loop, inox_dgram_recv_fn recv, void* user, inox_dgram_socket** out);
+  static inox_status create(inox_loop* loop, DgramRecvFn recv, void* user, inox_dgram_socket** out);
 
   inox_status bind(const char* host, int port, unsigned int flags = 0) const;
-  inox_status onMessage(inox_dgram_recv_fn recv, void* user) const;
-  inox_status onClose(inox_dgram_close_fn close, void* user) const;
+  inox_status onMessage(DgramRecvFn recv, void* user) const;
+  inox_status onClose(DgramCloseFn close, void* user) const;
   inox_status connect(const char* host, int port) const;
   inox_status disconnect() const;
   inox_status recvStart() const;

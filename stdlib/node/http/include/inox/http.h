@@ -29,7 +29,7 @@ typedef struct inox_http_request {
   size_t body_len;
 } inox_http_request;
 
-typedef inox_status (*inox_http_handler_fn)(
+typedef inox_status (*HttpHandlerFn)(
   void* user,
   const inox_http_request* request,
   inox_http_response* response
@@ -46,10 +46,10 @@ public:
   explicit HttpServer(inox_http_server* server);
 
   inox_http_server* raw() const;
-  inox_status create(inox_loop* loop, inox_http_handler_fn handler, void* user);
+  inox_status create(inox_loop* loop, HttpHandlerFn handler, void* user);
   inox_status listen(const char* host, int port, int backlog) const;
   inox_status localPort(int* out_port) const;
-  inox_status onRequest(inox_http_handler_fn handler, void* user) const;
+  inox_status onRequest(HttpHandlerFn handler, void* user) const;
   void close() const;
 };
 

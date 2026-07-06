@@ -17,26 +17,26 @@ typedef struct inox_net_write_request {
   char* bytes;
   size_t len;
   int close_after;
-  inox_net_socket_write_fn callback;
+  NetSocketWriteFn callback;
   void* user;
 } inox_net_write_request;
 
 typedef struct inox_net_connect_request {
   uv_connect_t request;
   inox_net_socket* socket;
-  inox_net_connect_fn connect;
+  NetConnectFn connect;
 } inox_net_connect_request;
 
 struct inox_net_server {
   inox_loop* loop;
   inox_allocator* allocator;
-  inox_net_connection_fn connection;
+  NetConnectionFn connection;
   void* user;
-  inox_net_server_fn listening;
+  NetServerFn listening;
   void* listening_user;
-  inox_net_server_fn close;
+  NetServerFn close;
   void* close_user;
-  inox_net_server_error_fn error;
+  NetServerErrorFn error;
   void* error_user;
   uv_tcp_t handle;
   int closing;
@@ -46,21 +46,21 @@ struct inox_net_server {
 struct inox_net_socket {
   inox_loop* loop;
   inox_allocator* allocator;
-  inox_net_data_fn data;
+  NetDataFn data;
   void* data_user;
-  inox_net_close_fn close;
+  NetCloseFn close;
   void* close_user;
-  inox_net_socket_fn connect_event;
+  NetSocketFn connect_event;
   void* connect_user;
-  inox_net_socket_fn ready;
+  NetSocketFn ready;
   void* ready_user;
-  inox_net_socket_fn end;
+  NetSocketFn end;
   void* end_user;
-  inox_net_socket_fn close_event;
+  NetSocketFn close_event;
   void* close_event_user;
-  inox_net_socket_error_fn error;
+  NetSocketErrorFn error;
   void* error_user;
-  inox_net_socket_fn drain;
+  NetSocketFn drain;
   void* drain_user;
   void* user;
   uv_tcp_t handle;
@@ -87,7 +87,7 @@ static void inox_net_socket_close_cb(uv_handle_t* handle);
 
 inox_status NetServer::create(
   inox_loop* loop,
-  inox_net_connection_fn connection,
+  NetConnectionFn connection,
   void* user,
   inox_net_server** out
 ) {
@@ -134,7 +134,7 @@ inox_status NetServer::create(
   return INOX_OK;
 }
 
-inox_status NetServer::onConnection(inox_net_connection_fn connection, void* user) const {
+inox_status NetServer::onConnection(NetConnectionFn connection, void* user) const {
   inox_net_server* server = server_;
 
   if (server == 0 || server->closing) {
@@ -147,7 +147,7 @@ inox_status NetServer::onConnection(inox_net_connection_fn connection, void* use
   return INOX_OK;
 }
 
-inox_status NetServer::onListening(inox_net_server_fn listening, void* user) const {
+inox_status NetServer::onListening(NetServerFn listening, void* user) const {
   inox_net_server* server = server_;
 
   if (server == 0 || server->closing) {
@@ -160,7 +160,7 @@ inox_status NetServer::onListening(inox_net_server_fn listening, void* user) con
   return INOX_OK;
 }
 
-inox_status NetServer::onClose(inox_net_server_fn close, void* user) const {
+inox_status NetServer::onClose(NetServerFn close, void* user) const {
   inox_net_server* server = server_;
 
   if (server == 0 || server->closing) {
@@ -173,7 +173,7 @@ inox_status NetServer::onClose(inox_net_server_fn close, void* user) const {
   return INOX_OK;
 }
 
-inox_status NetServer::onError(inox_net_server_error_fn error, void* user) const {
+inox_status NetServer::onError(NetServerErrorFn error, void* user) const {
   inox_net_server* server = server_;
 
   if (server == 0 || server->closing) {
@@ -271,9 +271,9 @@ inox_status NetSocket::connect(
   inox_loop* loop,
   const char* host,
   int port,
-  inox_net_connect_fn connect,
-  inox_net_data_fn data,
-  inox_net_close_fn close,
+  NetConnectFn connect,
+  NetDataFn data,
+  NetCloseFn close,
   void* user,
   inox_net_socket** out
 ) {
@@ -339,7 +339,7 @@ inox_status NetSocket::connect(
   return INOX_OK;
 }
 
-void NetSocket::setCallbacks(inox_net_data_fn data, inox_net_close_fn close, void* user) const {
+void NetSocket::setCallbacks(NetDataFn data, NetCloseFn close, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0) {
@@ -353,7 +353,7 @@ void NetSocket::setCallbacks(inox_net_data_fn data, inox_net_close_fn close, voi
   socket->user = user;
 }
 
-inox_status NetSocket::onConnect(inox_net_socket_fn connect, void* user) const {
+inox_status NetSocket::onConnect(NetSocketFn connect, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -366,7 +366,7 @@ inox_status NetSocket::onConnect(inox_net_socket_fn connect, void* user) const {
   return INOX_OK;
 }
 
-inox_status NetSocket::onReady(inox_net_socket_fn ready, void* user) const {
+inox_status NetSocket::onReady(NetSocketFn ready, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -379,7 +379,7 @@ inox_status NetSocket::onReady(inox_net_socket_fn ready, void* user) const {
   return INOX_OK;
 }
 
-inox_status NetSocket::onData(inox_net_data_fn data, void* user) const {
+inox_status NetSocket::onData(NetDataFn data, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -392,7 +392,7 @@ inox_status NetSocket::onData(inox_net_data_fn data, void* user) const {
   return INOX_OK;
 }
 
-inox_status NetSocket::onEnd(inox_net_socket_fn end, void* user) const {
+inox_status NetSocket::onEnd(NetSocketFn end, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -405,7 +405,7 @@ inox_status NetSocket::onEnd(inox_net_socket_fn end, void* user) const {
   return INOX_OK;
 }
 
-inox_status NetSocket::onClose(inox_net_socket_fn close, void* user) const {
+inox_status NetSocket::onClose(NetSocketFn close, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -418,7 +418,7 @@ inox_status NetSocket::onClose(inox_net_socket_fn close, void* user) const {
   return INOX_OK;
 }
 
-inox_status NetSocket::onError(inox_net_socket_error_fn error, void* user) const {
+inox_status NetSocket::onError(NetSocketErrorFn error, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -431,7 +431,7 @@ inox_status NetSocket::onError(inox_net_socket_error_fn error, void* user) const
   return INOX_OK;
 }
 
-inox_status NetSocket::onDrain(inox_net_socket_fn drain, void* user) const {
+inox_status NetSocket::onDrain(NetSocketFn drain, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
@@ -589,7 +589,7 @@ inox_status NetSocket::unref() const {
   return INOX_OK;
 }
 
-inox_status NetSocket::write(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+inox_status NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
@@ -650,7 +650,7 @@ inox_status NetSocket::write(inox::StringView bytes, inox_net_socket_write_fn ca
   return INOX_OK;
 }
 
-inox_status NetSocket::end(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+inox_status NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
@@ -933,7 +933,7 @@ static void inox_net_connect_cb(uv_connect_t* request, int status) {
   }
 
   inox_net_socket* socket = connect_request->socket;
-  inox_net_connect_fn connect = connect_request->connect;
+  NetConnectFn connect = connect_request->connect;
   inox_status connect_status = status == 0 ? INOX_OK : INOX_ERR_FIELD;
 
   inox_libuv_loop_release_request(socket->loop);
@@ -1125,7 +1125,7 @@ struct inox_net_socket {
 
 inox_status NetServer::create(
   inox_loop* loop,
-  inox_net_connection_fn connection,
+  NetConnectionFn connection,
   void* user,
   inox_net_server** out
 ) {
@@ -1141,28 +1141,28 @@ inox_status NetServer::create(
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetServer::onConnection(inox_net_connection_fn connection, void* user) const {
+inox_status NetServer::onConnection(NetConnectionFn connection, void* user) const {
   (void)server_;
   (void)connection;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetServer::onListening(inox_net_server_fn listening, void* user) const {
+inox_status NetServer::onListening(NetServerFn listening, void* user) const {
   (void)server_;
   (void)listening;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetServer::onClose(inox_net_server_fn close, void* user) const {
+inox_status NetServer::onClose(NetServerFn close, void* user) const {
   (void)server_;
   (void)close;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetServer::onError(inox_net_server_error_fn error, void* user) const {
+inox_status NetServer::onError(NetServerErrorFn error, void* user) const {
   (void)server_;
   (void)error;
   (void)user;
@@ -1209,9 +1209,9 @@ inox_status NetSocket::connect(
   inox_loop* loop,
   const char* host,
   int port,
-  inox_net_connect_fn connect,
-  inox_net_data_fn data,
-  inox_net_close_fn close,
+  NetConnectFn connect,
+  NetDataFn data,
+  NetCloseFn close,
   void* user,
   inox_net_socket** out
 ) {
@@ -1231,56 +1231,56 @@ inox_status NetSocket::connect(
   return INOX_ERR_UNSUPPORTED;
 }
 
-void NetSocket::setCallbacks(inox_net_data_fn data, inox_net_close_fn close, void* user) const {
+void NetSocket::setCallbacks(NetDataFn data, NetCloseFn close, void* user) const {
   (void)socket_;
   (void)data;
   (void)close;
   (void)user;
 }
 
-inox_status NetSocket::onConnect(inox_net_socket_fn connect, void* user) const {
+inox_status NetSocket::onConnect(NetSocketFn connect, void* user) const {
   (void)socket_;
   (void)connect;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::onReady(inox_net_socket_fn ready, void* user) const {
+inox_status NetSocket::onReady(NetSocketFn ready, void* user) const {
   (void)socket_;
   (void)ready;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::onData(inox_net_data_fn data, void* user) const {
+inox_status NetSocket::onData(NetDataFn data, void* user) const {
   (void)socket_;
   (void)data;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::onEnd(inox_net_socket_fn end, void* user) const {
+inox_status NetSocket::onEnd(NetSocketFn end, void* user) const {
   (void)socket_;
   (void)end;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::onClose(inox_net_socket_fn close, void* user) const {
+inox_status NetSocket::onClose(NetSocketFn close, void* user) const {
   (void)socket_;
   (void)close;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::onError(inox_net_socket_error_fn error, void* user) const {
+inox_status NetSocket::onError(NetSocketErrorFn error, void* user) const {
   (void)socket_;
   (void)error;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::onDrain(inox_net_socket_fn drain, void* user) const {
+inox_status NetSocket::onDrain(NetSocketFn drain, void* user) const {
   (void)socket_;
   (void)drain;
   (void)user;
@@ -1374,7 +1374,7 @@ inox_status NetSocket::unref() const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::write(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+inox_status NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
   (void)socket_;
   (void)bytes;
   (void)callback;
@@ -1382,7 +1382,7 @@ inox_status NetSocket::write(inox::StringView bytes, inox_net_socket_write_fn ca
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::end(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const {
+inox_status NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, void* user) const {
   (void)socket_;
   (void)bytes;
   (void)callback;

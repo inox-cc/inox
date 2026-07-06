@@ -19,9 +19,9 @@ typedef struct inox_dgram_send_request {
 struct inox_dgram_socket {
   inox_loop* loop;
   inox_allocator* allocator;
-  inox_dgram_recv_fn recv;
+  DgramRecvFn recv;
   void* recv_user;
-  inox_dgram_close_fn close;
+  DgramCloseFn close;
   void* close_user;
   uv_udp_t handle;
   int closing;
@@ -37,7 +37,7 @@ static void inox_dgram_close_cb(uv_handle_t* handle);
 
 inox_status DgramSocket::create(
   inox_loop* loop,
-  inox_dgram_recv_fn recv,
+  DgramRecvFn recv,
   void* user,
   inox_dgram_socket** out
 ) {
@@ -105,7 +105,7 @@ inox_status DgramSocket::bind(const char* host, int port, unsigned int flags) co
   return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, uv_flags) == 0 ? INOX_OK : INOX_ERR_FIELD;
 }
 
-inox_status DgramSocket::onMessage(inox_dgram_recv_fn recv, void* user) const {
+inox_status DgramSocket::onMessage(DgramRecvFn recv, void* user) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || recv == 0) {
@@ -117,7 +117,7 @@ inox_status DgramSocket::onMessage(inox_dgram_recv_fn recv, void* user) const {
   return INOX_OK;
 }
 
-inox_status DgramSocket::onClose(inox_dgram_close_fn close, void* user) const {
+inox_status DgramSocket::onClose(DgramCloseFn close, void* user) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || close == 0) {
@@ -541,7 +541,7 @@ struct inox_dgram_socket {
 
 inox_status DgramSocket::create(
   inox_loop* loop,
-  inox_dgram_recv_fn recv,
+  DgramRecvFn recv,
   void* user,
   inox_dgram_socket** out
 ) {
@@ -565,14 +565,14 @@ inox_status DgramSocket::bind(const char* host, int port, unsigned int flags) co
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status DgramSocket::onMessage(inox_dgram_recv_fn recv, void* user) const {
+inox_status DgramSocket::onMessage(DgramRecvFn recv, void* user) const {
   (void)socket_;
   (void)recv;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status DgramSocket::onClose(inox_dgram_close_fn close, void* user) const {
+inox_status DgramSocket::onClose(DgramCloseFn close, void* user) const {
   (void)socket_;
   (void)close;
   (void)user;
