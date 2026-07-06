@@ -439,6 +439,8 @@ process_exit_code_property& process_exit_code_property::operator=(double code) {
   return *this;
 }
 
+process_argv::process_argv() : length(process_number_reader::argvLength) {}
+
 inox::String process_argv::operator[](int index) const {
   const char* value = process_argv_value_at(index);
 
@@ -503,6 +505,8 @@ void process_versions::init() {
   }
 }
 
+process::process() : pid(process_number_reader::pid) {}
+
 void process::init() {
   arch = inox::String(process_arch_name());
   argv0 = argv[0];
@@ -528,6 +532,10 @@ inox::String process::cwd() const {
   }
 
   return inox::String(cwd);
+}
+
+void process::exit() const {
+  exit(0);
 }
 
 void process::exit(int code) const {

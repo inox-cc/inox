@@ -34,7 +34,9 @@ public:
 
 class process_argv {
 public:
-  process_number_property length{process_number_reader::argvLength};
+  process_argv();
+
+  process_number_property length;
 
   inox::String operator[](int index) const;
 };
@@ -56,13 +58,15 @@ public:
 
 class process : public inox::Value {
 public:
+  process();
+
   inox::String arch;
   process_argv argv;
   inox::String argv0;
   process_env env;
   inox::String execPath;
   process_exit_code_property exitCode;
-  process_number_property pid{process_number_reader::pid};
+  process_number_property pid;
   inox::String platform;
   inox::String version;
   process_versions versions;
@@ -71,7 +75,8 @@ public:
 
   void init();
   inox::String cwd() const;
-  void exit(int code = 0) const;
+  void exit() const;
+  void exit(int code) const;
   inox::Value hrtime() const;
   inox::Value hrtime(inox_value previous) const;
   inox::Value hrtime(const inox::Value& previous) const;
