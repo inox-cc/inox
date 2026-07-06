@@ -274,25 +274,6 @@ Buffer Buffer::alloc(size_t length) {
   return Buffer(inox::adopt_value, value);
 }
 
-Buffer Buffer::from(const char* text) {
-  const char* bytes = text == nullptr ? "" : text;
-  inox_value value = inox_undefined_value();
-  inox_status status = make_bytes_value(
-    &inox_default_allocator,
-    (const uint8_t*)bytes,
-    strlen(bytes),
-    false,
-    &value
-  );
-
-  if (status != INOX_OK) {
-    throw_bytes_error("TypeError: Buffer allocation failed");
-    return Buffer();
-  }
-
-  return Buffer(inox::adopt_value, value);
-}
-
 Buffer Buffer::from(inox::StringView text) {
   inox_value value = inox_undefined_value();
   inox_status status = make_bytes_value(&inox_default_allocator, (const uint8_t*)text.bytes, text.len, false, &value);

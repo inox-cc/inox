@@ -59,7 +59,6 @@ public:
   using Uint8Array::release;
 
   static Buffer alloc(size_t length);
-  static Buffer from(const char* text);
   static Buffer from(inox::StringView text);
   static Buffer from(const uint8_t* bytes, size_t length);
   static Buffer from(inox_allocator* allocator, const uint8_t* bytes, size_t length);
