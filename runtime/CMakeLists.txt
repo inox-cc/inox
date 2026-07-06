@@ -126,6 +126,7 @@ file(GLOB INOX_STDLIB_NODE_INCLUDE_DIRS
 )
 
 set(INOX_RUNTIME_SOURCES
+  "${INOX_RUNTIME_DIR}/src/async/time_bridge.cc"
   "${INOX_RUNTIME_DIR}/src/async/promise.c"
   "${INOX_RUNTIME_DIR}/src/core/allocator.c"
   "${INOX_RUNTIME_DIR}/src/core/callback.c"

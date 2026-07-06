@@ -1,8 +1,5 @@
 #include "inox/loop.h"
-#include "inox/time.h"
-
-inox_number inox_performance_now(void);
-void inox_time_sleep_ms(inox_number delay_ms);
+#include "inox/time_bridge.h"
 
 typedef struct inox_microtask {
   inox_microtask_fn run;

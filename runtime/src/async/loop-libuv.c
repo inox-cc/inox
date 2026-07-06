@@ -1,9 +1,7 @@
 #include "loop-libuv-internal.h"
-#include "inox/time.h"
+#include "inox/time_bridge.h"
 
 #include <stdint.h>
-
-inox_number inox_performance_now(void);
 
 typedef struct inox_microtask {
   inox_microtask_fn run;
