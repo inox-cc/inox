@@ -4,26 +4,6 @@ NetServer::NetServer(inox_net_server* server) : server_(server) {}
 
 NetSocket::NetSocket(inox_net_socket* socket) : socket_(socket) {}
 
-inox_status NetSocket::write(inox::StringView bytes) const {
-  return write(bytes, nullptr, nullptr);
-}
-
-inox_status NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback) const {
-  return write(bytes, callback, nullptr);
-}
-
-inox_status NetSocket::end() const {
-  return end(inox::StringView(), nullptr, nullptr);
-}
-
-inox_status NetSocket::end(inox::StringView bytes) const {
-  return end(bytes, nullptr, nullptr);
-}
-
-inox_status NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback) const {
-  return end(bytes, callback, nullptr);
-}
-
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
 
