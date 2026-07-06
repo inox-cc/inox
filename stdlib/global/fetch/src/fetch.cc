@@ -2028,7 +2028,11 @@ bool FetchResponse::valid() const {
 inox_number FetchResponse::status() const {
   Value value;
 
-  if (!number_field("status", 6, value)) {
+  if (
+    !valid() ||
+    inox_object_get(value_, "status", 6, value.out()) != INOX_OK ||
+    value.tag != INOX_TAG_NUMBER
+  ) {
     return 0;
   }
 
@@ -2038,13 +2042,19 @@ inox_number FetchResponse::status() const {
 bool FetchResponse::ok() const {
   Value value;
 
-  return bool_field("ok", 2, value) && value.as.boolean;
+  return valid() &&
+         inox_object_get(value_, "ok", 2, value.out()) == INOX_OK &&
+         value.tag == INOX_TAG_BOOL &&
+         value.as.boolean;
 }
 
 bool FetchResponse::redirected() const {
   Value value;
 
-  return bool_field("redirected", 10, value) && value.as.boolean;
+  return valid() &&
+         inox_object_get(value_, "redirected", 10, value.out()) == INOX_OK &&
+         value.tag == INOX_TAG_BOOL &&
+         value.as.boolean;
 }
 
 Promise FetchResponse::text(inox_loop* loop) const {
@@ -2081,18 +2091,6 @@ inox_value FetchResponse::raw() const {
 
 FetchResponse::operator inox_value() const {
   return value_.raw();
-}
-
-bool FetchResponse::field(const char* name, size_t len, Value& out) const {
-  return valid() && inox_object_get(value_, name, len, out.out()) == INOX_OK;
-}
-
-bool FetchResponse::number_field(const char* name, size_t len, Value& out) const {
-  return field(name, len, out) && out.tag == INOX_TAG_NUMBER;
-}
-
-bool FetchResponse::bool_field(const char* name, size_t len, Value& out) const {
-  return field(name, len, out) && out.tag == INOX_TAG_BOOL;
 }
 
 Promise fetch(inox_loop* loop, StringView url) {

@@ -47,11 +47,6 @@ public:
   Promise text() const;
   inox_value raw() const;
   operator inox_value() const;
-
-private:
-  bool field(const char* name, size_t len, Value& out) const;
-  bool number_field(const char* name, size_t len, Value& out) const;
-  bool bool_field(const char* name, size_t len, Value& out) const;
 };
 
 Promise fetch(inox_loop* loop, StringView url);
