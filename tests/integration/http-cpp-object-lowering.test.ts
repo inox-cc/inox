@@ -53,7 +53,17 @@ createServer().listen(8081, '127.0.0.1')
 
   const header = readFileSync(resolve('stdlib/node/http/include/inox/http.h'), 'utf8')
   assert.match(header, /void listen\(inox::StringView host, int port, int backlog\) const;/)
+  assert.match(header, /inox::StringView method;/)
+  assert.match(header, /inox::StringView url;/)
+  assert.match(header, /inox::StringView body;/)
+  assert.match(header, /inox::StringView name;/)
+  assert.match(header, /inox::StringView value;/)
   assert.doesNotMatch(header, /listen\(const char\* host/)
+  assert.doesNotMatch(header, /\bmethod_len\b/)
+  assert.doesNotMatch(header, /\burl_len\b/)
+  assert.doesNotMatch(header, /\bbody_len\b/)
+  assert.doesNotMatch(header, /\bname_len\b/)
+  assert.doesNotMatch(header, /\bvalue_len\b/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

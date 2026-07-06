@@ -2,31 +2,24 @@
 #define INOX_HTTP_H
 
 #include <stddef.h>
-#include "inox/loop.h"
 
-#ifdef __cplusplus
+#include "inox/loop.h"
 #include "inox/string_view.h"
-#endif
 
 struct inox_http_server;
 struct inox_http_response;
 
 struct HttpHeader {
-  const char* name;
-  size_t name_len;
-  const char* value;
-  size_t value_len;
+  inox::StringView name;
+  inox::StringView value;
 };
 
 struct HttpRequestData {
-  const char* method;
-  size_t method_len;
-  const char* url;
-  size_t url_len;
+  inox::StringView method;
+  inox::StringView url;
   const HttpHeader* headers;
   size_t header_count;
-  const char* body;
-  size_t body_len;
+  inox::StringView body;
 };
 
 typedef inox_status (*HttpHandlerFn)(

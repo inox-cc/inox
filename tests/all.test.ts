@@ -180,6 +180,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertPromiseVariablesUseCppRaii } = await import('./integration/promise-raii-lowering.test.ts')
   const { assertPathLowersToCppObject } = await import('./integration/path-cpp-object-lowering.test.ts')
   const { assertNetUsesCppObjectFacade } = await import('./integration/net-cpp-object-lowering.test.ts')
+  const { assertHttpServerUsesCppObjectFacade } = await import('./integration/http-cpp-object-lowering.test.ts')
   const { assertReadableCStringLiterals } = await import('./integration/readable-c-string-literals.test.ts')
   const { assertRegExpLowersToCppObject } = await import('./integration/regexp-cpp-object-lowering.test.ts')
   const { assertRuntimeAllocatorStaysInRuntime } =
@@ -429,6 +430,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('net-cpp-object-lowering', () => {
       assertNetUsesCppObjectFacade()
+    })
+
+    await t.test('http-cpp-object-lowering', () => {
+      assertHttpServerUsesCppObjectFacade()
     })
 
     await t.test('regexp-cpp-object-lowering', () => {

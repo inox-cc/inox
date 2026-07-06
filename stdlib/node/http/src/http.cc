@@ -16,14 +16,14 @@ HttpRequest::HttpRequest(const HttpRequestData* request) : request_(request) {}
 
 bool HttpRequest::methodEquals(inox::StringView method) const {
   return request_ != 0 &&
-         request_->method_len == method.len &&
-         memcmp(request_->method, method.bytes, method.len) == 0;
+         request_->method.len == method.len &&
+         memcmp(request_->method.bytes, method.bytes, method.len) == 0;
 }
 
 bool HttpRequest::urlEquals(inox::StringView url) const {
   return request_ != 0 &&
-         request_->url_len == url.len &&
-         memcmp(request_->url, url.bytes, url.len) == 0;
+         request_->url.len == url.len &&
+         memcmp(request_->url.bytes, url.bytes, url.len) == 0;
 }
 
 const HttpRequestData* HttpRequest::raw() const {
@@ -268,10 +268,7 @@ void HttpResponse::writeHead(int status, const HttpHeader* headers, size_t heade
   }
 
   for (size_t index = 0; index < header_count; index += 1) {
-    setHeader(
-      inox::StringView(headers[index].name, headers[index].name_len),
-      inox::StringView(headers[index].value, headers[index].value_len)
-    );
+    setHeader(headers[index].name, headers[index].value);
 
     if (inox::thrown()) {
       return;
@@ -415,7 +412,7 @@ void HttpResponse::text(int status, inox::StringView body) const {
   writeHead(
     status,
     (const HttpHeader[]){
-      { "Content-Type", 12, "text/plain; charset=utf-8", 25 }
+      { "Content-Type", "text/plain; charset=utf-8" }
     },
     1
   );
@@ -445,12 +442,12 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
     return 0;
   }
 
-  if (raw_request->url_len < url_prefix.len || memcmp(raw_request->url, url_prefix.bytes, url_prefix.len) != 0) {
+  if (raw_request->url.len < url_prefix.len || memcmp(raw_request->url.bytes, url_prefix.bytes, url_prefix.len) != 0) {
     return 0;
   }
 
-  const char* relative_path = raw_request->url + url_prefix.len;
-  size_t relative_path_len = raw_request->url_len - url_prefix.len;
+  const char* relative_path = raw_request->url.bytes + url_prefix.len;
+  size_t relative_path_len = raw_request->url.len - url_prefix.len;
 
   for (size_t index = 0; index < relative_path_len; index += 1) {
     if (relative_path[index] == '?' || relative_path[index] == '#') {
@@ -517,7 +514,7 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
   writeHead(
     200,
     (const HttpHeader[]){
-      { "Content-Type", 12, content_type, content_type_len }
+      { "Content-Type", inox::StringView(content_type, content_type_len) }
     },
     1
   );
@@ -674,14 +671,11 @@ static inox_status inox_http_try_handle(HttpConnection* connection) {
   }
 
   HttpRequestData request = {
-    connection->buffer,
-    (size_t)(method_end - connection->buffer),
-    url_start,
-    (size_t)(url_end - url_start),
+    inox::StringView(connection->buffer, (size_t)(method_end - connection->buffer)),
+    inox::StringView(url_start, (size_t)(url_end - url_start)),
     headers,
     header_count,
-    header_end,
-    content_length
+    inox::StringView(header_end, content_length)
   };
   inox_http_response response;
   inox_http_response_init(&response, connection);
@@ -800,11 +794,9 @@ static inox_status inox_http_parse_headers(
       return INOX_ERR_FIELD;
     }
 
-    headers[*header_count] = (HttpHeader){
-      cursor,
-      (size_t)(separator - cursor),
-      value,
-      (size_t)(line_end - value)
+    headers[*header_count] = HttpHeader{
+      inox::StringView(cursor, (size_t)(separator - cursor)),
+      inox::StringView(value, (size_t)(line_end - value))
     };
 
     if (HttpHeader_name_equals(cursor, (size_t)(separator - cursor), "Content-Length", 14)) {

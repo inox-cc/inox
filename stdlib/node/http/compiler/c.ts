@@ -738,14 +738,14 @@ function emitHttpLogOperand(
   if (requestMember === 'method') {
     return {
       format: '%.*s',
-      args: [`(int)${httpContext.requestName}->method_len`, `${httpContext.requestName}->method`]
+      args: [`(int)${httpContext.requestName}->method.len`, `${httpContext.requestName}->method.bytes`]
     }
   }
 
   if (requestMember === 'url') {
     return {
       format: '%.*s',
-      args: [`(int)${httpContext.requestName}->url_len`, `${httpContext.requestName}->url`]
+      args: [`(int)${httpContext.requestName}->url.len`, `${httpContext.requestName}->url.bytes`]
     }
   }
 
@@ -895,9 +895,7 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
       continue
     }
 
-    lines.push(
-      `  { ${cStringLiteral(property.key)}, ${utf8ByteLength(property.key)}, ${cStringLiteral(value)}, ${utf8ByteLength(value)} },`
-    )
+    lines.push(`  { ${cStringLiteral(property.key)}, ${cStringLiteral(value)} },`)
   }
 
   lines.push('};')
@@ -1039,16 +1037,16 @@ function emitHttpStringBytesOperand(
   if (requestMember === 'method') {
     return {
       lines: [],
-      bytes: `${httpContext.requestName}->method`,
-      length: `${httpContext.requestName}->method_len`
+      bytes: `${httpContext.requestName}->method.bytes`,
+      length: `${httpContext.requestName}->method.len`
     }
   }
 
   if (requestMember === 'url') {
     return {
       lines: [],
-      bytes: `${httpContext.requestName}->url`,
-      length: `${httpContext.requestName}->url_len`
+      bytes: `${httpContext.requestName}->url.bytes`,
+      length: `${httpContext.requestName}->url.len`
     }
   }
 
