@@ -478,32 +478,6 @@ static void process_exit(int code) {
   exit(code);
 }
 
-namespace inox {
-namespace node_process {
-
-static String string(inox_status (*read)(inox_allocator*, inox_value*)) {
-  inox_value value = inox_undefined_value();
-
-  if (read(&inox_default_allocator, &value) != INOX_OK) {
-    return String();
-  }
-
-  return String(adopt(value));
-}
-
-static Value value(inox_status (*read)(inox_allocator*, inox_value*)) {
-  inox_value result = inox_undefined_value();
-
-  if (read(&inox_default_allocator, &result) != INOX_OK) {
-    return Value();
-  }
-
-  return adopt(result);
-}
-
-} // namespace node_process
-} // namespace inox
-
 process_number_property::process_number_property(process_number_reader read) : read_(read) {}
 
 double process_number_property::value() const {
@@ -571,24 +545,78 @@ inox::String process_env::get(inox::StringView name) const {
 }
 
 void process_versions::init() {
-  node = inox::node_process::string(process_versions_node);
+  inox_value value = inox_undefined_value();
+
+  if (process_versions_node(&inox_default_allocator, &value) != INOX_OK) {
+    node = inox::String();
+    return;
+  }
+
+  node = inox::String(inox::adopt(value));
 }
 
 inox::Value process_versions::value() const {
-  return inox::node_process::value(process_versions_value);
+  inox_value result = inox_undefined_value();
+
+  if (process_versions_value(&inox_default_allocator, &result) != INOX_OK) {
+    return inox::Value();
+  }
+
+  return inox::adopt(result);
 }
 
 void process::init() {
-  arch = inox::node_process::string(process_arch);
-  argv0 = inox::node_process::string(process_argv0);
-  execPath = inox::node_process::string(process_execPath);
-  platform = inox::node_process::string(process_platform);
-  version = inox::node_process::string(process_version);
+  inox_value arch_value = inox_undefined_value();
+
+  if (process_arch(&inox_default_allocator, &arch_value) == INOX_OK) {
+    arch = inox::String(inox::adopt(arch_value));
+  } else {
+    arch = inox::String();
+  }
+
+  inox_value argv0_value = inox_undefined_value();
+
+  if (process_argv0(&inox_default_allocator, &argv0_value) == INOX_OK) {
+    argv0 = inox::String(inox::adopt(argv0_value));
+  } else {
+    argv0 = inox::String();
+  }
+
+  inox_value exec_path_value = inox_undefined_value();
+
+  if (process_execPath(&inox_default_allocator, &exec_path_value) == INOX_OK) {
+    execPath = inox::String(inox::adopt(exec_path_value));
+  } else {
+    execPath = inox::String();
+  }
+
+  inox_value platform_value = inox_undefined_value();
+
+  if (process_platform(&inox_default_allocator, &platform_value) == INOX_OK) {
+    platform = inox::String(inox::adopt(platform_value));
+  } else {
+    platform = inox::String();
+  }
+
+  inox_value version_value = inox_undefined_value();
+
+  if (process_version(&inox_default_allocator, &version_value) == INOX_OK) {
+    version = inox::String(inox::adopt(version_value));
+  } else {
+    version = inox::String();
+  }
+
   versions.init();
 }
 
 inox::String process::cwd() const {
-  return inox::node_process::string(process_cwd);
+  inox_value value = inox_undefined_value();
+
+  if (process_cwd(&inox_default_allocator, &value) != INOX_OK) {
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt(value));
 }
 
 void process::exit(int code) const {
@@ -626,17 +654,29 @@ inox::Value process::hrtime(const inox::Value& previous) const {
 }
 
 inox::Value process::memoryUsage() const {
-  return inox::node_process::value(process_memoryUsage);
+  inox_value value = inox_undefined_value();
+
+  if (process_memoryUsage(&inox_default_allocator, &value) != INOX_OK) {
+    return inox::Value();
+  }
+
+  return inox::adopt(value);
 }
 
 inox::Value process::value() const {
-  return inox::node_process::value(process_value);
+  inox_value value = inox_undefined_value();
+
+  if (process_value(&inox_default_allocator, &value) != INOX_OK) {
+    return inox::Value();
+  }
+
+  return inox::adopt(value);
 }
 
 class process process;
 
 int inox::return_code() {
-  return inox::return_code(process_get_exit_code());
+  return !inox_promise_has_unhandled_rejection() ? process_get_exit_code() : 1;
 }
 
 int inox::main(int argc, char** argv, AppMain app_main) {

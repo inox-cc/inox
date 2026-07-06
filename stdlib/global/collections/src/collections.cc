@@ -1670,11 +1670,11 @@ bool Array::isArray(inox_value value) const {
 }
 
 bool Array::isArray(const inox::Value& value) const {
-  return isArray(value.raw());
+  return value.raw().tag == INOX_TAG_ARRAY;
 }
 
 inox_array* Array::raw(inox_value value) const {
-  if (!isArray(value) || value.as.ref == 0) {
+  if (value.tag != INOX_TAG_ARRAY || value.as.ref == 0) {
     return 0;
   }
 
@@ -1682,7 +1682,13 @@ inox_array* Array::raw(inox_value value) const {
 }
 
 inox_array* Array::raw(const inox::Value& value) const {
-  return raw(value.raw());
+  inox_value raw_value = value.raw();
+
+  if (raw_value.tag != INOX_TAG_ARRAY || raw_value.as.ref == 0) {
+    return 0;
+  }
+
+  return (inox_array*)raw_value.as.ref;
 }
 
 void Array::throwNotIterable() const {

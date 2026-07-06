@@ -40,7 +40,10 @@ double Math::ceil(double value) const {
 }
 
 double Math::round(double value) const {
-  return floor(value + 0.5);
+  double shifted = value + 0.5;
+  long long truncated = (long long)shifted;
+
+  return (double)truncated > shifted ? (double)(truncated - 1) : (double)truncated;
 }
 
 double Math::trunc(double value) const {

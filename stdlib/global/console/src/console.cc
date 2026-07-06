@@ -607,7 +607,15 @@ inox_status console::log() const {
 }
 
 inox_status console::log(const char* text) const {
-  return write_text_line(inox::ConsoleStream::stdout, text);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (text == nullptr) {
+    return inox::console_newline(inox::ConsoleStream::stdout);
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
 }
 
 inox_status console::log(inox::StringView text) const {
@@ -635,47 +643,175 @@ inox_status console::log(inox_value value) const {
 }
 
 inox_status console::log(const inox::Value& value) const {
-  return log(value.raw());
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
 }
 
 inox_status console::log(const char* prefix, inox_value value) const {
-  return write_prefixed_value_line(inox::ConsoleStream::stdout, prefix, value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stdout);
 }
 
 inox_status console::log(const char* prefix, const inox::Value& value) const {
-  return log(prefix, value.raw());
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value.raw());
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stdout);
 }
 
 inox_status console::info() const {
-  return log();
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stdout);
 }
 
 inox_status console::info(const char* text) const {
-  return log(text);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (text == nullptr) {
+    return inox::console_newline(inox::ConsoleStream::stdout);
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
 }
 
 inox_status console::info(inox::StringView text) const {
-  return log(text);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
 }
 
 inox_status console::info(const inox::String& value) const {
-  return log(value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
 }
 
 inox_status console::info(inox_value value) const {
-  return log(value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_print_value_line(inox::ConsoleStream::stdout, value);
 }
 
 inox_status console::info(const inox::Value& value) const {
-  return log(value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
 }
 
 inox_status console::info(const char* prefix, inox_value value) const {
-  return log(prefix, value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stdout);
 }
 
 inox_status console::info(const char* prefix, const inox::Value& value) const {
-  return log(prefix, value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value.raw());
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stdout);
 }
 
 inox_status console::warn() const {
@@ -687,7 +823,15 @@ inox_status console::warn() const {
 }
 
 inox_status console::warn(const char* text) const {
-  return write_text_line(inox::ConsoleStream::stderr, text);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (text == nullptr) {
+    return inox::console_newline(inox::ConsoleStream::stderr);
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
 }
 
 inox_status console::warn(inox::StringView text) const {
@@ -715,47 +859,175 @@ inox_status console::warn(inox_value value) const {
 }
 
 inox_status console::warn(const inox::Value& value) const {
-  return warn(value.raw());
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
 }
 
 inox_status console::warn(const char* prefix, inox_value value) const {
-  return write_prefixed_value_line(inox::ConsoleStream::stderr, prefix, value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stderr);
 }
 
 inox_status console::warn(const char* prefix, const inox::Value& value) const {
-  return warn(prefix, value.raw());
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value.raw());
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stderr);
 }
 
 inox_status console::error() const {
-  return warn();
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stderr);
 }
 
 inox_status console::error(const char* text) const {
-  return warn(text);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (text == nullptr) {
+    return inox::console_newline(inox::ConsoleStream::stderr);
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
 }
 
 inox_status console::error(inox::StringView text) const {
-  return warn(text);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
 }
 
 inox_status console::error(const inox::String& value) const {
-  return warn(value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
 }
 
 inox_status console::error(inox_value value) const {
-  return warn(value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_print_value_line(inox::ConsoleStream::stderr, value);
 }
 
 inox_status console::error(const inox::Value& value) const {
-  return warn(value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  return inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
 }
 
 inox_status console::error(const char* prefix, inox_value value) const {
-  return warn(prefix, value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value);
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stderr);
 }
 
 inox_status console::error(const char* prefix, const inox::Value& value) const {
-  return warn(prefix, value);
+  if (skip_write()) {
+    return INOX_OK;
+  }
+
+  if (prefix != nullptr && prefix[0] != '\0') {
+    inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+  }
+
+  inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value.raw());
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  return inox::console_newline(inox::ConsoleStream::stderr);
 }
 
 bool console::skip_write() {
@@ -811,7 +1083,7 @@ bool console::is_string_format_spec(const char* spec, size_t len) {
 }
 
 bool console::is_value_format_spec(const char* spec, size_t len) {
-  return is_string_format_spec(spec, len);
+  return len > 0 && spec[len - 1] == 's';
 }
 
 const char* console::next_format_spec(const char* format, const char** spec_end) {

@@ -134,17 +134,17 @@ public:
 
   template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status info(const T& value) const {
-    return log(value);
+    return write_value_object_line(inox::ConsoleStream::stdout, value);
   }
 
   template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status info(const char* prefix, const T& value) const {
-    return log(prefix, value);
+    return write_prefixed_value_object_line(inox::ConsoleStream::stdout, prefix, value);
   }
 
   template <typename... Args>
   inox_status info(const char* format, Args... args) const {
-    return log(format, args...);
+    return printf_line(inox::ConsoleStream::stdout, format, args...);
   }
 
   inox_status warn() const;
@@ -182,17 +182,17 @@ public:
 
   template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status error(const T& value) const {
-    return warn(value);
+    return write_value_object_line(inox::ConsoleStream::stderr, value);
   }
 
   template <typename T, typename std::enable_if_t<ConsoleValueObject<T>::value, int> = 0>
   inox_status error(const char* prefix, const T& value) const {
-    return warn(prefix, value);
+    return write_prefixed_value_object_line(inox::ConsoleStream::stderr, prefix, value);
   }
 
   template <typename... Args>
   inox_status error(const char* format, Args... args) const {
-    return warn(format, args...);
+    return printf_line(inox::ConsoleStream::stderr, format, args...);
   }
 
 private:

@@ -924,7 +924,75 @@ String String::toUpperCase() const {
 }
 
 String String::padStart(double target_len) const {
-  return padStart(target_len, StringView(" "));
+  if (!valid()) {
+    return String();
+  }
+
+  StringView pad(" ");
+  size_t target = non_negative_index(target_len);
+  const size_t value_units = inox_string_code_unit_length_parts(bytes(), length());
+  const size_t pad_units = inox_string_code_unit_length_parts(pad.bytes, pad.len);
+
+  if (target <= value_units || pad.len == 0 || pad_units == 0) {
+    return String(*this);
+  }
+
+  size_t remaining_units = target - value_units;
+  size_t pad_total_len = 0;
+
+  while (remaining_units > 0) {
+    size_t take_units = pad_units;
+
+    if (take_units > remaining_units) {
+      take_units = remaining_units;
+    }
+
+    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+
+    if (take_len > ((size_t)-1) - pad_total_len) {
+      return String();
+    }
+
+    pad_total_len += take_len;
+    remaining_units -= take_units;
+  }
+
+  if (length() > ((size_t)-1) - pad_total_len) {
+    return String();
+  }
+
+  const size_t len = pad_total_len + length();
+  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+
+  if (string == 0) {
+    return String();
+  }
+
+  remaining_units = target - value_units;
+  size_t offset = 0;
+
+  while (remaining_units > 0) {
+    size_t take_units = pad_units;
+
+    if (take_units > remaining_units) {
+      take_units = remaining_units;
+    }
+
+    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+
+    if (take_len != 0) {
+      memcpy(string->bytes + offset, pad.bytes, take_len);
+      offset += take_len;
+    }
+
+    remaining_units -= take_units;
+  }
+
+  if (length() != 0) {
+    memcpy(string->bytes + offset, bytes(), length());
+  }
+
+  return String(adopt_value, inox_string_adopt_storage(string));
 }
 
 String String::padStart(double target_len, StringView pad) const {
