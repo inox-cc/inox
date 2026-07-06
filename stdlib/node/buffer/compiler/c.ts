@@ -54,6 +54,10 @@ function binaryFacade(expression: string, kind: BinaryBytesKind): string {
   return `${binaryCppType(kind)}(${expression})`
 }
 
+function binaryStringArgument(value: PreparedStringBytesOperand): string {
+  return value.cppExpression ?? `inox::StringView(${value.bytes}, ${value.length})`
+}
+
 export function binaryRuntimeMethodName(callee: AnyNode): string | null {
   if (callee.type !== 'MemberExpression') {
     return null
@@ -199,7 +203,7 @@ function emitCBufferFromValueExpression(
   const lines: string[] = []
 
   pushBinaryLines(lines, value.lines)
-  lines.push(`auto ${temp} = Buffer::from(inox::StringView(${value.bytes}, ${value.length}));`)
+  lines.push(`auto ${temp} = Buffer::from(${binaryStringArgument(value)});`)
   lines.push(binaryThrownCheck(context))
 
   return {
