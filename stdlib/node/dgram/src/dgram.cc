@@ -2,7 +2,21 @@
 
 #include <string.h>
 
+#include "inox/string.h"
+
+DgramSocket::DgramSocket() : socket_(0) {}
+
 DgramSocket::DgramSocket(inox_dgram_socket* socket) : socket_(socket) {}
+
+static void inox_dgram_throw_failed(const char* message) {
+  inox::throw_value(inox::String(message == 0 ? "dgram operation failed" : message));
+}
+
+static void inox_dgram_throw_status(inox_status status, const char* message) {
+  if (status != INOX_OK) {
+    inox_dgram_throw_failed(message);
+  }
+}
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
@@ -35,22 +49,21 @@ static void inox_dgram_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* 
 static void inox_dgram_send_cb(uv_udp_send_t* request, int status);
 static void inox_dgram_close_cb(uv_handle_t* handle);
 
-inox_status DgramSocket::create(
+DgramSocket DgramSocket::create(
   inox_loop* loop,
   DgramRecvFn recv,
-  void* user,
-  inox_dgram_socket** out
+  void* user
 ) {
-  if (loop == 0 || loop->allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
+  if (loop == 0 || loop->allocator == 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.create failed");
+    return DgramSocket();
   }
-
-  *out = 0;
 
   uv_loop_t* uv_loop = inox_libuv_loop_handle(loop);
 
   if (uv_loop == 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.create failed");
+    return DgramSocket();
   }
 
   inox_allocator* allocator = loop->allocator;
@@ -58,7 +71,8 @@ inox_status DgramSocket::create(
     (inox_dgram_socket*)allocator->alloc(allocator->user, sizeof(inox_dgram_socket), alignof(inox_dgram_socket));
 
   if (socket == 0) {
-    return INOX_ERR_OOM;
+    inox_dgram_throw_failed("TypeError: DgramSocket allocation failed");
+    return DgramSocket();
   }
 
   memset(socket, 0, sizeof(inox_dgram_socket));
@@ -69,118 +83,137 @@ inox_status DgramSocket::create(
 
   if (uv_udp_init(uv_loop, &socket->handle) != 0) {
     allocator->free(allocator->user, socket, sizeof(inox_dgram_socket), alignof(inox_dgram_socket));
-    return INOX_ERR_FIELD;
+    inox_dgram_throw_failed("TypeError: DgramSocket.create failed");
+    return DgramSocket();
   }
 
   if (inox_libuv_loop_retain_request(loop) != INOX_OK) {
     uv_close((uv_handle_t*)&socket->handle, 0);
     uv_run(uv_loop, UV_RUN_NOWAIT);
     allocator->free(allocator->user, socket, sizeof(inox_dgram_socket), alignof(inox_dgram_socket));
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.create failed");
+    return DgramSocket();
   }
 
   socket->retained = 1;
   socket->handle.data = socket;
-  *out = socket;
 
-  return INOX_OK;
+  return DgramSocket(socket);
 }
 
-inox_status DgramSocket::bind(const char* host, int port, unsigned int flags) const {
+void DgramSocket::bind(const char* host, int port, unsigned int flags) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.bind failed");
+    return;
   }
 
   struct sockaddr_in addr;
   inox_status status = inox_dgram_ip4_addr(host == 0 ? "0.0.0.0" : host, port, &addr);
 
   if (status != INOX_OK) {
-    return status;
+    inox_dgram_throw_failed("TypeError: DgramSocket.bind failed");
+    return;
   }
 
   unsigned int uv_flags = (flags & INOX_DGRAM_BIND_REUSEADDR) != 0 ? UV_UDP_REUSEADDR : 0;
 
-  return uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, uv_flags) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_udp_bind(&socket->handle, (const struct sockaddr*)&addr, uv_flags) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.bind failed");
+  }
 }
 
-inox_status DgramSocket::onMessage(DgramRecvFn recv, void* user) const {
+void DgramSocket::onMessage(DgramRecvFn recv, void* user) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || recv == 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.onMessage failed");
+    return;
   }
 
   socket->recv = recv;
   socket->recv_user = user;
-  return INOX_OK;
 }
 
-inox_status DgramSocket::onClose(DgramCloseFn close, void* user) const {
+void DgramSocket::onClose(DgramCloseFn close, void* user) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || close == 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.onClose failed");
+    return;
   }
 
   socket->close = close;
   socket->close_user = user;
-  return INOX_OK;
 }
 
-inox_status DgramSocket::connect(const char* host, int port) const {
+void DgramSocket::connect(const char* host, int port) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || host == 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.connect failed");
+    return;
   }
 
   struct sockaddr_in addr;
   inox_status status = inox_dgram_ip4_addr(host, port, &addr);
 
   if (status != INOX_OK) {
-    return status;
+    inox_dgram_throw_failed("TypeError: DgramSocket.connect failed");
+    return;
   }
 
-  return uv_udp_connect(&socket->handle, (const struct sockaddr*)&addr) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_udp_connect(&socket->handle, (const struct sockaddr*)&addr) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.connect failed");
+  }
 }
 
-inox_status DgramSocket::disconnect() const {
+void DgramSocket::disconnect() const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.disconnect failed");
+    return;
   }
 
-  return uv_udp_connect(&socket->handle, 0) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_udp_connect(&socket->handle, 0) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.disconnect failed");
+  }
 }
 
-inox_status DgramSocket::recvStart() const {
+void DgramSocket::recvStart() const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || socket->recv == 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.recvStart failed");
+    return;
   }
 
-  return uv_udp_recv_start(&socket->handle, inox_dgram_alloc_cb, inox_dgram_recv_cb) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_udp_recv_start(&socket->handle, inox_dgram_alloc_cb, inox_dgram_recv_cb) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.recvStart failed");
+  }
 }
 
-inox_status DgramSocket::recvStop() const {
+void DgramSocket::recvStop() const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.recvStop failed");
+    return;
   }
 
-  return uv_udp_recv_stop(&socket->handle) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_udp_recv_stop(&socket->handle) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.recvStop failed");
+  }
 }
 
-inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
+void DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
   }
 
   struct sockaddr_in addr;
@@ -190,7 +223,8 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
     inox_status status = inox_dgram_ip4_addr(host, port, &addr);
 
     if (status != INOX_OK) {
-      return status;
+      inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+      return;
     }
 
     send_addr = (const struct sockaddr*)&addr;
@@ -201,7 +235,8 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
     (DgramSendRequest*)allocator->alloc(allocator->user, sizeof(DgramSendRequest), alignof(DgramSendRequest));
 
   if (request == 0) {
-    return INOX_ERR_OOM;
+    inox_dgram_throw_failed("TypeError: DgramSocket send allocation failed");
+    return;
   }
 
   memset(request, 0, sizeof(DgramSendRequest));
@@ -213,7 +248,8 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
 
     if (request->bytes == 0) {
       allocator->free(allocator->user, request, sizeof(DgramSendRequest), alignof(DgramSendRequest));
-      return INOX_ERR_OOM;
+      inox_dgram_throw_failed("TypeError: DgramSocket send allocation failed");
+      return;
     }
 
     memcpy(request->bytes, bytes.bytes, bytes.len);
@@ -227,7 +263,8 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
     }
 
     allocator->free(allocator->user, request, sizeof(DgramSendRequest), alignof(DgramSendRequest));
-    return status;
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
   }
 
   uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)bytes.len);
@@ -241,165 +278,189 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
     }
 
     allocator->free(allocator->user, request, sizeof(DgramSendRequest), alignof(DgramSendRequest));
-    return INOX_ERR_FIELD;
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
   }
-
-  return INOX_OK;
 }
 
-inox_status DgramSocket::address(DgramAddress* out) const {
+DgramAddress DgramSocket::address() const {
   inox_dgram_socket* socket = socket_;
+  DgramAddress out = {};
 
-  if (socket == 0 || out == 0) {
-    return INOX_ERR_TYPE;
+  if (socket == 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.address failed");
+    return out;
   }
 
   struct sockaddr_storage addr;
   int len = sizeof(addr);
 
   if (uv_udp_getsockname(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
-    return INOX_ERR_FIELD;
+    inox_dgram_throw_failed("TypeError: DgramSocket.address failed");
+    return out;
   }
 
-  return inox_dgram_sockaddr_to_address((const struct sockaddr*)&addr, out);
+  inox_status status = inox_dgram_sockaddr_to_address((const struct sockaddr*)&addr, &out);
+  inox_dgram_throw_status(status, "TypeError: DgramSocket.address failed");
+
+  return out;
 }
 
-inox_status DgramSocket::remoteAddress(DgramAddress* out) const {
+DgramAddress DgramSocket::remoteAddress() const {
   inox_dgram_socket* socket = socket_;
+  DgramAddress out = {};
 
-  if (socket == 0 || out == 0) {
-    return INOX_ERR_TYPE;
+  if (socket == 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.remoteAddress failed");
+    return out;
   }
 
   struct sockaddr_storage addr;
   int len = sizeof(addr);
 
   if (uv_udp_getpeername(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
-    return INOX_ERR_FIELD;
+    inox_dgram_throw_failed("TypeError: DgramSocket.remoteAddress failed");
+    return out;
   }
 
-  return inox_dgram_sockaddr_to_address((const struct sockaddr*)&addr, out);
+  inox_status status = inox_dgram_sockaddr_to_address((const struct sockaddr*)&addr, &out);
+  inox_dgram_throw_status(status, "TypeError: DgramSocket.remoteAddress failed");
+
+  return out;
 }
 
-inox_status DgramSocket::localPort(int* out_port) const {
+int DgramSocket::localPort() const {
   inox_dgram_socket* socket = socket_;
 
-  if (socket == 0 || out_port == 0) {
-    return INOX_ERR_TYPE;
+  if (socket == 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.localPort failed");
+    return 0;
   }
 
   struct sockaddr_storage addr;
   int len = sizeof(addr);
 
   if (uv_udp_getsockname(&socket->handle, (struct sockaddr*)&addr, &len) != 0) {
-    return INOX_ERR_FIELD;
+    inox_dgram_throw_failed("TypeError: DgramSocket.localPort failed");
+    return 0;
   }
 
   if (((struct sockaddr*)&addr)->sa_family != AF_INET) {
-    return INOX_ERR_UNSUPPORTED;
+    inox_dgram_throw_failed("TypeError: DgramSocket.localPort failed");
+    return 0;
   }
 
-  *out_port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
-
-  return INOX_OK;
+  return ntohs(((struct sockaddr_in*)&addr)->sin_port);
 }
 
-inox_status DgramSocket::setBroadcast(bool enabled) const {
+void DgramSocket::setBroadcast(bool enabled) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.setBroadcast failed");
+    return;
   }
 
-  return uv_udp_set_broadcast(&socket->handle, enabled ? 1 : 0) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_udp_set_broadcast(&socket->handle, enabled ? 1 : 0) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.setBroadcast failed");
+  }
 }
 
-inox_status DgramSocket::setTTL(int ttl) const {
+void DgramSocket::setTTL(int ttl) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.setTTL failed");
+    return;
   }
 
-  return uv_udp_set_ttl(&socket->handle, ttl) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_udp_set_ttl(&socket->handle, ttl) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.setTTL failed");
+  }
 }
 
-inox_status DgramSocket::getSendBufferSize(int* out_size) const {
+int DgramSocket::getSendBufferSize() const {
   inox_dgram_socket* socket = socket_;
 
-  if (socket == 0 || socket->closing || out_size == 0) {
-    return INOX_ERR_TYPE;
+  if (socket == 0 || socket->closing) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.getSendBufferSize failed");
+    return 0;
   }
 
   int size = 0;
 
   if (uv_send_buffer_size((uv_handle_t*)&socket->handle, &size) != 0) {
-    return INOX_ERR_FIELD;
+    inox_dgram_throw_failed("TypeError: DgramSocket.getSendBufferSize failed");
+    return 0;
   }
 
-  *out_size = size;
-  return INOX_OK;
+  return size;
 }
 
-inox_status DgramSocket::setSendBufferSize(int size) const {
+void DgramSocket::setSendBufferSize(int size) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || size <= 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.setSendBufferSize failed");
+    return;
   }
 
   int value = size;
 
-  return uv_send_buffer_size((uv_handle_t*)&socket->handle, &value) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_send_buffer_size((uv_handle_t*)&socket->handle, &value) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.setSendBufferSize failed");
+  }
 }
 
-inox_status DgramSocket::getRecvBufferSize(int* out_size) const {
+int DgramSocket::getRecvBufferSize() const {
   inox_dgram_socket* socket = socket_;
 
-  if (socket == 0 || socket->closing || out_size == 0) {
-    return INOX_ERR_TYPE;
+  if (socket == 0 || socket->closing) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.getRecvBufferSize failed");
+    return 0;
   }
 
   int size = 0;
 
   if (uv_recv_buffer_size((uv_handle_t*)&socket->handle, &size) != 0) {
-    return INOX_ERR_FIELD;
+    inox_dgram_throw_failed("TypeError: DgramSocket.getRecvBufferSize failed");
+    return 0;
   }
 
-  *out_size = size;
-  return INOX_OK;
+  return size;
 }
 
-inox_status DgramSocket::setRecvBufferSize(int size) const {
+void DgramSocket::setRecvBufferSize(int size) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing || size <= 0) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.setRecvBufferSize failed");
+    return;
   }
 
   int value = size;
 
-  return uv_recv_buffer_size((uv_handle_t*)&socket->handle, &value) == 0 ? INOX_OK : INOX_ERR_FIELD;
+  if (uv_recv_buffer_size((uv_handle_t*)&socket->handle, &value) != 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.setRecvBufferSize failed");
+  }
 }
 
-inox_status DgramSocket::ref() const {
+void DgramSocket::ref() const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.ref failed");
+    return;
   }
-
-  return INOX_OK;
 }
 
-inox_status DgramSocket::unref() const {
+void DgramSocket::unref() const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || socket->closing) {
-    return INOX_ERR_TYPE;
+    inox_dgram_throw_failed("TypeError: DgramSocket.unref failed");
+    return;
   }
-
-  return INOX_OK;
 }
 
 void DgramSocket::close() const {
@@ -539,163 +600,135 @@ struct inox_dgram_socket {
   int unused;
 };
 
-inox_status DgramSocket::create(
+DgramSocket DgramSocket::create(
   inox_loop* loop,
   DgramRecvFn recv,
-  void* user,
-  inox_dgram_socket** out
+  void* user
 ) {
   (void)loop;
   (void)recv;
   (void)user;
 
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.create is unsupported");
+  return DgramSocket();
 }
 
-inox_status DgramSocket::bind(const char* host, int port, unsigned int flags) const {
+void DgramSocket::bind(const char* host, int port, unsigned int flags) const {
   (void)socket_;
   (void)host;
   (void)port;
   (void)flags;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.bind is unsupported");
 }
 
-inox_status DgramSocket::onMessage(DgramRecvFn recv, void* user) const {
+void DgramSocket::onMessage(DgramRecvFn recv, void* user) const {
   (void)socket_;
   (void)recv;
   (void)user;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.onMessage is unsupported");
 }
 
-inox_status DgramSocket::onClose(DgramCloseFn close, void* user) const {
+void DgramSocket::onClose(DgramCloseFn close, void* user) const {
   (void)socket_;
   (void)close;
   (void)user;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.onClose is unsupported");
 }
 
-inox_status DgramSocket::connect(const char* host, int port) const {
+void DgramSocket::connect(const char* host, int port) const {
   (void)socket_;
   (void)host;
   (void)port;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.connect is unsupported");
 }
 
-inox_status DgramSocket::disconnect() const {
+void DgramSocket::disconnect() const {
   (void)socket_;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.disconnect is unsupported");
 }
 
-inox_status DgramSocket::recvStart() const {
+void DgramSocket::recvStart() const {
   (void)socket_;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.recvStart is unsupported");
 }
 
-inox_status DgramSocket::recvStop() const {
+void DgramSocket::recvStop() const {
   (void)socket_;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.recvStop is unsupported");
 }
 
-inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
+void DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
   (void)socket_;
   (void)bytes;
   (void)host;
   (void)port;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.send is unsupported");
 }
 
-inox_status DgramSocket::address(DgramAddress* out) const {
+DgramAddress DgramSocket::address() const {
   (void)socket_;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  memset(out, 0, sizeof(DgramAddress));
-  return INOX_ERR_UNSUPPORTED;
+  DgramAddress out = {};
+  inox_dgram_throw_failed("TypeError: DgramSocket.address is unsupported");
+  return out;
 }
 
-inox_status DgramSocket::remoteAddress(DgramAddress* out) const {
+DgramAddress DgramSocket::remoteAddress() const {
   (void)socket_;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  memset(out, 0, sizeof(DgramAddress));
-  return INOX_ERR_UNSUPPORTED;
+  DgramAddress out = {};
+  inox_dgram_throw_failed("TypeError: DgramSocket.remoteAddress is unsupported");
+  return out;
 }
 
-inox_status DgramSocket::localPort(int* out_port) const {
+int DgramSocket::localPort() const {
   (void)socket_;
-
-  if (out_port == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out_port = 0;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.localPort is unsupported");
+  return 0;
 }
 
-inox_status DgramSocket::setBroadcast(bool enabled) const {
+void DgramSocket::setBroadcast(bool enabled) const {
   (void)socket_;
   (void)enabled;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.setBroadcast is unsupported");
 }
 
-inox_status DgramSocket::setTTL(int ttl) const {
+void DgramSocket::setTTL(int ttl) const {
   (void)socket_;
   (void)ttl;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.setTTL is unsupported");
 }
 
-inox_status DgramSocket::getSendBufferSize(int* out_size) const {
+int DgramSocket::getSendBufferSize() const {
   (void)socket_;
-
-  if (out_size == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out_size = 0;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.getSendBufferSize is unsupported");
+  return 0;
 }
 
-inox_status DgramSocket::setSendBufferSize(int size) const {
+void DgramSocket::setSendBufferSize(int size) const {
   (void)socket_;
   (void)size;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.setSendBufferSize is unsupported");
 }
 
-inox_status DgramSocket::getRecvBufferSize(int* out_size) const {
+int DgramSocket::getRecvBufferSize() const {
   (void)socket_;
-
-  if (out_size == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out_size = 0;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.getRecvBufferSize is unsupported");
+  return 0;
 }
 
-inox_status DgramSocket::setRecvBufferSize(int size) const {
+void DgramSocket::setRecvBufferSize(int size) const {
   (void)socket_;
   (void)size;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.setRecvBufferSize is unsupported");
 }
 
-inox_status DgramSocket::ref() const {
+void DgramSocket::ref() const {
   (void)socket_;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.ref is unsupported");
 }
 
-inox_status DgramSocket::unref() const {
+void DgramSocket::unref() const {
   (void)socket_;
-  return INOX_ERR_UNSUPPORTED;
+  inox_dgram_throw_failed("TypeError: DgramSocket.unref is unsupported");
 }
 
 void DgramSocket::close() const {

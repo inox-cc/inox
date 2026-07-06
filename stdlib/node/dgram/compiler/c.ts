@@ -9,7 +9,7 @@ import {
 import {
   createFunctionContext,
   emitEventLoopReference,
-  emitStatusCheck,
+  emitRuntimeTypeCheck,
   nextCName,
   registerEventLoop
 } from '../../../../compiler/c/context.ts'
@@ -228,8 +228,8 @@ export function emitDgramAddressVariableDeclaration(statement: AnyNode, context:
   context.variables.set(statement.name, 'dgram-address')
 
   return [
-    `DgramAddress ${statement.name};`,
-    emitStatusCheck(`DgramSocket(${socketName}).${method}(&${statement.name})`, context)
+    `DgramAddress ${statement.name} = ${socketName}.${method}();`,
+    ...emitDgramThrownCheck(context)
   ]
 }
 
@@ -272,16 +272,9 @@ export function emitDgramNumberVariableDeclaration(statement: AnyNode, context: 
 
   context.variables.set(statement.name, 'number')
 
-  const size = nextCName(context, 'inox_dgram_buffer_size')
-  const statusCall = `DgramSocket(${socketName}).${facadeMethod}(&${size})`
-
   return [
-    `double ${statement.name} = 0;`,
-    '{',
-    `  int ${size} = 0;`,
-    `  ${emitStatusCheck(statusCall, context)}`,
-    `  ${statement.name} = (double)${size};`,
-    '}'
+    `double ${statement.name} = (double)${socketName}.${facadeMethod}();`,
+    ...emitDgramThrownCheck(context)
   ]
 }
 
@@ -300,7 +293,7 @@ export function emitDgramSocketCallStatement(
     isDgramCreateSocketCall(callee.object, context)
   ) {
     const socketName = nextCName(context, 'inox_dgram_socket')
-    const lines = [`inox_dgram_socket* ${socketName} = 0;`]
+    const lines = [`DgramSocket ${socketName};`]
     registerEventLoop(context)
 
     pushDgramLines(
@@ -868,7 +861,7 @@ function emitDgramSocketCreateLines(
   const lines: string[] = []
 
   if (options === null || typeof options === 'undefined' || options.declare !== false) {
-    lines.push(`inox_dgram_socket* ${socketName} = 0;`)
+    lines.push(`DgramSocket ${socketName};`)
   }
 
   let wrapperName = '0'
@@ -877,12 +870,8 @@ function emitDgramSocketCreateLines(
     wrapperName = wrapper.name
   }
 
-  lines.push(
-    emitStatusCheck(
-      `DgramSocket::create(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${socketName})`,
-      context
-    )
-  )
+  lines.push(`${socketName} = DgramSocket::create(${emitEventLoopReference(context)}, ${wrapperName}, 0);`)
+  pushDgramLines(lines, emitDgramThrownCheck(context))
 
   if (wrapper !== null && typeof wrapper !== 'undefined') {
     context.dgramMessageSockets.add(socketName)
@@ -984,9 +973,8 @@ function emitDgramBindLines(
   const lines: string[] = []
 
   pushDgramLines(lines, port.lines)
-  lines.push(
-    emitStatusCheck(`DgramSocket(${socketName}).bind(${host}, (int)(${port.expression}), ${flags})`, context)
-  )
+  lines.push(`${socketName}.bind(${host}, (int)(${port.expression}), ${flags});`)
+  pushDgramLines(lines, emitDgramThrownCheck(context))
 
   context.dgramBoundSockets.add(socketName)
   pushDgramLines(lines, emitDgramMaybeRecvStartLines(socketName, context))
@@ -1052,7 +1040,8 @@ function emitDgramOnLines(socketName: string, args: AnyNode[], context: CFunctio
 
   context.dgramMessageSockets.add(socketName)
 
-  const lines = [emitStatusCheck(`DgramSocket(${socketName}).onMessage(${wrapper.name}, 0)`, context)]
+  const lines = [`${socketName}.onMessage(${wrapper.name}, 0);`]
+  pushDgramLines(lines, emitDgramThrownCheck(context))
 
   pushDgramLines(lines, emitDgramMaybeRecvStartLines(socketName, context))
 
@@ -1106,7 +1095,8 @@ function emitDgramConnectLines(
   const lines: string[] = []
 
   pushDgramLines(lines, port.lines)
-  lines.push(emitStatusCheck(`DgramSocket(${socketName}).connect(${host}, (int)(${port.expression}))`, context))
+  lines.push(`${socketName}.connect(${host}, (int)(${port.expression}));`)
+  pushDgramLines(lines, emitDgramThrownCheck(context))
   pushDgramLines(lines, emitDgramZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -1123,7 +1113,10 @@ function emitDgramDisconnectLines(socketName: string, args: AnyNode[], context: 
     )
   }
 
-  return [emitStatusCheck(`DgramSocket(${socketName}).disconnect()`, context)]
+  return [
+    `${socketName}.disconnect();`,
+    ...emitDgramThrownCheck(context)
+  ]
 }
 
 function emitDgramSocketOptionCallStatement(
@@ -1152,7 +1145,8 @@ function emitDgramSocketOptionCallStatement(
     const lines: string[] = []
 
     pushDgramLines(lines, enabled.lines)
-    lines.push(emitStatusCheck(`DgramSocket(${socketName}).setBroadcast(${enabled.expression} != 0)`, context))
+    lines.push(`${socketName}.setBroadcast(${enabled.expression} != 0);`)
+    pushDgramLines(lines, emitDgramThrownCheck(context))
 
     return lines
   }
@@ -1162,7 +1156,8 @@ function emitDgramSocketOptionCallStatement(
     const lines: string[] = []
 
     pushDgramLines(lines, ttl.lines)
-    lines.push(emitStatusCheck(`DgramSocket(${socketName}).setTTL((int)(${ttl.expression}))`, context))
+    lines.push(`${socketName}.setTTL((int)(${ttl.expression}));`)
+    pushDgramLines(lines, emitDgramThrownCheck(context))
 
     return lines
   }
@@ -1178,7 +1173,8 @@ function emitDgramSocketOptionCallStatement(
     const lines: string[] = []
 
     pushDgramLines(lines, size.lines)
-    lines.push(emitStatusCheck(`DgramSocket(${socketName}).${facadeMethod}((int)(${size.expression}))`, context))
+    lines.push(`${socketName}.${facadeMethod}((int)(${size.expression}));`)
+    pushDgramLines(lines, emitDgramThrownCheck(context))
 
     return lines
   }
@@ -1200,7 +1196,10 @@ function emitDgramSocketOptionCallStatement(
       facadeMethod = 'ref'
     }
 
-    return [emitStatusCheck(`DgramSocket(${socketName}).${facadeMethod}()`, context)]
+    return [
+      `${socketName}.${facadeMethod}();`,
+      ...emitDgramThrownCheck(context)
+    ]
   }
 
   return null
@@ -1213,6 +1212,9 @@ function emitDgramSendLines(
   deps: DgramLoweringDependencies,
   dgramContext: DgramMessageContext | null
 ): string[] {
+  const socketExpression = dgramContext === null || typeof dgramContext === 'undefined'
+    ? socketName
+    : `DgramSocket(${socketName})`
   const lastArg = lastDgramArgument(args)
   let callback: AnyNode | null = null
 
@@ -1231,14 +1233,8 @@ function emitDgramSendLines(
     const lines: string[] = []
 
     pushDgramLines(lines, body.lines)
-    pushDgramLines(
-      lines,
-      emitDgramStatusCheck(
-        `DgramSocket(${socketName}).send(inox::StringView(${body.bytes}, ${body.length}), 0, 0)`,
-        context,
-        dgramContext
-      )
-    )
+    lines.push(`${socketExpression}.send(inox::StringView(${body.bytes}, ${body.length}), 0, 0);`)
+    pushDgramLines(lines, emitDgramThrownCheck(context))
     pushDgramLines(lines, emitDgramZeroArgCallbackLines(callback, context, deps))
 
     return lines
@@ -1292,14 +1288,8 @@ function emitDgramSendLines(
 
   pushDgramLines(lines, body.lines)
   pushDgramLines(lines, port.lines)
-  pushDgramLines(
-    lines,
-    emitDgramStatusCheck(
-      `DgramSocket(${socketName}).send(inox::StringView(${body.bytes}, ${body.length}), ${host}, (int)(${port.expression}))`,
-      context,
-      dgramContext
-    )
-  )
+  lines.push(`${socketExpression}.send(inox::StringView(${body.bytes}, ${body.length}), ${host}, (int)(${port.expression}));`)
+  pushDgramLines(lines, emitDgramThrownCheck(context))
   pushDgramLines(lines, emitDgramZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -1321,7 +1311,7 @@ function emitDgramCloseLines(
     )
   }
 
-  const lines = [`DgramSocket(${socketName}).close();`]
+  const lines = [`${socketName}.close();`]
 
   pushDgramLines(lines, emitDgramZeroArgCallbackLines(args[0], context, deps))
 
@@ -1333,21 +1323,14 @@ function emitDgramMaybeRecvStartLines(socketName: string, context: CFunctionCont
     return []
   }
 
-  return [emitStatusCheck(`DgramSocket(${socketName}).recvStart()`, context)]
+  return [
+    `${socketName}.recvStart();`,
+    ...emitDgramThrownCheck(context)
+  ]
 }
 
-function emitDgramStatusCheck(
-  call: string,
-  context: CFunctionContext,
-  dgramContext: DgramMessageContext | null
-): string[] {
-  if (dgramContext === null || typeof dgramContext === 'undefined') {
-    return [emitStatusCheck(call, context)]
-  }
-
-  const status = nextCName(context, 'inox_dgram_status')
-
-  return ['{', `  inox_status ${status} = ${call};`, `  if (${status} != INOX_OK) return ${status};`, '}']
+function emitDgramThrownCheck(context: CFunctionContext): string[] {
+  return [emitRuntimeTypeCheck('inox::thrown()', context)]
 }
 
 function emitDgramBytesOperand(

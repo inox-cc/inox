@@ -35,30 +35,31 @@ private:
   inox_dgram_socket* socket_;
 
 public:
+  DgramSocket();
   explicit DgramSocket(inox_dgram_socket* socket);
 
-  static inox_status create(inox_loop* loop, DgramRecvFn recv, void* user, inox_dgram_socket** out);
+  static DgramSocket create(inox_loop* loop, DgramRecvFn recv, void* user);
 
-  inox_status bind(const char* host, int port, unsigned int flags = 0) const;
-  inox_status onMessage(DgramRecvFn recv, void* user) const;
-  inox_status onClose(DgramCloseFn close, void* user) const;
-  inox_status connect(const char* host, int port) const;
-  inox_status disconnect() const;
-  inox_status recvStart() const;
-  inox_status recvStop() const;
-  inox_status send(inox::StringView bytes, const char* host, int port) const;
+  void bind(const char* host, int port, unsigned int flags = 0) const;
+  void onMessage(DgramRecvFn recv, void* user) const;
+  void onClose(DgramCloseFn close, void* user) const;
+  void connect(const char* host, int port) const;
+  void disconnect() const;
+  void recvStart() const;
+  void recvStop() const;
+  void send(inox::StringView bytes, const char* host, int port) const;
   void close() const;
-  inox_status address(DgramAddress* out) const;
-  inox_status remoteAddress(DgramAddress* out) const;
-  inox_status localPort(int* out_port) const;
-  inox_status setBroadcast(bool enabled) const;
-  inox_status setTTL(int ttl) const;
-  inox_status getSendBufferSize(int* out_size) const;
-  inox_status setSendBufferSize(int size) const;
-  inox_status getRecvBufferSize(int* out_size) const;
-  inox_status setRecvBufferSize(int size) const;
-  inox_status ref() const;
-  inox_status unref() const;
+  DgramAddress address() const;
+  DgramAddress remoteAddress() const;
+  int localPort() const;
+  void setBroadcast(bool enabled) const;
+  void setTTL(int ttl) const;
+  int getSendBufferSize() const;
+  void setSendBufferSize(int size) const;
+  int getRecvBufferSize() const;
+  void setRecvBufferSize(int size) const;
+  void ref() const;
+  void unref() const;
 };
 
 #endif
