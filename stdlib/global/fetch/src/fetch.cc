@@ -50,9 +50,13 @@ inox_status fetch_backend_response_text(inox_loop* loop, inox_value response, in
 inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out);
 inox_status fetch_backend_headers_has(inox_value headers, const char* name, size_t name_len, int* out);
 inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out);
-inox_status fetch_backend_abort_controller_signal(inox_value controller, inox_value* out);
 inox_status fetch_backend_abort_controller_abort(inox_value controller);
 inox_status fetch_backend_signal_aborted(inox_value signal, int* out);
+
+enum {
+  INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX = 0,
+  INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX = 0
+};
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "inox/net.h"
@@ -112,11 +116,6 @@ enum {
 
 enum {
   INOX_FETCH_HEADERS_RAW_INDEX = 0
-};
-
-enum {
-  INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX = 0,
-  INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX = 0
 };
 
 enum {
@@ -212,7 +211,6 @@ static inox_status fetch_response_new(
   inox_value* out
 );
 static inox_status fetch_headers_new(inox_allocator* allocator, const char* headers, size_t headers_len, inox_value* out);
-static inox_status fetch_headers_raw(inox_value headers, inox_value* out);
 static inox_status fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status);
 static inox_status fetch_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out);
 static inox_status fetch_error_field(
@@ -397,7 +395,7 @@ inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value head
 
   *out = inox_undefined_value();
   inox_value raw = inox_undefined_value();
-  inox_status status = fetch_headers_raw(headers, &raw);
+  inox_status status = inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, &raw);
 
   if (status != INOX_OK) {
     return status;
@@ -430,7 +428,7 @@ inox_status fetch_backend_headers_has(inox_value headers, const char* name, size
 
   *out = 0;
   inox_value raw = inox_undefined_value();
-  inox_status status = fetch_headers_raw(headers, &raw);
+  inox_status status = inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, &raw);
 
   if (status != INOX_OK) {
     return status;
@@ -489,13 +487,9 @@ inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_v
   return INOX_OK;
 }
 
-inox_status fetch_backend_abort_controller_signal(inox_value controller, inox_value* out) {
-  return inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out);
-}
-
 inox_status fetch_backend_abort_controller_abort(inox_value controller) {
   inox_value signal = inox_undefined_value();
-  inox_status status = fetch_backend_abort_controller_signal(controller, &signal);
+  inox_status status = inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, &signal);
 
   if (status == INOX_OK) {
     status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
@@ -1770,10 +1764,6 @@ static inox_status fetch_headers_new(inox_allocator* allocator, const char* head
   return INOX_OK;
 }
 
-static inox_status fetch_headers_raw(inox_value headers, inox_value* out) {
-  return inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, out);
-}
-
 static inox_status fetch_reject_status(inox_loop* loop, inox_promise* promise, inox_status status) {
   if (loop == 0 || promise == 0 || loop->allocator == 0) {
     return INOX_ERR_TYPE;
@@ -1944,17 +1934,6 @@ inox_status fetch_backend_headers_has(inox_value headers, const char* name, size
 
 inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out) {
   (void)allocator;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-  return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status fetch_backend_abort_controller_signal(inox_value controller, inox_value* out) {
-  (void)controller;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
@@ -2242,7 +2221,7 @@ Value fetch_abort_controller() {
 Value fetch_abort_controller_signal(inox_value controller) {
   Value out;
 
-  if (fetch_backend_abort_controller_signal(controller, out.out()) != INOX_OK) {
+  if (inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, out.out()) != INOX_OK) {
     throw_value(Value());
   }
 
