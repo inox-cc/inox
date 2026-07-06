@@ -39,8 +39,6 @@ typedef struct fetch_init {
 
 typedef inox_status (*fetch_done_fn)(void* user, inox_status status, const fetch_response* response);
 
-inox_status fetch_get(inox_loop* loop, const char* url, fetch_done_fn done, void* user);
-inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* init, fetch_done_fn done, void* user);
 inox_status fetch_backend_with_init(
   inox_loop* loop,
   const char* url,
@@ -226,18 +224,6 @@ static inox_status fetch_error_field(
 );
 static const char* fetch_error_message(inox_status status);
 static void fetch_promise_request_free(fetch_promise_request* request);
-
-inox_status fetch_get(inox_loop* loop, const char* url, fetch_done_fn done, void* user) {
-  return fetch_request(loop, url, 0, done, user);
-}
-
-inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* init, fetch_done_fn done, void* user) {
-  if (url == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  return fetch_request_view(loop, url, strlen(url), init, done, user);
-}
 
 static inox_status fetch_request_view(
   inox_loop* loop,
@@ -1896,23 +1882,6 @@ static void fetch_promise_request_free(fetch_promise_request* request) {
 }
 
 #else
-
-inox_status fetch_get(inox_loop* loop, const char* url, fetch_done_fn done, void* user) {
-  (void)loop;
-  (void)url;
-  (void)done;
-  (void)user;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status fetch_request(inox_loop* loop, const char* url, const fetch_init* init, fetch_done_fn done, void* user) {
-  (void)loop;
-  (void)url;
-  (void)init;
-  (void)done;
-  (void)user;
-  return INOX_ERR_UNSUPPORTED;
-}
 
 inox_status fetch_backend_with_init(
   inox_loop* loop,
