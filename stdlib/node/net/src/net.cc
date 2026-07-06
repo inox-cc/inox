@@ -40,6 +40,26 @@ static bool inox_net_copy_host(inox::StringView host, const char* fallback, char
   return true;
 }
 
+static NetError inox_net_error_from_status(inox_status status) {
+  if (status == INOX_OK) {
+    return NetError::None;
+  }
+
+  if (status == INOX_ERR_OOM) {
+    return NetError::OutOfMemory;
+  }
+
+  if (status == INOX_ERR_FIELD) {
+    return NetError::Field;
+  }
+
+  if (status == INOX_ERR_UNSUPPORTED) {
+    return NetError::Unsupported;
+  }
+
+  return NetError::Type;
+}
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "loop-libuv-internal.h"
 
@@ -936,7 +956,7 @@ static void inox_net_server_report_status(inox_net_server* server, inox_status s
   }
 
   if (server->error != 0) {
-    server->error(server->error_user, NetServer(server), status);
+    server->error(server->error_user, NetServer(server), inox_net_error_from_status(status));
 
     if (inox::thrown()) {
       inox_libuv_loop_report_status(server->loop, INOX_ERR_TYPE);
@@ -954,7 +974,7 @@ static void inox_net_socket_report_status(inox_net_socket* socket, inox_status s
   }
 
   if (socket->error != 0) {
-    socket->error(socket->error_user, NetSocket(socket), status);
+    socket->error(socket->error_user, NetSocket(socket), inox_net_error_from_status(status));
 
     if (inox::thrown()) {
       inox_libuv_loop_report_status(socket->loop, INOX_ERR_TYPE);
@@ -1018,7 +1038,7 @@ static void inox_net_connect_cb(uv_connect_t* request, int status) {
   inox_libuv_loop_release_request(socket->loop);
 
   if (connect != 0) {
-    connect(socket->user, NetSocket(socket), connect_status);
+    connect(socket->user, NetSocket(socket), inox_net_error_from_status(connect_status));
 
     if (inox::thrown()) {
       inox_net_socket_report_status(socket, INOX_ERR_TYPE);
@@ -1119,7 +1139,7 @@ static void inox_net_write_cb(uv_write_t* request, int status) {
   inox_libuv_loop_release_request(socket->loop);
 
   if (write->callback != 0) {
-    write->callback(write->user, NetSocket(socket), status == 0 ? INOX_OK : INOX_ERR_FIELD);
+    write->callback(write->user, NetSocket(socket), status == 0 ? NetError::None : NetError::Field);
 
     if (inox::thrown()) {
       inox_net_socket_report_status(socket, INOX_ERR_TYPE);

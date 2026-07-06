@@ -159,7 +159,7 @@ static inox_status fetch_append_size(char* out, size_t out_size, size_t* offset,
 static int fetch_header_name_equals(const char* name, size_t name_len, const char* expected);
 static int fetch_headers_include(const FetchNativeHeader* headers, size_t header_count, const char* name);
 static inox_status fetch_redirect_mode_from_init(const FetchNativeInit* init, int* out);
-static void fetch_on_connect(void* user, NetSocket socket, inox_status status);
+static void fetch_on_connect(void* user, NetSocket socket, NetError error);
 static void fetch_on_data(void* user, NetSocket socket, inox::StringView bytes);
 static void fetch_on_close(void* user, NetSocket socket);
 static inox_status fetch_on_tls_connect(void* user, inox_tls_client* client, inox_status status);
@@ -928,8 +928,29 @@ static inox_status fetch_redirect_mode_from_init(const FetchNativeInit* init, in
   return INOX_ERR_UNSUPPORTED;
 }
 
-static void fetch_on_connect(void* user, NetSocket socket, inox_status status) {
+static inox_status fetch_status_from_net_error(NetError error) {
+  if (error == NetError::None) {
+    return INOX_OK;
+  }
+
+  if (error == NetError::OutOfMemory) {
+    return INOX_ERR_OOM;
+  }
+
+  if (error == NetError::Unsupported) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  if (error == NetError::Field) {
+    return INOX_ERR_FIELD;
+  }
+
+  return INOX_ERR_TYPE;
+}
+
+static void fetch_on_connect(void* user, NetSocket socket, NetError error) {
   FetchOperation* request = (FetchOperation*)user;
+  inox_status status = fetch_status_from_net_error(error);
 
   if (status != INOX_OK) {
     (void)fetch_on_transport_connect(request, status);

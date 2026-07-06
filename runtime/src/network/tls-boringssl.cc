@@ -27,7 +27,7 @@ struct inox_tls_client {
 
 static inox_status inox_tls_configure_verify(SSL_CTX* ctx);
 static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername);
-static void inox_tls_on_tcp_connect(void* user, NetSocket socket, inox_status status);
+static void inox_tls_on_tcp_connect(void* user, NetSocket socket, NetError error);
 static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes);
 static void inox_tls_on_tcp_close(void* user, NetSocket socket);
 static inox_status inox_tls_drive_handshake(inox_tls_client* client);
@@ -276,12 +276,34 @@ static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char
   return INOX_OK;
 }
 
-static void inox_tls_on_tcp_connect(void* user, NetSocket socket, inox_status status) {
+static inox_status inox_tls_status_from_net_error(NetError error) {
+  if (error == NetError::None) {
+    return INOX_OK;
+  }
+
+  if (error == NetError::OutOfMemory) {
+    return INOX_ERR_OOM;
+  }
+
+  if (error == NetError::Unsupported) {
+    return INOX_ERR_UNSUPPORTED;
+  }
+
+  if (error == NetError::Field) {
+    return INOX_ERR_FIELD;
+  }
+
+  return INOX_ERR_TYPE;
+}
+
+static void inox_tls_on_tcp_connect(void* user, NetSocket socket, NetError error) {
   inox_tls_client* client = (inox_tls_client*)user;
 
   if (client == 0) {
     return;
   }
+
+  inox_status status = inox_tls_status_from_net_error(error);
 
   if (status != INOX_OK) {
     (void)inox_tls_fail_async(client, status);

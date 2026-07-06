@@ -18,15 +18,23 @@ struct NetAddress {
 class NetServer;
 class NetSocket;
 
+enum class NetError {
+  None,
+  Type,
+  OutOfMemory,
+  Field,
+  Unsupported
+};
+
 typedef void (*NetConnectionFn)(void* user, NetServer server, NetSocket socket);
 typedef void (*NetServerFn)(void* user, NetServer server);
-typedef void (*NetServerErrorFn)(void* user, NetServer server, inox_status status);
-typedef void (*NetConnectFn)(void* user, NetSocket socket, inox_status status);
+typedef void (*NetServerErrorFn)(void* user, NetServer server, NetError error);
+typedef void (*NetConnectFn)(void* user, NetSocket socket, NetError error);
 typedef void (*NetDataFn)(void* user, NetSocket socket, inox::StringView bytes);
 typedef void (*NetCloseFn)(void* user, NetSocket socket);
 typedef void (*NetSocketFn)(void* user, NetSocket socket);
-typedef void (*NetSocketErrorFn)(void* user, NetSocket socket, inox_status status);
-typedef void (*NetSocketWriteFn)(void* user, NetSocket socket, inox_status status);
+typedef void (*NetSocketErrorFn)(void* user, NetSocket socket, NetError error);
+typedef void (*NetSocketWriteFn)(void* user, NetSocket socket, NetError error);
 
 #ifdef __cplusplus
 
