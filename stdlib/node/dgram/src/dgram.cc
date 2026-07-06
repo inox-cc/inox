@@ -299,7 +299,64 @@ static void inox_dgram_send_bytes(inox_dgram_socket* socket, inox::StringView by
 }
 
 void DgramSocket::send(inox::StringView bytes) const {
-  inox_dgram_send_bytes(socket_, bytes, 0);
+  inox_dgram_socket* socket = socket_;
+
+  if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
+  }
+
+  inox_allocator* allocator = socket->allocator;
+  DgramSendRequest* request =
+    (DgramSendRequest*)allocator->alloc(allocator->user, sizeof(DgramSendRequest), alignof(DgramSendRequest));
+
+  if (request == 0) {
+    inox_dgram_throw_failed("TypeError: DgramSocket send allocation failed");
+    return;
+  }
+
+  memset(request, 0, sizeof(DgramSendRequest));
+  request->socket = socket;
+  request->length = bytes.len;
+
+  if (bytes.len != 0) {
+    request->bytes = (char*)allocator->alloc(allocator->user, bytes.len, alignof(char));
+
+    if (request->bytes == 0) {
+      allocator->free(allocator->user, request, sizeof(DgramSendRequest), alignof(DgramSendRequest));
+      inox_dgram_throw_failed("TypeError: DgramSocket send allocation failed");
+      return;
+    }
+
+    memcpy(request->bytes, bytes.bytes, bytes.len);
+  }
+
+  inox_status status = inox_libuv_loop_retain_request(socket->loop);
+
+  if (status != INOX_OK) {
+    if (request->bytes != 0) {
+      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
+    }
+
+    allocator->free(allocator->user, request, sizeof(DgramSendRequest), alignof(DgramSendRequest));
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
+  }
+
+  uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)bytes.len);
+  request->request.data = request;
+
+  if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, 0, inox_dgram_send_cb) != 0) {
+    inox_libuv_loop_release_request(socket->loop);
+
+    if (request->bytes != 0) {
+      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
+    }
+
+    allocator->free(allocator->user, request, sizeof(DgramSendRequest), alignof(DgramSendRequest));
+    inox_dgram_throw_failed("TypeError: DgramSocket.send failed");
+    return;
+  }
 }
 
 void DgramSocket::send(inox::StringView bytes, inox::StringView host, int port) const {
