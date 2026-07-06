@@ -11,21 +11,21 @@ NetSocket::NetSocket(inox_net_socket* socket) : socket_(socket) {}
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct inox_net_write_request {
+struct NetWriteRequest {
   uv_write_t request;
   inox_net_socket* socket;
   char* bytes;
-  size_t len;
+  size_t length;
   int close_after;
   NetSocketWriteFn callback;
   void* user;
-} inox_net_write_request;
+};
 
-typedef struct inox_net_connect_request {
+struct NetConnectRequest {
   uv_connect_t request;
   inox_net_socket* socket;
   NetConnectFn connect;
-} inox_net_connect_request;
+};
 
 struct inox_net_server {
   inox_loop* loop;
@@ -290,15 +290,15 @@ inox_status NetSocket::connect(
   }
 
   inox_allocator* allocator = loop->allocator;
-  inox_net_connect_request* request =
-    (inox_net_connect_request*)allocator->alloc(allocator->user, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
+  NetConnectRequest* request =
+    (NetConnectRequest*)allocator->alloc(allocator->user, sizeof(NetConnectRequest), alignof(NetConnectRequest));
 
   if (request == 0) {
     NetSocket(socket).close();
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(inox_net_connect_request));
+  memset(request, 0, sizeof(NetConnectRequest));
   request->socket = socket;
   request->connect = connect;
   request->request.data = request;
@@ -307,7 +307,7 @@ inox_status NetSocket::connect(
   status = inox_net_resolve_ip4_addr(loop, host, port, &addr);
 
   if (status != INOX_OK) {
-    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
+    allocator->free(allocator->user, request, sizeof(NetConnectRequest), alignof(NetConnectRequest));
     NetSocket(socket).close();
     return status;
   }
@@ -315,7 +315,7 @@ inox_status NetSocket::connect(
   status = inox_libuv_loop_retain_request(loop);
 
   if (status != INOX_OK) {
-    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
+    allocator->free(allocator->user, request, sizeof(NetConnectRequest), alignof(NetConnectRequest));
     NetSocket(socket).close();
     return status;
   }
@@ -324,7 +324,7 @@ inox_status NetSocket::connect(
 
   if (uv_tcp_connect(&request->request, &socket->handle, (const struct sockaddr*)&addr, inox_net_connect_cb) != 0) {
     inox_libuv_loop_release_request(loop);
-    allocator->free(allocator->user, request, sizeof(inox_net_connect_request), alignof(inox_net_connect_request));
+    allocator->free(allocator->user, request, sizeof(NetConnectRequest), alignof(NetConnectRequest));
     NetSocket(socket).close();
     return INOX_ERR_FIELD;
   }
@@ -597,16 +597,16 @@ inox_status NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, 
   }
 
   inox_allocator* allocator = socket->allocator;
-  inox_net_write_request* request =
-    (inox_net_write_request*)allocator->alloc(allocator->user, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+  NetWriteRequest* request =
+    (NetWriteRequest*)allocator->alloc(allocator->user, sizeof(NetWriteRequest), alignof(NetWriteRequest));
 
   if (request == 0) {
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(inox_net_write_request));
+  memset(request, 0, sizeof(NetWriteRequest));
   request->socket = socket;
-  request->len = bytes.len;
+  request->length = bytes.len;
   request->close_after = 0;
   request->callback = callback;
   request->user = user;
@@ -615,7 +615,7 @@ inox_status NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, 
     request->bytes = (char*)allocator->alloc(allocator->user, bytes.len, alignof(char));
 
     if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+      allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
       return INOX_ERR_OOM;
     }
 
@@ -629,7 +629,7 @@ inox_status NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, 
       allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
     return status;
   }
 
@@ -643,7 +643,7 @@ inox_status NetSocket::write(inox::StringView bytes, NetSocketWriteFn callback, 
       allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
     return INOX_ERR_FIELD;
   }
 
@@ -658,16 +658,16 @@ inox_status NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, vo
   }
 
   inox_allocator* allocator = socket->allocator;
-  inox_net_write_request* request =
-    (inox_net_write_request*)allocator->alloc(allocator->user, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+  NetWriteRequest* request =
+    (NetWriteRequest*)allocator->alloc(allocator->user, sizeof(NetWriteRequest), alignof(NetWriteRequest));
 
   if (request == 0) {
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(inox_net_write_request));
+  memset(request, 0, sizeof(NetWriteRequest));
   request->socket = socket;
-  request->len = bytes.len;
+  request->length = bytes.len;
   request->close_after = 1;
   request->callback = callback;
   request->user = user;
@@ -676,7 +676,7 @@ inox_status NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, vo
     request->bytes = (char*)allocator->alloc(allocator->user, bytes.len, alignof(char));
 
     if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+      allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
       return INOX_ERR_OOM;
     }
 
@@ -690,7 +690,7 @@ inox_status NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, vo
       allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
     return status;
   }
 
@@ -704,7 +704,7 @@ inox_status NetSocket::end(inox::StringView bytes, NetSocketWriteFn callback, vo
       allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
     }
 
-    allocator->free(allocator->user, request, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+    allocator->free(allocator->user, request, sizeof(NetWriteRequest), alignof(NetWriteRequest));
     return INOX_ERR_FIELD;
   }
 
@@ -926,7 +926,7 @@ static void inox_net_connection_cb(uv_stream_t* server_handle, int status) {
 }
 
 static void inox_net_connect_cb(uv_connect_t* request, int status) {
-  inox_net_connect_request* connect_request = request == 0 ? 0 : (inox_net_connect_request*)request->data;
+  NetConnectRequest* connect_request = request == 0 ? 0 : (NetConnectRequest*)request->data;
 
   if (connect_request == 0 || connect_request->socket == 0) {
     return;
@@ -969,8 +969,8 @@ static void inox_net_connect_cb(uv_connect_t* request, int status) {
   socket->allocator->free(
     socket->allocator->user,
     connect_request,
-    sizeof(inox_net_connect_request),
-    alignof(inox_net_connect_request)
+    sizeof(NetConnectRequest),
+    alignof(NetConnectRequest)
   );
 }
 
@@ -1022,7 +1022,7 @@ static void inox_net_read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t*
 }
 
 static void inox_net_write_cb(uv_write_t* request, int status) {
-  inox_net_write_request* write = request == 0 ? 0 : (inox_net_write_request*)request->data;
+  NetWriteRequest* write = request == 0 ? 0 : (NetWriteRequest*)request->data;
 
   if (write == 0 || write->socket == 0) {
     return;
@@ -1033,7 +1033,7 @@ static void inox_net_write_cb(uv_write_t* request, int status) {
   if (status != 0) {
     inox_net_socket_report_status(socket, INOX_ERR_FIELD);
   } else {
-    socket->bytes_written += write->len;
+    socket->bytes_written += write->length;
   }
 
   inox_libuv_loop_release_request(socket->loop);
@@ -1059,10 +1059,10 @@ static void inox_net_write_cb(uv_write_t* request, int status) {
   }
 
   if (write->bytes != 0) {
-    socket->allocator->free(socket->allocator->user, write->bytes, write->len, alignof(char));
+    socket->allocator->free(socket->allocator->user, write->bytes, write->length, alignof(char));
   }
 
-  socket->allocator->free(socket->allocator->user, write, sizeof(inox_net_write_request), alignof(inox_net_write_request));
+  socket->allocator->free(socket->allocator->user, write, sizeof(NetWriteRequest), alignof(NetWriteRequest));
 }
 
 static void inox_net_server_close_cb(uv_handle_t* handle) {
