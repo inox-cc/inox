@@ -167,7 +167,6 @@ static void inox_fs_throw_status(inox_status status);
 static void inox_fs_throw_status_if_needed(inox_status status);
 static inox_status inox_fs_status_from_thrown(void);
 static inox_status inox_fs_reject_thrown(inox_promise* promise);
-static inox_status inox_fs_copy_binary_result(Uint8Array bytes, inox_value* out);
 static const char* inox_fs_error_code(inox_status status);
 static const char* inox_fs_error_message(inox_status status);
 static void inox_fs_request_finalizer(void* context);
@@ -1697,7 +1696,14 @@ inox_fs_libuv_read_file_bytes(void* user, inox_allocator* allocator, const char*
   inox_status status = inox_fs_libuv_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    status = inox_fs_copy_binary_result(Uint8Array::from((const uint8_t*)buffer, byte_len), out);
+    Uint8Array bytes = Uint8Array::from((const uint8_t*)buffer, byte_len);
+
+    if (inox::thrown()) {
+      inox::take_exception();
+      status = INOX_ERR_TYPE;
+    } else {
+      status = bytes.valid() ? bytes.copy_to(out) : INOX_ERR_TYPE;
+    }
   }
 
   free(buffer);
@@ -2650,9 +2656,14 @@ static inox_status inox_fs_libuv_settle(FsLibuvRequest* request, inox_status sta
     auto value = inox::String(request->data == 0 ? "" : request->data, request->data_len);
     status = value.valid() ? value.copy_to(&result) : INOX_ERR_OOM;
   } else if (request->kind == INOX_FS_REQUEST_READ_FILE_BYTES) {
-    status = inox_fs_copy_binary_result(
-      Uint8Array::from((const uint8_t*)request->data, request->data_len), &result
-    );
+    Uint8Array bytes = Uint8Array::from((const uint8_t*)request->data, request->data_len);
+
+    if (inox::thrown()) {
+      inox::take_exception();
+      status = INOX_ERR_TYPE;
+    } else {
+      status = bytes.valid() ? bytes.copy_to(&result) : INOX_ERR_TYPE;
+    }
   }
 
   return inox_fs_libuv_settle_value(request, status, result);
@@ -3030,7 +3041,14 @@ inox_fs_default_read_file_bytes(void* user, inox_allocator* allocator, const cha
   inox_status status = inox_fs_default_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    status = inox_fs_copy_binary_result(Uint8Array::from((const uint8_t*)buffer, byte_len), out);
+    Uint8Array bytes = Uint8Array::from((const uint8_t*)buffer, byte_len);
+
+    if (inox::thrown()) {
+      inox::take_exception();
+      status = INOX_ERR_TYPE;
+    } else {
+      status = bytes.valid() ? bytes.copy_to(out) : INOX_ERR_TYPE;
+    }
   }
 
   free(buffer);
@@ -4143,25 +4161,6 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   return inox_promise_resolve(request->promise, inox_undefined_value());
-}
-
-static inox_status inox_fs_copy_binary_result(Uint8Array bytes, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
-  if (inox::thrown()) {
-    inox::take_exception();
-    return INOX_ERR_TYPE;
-  }
-
-  if (!bytes.valid()) {
-    return INOX_ERR_TYPE;
-  }
-
-  return bytes.copy_to(out);
 }
 
 static inox_status inox_fs_reject_status(inox_loop* loop, inox_promise* promise, inox_status status) {
