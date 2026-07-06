@@ -2,6 +2,14 @@
 
 #include <string.h>
 
+HttpServer::HttpServer() : server_(0) {}
+
+HttpServer::HttpServer(inox_http_server* server) : server_(server) {}
+
+inox_http_server* HttpServer::raw() const {
+  return server_;
+}
+
 HttpRequest::HttpRequest(const inox_http_request* request) : request_(request) {}
 
 bool HttpRequest::methodEquals(inox::StringView method) const {
@@ -88,17 +96,12 @@ static inox_status inox_http_parse_headers(
 static const char* inox_http_find_header_end(const char* bytes, size_t len);
 static const char* inox_http_status_text(int status);
 
-inox_status inox_http_server_new(
-  inox_loop* loop,
-  inox_http_handler_fn handler,
-  void* user,
-  inox_http_server** out
-) {
-  if (loop == 0 || loop->allocator == 0 || out == 0) {
+inox_status HttpServer::create(inox_loop* loop, inox_http_handler_fn handler, void* user) {
+  if (loop == 0 || loop->allocator == 0) {
     return INOX_ERR_TYPE;
   }
 
-  *out = 0;
+  server_ = 0;
   inox_allocator* allocator = loop->allocator;
   inox_http_server* server =
     (inox_http_server*)allocator->alloc(allocator->user, sizeof(inox_http_server), alignof(inox_http_server));
@@ -120,11 +123,13 @@ inox_status inox_http_server_new(
     return status;
   }
 
-  *out = server;
+  server_ = server;
   return INOX_OK;
 }
 
-inox_status inox_http_server_listen(inox_http_server* server, const char* host, int port, int backlog) {
+inox_status HttpServer::listen(const char* host, int port, int backlog) const {
+  inox_http_server* server = server_;
+
   if (server == 0) {
     return INOX_ERR_TYPE;
   }
@@ -132,7 +137,13 @@ inox_status inox_http_server_listen(inox_http_server* server, const char* host, 
   return inox_net_server_listen(server->net_server, host, port, backlog);
 }
 
-inox_status inox_http_server_local_port(inox_http_server* server, int* out_port) {
+inox_status HttpServer::listen(inox::StringView host, int port, int backlog) const {
+  return listen(host.bytes, port, backlog);
+}
+
+inox_status HttpServer::localPort(int* out_port) const {
+  inox_http_server* server = server_;
+
   if (server == 0) {
     return INOX_ERR_TYPE;
   }
@@ -140,7 +151,9 @@ inox_status inox_http_server_local_port(inox_http_server* server, int* out_port)
   return inox_net_server_local_port(server->net_server, out_port);
 }
 
-inox_status inox_http_server_on_request(inox_http_server* server, inox_http_handler_fn handler, void* user) {
+inox_status HttpServer::onRequest(inox_http_handler_fn handler, void* user) const {
+  inox_http_server* server = server_;
+
   if (server == 0 || handler == 0) {
     return INOX_ERR_TYPE;
   }
@@ -150,7 +163,9 @@ inox_status inox_http_server_on_request(inox_http_server* server, inox_http_hand
   return INOX_OK;
 }
 
-void inox_http_server_close(inox_http_server* server) {
+void HttpServer::close() const {
+  inox_http_server* server = server_;
+
   if (server == 0) {
     return;
   }
@@ -856,34 +871,29 @@ struct inox_http_response {
   int unused;
 };
 
-inox_status inox_http_server_new(
-  inox_loop* loop,
-  inox_http_handler_fn handler,
-  void* user,
-  inox_http_server** out
-) {
+inox_status HttpServer::create(inox_loop* loop, inox_http_handler_fn handler, void* user) {
   (void)loop;
   (void)handler;
   (void)user;
 
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
+  server_ = 0;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_server_listen(inox_http_server* server, const char* host, int port, int backlog) {
-  (void)server;
+inox_status HttpServer::listen(const char* host, int port, int backlog) const {
+  (void)server_;
   (void)host;
   (void)port;
   (void)backlog;
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_server_local_port(inox_http_server* server, int* out_port) {
-  (void)server;
+inox_status HttpServer::listen(inox::StringView host, int port, int backlog) const {
+  return listen(host.bytes, port, backlog);
+}
+
+inox_status HttpServer::localPort(int* out_port) const {
+  (void)server_;
 
   if (out_port == 0) {
     return INOX_ERR_TYPE;
@@ -893,15 +903,15 @@ inox_status inox_http_server_local_port(inox_http_server* server, int* out_port)
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status inox_http_server_on_request(inox_http_server* server, inox_http_handler_fn handler, void* user) {
-  (void)server;
+inox_status HttpServer::onRequest(inox_http_handler_fn handler, void* user) const {
+  (void)server_;
   (void)handler;
   (void)user;
   return INOX_ERR_UNSUPPORTED;
 }
 
-void inox_http_server_close(inox_http_server* server) {
-  (void)server;
+void HttpServer::close() const {
+  (void)server_;
 }
 
 inox_status HttpResponse::setStatus(int status) const {

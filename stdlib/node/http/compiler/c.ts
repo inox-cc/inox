@@ -1440,7 +1440,7 @@ function emitHttpServerCreateLines(
   const lines: string[] = []
 
   if (options === null || typeof options === 'undefined' || options.declare !== false) {
-    lines.push(`inox_http_server* ${serverName} = 0;`)
+    lines.push(`HttpServer ${serverName};`)
   }
 
   let wrapperName = '0'
@@ -1451,7 +1451,7 @@ function emitHttpServerCreateLines(
 
   lines.push(
     emitStatusCheck(
-      `inox_http_server_new(${emitEventLoopReference(context)}, ${wrapperName}, 0, &${serverName})`,
+      `${serverName}.create(${emitEventLoopReference(context)}, ${wrapperName}, 0)`,
       context
     )
   )
@@ -1504,7 +1504,7 @@ function emitHttpServerListenLines(
 
   pushHttpLines(lines, port.lines)
   lines.push(
-    emitStatusCheck(`inox_http_server_listen(${serverName}, ${host}, (int)(${port.expression}), 128)`, context)
+    emitStatusCheck(`${serverName}.listen(${host}, (int)(${port.expression}), 128)`, context)
   )
   pushHttpLines(lines, emitHttpZeroArgCallbackLines(callback, context, deps))
 
@@ -1566,7 +1566,7 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     return []
   }
 
-  return [emitStatusCheck(`inox_http_server_on_request(${serverName}, ${wrapper.name}, 0)`, context)]
+  return [emitStatusCheck(`${serverName}.onRequest(${wrapper.name}, 0)`, context)]
 }
 
 function emitHttpServerCloseLines(
@@ -1585,7 +1585,7 @@ function emitHttpServerCloseLines(
     )
   }
 
-  const lines = [`inox_http_server_close(${serverName});`]
+  const lines = [`${serverName}.close();`]
 
   pushHttpLines(lines, emitHttpZeroArgCallbackLines(args[0], context, deps))
 

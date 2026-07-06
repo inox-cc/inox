@@ -35,18 +35,24 @@ typedef inox_status (*inox_http_handler_fn)(
   inox_http_response* response
 );
 
-inox_status inox_http_server_new(
-  inox_loop* loop,
-  inox_http_handler_fn handler,
-  void* user,
-  inox_http_server** out
-);
-inox_status inox_http_server_listen(inox_http_server* server, const char* host, int port, int backlog);
-inox_status inox_http_server_local_port(inox_http_server* server, int* out_port);
-inox_status inox_http_server_on_request(inox_http_server* server, inox_http_handler_fn handler, void* user);
-void inox_http_server_close(inox_http_server* server);
-
 #ifdef __cplusplus
+
+class HttpServer {
+private:
+  inox_http_server* server_;
+
+public:
+  HttpServer();
+  explicit HttpServer(inox_http_server* server);
+
+  inox_http_server* raw() const;
+  inox_status create(inox_loop* loop, inox_http_handler_fn handler, void* user);
+  inox_status listen(const char* host, int port, int backlog) const;
+  inox_status listen(inox::StringView host, int port, int backlog) const;
+  inox_status localPort(int* out_port) const;
+  inox_status onRequest(inox_http_handler_fn handler, void* user) const;
+  void close() const;
+};
 
 class HttpRequest {
 private:
