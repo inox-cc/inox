@@ -6,10 +6,9 @@
 #include "inox/value.h"
 
 #ifdef __cplusplus
-extern "C" {
-#endif
+namespace inox {
 
-typedef struct inox_debug_memory_stats {
+struct DebugMemoryStats {
   size_t alloc_count;
   size_t realloc_count;
   size_t free_count;
@@ -24,26 +23,30 @@ typedef struct inox_debug_memory_stats {
   size_t live_weak_cells;
   size_t oom_fail_after;
   size_t oom_failure_count;
-} inox_debug_memory_stats;
+};
 
-inox_allocator inox_debug_allocator(inox_allocator* inner);
-void inox_debug_memory_snapshot(inox_debug_memory_stats* out);
-void inox_debug_memory_reset(void);
-void inox_debug_memory_reset_peak(void);
-void inox_debug_memory_set_oom_after(size_t successful_allocations);
-void inox_debug_memory_clear_oom(void);
+class DebugMemory {
+public:
+  inox_allocator allocator(inox_allocator* inner) const;
+  DebugMemoryStats snapshot() const;
+  void reset() const;
+  void resetPeak() const;
+  void setOomAfter(size_t successful_allocations) const;
+  void clearOom() const;
 
-void inox_debug_memory_record_ref_created(inox_ref_kind kind);
-void inox_debug_memory_record_ref_destroyed(inox_ref_kind kind);
-void inox_debug_memory_record_retain(void);
-void inox_debug_memory_record_release(void);
-void inox_debug_memory_record_promise_created(void);
-void inox_debug_memory_record_promise_destroyed(void);
-void inox_debug_memory_record_weak_cell_created(void);
-void inox_debug_memory_record_weak_cell_destroyed(void);
+  void recordRefCreated(inox_ref_kind kind) const;
+  void recordRefDestroyed(inox_ref_kind kind) const;
+  void recordRetain() const;
+  void recordRelease() const;
+  void recordPromiseCreated() const;
+  void recordPromiseDestroyed() const;
+  void recordWeakCellCreated() const;
+  void recordWeakCellDestroyed() const;
+};
 
-#ifdef __cplusplus
-}
+extern DebugMemory debugMemory;
+
+} // namespace inox
 #endif
 
 #endif

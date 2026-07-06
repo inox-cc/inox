@@ -35,7 +35,7 @@ static inox_string* inox_string_alloc_storage(inox_allocator* allocator, size_t 
   inox_ref_init_weak(&string->header);
   string->len = len;
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_STRING);
+  inox::debugMemory.recordRefCreated(INOX_REF_STRING);
 #endif
 
   return string;
@@ -75,7 +75,7 @@ inox_status inox_string_from_literal(inox_allocator* allocator, const char* byte
   out->tag = INOX_TAG_STRING;
   out->as.ref = &string->header;
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_STRING);
+  inox::debugMemory.recordRefCreated(INOX_REF_STRING);
 #endif
 
   return INOX_OK;
@@ -200,7 +200,7 @@ inox_status inox_string_from_format(inox_allocator* allocator, inox_value* out, 
   out->tag = INOX_TAG_STRING;
   out->as.ref = &string->header;
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_STRING);
+  inox::debugMemory.recordRefCreated(INOX_REF_STRING);
 #endif
 
   return INOX_OK;

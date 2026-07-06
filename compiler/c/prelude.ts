@@ -338,12 +338,12 @@ export function emitCPrelude(
 
   if (needsRuntime) {
     if (needsDebugMemoryRuntime) {
-      lines.push('static int inox_debug_memory_allocator_initialized = 0;')
+      lines.push('static int inox_debugMemoryAllocatorInitialized = 0;')
       lines.push('')
-      lines.push('static void inox_debug_memory_ensure_allocator(void) {')
-      lines.push('  if (inox_debug_memory_allocator_initialized) return;')
-      lines.push('  inox_debug_memory_allocator_initialized = 1;')
-      lines.push('  inox_default_allocator = inox_debug_allocator(&inox_default_base_allocator);')
+      lines.push('static void inox_ensure_debug_memory_allocator(void) {')
+      lines.push('  if (inox_debugMemoryAllocatorInitialized) return;')
+      lines.push('  inox_debugMemoryAllocatorInitialized = 1;')
+      lines.push('  inox_default_allocator = inox::debugMemory.allocator(&inox_default_base_allocator);')
       lines.push('}')
       lines.push('')
     }

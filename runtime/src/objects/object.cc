@@ -102,7 +102,7 @@ inox_status inox_object_new(inox_allocator* allocator, const inox_shape* shape, 
   out->tag = INOX_TAG_OBJECT;
   out->as.ref = &object->header;
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_OBJECT);
+  inox::debugMemory.recordRefCreated(INOX_REF_OBJECT);
 #endif
 
   return INOX_OK;

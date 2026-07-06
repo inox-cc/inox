@@ -203,7 +203,7 @@ Map Map::create() {
   out.tag = INOX_TAG_MAP;
   out.as.ref = &map->header;
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_MAP);
+  inox::debugMemory.recordRefCreated(INOX_REF_MAP);
 #endif
 
   return Map(inox::adopt_value, out);
@@ -822,7 +822,7 @@ Set Set::create() {
   out.tag = INOX_TAG_SET;
   out.as.ref = &set->header;
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_SET);
+  inox::debugMemory.recordRefCreated(INOX_REF_SET);
 #endif
 
   return Set(inox::adopt_value, out);
@@ -1122,7 +1122,7 @@ static inox_array* inox_array_alloc_storage(inox_allocator* allocator, size_t le
   }
 
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_ARRAY);
+  inox::debugMemory.recordRefCreated(INOX_REF_ARRAY);
 #endif
 
   return array;

@@ -1,5 +1,5 @@
 #ifdef INOX_DEBUG_MEMORY
-#include "inox/debug.h"
+#include "inox/debug_bridge.h"
 #endif
 #include "inox/promise.h"
 

@@ -1,9 +1,10 @@
 #include <stdbool.h>
 #include <string.h>
 #include "inox/debug.h"
+#include "inox/debug_bridge.h"
 
 #ifdef INOX_DEBUG_MEMORY
-static inox_debug_memory_stats inox_debug_stats;
+static inox::DebugMemoryStats inox_debug_stats;
 static bool inox_debug_oom_enabled = false;
 
 static void inox_debug_update_peak(void) {
@@ -99,7 +100,11 @@ static void inox_debug_free(void* user, void* ptr, size_t size, size_t align) {
 }
 #endif
 
-inox_allocator inox_debug_allocator(inox_allocator* inner) {
+namespace inox {
+
+DebugMemory debugMemory;
+
+inox_allocator DebugMemory::allocator(inox_allocator* inner) const {
 #ifdef INOX_DEBUG_MEMORY
   inox_allocator allocator = { inner, inox_debug_alloc, inox_debug_realloc, inox_debug_free };
 
@@ -115,32 +120,31 @@ inox_allocator inox_debug_allocator(inox_allocator* inner) {
 #endif
 }
 
-void inox_debug_memory_snapshot(inox_debug_memory_stats* out) {
-  if (out == 0) {
-    return;
-  }
-
+DebugMemoryStats DebugMemory::snapshot() const {
+  DebugMemoryStats out;
 #ifdef INOX_DEBUG_MEMORY
-  *out = inox_debug_stats;
+  out = inox_debug_stats;
 #else
-  memset(out, 0, sizeof(*out));
+  memset(&out, 0, sizeof(out));
 #endif
+
+  return out;
 }
 
-void inox_debug_memory_reset(void) {
+void DebugMemory::reset() const {
 #ifdef INOX_DEBUG_MEMORY
   memset(&inox_debug_stats, 0, sizeof(inox_debug_stats));
   inox_debug_oom_enabled = false;
 #endif
 }
 
-void inox_debug_memory_reset_peak(void) {
+void DebugMemory::resetPeak() const {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_stats.peak_live_bytes = inox_debug_stats.live_bytes;
 #endif
 }
 
-void inox_debug_memory_set_oom_after(size_t successful_allocations) {
+void DebugMemory::setOomAfter(size_t successful_allocations) const {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_stats.oom_fail_after = successful_allocations;
   inox_debug_oom_enabled = true;
@@ -149,14 +153,14 @@ void inox_debug_memory_set_oom_after(size_t successful_allocations) {
 #endif
 }
 
-void inox_debug_memory_clear_oom(void) {
+void DebugMemory::clearOom() const {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_oom_enabled = false;
   inox_debug_stats.oom_fail_after = 0;
 #endif
 }
 
-void inox_debug_memory_record_ref_created(inox_ref_kind kind) {
+void DebugMemory::recordRefCreated(inox_ref_kind kind) const {
 #ifdef INOX_DEBUG_MEMORY
   if ((size_t)kind < INOX_REF_KIND_COUNT) {
     inox_debug_stats.live_refs_by_kind[kind] += 1;
@@ -170,7 +174,7 @@ void inox_debug_memory_record_ref_created(inox_ref_kind kind) {
 #endif
 }
 
-void inox_debug_memory_record_ref_destroyed(inox_ref_kind kind) {
+void DebugMemory::recordRefDestroyed(inox_ref_kind kind) const {
 #ifdef INOX_DEBUG_MEMORY
   if ((size_t)kind < INOX_REF_KIND_COUNT) {
     if (inox_debug_stats.live_refs_by_kind[kind] > 0) {
@@ -186,25 +190,25 @@ void inox_debug_memory_record_ref_destroyed(inox_ref_kind kind) {
 #endif
 }
 
-void inox_debug_memory_record_retain(void) {
+void DebugMemory::recordRetain() const {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_stats.retain_count += 1;
 #endif
 }
 
-void inox_debug_memory_record_release(void) {
+void DebugMemory::recordRelease() const {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_stats.release_count += 1;
 #endif
 }
 
-void inox_debug_memory_record_promise_created(void) {
+void DebugMemory::recordPromiseCreated() const {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_stats.live_promises += 1;
 #endif
 }
 
-void inox_debug_memory_record_promise_destroyed(void) {
+void DebugMemory::recordPromiseDestroyed() const {
 #ifdef INOX_DEBUG_MEMORY
   if (inox_debug_stats.live_promises > 0) {
     inox_debug_stats.live_promises -= 1;
@@ -212,16 +216,50 @@ void inox_debug_memory_record_promise_destroyed(void) {
 #endif
 }
 
-void inox_debug_memory_record_weak_cell_created(void) {
+void DebugMemory::recordWeakCellCreated() const {
 #ifdef INOX_DEBUG_MEMORY
   inox_debug_stats.live_weak_cells += 1;
 #endif
 }
 
-void inox_debug_memory_record_weak_cell_destroyed(void) {
+void DebugMemory::recordWeakCellDestroyed() const {
 #ifdef INOX_DEBUG_MEMORY
   if (inox_debug_stats.live_weak_cells > 0) {
     inox_debug_stats.live_weak_cells -= 1;
   }
 #endif
+}
+
+} // namespace inox
+
+extern "C" void inox_debug_memory_record_ref_created(inox_ref_kind kind) {
+  inox::debugMemory.recordRefCreated(kind);
+}
+
+extern "C" void inox_debug_memory_record_ref_destroyed(inox_ref_kind kind) {
+  inox::debugMemory.recordRefDestroyed(kind);
+}
+
+extern "C" void inox_debug_memory_record_retain(void) {
+  inox::debugMemory.recordRetain();
+}
+
+extern "C" void inox_debug_memory_record_release(void) {
+  inox::debugMemory.recordRelease();
+}
+
+extern "C" void inox_debug_memory_record_promise_created(void) {
+  inox::debugMemory.recordPromiseCreated();
+}
+
+extern "C" void inox_debug_memory_record_promise_destroyed(void) {
+  inox::debugMemory.recordPromiseDestroyed();
+}
+
+extern "C" void inox_debug_memory_record_weak_cell_created(void) {
+  inox::debugMemory.recordWeakCellCreated();
+}
+
+extern "C" void inox_debug_memory_record_weak_cell_destroyed(void) {
+  inox::debugMemory.recordWeakCellDestroyed();
 }

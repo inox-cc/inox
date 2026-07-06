@@ -1,6 +1,6 @@
 #include "inox/callback.h"
 #ifdef INOX_DEBUG_MEMORY
-#include "inox/debug.h"
+#include "inox/debug_bridge.h"
 #endif
 
 static void inox_callback_dispose_ref(inox_ref* ref) {

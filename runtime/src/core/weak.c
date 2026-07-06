@@ -1,6 +1,6 @@
 #include "inox/weak.h"
 #ifdef INOX_DEBUG_MEMORY
-#include "inox/debug.h"
+#include "inox/debug_bridge.h"
 #endif
 
 #ifdef INOX_ENABLE_WEAK

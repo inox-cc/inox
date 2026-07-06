@@ -442,7 +442,7 @@ static inox_status allocate_bytes(inox_allocator* allocator, size_t length, inox
   bytes->len = length;
   *out = bytes;
 #ifdef INOX_DEBUG_MEMORY
-  inox_debug_memory_record_ref_created(INOX_REF_BYTES);
+  inox::debugMemory.recordRefCreated(INOX_REF_BYTES);
 #endif
 
   return INOX_OK;
