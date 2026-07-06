@@ -10,11 +10,11 @@
 #include <string.h>
 #include <time.h>
 
-typedef struct inox_time_adapter {
+struct TimeAdapter {
   void* user;
   inox_number (*monotonic_now_ms)(void* user);
   inox_number (*wall_now_ms)(void* user);
-} inox_time_adapter;
+};
 
 static inox_number inox_default_monotonic_now_ms(void* user);
 static inox_number inox_default_wall_now_ms(void* user);
@@ -29,7 +29,7 @@ static int inox_date_timezone_offset_minutes(const char* bytes, size_t len, size
 static inox_number inox_timespec_ms(const struct timespec* value);
 static void inox_time_ensure_initialized(void);
 
-static inox_time_adapter inox_time_current_adapter = { 0, inox_default_monotonic_now_ms, inox_default_wall_now_ms };
+static TimeAdapter inox_time_current_adapter = { 0, inox_default_monotonic_now_ms, inox_default_wall_now_ms };
 static int inox_time_initialized = 0;
 static inox_number inox_performance_base_ms = 0;
 static inox_number inox_wall_base_ms = 0;
