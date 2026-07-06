@@ -623,20 +623,6 @@ inox_status inox_string_to_number(const char* value_bytes, size_t value_len, ino
   return INOX_OK;
 }
 
-static inox_status inox_string_split_push(inox_allocator* allocator, inox_value array, const char* bytes, size_t len) {
-  inox_value item = inox_undefined_value();
-  inox_status status = inox_string_from_literal(allocator, bytes == 0 ? "" : bytes, len, &item);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  status = Array.push(array, item);
-  inox_release(item);
-
-  return status;
-}
-
 namespace inox {
 
 Value String::make(const char* bytes, size_t len) {
@@ -1043,9 +1029,9 @@ ArrayClass String::split(StringView separator) const {
         step = 1;
       }
 
-      status = inox_string_split_push(&inox_default_allocator, out, bytes() + index, step);
+      String item(bytes() + index, step);
 
-      if (status != INOX_OK) {
+      if (!item.valid() || Array.push(out, item.raw()) != INOX_OK) {
         inox_release(out);
         return ArrayClass();
       }
@@ -1065,9 +1051,9 @@ ArrayClass String::split(StringView separator) const {
       continue;
     }
 
-    status = inox_string_split_push(&inox_default_allocator, out, bytes() + start, index - start);
+    String item(bytes() + start, index - start);
 
-    if (status != INOX_OK) {
+    if (!item.valid() || Array.push(out, item.raw()) != INOX_OK) {
       inox_release(out);
       return ArrayClass();
     }
@@ -1076,9 +1062,9 @@ ArrayClass String::split(StringView separator) const {
     start = index;
   }
 
-  status = inox_string_split_push(&inox_default_allocator, out, bytes() + start, length() - start);
+  String item(bytes() + start, length() - start);
 
-  if (status != INOX_OK) {
+  if (!item.valid() || Array.push(out, item.raw()) != INOX_OK) {
     inox_release(out);
     return ArrayClass();
   }
