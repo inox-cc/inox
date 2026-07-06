@@ -5,10 +5,10 @@
 #include "inox/object.h"
 #include "inox/string.h"
 
-typedef struct inox_path_span {
+struct PathSpan {
   const char* bytes;
-  size_t len;
-} inox_path_span;
+  size_t length;
+};
 
 static inox_status inox_path_string(inox_value value, const char** bytes, size_t* len);
 static inox_status inox_path_string_value_result(inox_allocator* allocator, char* bytes, size_t len, inox_value* out);
@@ -729,7 +729,7 @@ static inox_status inox_path_normalize_bytes(
     return inox_path_copy(allocator, ".", 1, out, out_len);
   }
 
-  inox_path_span* segments = (inox_path_span*)allocator->alloc(allocator->user, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
+  PathSpan* segments = (PathSpan*)allocator->alloc(allocator->user, sizeof(PathSpan) * (len + 1), alignof(PathSpan));
 
   if (segments == 0) {
     return INOX_ERR_OOM;
@@ -757,36 +757,39 @@ static inox_status inox_path_normalize_bytes(
     }
 
     if (segment_len == 2 && bytes[start] == '.' && bytes[start + 1] == '.') {
-      if (count > 0 && !(segments[count - 1].len == 2 && segments[count - 1].bytes[0] == '.' && segments[count - 1].bytes[1] == '.')) {
+      if (
+        count > 0 &&
+        !(segments[count - 1].length == 2 && segments[count - 1].bytes[0] == '.' && segments[count - 1].bytes[1] == '.')
+      ) {
         count -= 1;
       } else if (!absolute) {
         segments[count].bytes = bytes + start;
-        segments[count].len = segment_len;
+        segments[count].length = segment_len;
         count += 1;
       }
       continue;
     }
 
     segments[count].bytes = bytes + start;
-    segments[count].len = segment_len;
+    segments[count].length = segment_len;
     count += 1;
   }
 
   if (count == 0) {
-    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
+    allocator->free(allocator->user, segments, sizeof(PathSpan) * (len + 1), alignof(PathSpan));
     return absolute ? inox_path_copy(allocator, "/", 1, out, out_len) : inox_path_copy(allocator, ".", 1, out, out_len);
   }
 
   size_t result_len = absolute ? 1 : 0;
 
   for (size_t i = 0; i < count; i += 1) {
-    result_len += segments[i].len + (i == 0 ? 0 : 1);
+    result_len += segments[i].length + (i == 0 ? 0 : 1);
   }
 
   char* result = inox_path_alloc(allocator, result_len);
 
   if (result == 0) {
-    allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
+    allocator->free(allocator->user, segments, sizeof(PathSpan) * (len + 1), alignof(PathSpan));
     return INOX_ERR_OOM;
   }
 
@@ -803,11 +806,11 @@ static inox_status inox_path_normalize_bytes(
       offset += 1;
     }
 
-    memcpy(result + offset, segments[i].bytes, segments[i].len);
-    offset += segments[i].len;
+    memcpy(result + offset, segments[i].bytes, segments[i].length);
+    offset += segments[i].length;
   }
 
-  allocator->free(allocator->user, segments, sizeof(inox_path_span) * (len + 1), alignof(inox_path_span));
+  allocator->free(allocator->user, segments, sizeof(PathSpan) * (len + 1), alignof(PathSpan));
   *out = result;
   *out_len = offset;
 
