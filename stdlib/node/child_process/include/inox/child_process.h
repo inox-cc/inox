@@ -10,11 +10,11 @@
 
 class child_process {
 public:
-  inox::String execSync(inox_value command, inox_value options) const;
-  inox::String execFileSync(inox_value file, const inox_value* args, size_t arg_count, inox_value options) const;
+  inox::String execSync(inox::StringView command, inox_value options) const;
+  inox::String execFileSync(inox::StringView file, const inox::StringView* args, size_t arg_count, inox_value options) const;
   inox::Value spawnSync(
-    inox_value file,
-    const inox_value* args,
+    inox::StringView file,
+    const inox::StringView* args,
     size_t arg_count,
     inox_value options,
     const inox_shape* shape

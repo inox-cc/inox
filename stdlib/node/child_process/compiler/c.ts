@@ -4,11 +4,17 @@ import { emitRuntimeTypeCheck, nextCName } from '../../../../compiler/c/context.
 import type {
   CObjectShape,
   CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression
+  CPreparedExpression as PreparedExpression,
+  CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from '../../../../compiler/c/types.ts'
 
 export type ChildProcessLoweringDependencies = {
   emitCValueExpression: (expression: AnyNode, context: CFunctionContext) => PreparedExpression
+  emitPreparedStringBytesOperand(
+    expression: AnyNode,
+    context: CFunctionContext,
+    tempPrefix?: string
+  ): PreparedStringBytesOperand
   registerObjectShape: (context: CFunctionContext, name: string, shape: CObjectShape | null | undefined) => void
 }
 
@@ -18,14 +24,18 @@ function pushChildProcessLines(target: string[], lines: string[]): void {
   }
 }
 
-function emitChildProcessArgumentArray(args: PreparedExpression[]): string {
+function emitChildProcessStringArgument(operand: PreparedStringBytesOperand): string {
+  return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
+}
+
+function emitChildProcessArgumentArray(args: PreparedStringBytesOperand[]): string {
   let output = ''
 
   for (let index = 0; index < args.length; index = index + 1) {
     if (index === 0) {
-      output = args[index].expression
+      output = emitChildProcessStringArgument(args[index])
     } else {
-      output = `${output}, ${args[index].expression}`
+      output = `${output}, ${emitChildProcessStringArgument(args[index])}`
     }
   }
 
@@ -58,7 +68,7 @@ export function emitPreparedChildProcessCallExpression(
     return null
   }
 
-  const command = dependencies.emitCValueExpression(expression.args[0], context)
+  const command = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_child_process_command')
   let out = nextCName(context, 'inox_child_process_output')
 
   if (options.out !== null && typeof options.out !== 'undefined') {
@@ -72,7 +82,7 @@ export function emitPreparedChildProcessCallExpression(
   if (method === 'execSync') {
     const childOptions = dependencies.emitCValueExpression(expression.args[1], context)
     pushChildProcessLines(lines, childOptions.lines)
-    lines.push(`auto ${out} = child_process.execSync(${command.expression}, ${childOptions.expression});`)
+    lines.push(`auto ${out} = child_process.execSync(${emitChildProcessStringArgument(command)}, ${childOptions.expression});`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
@@ -108,12 +118,12 @@ export function emitPreparedChildProcessCallExpression(
     childOptions = dependencies.emitCValueExpression(optionsArg, context)
   }
 
-  const args: PreparedExpression[] = []
+  const args: PreparedStringBytesOperand[] = []
 
   if (argArray !== null && typeof argArray !== 'undefined' && argArray.type === 'ArrayLiteral') {
     for (let index = 0; index < argArray.elements.length; index = index + 1) {
       const arg = argArray.elements[index]
-      args.push(dependencies.emitCValueExpression(arg, context))
+      args.push(dependencies.emitPreparedStringBytesOperand(arg, context, 'inox_child_process_arg'))
     }
   }
 
@@ -131,15 +141,17 @@ export function emitPreparedChildProcessCallExpression(
     pushChildProcessLines(lines, shape.lines)
 
     if (args.length === 0) {
-      lines.push(`auto ${out} = child_process.spawnSync(${command.expression}, 0, 0, ${childOptions.expression}, ${shape.expression});`)
+      lines.push(
+        `auto ${out} = child_process.spawnSync(${emitChildProcessStringArgument(command)}, 0, 0, ${childOptions.expression}, ${shape.expression});`
+      )
       lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
     } else {
       const argsName = nextCName(context, 'inox_child_process_args')
       const argsValue = emitChildProcessArgumentArray(args)
 
-      lines.push(`inox_value ${argsName}[] = { ${argsValue} };`)
+      lines.push(`inox::StringView ${argsName}[] = { ${argsValue} };`)
       lines.push(
-        `auto ${out} = child_process.spawnSync(${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression});`
+        `auto ${out} = child_process.spawnSync(${emitChildProcessStringArgument(command)}, ${argsName}, ${args.length}, ${childOptions.expression}, ${shape.expression});`
       )
       lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
     }
@@ -153,14 +165,18 @@ export function emitPreparedChildProcessCallExpression(
   }
 
   if (args.length === 0) {
-    lines.push(`auto ${out} = child_process.execFileSync(${command.expression}, 0, 0, ${childOptions.expression});`)
+    lines.push(
+      `auto ${out} = child_process.execFileSync(${emitChildProcessStringArgument(command)}, 0, 0, ${childOptions.expression});`
+    )
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   } else {
     const argsName = nextCName(context, 'inox_child_process_args')
     const argsValue = emitChildProcessArgumentArray(args)
 
-    lines.push(`inox_value ${argsName}[] = { ${argsValue} };`)
-    lines.push(`auto ${out} = child_process.execFileSync(${command.expression}, ${argsName}, ${args.length}, ${childOptions.expression});`)
+    lines.push(`inox::StringView ${argsName}[] = { ${argsValue} };`)
+    lines.push(
+      `auto ${out} = child_process.execFileSync(${emitChildProcessStringArgument(command)}, ${argsName}, ${args.length}, ${childOptions.expression});`
+    )
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
   }
 

@@ -938,6 +938,7 @@ binaryLoweringDependencies = {
 
 childProcessLoweringDependencies = {
   emitCValueExpression,
+  emitPreparedStringBytesOperand,
   registerObjectShape
 }
 

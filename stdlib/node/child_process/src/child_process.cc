@@ -60,14 +60,14 @@ static inox_status inox_child_process_envp_from_object(
 static void inox_child_process_envp_free(inox_allocator* allocator, char** envp, size_t count);
 static inox_status inox_child_process_run_shell(
   inox_allocator* allocator,
-  inox_value command,
+  inox::StringView command,
   inox_value options,
   ChildProcessResult* result
 );
 static inox_status inox_child_process_run_file(
   inox_allocator* allocator,
-  inox_value file,
-  const inox_value* args,
+  inox::StringView file,
+  const inox::StringView* args,
   size_t arg_count,
   inox_value options,
   ChildProcessResult* result
@@ -80,8 +80,8 @@ static inox_status inox_child_process_run_argv(
 );
 static inox_status inox_child_process_build_argv(
   inox_allocator* allocator,
-  inox_value file,
-  const inox_value* args,
+  inox::StringView file,
+  const inox::StringView* args,
   size_t arg_count,
   char*** out
 );
@@ -111,7 +111,7 @@ static void inox_child_process_throw_failed(const char* message) {
   inox::throw_value(inox::String(message == 0 ? "child_process operation failed" : message));
 }
 
-inox::String child_process::execSync(inox_value command, inox_value options) const {
+inox::String child_process::execSync(inox::StringView command, inox_value options) const {
   inox_allocator* allocator = &inox_default_allocator;
   ChildProcessResult result;
   inox_status status = inox_child_process_result_init(allocator, &result);
@@ -141,8 +141,8 @@ inox::String child_process::execSync(inox_value command, inox_value options) con
 }
 
 inox::String child_process::execFileSync(
-  inox_value file,
-  const inox_value* args,
+  inox::StringView file,
+  const inox::StringView* args,
   size_t arg_count,
   inox_value options
 ) const {
@@ -175,8 +175,8 @@ inox::String child_process::execFileSync(
 }
 
 inox::Value child_process::spawnSync(
-  inox_value file,
-  const inox_value* args,
+  inox::StringView file,
+  const inox::StringView* args,
   size_t arg_count,
   inox_value options,
   const inox_shape* shape
@@ -455,16 +455,12 @@ static void inox_child_process_envp_free(inox_allocator* allocator, char** envp,
 
 static inox_status inox_child_process_run_shell(
   inox_allocator* allocator,
-  inox_value command,
+  inox::StringView command,
   inox_value options,
   ChildProcessResult* result
 ) {
-  const char* command_bytes = 0;
-  size_t command_len = 0;
-  inox_status status = inox_child_process_string(command, &command_bytes, &command_len);
-
-  if (status != INOX_OK) {
-    return status;
+  if (command.bytes == 0 && command.len != 0) {
+    return INOX_ERR_TYPE;
   }
 
   char** argv = (char**)allocator->alloc(allocator->user, sizeof(char*) * 4, alignof(char*));
@@ -475,7 +471,7 @@ static inox_status inox_child_process_run_shell(
 
   argv[0] = inox_child_process_copy_nul(allocator, "/bin/sh", 7);
   argv[1] = inox_child_process_copy_nul(allocator, "-c", 2);
-  argv[2] = inox_child_process_copy_nul(allocator, command_bytes, command_len);
+  argv[2] = inox_child_process_copy_nul(allocator, command.bytes, command.len);
   argv[3] = 0;
 
   if (argv[0] == 0 || argv[1] == 0 || argv[2] == 0) {
@@ -483,7 +479,7 @@ static inox_status inox_child_process_run_shell(
     return INOX_ERR_OOM;
   }
 
-  status = inox_child_process_run_argv(allocator, argv, options, result);
+  inox_status status = inox_child_process_run_argv(allocator, argv, options, result);
   inox_child_process_free_argv(allocator, argv);
 
   return status;
@@ -491,8 +487,8 @@ static inox_status inox_child_process_run_shell(
 
 static inox_status inox_child_process_run_file(
   inox_allocator* allocator,
-  inox_value file,
-  const inox_value* args,
+  inox::StringView file,
+  const inox::StringView* args,
   size_t arg_count,
   inox_value options,
   ChildProcessResult* result
@@ -698,17 +694,13 @@ static inox_status inox_child_process_run_argv(
 
 static inox_status inox_child_process_build_argv(
   inox_allocator* allocator,
-  inox_value file,
-  const inox_value* args,
+  inox::StringView file,
+  const inox::StringView* args,
   size_t arg_count,
   char*** out
 ) {
-  const char* file_bytes = 0;
-  size_t file_len = 0;
-  inox_status status = inox_child_process_string(file, &file_bytes, &file_len);
-
-  if (status != INOX_OK) {
-    return status;
+  if ((file.bytes == 0 && file.len != 0) || (args == 0 && arg_count != 0)) {
+    return INOX_ERR_TYPE;
   }
 
   char** argv = (char**)allocator->alloc(allocator->user, sizeof(char*) * (arg_count + 2), alignof(char*));
@@ -721,7 +713,7 @@ static inox_status inox_child_process_build_argv(
     argv[index] = 0;
   }
 
-  argv[0] = inox_child_process_copy_nul(allocator, file_bytes, file_len);
+  argv[0] = inox_child_process_copy_nul(allocator, file.bytes, file.len);
 
   if (argv[0] == 0) {
     inox_child_process_free_argv(allocator, argv);
@@ -729,16 +721,12 @@ static inox_status inox_child_process_build_argv(
   }
 
   for (size_t index = 0; index < arg_count; index += 1) {
-    const char* arg_bytes = 0;
-    size_t arg_len = 0;
-    status = inox_child_process_string(args[index], &arg_bytes, &arg_len);
-
-    if (status != INOX_OK) {
+    if (args[index].bytes == 0 && args[index].len != 0) {
       inox_child_process_free_argv(allocator, argv);
-      return status;
+      return INOX_ERR_TYPE;
     }
 
-    argv[index + 1] = inox_child_process_copy_nul(allocator, arg_bytes, arg_len);
+    argv[index + 1] = inox_child_process_copy_nul(allocator, args[index].bytes, args[index].len);
 
     if (argv[index + 1] == 0) {
       inox_child_process_free_argv(allocator, argv);
