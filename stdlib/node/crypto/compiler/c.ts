@@ -2,17 +2,12 @@ import { diagnostic } from '../../../../compiler/diagnostics.ts'
 import type { AnyNode, IrProgram, SourceLocation } from '../../../../compiler/types.ts'
 import type { CEmitContext, CFunctionContext } from '../../../../compiler/c/context.ts'
 import {
-  emitPrepareOwnedValueWrite,
   emitRuntimeTypeCheck,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedCryptoHash,
-  registerOwnedCryptoHmac,
-  registerOwnedValue
+  nextCName
 } from '../../../../compiler/c/context.ts'
-import { emitRuntimeValueCheck } from '../../../../compiler/c/runtime-values.ts'
 import { collectStdlibRuntimeImportNames } from '../../../../compiler/c/runtime-imports.ts'
 import { cStringLiteral } from '../../../../compiler/c/identifiers.ts'
+import { isCryptoRuntimeMethod } from './descriptor.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
@@ -79,6 +74,14 @@ function cryptoResultExpression(options: PreparedCallOptions, value: string): st
   return value
 }
 
+function cryptoResultWrite(out: string, expression: string, options: PreparedCallOptions): string {
+  if (options.prepareOut === false) {
+    return `${out} = ${expression};`
+  }
+
+  return `auto ${out} = ${expression};`
+}
+
 function cryptoStringViewExpression(operand: PreparedStringBytesOperand): string {
   if (operand.literalValue !== null && typeof operand.literalValue !== 'undefined') {
     return cStringLiteral(operand.literalValue)
@@ -87,18 +90,45 @@ function cryptoStringViewExpression(operand: PreparedStringBytesOperand): string
   return `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
-export function cryptoRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
+export function cryptoRuntimeMethodName(
+  expression: AnyNode | null | undefined,
+  context?: CFunctionContext | null
+): string | null {
   if (
     expression === null ||
     typeof expression === 'undefined' ||
-    expression.type !== 'CallExpression' ||
-    expression.cryptoRuntimeMethod === null ||
-    typeof expression.cryptoRuntimeMethod === 'undefined'
+    expression.type !== 'CallExpression'
   ) {
     return null
   }
 
-  return expression.cryptoRuntimeMethod
+  if (expression.cryptoRuntimeMethod !== null && typeof expression.cryptoRuntimeMethod !== 'undefined') {
+    return expression.cryptoRuntimeMethod
+  }
+
+  if (context !== null && typeof context !== 'undefined') {
+    return cryptoRuntimeMethodNameFromCallee(expression.callee, context)
+  }
+
+  return null
+}
+
+function cryptoRuntimeMethodNameFromCallee(callee: AnyNode, context: CFunctionContext): string | null {
+  if (callee.type !== 'MemberExpression' || callee.object.type !== 'Reference' || callee.object.path.length !== 1) {
+    return null
+  }
+
+  const root = callee.object.path[0]
+
+  if (root !== 'crypto' && !context.cryptoImportNames.has(root)) {
+    return null
+  }
+
+  if (!isCryptoRuntimeMethod(callee.property)) {
+    return null
+  }
+
+  return callee.property
 }
 
 export function emitCryptoHashVariableDeclaration(
@@ -110,7 +140,7 @@ export function emitCryptoHashVariableDeclaration(
     return null
   }
 
-  if (cryptoRuntimeMethodName(statement.init) === 'createHash') {
+  if (cryptoRuntimeMethodName(statement.init, context) === 'createHash') {
     const prepared = emitPreparedCryptoHashCallExpression(statement.init, context, deps, {
       out: statement.name
     })
@@ -122,7 +152,7 @@ export function emitCryptoHashVariableDeclaration(
     return null
   }
 
-  if (cryptoRuntimeMethodName(statement.init) === 'createHmac') {
+  if (cryptoRuntimeMethodName(statement.init, context) === 'createHmac') {
     const prepared = emitPreparedCryptoHmacCallExpression(statement.init, context, deps, {
       out: statement.name
     })
@@ -145,7 +175,7 @@ export function emitCryptoHashVariableDeclaration(
 
     const lines: string[] = []
     pushCryptoLines(lines, handle.lines)
-    lines.push(`inox_crypto_hmac* ${statement.name} = ${handle.expression};`)
+    lines.push(`Hmac& ${statement.name} = ${handle.expression};`)
     return lines
   }
 
@@ -155,7 +185,7 @@ export function emitCryptoHashVariableDeclaration(
 
   const lines: string[] = []
   pushCryptoLines(lines, handle.lines)
-  lines.push(`inox_crypto_hash* ${statement.name} = ${handle.expression};`)
+  lines.push(`Hash& ${statement.name} = ${handle.expression};`)
   return lines
 }
 
@@ -172,7 +202,7 @@ export function emitCryptoHandleVariableDeclaration(
 
     const lines: string[] = []
     pushCryptoLines(lines, handle.lines)
-    lines.push(`inox_crypto_hash* ${statement.name} = ${handle.expression};`)
+    lines.push(`Hash& ${statement.name} = ${handle.expression};`)
     return lines
   }
 
@@ -183,7 +213,7 @@ export function emitCryptoHandleVariableDeclaration(
 
     const lines: string[] = []
     pushCryptoLines(lines, handle.lines)
-    lines.push(`inox_crypto_hmac* ${statement.name} = ${handle.expression};`)
+    lines.push(`Hmac& ${statement.name} = ${handle.expression};`)
     return lines
   }
 
@@ -196,29 +226,19 @@ export function emitPreparedCryptoHashCallExpression(
   deps: CryptoLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  const method = cryptoRuntimeMethodName(expression)
+  const method = cryptoRuntimeMethodName(expression, context)
 
   if (method === 'createHash') {
     const algorithmArg = cryptoArgOrEmptyString(expression, 0, deps)
     const algorithm = deps.emitPreparedStringBytesOperand(algorithmArg, context, 'inox_crypto_algorithm')
     const out = cryptoOutName(options, context, 'inox_crypto_hash')
 
-    if (options.owned !== false) {
-      registerOwnedCryptoHash(context, out)
-    } else {
-      context.variables.set(out, 'crypto-hash')
-    }
+    context.variables.set(out, 'crypto-hash')
 
     const lines: string[] = []
     pushCryptoLines(lines, algorithm.lines)
-    lines.push(`inox_crypto_hash_free(${out});`)
-    lines.push(`${out} = 0;`)
-    lines.push(
-      emitStatusCheck(
-        `inox_crypto_hash_create(&inox_default_allocator, ${algorithm.bytes}, ${algorithm.length}, &${out})`,
-        context
-      )
-    )
+    lines.push(cryptoResultWrite(out, `crypto.createHash(${cryptoStringViewExpression(algorithm)})`, options))
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
@@ -237,7 +257,8 @@ export function emitPreparedCryptoHashCallExpression(
 
   pushCryptoLines(lines, handle.lines)
   pushCryptoLines(lines, data.lines)
-  lines.push(emitStatusCheck(`inox_crypto_hash_update(${handle.expression}, ${data.expression})`, context))
+  lines.push(`${handle.expression}.update(${data.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,
@@ -251,7 +272,7 @@ export function emitPreparedCryptoHmacCallExpression(
   deps: CryptoLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  const method = cryptoRuntimeMethodName(expression)
+  const method = cryptoRuntimeMethodName(expression, context)
 
   if (method === 'createHmac') {
     const algorithmArg = cryptoArgOrEmptyString(expression, 0, deps)
@@ -260,23 +281,13 @@ export function emitPreparedCryptoHmacCallExpression(
     const key = deps.emitCValueExpression(keyArg, context)
     const out = cryptoOutName(options, context, 'inox_crypto_hmac')
 
-    if (options.owned !== false) {
-      registerOwnedCryptoHmac(context, out)
-    } else {
-      context.variables.set(out, 'crypto-hmac')
-    }
+    context.variables.set(out, 'crypto-hmac')
 
     const lines: string[] = []
     pushCryptoLines(lines, algorithm.lines)
     pushCryptoLines(lines, key.lines)
-    lines.push(`inox_crypto_hmac_free(${out});`)
-    lines.push(`${out} = 0;`)
-    lines.push(
-      emitStatusCheck(
-        `inox_crypto_hmac_create(&inox_default_allocator, ${algorithm.bytes}, ${algorithm.length}, ${key.expression}, &${out})`,
-        context
-      )
-    )
+    lines.push(cryptoResultWrite(out, `crypto.createHmac(${cryptoStringViewExpression(algorithm)}, ${key.expression})`, options))
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
@@ -295,7 +306,8 @@ export function emitPreparedCryptoHmacCallExpression(
 
   pushCryptoLines(lines, handle.lines)
   pushCryptoLines(lines, data.lines)
-  lines.push(emitStatusCheck(`inox_crypto_hmac_update(${handle.expression}, ${data.expression})`, context))
+  lines.push(`${handle.expression}.update(${data.expression});`)
+  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
   return {
     lines,
@@ -309,7 +321,7 @@ export function emitPreparedCryptoCallExpression(
   deps: CryptoLoweringDependencies,
   options: PreparedCallOptions = {}
 ): PreparedExpression | null {
-  const method = cryptoRuntimeMethodName(expression)
+  const method = cryptoRuntimeMethodName(expression, context)
 
   if (method === null || typeof method === 'undefined' || method === 'randomInt' || method === 'timingSafeEqual') {
     return null
@@ -372,16 +384,15 @@ export function emitPreparedCryptoCallExpression(
   if (method === 'Hash.digest' || method === 'Hmac.digest') {
     const isHmac = method === 'Hmac.digest'
     let handle = emptyPreparedCryptoExpression('0')
-    const out = nextCName(context, 'inox_crypto_digest')
+    const out = cryptoOutName(options, context, 'inox_crypto_digest')
     let encoding = 'bytes'
-    let runtimeKind = 'hash'
     let digestCall = ''
-    let expectedTag = 'INOX_TAG_BYTES'
+    let cppType = 'Buffer'
+    let valueType = 'bytes'
     const lines: string[] = []
 
     if (isHmac) {
       handle = emitPreparedCryptoHmacHandleExpression(expression.callee.object, context, deps)
-      runtimeKind = 'hmac'
     } else {
       handle = emitPreparedCryptoHashHandleExpression(expression.callee.object, context, deps)
     }
@@ -391,21 +402,22 @@ export function emitPreparedCryptoCallExpression(
     }
 
     if (encoding === 'hex') {
-      digestCall = `inox_crypto_${runtimeKind}_digest_hex(&inox_default_allocator, ${handle.expression}, &${out})`
-      expectedTag = 'INOX_TAG_STRING'
+      digestCall = `${handle.expression}.digestHex()`
+      cppType = 'inox::String'
+      valueType = 'string'
     } else {
-      digestCall = `inox_crypto_${runtimeKind}_digest_bytes(&inox_default_allocator, ${handle.expression}, &${out})`
+      digestCall = `${handle.expression}.digest()`
     }
 
-    registerOwnedValue(context, out)
     pushCryptoLines(lines, handle.lines)
-    pushCryptoLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(digestCall, context))
-    lines.push(emitRuntimeValueCheck(out, expectedTag, context))
+    lines.push(`auto ${out} = ${digestCall};`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      expression: cryptoResultExpression(options, out)
+      expression: cryptoResultExpression(options, out),
+      cppType,
+      valueType
     }
   }
 
@@ -483,7 +495,7 @@ export function emitPreparedCryptoNumberCallExpression(
   context: CFunctionContext,
   deps: CryptoLoweringDependencies
 ): PreparedExpression | null {
-  const method = cryptoRuntimeMethodName(expression)
+  const method = cryptoRuntimeMethodName(expression, context)
 
   if (method === 'timingSafeEqual') {
     const left = deps.emitCValueExpression(expression.args[0], context)

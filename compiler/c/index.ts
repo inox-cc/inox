@@ -622,10 +622,16 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies, options),
-  emitPreparedCryptoHashCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies),
-  emitPreparedCryptoHmacCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoHmacCallExpression(expression, context, cryptoLoweringDependencies),
+  emitPreparedCryptoHashCallExpression: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ) => emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies, options),
+  emitPreparedCryptoHmacCallExpression: (
+    expression: AnyNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ) => emitPreparedCryptoHmacCallExpression(expression, context, cryptoLoweringDependencies, options),
   emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
@@ -3214,11 +3220,11 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
   }
 
   if (inferred === 'crypto-hash') {
-    return [`${prefix}inox_crypto_hash* ${emitCIdentifier(statement.name)} = 0;`]
+    return [`${prefix}Hash ${emitCIdentifier(statement.name)};`]
   }
 
   if (inferred === 'crypto-hmac') {
-    return [`${prefix}inox_crypto_hmac* ${emitCIdentifier(statement.name)} = 0;`]
+    return [`${prefix}Hmac ${emitCIdentifier(statement.name)};`]
   }
 
   if (inferred === 'function') {
@@ -3348,6 +3354,32 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
       context.variables.set(statement.name, 'timer')
       context.moduleValueTypes.set(statement.name, 'timer')
       return timer.lines
+    }
+  }
+
+  if (inferred === 'crypto-hash') {
+    const hash = emitPreparedCryptoHashCallExpression(statement.init, context, cryptoLoweringDependencies, {
+      out: name,
+      prepareOut: false
+    })
+
+    if (hash !== null && typeof hash !== 'undefined') {
+      context.variables.set(statement.name, 'crypto-hash')
+      context.moduleValueTypes.set(statement.name, 'crypto-hash')
+      return hash.lines
+    }
+  }
+
+  if (inferred === 'crypto-hmac') {
+    const hmac = emitPreparedCryptoHmacCallExpression(statement.init, context, cryptoLoweringDependencies, {
+      out: name,
+      prepareOut: false
+    })
+
+    if (hmac !== null && typeof hmac !== 'undefined') {
+      context.variables.set(statement.name, 'crypto-hmac')
+      context.moduleValueTypes.set(statement.name, 'crypto-hmac')
+      return hmac.lines
     }
   }
 

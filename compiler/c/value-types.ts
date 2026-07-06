@@ -109,11 +109,11 @@ export function emitCType(valueType: CValueTypeInput): string {
   }
 
   if (valueType === 'crypto-hash') {
-    return 'inox_crypto_hash*'
+    return 'Hash'
   }
 
   if (valueType === 'crypto-hmac') {
-    return 'inox_crypto_hmac*'
+    return 'Hmac'
   }
 
   return 'double'

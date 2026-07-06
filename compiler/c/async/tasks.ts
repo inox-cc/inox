@@ -138,8 +138,6 @@ type AsyncTaskFunctionContext = AsyncTaskEmitContext & {
   objectAliases: AsyncTaskStringMap
   objectDeclaredTypes: AsyncTaskStringMap
   objectShapes: AsyncTaskObjectShapeFieldMap
-  ownedCryptoHashes: string[]
-  ownedCryptoHmacs: string[]
   ownedPromises: string[]
   ownedValues: string[]
   promiseConstructorHandlers: AsyncTaskPromiseConstructorHandlerMap

@@ -315,8 +315,6 @@ export type CFunctionContext = CEmitContext & {
   nullableVariables: CStringSet
   objectAliases: CStringMap
   objectDeclaredTypes: CStringMap
-  ownedCryptoHashes: string[]
-  ownedCryptoHmacs: string[]
   ownedPromises: string[]
   ownedValues: string[]
   objectShapes: CObjectShapeFieldMap
@@ -482,8 +480,6 @@ export function createFunctionContext(
     objectDeclaredTypes: new Map(),
     objectShapes: cloneCObjectShapeFieldMap(baseContext.moduleObjectShapes),
     ownedPromises: [],
-    ownedCryptoHashes: [],
-    ownedCryptoHmacs: [],
     ownedValues: [],
     promiseRejectionValueTypes: new Map(),
     promiseConstructorHandlers: new Map(),
@@ -570,22 +566,6 @@ export function registerOwnedPromise(
   context.promiseRejectionValueTypes.set(name, rejectionValueType)
 }
 
-export function registerOwnedCryptoHash(context: CFunctionContext, name: string): void {
-  if (!stringArrayHas(context.ownedCryptoHashes, name)) {
-    context.ownedCryptoHashes.push(name)
-  }
-
-  context.variables.set(name, 'crypto-hash')
-}
-
-export function registerOwnedCryptoHmac(context: CFunctionContext, name: string): void {
-  if (!stringArrayHas(context.ownedCryptoHmacs, name)) {
-    context.ownedCryptoHmacs.push(name)
-  }
-
-  context.variables.set(name, 'crypto-hmac')
-}
-
 export function registerEventLoop(context: CEventLoopContext): void {
   context.eventLoopUsed = true
   context.usedCleanupGoto = true
@@ -654,8 +634,6 @@ type CReturnFlowDeclarationContext = {
 
 type COwnedValueDeclarationContext = {
   cleanupEnabled?: boolean | null
-  ownedCryptoHashes?: string[] | null
-  ownedCryptoHmacs?: string[] | null
   ownedValues?: string[] | null
 }
 
@@ -691,11 +669,7 @@ export function shouldEmitCleanupLabel(context: CFunctionContext): boolean {
     context.throwingFunction ||
     context.returnType !== 'void' ||
     (context.returnType === 'void' &&
-      (context.ownedValues.length > 0 ||
-        context.ownedCryptoHashes.length > 0 ||
-        context.ownedCryptoHmacs.length > 0 ||
-        context.boxedValues.length > 0 ||
-        context.usedCleanupGoto))
+      (context.ownedValues.length > 0 || context.boxedValues.length > 0 || context.usedCleanupGoto))
   )
 }
 
@@ -766,31 +740,13 @@ export function emitReturnFlowDeclarations(context: CReturnFlowDeclarationContex
 export function emitOwnedValueDeclarations(context: COwnedValueDeclarationContext): string[] {
   const lines: string[] = []
   let ownedValues: string[] = []
-  let ownedCryptoHashes: string[] = []
-  let ownedCryptoHmacs: string[] = []
 
   if (context.ownedValues !== null && typeof context.ownedValues !== 'undefined') {
     ownedValues = context.ownedValues
   }
 
-  if (context.ownedCryptoHashes !== null && typeof context.ownedCryptoHashes !== 'undefined') {
-    ownedCryptoHashes = context.ownedCryptoHashes
-  }
-
-  if (context.ownedCryptoHmacs !== null && typeof context.ownedCryptoHmacs !== 'undefined') {
-    ownedCryptoHmacs = context.ownedCryptoHmacs
-  }
-
   for (const name of ownedValues) {
     lines.push(`inox::Value ${emitCLocalName(name)};`)
-  }
-
-  for (const name of ownedCryptoHashes) {
-    lines.push(`inox_crypto_hash* ${emitCLocalName(name)} = 0;`)
-  }
-
-  for (const name of ownedCryptoHmacs) {
-    lines.push(`inox_crypto_hmac* ${emitCLocalName(name)} = 0;`)
   }
 
   return lines
@@ -851,20 +807,8 @@ export function emitBoxedValueDeclarations(context: CBoxedValueDeclarationContex
   return lines
 }
 
-export function emitOwnedValueCleanup(context: CFunctionContext): string[] {
-  const lines: string[] = []
-
-  for (let index = context.ownedCryptoHmacs.length - 1; index >= 0; index--) {
-    const name = context.ownedCryptoHmacs[index]
-    lines.push(`inox_crypto_hmac_free(${emitCLocalName(name)});`)
-  }
-
-  for (let index = context.ownedCryptoHashes.length - 1; index >= 0; index--) {
-    const name = context.ownedCryptoHashes[index]
-    lines.push(`inox_crypto_hash_free(${emitCLocalName(name)});`)
-  }
-
-  return lines
+export function emitOwnedValueCleanup(_context: CFunctionContext): string[] {
+  return []
 }
 
 export function emitOwnedPromiseCleanup(context: CFunctionContext): string[] {

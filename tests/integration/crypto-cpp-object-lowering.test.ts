@@ -23,9 +23,16 @@ const filled = crypto.randomFillSync(bytes, 0, 4)
 const value = crypto.randomInt(5, 10)
 const uuid = crypto.randomUUID()
 const digest = crypto.hash('sha256', 'test')
+const hash = crypto.createHash('sha256')
+hash.update('test')
+const digestHex = hash.digest('hex')
+const chainedDigest = crypto.createHash('sha256').update('test').digest('hex')
+const hmac = crypto.createHmac('sha256', 'key')
+hmac.update('test')
+const hmacDigest = hmac.digest('hex')
 const same = crypto.timingSafeEqual(Buffer.from('a'), Buffer.from('a'))
 
-console.log(bytes.length, filled.length, value, uuid.length, digest, same)
+console.log(bytes.length, filled.length, value, uuid.length, digest, digestHex, chainedDigest, hmacDigest, same)
 `
       }
     ],
@@ -47,10 +54,21 @@ console.log(bytes.length, filled.length, value, uuid.length, digest, same)
   assert.match(source, /crypto\.randomInt\(5, 10\)/)
   assert.match(source, /crypto\.randomUUID\(\)/)
   assert.match(source, /crypto\.hashHex\("sha256", inox_value_\d+\)/)
+  assert.match(source, /static Hash hash;/)
+  assert.match(source, /hash = crypto\.createHash\("sha256"\);/)
+  assert.match(source, /hash\.update\(inox_value_\d+\);/)
+  assert.match(source, /auto digestHex = hash\.digestHex\(\);/)
+  assert.match(source, /crypto\.createHash\("sha256"\)/)
+  assert.match(source, /\.update\(inox_value_\d+\);/)
+  assert.match(source, /\.digestHex\(\)/)
+  assert.match(source, /static Hmac hmac;/)
+  assert.match(source, /hmac = crypto\.createHmac\("sha256", inox_value_\d+\);/)
+  assert.match(source, /hmac\.update\(inox_value_\d+\);/)
+  assert.match(source, /auto hmacDigest = hmac\.digestHex\(\);/)
   assert.match(source, /crypto\.timingSafeEqual\(/)
   assert.doesNotMatch(
     source,
-    /inox_crypto_(get_hashes|get_random_values|random_bytes|random_fill|random_int|random_uuid|hash_oneshot|timing_safe_equal)/
+    /inox_crypto_(get_hashes|get_random_values|random_bytes|random_fill|random_int|random_uuid|hash_oneshot|timing_safe_equal|hash_(create|update|digest|free)|hmac_(create|update|digest|free))/
   )
 }
 

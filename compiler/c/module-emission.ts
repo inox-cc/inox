@@ -2324,7 +2324,13 @@ function cModuleValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'regexp' || valueType === 'url.URL' || valueType === 'url.URLSearchParams') {
+  if (
+    valueType === 'regexp' ||
+    valueType === 'url.URL' ||
+    valueType === 'url.URLSearchParams' ||
+    valueType === 'crypto-hash' ||
+    valueType === 'crypto-hmac'
+  ) {
     return ''
   }
 

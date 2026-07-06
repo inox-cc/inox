@@ -199,8 +199,6 @@ type CFunctionContext = {
   objectAliases: CStringMap
   objectDeclaredTypes: CStringMap
   objectShapes: Map<string, CObjectShapeField[]>
-  ownedCryptoHashes: string[]
-  ownedCryptoHmacs: string[]
   ownedPromises: string[]
   ownedValues: string[]
   processEntryPath: string | null
@@ -429,8 +427,16 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedCryptoHashCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCryptoHmacCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCryptoHashCallExpression(
+    expression: StatementNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
+  emitPreparedCryptoHmacCallExpression(
+    expression: StatementNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedCryptoNumberCallExpression(
     expression: StatementNode,
     context: CFunctionContext
@@ -4196,6 +4202,41 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return promiseCall.lines
   }
 
+  const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(
+    statement.init,
+    context,
+    preparedCallOut(statement.name)
+  )
+
+  if (cryptoHashCall !== null && typeof cryptoHashCall !== 'undefined') {
+    return cryptoHashCall.lines
+  }
+
+  const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(
+    statement.init,
+    context,
+    preparedCallOut(statement.name)
+  )
+
+  if (cryptoHmacCall !== null && typeof cryptoHmacCall !== 'undefined') {
+    return cryptoHmacCall.lines
+  }
+
+  if (
+    statement.init.type === 'CallExpression' &&
+    (statement.init.cryptoRuntimeMethod === 'Hash.digest' || statement.init.cryptoRuntimeMethod === 'Hmac.digest')
+  ) {
+    const cryptoDigestCall = deps.emitPreparedCryptoCallExpression(
+      statement.init,
+      context,
+      preparedCallOut(statement.name)
+    )
+
+    if (cryptoDigestCall !== null && typeof cryptoDigestCall !== 'undefined') {
+      return cryptoDigestCall.lines
+    }
+  }
+
   if (statement.init.valueType === 'promise') {
     const classMethodCall = deps.emitPreparedClassMethodCallExpression(
       statement.init,
@@ -4293,6 +4334,12 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (jsonParseDeclaration !== null && typeof jsonParseDeclaration !== 'undefined') {
     return jsonParseDeclaration
+  }
+
+  const cryptoHandleValueType = statement.valueType ?? deps.inferExpressionType(statement.init, context)
+
+  if (cryptoHandleValueType === 'crypto-hash' || cryptoHandleValueType === 'crypto-hmac') {
+    return deps.emitScalarVariableDeclaration(statement, context)
   }
 
   if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'ObjectLiteral') {
