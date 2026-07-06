@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "inox/array.h"
 #include "inox/binary.h"
 #include "inox/loop.h"
 #include "inox/promise.h"
@@ -19,18 +20,8 @@ enum {
 
 typedef inox::String (*FsReadFileFn)(void* user, inox::StringView path);
 typedef Buffer (*FsReadFileBytesFn)(void* user, inox::StringView path);
-typedef inox_status (*FsReadDirFn)(
-  void* user,
-  inox_allocator* allocator,
-  inox::StringView path,
-  inox_value* out
-);
-typedef inox_status (*FsReadDirDirentsFn)(
-  void* user,
-  inox_allocator* allocator,
-  inox::StringView path,
-  inox_value* out
-);
+typedef ArrayClass (*FsReadDirFn)(void* user, inox::StringView path);
+typedef ArrayClass (*FsReadDirDirentsFn)(void* user, inox::StringView path);
 typedef inox_status (*FsStatFn)(
   void* user,
   inox_allocator* allocator,
@@ -72,8 +63,6 @@ struct FsAdapter {
   FsRenameFn rename;
 };
 #ifdef __cplusplus
-
-#include "inox/array.h"
 
 class FsStats;
 class fs_promises {
