@@ -1310,11 +1310,10 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
 
   *out = inox_undefined_value();
 
-  inox_value entries = inox_undefined_value();
-  inox_status status = Array.make(allocator, 0, &entries);
+  ArrayClass entries = ArrayClass::create(allocator, 0);
 
-  if (status != INOX_OK) {
-    return status;
+  if (inox::thrown()) {
+    return INOX_ERR_TYPE;
   }
 
   uv_dirent_t entry;
@@ -1322,12 +1321,12 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
 
   while (next_result != UV_EOF) {
     if (next_result < 0) {
-      inox_release(entries);
       return inox_fs_status_from_uv(next_result);
     }
 
     inox_value value = inox_undefined_value();
     size_t name_len = strlen(entry.name);
+    inox_status status = INOX_OK;
 
     if (with_file_types) {
       status = inox_fs_dirent_new(
@@ -1342,21 +1341,22 @@ static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* 
       status = inox_string_from_literal(allocator, entry.name, name_len, &value);
     }
 
-    if (status == INOX_OK) {
-      status = Array.push(entries, value);
+    if (status != INOX_OK) {
+      inox_release(value);
+      return status;
     }
 
+    entries.push(value);
     inox_release(value);
 
-    if (status != INOX_OK) {
-      inox_release(entries);
-      return status;
+    if (inox::thrown()) {
+      return INOX_ERR_TYPE;
     }
 
     next_result = uv_fs_scandir_next(req, &entry);
   }
 
-  *out = entries;
+  *out = entries.release();
 
   return INOX_OK;
 }
@@ -2660,12 +2660,11 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
     return INOX_ERR_FIELD;
   }
 
-  inox_value entries = inox_undefined_value();
-  status = Array.make(allocator, 0, &entries);
+  ArrayClass entries = ArrayClass::create(allocator, 0);
 
-  if (status != INOX_OK) {
+  if (inox::thrown()) {
     closedir(dir);
-    return status;
+    return INOX_ERR_TYPE;
   }
 
   struct dirent* entry = readdir(dir);
@@ -2678,16 +2677,18 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
       size_t name_len = strlen(name);
       status = inox_string_from_literal(allocator, name, name_len, &value);
 
-      if (status == INOX_OK) {
-        status = Array.push(entries, value);
-      }
-
-      inox_release(value);
-
       if (status != INOX_OK) {
         closedir(dir);
-        inox_release(entries);
+        inox_release(value);
         return status;
+      }
+
+      entries.push(value);
+      inox_release(value);
+
+      if (inox::thrown()) {
+        closedir(dir);
+        return INOX_ERR_TYPE;
       }
     }
 
@@ -2695,11 +2696,10 @@ inox_fs_default_read_dir(void* user, inox_allocator* allocator, const char* path
   }
 
   if (closedir(dir) != 0) {
-    inox_release(entries);
     return INOX_ERR_FIELD;
   }
 
-  *out = entries;
+  *out = entries.release();
 
   return INOX_OK;
 #endif
@@ -2766,13 +2766,12 @@ inox_fs_default_read_dir_dirents(void* user, inox_allocator* allocator, const ch
     return INOX_ERR_FIELD;
   }
 
-  inox_value entries = inox_undefined_value();
-  status = Array.make(allocator, 0, &entries);
+  ArrayClass entries = ArrayClass::create(allocator, 0);
 
-  if (status != INOX_OK) {
+  if (inox::thrown()) {
     free(path_copy);
     closedir(dir);
-    return status;
+    return INOX_ERR_TYPE;
   }
 
   struct dirent* entry = readdir(dir);
@@ -2792,17 +2791,20 @@ inox_fs_default_read_dir_dirents(void* user, inox_allocator* allocator, const ch
         status = inox_fs_dirent_new(allocator, name, name_len, is_file, is_directory, &value);
       }
 
-      if (status == INOX_OK) {
-        status = Array.push(entries, value);
-      }
-
-      inox_release(value);
-
       if (status != INOX_OK) {
         free(path_copy);
         closedir(dir);
-        inox_release(entries);
+        inox_release(value);
         return status;
+      }
+
+      entries.push(value);
+      inox_release(value);
+
+      if (inox::thrown()) {
+        free(path_copy);
+        closedir(dir);
+        return INOX_ERR_TYPE;
       }
     }
 
@@ -2812,11 +2814,10 @@ inox_fs_default_read_dir_dirents(void* user, inox_allocator* allocator, const ch
   free(path_copy);
 
   if (closedir(dir) != 0) {
-    inox_release(entries);
     return INOX_ERR_FIELD;
   }
 
-  *out = entries;
+  *out = entries.release();
 
   return INOX_OK;
 #endif
