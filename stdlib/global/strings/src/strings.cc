@@ -13,7 +13,7 @@
 #include "inox/loop.h"
 #include "inox/string.h"
 
-static inox_string* inox_string_alloc_storage(inox_allocator* allocator, size_t len) {
+static inox_string* string_alloc_storage(inox_allocator* allocator, size_t len) {
   if (allocator == 0 || allocator->alloc == 0 || len > ((size_t)-1) - sizeof(inox_string)) {
     return 0;
   }
@@ -41,7 +41,7 @@ static inox_string* inox_string_alloc_storage(inox_allocator* allocator, size_t 
   return string;
 }
 
-static inox_status inox_string_format_number(double value, char* buffer, size_t buffer_len, size_t* len_out) {
+static inox_status string_format_number(double value, char* buffer, size_t buffer_len, size_t* len_out) {
   if (buffer == 0 || buffer_len == 0 || len_out == 0) {
     return INOX_ERR_TYPE;
   }
@@ -56,21 +56,21 @@ static inox_status inox_string_format_number(double value, char* buffer, size_t 
   return INOX_OK;
 }
 
-static bool inox_string_is_trim_space_code_point(uint32_t value) {
+static bool string_is_trim_space_code_point(uint32_t value) {
   return value == 0x0009u || value == 0x000au || value == 0x000bu || value == 0x000cu || value == 0x000du || value == 0x0020u ||
          value == 0x00a0u || value == 0x1680u || (value >= 0x2000u && value <= 0x200au) || value == 0x2028u || value == 0x2029u ||
          value == 0x202fu || value == 0x205fu || value == 0x3000u || value == 0xfeffu;
 }
 
-static bool inox_string_is_ascii_digit(char value) {
+static bool string_is_ascii_digit(char value) {
   return value >= '0' && value <= '9';
 }
 
-static bool inox_utf8_is_continuation(unsigned char value) {
+static bool utf8_is_continuation(unsigned char value) {
   return (value & 0xc0u) == 0x80u;
 }
 
-static size_t inox_utf8_next_len(const char* bytes, size_t len, size_t index) {
+static size_t utf8_next_len(const char* bytes, size_t len, size_t index) {
   if (bytes == 0 || index >= len) {
     return 0;
   }
@@ -81,21 +81,21 @@ static size_t inox_utf8_next_len(const char* bytes, size_t len, size_t index) {
     return 1;
   }
 
-  if (first >= 0xc2u && first <= 0xdfu && index + 1 < len && inox_utf8_is_continuation((unsigned char)bytes[index + 1])) {
+  if (first >= 0xc2u && first <= 0xdfu && index + 1 < len && utf8_is_continuation((unsigned char)bytes[index + 1])) {
     return 2;
   }
 
   if (first == 0xe0u && index + 2 < len) {
     const unsigned char second = (unsigned char)bytes[index + 1];
 
-    if (second >= 0xa0u && second <= 0xbfu && inox_utf8_is_continuation((unsigned char)bytes[index + 2])) {
+    if (second >= 0xa0u && second <= 0xbfu && utf8_is_continuation((unsigned char)bytes[index + 2])) {
       return 3;
     }
   }
 
   if (
-    first >= 0xe1u && first <= 0xecu && index + 2 < len && inox_utf8_is_continuation((unsigned char)bytes[index + 1]) &&
-    inox_utf8_is_continuation((unsigned char)bytes[index + 2])
+    first >= 0xe1u && first <= 0xecu && index + 2 < len && utf8_is_continuation((unsigned char)bytes[index + 1]) &&
+    utf8_is_continuation((unsigned char)bytes[index + 2])
   ) {
     return 3;
   }
@@ -103,14 +103,14 @@ static size_t inox_utf8_next_len(const char* bytes, size_t len, size_t index) {
   if (first == 0xedu && index + 2 < len) {
     const unsigned char second = (unsigned char)bytes[index + 1];
 
-    if (second >= 0x80u && second <= 0x9fu && inox_utf8_is_continuation((unsigned char)bytes[index + 2])) {
+    if (second >= 0x80u && second <= 0x9fu && utf8_is_continuation((unsigned char)bytes[index + 2])) {
       return 3;
     }
   }
 
   if (
-    first >= 0xeeu && first <= 0xefu && index + 2 < len && inox_utf8_is_continuation((unsigned char)bytes[index + 1]) &&
-    inox_utf8_is_continuation((unsigned char)bytes[index + 2])
+    first >= 0xeeu && first <= 0xefu && index + 2 < len && utf8_is_continuation((unsigned char)bytes[index + 1]) &&
+    utf8_is_continuation((unsigned char)bytes[index + 2])
   ) {
     return 3;
   }
@@ -119,16 +119,16 @@ static size_t inox_utf8_next_len(const char* bytes, size_t len, size_t index) {
     const unsigned char second = (unsigned char)bytes[index + 1];
 
     if (
-      second >= 0x90u && second <= 0xbfu && inox_utf8_is_continuation((unsigned char)bytes[index + 2]) &&
-      inox_utf8_is_continuation((unsigned char)bytes[index + 3])
+      second >= 0x90u && second <= 0xbfu && utf8_is_continuation((unsigned char)bytes[index + 2]) &&
+      utf8_is_continuation((unsigned char)bytes[index + 3])
     ) {
       return 4;
     }
   }
 
   if (
-    first >= 0xf1u && first <= 0xf3u && index + 3 < len && inox_utf8_is_continuation((unsigned char)bytes[index + 1]) &&
-    inox_utf8_is_continuation((unsigned char)bytes[index + 2]) && inox_utf8_is_continuation((unsigned char)bytes[index + 3])
+    first >= 0xf1u && first <= 0xf3u && index + 3 < len && utf8_is_continuation((unsigned char)bytes[index + 1]) &&
+    utf8_is_continuation((unsigned char)bytes[index + 2]) && utf8_is_continuation((unsigned char)bytes[index + 3])
   ) {
     return 4;
   }
@@ -137,8 +137,8 @@ static size_t inox_utf8_next_len(const char* bytes, size_t len, size_t index) {
     const unsigned char second = (unsigned char)bytes[index + 1];
 
     if (
-      second >= 0x80u && second <= 0x8fu && inox_utf8_is_continuation((unsigned char)bytes[index + 2]) &&
-      inox_utf8_is_continuation((unsigned char)bytes[index + 3])
+      second >= 0x80u && second <= 0x8fu && utf8_is_continuation((unsigned char)bytes[index + 2]) &&
+      utf8_is_continuation((unsigned char)bytes[index + 3])
     ) {
       return 4;
     }
@@ -147,8 +147,8 @@ static size_t inox_utf8_next_len(const char* bytes, size_t len, size_t index) {
   return 1;
 }
 
-static uint32_t inox_utf8_code_point_at(const char* bytes, size_t len, size_t index, size_t* step_out) {
-  size_t step = inox_utf8_next_len(bytes, len, index);
+static uint32_t utf8_code_point_at(const char* bytes, size_t len, size_t index, size_t* step_out) {
+  size_t step = utf8_next_len(bytes, len, index);
 
   if (step == 0) {
     step = 1;
@@ -182,14 +182,14 @@ static uint32_t inox_utf8_code_point_at(const char* bytes, size_t len, size_t in
          (uint32_t)(fourth & 0x3fu);
 }
 
-static size_t inox_string_utf16_code_units(uint32_t code_point) {
+static size_t string_utf16_code_units(uint32_t code_point) {
   return code_point > 0xffffu ? 2 : 1;
 }
 
-static size_t inox_string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset);
-static size_t inox_string_code_unit_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset);
+static size_t string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset);
+static size_t string_code_unit_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset);
 
-static void inox_string_trim_span(const char* bytes, size_t len, size_t* start_out, size_t* end_out) {
+static void string_trim_span(const char* bytes, size_t len, size_t* start_out, size_t* end_out) {
   size_t start = 0;
   size_t end = 0;
   size_t index = 0;
@@ -197,9 +197,9 @@ static void inox_string_trim_span(const char* bytes, size_t len, size_t* start_o
 
   while (index < len) {
     size_t step = 0;
-    const uint32_t code_point = inox_utf8_code_point_at(bytes, len, index, &step);
+    const uint32_t code_point = utf8_code_point_at(bytes, len, index, &step);
 
-    if (!inox_string_is_trim_space_code_point(code_point)) {
+    if (!string_is_trim_space_code_point(code_point)) {
       if (!seen_non_space) {
         start = index;
       }
@@ -225,7 +225,7 @@ static void inox_string_trim_span(const char* bytes, size_t len, size_t* start_o
   }
 }
 
-static size_t inox_string_code_unit_length(const char* value_bytes, size_t value_len) {
+static size_t string_code_unit_length(const char* value_bytes, size_t value_len) {
   if (value_bytes == 0 && value_len != 0) {
     return 0;
   }
@@ -236,23 +236,23 @@ static size_t inox_string_code_unit_length(const char* value_bytes, size_t value
 
   while (index < value_len) {
     size_t step = 0;
-    const uint32_t code_point = inox_utf8_code_point_at(bytes, value_len, index, &step);
+    const uint32_t code_point = utf8_code_point_at(bytes, value_len, index, &step);
 
     index += step;
-    length += inox_string_utf16_code_units(code_point);
+    length += string_utf16_code_units(code_point);
   }
 
   return length;
 }
 
-static size_t inox_string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset) {
+static size_t string_code_unit_to_byte_offset_floor(const char* bytes, size_t value_len, size_t offset) {
   size_t index = 0;
   size_t current = 0;
 
   while (index < value_len && current < offset) {
     size_t step = 0;
-    const uint32_t code_point = inox_utf8_code_point_at(bytes, value_len, index, &step);
-    const size_t units = inox_string_utf16_code_units(code_point);
+    const uint32_t code_point = utf8_code_point_at(bytes, value_len, index, &step);
+    const size_t units = string_utf16_code_units(code_point);
 
     if (current + units > offset) {
       return index;
@@ -265,14 +265,14 @@ static size_t inox_string_code_unit_to_byte_offset_floor(const char* bytes, size
   return index;
 }
 
-static size_t inox_string_code_unit_to_byte_offset_ceiling(const char* bytes, size_t value_len, size_t offset) {
+static size_t string_code_unit_to_byte_offset_ceiling(const char* bytes, size_t value_len, size_t offset) {
   size_t index = 0;
   size_t current = 0;
 
   while (index < value_len && current < offset) {
     size_t step = 0;
-    const uint32_t code_point = inox_utf8_code_point_at(bytes, value_len, index, &step);
-    const size_t units = inox_string_utf16_code_units(code_point);
+    const uint32_t code_point = utf8_code_point_at(bytes, value_len, index, &step);
+    const size_t units = string_utf16_code_units(code_point);
 
     if (current + units > offset) {
       return index + step;
@@ -285,20 +285,20 @@ static size_t inox_string_code_unit_to_byte_offset_ceiling(const char* bytes, si
   return index;
 }
 
-static size_t inox_string_code_unit_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset) {
+static size_t string_code_unit_index_of_byte_offset(const char* bytes, size_t value_len, size_t offset) {
   size_t index = 0;
   size_t current = 0;
 
   while (index < value_len && index < offset) {
     size_t step = 0;
-    const uint32_t code_point = inox_utf8_code_point_at(bytes, value_len, index, &step);
+    const uint32_t code_point = utf8_code_point_at(bytes, value_len, index, &step);
 
     if (index + step > offset) {
       break;
     }
 
     index += step;
-    current += inox_string_utf16_code_units(code_point);
+    current += string_utf16_code_units(code_point);
   }
 
   return current;
@@ -312,7 +312,7 @@ inox_value inox::String::toNumber(StringView value) {
   const char* bytes = value.bytes == 0 ? "" : value.bytes;
   size_t start = 0;
   size_t end = value.len;
-  inox_string_trim_span(bytes, value.len, &start, &end);
+  string_trim_span(bytes, value.len, &start, &end);
 
   if (start == end) {
     return inox_number_value(0);
@@ -333,7 +333,7 @@ inox_value inox::String::toNumber(StringView value) {
   double parsed = 0;
   size_t digits = 0;
 
-  while (pos < end && inox_string_is_ascii_digit(bytes[pos])) {
+  while (pos < end && string_is_ascii_digit(bytes[pos])) {
     const double digit = (double)(bytes[pos] - '0');
 
     if (parsed > (DBL_MAX - digit) / 10.0) {
@@ -350,7 +350,7 @@ inox_value inox::String::toNumber(StringView value) {
     pos += 1;
     double scale = 0.1;
 
-    while (pos < end && inox_string_is_ascii_digit(bytes[pos])) {
+    while (pos < end && string_is_ascii_digit(bytes[pos])) {
       parsed += (double)(bytes[pos] - '0') * scale;
       scale /= 10.0;
       digits += 1;
@@ -371,13 +371,13 @@ inox_value inox::String::toNumber(StringView value) {
       pos += 1;
     }
 
-    if (pos >= end || !inox_string_is_ascii_digit(bytes[pos])) {
+    if (pos >= end || !string_is_ascii_digit(bytes[pos])) {
       return inox_null_value();
     }
 
     size_t exponent = 0;
 
-    while (pos < end && inox_string_is_ascii_digit(bytes[pos])) {
+    while (pos < end && string_is_ascii_digit(bytes[pos])) {
       if (exponent < 400) {
         exponent = exponent * 10 + (size_t)(bytes[pos] - '0');
 
@@ -418,7 +418,7 @@ Value String::make(const char* bytes, size_t len) {
     return Value();
   }
 
-  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+  inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == nullptr) {
     return Value();
@@ -470,7 +470,7 @@ String String::fromNumber(double value) {
   char buffer[64];
   size_t len = 0;
 
-  if (inox_string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
+  if (string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
     return String();
   }
 
@@ -482,7 +482,7 @@ String String::fromNumberRadix(double value, int radix) {
     char buffer[64];
     size_t len = 0;
 
-    if (inox_string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
+    if (string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
       return String();
     }
 
@@ -497,7 +497,7 @@ String String::fromNumberRadix(double value, int radix) {
     char buffer[64];
     size_t len = 0;
 
-    if (inox_string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
+    if (string_format_number(value, buffer, sizeof(buffer), &len) != INOX_OK) {
       return String();
     }
 
@@ -555,7 +555,7 @@ String String::fromFormat(const char* format, ...) {
     return String();
   }
 
-  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len + 1);
+  inox_string* string = string_alloc_storage(&inox_default_allocator, len + 1);
 
   if (string == 0) {
     va_end(args);
@@ -680,10 +680,10 @@ size_t String::codeUnitLength() const {
 
   while (index < len) {
     size_t step = 0;
-    const uint32_t code_point = inox_utf8_code_point_at(value, len, index, &step);
+    const uint32_t code_point = utf8_code_point_at(value, len, index, &step);
 
     index += step;
-    code_units += inox_string_utf16_code_units(code_point);
+    code_units += string_utf16_code_units(code_point);
   }
 
   return code_units;
@@ -708,7 +708,7 @@ String String::trim() const {
 
   size_t start = 0;
   size_t end = length();
-  inox_string_trim_span(bytes(), length(), &start, &end);
+  string_trim_span(bytes(), length(), &start, &end);
 
   return String(bytes() + start, end - start);
 }
@@ -720,7 +720,7 @@ String String::trimStart() const {
 
   size_t start = 0;
   size_t end = length();
-  inox_string_trim_span(bytes(), length(), &start, &end);
+  string_trim_span(bytes(), length(), &start, &end);
 
   if (end == 0) {
     return String("");
@@ -736,7 +736,7 @@ String String::trimLeft() const {
 
   size_t start = 0;
   size_t end = length();
-  inox_string_trim_span(bytes(), length(), &start, &end);
+  string_trim_span(bytes(), length(), &start, &end);
 
   if (end == 0) {
     return String("");
@@ -751,7 +751,7 @@ String String::trimEnd() const {
   }
 
   size_t end = length();
-  inox_string_trim_span(bytes(), length(), 0, &end);
+  string_trim_span(bytes(), length(), 0, &end);
 
   return String(bytes(), end);
 }
@@ -762,7 +762,7 @@ String String::trimRight() const {
   }
 
   size_t end = length();
-  inox_string_trim_span(bytes(), length(), 0, &end);
+  string_trim_span(bytes(), length(), 0, &end);
 
   return String(bytes(), end);
 }
@@ -800,8 +800,8 @@ String String::padStart(double target_len) const {
 
   StringView pad(" ");
   size_t target = non_negative_index(target_len);
-  const size_t value_units = inox_string_code_unit_length(bytes(), length());
-  const size_t pad_units = inox_string_code_unit_length(pad.bytes, pad.len);
+  const size_t value_units = string_code_unit_length(bytes(), length());
+  const size_t pad_units = string_code_unit_length(pad.bytes, pad.len);
 
   if (target <= value_units || pad.len == 0 || pad_units == 0) {
     return String(*this);
@@ -817,7 +817,7 @@ String String::padStart(double target_len) const {
       take_units = remaining_units;
     }
 
-    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+    const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
 
     if (take_len > ((size_t)-1) - pad_total_len) {
       return String();
@@ -832,7 +832,7 @@ String String::padStart(double target_len) const {
   }
 
   const size_t len = pad_total_len + length();
-  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+  inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
     return String();
@@ -848,7 +848,7 @@ String String::padStart(double target_len) const {
       take_units = remaining_units;
     }
 
-    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+    const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
 
     if (take_len != 0) {
       memcpy(string->bytes + offset, pad.bytes, take_len);
@@ -874,8 +874,8 @@ String String::padStart(double target_len, StringView pad) const {
   }
 
   size_t target = non_negative_index(target_len);
-  const size_t value_units = inox_string_code_unit_length(bytes(), length());
-  const size_t pad_units = inox_string_code_unit_length(pad.bytes, pad.len);
+  const size_t value_units = string_code_unit_length(bytes(), length());
+  const size_t pad_units = string_code_unit_length(pad.bytes, pad.len);
 
   if (target <= value_units || pad.len == 0 || pad_units == 0) {
     return String(*this);
@@ -891,7 +891,7 @@ String String::padStart(double target_len, StringView pad) const {
       take_units = remaining_units;
     }
 
-    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+    const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
 
     if (take_len > ((size_t)-1) - pad_total_len) {
       return String();
@@ -906,7 +906,7 @@ String String::padStart(double target_len, StringView pad) const {
   }
 
   const size_t len = pad_total_len + length();
-  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+  inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
     return String();
@@ -922,7 +922,7 @@ String String::padStart(double target_len, StringView pad) const {
       take_units = remaining_units;
     }
 
-    const size_t take_len = inox_string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
+    const size_t take_len = string_code_unit_to_byte_offset_ceiling(pad.bytes, pad.len, take_units);
 
     if (take_len != 0) {
       memcpy(string->bytes + offset, pad.bytes, take_len);
@@ -947,9 +947,9 @@ String String::slice(double start) const {
     return String();
   }
 
-  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
   size_t start_index = slice_index(start, code_unit_length);
-  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+  const size_t start_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
 
   return String(bytes() + start_byte, length() - start_byte);
 }
@@ -959,7 +959,7 @@ String String::slice(double start, double end) const {
     return String();
   }
 
-  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
   size_t start_index = slice_index(start, code_unit_length);
   size_t end_index = slice_index(end, code_unit_length);
 
@@ -967,8 +967,8 @@ String String::slice(double start, double end) const {
     end_index = start_index;
   }
 
-  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
-  size_t end_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), end_index);
+  const size_t start_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+  size_t end_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), end_index);
 
   if (end_byte < start_byte) {
     end_byte = start_byte;
@@ -990,7 +990,7 @@ ArrayClass String::split(StringView separator) const {
 
   if (separator.len == 0) {
     for (size_t index = 0; index < length();) {
-      size_t step = inox_utf8_next_len(bytes(), length(), index);
+      size_t step = utf8_next_len(bytes(), length(), index);
 
       if (step == 0) {
         step = 1;
@@ -1060,7 +1060,7 @@ String String::concat(StringView right) const {
   }
 
   const size_t len = length() + right.len;
-  inox_string* string = inox_string_alloc_storage(&inox_default_allocator, len);
+  inox_string* string = string_alloc_storage(&inox_default_allocator, len);
 
   if (string == 0) {
     return String();
@@ -1086,20 +1086,20 @@ double String::charCodeAt(double offset) const {
   }
 
   const size_t index = non_negative_index(offset);
-  const size_t byte_offset = inox_string_code_unit_to_byte_offset_floor(bytes(), length(), index);
+  const size_t byte_offset = string_code_unit_to_byte_offset_floor(bytes(), length(), index);
 
   if (byte_offset >= length()) {
     return 0;
   }
 
   size_t step = 0;
-  const uint32_t code_point = inox_utf8_code_point_at(bytes(), length(), byte_offset, &step);
+  const uint32_t code_point = utf8_code_point_at(bytes(), length(), byte_offset, &step);
 
   if (code_point <= 0xffffu) {
     return (double)code_point;
   }
 
-  const size_t code_unit_offset = inox_string_code_unit_index_of_byte_offset(bytes(), length(), byte_offset);
+  const size_t code_unit_offset = string_code_unit_index_of_byte_offset(bytes(), length(), byte_offset);
   const uint32_t surrogate = code_point - 0x10000u;
 
   if (index > code_unit_offset) {
@@ -1129,7 +1129,7 @@ bool String::includes(StringView search) const {
       return true;
     }
 
-    size_t step = inox_utf8_next_len(bytes(), length(), index);
+    size_t step = utf8_next_len(bytes(), length(), index);
 
     if (step == 0) {
       step = 1;
@@ -1147,7 +1147,7 @@ bool String::includes(StringView search, double start) const {
   }
 
   size_t start_index = non_negative_index(start);
-  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
 
   if (start_index > code_unit_length) {
     start_index = code_unit_length;
@@ -1157,7 +1157,7 @@ bool String::includes(StringView search, double start) const {
     return true;
   }
 
-  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+  const size_t start_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
 
   if (search.len > length() - start_byte) {
     return false;
@@ -1170,7 +1170,7 @@ bool String::includes(StringView search, double start) const {
       return true;
     }
 
-    size_t step = inox_utf8_next_len(bytes(), length(), index);
+    size_t step = utf8_next_len(bytes(), length(), index);
 
     if (step == 0) {
       step = 1;
@@ -1215,10 +1215,10 @@ double String::indexOf(StringView search) const {
 
   for (size_t index = 0; index <= max_start;) {
     if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
-      return (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+      return (double)string_code_unit_index_of_byte_offset(bytes(), length(), index);
     }
 
-    size_t step = inox_utf8_next_len(bytes(), length(), index);
+    size_t step = utf8_next_len(bytes(), length(), index);
 
     if (step == 0) {
       step = 1;
@@ -1236,7 +1236,7 @@ double String::indexOf(StringView search, double start) const {
   }
 
   size_t start_index = non_negative_index(start);
-  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
 
   if (start_index > code_unit_length) {
     start_index = code_unit_length;
@@ -1246,7 +1246,7 @@ double String::indexOf(StringView search, double start) const {
     return (double)start_index;
   }
 
-  const size_t start_byte = inox_string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
+  const size_t start_byte = string_code_unit_to_byte_offset_ceiling(bytes(), length(), start_index);
 
   if (search.len > length() - start_byte) {
     return -1;
@@ -1256,10 +1256,10 @@ double String::indexOf(StringView search, double start) const {
 
   for (size_t index = start_byte; index <= max_start;) {
     if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
-      return (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+      return (double)string_code_unit_index_of_byte_offset(bytes(), length(), index);
     }
 
-    size_t step = inox_utf8_next_len(bytes(), length(), index);
+    size_t step = utf8_next_len(bytes(), length(), index);
 
     if (step == 0) {
       step = 1;
@@ -1276,7 +1276,7 @@ double String::lastIndexOf(StringView search) const {
     return -1;
   }
 
-  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
 
   if (search.len == 0) {
     return (double)code_unit_length;
@@ -1291,10 +1291,10 @@ double String::lastIndexOf(StringView search) const {
 
   for (size_t index = 0; index <= max_start;) {
     if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
-      last_match = (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+      last_match = (double)string_code_unit_index_of_byte_offset(bytes(), length(), index);
     }
 
-    size_t step = inox_utf8_next_len(bytes(), length(), index);
+    size_t step = utf8_next_len(bytes(), length(), index);
 
     if (step == 0) {
       step = 1;
@@ -1312,7 +1312,7 @@ double String::lastIndexOf(StringView search, double start) const {
   }
 
   size_t start_index = non_negative_index(start);
-  const size_t code_unit_length = inox_string_code_unit_length(bytes(), length());
+  const size_t code_unit_length = string_code_unit_length(bytes(), length());
 
   if (start_index > code_unit_length) {
     start_index = code_unit_length;
@@ -1326,7 +1326,7 @@ double String::lastIndexOf(StringView search, double start) const {
     return -1;
   }
 
-  const size_t start_byte = inox_string_code_unit_to_byte_offset_floor(bytes(), length(), start_index);
+  const size_t start_byte = string_code_unit_to_byte_offset_floor(bytes(), length(), start_index);
   const size_t max_start = length() - search.len;
   double last_match = -1;
 
@@ -1336,10 +1336,10 @@ double String::lastIndexOf(StringView search, double start) const {
     }
 
     if (memcmp(bytes() + index, search.bytes, search.len) == 0) {
-      last_match = (double)inox_string_code_unit_index_of_byte_offset(bytes(), length(), index);
+      last_match = (double)string_code_unit_index_of_byte_offset(bytes(), length(), index);
     }
 
-    size_t step = inox_utf8_next_len(bytes(), length(), index);
+    size_t step = utf8_next_len(bytes(), length(), index);
 
     if (step == 0) {
       step = 1;
