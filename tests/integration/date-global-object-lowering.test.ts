@@ -52,7 +52,7 @@ console.log(local.toISOString())
 
 function assertDateObjectCalls(source: string): void {
   assert.match(source, /Date\.now\(\)/)
-  assert.match(source, /Date\.parse\("2026-06-24T12:34:56\.789Z", 24\)/)
+  assert.match(source, /Date\.parse\("2026-06-24T12:34:56\.789Z"\)/)
   assert.match(source, /Date\.UTC\(2026, 5, 24, 12, 34, 56, 789\)/)
   assert.match(source, /Date\.fromLocal\(2026, 5, 24, 12, 34, 56, 789\)/)
   assert.match(source, /Date\.part\(local, 0, false\)/)

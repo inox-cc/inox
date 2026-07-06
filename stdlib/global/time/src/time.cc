@@ -283,20 +283,6 @@ inox_number Date::now() const {
   );
 }
 
-inox_number Date::parse(const char* bytes, size_t len) const {
-  inox_number result = 0;
-
-  if (bytes == 0) {
-    return inox_date_nan();
-  }
-
-  if (inox_date_parse_iso(bytes, len, &result)) {
-    return result;
-  }
-
-  return inox_date_nan();
-}
-
 inox_number Date::parse(inox::StringView text) const {
   inox_number result = 0;
 

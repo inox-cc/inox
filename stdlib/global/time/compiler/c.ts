@@ -185,7 +185,7 @@ function emitPreparedDateParseExpression(
 
   return {
     lines: text.lines,
-    expression: `Date.parse(${text.bytes}, ${text.length})`
+    expression: `Date.parse(${timeStringViewExpression(text)})`
   }
 }
 
@@ -223,7 +223,7 @@ function emitPreparedDateConstructorExpression(
 
       return {
         lines: text.lines,
-        expression: `Date.parse(${text.bytes}, ${text.length})`
+        expression: `Date.parse(${timeStringViewExpression(text)})`
       }
     }
 
@@ -306,6 +306,10 @@ function emitPreparedTimeStringArg(
     bytes: '""',
     length: '0'
   }
+}
+
+function timeStringViewExpression(operand: CPreparedStringBytesOperand): string {
+  return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
 function datePartInfo(method: string): DatePartInfo | null {

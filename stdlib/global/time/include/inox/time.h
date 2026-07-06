@@ -12,8 +12,6 @@ class Date {
 public:
   inox_number now() const;
 
-  inox_number parse(const char* bytes, size_t len) const;
-
   inox_number parse(inox::StringView text) const;
 
   inox_number UTC(inox_number year) const;
