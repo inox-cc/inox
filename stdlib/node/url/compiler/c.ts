@@ -81,6 +81,14 @@ function urlStringLength(prepared: PreparedStringBytesOperand | null): string {
   return length
 }
 
+function urlStringArgument(prepared: PreparedStringBytesOperand | null): string {
+  if (prepared !== null && typeof prepared !== 'undefined' && typeof prepared.cppExpression === 'string') {
+    return prepared.cppExpression
+  }
+
+  return `inox::StringView(${urlStringBytes(prepared)}, ${urlStringLength(prepared)})`
+}
+
 function isUrlSearchParamsRuntimeCall(method: string): boolean {
   if (method === 'URLSearchParams.append') {
     return true
@@ -305,9 +313,7 @@ export function emitPreparedUrlSearchParamsCallExpression(
     pushUrlLines(lines, name.lines)
   }
 
-  const nameBytes = urlStringBytes(name)
-  const nameLength = urlStringLength(name)
-  const nameArg = `inox::StringView(${nameBytes}, ${nameLength})`
+  const nameArg = urlStringArgument(name)
   const receiverExpression =
     receiver.cppType === 'URLSearchParams' || isUrlSearchParamsReference(receiverObject, context)
       ? receiver.expression
@@ -359,7 +365,7 @@ export function emitPreparedUrlSearchParamsCallExpression(
   }
 
   const value = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_url_param_value')
-  const valueArg = `inox::StringView(${value.bytes}, ${value.length})`
+  const valueArg = urlStringArgument(value)
   let call = `${receiverExpression}.append(${nameArg}, ${valueArg})`
 
   if (method === 'URLSearchParams.set') {

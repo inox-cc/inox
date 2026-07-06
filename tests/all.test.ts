@@ -209,7 +209,8 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/runtime-value-core-dependencies.test.ts')
   const { assertThrowingErrorTransferUsesValueRelease } =
     await import('./integration/throwing-error-transfer-lowering.test.ts')
-  const { assertUrlRuntimeUsesStringFacade } = await import('./integration/url-cpp-object-lowering.test.ts')
+  const { assertUrlRuntimeUsesStringFacade, assertUrlSearchParamsLowersStringLiteralsDirectly } =
+    await import('./integration/url-cpp-object-lowering.test.ts')
 
   await test('compiler integration checks', async (t) => {
     await t.test('no-example-dependencies', async () => {
@@ -460,6 +461,7 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('url-cpp-object-lowering', () => {
       assertUrlRuntimeUsesStringFacade()
+      assertUrlSearchParamsLowersStringLiteralsDirectly()
     })
 
     await t.test('runtime-allocator-prelude', () => {
