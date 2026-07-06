@@ -107,6 +107,7 @@ struct FsAdapter {
 #ifdef __cplusplus
 
 #include "inox/array.h"
+#include "inox/binary.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
 
@@ -162,6 +163,7 @@ public:
   void clearAdapter();
 
   inox::String readFileSync(inox::StringView path);
+  Buffer readFileBytesSync(inox::StringView path);
   ArrayClass readdirSync(inox::StringView path);
   ArrayClass readdirDirentsSync(inox::StringView path);
   FsStats statSync(inox::StringView path);
@@ -179,7 +181,6 @@ public:
   void renameSync(inox::StringView old_path, inox::StringView new_path);
   void writeFileSync(inox::StringView path, inox::StringView bytes);
   void writeFileSync(inox::StringView path, inox_value bytes);
-  inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status mkdirSync(const char* path, size_t path_len, bool recursive);
   inox_status unlinkSync(const char* path, size_t path_len);
   inox_status rmSync(const char* path, size_t path_len, bool recursive, bool force);

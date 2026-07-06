@@ -451,25 +451,19 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
   path_len += relative_path_len;
   path[path_len] = '\0';
 
-  inox_value file = inox_undefined_value();
-  inox_status read_status =
-    fs.readFileBytesSync(response->connection->server->allocator, path, path_len, &file);
+  Buffer file = fs.readFileBytesSync(inox::StringView(path, path_len));
 
-  if (read_status != INOX_OK) {
+  if (inox::thrown()) {
+    inox::take_exception();
     return 0;
   }
 
-  if (file.tag != INOX_TAG_BYTES) {
-    inox_release(file);
-
+  BytesStorage* bytes = file.data();
+  if (bytes == nullptr) {
     return text(500, "internal server error") == INOX_OK ? 1 : 0;
   }
 
-  BytesStorage* bytes = (BytesStorage*)file.as.ref;
-
   if (bytes->length > INOX_HTTP_MAX_RESPONSE_BODY) {
-    inox_release(file);
-
     return text(413, "payload too large") == INOX_OK ? 1 : 0;
   }
 
@@ -486,8 +480,6 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
   if (result == INOX_OK) {
     result = end(inox::StringView((const char*)bytes->bytes, bytes->length));
   }
-
-  inox_release(file);
 
   return result == INOX_OK ? 1 : 0;
 }

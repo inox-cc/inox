@@ -379,6 +379,7 @@ static bool inox_fs_throw_sync_status(inox_status status, inox_value* value) {
   return true;
 }
 
+static inox_status fs_read_file_bytes_sync_status(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
 static inox_status fs_append_file_sync_status(const char* path, size_t path_len, const char* bytes, size_t byte_len);
 static inox_status fs_append_file_bytes_sync_status(const char* path, size_t path_len, inox_value bytes);
 static inox_status fs_copy_file_sync_status(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len);
@@ -410,7 +411,7 @@ inox::String fs::readFileSync(inox::StringView path) {
   return inox::String(inox::adopt_value, out);
 }
 
-inox_status fs::readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+static inox_status fs_read_file_bytes_sync_status(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -432,6 +433,17 @@ inox_status fs::readFileBytesSync(inox_allocator* allocator, const char* path, s
 #else
   return INOX_ERR_UNSUPPORTED;
 #endif
+}
+
+Buffer fs::readFileBytesSync(inox::StringView path) {
+  inox_value out = inox_undefined_value();
+  inox_status status = fs_read_file_bytes_sync_status(&inox_default_allocator, path.bytes, path.len, &out);
+
+  if (inox_fs_throw_sync_status(status, &out)) {
+    return Buffer();
+  }
+
+  return Buffer(inox::adopt_value, out);
 }
 
 ArrayClass fs::readdirSync(inox::StringView path) {
@@ -3605,7 +3617,7 @@ static inox_status inox_fs_run_request(void* context) {
 
   if (request->kind == INOX_FS_REQUEST_READ_FILE_BYTES) {
     inox_value result = inox_undefined_value();
-    inox_status status = fs.readFileBytesSync(request->loop->allocator, request->path, request->path_len, &result);
+    inox_status status = fs_read_file_bytes_sync_status(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);

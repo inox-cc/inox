@@ -85,6 +85,10 @@ function fsSyncValueCppType(callName: string, valueType: string): string | null 
     return 'inox::String'
   }
 
+  if (callName === 'fs.readFileBytesSync') {
+    return 'Buffer'
+  }
+
   return null
 }
 
