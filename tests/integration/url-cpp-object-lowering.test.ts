@@ -12,10 +12,19 @@ type GeneratedTextFile = {
 }
 
 export function assertUrlRuntimeUsesStringFacade(): void {
+  const header = readFileSync(resolve('stdlib/node/url/include/inox/url.h'), 'utf8')
   const source = readFileSync(resolve('stdlib/node/url/src/url.cc'), 'utf8')
 
   assert.match(source, /auto out = inox::String\(decoded, decoded_len\);/)
   assert.doesNotMatch(source, /String::fromLiteral\(&inox_default_allocator, decoded, decoded_len/)
+  assert.doesNotMatch(header, /static URL from\([^)]*inox_value/)
+  assert.doesNotMatch(header, /void setField\([^)]*inox_value/)
+  assert.doesNotMatch(header, /static URLSearchParams from\([^)]*inox_value/)
+  assert.doesNotMatch(header, /(?:fileURLToPath|pathToFileURL)\([^)]*inox_value/)
+  assert.doesNotMatch(source, /URL::from\([^)]*inox_value/)
+  assert.doesNotMatch(source, /URL::setField\([^)]*inox_value/)
+  assert.doesNotMatch(source, /URLSearchParams::(?:make|from)\([^)]*inox_value/)
+  assert.doesNotMatch(source, /url::(?:fileURLToPath|pathToFileURL)\([^)]*inox_value/)
 }
 
 export function assertUrlSearchParamsLowersStringLiteralsDirectly(): void {

@@ -18,15 +18,15 @@ public:
 
   using inox::Value::operator=;
 
-  static URL from(inox_value input, inox_value base, bool has_base, const inox_shape* shape);
+  static URL from(const inox::Value& input, const inox::Value& base, bool has_base, const inox_shape* shape);
 
   bool valid() const;
-  void setField(uint32_t field_index, inox_value value);
+  void setField(uint32_t field_index, const inox::Value& value);
 };
 
 class URLSearchParams : public inox::Value {
 private:
-  static inox::Value make(inox_value init);
+  static inox::Value make(const inox::Value& init);
   static inox::Value make(inox::StringView init);
 
 public:
@@ -38,7 +38,6 @@ public:
 
   using inox::Value::operator=;
 
-  static URLSearchParams from(inox_value init);
   static URLSearchParams from(const inox::Value& init);
 
   bool valid() const;
@@ -52,8 +51,8 @@ public:
 
 class url {
 public:
-  inox::String fileURLToPath(inox_value value) const;
-  URL pathToFileURL(inox_value path, const inox_shape* shape) const;
+  inox::String fileURLToPath(const inox::Value& value) const;
+  URL pathToFileURL(const inox::Value& path, const inox_shape* shape) const;
 };
 
 extern url url;

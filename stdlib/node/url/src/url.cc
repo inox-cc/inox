@@ -152,11 +152,12 @@ bool URL::valid() const {
   return value.tag == INOX_TAG_OBJECT && value.as.ref != 0;
 }
 
-inox::String url::fileURLToPath(inox_value value) const {
+inox::String url::fileURLToPath(const inox::Value& value) const {
+  inox_value raw_value = value.raw();
   const char* bytes = 0;
   size_t len = 0;
   inox_value retained = inox_undefined_value();
-  inox_status status = inox_url_value_string(value, INOX_URL_HREF_INDEX, &retained, &bytes, &len);
+  inox_status status = inox_url_value_string(raw_value, INOX_URL_HREF_INDEX, &retained, &bytes, &len);
 
   if (status != INOX_OK) {
     inox_url_throw_failed("fileURLToPath failed");
@@ -215,10 +216,11 @@ inox::String url::fileURLToPath(inox_value value) const {
   return out;
 }
 
-URL url::pathToFileURL(inox_value path, const inox_shape* shape) const {
+URL url::pathToFileURL(const inox::Value& path, const inox_shape* shape) const {
+  inox_value raw_path = path.raw();
   const char* bytes = 0;
   size_t len = 0;
-  inox_status status = inox_url_string(path, &bytes, &len);
+  inox_status status = inox_url_string(raw_path, &bytes, &len);
 
   if (status != INOX_OK) {
     inox_url_throw_failed("pathToFileURL failed");
@@ -253,10 +255,12 @@ URL url::pathToFileURL(inox_value path, const inox_shape* shape) const {
   return URL(inox::adopt_value, out);
 }
 
-URL URL::from(inox_value input, inox_value base, bool has_base, const inox_shape* shape) {
+URL URL::from(const inox::Value& input, const inox::Value& base, bool has_base, const inox_shape* shape) {
+  inox_value raw_input = input.raw();
+  inox_value raw_base = base.raw();
   const char* input_bytes = 0;
   size_t input_len = 0;
-  inox_status status = inox_url_string(input, &input_bytes, &input_len);
+  inox_status status = inox_url_string(raw_input, &input_bytes, &input_len);
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URL constructor failed");
@@ -290,7 +294,7 @@ URL URL::from(inox_value input, inox_value base, bool has_base, const inox_shape
   inox_value retained_base = inox_undefined_value();
   UrlParts base_parts;
 
-  status = inox_url_value_string(base, INOX_URL_HREF_INDEX, &retained_base, &base_bytes, &base_len);
+  status = inox_url_value_string(raw_base, INOX_URL_HREF_INDEX, &retained_base, &base_bytes, &base_len);
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URL constructor failed");
@@ -335,15 +339,16 @@ URL URL::from(inox_value input, inox_value base, bool has_base, const inox_shape
   return URL(inox::adopt_value, out);
 }
 
-void URL::setField(uint32_t field_index, inox_value value) {
+void URL::setField(uint32_t field_index, const inox::Value& value) {
   if (field_index != INOX_URL_PATHNAME_INDEX && field_index != INOX_URL_SEARCH_INDEX && field_index != INOX_URL_HASH_INDEX) {
     inox_url_throw_failed("URL field assignment failed");
     return;
   }
 
+  inox_value raw_value = value.raw();
   const char* bytes = 0;
   size_t len = 0;
-  inox_status status = inox_url_string(value, &bytes, &len);
+  inox_status status = inox_url_string(raw_value, &bytes, &len);
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URL field assignment failed");
@@ -385,7 +390,8 @@ static const inox_shape* inox_url_search_params_shape(void) {
   return &shape;
 }
 
-inox::Value URLSearchParams::make(inox_value init) {
+inox::Value URLSearchParams::make(const inox::Value& init) {
+  inox_value raw_init = init.raw();
   inox_value object = inox_undefined_value();
   inox_status status = inox_object_new(&inox_default_allocator, inox_url_search_params_shape(), &object);
 
@@ -397,23 +403,23 @@ inox::Value URLSearchParams::make(inox_value init) {
   char* query = 0;
   size_t query_len = 0;
 
-  if (init.tag == INOX_TAG_UNDEFINED || init.tag == INOX_TAG_NULL) {
+  if (raw_init.tag == INOX_TAG_UNDEFINED || raw_init.tag == INOX_TAG_NULL) {
     query = inox_url_alloc(&inox_default_allocator, 0);
 
     if (query == 0) {
       status = INOX_ERR_OOM;
     }
-  } else if (init.tag == INOX_TAG_STRING) {
+  } else if (raw_init.tag == INOX_TAG_STRING) {
     const char* bytes = 0;
     size_t len = 0;
 
-    status = inox_url_string(init, &bytes, &len);
+    status = inox_url_string(raw_init, &bytes, &len);
 
     if (status == INOX_OK) {
       status = inox_url_search_params_from_string(&inox_default_allocator, bytes, len, &query, &query_len);
     }
-  } else if (init.tag == INOX_TAG_OBJECT) {
-    status = inox_url_search_params_from_object(&inox_default_allocator, init, &query, &query_len);
+  } else if (raw_init.tag == INOX_TAG_OBJECT) {
+    status = inox_url_search_params_from_object(&inox_default_allocator, raw_init, &query, &query_len);
   } else {
     status = INOX_ERR_TYPE;
   }
@@ -475,14 +481,8 @@ URLSearchParams::URLSearchParams(const inox::Value& value) : inox::Value(value) 
 
 URLSearchParams::URLSearchParams(inox::AdoptValue adopt, inox_value value) : inox::Value(adopt, value) {}
 
-URLSearchParams URLSearchParams::from(inox_value init) {
-  inox::Value value = make(init);
-
-  return URLSearchParams(inox::adopt_value, value.release());
-}
-
 URLSearchParams URLSearchParams::from(const inox::Value& init) {
-  inox::Value value = make(init.raw());
+  inox::Value value = make(init);
 
   return URLSearchParams(inox::adopt_value, value.release());
 }
