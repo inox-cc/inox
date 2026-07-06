@@ -1,6 +1,7 @@
 #include "inox/fetch.h"
 
 #include <cstring>
+#include <strings.h>
 #include <utility>
 #include <vector>
 
@@ -48,17 +49,72 @@ static inox_status fetch_backend_with_init(
   const FetchNativeInit* init,
   inox_promise** out
 );
-static inox_status fetch_backend_response_text(inox_loop* loop, inox_value response, inox_promise** out);
-static inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out);
-static inox_status fetch_backend_headers_has(inox_value headers, const char* name, size_t name_len, int* out);
-static inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out);
-static inox_status fetch_backend_abort_controller_abort(inox_value controller);
-static inox_status fetch_backend_signal_aborted(inox_value signal, int* out);
-
 enum {
   INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX = 0,
   INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX = 0
 };
+
+enum {
+  INOX_FETCH_HEADERS_RAW_INDEX = 0
+};
+
+static int fetch_find_header_value(
+  const char* bytes,
+  size_t header_len,
+  const char* name,
+  size_t name_len,
+  const char** value,
+  size_t* value_len
+) {
+  if (bytes == 0 || name == 0 || name_len == 0 || value == 0 || value_len == 0) {
+    return 0;
+  }
+
+  const char* cursor = bytes;
+  const char* end = bytes + header_len;
+
+  while (cursor < end && !(cursor[0] == '\r' && cursor + 1 < end && cursor[1] == '\n')) {
+    cursor += 1;
+  }
+
+  if (cursor + 2 <= end) {
+    cursor += 2;
+  }
+
+  while (cursor < end && !(cursor[0] == '\r' && cursor + 1 < end && cursor[1] == '\n')) {
+    const char* line_end = cursor;
+
+    while (line_end < end && *line_end != '\r' && *line_end != '\n') {
+      line_end += 1;
+    }
+
+    const char* colon = (const char*)memchr(cursor, ':', (size_t)(line_end - cursor));
+
+    if (colon != 0 && (size_t)(colon - cursor) == name_len && strncasecmp(cursor, name, name_len) == 0) {
+      const char* field_value = colon + 1;
+
+      while (field_value < line_end && (*field_value == ' ' || *field_value == '\t')) {
+        field_value += 1;
+      }
+
+      while (line_end > field_value && (line_end[-1] == ' ' || line_end[-1] == '\t')) {
+        line_end -= 1;
+      }
+
+      *value = field_value;
+      *value_len = (size_t)(line_end - field_value);
+      return 1;
+    }
+
+    cursor = line_end;
+
+    while (cursor < end && (*cursor == '\r' || *cursor == '\n')) {
+      cursor += 1;
+    }
+  }
+
+  return 0;
+}
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "inox/net.h"
@@ -114,10 +170,6 @@ enum {
   INOX_FETCH_RESPONSE_REDIRECTED_INDEX = 4,
   INOX_FETCH_RESPONSE_HEADERS_INDEX = 5,
   INOX_FETCH_RESPONSE_BODY_INDEX = 6
-};
-
-enum {
-  INOX_FETCH_HEADERS_RAW_INDEX = 0
 };
 
 enum {
@@ -181,14 +233,6 @@ static int fetch_parse_status_line(
   size_t* status_text_len
 );
 static int fetch_parse_content_length(const char* bytes, size_t header_len, size_t* out);
-static int fetch_find_header_value(
-  const char* bytes,
-  size_t header_len,
-  const char* name,
-  size_t name_len,
-  const char** value,
-  size_t* value_len
-);
 static int fetch_header_value_contains_token(const char* value, size_t value_len, const char* token);
 static inox_status fetch_decode_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete);
 static inox_status fetch_scan_chunked_body(char* bytes, size_t len, size_t* out_len, int* complete, int decode);
@@ -361,168 +405,6 @@ static inox_status fetch_backend_with_init(
   }
 
   *out = promise;
-
-  return INOX_OK;
-}
-
-static inox_status fetch_backend_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
-  if (loop == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
-
-  inox_value body = inox_undefined_value();
-  inox_status status = inox_object_get(response, "__inoxBody", 10, &body);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (body.tag != INOX_TAG_STRING || body.as.ref == 0) {
-    inox_release(body);
-    return INOX_ERR_TYPE;
-  }
-
-  status = inox_promise_resolved(loop, body, out);
-  inox_release(body);
-
-  return status;
-}
-
-static inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
-  if (allocator == 0 || name == 0 || name_len == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-  inox_value raw = inox_undefined_value();
-  inox_status status = inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, &raw);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (raw.tag != INOX_TAG_STRING || raw.as.ref == 0) {
-    inox_release(raw);
-    return INOX_ERR_TYPE;
-  }
-
-  inox_string* raw_string = (inox_string*)raw.as.ref;
-  const char* value = 0;
-  size_t value_len = 0;
-
-  if (fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len)) {
-    auto header = inox::String(value, value_len);
-    status = header.valid() ? header.copy_to(out) : INOX_ERR_OOM;
-  } else {
-    *out = inox_null_value();
-    status = INOX_OK;
-  }
-
-  inox_release(raw);
-  return status;
-}
-
-static inox_status fetch_backend_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
-  if (name == 0 || name_len == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
-  inox_value raw = inox_undefined_value();
-  inox_status status = inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, &raw);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (raw.tag != INOX_TAG_STRING || raw.as.ref == 0) {
-    inox_release(raw);
-    return INOX_ERR_TYPE;
-  }
-
-  inox_string* raw_string = (inox_string*)raw.as.ref;
-  const char* value = 0;
-  size_t value_len = 0;
-  *out = fetch_find_header_value(raw_string->bytes, raw_string->len, name, name_len, &value, &value_len) ? 1 : 0;
-
-  inox_release(raw);
-  return INOX_OK;
-}
-
-static inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out) {
-  static const inox_field_info signal_fields[] = { { "aborted", 0 } };
-  static const inox_shape signal_shape = { 1, signal_fields };
-  static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
-  static const inox_shape controller_shape = { 1, controller_fields };
-
-  if (allocator == 0 || out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-  inox_value signal = inox_undefined_value();
-  inox_value controller = inox_undefined_value();
-  inox_status status = inox_object_new(allocator, &signal_shape, &signal);
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(false));
-  }
-
-  if (status == INOX_OK) {
-    status = inox_object_new(allocator, &controller_shape, &controller);
-  }
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
-  }
-
-  inox_release(signal);
-
-  if (status != INOX_OK) {
-    inox_release(controller);
-    return status;
-  }
-
-  *out = controller;
-
-  return INOX_OK;
-}
-
-static inox_status fetch_backend_abort_controller_abort(inox_value controller) {
-  inox_value signal = inox_undefined_value();
-  inox_status status = inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, &signal);
-
-  if (status == INOX_OK) {
-    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
-  }
-
-  inox_release(signal);
-
-  return status;
-}
-
-static inox_status fetch_backend_signal_aborted(inox_value signal, int* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
-  inox_value aborted = inox_undefined_value();
-  inox_status status = inox_object_get_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, &aborted);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (aborted.tag != INOX_TAG_BOOL) {
-    inox_release(aborted);
-    return INOX_ERR_TYPE;
-  }
-
-  *out = aborted.as.boolean ? 1 : 0;
-  inox_release(aborted);
 
   return INOX_OK;
 }
@@ -823,7 +705,19 @@ static inox_status fetch_operation_is_aborted(FetchOperation* request, int* out)
     return INOX_OK;
   }
 
-  return fetch_backend_signal_aborted(request->signal, out);
+  inox::Value aborted;
+  inox_status status = inox_object_get_known(request->signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, aborted.out());
+
+  if (status != INOX_OK) {
+    return status;
+  }
+
+  if (aborted.tag != INOX_TAG_BOOL) {
+    return INOX_ERR_TYPE;
+  }
+
+  *out = aborted.as.boolean ? 1 : 0;
+  return INOX_OK;
 }
 
 static void fetch_operation_free(FetchOperation* request) {
@@ -1293,64 +1187,6 @@ static int fetch_parse_content_length(const char* bytes, size_t header_len, size
 
       *out = value;
       return 1;
-    }
-  }
-
-  return 0;
-}
-
-static int fetch_find_header_value(
-  const char* bytes,
-  size_t header_len,
-  const char* name,
-  size_t name_len,
-  const char** value,
-  size_t* value_len
-) {
-  if (bytes == 0 || name == 0 || name_len == 0 || value == 0 || value_len == 0) {
-    return 0;
-  }
-
-  const char* cursor = bytes;
-  const char* end = bytes + header_len;
-
-  while (cursor < end && !(cursor[0] == '\r' && cursor + 1 < end && cursor[1] == '\n')) {
-    cursor += 1;
-  }
-
-  if (cursor + 2 <= end) {
-    cursor += 2;
-  }
-
-  while (cursor < end && !(cursor[0] == '\r' && cursor + 1 < end && cursor[1] == '\n')) {
-    const char* line_end = cursor;
-
-    while (line_end < end && *line_end != '\r' && *line_end != '\n') {
-      line_end += 1;
-    }
-
-    const char* colon = (const char*)memchr(cursor, ':', (size_t)(line_end - cursor));
-
-    if (colon != 0 && (size_t)(colon - cursor) == name_len && strncasecmp(cursor, name, name_len) == 0) {
-      const char* field_value = colon + 1;
-
-      while (field_value < line_end && (*field_value == ' ' || *field_value == '\t')) {
-        field_value += 1;
-      }
-
-      while (line_end > field_value && (line_end[-1] == ' ' || line_end[-1] == '\t')) {
-        line_end -= 1;
-      }
-
-      *value = field_value;
-      *value_len = (size_t)(line_end - field_value);
-      return 1;
-    }
-
-    cursor = line_end;
-
-    while (cursor < end && (*cursor == '\r' || *cursor == '\n')) {
-      cursor += 1;
     }
   }
 
@@ -1930,72 +1766,6 @@ static inox_status fetch_backend_with_init(
   return INOX_ERR_UNSUPPORTED;
 }
 
-static inox_status fetch_backend_response_text(inox_loop* loop, inox_value response, inox_promise** out) {
-  (void)loop;
-  (void)response;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-static inox_status fetch_backend_headers_get(inox_allocator* allocator, inox_value headers, const char* name, size_t name_len, inox_value* out) {
-  (void)allocator;
-  (void)headers;
-  (void)name;
-  (void)name_len;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-  return INOX_ERR_UNSUPPORTED;
-}
-
-static inox_status fetch_backend_headers_has(inox_value headers, const char* name, size_t name_len, int* out) {
-  (void)headers;
-  (void)name;
-  (void)name_len;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-static inox_status fetch_backend_abort_controller_new(inox_allocator* allocator, inox_value* out) {
-  (void)allocator;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-  return INOX_ERR_UNSUPPORTED;
-}
-
-static inox_status fetch_backend_abort_controller_abort(inox_value controller) {
-  (void)controller;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-static inox_status fetch_backend_signal_aborted(inox_value signal, int* out) {
-  (void)signal;
-
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = 0;
-  return INOX_ERR_UNSUPPORTED;
-}
-
 #endif
 
 namespace inox {
@@ -2059,13 +1829,23 @@ bool FetchResponse::redirected() const {
 }
 
 Promise FetchResponse::text() const {
-  inox_promise* promise = nullptr;
-
   if (!valid()) {
     return Promise();
   }
 
-  if (fetch_backend_response_text(loop(), value_, &promise) != INOX_OK) {
+  Value body;
+
+  if (
+    inox_object_get(value_, "__inoxBody", 10, body.out()) != INOX_OK ||
+    body.tag != INOX_TAG_STRING ||
+    body.as.ref == nullptr
+  ) {
+    return Promise();
+  }
+
+  inox_promise* promise = nullptr;
+
+  if (inox_promise_resolved(loop(), body, &promise) != INOX_OK) {
     return Promise();
   }
 
@@ -2129,34 +1909,92 @@ Promise fetch(StringView url, const FetchInit* init) {
 }
 
 bool fetch_headers_has(inox_value headers, StringView name) {
-  int out = 0;
-
-  if (fetch_backend_headers_has(headers, name.bytes, name.len, &out) != INOX_OK) {
+  if (name.bytes == nullptr || name.len == 0) {
     throw_value(Value());
     return false;
   }
 
-  return out != 0;
+  Value raw;
+
+  if (
+    inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, raw.out()) != INOX_OK ||
+    raw.tag != INOX_TAG_STRING ||
+    raw.as.ref == nullptr
+  ) {
+    throw_value(Value());
+    return false;
+  }
+
+  inox_string* raw_string = (inox_string*)raw.as.ref;
+  const char* value = nullptr;
+  size_t value_len = 0;
+
+  return fetch_find_header_value(raw_string->bytes, raw_string->len, name.bytes, name.len, &value, &value_len) != 0;
 }
 
 Value fetch_headers_get(inox_value headers, StringView name) {
-  Value out;
-
-  if (fetch_backend_headers_get(&inox_default_allocator, headers, name.bytes, name.len, out.out()) != INOX_OK) {
+  if (name.bytes == nullptr || name.len == 0) {
     throw_value(Value());
+    return Value();
   }
 
-  return out;
+  Value raw;
+
+  if (
+    inox_object_get_known(headers, INOX_FETCH_HEADERS_RAW_INDEX, raw.out()) != INOX_OK ||
+    raw.tag != INOX_TAG_STRING ||
+    raw.as.ref == nullptr
+  ) {
+    throw_value(Value());
+    return Value();
+  }
+
+  inox_string* raw_string = (inox_string*)raw.as.ref;
+  const char* value = nullptr;
+  size_t value_len = 0;
+
+  if (!fetch_find_header_value(raw_string->bytes, raw_string->len, name.bytes, name.len, &value, &value_len)) {
+    return Value(inox_null_value());
+  }
+
+  String header(value, value_len);
+
+  if (!header.valid()) {
+    throw_value(Value());
+    return Value();
+  }
+
+  return header;
 }
 
 Value fetch_abort_controller() {
-  Value out;
+  static const inox_field_info signal_fields[] = { { "aborted", 0 } };
+  static const inox_shape signal_shape = { 1, signal_fields };
+  static const inox_field_info controller_fields[] = { { "signal", INOX_FIELD_READONLY } };
+  static const inox_shape controller_shape = { 1, controller_fields };
 
-  if (fetch_backend_abort_controller_new(&inox_default_allocator, out.out()) != INOX_OK) {
-    throw_value(Value());
+  Value signal;
+  Value controller;
+  inox_status status = inox_object_new(&inox_default_allocator, &signal_shape, signal.out());
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(false));
   }
 
-  return out;
+  if (status == INOX_OK) {
+    status = inox_object_new(&inox_default_allocator, &controller_shape, controller.out());
+  }
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal);
+  }
+
+  if (status != INOX_OK) {
+    throw_value(Value());
+    return Value();
+  }
+
+  return controller;
 }
 
 Value fetch_abort_controller_signal(inox_value controller) {
@@ -2170,7 +2008,14 @@ Value fetch_abort_controller_signal(inox_value controller) {
 }
 
 void fetch_abort_controller_abort(inox_value controller) {
-  if (fetch_backend_abort_controller_abort(controller) != INOX_OK) {
+  Value signal;
+  inox_status status = inox_object_get_known(controller, INOX_FETCH_ABORT_CONTROLLER_SIGNAL_INDEX, signal.out());
+
+  if (status == INOX_OK) {
+    status = inox_object_init_known(signal, INOX_FETCH_ABORT_SIGNAL_ABORTED_INDEX, inox_bool_value(true));
+  }
+
+  if (status != INOX_OK) {
     throw_value(Value());
   }
 }
