@@ -1,14 +1,8 @@
 import type { AnyNode } from '../../../../compiler/types.ts'
 import type { CFunctionContext } from '../../../../compiler/c/context.ts'
-import {
-  emitFailureStatement,
-  emitPrepareOwnedValueWrite,
-  emitStatusCheck,
-  nextCName,
-  registerOwnedValue
-} from '../../../../compiler/c/context.ts'
+import { emitFailureStatement, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
 import { cStringLiteral, emitCIdentifier } from '../../../../compiler/c/identifiers.ts'
-import { emitRuntimeValueCheck, emitRuntimeValueCheckLines } from '../../../../compiler/c/runtime-values.ts'
+import { emitRuntimeValueCheckLines } from '../../../../compiler/c/runtime-values.ts'
 import type {
   CObjectShape,
   CObjectShapeField,
@@ -262,7 +256,8 @@ export function emitPreparedJsonCallExpression(
     return null
   }
 
-  let out = nextCName(context, 'inox_json_value')
+  const outPrefix = method === 'parse' ? 'inox_json_value' : 'inox_json_string'
+  let out = nextCName(context, outPrefix)
 
   if (
     options !== null &&
@@ -272,8 +267,6 @@ export function emitPreparedJsonCallExpression(
   ) {
     out = options.out
   }
-
-  const ownsOut = options === null || typeof options === 'undefined' || options.owned !== false
 
   if (method === 'parse') {
     const text = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_json_text')
@@ -297,25 +290,23 @@ export function emitPreparedJsonCallExpression(
     }
   }
 
-  if (ownsOut) {
-    registerOwnedValue(context, out)
-  }
-
   const lines: string[] = []
   const classToJson = dependencies.emitPreparedClassToJsonExpression(expression.args[0], context)
+  const declare = options === null || typeof options === 'undefined' || options.out === null || typeof options.out === 'undefined'
 
   if (classToJson !== null && typeof classToJson !== 'undefined') {
     pushJsonLines(lines, classToJson.lines)
-    pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-    lines.push(emitStatusCheck(`JSON.stringify(${classToJson.expression}, ${out})`, context))
-    lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
+    lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${classToJson.expression});`)
+    pushJsonThrownCheckLines(lines, context)
 
     return {
       lines: lines,
       expression: out,
-      owned: ownsOut,
+      owned: false,
       runtimeTypeChecked: true,
-      valueType: 'string'
+      valueType: 'string',
+      cppType: 'inox::String',
+      cppDeclaredName: declare ? out : undefined
     }
   }
 
@@ -323,36 +314,35 @@ export function emitPreparedJsonCallExpression(
 
   if (classInstance !== null && typeof classInstance !== 'undefined') {
     pushJsonLines(lines, classInstance.lines)
-    pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
     lines.push(
-      emitStatusCheck(
-        `JSON.stringify(${classInstance.descriptor}, ${classInstance.instance}, ${out})`,
-        context
-      )
+      `${declare ? 'auto ' : ''}${out} = JSON.stringify(${classInstance.descriptor}, ${classInstance.instance});`
     )
-    lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
+    pushJsonThrownCheckLines(lines, context)
 
     return {
       lines: lines,
       expression: out,
-      owned: ownsOut,
+      owned: false,
       runtimeTypeChecked: true,
-      valueType: 'string'
+      valueType: 'string',
+      cppType: 'inox::String',
+      cppDeclaredName: declare ? out : undefined
     }
   }
 
   const value = dependencies.emitCValueExpression(expression.args[0], context)
   pushJsonLines(lines, value.lines)
-  pushJsonLines(lines, emitPrepareOwnedValueWrite(out))
-  lines.push(emitStatusCheck(`JSON.stringify(${value.expression}, ${out})`, context))
-  lines.push(emitRuntimeValueCheck(out, 'INOX_TAG_STRING', context))
+  lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${value.expression});`)
+  pushJsonThrownCheckLines(lines, context)
 
   return {
     lines: lines,
     expression: out,
-    owned: ownsOut,
+    owned: false,
     runtimeTypeChecked: true,
-    valueType: 'string'
+    valueType: 'string',
+    cppType: 'inox::String',
+    cppDeclaredName: declare ? out : undefined
   }
 }
 

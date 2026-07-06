@@ -2,12 +2,11 @@
 #define INOX_JSON_H
 
 #include <stddef.h>
-#include "inox/allocator.h"
 #include "inox/class_descriptor.h"
 #include "inox/value.h"
 
 #ifdef __cplusplus
-#include "inox/loop.h"
+#include "inox/string.h"
 #include "inox/string_view.h"
 #endif
 
@@ -17,11 +16,11 @@ public:
   inox::Value parse(inox::StringView text) const;
   inox::Value parse(const char* text) const;
 
-  inox_status stringify(inox_value value, inox::Value& out) const;
+  inox::String stringify(inox_value value) const;
 
-  inox_status stringify(const inox_class_descriptor& descriptor, const void* instance, inox::Value& out) const;
+  inox::String stringify(const inox_class_descriptor& descriptor, const void* instance) const;
 
-  inox_status stringify(const inox_class_descriptor* descriptor, const void* instance, inox::Value& out) const;
+  inox::String stringify(const inox_class_descriptor* descriptor, const void* instance) const;
 };
 
 extern Json JSON;

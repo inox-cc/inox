@@ -15,6 +15,7 @@ export type CPreparedExpression = {
   scalarType?: string
   valueType?: string
   cppType?: string
+  cppDeclaredName?: string
 }
 
 export type CPreparedStatement = {

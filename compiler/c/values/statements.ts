@@ -1344,12 +1344,23 @@ export function emitRuntimeStringVariableDeclaration(
   const value = statementDeps(context).emitCValueExpression(expression, context)
   const lines: string[] = []
 
-  pushAllLines(lines, value.lines)
-
   if (statement.kind === 'const' && value.cppType === 'inox::String') {
     const name = emitCIdentifier(statement.name)
+    const declaredName = value.cppDeclaredName
 
-    lines.push(`auto ${name} = ${value.expression};`)
+    if (
+      declaredName !== null &&
+      typeof declaredName !== 'undefined' &&
+      declaredName !== name &&
+      value.expression === declaredName
+    ) {
+      for (const line of value.lines) {
+        lines.push(replacePreparedCppDeclaredName(line, declaredName, name))
+      }
+    } else {
+      pushAllLines(lines, value.lines)
+      lines.push(`auto ${name} = ${value.expression};`)
+    }
 
     if (!shouldSkipRuntimeValueDeclarationCheck(statement, value, 'string')) {
       lines.push(emitRuntimeTypeCheck(`!${name}.valid()`, context))
@@ -1364,6 +1375,7 @@ export function emitRuntimeStringVariableDeclaration(
 
   const storage = registerRuntimeStringStorage(statement.name, context)
 
+  pushAllLines(lines, value.lines)
   lines.push(`${storage} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, storage, value)
 
@@ -1704,6 +1716,10 @@ function pushAwaitVariableDeclarationSpacing(lines: string[], expression: Statem
   if (expression.type === 'AwaitExpression') {
     lines.push('')
   }
+}
+
+function replacePreparedCppDeclaredName(line: string, declaredName: string, name: string): string {
+  return line.split(declaredName).join(name)
 }
 
 function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: PreparedExpression): string {
