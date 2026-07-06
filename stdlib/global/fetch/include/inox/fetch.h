@@ -58,7 +58,6 @@ public:
 class FetchHeaders : public Value {
 public:
   FetchHeaders();
-  explicit FetchHeaders(inox_value value);
   explicit FetchHeaders(const Value& value);
 
   bool has(StringView name) const;
@@ -68,7 +67,6 @@ public:
 class AbortController : public Value {
 public:
   AbortController();
-  explicit AbortController(inox_value value);
   explicit AbortController(const Value& value);
 
   using Value::operator=;

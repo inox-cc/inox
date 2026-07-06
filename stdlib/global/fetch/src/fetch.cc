@@ -1854,8 +1854,6 @@ Promise FetchResponse::text() const {
 
 FetchHeaders::FetchHeaders() : Value() {}
 
-FetchHeaders::FetchHeaders(inox_value value) : Value(value) {}
-
 FetchHeaders::FetchHeaders(const Value& value) : Value(value) {}
 
 bool FetchHeaders::has(StringView name) const {
@@ -1946,8 +1944,6 @@ AbortController::AbortController() : Value() {
 
   Value::operator=(std::move(controller));
 }
-
-AbortController::AbortController(inox_value value) : Value(value) {}
 
 AbortController::AbortController(const Value& value) : Value(value) {}
 

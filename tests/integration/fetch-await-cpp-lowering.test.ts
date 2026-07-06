@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -155,6 +157,16 @@ await checkFetchFacade()
   assert.doesNotMatch(source, /fetch_headers_(?:get|has)/)
 }
 
+export function assertFetchRuntimeFacadesDoNotExposeRawConstructors(): void {
+  const header = readFileSync(resolve('stdlib/global/fetch/include/inox/fetch.h'), 'utf8')
+  const source = readFileSync(resolve('stdlib/global/fetch/src/fetch.cc'), 'utf8')
+
+  assert.doesNotMatch(header, /FetchHeaders\(inox_value/)
+  assert.doesNotMatch(header, /AbortController\(inox_value/)
+  assert.doesNotMatch(source, /FetchHeaders::FetchHeaders\(inox_value/)
+  assert.doesNotMatch(source, /AbortController::AbortController\(inox_value/)
+}
+
 function functionSource(source: string, signatureStart: string): string {
   const start = source.indexOf(signatureStart)
 
@@ -184,4 +196,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertFetchAwaitUsesCppWrappers()
   assertFetchRuntimeFacadesUseCppObjects()
+  assertFetchRuntimeFacadesDoNotExposeRawConstructors()
 }
