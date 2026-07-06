@@ -8,7 +8,7 @@
 #include "inox/string_view.h"
 #endif
 
-typedef struct inox_dgram_socket inox_dgram_socket;
+struct inox_dgram_socket;
 
 struct DgramAddress {
   char address[64];

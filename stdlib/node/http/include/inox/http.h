@@ -8,8 +8,8 @@
 #include "inox/string_view.h"
 #endif
 
-typedef struct inox_http_server inox_http_server;
-typedef struct inox_http_response inox_http_response;
+struct inox_http_server;
+struct inox_http_response;
 
 struct HttpHeader {
   const char* name;

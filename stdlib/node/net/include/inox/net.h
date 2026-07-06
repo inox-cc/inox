@@ -8,8 +8,8 @@
 #include "inox/string_view.h"
 #endif
 
-typedef struct inox_net_server inox_net_server;
-typedef struct inox_net_socket inox_net_socket;
+struct inox_net_server;
+struct inox_net_socket;
 
 struct NetAddress {
   char address[64];
