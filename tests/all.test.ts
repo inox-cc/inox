@@ -183,7 +183,7 @@ async function runIntegrationTests(): Promise<void> {
   const { assertRegExpLowersToCppObject } = await import('./integration/regexp-cpp-object-lowering.test.ts')
   const { assertRuntimeAllocatorStaysInRuntime } =
     await import('./integration/runtime-allocator-prelude.test.ts')
-  const { assertStringMethodsLowerToCppObject } =
+  const { assertStringMethodsLowerToCppObject, assertStringRuntimeMethodsStayDirect } =
     await import('./integration/string-cpp-object-lowering.test.ts')
   const { assertRuntimeValueDeclarationsStayLocal } =
     await import('./integration/runtime-value-local-declaration-lowering.test.ts')
@@ -434,6 +434,7 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('string-cpp-object-lowering', () => {
       assertStringMethodsLowerToCppObject()
+      assertStringRuntimeMethodsStayDirect()
     })
 
     await t.test('promise-await-helper-lowering', () => {

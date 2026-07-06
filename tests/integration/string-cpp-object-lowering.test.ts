@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
@@ -79,6 +81,16 @@ console.log(words('left,right'))
   )
 }
 
+export function assertStringRuntimeMethodsStayDirect(): void {
+  const source = readFileSync(resolve('stdlib/global/strings/src/strings.cc'), 'utf8')
+
+  assert.doesNotMatch(
+    source,
+    /inox_string_(trim|to_upper_case|slice|includes|starts_with|ends_with|index_of|last_index_of|split)_parts/
+  )
+  assert.doesNotMatch(source, /return\s+inox::String::from(?:Literal|Number|NumberRadix|Value)\(/)
+}
+
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {
   for (const file of files) {
     if (file.path === path) {
@@ -91,4 +103,5 @@ function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedT
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertStringMethodsLowerToCppObject()
+  assertStringRuntimeMethodsStayDirect()
 }
