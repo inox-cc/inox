@@ -127,7 +127,7 @@ Hash& Hash::update(inox::StringView data) {
   return *this;
 }
 
-Hash& Hash::update(inox_value data) {
+Hash& Hash::update(const inox::Value& data) {
   if (handle_ == 0 || handle_->finalized) {
     inox_crypto_throw_failed("crypto.Hash.update failed");
     return *this;
@@ -136,7 +136,7 @@ Hash& Hash::update(inox_value data) {
   const uint8_t* bytes = 0;
   size_t len = 0;
 
-  if (CryptoHashState_data(data, &bytes, &len) != INOX_OK) {
+  if (CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK) {
     inox_crypto_throw_failed("crypto.Hash.update failed");
     return *this;
   }
@@ -220,7 +220,7 @@ Hmac& Hmac::update(inox::StringView data) {
   return *this;
 }
 
-Hmac& Hmac::update(inox_value data) {
+Hmac& Hmac::update(const inox::Value& data) {
   if (handle_ == 0 || handle_->finalized) {
     inox_crypto_throw_failed("crypto.Hmac.update failed");
     return *this;
@@ -229,7 +229,7 @@ Hmac& Hmac::update(inox_value data) {
   const uint8_t* bytes = 0;
   size_t len = 0;
 
-  if (CryptoHashState_data(data, &bytes, &len) != INOX_OK) {
+  if (CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK) {
     inox_crypto_throw_failed("crypto.Hmac.update failed");
     return *this;
   }
@@ -299,14 +299,13 @@ ArrayClass crypto::getHashes() const {
 #endif
 }
 
-Uint8Array crypto::getRandomValues(inox_value value) const {
-  if (value.tag != INOX_TAG_BYTES || value.as.ref == 0) {
+Uint8Array crypto::getRandomValues(Uint8Array value) const {
+  if (!value.valid()) {
     inox_crypto_throw_failed("crypto.getRandomValues failed");
     return Uint8Array();
   }
 
-  BytesStorage* bytes = (BytesStorage*)value.as.ref;
-  inox_status status = inox_crypto_random_bytes_raw(bytes->bytes, bytes->length);
+  inox_status status = inox_crypto_random_bytes_raw(value.bytes(), value.length());
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.getRandomValues failed");
@@ -345,18 +344,16 @@ Buffer crypto::randomBytes(inox_number size) const {
   return out;
 }
 
-Uint8Array crypto::randomFillSync(inox_value value, inox_number offset_value, inox_number size_value, bool has_size) const {
+Uint8Array crypto::randomFillSync(Uint8Array value, inox_number offset_value, inox_number size_value, bool has_size) const {
   size_t offset = 0;
   size_t size = 0;
 
-  if (value.tag != INOX_TAG_BYTES || value.as.ref == 0 || !inox_crypto_number_to_size(offset_value, &offset)) {
+  if (!value.valid() || !inox_crypto_number_to_size(offset_value, &offset)) {
     inox_crypto_throw_failed("crypto.randomFillSync failed");
     return Uint8Array();
   }
 
-  BytesStorage* bytes = (BytesStorage*)value.as.ref;
-
-  if (offset > bytes->length) {
+  if (offset > value.length()) {
     inox_crypto_throw_failed("crypto.randomFillSync failed");
     return Uint8Array();
   }
@@ -367,15 +364,15 @@ Uint8Array crypto::randomFillSync(inox_value value, inox_number offset_value, in
       return Uint8Array();
     }
   } else {
-    size = bytes->length - offset;
+    size = value.length() - offset;
   }
 
-  if (size > bytes->length - offset) {
+  if (size > value.length() - offset) {
     inox_crypto_throw_failed("crypto.randomFillSync failed");
     return Uint8Array();
   }
 
-  inox_status status = inox_crypto_random_bytes_raw(bytes->bytes + offset, size);
+  inox_status status = inox_crypto_random_bytes_raw(value.bytes() + offset, size);
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.randomFillSync failed");
@@ -519,10 +516,10 @@ Hmac crypto::createHmac(inox::StringView algorithm, inox::StringView key) const 
   return Hmac(hmac);
 }
 
-Hmac crypto::createHmac(inox::StringView algorithm, inox_value key) const {
+Hmac crypto::createHmac(inox::StringView algorithm, const inox::Value& key) const {
   CryptoHmacState* hmac = 0;
 
-  if (CryptoHmacState_create(&inox_default_allocator, algorithm.bytes, algorithm.len, key, &hmac) != INOX_OK) {
+  if (CryptoHmacState_create(&inox_default_allocator, algorithm.bytes, algorithm.len, key.raw(), &hmac) != INOX_OK) {
     CryptoHmacState_free(hmac);
     inox_crypto_throw_failed("crypto.createHmac failed");
     return Hmac();
@@ -547,7 +544,7 @@ Buffer crypto::hash(inox::StringView algorithm, inox::StringView data) const {
   return hash.digest();
 }
 
-Buffer crypto::hash(inox::StringView algorithm, inox_value data) const {
+Buffer crypto::hash(inox::StringView algorithm, const inox::Value& data) const {
   Hash hash = createHash(algorithm);
 
   if (inox::thrown()) {
@@ -579,7 +576,7 @@ inox::String crypto::hashHex(inox::StringView algorithm, inox::StringView data) 
   return hash.digestHex();
 }
 
-inox::String crypto::hashHex(inox::StringView algorithm, inox_value data) const {
+inox::String crypto::hashHex(inox::StringView algorithm, const inox::Value& data) const {
   Hash hash = createHash(algorithm);
 
   if (inox::thrown()) {
@@ -595,29 +592,16 @@ inox::String crypto::hashHex(inox::StringView algorithm, inox_value data) const 
   return hash.digestHex();
 }
 
-bool crypto::timingSafeEqual(inox_value left, inox_value right) const {
-  const uint8_t* left_bytes = 0;
-  const uint8_t* right_bytes = 0;
-  size_t left_len = 0;
-  size_t right_len = 0;
-  inox_status status = CryptoHashState_data(left, &left_bytes, &left_len);
-
-  if (status != INOX_OK) {
-    inox_crypto_throw_failed("crypto.timingSafeEqual failed");
-    return false;
-  }
-
-  status = CryptoHashState_data(right, &right_bytes, &right_len);
-
-  if (status != INOX_OK || left_len != right_len) {
+bool crypto::timingSafeEqual(const Uint8Array& left, const Uint8Array& right) const {
+  if (!left.valid() || !right.valid() || left.length() != right.length()) {
     inox_crypto_throw_failed("crypto.timingSafeEqual failed");
     return false;
   }
 
   uint8_t diff = 0;
 
-  for (size_t index = 0; index < left_len; index += 1) {
-    diff = (uint8_t)(diff | (left_bytes[index] ^ right_bytes[index]));
+  for (size_t index = 0; index < left.length(); index += 1) {
+    diff = (uint8_t)(diff | (left.bytes()[index] ^ right.bytes()[index]));
   }
 
   return diff == 0;

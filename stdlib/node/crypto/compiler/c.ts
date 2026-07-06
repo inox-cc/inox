@@ -90,6 +90,24 @@ function cryptoStringViewExpression(operand: PreparedStringBytesOperand): string
   return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
+function cryptoValueExpression(value: PreparedExpression): string {
+  const cppType = value.cppType
+
+  if (typeof cppType === 'string' && cppType !== '') {
+    return value.expression
+  }
+
+  return `inox::Value(${value.expression})`
+}
+
+function cryptoBytesExpression(value: PreparedExpression): string {
+  if (value.cppType === 'Uint8Array' || value.cppType === 'Buffer') {
+    return value.expression
+  }
+
+  return `Uint8Array(${value.expression})`
+}
+
 function cryptoDataArgument(
   expression: AnyNode,
   context: CFunctionContext,
@@ -109,7 +127,7 @@ function cryptoDataArgument(
 
   return {
     lines: data.lines,
-    expression: data.expression
+    expression: cryptoValueExpression(data)
   }
 }
 
@@ -448,12 +466,12 @@ export function emitPreparedCryptoCallExpression(
     const value = deps.emitCValueExpression(expression.args[0], context)
     let preparedCall: CryptoRandomFillCall = {
       lines: [],
-      call: `crypto.getRandomValues(${value.expression})`
+      call: `crypto.getRandomValues(${cryptoBytesExpression(value)})`
     }
     const lines: string[] = []
 
     if (method === 'randomFillSync') {
-      preparedCall = emitCryptoRandomFillCall(value.expression, expression, context, deps)
+      preparedCall = emitCryptoRandomFillCall(cryptoBytesExpression(value), expression, context, deps)
     }
 
     pushCryptoLines(lines, value.lines)
@@ -528,7 +546,7 @@ export function emitPreparedCryptoNumberCallExpression(
 
     pushCryptoLines(lines, left.lines)
     pushCryptoLines(lines, right.lines)
-    lines.push(`auto ${out} = crypto.timingSafeEqual(${left.expression}, ${right.expression});`)
+    lines.push(`auto ${out} = crypto.timingSafeEqual(${cryptoBytesExpression(left)}, ${cryptoBytesExpression(right)});`)
     lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {

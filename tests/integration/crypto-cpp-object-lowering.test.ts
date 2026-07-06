@@ -51,7 +51,7 @@ console.log(bytes.length, filled.length, value, small, uuid.length, digest, dige
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /crypto\.randomBytes\(8\)/)
-  assert.match(source, /crypto\.randomFillSync\(bytes, 0, 4, true\)/)
+  assert.match(source, /crypto\.randomFillSync\((?:bytes|Uint8Array\(bytes\)), 0, 4, true\)/)
   assert.match(source, /crypto\.randomInt\(5, 10\)/)
   assert.match(source, /crypto\.randomInt\(5\)/)
   assert.match(source, /crypto\.randomUUID\(\)/)

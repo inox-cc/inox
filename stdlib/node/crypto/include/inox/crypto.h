@@ -31,7 +31,7 @@ public:
 
   bool valid() const;
   Hash& update(inox::StringView data);
-  Hash& update(inox_value data);
+  Hash& update(const inox::Value& data);
   Buffer digest();
   inox::String digestHex();
 };
@@ -54,7 +54,7 @@ public:
 
   bool valid() const;
   Hmac& update(inox::StringView data);
-  Hmac& update(inox_value data);
+  Hmac& update(const inox::Value& data);
   Buffer digest();
   inox::String digestHex();
 };
@@ -62,20 +62,20 @@ public:
 class crypto {
 public:
   ArrayClass getHashes() const;
-  Uint8Array getRandomValues(inox_value value) const;
+  Uint8Array getRandomValues(Uint8Array value) const;
   Buffer randomBytes(inox_number size) const;
-  Uint8Array randomFillSync(inox_value value, inox_number offset, inox_number size, bool has_size) const;
+  Uint8Array randomFillSync(Uint8Array value, inox_number offset, inox_number size, bool has_size) const;
   inox_number randomInt(inox_number max) const;
   inox_number randomInt(inox_number min, inox_number max) const;
   inox::String randomUUID() const;
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
-  Hmac createHmac(inox::StringView algorithm, inox_value key) const;
+  Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;
   Buffer hash(inox::StringView algorithm, inox::StringView data) const;
-  Buffer hash(inox::StringView algorithm, inox_value data) const;
+  Buffer hash(inox::StringView algorithm, const inox::Value& data) const;
   inox::String hashHex(inox::StringView algorithm, inox::StringView data) const;
-  inox::String hashHex(inox::StringView algorithm, inox_value data) const;
-  bool timingSafeEqual(inox_value left, inox_value right) const;
+  inox::String hashHex(inox::StringView algorithm, const inox::Value& data) const;
+  bool timingSafeEqual(const Uint8Array& left, const Uint8Array& right) const;
 };
 
 extern crypto crypto;
