@@ -1,10 +1,16 @@
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include <utility>
+
+#include "inox/array.h"
 #ifdef INOX_DEBUG_MEMORY
 #include "inox/debug.h"
 #endif
-#include <utility>
 #include "inox/hash.h"
 #include "inox/loop.h"
 #include "inox/map.h"
+#include "inox/set.h"
 #include "inox/string.h"
 
 static void inox_map_dispose_ref(inox_ref* ref);
@@ -447,12 +453,6 @@ size_t Map::size() const {
   return instance->length;
 }
 
-#ifdef INOX_DEBUG_MEMORY
-#include "inox/debug.h"
-#endif
-#include "inox/hash.h"
-#include "inox/set.h"
-
 static void inox_set_dispose_ref(inox_ref* ref);
 
 static void inox_set_init_entries(SetEntry* entries, size_t cap) {
@@ -838,18 +838,6 @@ size_t Set::size() const {
 
   return instance->length;
 }
-
-#include <stddef.h>
-#include <stdio.h>
-#include <string.h>
-#include <utility>
-#include "inox/array.h"
-#include "inox/hash.h"
-#include "inox/loop.h"
-#ifdef INOX_DEBUG_MEMORY
-#include "inox/debug.h"
-#endif
-#include "inox/string.h"
 
 namespace inox {
 
