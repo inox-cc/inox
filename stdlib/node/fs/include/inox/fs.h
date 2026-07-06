@@ -51,15 +51,15 @@ typedef inox_status (*FsStringPathFn)(
   inox::StringView path,
   inox_value* out
 );
-typedef inox_status (*FsAccessFn)(void* user, inox::StringView path, int mode);
-typedef inox_status (*FsMkdirFn)(void* user, inox::StringView path, bool recursive);
-typedef inox_status (*FsUnlinkFn)(void* user, inox::StringView path);
-typedef inox_status (*FsRmFn)(void* user, inox::StringView path, bool recursive, bool force);
-typedef inox_status (*FsAppendFileFn)(void* user, inox::StringView path, inox::StringView bytes);
-typedef inox_status (*FsCopyFileFn)(void* user, inox::StringView src_path, inox::StringView dest_path);
-typedef inox_status (*FsSymlinkFn)(void* user, inox::StringView target, inox::StringView path);
-typedef inox_status (*FsRenameFn)(void* user, inox::StringView old_path, inox::StringView new_path);
-typedef inox_status (*FsWriteFileFn)(void* user, inox::StringView path, inox::StringView bytes);
+typedef void (*FsAccessFn)(void* user, inox::StringView path, int mode);
+typedef void (*FsMkdirFn)(void* user, inox::StringView path, bool recursive);
+typedef void (*FsUnlinkFn)(void* user, inox::StringView path);
+typedef void (*FsRmFn)(void* user, inox::StringView path, bool recursive, bool force);
+typedef void (*FsAppendFileFn)(void* user, inox::StringView path, inox::StringView bytes);
+typedef void (*FsCopyFileFn)(void* user, inox::StringView src_path, inox::StringView dest_path);
+typedef void (*FsSymlinkFn)(void* user, inox::StringView target, inox::StringView path);
+typedef void (*FsRenameFn)(void* user, inox::StringView old_path, inox::StringView new_path);
+typedef void (*FsWriteFileFn)(void* user, inox::StringView path, inox::StringView bytes);
 
 struct FsAdapter {
   void* user;

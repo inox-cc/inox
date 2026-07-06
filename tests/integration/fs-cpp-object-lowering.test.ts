@@ -78,8 +78,9 @@ fs.rmSync(dir, { recursive: true, force: true })
 
   const header = readFileSync(resolve('stdlib/node/fs/include/inox/fs.h'), 'utf8')
   assert.match(header, /typedef inox_status \(\*FsReadFileFn\)\([\s\S]*?inox::StringView path,[\s\S]*?inox_value\* out/)
-  assert.match(header, /typedef inox_status \(\*FsWriteFileFn\)\(void\* user, inox::StringView path, inox::StringView bytes\);/)
-  assert.match(header, /typedef inox_status \(\*FsCopyFileFn\)\(void\* user, inox::StringView src_path, inox::StringView dest_path\);/)
+  assert.match(header, /typedef void \(\*FsWriteFileFn\)\(void\* user, inox::StringView path, inox::StringView bytes\);/)
+  assert.match(header, /typedef void \(\*FsCopyFileFn\)\(void\* user, inox::StringView src_path, inox::StringView dest_path\);/)
+  assert.doesNotMatch(header, /typedef inox_status \(\*Fs(?:Access|Mkdir|Unlink|Rm|AppendFile|CopyFile|Symlink|Rename|WriteFile)Fn\)/)
   assert.doesNotMatch(header, /const char\* path,[\s\S]*?size_t path_len,[\s\S]*?inox_value\* out/)
   assert.doesNotMatch(header, /const char\* bytes, size_t byte_len/)
 }
