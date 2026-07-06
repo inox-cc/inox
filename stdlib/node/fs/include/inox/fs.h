@@ -106,6 +106,9 @@ struct FsAdapter {
 };
 #ifdef __cplusplus
 
+#include "inox/string.h"
+#include "inox/string_view.h"
+
 class fs_promises {
 public:
   inox_status readFile(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
@@ -151,6 +154,9 @@ public:
   FsAdapter getAdapter();
   void clearAdapter();
 
+  inox::String readFileSync(const char* path);
+  inox::String readFileSync(const inox::String& path);
+  inox::String readFileSync(inox::StringView path);
   inox_status readFileSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
   inox_status readdirSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);

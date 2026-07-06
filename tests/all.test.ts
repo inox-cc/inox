@@ -151,6 +151,7 @@ async function runIntegrationTests(): Promise<void> {
   } =
     await import('./integration/json-parse-shape-lowering.test.ts')
   const { assertJsonLowersToGlobalObject } = await import('./integration/json-global-object-lowering.test.ts')
+  const { assertFsReadFileSyncLowersToCppObject } = await import('./integration/fs-cpp-object-lowering.test.ts')
   const { assertClassSuperDiagnosticUsesInheritanceCode } = await import('./integration/class-diagnostics.test.ts')
   const { assertNativeClassAsyncStateDoesNotSplitMethods } =
     await import('./integration/native-class-async-state-order.test.ts')
@@ -400,6 +401,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('readable-c-string-literals', () => {
       assertReadableCStringLiterals()
+    })
+
+    await t.test('fs-cpp-object-lowering', () => {
+      assertFsReadFileSyncLowersToCppObject()
     })
 
     await t.test('regexp-cpp-object-lowering', () => {

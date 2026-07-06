@@ -26,6 +26,7 @@ export type CPreparedStringBytesOperand = {
   lines: string[]
   bytes: string
   length: string
+  cppExpression?: string
   literalValue?: string
 }
 

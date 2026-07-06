@@ -162,10 +162,13 @@ static inox_status inox_fs_queue_request(
 static inox_status inox_fs_run_request(void* context);
 static inox_status inox_fs_reject_status(inox_loop* loop, inox_promise* promise, inox_status status);
 static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out);
+static void inox_fs_throw_status(inox_status status);
 static inox_status inox_fs_copy_binary_result(Uint8Array bytes, inox_value* out);
 static const char* inox_fs_error_code(inox_status status);
 static const char* inox_fs_error_message(inox_status status);
 static void inox_fs_request_finalizer(void* context);
+static inox_status inox_fs_read_file_sync_raw(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+static inox::String inox_fs_read_file_sync_string(const char* path, size_t path_len);
 
 void fs::setAdapter(FsAdapter adapter) {
   fs_active_adapter = adapter;
@@ -361,7 +364,35 @@ bool FsDirent::isDirectory() const {
 
 class fs fs;
 
+inox::String fs::readFileSync(const char* path) {
+  return inox_fs_read_file_sync_string(path, path == 0 ? 0 : strlen(path));
+}
+
+inox::String fs::readFileSync(const inox::String& path) {
+  return inox_fs_read_file_sync_string(path.bytes(), path.length());
+}
+
+inox::String fs::readFileSync(inox::StringView path) {
+  return inox_fs_read_file_sync_string(path.bytes, path.len);
+}
+
+static inox::String inox_fs_read_file_sync_string(const char* path, size_t path_len) {
+  inox_value out = inox_undefined_value();
+  inox_status status = inox_fs_read_file_sync_raw(&inox_default_allocator, path, path_len, &out);
+
+  if (status != INOX_OK) {
+    inox_fs_throw_status(status);
+    return inox::String();
+  }
+
+  return inox::String(inox::adopt_value, out);
+}
+
 inox_status fs::readFileSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+  return inox_fs_read_file_sync_raw(allocator, path, path_len, out);
+}
+
+static inox_status inox_fs_read_file_sync_raw(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -3608,6 +3639,17 @@ static inox_status inox_fs_reject_status(inox_loop* loop, inox_promise* promise,
   inox_release(error);
 
   return reject_status == INOX_OK ? INOX_OK : reject_status;
+}
+
+static void inox_fs_throw_status(inox_status status) {
+  inox_value error = inox_undefined_value();
+
+  if (inox_fs_error_from_status(&inox_default_allocator, status, &error) == INOX_OK) {
+    inox::throw_value(inox::Value(inox::adopt_value, error));
+    return;
+  }
+
+  inox::throw_value(inox::String("FsError"));
 }
 
 static inox_status inox_fs_error_from_status(inox_allocator* allocator, inox_status status, inox_value* out) {

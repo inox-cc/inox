@@ -1054,6 +1054,7 @@ export function emitPreparedStringBytesOperand(
       lines: [],
       bytes: cStringLiteral(expression.value),
       length: `${utf8ByteLength(expression.value)}`,
+      cppExpression: cStringLiteral(expression.value),
       literalValue: expression.value
     }
   }
@@ -1070,6 +1071,7 @@ export function emitPreparedStringBytesOperand(
       lines: [],
       bytes: cStringLiteral(value),
       length: `${utf8ByteLength(value)}`,
+      cppExpression: cStringLiteral(value),
       literalValue: value
     }
   }
@@ -1081,6 +1083,7 @@ export function emitPreparedStringBytesOperand(
       lines: [],
       bytes: cStringLiteral(runtimeConstant),
       length: `${utf8ByteLength(runtimeConstant)}`,
+      cppExpression: cStringLiteral(runtimeConstant),
       literalValue: runtimeConstant
     }
   }
@@ -1158,7 +1161,8 @@ export function emitPreparedStringBytesOperand(
         return {
           lines: [],
           bytes: `${reference}.bytes()`,
-          length: `${reference}.length()`
+          length: `${reference}.length()`,
+          cppExpression: reference
         }
       }
 
@@ -1211,7 +1215,8 @@ export function emitPreparedStringBytesOperand(
       return {
         lines: [],
         bytes: reference,
-        length: `strlen(${reference})`
+        length: `strlen(${reference})`,
+        cppExpression: reference
       }
     }
   }
@@ -1235,7 +1240,8 @@ export function emitPreparedStringBytesOperand(
     return {
       lines: [],
       bytes: netAddressMember,
-      length: `strlen(${netAddressMember})`
+      length: `strlen(${netAddressMember})`,
+      cppExpression: netAddressMember
     }
   }
 
@@ -2674,7 +2680,8 @@ function emitPreparedRuntimeStringValueBytesOperand(
     return {
       lines,
       bytes: `${string}.bytes()`,
-      length: `${string}.length()`
+      length: `${string}.length()`,
+      cppExpression: string
     }
   }
 

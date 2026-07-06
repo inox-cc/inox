@@ -4,6 +4,7 @@ import type { AnyNode } from '../../../../compiler/types.ts'
 import {
   emitEventLoopReference,
   emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
   emitStatusCheck,
   nextCName,
   registerEventLoop,
@@ -62,6 +63,10 @@ type FsSyncStatementDescriptor = {
   callName: string
   kind: string
   tempPrefix?: string
+}
+
+function emitFsStringArgument(operand: PreparedStringBytesOperand): string {
+  return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
 const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
@@ -557,11 +562,23 @@ export function emitPreparedFsSyncValueExpression(
   }
 
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
+  const lines: string[] = []
+  appendLines(lines, path.lines)
+
+  if (method === 'readFileSync' && valueType === 'string') {
+    const out = nextCName(context, 'text')
+    lines.push(`auto ${out} = fs.readFileSync(${emitFsStringArgument(path)});`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+
+    return {
+      lines,
+      expression: out
+    }
+  }
+
   const out = nextCName(context, 'inox_fs_value')
   registerOwnedValue(context, out)
   const call = `${callName}(&inox_default_allocator, ${path.bytes}, ${path.length}, &${out})`
-  const lines: string[] = []
-  appendLines(lines, path.lines)
   appendLines(lines, emitPrepareOwnedValueWrite(out))
   lines.push(emitStatusCheck(call, context))
   lines.push(emitRuntimeValueCheck(out, expectedTag, context))
