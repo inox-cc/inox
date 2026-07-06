@@ -304,7 +304,7 @@ static size_t string_code_unit_index_of_byte_offset(const char* bytes, size_t va
   return current;
 }
 
-inox_value inox::String::toNumber(StringView value) {
+inox::Value inox::String::toNumber(StringView value) {
   if (value.bytes == 0 && value.len != 0) {
     return inox_null_value();
   }

@@ -31,7 +31,7 @@ public:
   static String fromNumberRadix(double value, int radix);
   static String fromFormat(const char* format, ...);
   static String fromValue(const Value& value);
-  static inox_value toNumber(StringView value);
+  static Value toNumber(StringView value);
 
   String();
   String(const char* bytes);
