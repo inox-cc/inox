@@ -512,7 +512,7 @@ function emitNetHandlerConsoleLogStatement(
     firstArg.path.length === 1 &&
     netReferenceName(firstArg) === netContext.dataName
   ) {
-    return [`if (console.${stream}("%.*s", (int)inox_len, inox_bytes) != INOX_OK) return INOX_ERR_TYPE;`]
+    return [`console.${stream}("%.*s", (int)inox_len, inox_bytes);`]
   }
 
   return deps.emitConsoleLogStatement(callee.property, expression.args, context)

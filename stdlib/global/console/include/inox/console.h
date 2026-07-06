@@ -77,17 +77,17 @@ int console_printf(ConsoleStream stream, const char* format, ...);
 
 class console {
 public:
-  inox_status log() const;
-  inox_status log(const char* text) const;
-  inox_status log(inox::StringView text) const;
-  inox_status log(const inox::String& value) const;
-  inox_status log(inox_value value) const;
-  inox_status log(const inox::Value& value) const;
-  inox_status log(const char* prefix, inox_value value) const;
-  inox_status log(const char* prefix, const inox::Value& value) const;
-  inox_status log(const char* format, inox::StringView arg0) const;
-  inox_status log(const char* format, const inox::String& arg0) const;
-  inox_status log(
+  void log() const;
+  void log(const char* text) const;
+  void log(inox::StringView text) const;
+  void log(const inox::String& value) const;
+  void log(inox_value value) const;
+  void log(const inox::Value& value) const;
+  void log(const char* prefix, inox_value value) const;
+  void log(const char* prefix, const inox::Value& value) const;
+  void log(const char* format, inox::StringView arg0) const;
+  void log(const char* format, const inox::String& arg0) const;
+  void log(
     const char* format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),
@@ -107,17 +107,17 @@ public:
     inox::ConsoleArg arg15 = inox::ConsoleArg()
   ) const;
 
-  inox_status info() const;
-  inox_status info(const char* text) const;
-  inox_status info(inox::StringView text) const;
-  inox_status info(const inox::String& value) const;
-  inox_status info(inox_value value) const;
-  inox_status info(const inox::Value& value) const;
-  inox_status info(const char* prefix, inox_value value) const;
-  inox_status info(const char* prefix, const inox::Value& value) const;
-  inox_status info(const char* format, inox::StringView arg0) const;
-  inox_status info(const char* format, const inox::String& arg0) const;
-  inox_status info(
+  void info() const;
+  void info(const char* text) const;
+  void info(inox::StringView text) const;
+  void info(const inox::String& value) const;
+  void info(inox_value value) const;
+  void info(const inox::Value& value) const;
+  void info(const char* prefix, inox_value value) const;
+  void info(const char* prefix, const inox::Value& value) const;
+  void info(const char* format, inox::StringView arg0) const;
+  void info(const char* format, const inox::String& arg0) const;
+  void info(
     const char* format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),
@@ -137,17 +137,17 @@ public:
     inox::ConsoleArg arg15 = inox::ConsoleArg()
   ) const;
 
-  inox_status warn() const;
-  inox_status warn(const char* text) const;
-  inox_status warn(inox::StringView text) const;
-  inox_status warn(const inox::String& value) const;
-  inox_status warn(inox_value value) const;
-  inox_status warn(const inox::Value& value) const;
-  inox_status warn(const char* prefix, inox_value value) const;
-  inox_status warn(const char* prefix, const inox::Value& value) const;
-  inox_status warn(const char* format, inox::StringView arg0) const;
-  inox_status warn(const char* format, const inox::String& arg0) const;
-  inox_status warn(
+  void warn() const;
+  void warn(const char* text) const;
+  void warn(inox::StringView text) const;
+  void warn(const inox::String& value) const;
+  void warn(inox_value value) const;
+  void warn(const inox::Value& value) const;
+  void warn(const char* prefix, inox_value value) const;
+  void warn(const char* prefix, const inox::Value& value) const;
+  void warn(const char* format, inox::StringView arg0) const;
+  void warn(const char* format, const inox::String& arg0) const;
+  void warn(
     const char* format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),
@@ -167,17 +167,17 @@ public:
     inox::ConsoleArg arg15 = inox::ConsoleArg()
   ) const;
 
-  inox_status error() const;
-  inox_status error(const char* text) const;
-  inox_status error(inox::StringView text) const;
-  inox_status error(const inox::String& value) const;
-  inox_status error(inox_value value) const;
-  inox_status error(const inox::Value& value) const;
-  inox_status error(const char* prefix, inox_value value) const;
-  inox_status error(const char* prefix, const inox::Value& value) const;
-  inox_status error(const char* format, inox::StringView arg0) const;
-  inox_status error(const char* format, const inox::String& arg0) const;
-  inox_status error(
+  void error() const;
+  void error(const char* text) const;
+  void error(inox::StringView text) const;
+  void error(const inox::String& value) const;
+  void error(inox_value value) const;
+  void error(const inox::Value& value) const;
+  void error(const char* prefix, inox_value value) const;
+  void error(const char* prefix, const inox::Value& value) const;
+  void error(const char* format, inox::StringView arg0) const;
+  void error(const char* format, const inox::String& arg0) const;
+  void error(
     const char* format,
     inox::ConsoleArg arg0,
     inox::ConsoleArg arg1 = inox::ConsoleArg(),

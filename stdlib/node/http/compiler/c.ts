@@ -716,7 +716,7 @@ function emitHttpHandlerConsoleLogStatement(
   const consoleMethod = callee.property === 'warn' || callee.property === 'error' ? 'error' : 'log'
   const trimmedFormat = cStringLiteral(joinStrings(formatParts.slice(0, formatParts.length - 1), ''))
 
-  return [`if (console.${consoleMethod}(${trimmedFormat}${callArgs}) != INOX_OK) return INOX_ERR_TYPE;`]
+  return [`console.${consoleMethod}(${trimmedFormat}${callArgs});`]
 }
 
 function emitHttpLogOperand(

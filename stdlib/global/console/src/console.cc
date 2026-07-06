@@ -792,127 +792,128 @@ int console_printf(ConsoleStream stream, const char* format, ...) {
 
 } // namespace inox
 
-inox_status console::log() const {
+void console::log() const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-inox_status console::log(const char* text) const {
+void console::log(const char* text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (text == nullptr) {
-    return inox::console_newline(inox::ConsoleStream::stdout);
+    inox::console_newline(inox::ConsoleStream::stdout);
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
+  inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
 }
 
-inox_status console::log(inox::StringView text) const {
+void console::log(inox::StringView text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
+  inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
 }
 
-inox_status console::log(const inox::String& value) const {
+void console::log(const inox::String& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
+  inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
 }
 
-inox_status console::log(inox_value value) const {
+void console::log(inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stdout, value);
+  inox::console_print_value_line(inox::ConsoleStream::stdout, value);
 }
 
-inox_status console::log(const inox::Value& value) const {
+void console::log(const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
+  inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
 }
 
-inox_status console::log(const char* prefix, inox_value value) const {
+void console::log(const char* prefix, inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value);
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-inox_status console::log(const char* prefix, const inox::Value& value) const {
+void console::log(const char* prefix, const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value.raw());
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-inox_status console::log(const char* format, inox::StringView arg0) const {
+void console::log(const char* format, inox::StringView arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stdout, format, args, 1);
+  printf_line(inox::ConsoleStream::stdout, format, args, 1);
 }
 
-inox_status console::log(const char* format, const inox::String& arg0) const {
+void console::log(const char* format, const inox::String& arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stdout, format, args, 1);
+  printf_line(inox::ConsoleStream::stdout, format, args, 1);
 }
 
-inox_status console::log(
+void console::log(
   const char* format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
@@ -950,130 +951,131 @@ inox_status console::log(
     arg15
   };
 
-  return printf_line(inox::ConsoleStream::stdout, format, args, 16);
+  printf_line(inox::ConsoleStream::stdout, format, args, 16);
 }
 
-inox_status console::info() const {
+void console::info() const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-inox_status console::info(const char* text) const {
+void console::info(const char* text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (text == nullptr) {
-    return inox::console_newline(inox::ConsoleStream::stdout);
+    inox::console_newline(inox::ConsoleStream::stdout);
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
+  inox::console_write_line(inox::ConsoleStream::stdout, text, strlen(text));
 }
 
-inox_status console::info(inox::StringView text) const {
+void console::info(inox::StringView text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
+  inox::console_write_line(inox::ConsoleStream::stdout, text.bytes, text.len);
 }
 
-inox_status console::info(const inox::String& value) const {
+void console::info(const inox::String& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
+  inox::console_write_line(inox::ConsoleStream::stdout, value.bytes(), value.length());
 }
 
-inox_status console::info(inox_value value) const {
+void console::info(inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stdout, value);
+  inox::console_print_value_line(inox::ConsoleStream::stdout, value);
 }
 
-inox_status console::info(const inox::Value& value) const {
+void console::info(const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
+  inox::console_print_value_line(inox::ConsoleStream::stdout, value.raw());
 }
 
-inox_status console::info(const char* prefix, inox_value value) const {
+void console::info(const char* prefix, inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value);
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-inox_status console::info(const char* prefix, const inox::Value& value) const {
+void console::info(const char* prefix, const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stdout, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stdout, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stdout, value.raw());
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_newline(inox::ConsoleStream::stdout);
 }
 
-inox_status console::info(const char* format, inox::StringView arg0) const {
+void console::info(const char* format, inox::StringView arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stdout, format, args, 1);
+  printf_line(inox::ConsoleStream::stdout, format, args, 1);
 }
 
-inox_status console::info(const char* format, const inox::String& arg0) const {
+void console::info(const char* format, const inox::String& arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stdout, format, args, 1);
+  printf_line(inox::ConsoleStream::stdout, format, args, 1);
 }
 
-inox_status console::info(
+void console::info(
   const char* format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
@@ -1111,130 +1113,131 @@ inox_status console::info(
     arg15
   };
 
-  return printf_line(inox::ConsoleStream::stdout, format, args, 16);
+  printf_line(inox::ConsoleStream::stdout, format, args, 16);
 }
 
-inox_status console::warn() const {
+void console::warn() const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-inox_status console::warn(const char* text) const {
+void console::warn(const char* text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (text == nullptr) {
-    return inox::console_newline(inox::ConsoleStream::stderr);
+    inox::console_newline(inox::ConsoleStream::stderr);
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
+  inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
 }
 
-inox_status console::warn(inox::StringView text) const {
+void console::warn(inox::StringView text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
+  inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
 }
 
-inox_status console::warn(const inox::String& value) const {
+void console::warn(const inox::String& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
+  inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
 }
 
-inox_status console::warn(inox_value value) const {
+void console::warn(inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stderr, value);
+  inox::console_print_value_line(inox::ConsoleStream::stderr, value);
 }
 
-inox_status console::warn(const inox::Value& value) const {
+void console::warn(const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
+  inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
 }
 
-inox_status console::warn(const char* prefix, inox_value value) const {
+void console::warn(const char* prefix, inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value);
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-inox_status console::warn(const char* prefix, const inox::Value& value) const {
+void console::warn(const char* prefix, const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value.raw());
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-inox_status console::warn(const char* format, inox::StringView arg0) const {
+void console::warn(const char* format, inox::StringView arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stderr, format, args, 1);
+  printf_line(inox::ConsoleStream::stderr, format, args, 1);
 }
 
-inox_status console::warn(const char* format, const inox::String& arg0) const {
+void console::warn(const char* format, const inox::String& arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stderr, format, args, 1);
+  printf_line(inox::ConsoleStream::stderr, format, args, 1);
 }
 
-inox_status console::warn(
+void console::warn(
   const char* format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
@@ -1272,130 +1275,131 @@ inox_status console::warn(
     arg15
   };
 
-  return printf_line(inox::ConsoleStream::stderr, format, args, 16);
+  printf_line(inox::ConsoleStream::stderr, format, args, 16);
 }
 
-inox_status console::error() const {
+void console::error() const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-inox_status console::error(const char* text) const {
+void console::error(const char* text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (text == nullptr) {
-    return inox::console_newline(inox::ConsoleStream::stderr);
+    inox::console_newline(inox::ConsoleStream::stderr);
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
+  inox::console_write_line(inox::ConsoleStream::stderr, text, strlen(text));
 }
 
-inox_status console::error(inox::StringView text) const {
+void console::error(inox::StringView text) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
+  inox::console_write_line(inox::ConsoleStream::stderr, text.bytes, text.len);
 }
 
-inox_status console::error(const inox::String& value) const {
+void console::error(const inox::String& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
+  inox::console_write_line(inox::ConsoleStream::stderr, value.bytes(), value.length());
 }
 
-inox_status console::error(inox_value value) const {
+void console::error(inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stderr, value);
+  inox::console_print_value_line(inox::ConsoleStream::stderr, value);
 }
 
-inox_status console::error(const inox::Value& value) const {
+void console::error(const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
-  return inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
+  inox::console_print_value_line(inox::ConsoleStream::stderr, value.raw());
 }
 
-inox_status console::error(const char* prefix, inox_value value) const {
+void console::error(const char* prefix, inox_value value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value);
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-inox_status console::error(const char* prefix, const inox::Value& value) const {
+void console::error(const char* prefix, const inox::Value& value) const {
   if (inox::thrown()) {
-    return INOX_OK;
+    return;
   }
 
   if (prefix != nullptr && prefix[0] != '\0') {
     inox_status status = inox::console_write(inox::ConsoleStream::stderr, prefix, strlen(prefix));
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
 
     status = inox::console_write(inox::ConsoleStream::stderr, " ", 1);
 
     if (status != INOX_OK) {
-      return status;
+      return;
     }
   }
 
   inox_status status = inox::console_print_value(inox::ConsoleStream::stderr, value.raw());
 
   if (status != INOX_OK) {
-    return status;
+    return;
   }
 
-  return inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_newline(inox::ConsoleStream::stderr);
 }
 
-inox_status console::error(const char* format, inox::StringView arg0) const {
+void console::error(const char* format, inox::StringView arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stderr, format, args, 1);
+  printf_line(inox::ConsoleStream::stderr, format, args, 1);
 }
 
-inox_status console::error(const char* format, const inox::String& arg0) const {
+void console::error(const char* format, const inox::String& arg0) const {
   const inox::ConsoleArg args[] = { inox::ConsoleArg(arg0) };
 
-  return printf_line(inox::ConsoleStream::stderr, format, args, 1);
+  printf_line(inox::ConsoleStream::stderr, format, args, 1);
 }
 
-inox_status console::error(
+void console::error(
   const char* format,
   inox::ConsoleArg arg0,
   inox::ConsoleArg arg1,
@@ -1433,7 +1437,8 @@ inox_status console::error(
     arg15
   };
 
-  return printf_line(inox::ConsoleStream::stderr, format, args, 16);
+  printf_line(inox::ConsoleStream::stderr, format, args, 16);
+  return;
 }
 
 static bool inox_console_is_format_conversion(char value) {
