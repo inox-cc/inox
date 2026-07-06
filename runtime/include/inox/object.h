@@ -76,27 +76,20 @@ void inox_object_dispose_fields(inox_object* object);
 namespace inox {
 
 Value object_value_at(inox_value object, size_t index);
-Value object_value_at(const Value& object, size_t index);
 Value object_entry_at(inox_value object, size_t index);
-Value object_entry_at(const Value& object, size_t index);
 void throw_property_read_type_error(StringView name, const char* receiver);
 Value get(inox_value object, StringView name);
-Value get(const Value& object, StringView name);
 Value get(inox_value object, const char* name);
-Value get(const Value& object, const char* name);
 
 } // namespace inox
 
 class Object {
 public:
   inox::Value keys(inox_value value) const;
-  inox::Value keys(const inox::Value& value) const;
   inox::Value keys(const inox_class_descriptor& descriptor, const void* instance) const;
   inox::Value values(inox_value value) const;
-  inox::Value values(const inox::Value& value) const;
   inox::Value values(const inox_class_descriptor& descriptor, const void* instance) const;
   inox::Value entries(inox_value value) const;
-  inox::Value entries(const inox::Value& value) const;
   inox::Value entries(const inox_class_descriptor& descriptor, const void* instance) const;
 };
 

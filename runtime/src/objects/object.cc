@@ -1021,10 +1021,6 @@ Value object_value_at(inox_value object, size_t index) {
   );
 }
 
-Value object_value_at(const Value& object, size_t index) {
-  return object_value_at(object.raw(), index);
-}
-
 Value object_entry_at(inox_value object, size_t index) {
   if (thrown()) {
     return Value();
@@ -1037,10 +1033,6 @@ Value object_entry_at(inox_value object, size_t index) {
     out,
     "Object.entries index failed"
   );
-}
-
-Value object_entry_at(const Value& object, size_t index) {
-  return object_entry_at(object.raw(), index);
 }
 
 void throw_property_read_type_error(StringView name, const char* receiver) {
@@ -1092,16 +1084,8 @@ Value get(inox_value object, StringView name) {
   return Value();
 }
 
-Value get(const Value& object, StringView name) {
-  return get(object.raw(), name);
-}
-
 Value get(inox_value object, const char* name) {
   return get(object, StringView(name));
-}
-
-Value get(const Value& object, const char* name) {
-  return get(object.raw(), name);
 }
 
 } // namespace inox
@@ -1122,10 +1106,6 @@ inox::Value Object::keys(inox_value value) const {
   inox::throw_value(inox::String("Object.keys failed"));
 
   return inox::Value();
-}
-
-inox::Value Object::keys(const inox::Value& value) const {
-  return keys(value.raw());
 }
 
 inox::Value Object::keys(const inox_class_descriptor& descriptor, const void* instance) const {
@@ -1164,10 +1144,6 @@ inox::Value Object::values(inox_value value) const {
   return inox::Value();
 }
 
-inox::Value Object::values(const inox::Value& value) const {
-  return values(value.raw());
-}
-
 inox::Value Object::values(const inox_class_descriptor& descriptor, const void* instance) const {
   if (inox::thrown()) {
     return inox::Value();
@@ -1202,10 +1178,6 @@ inox::Value Object::entries(inox_value value) const {
   inox::throw_value(inox::String("Object.entries failed"));
 
   return inox::Value();
-}
-
-inox::Value Object::entries(const inox::Value& value) const {
-  return entries(value.raw());
 }
 
 inox::Value Object::entries(const inox_class_descriptor& descriptor, const void* instance) const {
