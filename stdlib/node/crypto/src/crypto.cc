@@ -41,8 +41,6 @@ static inox_status CryptoHashState_create(
   size_t algorithm_len,
   CryptoHashState** out
 );
-static Buffer CryptoHashState_digest_bytes(CryptoHashState* hash);
-static inox::String CryptoHashState_digest_hex(CryptoHashState* hash);
 static void CryptoHashState_free(CryptoHashState* hash);
 static inox_status CryptoHmacState_create(
   inox_allocator* allocator,
@@ -59,8 +57,6 @@ static inox_status CryptoHmacState_create(
   inox_value key,
   CryptoHmacState** out
 );
-static Buffer CryptoHmacState_digest_bytes(CryptoHmacState* hmac);
-static inox::String CryptoHmacState_digest_hex(CryptoHmacState* hmac);
 static void CryptoHmacState_free(CryptoHmacState* hmac);
 static inox_status CryptoHashState_digest_raw(CryptoHashState* hash, uint8_t* digest, size_t* len);
 static inox_status CryptoHmacState_digest_raw(CryptoHmacState* hmac, uint8_t* digest, size_t* len);
@@ -155,18 +151,48 @@ Hash& Hash::update(const inox::Value& data) {
 }
 
 Buffer Hash::digest() {
-  Buffer result = CryptoHashState_digest_bytes(handle_);
+#if INOX_CRYPTO_HASH_HAS_EVP
+  uint8_t digest[EVP_MAX_MD_SIZE];
+  size_t len = 0;
+  inox_status status = CryptoHashState_digest_raw(handle_, digest, &len);
 
-  if (!result.valid()) {
+  if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.Hash.digest failed");
     return Buffer();
   }
 
-  return result;
+  Uint8Array bytes = Uint8Array::from(digest, len);
+
+  if (inox::thrown() || !bytes.valid()) {
+    inox_crypto_throw_failed("crypto.Hash.digest failed");
+    return Buffer();
+  }
+
+  return Buffer(std::move(bytes));
+#else
+  inox_crypto_throw_failed("crypto.Hash.digest failed");
+  return Buffer();
+#endif
 }
 
 inox::String Hash::digestHex() {
-  inox::String result = CryptoHashState_digest_hex(handle_);
+#if INOX_CRYPTO_HASH_HAS_EVP
+  uint8_t digest[EVP_MAX_MD_SIZE];
+  char hex[EVP_MAX_MD_SIZE * 2];
+  size_t len = 0;
+  inox_status status = CryptoHashState_digest_raw(handle_, digest, &len);
+
+  if (status != INOX_OK) {
+    inox_crypto_throw_failed("crypto.Hash.digest failed");
+    return inox::String();
+  }
+
+  for (size_t index = 0; index < len; index += 1) {
+    hex[index * 2] = inox_crypto_hex_digit((uint8_t)(digest[index] >> 4));
+    hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
+  }
+
+  inox::String result(hex, len * 2);
 
   if (!result.valid()) {
     inox_crypto_throw_failed("crypto.Hash.digest failed");
@@ -174,6 +200,10 @@ inox::String Hash::digestHex() {
   }
 
   return result;
+#else
+  inox_crypto_throw_failed("crypto.Hash.digest failed");
+  return inox::String();
+#endif
 }
 
 Hmac::Hmac() : handle_(0) {}
@@ -248,18 +278,48 @@ Hmac& Hmac::update(const inox::Value& data) {
 }
 
 Buffer Hmac::digest() {
-  Buffer result = CryptoHmacState_digest_bytes(handle_);
+#if INOX_CRYPTO_HASH_HAS_EVP
+  uint8_t digest[EVP_MAX_MD_SIZE];
+  size_t len = 0;
+  inox_status status = CryptoHmacState_digest_raw(handle_, digest, &len);
 
-  if (!result.valid()) {
+  if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.Hmac.digest failed");
     return Buffer();
   }
 
-  return result;
+  Uint8Array bytes = Uint8Array::from(digest, len);
+
+  if (inox::thrown() || !bytes.valid()) {
+    inox_crypto_throw_failed("crypto.Hmac.digest failed");
+    return Buffer();
+  }
+
+  return Buffer(std::move(bytes));
+#else
+  inox_crypto_throw_failed("crypto.Hmac.digest failed");
+  return Buffer();
+#endif
 }
 
 inox::String Hmac::digestHex() {
-  inox::String result = CryptoHmacState_digest_hex(handle_);
+#if INOX_CRYPTO_HASH_HAS_EVP
+  uint8_t digest[EVP_MAX_MD_SIZE];
+  char hex[EVP_MAX_MD_SIZE * 2];
+  size_t len = 0;
+  inox_status status = CryptoHmacState_digest_raw(handle_, digest, &len);
+
+  if (status != INOX_OK) {
+    inox_crypto_throw_failed("crypto.Hmac.digest failed");
+    return inox::String();
+  }
+
+  for (size_t index = 0; index < len; index += 1) {
+    hex[index * 2] = inox_crypto_hex_digit((uint8_t)(digest[index] >> 4));
+    hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
+  }
+
+  inox::String result(hex, len * 2);
 
   if (!result.valid()) {
     inox_crypto_throw_failed("crypto.Hmac.digest failed");
@@ -267,6 +327,10 @@ inox::String Hmac::digestHex() {
   }
 
   return result;
+#else
+  inox_crypto_throw_failed("crypto.Hmac.digest failed");
+  return inox::String();
+#endif
 }
 
 ArrayClass crypto::getHashes() const {
@@ -656,54 +720,6 @@ static inox_status CryptoHashState_create(
 #endif
 }
 
-static Buffer CryptoHashState_digest_bytes(CryptoHashState* hash) {
-#if INOX_CRYPTO_HASH_HAS_EVP
-  uint8_t digest[EVP_MAX_MD_SIZE];
-  size_t len = 0;
-  inox_status status = CryptoHashState_digest_raw(hash, digest, &len);
-
-  if (status != INOX_OK) {
-    return Buffer();
-  }
-
-  Uint8Array bytes = Uint8Array::from(digest, len);
-
-  if (inox::thrown() || !bytes.valid()) {
-    return Buffer();
-  }
-
-  return Buffer(std::move(bytes));
-#else
-  (void)hash;
-
-  return Buffer();
-#endif
-}
-
-static inox::String CryptoHashState_digest_hex(CryptoHashState* hash) {
-#if INOX_CRYPTO_HASH_HAS_EVP
-  uint8_t digest[EVP_MAX_MD_SIZE];
-  char hex[EVP_MAX_MD_SIZE * 2];
-  size_t len = 0;
-  inox_status status = CryptoHashState_digest_raw(hash, digest, &len);
-
-  if (status != INOX_OK) {
-    return inox::String();
-  }
-
-  for (size_t index = 0; index < len; index += 1) {
-    hex[index * 2] = inox_crypto_hex_digit((uint8_t)(digest[index] >> 4));
-    hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
-  }
-
-  return inox::String(hex, len * 2);
-#else
-  (void)hash;
-
-  return inox::String();
-#endif
-}
-
 static void CryptoHashState_free(CryptoHashState* hash) {
   if (hash == 0) {
     return;
@@ -805,54 +821,6 @@ static inox_status CryptoHmacState_create(
   }
 
   return CryptoHmacState_create(allocator, algorithm, algorithm_len, key_bytes, key_len, out);
-}
-
-static Buffer CryptoHmacState_digest_bytes(CryptoHmacState* hmac) {
-#if INOX_CRYPTO_HASH_HAS_EVP
-  uint8_t digest[EVP_MAX_MD_SIZE];
-  size_t len = 0;
-  inox_status status = CryptoHmacState_digest_raw(hmac, digest, &len);
-
-  if (status != INOX_OK) {
-    return Buffer();
-  }
-
-  Uint8Array bytes = Uint8Array::from(digest, len);
-
-  if (inox::thrown() || !bytes.valid()) {
-    return Buffer();
-  }
-
-  return Buffer(std::move(bytes));
-#else
-  (void)hmac;
-
-  return Buffer();
-#endif
-}
-
-static inox::String CryptoHmacState_digest_hex(CryptoHmacState* hmac) {
-#if INOX_CRYPTO_HASH_HAS_EVP
-  uint8_t digest[EVP_MAX_MD_SIZE];
-  char hex[EVP_MAX_MD_SIZE * 2];
-  size_t len = 0;
-  inox_status status = CryptoHmacState_digest_raw(hmac, digest, &len);
-
-  if (status != INOX_OK) {
-    return inox::String();
-  }
-
-  for (size_t index = 0; index < len; index += 1) {
-    hex[index * 2] = inox_crypto_hex_digit((uint8_t)(digest[index] >> 4));
-    hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
-  }
-
-  return inox::String(hex, len * 2);
-#else
-  (void)hmac;
-
-  return inox::String();
-#endif
 }
 
 static void CryptoHmacState_free(CryptoHmacState* hmac) {
