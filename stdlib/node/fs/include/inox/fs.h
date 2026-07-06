@@ -181,9 +181,6 @@ public:
   void renameSync(inox::StringView old_path, inox::StringView new_path);
   void writeFileSync(inox::StringView path, inox::StringView bytes);
   void writeFileSync(inox::StringView path, inox_value bytes);
-  inox_status mkdirSync(const char* path, size_t path_len, bool recursive);
-  inox_status unlinkSync(const char* path, size_t path_len);
-  inox_status rmSync(const char* path, size_t path_len, bool recursive, bool force);
 };
 
 class FsStats : public inox::Value {

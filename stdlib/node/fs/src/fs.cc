@@ -380,6 +380,9 @@ static bool inox_fs_throw_sync_status(inox_status status, inox_value* value) {
 }
 
 static inox_status fs_read_file_bytes_sync_status(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+static inox_status fs_mkdir_sync_status(const char* path, size_t path_len, bool recursive);
+static inox_status fs_unlink_sync_status(const char* path, size_t path_len);
+static inox_status fs_rm_sync_status(const char* path, size_t path_len, bool recursive, bool force);
 static inox_status fs_append_file_sync_status(const char* path, size_t path_len, const char* bytes, size_t byte_len);
 static inox_status fs_append_file_bytes_sync_status(const char* path, size_t path_len, inox_value bytes);
 static inox_status fs_copy_file_sync_status(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len);
@@ -613,26 +616,14 @@ void fs::accessSync(inox::StringView path, int mode) {
 }
 
 void fs::mkdirSync(inox::StringView path, bool recursive) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
-  if (path.bytes == 0 && path.len != 0) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.mkdir != 0) {
-    status = fs_active_adapter.mkdir(fs_active_adapter.user, path.bytes, path.len, recursive);
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_mkdir(0, path.bytes, path.len, recursive);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_mkdir(0, path.bytes, path.len, recursive);
-#endif
-  }
+  inox_status status = fs_mkdir_sync_status(path.bytes, path.len, recursive);
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
   }
 }
 
-inox_status fs::mkdirSync(const char* path, size_t path_len, bool recursive) {
+static inox_status fs_mkdir_sync_status(const char* path, size_t path_len, bool recursive) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -653,26 +644,14 @@ inox_status fs::mkdirSync(const char* path, size_t path_len, bool recursive) {
 }
 
 void fs::unlinkSync(inox::StringView path) {
-  inox_status status = INOX_ERR_UNSUPPORTED;
-
-  if (path.bytes == 0 && path.len != 0) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.unlink != 0) {
-    status = fs_active_adapter.unlink(fs_active_adapter.user, path.bytes, path.len);
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_unlink(0, path.bytes, path.len);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_unlink(0, path.bytes, path.len);
-#endif
-  }
+  inox_status status = fs_unlink_sync_status(path.bytes, path.len);
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
   }
 }
 
-inox_status fs::unlinkSync(const char* path, size_t path_len) {
+static inox_status fs_unlink_sync_status(const char* path, size_t path_len) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -693,26 +672,14 @@ inox_status fs::unlinkSync(const char* path, size_t path_len) {
 }
 
 void fs::rmSync(inox::StringView path, bool recursive, bool force) {
-  inox_status status = force ? INOX_OK : INOX_ERR_UNSUPPORTED;
-
-  if (path.bytes == 0 && path.len != 0) {
-    status = INOX_ERR_TYPE;
-  } else if (fs_active_adapter.rm != 0) {
-    status = fs_active_adapter.rm(fs_active_adapter.user, path.bytes, path.len, recursive, force);
-  } else {
-#ifdef INOX_LOOP_BACKEND_LIBUV
-    status = inox_fs_libuv_rm(0, path.bytes, path.len, recursive, force);
-#elif !defined(INOX_FS_DISABLE_HOST)
-    status = inox_fs_default_rm(0, path.bytes, path.len, recursive, force);
-#endif
-  }
+  inox_status status = fs_rm_sync_status(path.bytes, path.len, recursive, force);
 
   if (status != INOX_OK) {
     inox_fs_throw_status(status);
   }
 }
 
-inox_status fs::rmSync(const char* path, size_t path_len, bool recursive, bool force) {
+static inox_status fs_rm_sync_status(const char* path, size_t path_len, bool recursive, bool force) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -3756,7 +3723,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_MKDIR) {
-    inox_status status = fs.mkdirSync(request->path, request->path_len, request->recursive);
+    inox_status status = fs_mkdir_sync_status(request->path, request->path_len, request->recursive);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3766,7 +3733,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_UNLINK) {
-    inox_status status = fs.unlinkSync(request->path, request->path_len);
+    inox_status status = fs_unlink_sync_status(request->path, request->path_len);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3776,7 +3743,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_RM) {
-    inox_status status = fs.rmSync(request->path, request->path_len, request->recursive, request->force);
+    inox_status status = fs_rm_sync_status(request->path, request->path_len, request->recursive, request->force);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
