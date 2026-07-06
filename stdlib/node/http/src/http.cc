@@ -36,6 +36,12 @@ static void inox_http_throw_failed(const char* message) {
   inox::throw_value(inox::String(message == 0 ? "HTTP operation failed" : message));
 }
 
+static void inox_http_throw_status(inox_status status, const char* message) {
+  if (status != INOX_OK) {
+    inox_http_throw_failed(message);
+  }
+}
+
 #ifdef INOX_LOOP_BACKEND_LIBUV
 #include "inox/binary.h"
 #include "inox/fs.h"
@@ -105,9 +111,10 @@ static inox_status inox_http_parse_headers(
 static const char* inox_http_find_header_end(const char* bytes, size_t len);
 static const char* inox_http_status_text(int status);
 
-inox_status HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
+void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   if (loop == 0 || loop->allocator == 0) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpServer.create failed");
+    return;
   }
 
   server_ = 0;
@@ -116,7 +123,8 @@ inox_status HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* use
     (inox_http_server*)allocator->alloc(allocator->user, sizeof(inox_http_server), alignof(inox_http_server));
 
   if (server == 0) {
-    return INOX_ERR_OOM;
+    inox_http_throw_failed("TypeError: HttpServer allocation failed");
+    return;
   }
 
   memset(server, 0, sizeof(inox_http_server));
@@ -129,43 +137,52 @@ inox_status HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* use
 
   if (status != INOX_OK) {
     allocator->free(allocator->user, server, sizeof(inox_http_server), alignof(inox_http_server));
-    return status;
+    inox_http_throw_failed("TypeError: HttpServer.create failed");
+    return;
   }
 
   server_ = server;
-  return INOX_OK;
 }
 
-inox_status HttpServer::listen(const char* host, int port, int backlog) const {
+void HttpServer::listen(const char* host, int port, int backlog) const {
   inox_http_server* server = server_;
 
   if (server == 0) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpServer.listen failed");
+    return;
   }
 
-  return NetServer(server->net_server).listen(host, port, backlog);
+  inox_http_throw_status(
+    NetServer(server->net_server).listen(host, port, backlog),
+    "TypeError: HttpServer.listen failed"
+  );
 }
 
-inox_status HttpServer::localPort(int* out_port) const {
+int HttpServer::localPort() const {
   inox_http_server* server = server_;
 
   if (server == 0) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpServer.localPort failed");
+    return 0;
   }
 
-  return NetServer(server->net_server).localPort(out_port);
+  int port = 0;
+  inox_status status = NetServer(server->net_server).localPort(&port);
+  inox_http_throw_status(status, "TypeError: HttpServer.localPort failed");
+
+  return status == INOX_OK ? port : 0;
 }
 
-inox_status HttpServer::onRequest(HttpHandlerFn handler, void* user) const {
+void HttpServer::onRequest(HttpHandlerFn handler, void* user) const {
   inox_http_server* server = server_;
 
   if (server == 0 || handler == 0) {
-    return INOX_ERR_TYPE;
+    inox_http_throw_failed("TypeError: HttpServer.onRequest failed");
+    return;
   }
 
   server->handler = handler;
   server->user = user;
-  return INOX_OK;
 }
 
 void HttpServer::close() const {
@@ -903,39 +920,34 @@ struct inox_http_response {
   int unused;
 };
 
-inox_status HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
+void HttpServer::create(inox_loop* loop, HttpHandlerFn handler, void* user) {
   (void)loop;
   (void)handler;
   (void)user;
 
   server_ = 0;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpServer.create is unsupported");
 }
 
-inox_status HttpServer::listen(const char* host, int port, int backlog) const {
+void HttpServer::listen(const char* host, int port, int backlog) const {
   (void)server_;
   (void)host;
   (void)port;
   (void)backlog;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpServer.listen is unsupported");
 }
 
-inox_status HttpServer::localPort(int* out_port) const {
+int HttpServer::localPort() const {
   (void)server_;
-
-  if (out_port == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out_port = 0;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpServer.localPort is unsupported");
+  return 0;
 }
 
-inox_status HttpServer::onRequest(HttpHandlerFn handler, void* user) const {
+void HttpServer::onRequest(HttpHandlerFn handler, void* user) const {
   (void)server_;
   (void)handler;
   (void)user;
-  return INOX_ERR_UNSUPPORTED;
+  inox_http_throw_failed("TypeError: HttpServer.onRequest is unsupported");
 }
 
 void HttpServer::close() const {

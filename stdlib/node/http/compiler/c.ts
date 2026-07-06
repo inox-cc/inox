@@ -9,7 +9,7 @@ import {
 import {
   createFunctionContext,
   emitEventLoopReference,
-  emitStatusCheck,
+  emitRuntimeTypeCheck,
   nextCName,
   registerEventLoop
 } from '../../../../compiler/c/context.ts'
@@ -771,7 +771,7 @@ function emitHttpResponseStatusAssignment(
 
   return [
     `HttpResponse(${httpContext.responseName}).setStatus(${status});`,
-    ...emitHttpResponseThrownCheck()
+    ...emitHttpThrownCheck(context)
   ]
 }
 
@@ -801,7 +801,7 @@ function emitHttpResponseCallStatement(
     lines.push(
       `HttpResponse(${httpContext.responseName}).setHeader(inox::StringView(${name.bytes}, ${name.length}), inox::StringView(${value.bytes}, ${value.length}));`
     )
-    pushHttpLines(lines, emitHttpResponseThrownCheck())
+    pushHttpLines(lines, emitHttpThrownCheck(context))
 
     return lines
   }
@@ -813,7 +813,7 @@ function emitHttpResponseCallStatement(
 
     pushHttpLines(lines, headers.lines)
     lines.push(`HttpResponse(${httpContext.responseName}).writeHead(${status}, ${headers.name}, ${headers.count});`)
-    pushHttpLines(lines, emitHttpResponseThrownCheck())
+    pushHttpLines(lines, emitHttpThrownCheck(context))
 
     return lines
   }
@@ -829,7 +829,7 @@ function emitHttpResponseCallStatement(
 
     pushHttpLines(lines, body.lines)
     lines.push(`HttpResponse(${httpContext.responseName}).${runtime}(inox::StringView(${body.bytes}, ${body.length}));`)
-    pushHttpLines(lines, emitHttpResponseThrownCheck())
+    pushHttpLines(lines, emitHttpThrownCheck(context))
 
     return lines
   }
@@ -837,8 +837,8 @@ function emitHttpResponseCallStatement(
   return null
 }
 
-function emitHttpResponseThrownCheck(): string[] {
-  return ['if (inox::thrown()) return INOX_ERR_TYPE;']
+function emitHttpThrownCheck(context: CFunctionContext): string[] {
+  return [emitRuntimeTypeCheck('inox::thrown()', context)]
 }
 
 function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CFunctionContext): HttpHeaderArray {
@@ -1273,12 +1273,6 @@ function emitHttpStatusCodeExpression(expression: AnyNode | null | undefined, co
   return '200'
 }
 
-function emitHttpStatusCheck(call: string, context: CFunctionContext): string[] {
-  const status = nextCName(context, 'inox_http_status')
-
-  return ['{', `  inox_status ${status} = ${call};`, `  if (${status} != INOX_OK) return ${status};`, '}']
-}
-
 function isHttpResponseReference(expression: AnyNode, httpContext: HttpHandlerContext): boolean {
   const responseName = httpContext.responseName
 
@@ -1361,7 +1355,7 @@ export function emitHttpServerCallStatement(
     isHttpCreateServerCall(callee.object, context)
   ) {
     const serverName = nextCName(context, 'inox_http_server')
-    const lines = [`inox_http_server* ${serverName} = 0;`]
+    const lines = [`HttpServer ${serverName};`]
     registerEventLoop(context)
 
     pushHttpLines(
@@ -1443,12 +1437,8 @@ function emitHttpServerCreateLines(
     wrapperName = wrapper.name
   }
 
-  lines.push(
-    emitStatusCheck(
-      `${serverName}.create(${emitEventLoopReference(context)}, ${wrapperName}, 0)`,
-      context
-    )
-  )
+  lines.push(`${serverName}.create(${emitEventLoopReference(context)}, ${wrapperName}, 0);`)
+  pushHttpLines(lines, emitHttpThrownCheck(context))
 
   return lines
 }
@@ -1497,9 +1487,8 @@ function emitHttpServerListenLines(
   const lines: string[] = []
 
   pushHttpLines(lines, port.lines)
-  lines.push(
-    emitStatusCheck(`${serverName}.listen(${host}, (int)(${port.expression}), 128)`, context)
-  )
+  lines.push(`${serverName}.listen(${host}, (int)(${port.expression}), 128);`)
+  pushHttpLines(lines, emitHttpThrownCheck(context))
   pushHttpLines(lines, emitHttpZeroArgCallbackLines(callback, context, deps))
 
   return lines
@@ -1560,7 +1549,10 @@ function emitHttpServerOnRequestLines(serverName: string, args: AnyNode[], conte
     return []
   }
 
-  return [emitStatusCheck(`${serverName}.onRequest(${wrapper.name}, 0)`, context)]
+  return [
+    `${serverName}.onRequest(${wrapper.name}, 0);`,
+    ...emitHttpThrownCheck(context)
+  ]
 }
 
 function emitHttpServerCloseLines(
