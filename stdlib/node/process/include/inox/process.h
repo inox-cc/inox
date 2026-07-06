@@ -52,7 +52,6 @@ public:
   using inox::Value::operator=;
 
   void init();
-  inox::Value value() const;
 };
 
 class process : public inox::Value {
@@ -77,7 +76,6 @@ public:
   inox::Value hrtime(inox_value previous) const;
   inox::Value hrtime(const inox::Value& previous) const;
   inox::Value memoryUsage() const;
-  inox::Value value() const;
 };
 
 extern process process;

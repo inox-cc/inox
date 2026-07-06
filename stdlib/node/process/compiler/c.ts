@@ -281,19 +281,22 @@ export function emitPreparedProcessValueExpression(
   }
 
   if (method === 'memoryUsage' || object === 'process' || property === 'versions') {
-    let call = 'process.value()'
+    let call = 'process'
 
     if (method === 'memoryUsage') {
       call = 'process.memoryUsage()'
     } else if (property === 'versions') {
-      call = 'process.versions.value()'
+      call = 'process.versions'
     }
 
     context.variables.set(out, 'object')
     dependencies.registerObjectShape(context, out, expression.shape)
 
     lines.push(`${out} = ${call};`)
-    lines.push(`if (inox::thrown()) ${emitFailureStatement(context)}`)
+
+    if (method === 'memoryUsage') {
+      lines.push(`if (inox::thrown()) ${emitFailureStatement(context)}`)
+    }
 
     return {
       lines,

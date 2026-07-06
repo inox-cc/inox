@@ -55,7 +55,8 @@ inox_status inox_tls_connect(
 
   *out = 0;
   inox_allocator* allocator = loop->allocator;
-  inox_tls_client* client = allocator->alloc(allocator->user, sizeof(inox_tls_client), _Alignof(inox_tls_client));
+  inox_tls_client* client =
+    (inox_tls_client*)allocator->alloc(allocator->user, sizeof(inox_tls_client), alignof(inox_tls_client));
 
   if (client == 0) {
     return INOX_ERR_OOM;
@@ -510,5 +511,5 @@ static void inox_tls_client_free(inox_tls_client* client) {
     client->ctx = 0;
   }
 
-  allocator->free(allocator->user, client, sizeof(inox_tls_client), _Alignof(inox_tls_client));
+  allocator->free(allocator->user, client, sizeof(inox_tls_client), alignof(inox_tls_client));
 }

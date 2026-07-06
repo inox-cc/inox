@@ -17,7 +17,8 @@
 #endif
 
 void Math::init(uint32_t seed) const {
-  init(seed, MathRandomBackend::Simple);
+  random_state_ = seed;
+  random_backend_ = MathRandomBackend::Simple;
 }
 
 void Math::init(uint32_t seed, MathRandomBackend backend) const {

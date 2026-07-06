@@ -4,10 +4,6 @@
 #include <stddef.h>
 #include "inox/loop.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct inox_net_server inox_net_server;
 typedef struct inox_net_socket inox_net_socket;
 
@@ -95,9 +91,5 @@ inox_status inox_net_socket_end_with_callback(
 inox_status inox_net_socket_write_and_close(inox_net_socket* socket, const char* bytes, size_t len);
 inox_status inox_net_socket_destroy(inox_net_socket* socket);
 void inox_net_socket_close(inox_net_socket* socket);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

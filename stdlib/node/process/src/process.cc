@@ -504,10 +504,6 @@ void process_versions::init() {
   }
 }
 
-inox::Value process_versions::value() const {
-  return *this;
-}
-
 void process::init() {
   arch = inox::String(process_arch_name());
   argv0 = argv[0];
@@ -577,10 +573,6 @@ inox::Value process::memoryUsage() const {
   }
 
   return inox::adopt(value);
-}
-
-inox::Value process::value() const {
-  return *this;
 }
 
 class process process;
