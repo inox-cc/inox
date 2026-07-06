@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <string.h>
+#include <utility>
 #include "inox/array.h"
 #include "inox/binary.h"
 #include "inox/fs.h"
@@ -187,14 +188,14 @@ enum {
   INOX_FS_STATS_IS_DIRECTORY_INDEX = 4
 };
 
-static inox_status inox_fs_stats_bool_field(inox_value stats, uint32_t index, bool* out) {
+static inox_status inox_fs_bool_field(inox_value object, uint32_t index, bool* out) {
   if (out == 0) {
     return INOX_ERR_TYPE;
   }
 
   *out = false;
   inox_value value = inox_undefined_value();
-  inox_status status = inox_object_get_known(stats, index, &value);
+  inox_status status = inox_object_get_known(object, index, &value);
 
   if (status != INOX_OK) {
     return status;
@@ -211,19 +212,7 @@ static inox_status inox_fs_stats_bool_field(inox_value stats, uint32_t index, bo
   return INOX_OK;
 }
 
-bool inox_fs_stats_is_file(inox_value stats) {
-  bool result = false;
-
-  return inox_fs_stats_bool_field(stats, INOX_FS_STATS_IS_FILE_INDEX, &result) == INOX_OK && result;
-}
-
-bool inox_fs_stats_is_directory(inox_value stats) {
-  bool result = false;
-
-  return inox_fs_stats_bool_field(stats, INOX_FS_STATS_IS_DIRECTORY_INDEX, &result) == INOX_OK && result;
-}
-
-inox_status
+static inox_status
 inox_fs_stats_new(inox_allocator* allocator, double size, double mode, double mtime_ms, bool is_file, bool is_directory, inox_value* out) {
   static const inox_field_info fields[] = { { "size", INOX_FIELD_READONLY },
                                             { "mode", INOX_FIELD_READONLY },
@@ -270,49 +259,33 @@ inox_fs_stats_new(inox_allocator* allocator, double size, double mode, double mt
   return INOX_OK;
 }
 
+FsStats::FsStats() : inox::Value() {}
+
+FsStats::FsStats(inox_value value) : inox::Value(value) {}
+
+FsStats::FsStats(const inox::Value& value) : inox::Value(value) {}
+
+FsStats::FsStats(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+bool FsStats::isFile() const {
+  bool result = false;
+
+  return inox_fs_bool_field(raw(), INOX_FS_STATS_IS_FILE_INDEX, &result) == INOX_OK && result;
+}
+
+bool FsStats::isDirectory() const {
+  bool result = false;
+
+  return inox_fs_bool_field(raw(), INOX_FS_STATS_IS_DIRECTORY_INDEX, &result) == INOX_OK && result;
+}
+
 enum {
   INOX_FS_DIRENT_NAME_INDEX = 0,
   INOX_FS_DIRENT_IS_FILE_INDEX = 1,
   INOX_FS_DIRENT_IS_DIRECTORY_INDEX = 2
 };
 
-static inox_status inox_fs_dirent_bool_field(inox_value dirent, uint32_t index, bool* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = false;
-  inox_value value = inox_undefined_value();
-  inox_status status = inox_object_get_known(dirent, index, &value);
-
-  if (status != INOX_OK) {
-    return status;
-  }
-
-  if (value.tag != INOX_TAG_BOOL) {
-    inox_release(value);
-    return INOX_ERR_TYPE;
-  }
-
-  *out = value.as.boolean;
-  inox_release(value);
-
-  return INOX_OK;
-}
-
-bool inox_fs_dirent_is_file(inox_value dirent) {
-  bool result = false;
-
-  return inox_fs_dirent_bool_field(dirent, INOX_FS_DIRENT_IS_FILE_INDEX, &result) == INOX_OK && result;
-}
-
-bool inox_fs_dirent_is_directory(inox_value dirent) {
-  bool result = false;
-
-  return inox_fs_dirent_bool_field(dirent, INOX_FS_DIRENT_IS_DIRECTORY_INDEX, &result) == INOX_OK && result;
-}
-
-inox_status inox_fs_dirent_new(
+static inox_status inox_fs_dirent_new(
   inox_allocator* allocator,
   const char* name,
   size_t name_len,
@@ -360,6 +333,26 @@ inox_status inox_fs_dirent_new(
   *out = dirent;
 
   return INOX_OK;
+}
+
+FsDirent::FsDirent() : inox::Value() {}
+
+FsDirent::FsDirent(inox_value value) : inox::Value(value) {}
+
+FsDirent::FsDirent(const inox::Value& value) : inox::Value(value) {}
+
+FsDirent::FsDirent(inox::Value&& value) : inox::Value(std::move(value)) {}
+
+bool FsDirent::isFile() const {
+  bool result = false;
+
+  return inox_fs_bool_field(raw(), INOX_FS_DIRENT_IS_FILE_INDEX, &result) == INOX_OK && result;
+}
+
+bool FsDirent::isDirectory() const {
+  bool result = false;
+
+  return inox_fs_bool_field(raw(), INOX_FS_DIRENT_IS_DIRECTORY_INDEX, &result) == INOX_OK && result;
 }
 
 inox_status inox_fs_read_file_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {

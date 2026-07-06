@@ -157,12 +157,30 @@ inox_fs_rename(inox_loop* loop, const char* old_path, size_t old_path_len, const
 inox_status
 inox_fs_write_file(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out);
 inox_status inox_fs_write_file_bytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out);
-inox_status
-inox_fs_stats_new(inox_allocator* allocator, double size, double mode, double mtime_ms, bool is_file, bool is_directory, inox_value* out);
-bool inox_fs_stats_is_file(inox_value stats);
-bool inox_fs_stats_is_directory(inox_value stats);
-inox_status inox_fs_dirent_new(inox_allocator* allocator, const char* name, size_t name_len, bool is_file, bool is_directory, inox_value* out);
-bool inox_fs_dirent_is_file(inox_value dirent);
-bool inox_fs_dirent_is_directory(inox_value dirent);
+#ifdef __cplusplus
+
+class FsStats : public inox::Value {
+public:
+  FsStats();
+  explicit FsStats(inox_value value);
+  explicit FsStats(const inox::Value& value);
+  explicit FsStats(inox::Value&& value);
+
+  bool isFile() const;
+  bool isDirectory() const;
+};
+
+class FsDirent : public inox::Value {
+public:
+  FsDirent();
+  explicit FsDirent(inox_value value);
+  explicit FsDirent(const inox::Value& value);
+  explicit FsDirent(inox::Value&& value);
+
+  bool isFile() const;
+  bool isDirectory() const;
+};
+
+#endif
 
 #endif

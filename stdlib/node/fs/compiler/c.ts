@@ -745,11 +745,12 @@ export function emitPreparedFsStatsMethodExpression(
   }
 
   const receiver = dependencies.emitCValueExpression(expression.callee.object, context)
-  const helper = fsStatsRuntimeHelper(method)
+  const runtimeClass = fsStatsRuntimeClass(method)
+  const runtimeMethod = fsStatsRuntimeClassMethod(method)
 
   return {
     lines: receiver.lines,
-    expression: `(${helper}(${receiver.expression}) ? 1 : 0)`
+    expression: `(${runtimeClass}(${receiver.expression}).${runtimeMethod}() ? 1 : 0)`
   }
 }
 
@@ -804,18 +805,18 @@ function isFsStatsRuntimeMethod(method: string | null): boolean {
   )
 }
 
-function fsStatsRuntimeHelper(method: string | null): string {
-  if (method === 'statsIsFile') {
-    return 'inox_fs_stats_is_file'
+function fsStatsRuntimeClass(method: string | null): string {
+  if (method === 'statsIsFile' || method === 'statsIsDirectory') {
+    return 'FsStats'
   }
 
-  if (method === 'statsIsDirectory') {
-    return 'inox_fs_stats_is_directory'
+  return 'FsDirent'
+}
+
+function fsStatsRuntimeClassMethod(method: string | null): string {
+  if (method === 'statsIsFile' || method === 'direntIsFile') {
+    return 'isFile'
   }
 
-  if (method === 'direntIsFile') {
-    return 'inox_fs_dirent_is_file'
-  }
-
-  return 'inox_fs_dirent_is_directory'
+  return 'isDirectory'
 }
