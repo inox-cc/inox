@@ -1123,84 +1123,6 @@ static inox_status inox_array_join_part(inox_value value, char* buffer, size_t b
   return INOX_ERR_TYPE;
 }
 
-static inox::String array_join_string(inox_value array, inox::StringView separator_view) {
-  if (
-    inox_default_allocator.alloc == 0 || inox_default_allocator.free == 0 ||
-    array.tag != INOX_TAG_ARRAY || array.as.ref == 0 || (separator_view.bytes == 0 && separator_view.len != 0)
-  ) {
-    return inox::String();
-  }
-
-  inox_array* instance = (inox_array*)array.as.ref;
-  const char* separator = separator_view.bytes == 0 ? "" : separator_view.bytes;
-  const size_t separator_len = separator_view.len;
-  size_t total_len = 0;
-
-  for (size_t index = 0; index < instance->length; index += 1) {
-    char buffer[64];
-    const char* bytes = "";
-    size_t len = 0;
-    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
-
-    if (status != INOX_OK) {
-      return inox::String();
-    }
-
-    if (index > 0) {
-      if (total_len > (size_t)-1 - separator_len) {
-        return inox::String();
-      }
-
-      total_len += separator_len;
-    }
-
-    if (total_len > (size_t)-1 - len) {
-      return inox::String();
-    }
-
-    total_len += len;
-  }
-
-  if (total_len == 0) {
-    return inox::String("");
-  }
-
-  char* joined = (char*)inox_default_allocator.alloc(inox_default_allocator.user, total_len, alignof(char));
-
-  if (joined == 0) {
-    return inox::String();
-  }
-
-  size_t offset = 0;
-
-  for (size_t index = 0; index < instance->length; index += 1) {
-    char buffer[64];
-    const char* bytes = "";
-    size_t len = 0;
-    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
-
-    if (status != INOX_OK) {
-      inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
-      return inox::String();
-    }
-
-    if (index > 0 && separator_len > 0) {
-      memcpy(joined + offset, separator, separator_len);
-      offset += separator_len;
-    }
-
-    if (len > 0) {
-      memcpy(joined + offset, bytes, len);
-      offset += len;
-    }
-  }
-
-  inox::String result(joined, total_len);
-  inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
-
-  return result;
-}
-
 Array::Array() : inox::Value() {}
 
 Array::Array(inox_value value) : inox::Value(value) {}
@@ -1438,11 +1360,86 @@ inox_status Array::unshift(inox_value array, inox_value value, size_t* out) cons
 }
 
 inox::String Array::join(inox::StringView separator) const {
-  if (!valid()) {
+  inox_value array = inox::Value::raw();
+
+  if (
+    inox_default_allocator.alloc == 0 ||
+    inox_default_allocator.free == 0 ||
+    array.tag != INOX_TAG_ARRAY ||
+    array.as.ref == 0 ||
+    (separator.bytes == 0 && separator.len != 0)
+  ) {
     return inox::String();
   }
 
-  return array_join_string(inox::Value::raw(), separator);
+  inox_array* instance = (inox_array*)array.as.ref;
+  const char* separator_bytes = separator.bytes == 0 ? "" : separator.bytes;
+  const size_t separator_len = separator.len;
+  size_t total_len = 0;
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    char buffer[64];
+    const char* bytes = "";
+    size_t len = 0;
+    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
+
+    if (status != INOX_OK) {
+      return inox::String();
+    }
+
+    if (index > 0) {
+      if (total_len > (size_t)-1 - separator_len) {
+        return inox::String();
+      }
+
+      total_len += separator_len;
+    }
+
+    if (total_len > (size_t)-1 - len) {
+      return inox::String();
+    }
+
+    total_len += len;
+  }
+
+  if (total_len == 0) {
+    return inox::String("");
+  }
+
+  char* joined = (char*)inox_default_allocator.alloc(inox_default_allocator.user, total_len, alignof(char));
+
+  if (joined == 0) {
+    return inox::String();
+  }
+
+  size_t offset = 0;
+
+  for (size_t index = 0; index < instance->length; index += 1) {
+    char buffer[64];
+    const char* bytes = "";
+    size_t len = 0;
+    inox_status status = inox_array_join_part(instance->items[index], buffer, sizeof(buffer), &bytes, &len);
+
+    if (status != INOX_OK) {
+      inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
+      return inox::String();
+    }
+
+    if (index > 0 && separator_len > 0) {
+      memcpy(joined + offset, separator_bytes, separator_len);
+      offset += separator_len;
+    }
+
+    if (len > 0) {
+      memcpy(joined + offset, bytes, len);
+      offset += len;
+    }
+  }
+
+  inox::String result(joined, total_len);
+  inox_default_allocator.free(inox_default_allocator.user, joined, total_len, alignof(char));
+
+  return result;
 }
 
 bool Array::isArray(inox_value value) const {
