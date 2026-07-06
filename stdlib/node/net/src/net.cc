@@ -73,7 +73,7 @@ struct inox_net_socket {
 
 static inox_status inox_net_ip4_addr(const char* host, int port, struct sockaddr_in* out);
 static inox_status inox_net_resolve_ip4_addr(inox_loop* loop, const char* host, int port, struct sockaddr_in* out);
-static inox_status inox_net_sockaddr_to_address(const struct sockaddr* addr, inox_net_address* out);
+static inox_status inox_net_sockaddr_to_address(const struct sockaddr* addr, NetAddress* out);
 static inox_status inox_net_socket_init(inox_loop* loop, inox_net_socket** out);
 static void inox_net_server_report_status(inox_net_server* server, inox_status status);
 static void inox_net_socket_report_status(inox_net_socket* socket, inox_status status);
@@ -220,7 +220,7 @@ inox_status NetServer::listen(const char* host, int port, int backlog) const {
   return INOX_OK;
 }
 
-inox_status NetServer::address(inox_net_address* out) const {
+inox_status NetServer::address(NetAddress* out) const {
   inox_net_server* server = server_;
 
   if (server == 0 || out == 0) {
@@ -244,7 +244,7 @@ inox_status NetServer::localPort(int* out_port) const {
     return INOX_ERR_TYPE;
   }
 
-  inox_net_address address;
+  NetAddress address;
   inox_status status = this->address(&address);
 
   if (status != INOX_OK) {
@@ -487,7 +487,7 @@ inox_status NetSocket::setEncoding(inox::StringView encoding) const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::address(inox_net_address* out) const {
+inox_status NetSocket::address(NetAddress* out) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || out == 0) {
@@ -504,7 +504,7 @@ inox_status NetSocket::address(inox_net_address* out) const {
   return inox_net_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
-inox_status NetSocket::remoteAddress(inox_net_address* out) const {
+inox_status NetSocket::remoteAddress(NetAddress* out) const {
   inox_net_socket* socket = socket_;
 
   if (socket == 0 || out == 0) {
@@ -790,12 +790,12 @@ static inox_status inox_net_resolve_ip4_addr(inox_loop* loop, const char* host, 
   return resolve_status;
 }
 
-static inox_status inox_net_sockaddr_to_address(const struct sockaddr* addr, inox_net_address* out) {
+static inox_status inox_net_sockaddr_to_address(const struct sockaddr* addr, NetAddress* out) {
   if (addr == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
-  memset(out, 0, sizeof(inox_net_address));
+  memset(out, 0, sizeof(NetAddress));
 
   if (addr->sa_family != AF_INET) {
     return INOX_ERR_UNSUPPORTED;
@@ -1177,7 +1177,7 @@ inox_status NetServer::listen(const char* host, int port, int backlog) const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetServer::address(inox_net_address* out) const {
+inox_status NetServer::address(NetAddress* out) const {
   (void)server_;
 
   if (out == 0) {
@@ -1303,7 +1303,7 @@ inox_status NetSocket::setEncoding(inox::StringView encoding) const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::address(inox_net_address* out) const {
+inox_status NetSocket::address(NetAddress* out) const {
   (void)socket_;
 
   if (out == 0) {
@@ -1316,7 +1316,7 @@ inox_status NetSocket::address(inox_net_address* out) const {
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status NetSocket::remoteAddress(inox_net_address* out) const {
+inox_status NetSocket::remoteAddress(NetAddress* out) const {
   (void)socket_;
 
   if (out == 0) {

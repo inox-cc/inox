@@ -228,7 +228,7 @@ export function emitDgramAddressVariableDeclaration(statement: AnyNode, context:
   context.variables.set(statement.name, 'dgram-address')
 
   return [
-    `inox_dgram_address ${statement.name};`,
+    `DgramAddress ${statement.name};`,
     emitStatusCheck(`DgramSocket(${socketName}).${method}(&${statement.name})`, context)
   ]
 }

@@ -577,7 +577,7 @@ export function emitNetAddressVariableDeclaration(statement: AnyNode, context: C
   context.variables.set(statement.name, 'net-address')
 
   return [
-    `inox_net_address ${statement.name};`,
+    `NetAddress ${statement.name};`,
     emitStatusCheck(call, context)
   ]
 }
@@ -593,7 +593,7 @@ export function emitNetAddressMemberVariableDeclaration(
       context.variables.set(statement.name, 'string')
 
       return [
-        `inox_net_address ${member.tempName};`,
+        `NetAddress ${member.tempName};`,
         emitStatusCheck(`NetSocket(${member.socketName}).${member.runtime}(&${member.tempName})`, context),
         `const char *${statement.name} = ${member.tempName}.${member.field};`
       ]
@@ -606,7 +606,7 @@ export function emitNetAddressMemberVariableDeclaration(
     return [
       `double ${statement.name} = 0;`,
       '{',
-      `  inox_net_address ${member.tempName};`,
+      `  NetAddress ${member.tempName};`,
       `  ${emitStatusCheck(statusCall, context)}`,
       `  ${statement.name} = (double)${member.tempName}.${member.field};`,
       '}'
@@ -1733,7 +1733,7 @@ function resolveNetSocketAddressMember(
   return {
     socketName,
     runtime: runtime,
-    tempName: nextCName(context, 'inox_net_address'),
+    tempName: nextCName(context, 'NetAddress'),
     field: field,
     valueType: valueType
   }

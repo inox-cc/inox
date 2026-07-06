@@ -104,7 +104,7 @@ function pushIndentedHttpLines(target: string[], lines: string[]): void {
 }
 
 export function emitHttpHandlerHead(wrapper: CHttpHandler): string {
-  return `static inox_status ${wrapper.name}(void* user, const inox_http_request* inox_request, inox_http_response* inox_response)`
+  return `static inox_status ${wrapper.name}(void* user, const HttpRequestData* inox_request, inox_http_response* inox_response)`
 }
 
 export function emitHttpHandlerDeclaration(
@@ -159,7 +159,7 @@ export function emitHttpHandlerDeclaration(
   if (requestName === null || typeof requestName === 'undefined') {
     lines.push('  (void)inox_request;')
   } else {
-    lines.push(`  const inox_http_request* ${requestName} = inox_request;`)
+    lines.push(`  const HttpRequestData* ${requestName} = inox_request;`)
   }
 
   if (responseName === null || typeof responseName === 'undefined') {
@@ -880,9 +880,9 @@ function emitHttpHeaderArray(expression: AnyNode | null | undefined, context: CF
     }
   }
 
-  const name = nextCName(context, 'inox_http_headers')
+  const name = nextCName(context, 'HttpHeaders')
   const properties: HttpAstNode[] = expression.properties
-  const lines = [`inox_http_header ${name}[] = {`]
+  const lines = [`HttpHeader ${name}[] = {`]
   const staticContext: HttpStaticStringContext = {
     stringLocals: new Map()
   }

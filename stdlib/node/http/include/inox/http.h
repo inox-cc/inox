@@ -11,27 +11,27 @@
 typedef struct inox_http_server inox_http_server;
 typedef struct inox_http_response inox_http_response;
 
-typedef struct inox_http_header {
+typedef struct HttpHeader {
   const char* name;
   size_t name_len;
   const char* value;
   size_t value_len;
-} inox_http_header;
+} HttpHeader;
 
-typedef struct inox_http_request {
+typedef struct HttpRequestData {
   const char* method;
   size_t method_len;
   const char* url;
   size_t url_len;
-  const inox_http_header* headers;
+  const HttpHeader* headers;
   size_t header_count;
   const char* body;
   size_t body_len;
-} inox_http_request;
+} HttpRequestData;
 
 typedef inox_status (*HttpHandlerFn)(
   void* user,
-  const inox_http_request* request,
+  const HttpRequestData* request,
   inox_http_response* response
 );
 
@@ -55,14 +55,14 @@ public:
 
 class HttpRequest {
 private:
-  const inox_http_request* request_;
+  const HttpRequestData* request_;
 
 public:
-  explicit HttpRequest(const inox_http_request* request);
+  explicit HttpRequest(const HttpRequestData* request);
 
   bool methodEquals(inox::StringView method) const;
   bool urlEquals(inox::StringView url) const;
-  const inox_http_request* raw() const;
+  const HttpRequestData* raw() const;
 };
 
 class HttpResponse {
@@ -74,7 +74,7 @@ public:
 
   inox_status setStatus(int status) const;
   inox_status setHeader(inox::StringView name, inox::StringView value) const;
-  inox_status writeHead(int status, const inox_http_header* headers, size_t header_count) const;
+  inox_status writeHead(int status, const HttpHeader* headers, size_t header_count) const;
   inox_status write(inox::StringView bytes) const;
   inox_status end(inox::StringView bytes) const;
   inox_status text(int status, inox::StringView body) const;

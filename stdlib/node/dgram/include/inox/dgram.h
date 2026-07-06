@@ -10,11 +10,11 @@
 
 typedef struct inox_dgram_socket inox_dgram_socket;
 
-typedef struct inox_dgram_address {
+typedef struct DgramAddress {
   char address[64];
   const char* family;
   int port;
-} inox_dgram_address;
+} DgramAddress;
 
 typedef inox_status (*DgramRecvFn)(
   void* user,
@@ -48,8 +48,8 @@ public:
   inox_status recvStop() const;
   inox_status send(inox::StringView bytes, const char* host, int port) const;
   void close() const;
-  inox_status address(inox_dgram_address* out) const;
-  inox_status remoteAddress(inox_dgram_address* out) const;
+  inox_status address(DgramAddress* out) const;
+  inox_status remoteAddress(DgramAddress* out) const;
   inox_status localPort(int* out_port) const;
   inox_status setBroadcast(bool enabled) const;
   inox_status setTTL(int ttl) const;

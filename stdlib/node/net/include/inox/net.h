@@ -11,11 +11,11 @@
 typedef struct inox_net_server inox_net_server;
 typedef struct inox_net_socket inox_net_socket;
 
-typedef struct inox_net_address {
+typedef struct NetAddress {
   char address[64];
   const char* family;
   int port;
-} inox_net_address;
+} NetAddress;
 
 typedef inox_status (*NetConnectionFn)(void* user, inox_net_server* server, inox_net_socket* socket);
 typedef inox_status (*NetServerFn)(void* user, inox_net_server* server);
@@ -43,7 +43,7 @@ public:
   inox_status onClose(NetServerFn close, void* user) const;
   inox_status onError(NetServerErrorFn error, void* user) const;
   inox_status listen(const char* host, int port, int backlog) const;
-  inox_status address(inox_net_address* out) const;
+  inox_status address(NetAddress* out) const;
   inox_status localPort(int* out_port) const;
   void close() const;
 };
@@ -77,8 +77,8 @@ public:
   inox_status readStart() const;
   inox_status readStop() const;
   inox_status setEncoding(inox::StringView encoding) const;
-  inox_status address(inox_net_address* out) const;
-  inox_status remoteAddress(inox_net_address* out) const;
+  inox_status address(NetAddress* out) const;
+  inox_status remoteAddress(NetAddress* out) const;
   inox_status bytesRead(size_t* out_bytes) const;
   inox_status bytesWritten(size_t* out_bytes) const;
   inox_status setNoDelay(bool enabled) const;

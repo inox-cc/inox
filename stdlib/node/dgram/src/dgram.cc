@@ -29,7 +29,7 @@ struct inox_dgram_socket {
 };
 
 static inox_status inox_dgram_ip4_addr(const char* host, int port, struct sockaddr_in* out);
-static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, inox_dgram_address* out);
+static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, DgramAddress* out);
 static void inox_dgram_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 static void inox_dgram_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned flags);
 static void inox_dgram_send_cb(uv_udp_send_t* request, int status);
@@ -247,7 +247,7 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
   return INOX_OK;
 }
 
-inox_status DgramSocket::address(inox_dgram_address* out) const {
+inox_status DgramSocket::address(DgramAddress* out) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || out == 0) {
@@ -264,7 +264,7 @@ inox_status DgramSocket::address(inox_dgram_address* out) const {
   return inox_dgram_sockaddr_to_address((const struct sockaddr*)&addr, out);
 }
 
-inox_status DgramSocket::remoteAddress(inox_dgram_address* out) const {
+inox_status DgramSocket::remoteAddress(DgramAddress* out) const {
   inox_dgram_socket* socket = socket_;
 
   if (socket == 0 || out == 0) {
@@ -414,12 +414,12 @@ void DgramSocket::close() const {
   uv_close((uv_handle_t*)&socket->handle, inox_dgram_close_cb);
 }
 
-static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, inox_dgram_address* out) {
+static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, DgramAddress* out) {
   if (addr == 0 || out == 0) {
     return INOX_ERR_TYPE;
   }
 
-  memset(out, 0, sizeof(inox_dgram_address));
+  memset(out, 0, sizeof(DgramAddress));
 
   if (addr->sa_family != AF_INET) {
     return INOX_ERR_UNSUPPORTED;
@@ -609,25 +609,25 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status DgramSocket::address(inox_dgram_address* out) const {
+inox_status DgramSocket::address(DgramAddress* out) const {
   (void)socket_;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
   }
 
-  memset(out, 0, sizeof(inox_dgram_address));
+  memset(out, 0, sizeof(DgramAddress));
   return INOX_ERR_UNSUPPORTED;
 }
 
-inox_status DgramSocket::remoteAddress(inox_dgram_address* out) const {
+inox_status DgramSocket::remoteAddress(DgramAddress* out) const {
   (void)socket_;
 
   if (out == 0) {
     return INOX_ERR_TYPE;
   }
 
-  memset(out, 0, sizeof(inox_dgram_address));
+  memset(out, 0, sizeof(DgramAddress));
   return INOX_ERR_UNSUPPORTED;
 }
 
