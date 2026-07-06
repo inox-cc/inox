@@ -69,6 +69,49 @@ function emitFsStringArgument(operand: PreparedStringBytesOperand): string {
   return operand.cppExpression ?? `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
+function fsAsyncCppExpression(
+  expression: AnyNode,
+  context: FsFunctionContext,
+  dependencies: FsLoweringDependencies,
+  path: PreparedStringBytesOperand,
+  lines: string[],
+  descriptor: FsAsyncCallDescriptor
+): PreparedExpression | null {
+  const method = cFsRuntimeExpressionMethod(expression)
+
+  if (descriptor.kind === 'path-out') {
+    if (descriptor.callName !== 'fs.promises.readFile' && descriptor.callName !== 'fs.promises.unlink') {
+      return null
+    }
+
+    return {
+      lines,
+      expression: `${descriptor.callName}(${emitFsStringArgument(path)})`,
+      valueType: fsPromiseValueType(expression, method),
+      rejectionValueType: 'error'
+    }
+  }
+
+  if (descriptor.kind === 'string-bytes-out') {
+    if (descriptor.callName !== 'fs.promises.writeFile' && descriptor.callName !== 'fs.promises.appendFile') {
+      return null
+    }
+
+    const bytes = dependencies.emitPreparedStringBytesOperand(expression.args[1], context, 'inox_fs_bytes')
+
+    appendLines(lines, bytes.lines)
+
+    return {
+      lines,
+      expression: `${descriptor.callName}(${emitFsStringArgument(path)}, ${emitFsStringArgument(bytes)})`,
+      valueType: fsPromiseValueType(expression, method),
+      rejectionValueType: 'error'
+    }
+  }
+
+  return null
+}
+
 const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
   appendFileSync: { kind: 'string-bytes', callName: 'fs.appendFileSync' },
   copyFileSync: { kind: 'path-arg', callName: 'fs.copyFileSync', tempPrefix: 'inox_fs_dest_path' },
@@ -320,14 +363,23 @@ export function emitPreparedFsCallExpression(
 
   registerEventLoop(context)
 
-  const out = preparedFsCallOut(options, context, 'inox_promise')
-  if (options.owned !== false) {
-    registerOwnedPromise(context, out, fsPromiseValueType(expression, method), 'error')
-  }
   const path = dependencies.emitPreparedStringBytesOperand(expression.args[0], context, 'inox_fs_path')
   const lines: string[] = []
   appendLines(lines, path.lines)
   const descriptor = fsAsyncCallDescriptorForExpression(expression, method)
+
+  if (options.cppExpression === true && descriptor !== null && typeof descriptor !== 'undefined') {
+    const cppExpression = fsAsyncCppExpression(expression, context, dependencies, path, lines, descriptor)
+
+    if (cppExpression !== null && typeof cppExpression !== 'undefined') {
+      return cppExpression
+    }
+  }
+
+  const out = preparedFsCallOut(options, context, 'inox_promise')
+  if (options.owned !== false) {
+    registerOwnedPromise(context, out, fsPromiseValueType(expression, method), 'error')
+  }
 
   if (descriptor !== null && typeof descriptor !== 'undefined') {
     return emitPreparedFsAsyncDescriptorExpression(expression, context, dependencies, path, lines, out, descriptor)

@@ -111,6 +111,11 @@ struct FsAdapter {
 
 class fs_promises {
 public:
+  inox::Promise readFile(inox::StringView path);
+  inox::Promise writeFile(inox::StringView path, inox::StringView bytes);
+  inox::Promise appendFile(inox::StringView path, inox::StringView bytes);
+  inox::Promise unlink(inox::StringView path);
+
   inox_status readFile(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
   inox_status readFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
   inox_status readdir(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);

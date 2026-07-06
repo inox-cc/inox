@@ -8014,6 +8014,14 @@ function emitPreparedAwaitValuePromiseExpression(expression: AnyNode, context: C
     return preparedExpressionOrEmpty(fetchPromise)
   }
 
+  const fsPromise = emitPreparedFsCallExpression(expression.argument, context, fsLoweringDependencies, {
+    cppExpression: true
+  })
+
+  if (fsPromise !== null && typeof fsPromise !== 'undefined') {
+    return preparedExpressionOrEmpty(fsPromise)
+  }
+
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
 
   if (promise !== null && typeof promise !== 'undefined') {
@@ -8092,6 +8100,14 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
 
   if (fetchPromise !== null && typeof fetchPromise !== 'undefined') {
     return emitPreparedAwaitedPromiseValueExpression(expression, fetchPromise, context)
+  }
+
+  const fsPromise = emitPreparedFsCallExpression(expression.argument, context, fsLoweringDependencies, {
+    cppExpression: true
+  })
+
+  if (fsPromise !== null && typeof fsPromise !== 'undefined') {
+    return emitPreparedAwaitedPromiseValueExpression(expression, fsPromise, context)
   }
 
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)

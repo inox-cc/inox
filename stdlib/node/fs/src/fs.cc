@@ -849,6 +849,46 @@ inox_status fs::writeFileBytesSync(const char* path, size_t path_len, inox_value
   return this->writeFileSync(path, path_len, (const char*)data->bytes, data->length);
 }
 
+inox::Promise fs_promises::readFile(inox::StringView path) {
+  inox_promise* promise = 0;
+
+  if (readFile(inox::loop(), path.bytes, path.len, &promise) != INOX_OK) {
+    return inox::Promise();
+  }
+
+  return inox::adopt(promise);
+}
+
+inox::Promise fs_promises::writeFile(inox::StringView path, inox::StringView bytes) {
+  inox_promise* promise = 0;
+
+  if (writeFile(inox::loop(), path.bytes, path.len, bytes.bytes, bytes.len, &promise) != INOX_OK) {
+    return inox::Promise();
+  }
+
+  return inox::adopt(promise);
+}
+
+inox::Promise fs_promises::appendFile(inox::StringView path, inox::StringView bytes) {
+  inox_promise* promise = 0;
+
+  if (appendFile(inox::loop(), path.bytes, path.len, bytes.bytes, bytes.len, &promise) != INOX_OK) {
+    return inox::Promise();
+  }
+
+  return inox::adopt(promise);
+}
+
+inox::Promise fs_promises::unlink(inox::StringView path) {
+  inox_promise* promise = 0;
+
+  if (unlink(inox::loop(), path.bytes, path.len, &promise) != INOX_OK) {
+    return inox::Promise();
+  }
+
+  return inox::adopt(promise);
+}
+
 inox_status fs_promises::readFile(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (fs_active_adapter.read_file == 0) {

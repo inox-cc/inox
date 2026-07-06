@@ -19,12 +19,18 @@ import fs from 'node:fs'
 
 const dir = '/tmp/inox-fs-dir'
 const path = '/tmp/inox-fs.txt'
+const asyncPath = '/tmp/inox-fs-async.txt'
 fs.mkdirSync(dir, { recursive: true })
 fs.writeFileSync(path, 'hello')
 fs.appendFileSync(path, '!')
 const text = fs.readFileSync(path, 'utf8')
 console.log(text)
 fs.unlinkSync(path)
+await fs.promises.writeFile(asyncPath, 'async')
+await fs.promises.appendFile(asyncPath, '!')
+const asyncText = await fs.promises.readFile(asyncPath, 'utf8')
+console.log(asyncText)
+await fs.promises.unlink(asyncPath)
 fs.rmSync(dir, { recursive: true, force: true })
 `
       }
@@ -45,10 +51,15 @@ fs.rmSync(dir, { recursive: true, force: true })
   assert.match(source, /fs\.appendFileSync\(path, "!"\);/)
   assert.match(source, /auto text_\d+ = fs\.readFileSync\(path\);/)
   assert.match(source, /fs\.unlinkSync\(path\);/)
+  assert.match(source, /fs\.promises\.writeFile\(asyncPath, "async"\)/)
+  assert.match(source, /fs\.promises\.appendFile\(asyncPath, "!"\)/)
+  assert.match(source, /fs\.promises\.readFile\(asyncPath\)/)
+  assert.match(source, /fs\.promises\.unlink\(asyncPath\)/)
   assert.match(source, /fs\.rmSync\(dir, true, true\);/)
   assert.match(source, /if \(inox::thrown\(\)\) return;/)
   assert.doesNotMatch(source, /fs\.readFileSync\(&inox_default_allocator/)
   assert.doesNotMatch(source, /fs\.(mkdirSync|writeFileSync|appendFileSync|unlinkSync|rmSync)\([^;\n]*\.bytes\(\)/)
+  assert.doesNotMatch(source, /fs\.promises\.(writeFile|appendFile|readFile|unlink)\(inox::loop\(\)/)
   assert.doesNotMatch(source, /fs\.readFileSync\(inox::StringView/)
   assert.doesNotMatch(source, /inox_fs_value_\d+/)
 }
