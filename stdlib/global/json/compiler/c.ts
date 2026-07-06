@@ -114,6 +114,16 @@ function emitJsonStringArgument(operand: PreparedStringBytesOperand): string {
   return `inox::StringView(${operand.bytes}, ${operand.length})`
 }
 
+function emitJsonValueArgument(value: PreparedExpression): string {
+  const cppType = value.cppType
+
+  if (typeof cppType === 'string' && cppType !== '') {
+    return value.expression
+  }
+
+  return `inox::Value(${value.expression})`
+}
+
 function singleStringPathName(path: string[] | null | undefined): string | null {
   if (path === null || typeof path === 'undefined' || path.length !== 1) {
     return null
@@ -230,6 +240,7 @@ export function emitJsonParseVariableDeclaration(
   const lines: string[] = []
 
   dependencies.registerRuntimeValueMetadata(statement.name, valueType, statement, statement.init, context)
+  context.cppValueTypes.set(statement.name, 'inox::Value')
 
   if (valueType === 'object') {
     dependencies.registerObjectShape(context, statement.name, shape)
@@ -286,7 +297,8 @@ export function emitPreparedJsonCallExpression(
       expression: out,
       owned: false,
       runtimeTypeChecked: expectedTag !== null && typeof expectedTag !== 'undefined',
-      valueType
+      valueType,
+      cppType: 'inox::Value'
     }
   }
 
@@ -296,7 +308,7 @@ export function emitPreparedJsonCallExpression(
 
   if (classToJson !== null && typeof classToJson !== 'undefined') {
     pushJsonLines(lines, classToJson.lines)
-    lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${classToJson.expression});`)
+    lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${emitJsonValueArgument(classToJson)});`)
     pushJsonThrownCheckLines(lines, context)
 
     const result: PreparedExpression = {
@@ -342,7 +354,7 @@ export function emitPreparedJsonCallExpression(
 
   const value = dependencies.emitCValueExpression(expression.args[0], context)
   pushJsonLines(lines, value.lines)
-  lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${value.expression});`)
+  lines.push(`${declare ? 'auto ' : ''}${out} = JSON.stringify(${emitJsonValueArgument(value)});`)
   pushJsonThrownCheckLines(lines, context)
 
   const result: PreparedExpression = {

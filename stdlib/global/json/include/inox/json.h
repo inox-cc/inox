@@ -15,7 +15,7 @@ class Json {
 public:
   inox::Value parse(inox::StringView text) const;
 
-  inox::String stringify(inox_value value) const;
+  inox::String stringify(const inox::Value& value) const;
 
   inox::String stringify(const inox_class_descriptor& descriptor, const void* instance) const;
 };

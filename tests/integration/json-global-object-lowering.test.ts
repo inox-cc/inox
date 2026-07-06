@@ -44,7 +44,9 @@ console.log(text)
   assert.doesNotMatch(source, /inox_json_stringify\(&inox_default_allocator/)
 
   const header = readFileSync(resolve('stdlib/global/json/include/inox/json.h'), 'utf8')
+  assert.match(header, /inox::String stringify\(const inox::Value& value\) const;/)
   assert.match(header, /inox::String stringify\(const inox_class_descriptor& descriptor, const void\* instance\) const;/)
+  assert.doesNotMatch(header, /stringify\(inox_value value\)/)
   assert.doesNotMatch(header, /stringify\(const inox_class_descriptor\* descriptor/)
 }
 

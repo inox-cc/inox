@@ -1254,7 +1254,7 @@ inox::Value Json::parse(inox::StringView text) const {
   return inox::adopt(out);
 }
 
-inox::String Json::stringify(inox_value value) const {
+inox::String Json::stringify(const inox::Value& value) const {
   inox_allocator* allocator = &inox_default_allocator;
 
   if (allocator->alloc == 0 || allocator->realloc == 0 || allocator->free == 0) {
@@ -1264,7 +1264,7 @@ inox::String Json::stringify(inox_value value) const {
 
   JsonBuffer buffer = { allocator, 0, 0, 0 };
   JsonStringifyStack stack = { 0 };
-  inox_status status = inox_json_stringify_value(&buffer, &stack, value, 0);
+  inox_status status = inox_json_stringify_value(&buffer, &stack, value.raw(), 0);
 
   inox::String out;
 

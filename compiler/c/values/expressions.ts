@@ -197,6 +197,7 @@ type CFunctionContext = CEmitContext & {
   objectShapes: CObjectShapeFieldMap
   ownedValues: string[]
   cppStringValues: CStringSet
+  cppValueTypes: CStringMap
   regexpLiterals: Map<string, CValueNode>
   returnType?: string
   runtimeFunctionParams: CFunctionTypeMap
@@ -5529,6 +5530,17 @@ export function emitCValueExpression(
       return {
         lines: [],
         expression: reference,
+        valueType
+      }
+    }
+
+    const cppValueType = context.cppValueTypes.get(name)
+
+    if (cppValueType !== null && typeof cppValueType !== 'undefined') {
+      return {
+        lines: [],
+        expression: reference,
+        cppType: cppValueType,
         valueType
       }
     }

@@ -252,6 +252,7 @@ type CVariableScopeContext = {
   cppMapValues: CStringSet
   cppSetValues: CStringSet
   cppStringValues: CStringSet
+  cppValueTypes: CStringMap
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
@@ -291,6 +292,7 @@ export type CFunctionContext = CEmitContext & {
   cppMapValues: CStringSet
   cppSetValues: CStringSet
   cppStringValues: CStringSet
+  cppValueTypes: CStringMap
   dgramBoundSockets: CStringSet
   dgramMessageSockets: CStringSet
   dgramReuseAddrSockets: CStringSet
@@ -351,6 +353,7 @@ export type CVariableScopeSnapshot = {
   cppMapValues: CStringSet
   cppSetValues: CStringSet
   cppStringValues: CStringSet
+  cppValueTypes: CStringMap
   errorObjectNames: CStringSet
   functionTypes: CFunctionTypeMap
   localValueNames: CStringSet
@@ -452,6 +455,7 @@ export function createFunctionContext(
     cppMapValues: new Set(),
     cppSetValues: new Set(),
     cppStringValues: new Set(),
+    cppValueTypes: new Map(),
     continueFlowUsed: false,
     continueTargets: [],
     cleanupEnabled: true,
@@ -941,6 +945,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousCppMapValues = context.cppMapValues
   const previousCppSetValues = context.cppSetValues
   const previousCppStringValues = context.cppStringValues
+  const previousCppValueTypes = context.cppValueTypes
   const previousErrorObjectNames = context.errorObjectNames
   const previousFunctionTypes = context.functionTypes
   const previousLocalValueNames = context.localValueNames
@@ -970,6 +975,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.cppMapValues = cloneCStringSet(previousCppMapValues)
   context.cppSetValues = cloneCStringSet(previousCppSetValues)
   context.cppStringValues = cloneCStringSet(previousCppStringValues)
+  context.cppValueTypes = cloneCStringMap(previousCppValueTypes)
   context.errorObjectNames = cloneCStringSet(previousErrorObjectNames)
   context.functionTypes = cloneCFunctionTypeMap(previousFunctionTypes)
   context.localValueNames = cloneCStringSet(previousLocalValueNames)
@@ -999,6 +1005,7 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
     cppMapValues: previousCppMapValues,
     cppSetValues: previousCppSetValues,
     cppStringValues: previousCppStringValues,
+    cppValueTypes: previousCppValueTypes,
     errorObjectNames: previousErrorObjectNames,
     functionTypes: previousFunctionTypes,
     localValueNames: previousLocalValueNames,
@@ -1034,6 +1041,7 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.cppMapValues = snapshot.cppMapValues
   context.cppSetValues = snapshot.cppSetValues
   context.cppStringValues = snapshot.cppStringValues
+  context.cppValueTypes = snapshot.cppValueTypes
   context.errorObjectNames = snapshot.errorObjectNames
   context.functionTypes = snapshot.functionTypes
   context.localValueNames = snapshot.localValueNames

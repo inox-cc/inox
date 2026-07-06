@@ -137,6 +137,7 @@ type CFunctionContext = {
   cppMapValues: CStringSet
   cppSetValues: CStringSet
   cppStringValues: CStringSet
+  cppValueTypes: CStringMap
   cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
   dgramBoundSockets: CStringSet
@@ -1697,6 +1698,7 @@ export function emitRuntimeValueVariableDeclaration(
   if (value.cppType === 'Array') {
     context.cppArrayValues.add(statement.name)
   }
+  registerCppValueType(statement.name, value.cppType, context)
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
@@ -1748,6 +1750,19 @@ function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: Prepa
   return `${declarationType} ${name} = ${value.expression};`
 }
 
+function registerCppValueType(
+  name: string,
+  cppType: string | null | undefined,
+  context: CFunctionContext
+): void {
+  if (isCppRuntimeValueType(cppType)) {
+    context.cppValueTypes.set(name, cppType)
+    return
+  }
+
+  context.cppValueTypes.delete(name)
+}
+
 function emitObjectRuntimeCallValueVariableDeclaration(
   statement: StatementNode,
   context: CFunctionContext
@@ -1763,6 +1778,7 @@ function emitObjectRuntimeCallValueVariableDeclaration(
   }
 
   registerRuntimeValueMetadata(statement.name, 'array', statement, statement.init, context)
+  registerCppValueType(statement.name, value.cppType, context)
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
