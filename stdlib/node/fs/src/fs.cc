@@ -30,7 +30,7 @@
 #include <stdio.h>
 #endif
 
-typedef enum inox_fs_request_kind {
+enum FsRequestKind {
   INOX_FS_REQUEST_READ_FILE,
   INOX_FS_REQUEST_READ_FILE_BYTES,
   INOX_FS_REQUEST_READ_DIR,
@@ -48,12 +48,12 @@ typedef enum inox_fs_request_kind {
   INOX_FS_REQUEST_SYMLINK,
   INOX_FS_REQUEST_RENAME,
   INOX_FS_REQUEST_WRITE_FILE
-} inox_fs_request_kind;
+};
 
-typedef struct inox_fs_request {
+struct FsRequest {
   inox_loop* loop;
   inox_promise* promise;
-  inox_fs_request_kind kind;
+  FsRequestKind kind;
   char* path;
   size_t path_len;
   char* path2;
@@ -63,7 +63,7 @@ typedef struct inox_fs_request {
   int mode;
   bool recursive;
   bool force;
-} inox_fs_request;
+};
 
 static FsAdapter fs_active_adapter = { 0 };
 
@@ -101,7 +101,7 @@ static inox_status inox_fs_libuv_write_file(void* user, const char* path, size_t
 static inox_status inox_fs_libuv_read_file_data(const char* path, size_t path_len, char** out_bytes, size_t* out_len);
 static inox_status inox_fs_libuv_queue_request(
   inox_loop* loop,
-  inox_fs_request_kind kind,
+  FsRequestKind kind,
   const char* path,
   size_t path_len,
   const char* path2,
@@ -147,7 +147,7 @@ static inox_status inox_fs_default_write_file(void* user, const char* path, size
 #endif
 static inox_status inox_fs_queue_request(
   inox_loop* loop,
-  inox_fs_request_kind kind,
+  FsRequestKind kind,
   const char* path,
   size_t path_len,
   const char* path2,
@@ -1049,7 +1049,7 @@ static inox_status inox_fs_copy_host_bytes(const char* bytes, size_t len, char**
 #endif
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
-typedef enum inox_fs_libuv_stage {
+enum FsLibuvStage {
   INOX_FS_LIBUV_STAGE_OPEN,
   INOX_FS_LIBUV_STAGE_FSTAT,
   INOX_FS_LIBUV_STAGE_READ,
@@ -1067,13 +1067,13 @@ typedef enum inox_fs_libuv_stage {
   INOX_FS_LIBUV_STAGE_COPY_FILE,
   INOX_FS_LIBUV_STAGE_SYMLINK,
   INOX_FS_LIBUV_STAGE_RENAME
-} inox_fs_libuv_stage;
+};
 
-typedef struct inox_fs_libuv_request {
+struct FsLibuvRequest {
   inox_loop* loop;
   inox_promise* promise;
-  inox_fs_request_kind kind;
-  inox_fs_libuv_stage stage;
+  FsRequestKind kind;
+  FsLibuvStage stage;
   uv_fs_t req;
   uv_file file;
   int file_open;
@@ -1091,24 +1091,24 @@ typedef struct inox_fs_libuv_request {
   size_t data_len;
   size_t data_cap;
   inox_status close_status;
-} inox_fs_libuv_request;
+};
 
 static inox_status inox_fs_status_from_uv(ssize_t result);
 static inox_status inox_fs_libuv_close_sync(uv_file file, inox_status status);
 static inox_status inox_fs_stats_from_uv(inox_allocator* allocator, const uv_stat_t* stat, inox_value* out);
 static double inox_fs_uv_mtime_ms(const uv_stat_t* stat);
 static inox_status inox_fs_libuv_read_dir_entries(uv_fs_t* req, inox_allocator* allocator, bool with_file_types, inox_value* out);
-static inox_status inox_fs_libuv_start_request(inox_fs_libuv_request* request);
-static inox_status inox_fs_libuv_start_open(inox_fs_libuv_request* request, int flags, int mode);
-static inox_status inox_fs_libuv_start_fstat(inox_fs_libuv_request* request);
-static inox_status inox_fs_libuv_start_read(inox_fs_libuv_request* request);
-static inox_status inox_fs_libuv_start_write(inox_fs_libuv_request* request);
-static inox_status inox_fs_libuv_start_close(inox_fs_libuv_request* request, inox_status close_status);
-static inox_status inox_fs_libuv_settle(inox_fs_libuv_request* request, inox_status status);
-static inox_status inox_fs_libuv_settle_value(inox_fs_libuv_request* request, inox_status status, inox_value value);
-static inox_status inox_fs_libuv_settle_after_close(inox_fs_libuv_request* request, inox_status status);
+static inox_status inox_fs_libuv_start_request(FsLibuvRequest* request);
+static inox_status inox_fs_libuv_start_open(FsLibuvRequest* request, int flags, int mode);
+static inox_status inox_fs_libuv_start_fstat(FsLibuvRequest* request);
+static inox_status inox_fs_libuv_start_read(FsLibuvRequest* request);
+static inox_status inox_fs_libuv_start_write(FsLibuvRequest* request);
+static inox_status inox_fs_libuv_start_close(FsLibuvRequest* request, inox_status close_status);
+static inox_status inox_fs_libuv_settle(FsLibuvRequest* request, inox_status status);
+static inox_status inox_fs_libuv_settle_value(FsLibuvRequest* request, inox_status status, inox_value value);
+static inox_status inox_fs_libuv_settle_after_close(FsLibuvRequest* request, inox_status status);
 static void inox_fs_libuv_cb(uv_fs_t* req);
-static void inox_fs_libuv_request_finalizer(inox_fs_libuv_request* request);
+static void inox_fs_libuv_request_finalizer(FsLibuvRequest* request);
 
 static inox_status inox_fs_status_from_uv(ssize_t result) {
   if (result >= 0) {
@@ -1867,7 +1867,7 @@ static inox_status inox_fs_libuv_write_file(void* user, const char* path, size_t
 
 static inox_status inox_fs_libuv_queue_request(
   inox_loop* loop,
-  inox_fs_request_kind kind,
+  FsRequestKind kind,
   const char* path,
   size_t path_len,
   const char* path2,
@@ -1900,15 +1900,15 @@ static inox_status inox_fs_libuv_queue_request(
     return status;
   }
 
-  inox_fs_libuv_request* request =
-    (inox_fs_libuv_request*)loop->allocator->alloc(loop->allocator->user, sizeof(inox_fs_libuv_request), alignof(inox_fs_libuv_request));
+  FsLibuvRequest* request =
+    (FsLibuvRequest*)loop->allocator->alloc(loop->allocator->user, sizeof(FsLibuvRequest), alignof(FsLibuvRequest));
 
   if (request == 0) {
     inox_promise_release(promise);
     return INOX_ERR_OOM;
   }
 
-  memset(request, 0, sizeof(inox_fs_libuv_request));
+  memset(request, 0, sizeof(FsLibuvRequest));
   request->loop = loop;
   request->promise = promise;
   request->kind = kind;
@@ -1955,7 +1955,7 @@ static inox_status inox_fs_libuv_queue_request(
   return INOX_OK;
 }
 
-static inox_status inox_fs_libuv_start_request(inox_fs_libuv_request* request) {
+static inox_status inox_fs_libuv_start_request(FsLibuvRequest* request) {
   if (request == 0) {
     return INOX_ERR_TYPE;
   }
@@ -2129,7 +2129,7 @@ static inox_status inox_fs_libuv_start_request(inox_fs_libuv_request* request) {
   return inox_fs_libuv_start_open(request, UV_FS_O_RDONLY, 0);
 }
 
-static inox_status inox_fs_libuv_start_open(inox_fs_libuv_request* request, int flags, int mode) {
+static inox_status inox_fs_libuv_start_open(FsLibuvRequest* request, int flags, int mode) {
   uv_loop_t* uv_loop = inox_libuv_loop_handle(request == 0 ? 0 : request->loop);
 
   if (request == 0 || uv_loop == 0) {
@@ -2143,7 +2143,7 @@ static inox_status inox_fs_libuv_start_open(inox_fs_libuv_request* request, int 
   return result == 0 ? INOX_OK : inox_fs_status_from_uv(result);
 }
 
-static inox_status inox_fs_libuv_start_fstat(inox_fs_libuv_request* request) {
+static inox_status inox_fs_libuv_start_fstat(FsLibuvRequest* request) {
   uv_loop_t* uv_loop = inox_libuv_loop_handle(request == 0 ? 0 : request->loop);
 
   if (request == 0 || uv_loop == 0) {
@@ -2157,7 +2157,7 @@ static inox_status inox_fs_libuv_start_fstat(inox_fs_libuv_request* request) {
   return result == 0 ? INOX_OK : inox_fs_status_from_uv(result);
 }
 
-static inox_status inox_fs_libuv_start_read(inox_fs_libuv_request* request) {
+static inox_status inox_fs_libuv_start_read(FsLibuvRequest* request) {
   uv_loop_t* uv_loop = inox_libuv_loop_handle(request == 0 ? 0 : request->loop);
 
   if (request == 0 || uv_loop == 0 || request->data == 0 || request->data_cap == 0) {
@@ -2176,7 +2176,7 @@ static inox_status inox_fs_libuv_start_read(inox_fs_libuv_request* request) {
   return result == 0 ? INOX_OK : inox_fs_status_from_uv(result);
 }
 
-static inox_status inox_fs_libuv_start_write(inox_fs_libuv_request* request) {
+static inox_status inox_fs_libuv_start_write(FsLibuvRequest* request) {
   uv_loop_t* uv_loop = inox_libuv_loop_handle(request == 0 ? 0 : request->loop);
 
   if (request == 0 || uv_loop == 0 || (request->bytes == 0 && request->byte_len != 0)) {
@@ -2199,7 +2199,7 @@ static inox_status inox_fs_libuv_start_write(inox_fs_libuv_request* request) {
   return result == 0 ? INOX_OK : inox_fs_status_from_uv(result);
 }
 
-static inox_status inox_fs_libuv_start_close(inox_fs_libuv_request* request, inox_status close_status) {
+static inox_status inox_fs_libuv_start_close(FsLibuvRequest* request, inox_status close_status) {
   uv_loop_t* uv_loop = inox_libuv_loop_handle(request == 0 ? 0 : request->loop);
 
   if (request == 0 || uv_loop == 0) {
@@ -2224,7 +2224,7 @@ static inox_status inox_fs_libuv_start_close(inox_fs_libuv_request* request, ino
   return INOX_OK;
 }
 
-static inox_status inox_fs_libuv_settle(inox_fs_libuv_request* request, inox_status status) {
+static inox_status inox_fs_libuv_settle(FsLibuvRequest* request, inox_status status) {
   if (request == 0) {
     return INOX_ERR_TYPE;
   }
@@ -2248,7 +2248,7 @@ static inox_status inox_fs_libuv_settle(inox_fs_libuv_request* request, inox_sta
   return inox_fs_libuv_settle_value(request, status, result);
 }
 
-static inox_status inox_fs_libuv_settle_value(inox_fs_libuv_request* request, inox_status status, inox_value value) {
+static inox_status inox_fs_libuv_settle_value(FsLibuvRequest* request, inox_status status, inox_value value) {
   if (request == 0 || request->loop == 0 || request->promise == 0) {
     inox_release(value);
     return INOX_ERR_TYPE;
@@ -2264,7 +2264,7 @@ static inox_status inox_fs_libuv_settle_value(inox_fs_libuv_request* request, in
   return settle_status;
 }
 
-static inox_status inox_fs_libuv_settle_after_close(inox_fs_libuv_request* request, inox_status status) {
+static inox_status inox_fs_libuv_settle_after_close(FsLibuvRequest* request, inox_status status) {
   if (request == 0) {
     return INOX_ERR_TYPE;
   }
@@ -2283,7 +2283,7 @@ static void inox_fs_libuv_cb(uv_fs_t* req) {
     return;
   }
 
-  inox_fs_libuv_request* request = (inox_fs_libuv_request*)req->data;
+  FsLibuvRequest* request = (FsLibuvRequest*)req->data;
   inox_loop* loop = request->loop;
   ssize_t result = uv_fs_get_result(req);
   inox_status status = inox_fs_status_from_uv(result);
@@ -2493,7 +2493,7 @@ static void inox_fs_libuv_cb(uv_fs_t* req) {
   }
 }
 
-static void inox_fs_libuv_request_finalizer(inox_fs_libuv_request* request) {
+static void inox_fs_libuv_request_finalizer(FsLibuvRequest* request) {
   if (request == 0 || request->loop == 0 || request->loop->allocator == 0 || request->loop->allocator->free == 0) {
     return;
   }
@@ -2517,7 +2517,7 @@ static void inox_fs_libuv_request_finalizer(inox_fs_libuv_request* request) {
   }
 
   inox_promise_release(request->promise);
-  allocator->free(allocator->user, request, sizeof(inox_fs_libuv_request), alignof(inox_fs_libuv_request));
+  allocator->free(allocator->user, request, sizeof(FsLibuvRequest), alignof(FsLibuvRequest));
 }
 #endif
 
@@ -3310,7 +3310,7 @@ static inox_status inox_fs_default_write_file(void* user, const char* path, size
 
 static inox_status inox_fs_queue_request(
   inox_loop* loop,
-  inox_fs_request_kind kind,
+  FsRequestKind kind,
   const char* path,
   size_t path_len,
   const char* path2,
@@ -3343,7 +3343,7 @@ static inox_status inox_fs_queue_request(
     return status;
   }
 
-  inox_fs_request* request = (inox_fs_request*)loop->allocator->alloc(loop->allocator->user, sizeof(inox_fs_request), alignof(inox_fs_request));
+  FsRequest* request = (FsRequest*)loop->allocator->alloc(loop->allocator->user, sizeof(FsRequest), alignof(FsRequest));
 
   if (request == 0) {
     inox_promise_release(promise);
@@ -3390,7 +3390,7 @@ static inox_status inox_fs_queue_request(
 }
 
 static inox_status inox_fs_run_request(void* context) {
-  inox_fs_request* request = (inox_fs_request*)context;
+  FsRequest* request = (FsRequest*)context;
 
   if (request == 0 || request->loop == 0 || request->promise == 0) {
     return INOX_ERR_TYPE;
@@ -3711,7 +3711,7 @@ static const char* inox_fs_error_message(inox_status status) {
 }
 
 static void inox_fs_request_finalizer(void* context) {
-  inox_fs_request* request = (inox_fs_request*)context;
+  FsRequest* request = (FsRequest*)context;
 
   if (request == 0 || request->loop == 0 || request->loop->allocator == 0 || request->loop->allocator->free == 0) {
     return;
@@ -3732,5 +3732,5 @@ static void inox_fs_request_finalizer(void* context) {
   }
 
   inox_promise_release(request->promise);
-  allocator->free(allocator->user, request, sizeof(inox_fs_request), alignof(inox_fs_request));
+  allocator->free(allocator->user, request, sizeof(FsRequest), alignof(FsRequest));
 }
