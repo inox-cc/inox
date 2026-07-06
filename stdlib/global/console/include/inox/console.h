@@ -61,17 +61,11 @@ public:
   ConsoleArg(const Value& value);
 };
 
-inox_status console_newline(ConsoleStream stream);
-inox_status console_write(ConsoleStream stream, const char* bytes, size_t len);
-inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len);
-inox_status console_print_value(ConsoleStream stream, inox_value value);
-inox_status console_print_value_line(ConsoleStream stream, inox_value value);
 inox_status console_format_class_instance(
   const inox_class_descriptor& descriptor,
   const void* instance,
   Value& out
 );
-int console_printf(ConsoleStream stream, const char* format, ...);
 
 } // namespace inox
 

@@ -436,6 +436,13 @@ static inox_status inox_console_format_value_into(ConsoleFormatBuffer* buffer, i
 
 namespace inox {
 
+static inox_status console_newline(ConsoleStream stream);
+static inox_status console_write(ConsoleStream stream, const char* bytes, size_t len);
+static inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len);
+static inox_status console_print_value(ConsoleStream stream, inox_value value);
+static inox_status console_print_value_line(ConsoleStream stream, inox_value value);
+static int console_printf(ConsoleStream stream, const char* format, ...);
+
 ConsoleArg::ConsoleArg()
   : kind(ConsoleArgKind::empty),
     signed_integer(0),
@@ -636,11 +643,11 @@ ConsoleArg::ConsoleArg(const Value& value)
     string(nullptr),
     value(value.raw()) {}
 
-inox_status console_newline(ConsoleStream stream) {
+static inox_status console_newline(ConsoleStream stream) {
   return console_write(stream, "\n", 1);
 }
 
-inox_status console_write(ConsoleStream stream, const char* bytes, size_t len) {
+static inox_status console_write(ConsoleStream stream, const char* bytes, size_t len) {
   if (bytes == 0 && len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -654,7 +661,7 @@ inox_status console_write(ConsoleStream stream, const char* bytes, size_t len) {
 #endif
 }
 
-inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len) {
+static inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len) {
   inox_status status = console_write(stream, bytes, len);
 
   if (status != INOX_OK) {
@@ -664,7 +671,7 @@ inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t l
   return console_write(stream, "\n", 1);
 }
 
-inox_status console_print_value(ConsoleStream stream, inox_value value) {
+static inox_status console_print_value(ConsoleStream stream, inox_value value) {
   ConsoleFormatBuffer buffer = { 0 };
   inox_status status = inox_console_format_value_into(&buffer, value, 0);
 
@@ -677,7 +684,7 @@ inox_status console_print_value(ConsoleStream stream, inox_value value) {
   return status;
 }
 
-inox_status console_print_value_line(ConsoleStream stream, inox_value value) {
+static inox_status console_print_value_line(ConsoleStream stream, inox_value value) {
   ConsoleFormatBuffer buffer = { 0 };
   inox_status status = inox_console_format_value_into(&buffer, value, 0);
 
@@ -748,7 +755,7 @@ static inox_status inox_console_host_write(inox::ConsoleStream stream, const cha
 
 namespace inox {
 
-int console_printf(ConsoleStream stream, const char* format, ...) {
+static int console_printf(ConsoleStream stream, const char* format, ...) {
   if (format == nullptr) {
     format = "";
   }
