@@ -43,8 +43,8 @@ static inox_status CryptoHashState_create(
 );
 static inox_status CryptoHashState_update_bytes(CryptoHashState* hash, const uint8_t* bytes, size_t len);
 static inox_status CryptoHashState_update(CryptoHashState* hash, inox_value data);
-static inox_status CryptoHashState_digest_bytes(CryptoHashState* hash, inox_value* out);
-static inox_status CryptoHashState_digest_hex(CryptoHashState* hash, inox_value* out);
+static Buffer CryptoHashState_digest_bytes(CryptoHashState* hash);
+static inox::String CryptoHashState_digest_hex(CryptoHashState* hash);
 static void CryptoHashState_free(CryptoHashState* hash);
 static inox_status CryptoHmacState_create(
   inox_allocator* allocator,
@@ -63,12 +63,11 @@ static inox_status CryptoHmacState_create(
 );
 static inox_status CryptoHmacState_update_bytes(CryptoHmacState* hmac, const uint8_t* bytes, size_t len);
 static inox_status CryptoHmacState_update(CryptoHmacState* hmac, inox_value data);
-static inox_status CryptoHmacState_digest_bytes(CryptoHmacState* hmac, inox_value* out);
-static inox_status CryptoHmacState_digest_hex(CryptoHmacState* hmac, inox_value* out);
+static Buffer CryptoHmacState_digest_bytes(CryptoHmacState* hmac);
+static inox::String CryptoHmacState_digest_hex(CryptoHmacState* hmac);
 static void CryptoHmacState_free(CryptoHmacState* hmac);
 static inox_status CryptoHashState_digest_raw(CryptoHashState* hash, uint8_t* digest, size_t* len);
 static inox_status CryptoHmacState_digest_raw(CryptoHmacState* hmac, uint8_t* digest, size_t* len);
-static inox_status inox_crypto_copy_bytes_result(Uint8Array bytes, inox_value* out);
 static char inox_crypto_hex_digit(uint8_t value);
 static void inox_crypto_throw_failed(const char* message);
 
@@ -131,27 +130,25 @@ Hash& Hash::update(inox_value data) {
 }
 
 Buffer Hash::digest() {
-  inox_value out = inox_undefined_value();
+  Buffer result = CryptoHashState_digest_bytes(handle_);
 
-  if (CryptoHashState_digest_bytes(handle_, &out) != INOX_OK) {
-    inox_release(out);
+  if (!result.valid()) {
     inox_crypto_throw_failed("crypto.Hash.digest failed");
     return Buffer();
   }
 
-  return Buffer(inox::adopt_value, out);
+  return result;
 }
 
 inox::String Hash::digestHex() {
-  inox_value out = inox_undefined_value();
+  inox::String result = CryptoHashState_digest_hex(handle_);
 
-  if (CryptoHashState_digest_hex(handle_, &out) != INOX_OK) {
-    inox_release(out);
+  if (!result.valid()) {
     inox_crypto_throw_failed("crypto.Hash.digest failed");
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return result;
 }
 
 Hmac::Hmac() : handle_(0) {}
@@ -197,27 +194,25 @@ Hmac& Hmac::update(inox_value data) {
 }
 
 Buffer Hmac::digest() {
-  inox_value out = inox_undefined_value();
+  Buffer result = CryptoHmacState_digest_bytes(handle_);
 
-  if (CryptoHmacState_digest_bytes(handle_, &out) != INOX_OK) {
-    inox_release(out);
+  if (!result.valid()) {
     inox_crypto_throw_failed("crypto.Hmac.digest failed");
     return Buffer();
   }
 
-  return Buffer(inox::adopt_value, out);
+  return result;
 }
 
 inox::String Hmac::digestHex() {
-  inox_value out = inox_undefined_value();
+  inox::String result = CryptoHmacState_digest_hex(handle_);
 
-  if (CryptoHmacState_digest_hex(handle_, &out) != INOX_OK) {
-    inox_release(out);
+  if (!result.valid()) {
     inox_crypto_throw_failed("crypto.Hmac.digest failed");
     return inox::String();
   }
 
-  return inox::String(inox::adopt_value, out);
+  return result;
 }
 
 ArrayClass crypto::getHashes() const {
@@ -658,37 +653,31 @@ static inox_status CryptoHashState_update(CryptoHashState* hash, inox_value data
   return CryptoHashState_update_bytes(hash, bytes, len);
 }
 
-static inox_status CryptoHashState_digest_bytes(CryptoHashState* hash, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
+static Buffer CryptoHashState_digest_bytes(CryptoHashState* hash) {
 #if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   size_t len = 0;
   inox_status status = CryptoHashState_digest_raw(hash, digest, &len);
 
   if (status != INOX_OK) {
-    return status;
+    return Buffer();
   }
 
-  return inox_crypto_copy_bytes_result(Uint8Array::from(digest, len), out);
+  Uint8Array bytes = Uint8Array::from(digest, len);
+
+  if (inox::thrown() || !bytes.valid()) {
+    return Buffer();
+  }
+
+  return Buffer(std::move(bytes));
 #else
   (void)hash;
 
-  return INOX_ERR_UNSUPPORTED;
+  return Buffer();
 #endif
 }
 
-static inox_status CryptoHashState_digest_hex(CryptoHashState* hash, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
+static inox::String CryptoHashState_digest_hex(CryptoHashState* hash) {
 #if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   char hex[EVP_MAX_MD_SIZE * 2];
@@ -696,7 +685,7 @@ static inox_status CryptoHashState_digest_hex(CryptoHashState* hash, inox_value*
   inox_status status = CryptoHashState_digest_raw(hash, digest, &len);
 
   if (status != INOX_OK) {
-    return status;
+    return inox::String();
   }
 
   for (size_t index = 0; index < len; index += 1) {
@@ -704,12 +693,11 @@ static inox_status CryptoHashState_digest_hex(CryptoHashState* hash, inox_value*
     hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
   }
 
-  auto value = inox::String(hex, len * 2);
-  return value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
+  return inox::String(hex, len * 2);
 #else
   (void)hash;
 
-  return INOX_ERR_UNSUPPORTED;
+  return inox::String();
 #endif
 }
 
@@ -851,37 +839,31 @@ static inox_status CryptoHmacState_update(CryptoHmacState* hmac, inox_value data
   return CryptoHmacState_update_bytes(hmac, bytes, len);
 }
 
-static inox_status CryptoHmacState_digest_bytes(CryptoHmacState* hmac, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
+static Buffer CryptoHmacState_digest_bytes(CryptoHmacState* hmac) {
 #if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   size_t len = 0;
   inox_status status = CryptoHmacState_digest_raw(hmac, digest, &len);
 
   if (status != INOX_OK) {
-    return status;
+    return Buffer();
   }
 
-  return inox_crypto_copy_bytes_result(Uint8Array::from(digest, len), out);
+  Uint8Array bytes = Uint8Array::from(digest, len);
+
+  if (inox::thrown() || !bytes.valid()) {
+    return Buffer();
+  }
+
+  return Buffer(std::move(bytes));
 #else
   (void)hmac;
 
-  return INOX_ERR_UNSUPPORTED;
+  return Buffer();
 #endif
 }
 
-static inox_status CryptoHmacState_digest_hex(CryptoHmacState* hmac, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
+static inox::String CryptoHmacState_digest_hex(CryptoHmacState* hmac) {
 #if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   char hex[EVP_MAX_MD_SIZE * 2];
@@ -889,7 +871,7 @@ static inox_status CryptoHmacState_digest_hex(CryptoHmacState* hmac, inox_value*
   inox_status status = CryptoHmacState_digest_raw(hmac, digest, &len);
 
   if (status != INOX_OK) {
-    return status;
+    return inox::String();
   }
 
   for (size_t index = 0; index < len; index += 1) {
@@ -897,12 +879,11 @@ static inox_status CryptoHmacState_digest_hex(CryptoHmacState* hmac, inox_value*
     hex[index * 2 + 1] = inox_crypto_hex_digit((uint8_t)(digest[index] & 0x0fu));
   }
 
-  auto value = inox::String(hex, len * 2);
-  return value.valid() ? value.copy_to(out) : INOX_ERR_OOM;
+  return inox::String(hex, len * 2);
 #else
   (void)hmac;
 
-  return INOX_ERR_UNSUPPORTED;
+  return inox::String();
 #endif
 }
 
@@ -1099,25 +1080,6 @@ static inox_status CryptoHmacState_digest_raw(CryptoHmacState* hmac, uint8_t* di
 
   return INOX_ERR_UNSUPPORTED;
 #endif
-}
-
-static inox_status inox_crypto_copy_bytes_result(Uint8Array bytes, inox_value* out) {
-  if (out == 0) {
-    return INOX_ERR_TYPE;
-  }
-
-  *out = inox_undefined_value();
-
-  if (inox::thrown()) {
-    inox::take_exception();
-    return INOX_ERR_TYPE;
-  }
-
-  if (!bytes.valid()) {
-    return INOX_ERR_TYPE;
-  }
-
-  return bytes.copy_to(out);
 }
 
 static char inox_crypto_hex_digit(uint8_t value) {
