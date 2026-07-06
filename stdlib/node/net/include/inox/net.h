@@ -15,11 +15,13 @@ struct NetAddress {
   int port;
 };
 
+class NetSocket;
+
 typedef inox_status (*NetConnectionFn)(void* user, inox_net_server* server, inox_net_socket* socket);
 typedef inox_status (*NetServerFn)(void* user, inox_net_server* server);
 typedef inox_status (*NetServerErrorFn)(void* user, inox_net_server* server, inox_status status);
 typedef inox_status (*NetConnectFn)(void* user, inox_net_socket* socket, inox_status status);
-typedef inox_status (*NetDataFn)(void* user, inox_net_socket* socket, inox::StringView bytes);
+typedef void (*NetDataFn)(void* user, NetSocket socket, inox::StringView bytes);
 typedef void (*NetCloseFn)(void* user, inox_net_socket* socket);
 typedef inox_status (*NetSocketFn)(void* user, inox_net_socket* socket);
 typedef inox_status (*NetSocketErrorFn)(void* user, inox_net_socket* socket, inox_status status);

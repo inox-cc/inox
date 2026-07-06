@@ -90,7 +90,7 @@ struct inox_http_response {
 };
 
 static inox_status inox_http_on_connection(void* user, inox_net_server* server, inox_net_socket* socket);
-static inox_status inox_http_on_data(void* user, inox_net_socket* socket, inox::StringView bytes);
+static void inox_http_on_data(void* user, NetSocket socket, inox::StringView bytes);
 static void inox_http_on_close(void* user, inox_net_socket* socket);
 static inox_status inox_http_try_handle(HttpConnection* connection);
 static inox_status inox_http_response_init(inox_http_response* response, HttpConnection* connection);
@@ -583,20 +583,21 @@ static inox_status inox_http_on_connection(void* user, inox_net_server* server, 
   return INOX_OK;
 }
 
-static inox_status inox_http_on_data(void* user, inox_net_socket* socket, inox::StringView bytes) {
+static void inox_http_on_data(void* user, NetSocket socket, inox::StringView bytes) {
   (void)socket;
   HttpConnection* connection = (HttpConnection*)user;
 
   if (connection->length + bytes.len > sizeof(connection->buffer)) {
     inox_http_response response;
     inox_http_response_init(&response, connection);
-    return inox_http_response_text_status(&response, 413, "payload too large");
+    (void)inox_http_response_text_status(&response, 413, "payload too large");
+    return;
   }
 
   memcpy(connection->buffer + connection->length, bytes.bytes, bytes.len);
   connection->length += bytes.len;
 
-  return inox_http_try_handle(connection);
+  (void)inox_http_try_handle(connection);
 }
 
 static void inox_http_on_close(void* user, inox_net_socket* socket) {

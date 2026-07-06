@@ -28,7 +28,7 @@ struct inox_tls_client {
 static inox_status inox_tls_configure_verify(SSL_CTX* ctx);
 static inox_status inox_tls_client_setup_ssl(inox_tls_client* client, const char* servername);
 static inox_status inox_tls_on_tcp_connect(void* user, inox_net_socket* socket, inox_status status);
-static inox_status inox_tls_on_tcp_data(void* user, inox_net_socket* socket, inox::StringView bytes);
+static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes);
 static void inox_tls_on_tcp_close(void* user, inox_net_socket* socket);
 static inox_status inox_tls_drive_handshake(inox_tls_client* client);
 static inox_status inox_tls_drain_plaintext(inox_tls_client* client);
@@ -297,12 +297,12 @@ static inox_status inox_tls_on_tcp_connect(void* user, inox_net_socket* socket, 
   return inox_tls_drive_handshake(client);
 }
 
-static inox_status inox_tls_on_tcp_data(void* user, inox_net_socket* socket, inox::StringView bytes) {
+static void inox_tls_on_tcp_data(void* user, NetSocket socket, inox::StringView bytes) {
   (void)socket;
   inox_tls_client* client = (inox_tls_client*)user;
 
   if (client == 0 || client->net_bio == 0 || (bytes.bytes == 0 && bytes.len != 0)) {
-    return INOX_OK;
+    return;
   }
 
   size_t offset = 0;
@@ -311,17 +311,19 @@ static inox_status inox_tls_on_tcp_data(void* user, inox_net_socket* socket, ino
     int written = BIO_write(client->net_bio, bytes.bytes + offset, (int)(bytes.len - offset));
 
     if (written <= 0) {
-      return inox_tls_fail_async(client, INOX_ERR_FIELD);
+      (void)inox_tls_fail_async(client, INOX_ERR_FIELD);
+      return;
     }
 
     offset += (size_t)written;
   }
 
   if (!client->handshake_done) {
-    return inox_tls_drive_handshake(client);
+    (void)inox_tls_drive_handshake(client);
+    return;
   }
 
-  return inox_tls_drain_plaintext(client);
+  (void)inox_tls_drain_plaintext(client);
 }
 
 static void inox_tls_on_tcp_close(void* user, inox_net_socket* socket) {

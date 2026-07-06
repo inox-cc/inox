@@ -184,7 +184,7 @@ export function emitNetHandlerHead(wrapper: CNetHandler): string {
   }
 
   if (wrapper.kind === 'socket-data') {
-    return `static inox_status ${wrapper.name}(void* user, inox_net_socket* inox_socket, inox::StringView inox_bytes)`
+    return `static void ${wrapper.name}(void* user, NetSocket inox_socket, inox::StringView inox_bytes)`
   }
 
   if (wrapper.kind === 'socket-write') {
@@ -232,7 +232,7 @@ export function emitNetHandlerDeclaration(
     stringLocals: new Map()
   }
   const context = deps.createFunctionContext(baseContext, 'void', false)
-  context.statusReturn = true
+  context.statusReturn = wrapper.kind !== 'socket-data'
 
   if (socketName !== null && typeof socketName !== 'undefined') {
     context.variables.set(socketName, 'net-socket')
@@ -280,7 +280,9 @@ export function emitNetHandlerDeclaration(
     pushIndentedNetLines(lines, emitNetHandlerStatement(statement, netContext, context, deps))
   }
 
-  lines.push('  return INOX_OK;')
+  if (wrapper.kind !== 'socket-data') {
+    lines.push('  return INOX_OK;')
+  }
   lines.push('}')
 
   return lines
@@ -363,13 +365,13 @@ function emitNetHandlerStatement(
         const lines: string[] = []
 
         pushNetLines(lines, socketCall)
-        lines.push('return INOX_OK;')
+        lines.push(netContext.kind === 'socket-data' ? 'return;' : 'return INOX_OK;')
 
         return lines
       }
     }
 
-    return ['return INOX_OK;']
+    return [netContext.kind === 'socket-data' ? 'return;' : 'return INOX_OK;']
   }
 
   context.diagnostics.push(
