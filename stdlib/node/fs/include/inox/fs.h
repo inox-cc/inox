@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "inox/binary.h"
 #include "inox/loop.h"
 #include "inox/promise.h"
 #include "inox/string.h"
@@ -17,12 +18,7 @@ enum {
 };
 
 typedef inox::String (*FsReadFileFn)(void* user, inox::StringView path);
-typedef inox_status (*FsReadFileBytesFn)(
-  void* user,
-  inox_allocator* allocator,
-  inox::StringView path,
-  inox_value* out
-);
+typedef Buffer (*FsReadFileBytesFn)(void* user, inox::StringView path);
 typedef inox_status (*FsReadDirFn)(
   void* user,
   inox_allocator* allocator,
@@ -78,7 +74,6 @@ struct FsAdapter {
 #ifdef __cplusplus
 
 #include "inox/array.h"
-#include "inox/binary.h"
 
 class FsStats;
 class fs_promises {

@@ -472,7 +472,13 @@ static inox_status fs_read_file_bytes_sync_status(inox_allocator* allocator, con
   }
 
   if (fs_active_adapter.read_file_bytes != 0) {
-    return fs_active_adapter.read_file_bytes(fs_active_adapter.user, allocator, inox::StringView(path, path_len), out);
+    Buffer result = fs_active_adapter.read_file_bytes(fs_active_adapter.user, inox::StringView(path, path_len));
+
+    if (inox::thrown()) {
+      return INOX_ERR_THROW;
+    }
+
+    return result.valid() ? result.copy_to(out) : INOX_ERR_TYPE;
   }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
@@ -3797,7 +3803,7 @@ static inox_status inox_fs_run_request(void* context) {
     inox_status status = fs_read_file_bytes_sync_status(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
-      return inox_fs_reject_status(request->loop, request->promise, status);
+      return inox_fs_reject_request_status(request, status);
     }
 
     inox_status resolve_status = inox_promise_resolve(request->promise, result);
