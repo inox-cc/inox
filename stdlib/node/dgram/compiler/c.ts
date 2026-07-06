@@ -1234,7 +1234,7 @@ function emitDgramSendLines(
     pushDgramLines(
       lines,
       emitDgramStatusCheck(
-        `DgramSocket(${socketName}).sendConnected(inox::StringView(${body.bytes}, ${body.length}))`,
+        `DgramSocket(${socketName}).send(inox::StringView(${body.bytes}, ${body.length}), 0, 0)`,
         context,
         dgramContext
       )

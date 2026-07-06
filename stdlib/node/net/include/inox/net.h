@@ -85,11 +85,8 @@ public:
   inox_status setKeepAlive(bool enabled, unsigned int initial_delay) const;
   inox_status ref() const;
   inox_status unref() const;
-  inox_status write(inox::StringView bytes) const;
-  inox_status write(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const;
-  inox_status writeAndClose(inox::StringView bytes) const;
-  inox_status end(inox::StringView bytes) const;
-  inox_status end(inox::StringView bytes, inox_net_socket_write_fn callback, void* user) const;
+  inox_status write(inox::StringView bytes, inox_net_socket_write_fn callback = nullptr, void* user = nullptr) const;
+  inox_status end(inox::StringView bytes = inox::StringView(), inox_net_socket_write_fn callback = nullptr, void* user = nullptr) const;
   inox_status destroy() const;
   void close() const;
 };

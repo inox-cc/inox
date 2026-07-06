@@ -47,7 +47,6 @@ public:
   inox_status recvStart() const;
   inox_status recvStop() const;
   inox_status send(inox::StringView bytes, const char* host, int port) const;
-  inox_status sendConnected(inox::StringView bytes) const;
   void close() const;
   inox_status address(inox_dgram_address* out) const;
   inox_status remoteAddress(inox_dgram_address* out) const;

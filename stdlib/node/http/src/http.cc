@@ -137,10 +137,6 @@ inox_status HttpServer::listen(const char* host, int port, int backlog) const {
   return NetServer(server->net_server).listen(host, port, backlog);
 }
 
-inox_status HttpServer::listen(inox::StringView host, int port, int backlog) const {
-  return listen(host.bytes, port, backlog);
-}
-
 inox_status HttpServer::localPort(int* out_port) const {
   inox_http_server* server = server_;
 
@@ -366,7 +362,7 @@ inox_status HttpResponse::end(inox::StringView bytes) const {
     memcpy(response_bytes + header_size, response->body, response->body_len);
   }
 
-  inox_status write_status = NetSocket(connection->socket).writeAndClose(inox::StringView(response_bytes, total_len));
+  inox_status write_status = NetSocket(connection->socket).end(inox::StringView(response_bytes, total_len));
   connection->server->allocator->free(connection->server->allocator->user, response_bytes, total_len, alignof(char));
 
   return write_status;
@@ -886,10 +882,6 @@ inox_status HttpServer::listen(const char* host, int port, int backlog) const {
   (void)port;
   (void)backlog;
   return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status HttpServer::listen(inox::StringView host, int port, int backlog) const {
-  return listen(host.bytes, port, backlog);
 }
 
 inox_status HttpServer::localPort(int* out_port) const {

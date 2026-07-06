@@ -29,12 +29,6 @@ struct inox_dgram_socket {
 };
 
 static inox_status inox_dgram_ip4_addr(const char* host, int port, struct sockaddr_in* out);
-static inox_status inox_dgram_send_resolved(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  const struct sockaddr* addr
-);
 static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, inox_dgram_address* out);
 static void inox_dgram_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 static void inox_dgram_recv_cb(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const struct sockaddr* addr, unsigned flags);
@@ -183,22 +177,74 @@ inox_status DgramSocket::recvStop() const {
 }
 
 inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port) const {
-  if (host == 0) {
+  inox_dgram_socket* socket = socket_;
+
+  if (socket == 0 || socket->closing || (bytes.bytes == 0 && bytes.len != 0)) {
     return INOX_ERR_TYPE;
   }
 
   struct sockaddr_in addr;
-  inox_status status = inox_dgram_ip4_addr(host, port, &addr);
+  const struct sockaddr* send_addr = 0;
+
+  if (host != 0) {
+    inox_status status = inox_dgram_ip4_addr(host, port, &addr);
+
+    if (status != INOX_OK) {
+      return status;
+    }
+
+    send_addr = (const struct sockaddr*)&addr;
+  }
+
+  inox_allocator* allocator = socket->allocator;
+  inox_dgram_send_request* request =
+    (inox_dgram_send_request*)allocator->alloc(allocator->user, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
+
+  if (request == 0) {
+    return INOX_ERR_OOM;
+  }
+
+  memset(request, 0, sizeof(inox_dgram_send_request));
+  request->socket = socket;
+  request->len = bytes.len;
+
+  if (bytes.len != 0) {
+    request->bytes = (char*)allocator->alloc(allocator->user, bytes.len, alignof(char));
+
+    if (request->bytes == 0) {
+      allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
+      return INOX_ERR_OOM;
+    }
+
+    memcpy(request->bytes, bytes.bytes, bytes.len);
+  }
+
+  inox_status status = inox_libuv_loop_retain_request(socket->loop);
 
   if (status != INOX_OK) {
+    if (request->bytes != 0) {
+      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
+    }
+
+    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
     return status;
   }
 
-  return inox_dgram_send_resolved(socket_, bytes.bytes, bytes.len, (const struct sockaddr*)&addr);
-}
+  uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)bytes.len);
+  request->request.data = request;
 
-inox_status DgramSocket::sendConnected(inox::StringView bytes) const {
-  return inox_dgram_send_resolved(socket_, bytes.bytes, bytes.len, 0);
+  if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, send_addr, inox_dgram_send_cb) != 0) {
+    inox_libuv_loop_release_request(socket->loop);
+
+    if (request->bytes != 0) {
+      allocator->free(allocator->user, request->bytes, bytes.len, alignof(char));
+    }
+
+    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
+    return INOX_ERR_FIELD;
+  }
+
+  return INOX_OK;
 }
 
 inox_status DgramSocket::address(inox_dgram_address* out) const {
@@ -366,67 +412,6 @@ void DgramSocket::close() const {
   socket->closing = 1;
   uv_udp_recv_stop(&socket->handle);
   uv_close((uv_handle_t*)&socket->handle, inox_dgram_close_cb);
-}
-
-static inox_status inox_dgram_send_resolved(
-  inox_dgram_socket* socket,
-  const char* bytes,
-  size_t len,
-  const struct sockaddr* addr
-) {
-  if (socket == 0 || socket->closing || (bytes == 0 && len != 0)) {
-    return INOX_ERR_TYPE;
-  }
-
-  inox_allocator* allocator = socket->allocator;
-  inox_dgram_send_request* request =
-    (inox_dgram_send_request*)allocator->alloc(allocator->user, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
-
-  if (request == 0) {
-    return INOX_ERR_OOM;
-  }
-
-  memset(request, 0, sizeof(inox_dgram_send_request));
-  request->socket = socket;
-  request->len = len;
-
-  if (len != 0) {
-    request->bytes = (char*)allocator->alloc(allocator->user, len, alignof(char));
-
-    if (request->bytes == 0) {
-      allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
-      return INOX_ERR_OOM;
-    }
-
-    memcpy(request->bytes, bytes, len);
-  }
-
-  inox_status status = inox_libuv_loop_retain_request(socket->loop);
-
-  if (status != INOX_OK) {
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
-    return status;
-  }
-
-  uv_buf_t buffer = uv_buf_init(request->bytes, (unsigned int)len);
-  request->request.data = request;
-
-  if (uv_udp_send(&request->request, &socket->handle, &buffer, 1, addr, inox_dgram_send_cb) != 0) {
-    inox_libuv_loop_release_request(socket->loop);
-
-    if (request->bytes != 0) {
-      allocator->free(allocator->user, request->bytes, len, alignof(char));
-    }
-
-    allocator->free(allocator->user, request, sizeof(inox_dgram_send_request), alignof(inox_dgram_send_request));
-    return INOX_ERR_FIELD;
-  }
-
-  return INOX_OK;
 }
 
 static inox_status inox_dgram_sockaddr_to_address(const struct sockaddr* addr, inox_dgram_address* out) {
@@ -621,12 +606,6 @@ inox_status DgramSocket::send(inox::StringView bytes, const char* host, int port
   (void)bytes;
   (void)host;
   (void)port;
-  return INOX_ERR_UNSUPPORTED;
-}
-
-inox_status DgramSocket::sendConnected(inox::StringView bytes) const {
-  (void)socket_;
-  (void)bytes;
   return INOX_ERR_UNSUPPORTED;
 }
 
