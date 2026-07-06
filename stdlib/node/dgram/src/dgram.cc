@@ -687,7 +687,7 @@ static void inox_dgram_close_cb(uv_handle_t* handle) {
   }
 
   if (socket->close != 0) {
-    socket->close(socket->close_user, socket);
+    socket->close(socket->close_user, DgramSocket(socket));
   }
 
   if (socket->retained) {

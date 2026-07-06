@@ -23,7 +23,7 @@ typedef void (*DgramRecvFn)(
   inox::StringView host,
   int port
 );
-typedef void (*DgramCloseFn)(void* user, inox_dgram_socket* socket);
+typedef void (*DgramCloseFn)(void* user, DgramSocket socket);
 
 #define INOX_DGRAM_BIND_REUSEADDR 1u
 
