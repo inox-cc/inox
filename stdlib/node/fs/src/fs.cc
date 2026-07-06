@@ -359,7 +359,9 @@ bool FsDirent::isDirectory() const {
   return result;
 }
 
-inox_status inox_fs_read_file_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+class fs fs;
+
+inox_status fs::readFileSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -383,7 +385,7 @@ inox_status inox_fs_read_file_sync(inox_allocator* allocator, const char* path, 
 #endif
 }
 
-inox_status inox_fs_read_file_bytes_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+inox_status fs::readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -407,7 +409,7 @@ inox_status inox_fs_read_file_bytes_sync(inox_allocator* allocator, const char* 
 #endif
 }
 
-inox_status inox_fs_read_dir_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+inox_status fs::readdirSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -431,7 +433,7 @@ inox_status inox_fs_read_dir_sync(inox_allocator* allocator, const char* path, s
 #endif
 }
 
-inox_status inox_fs_read_dir_dirents_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+inox_status fs::readdirDirentsSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -455,7 +457,7 @@ inox_status inox_fs_read_dir_dirents_sync(inox_allocator* allocator, const char*
 #endif
 }
 
-inox_status inox_fs_stat_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+inox_status fs::statSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -479,7 +481,7 @@ inox_status inox_fs_stat_sync(inox_allocator* allocator, const char* path, size_
 #endif
 }
 
-inox_status inox_fs_lstat_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+inox_status fs::lstatSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -503,7 +505,7 @@ inox_status inox_fs_lstat_sync(inox_allocator* allocator, const char* path, size
 #endif
 }
 
-inox_status inox_fs_realpath_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+inox_status fs::realpathSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -527,7 +529,7 @@ inox_status inox_fs_realpath_sync(inox_allocator* allocator, const char* path, s
 #endif
 }
 
-inox_status inox_fs_readlink_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
+inox_status fs::readlinkSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out) {
   if (out != 0) {
     *out = inox_undefined_value();
   }
@@ -551,7 +553,7 @@ inox_status inox_fs_readlink_sync(inox_allocator* allocator, const char* path, s
 #endif
 }
 
-inox_status inox_fs_access_sync(const char* path, size_t path_len, int mode) {
+inox_status fs::accessSync(const char* path, size_t path_len, int mode) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -571,7 +573,7 @@ inox_status inox_fs_access_sync(const char* path, size_t path_len, int mode) {
 #endif
 }
 
-inox_status inox_fs_mkdir_sync(const char* path, size_t path_len, bool recursive) {
+inox_status fs::mkdirSync(const char* path, size_t path_len, bool recursive) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -591,7 +593,7 @@ inox_status inox_fs_mkdir_sync(const char* path, size_t path_len, bool recursive
 #endif
 }
 
-inox_status inox_fs_unlink_sync(const char* path, size_t path_len) {
+inox_status fs::unlinkSync(const char* path, size_t path_len) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -611,7 +613,7 @@ inox_status inox_fs_unlink_sync(const char* path, size_t path_len) {
 #endif
 }
 
-inox_status inox_fs_rm_sync(const char* path, size_t path_len, bool recursive, bool force) {
+inox_status fs::rmSync(const char* path, size_t path_len, bool recursive, bool force) {
   if (path == 0 && path_len != 0) {
     return INOX_ERR_TYPE;
   }
@@ -631,7 +633,7 @@ inox_status inox_fs_rm_sync(const char* path, size_t path_len, bool recursive, b
 #endif
 }
 
-inox_status inox_fs_append_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
+inox_status fs::appendFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -651,17 +653,17 @@ inox_status inox_fs_append_file_sync(const char* path, size_t path_len, const ch
 #endif
 }
 
-inox_status inox_fs_append_file_bytes_sync(const char* path, size_t path_len, inox_value bytes) {
+inox_status fs::appendFileBytesSync(const char* path, size_t path_len, inox_value bytes) {
   if (bytes.tag != INOX_TAG_BYTES || bytes.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
 
   inox_bytes* data = (inox_bytes*)bytes.as.ref;
 
-  return inox_fs_append_file_sync(path, path_len, (const char*)data->bytes, data->len);
+  return this->appendFileSync(path, path_len, (const char*)data->bytes, data->len);
 }
 
-inox_status inox_fs_copy_file_sync(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len) {
+inox_status fs::copyFileSync(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len) {
   if ((src_path == 0 && src_path_len != 0) || (dest_path == 0 && dest_path_len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -681,7 +683,7 @@ inox_status inox_fs_copy_file_sync(const char* src_path, size_t src_path_len, co
 #endif
 }
 
-inox_status inox_fs_symlink_sync(const char* target, size_t target_len, const char* path, size_t path_len) {
+inox_status fs::symlinkSync(const char* target, size_t target_len, const char* path, size_t path_len) {
   if ((target == 0 && target_len != 0) || (path == 0 && path_len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -701,7 +703,7 @@ inox_status inox_fs_symlink_sync(const char* target, size_t target_len, const ch
 #endif
 }
 
-inox_status inox_fs_rename_sync(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len) {
+inox_status fs::renameSync(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len) {
   if ((old_path == 0 && old_path_len != 0) || (new_path == 0 && new_path_len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -721,7 +723,7 @@ inox_status inox_fs_rename_sync(const char* old_path, size_t old_path_len, const
 #endif
 }
 
-inox_status inox_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
+inox_status fs::writeFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len) {
   if ((path == 0 && path_len != 0) || (bytes == 0 && byte_len != 0)) {
     return INOX_ERR_TYPE;
   }
@@ -741,17 +743,17 @@ inox_status inox_fs_write_file_sync(const char* path, size_t path_len, const cha
 #endif
 }
 
-inox_status inox_fs_write_file_bytes_sync(const char* path, size_t path_len, inox_value bytes) {
+inox_status fs::writeFileBytesSync(const char* path, size_t path_len, inox_value bytes) {
   if (bytes.tag != INOX_TAG_BYTES || bytes.as.ref == 0) {
     return INOX_ERR_TYPE;
   }
 
   inox_bytes* data = (inox_bytes*)bytes.as.ref;
 
-  return inox_fs_write_file_sync(path, path_len, (const char*)data->bytes, data->len);
+  return this->writeFileSync(path, path_len, (const char*)data->bytes, data->len);
 }
 
-inox_status inox_fs_read_file(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::readFile(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.read_file == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -761,7 +763,7 @@ inox_status inox_fs_read_file(inox_loop* loop, const char* path, size_t path_len
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_FILE, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_read_file_bytes(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::readFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.read_file_bytes == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -771,7 +773,7 @@ inox_status inox_fs_read_file_bytes(inox_loop* loop, const char* path, size_t pa
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_FILE_BYTES, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_read_dir(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::readdir(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.read_dir == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -781,7 +783,7 @@ inox_status inox_fs_read_dir(inox_loop* loop, const char* path, size_t path_len,
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_DIR, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_read_dir_dirents(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::readdirDirents(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.read_dir_dirents == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READ_DIR_DIRENTS, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -791,7 +793,7 @@ inox_status inox_fs_read_dir_dirents(inox_loop* loop, const char* path, size_t p
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READ_DIR_DIRENTS, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_stat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::stat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.stat == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_STAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -801,7 +803,7 @@ inox_status inox_fs_stat(inox_loop* loop, const char* path, size_t path_len, ino
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_STAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_lstat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::lstat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.lstat == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -811,7 +813,7 @@ inox_status inox_fs_lstat(inox_loop* loop, const char* path, size_t path_len, in
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_LSTAT, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_realpath(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::realpath(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.realpath == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_REALPATH, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -821,7 +823,7 @@ inox_status inox_fs_realpath(inox_loop* loop, const char* path, size_t path_len,
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_REALPATH, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_readlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::readlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.readlink == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_READLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -831,7 +833,7 @@ inox_status inox_fs_readlink(inox_loop* loop, const char* path, size_t path_len,
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_READLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_access(inox_loop* loop, const char* path, size_t path_len, int mode, inox_promise** out) {
+inox_status fs_promises::access(inox_loop* loop, const char* path, size_t path_len, int mode, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.access == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_ACCESS, path, path_len, 0, 0, 0, 0, mode, false, false, out);
@@ -841,7 +843,7 @@ inox_status inox_fs_access(inox_loop* loop, const char* path, size_t path_len, i
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_ACCESS, path, path_len, 0, 0, 0, 0, mode, false, false, out);
 }
 
-inox_status inox_fs_mkdir(inox_loop* loop, const char* path, size_t path_len, bool recursive, inox_promise** out) {
+inox_status fs_promises::mkdir(inox_loop* loop, const char* path, size_t path_len, bool recursive, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.mkdir == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_MKDIR, path, path_len, 0, 0, 0, 0, 0, recursive, false, out);
@@ -851,7 +853,7 @@ inox_status inox_fs_mkdir(inox_loop* loop, const char* path, size_t path_len, bo
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_MKDIR, path, path_len, 0, 0, 0, 0, 0, recursive, false, out);
 }
 
-inox_status inox_fs_unlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::unlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.unlink == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_UNLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
@@ -861,7 +863,7 @@ inox_status inox_fs_unlink(inox_loop* loop, const char* path, size_t path_len, i
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_UNLINK, path, path_len, 0, 0, 0, 0, 0, false, false, out);
 }
 
-inox_status inox_fs_rm(inox_loop* loop, const char* path, size_t path_len, bool recursive, bool force, inox_promise** out) {
+inox_status fs_promises::rm(inox_loop* loop, const char* path, size_t path_len, bool recursive, bool force, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.rm == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_RM, path, path_len, 0, 0, 0, 0, 0, recursive, force, out);
@@ -871,8 +873,7 @@ inox_status inox_fs_rm(inox_loop* loop, const char* path, size_t path_len, bool 
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_RM, path, path_len, 0, 0, 0, 0, 0, recursive, force, out);
 }
 
-inox_status
-inox_fs_append_file(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
+inox_status fs_promises::appendFile(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.append_file == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
@@ -882,7 +883,7 @@ inox_fs_append_file(inox_loop* loop, const char* path, size_t path_len, const ch
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_APPEND_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
 }
 
-inox_status inox_fs_append_file_bytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
+inox_status fs_promises::appendFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
   if (out != 0) {
     *out = 0;
   }
@@ -906,7 +907,7 @@ inox_status inox_fs_append_file_bytes(inox_loop* loop, const char* path, size_t 
   );
 }
 
-inox_status inox_fs_copy_file(
+inox_status fs_promises::copyFile(
   inox_loop* loop,
   const char* src_path,
   size_t src_path_len,
@@ -927,8 +928,7 @@ inox_status inox_fs_copy_file(
   );
 }
 
-inox_status
-inox_fs_symlink(inox_loop* loop, const char* target, size_t target_len, const char* path, size_t path_len, inox_promise** out) {
+inox_status fs_promises::symlink(inox_loop* loop, const char* target, size_t target_len, const char* path, size_t path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.symlink == 0) {
     return inox_fs_libuv_queue_request(
@@ -940,8 +940,7 @@ inox_fs_symlink(inox_loop* loop, const char* target, size_t target_len, const ch
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_SYMLINK, target, target_len, path, path_len, 0, 0, 0, false, false, out);
 }
 
-inox_status
-inox_fs_rename(inox_loop* loop, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len, inox_promise** out) {
+inox_status fs_promises::rename(inox_loop* loop, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.rename == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_RENAME, old_path, old_path_len, new_path, new_path_len, 0, 0, 0, false, false, out);
@@ -951,8 +950,7 @@ inox_fs_rename(inox_loop* loop, const char* old_path, size_t old_path_len, const
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_RENAME, old_path, old_path_len, new_path, new_path_len, 0, 0, 0, false, false, out);
 }
 
-inox_status
-inox_fs_write_file(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
+inox_status fs_promises::writeFile(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out) {
 #ifdef INOX_LOOP_BACKEND_LIBUV
   if (inox_fs_active_adapter.write_file == 0) {
     return inox_fs_libuv_queue_request(loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
@@ -962,7 +960,7 @@ inox_fs_write_file(inox_loop* loop, const char* path, size_t path_len, const cha
   return inox_fs_queue_request(loop, INOX_FS_REQUEST_WRITE_FILE, path, path_len, 0, 0, bytes, byte_len, 0, false, false, out);
 }
 
-inox_status inox_fs_write_file_bytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
+inox_status fs_promises::writeFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out) {
   if (out != 0) {
     *out = 0;
   }
@@ -3400,7 +3398,7 @@ static inox_status inox_fs_run_request(void* context) {
 
   if (request->kind == INOX_FS_REQUEST_READ_FILE) {
     inox_value result = inox_undefined_value();
-    inox_status status = inox_fs_read_file_sync(request->loop->allocator, request->path, request->path_len, &result);
+    inox_status status = fs.readFileSync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3414,7 +3412,7 @@ static inox_status inox_fs_run_request(void* context) {
 
   if (request->kind == INOX_FS_REQUEST_READ_FILE_BYTES) {
     inox_value result = inox_undefined_value();
-    inox_status status = inox_fs_read_file_bytes_sync(request->loop->allocator, request->path, request->path_len, &result);
+    inox_status status = fs.readFileBytesSync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3428,7 +3426,7 @@ static inox_status inox_fs_run_request(void* context) {
 
   if (request->kind == INOX_FS_REQUEST_READ_DIR) {
     inox_value result = inox_undefined_value();
-    inox_status status = inox_fs_read_dir_sync(request->loop->allocator, request->path, request->path_len, &result);
+    inox_status status = fs.readdirSync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3442,7 +3440,7 @@ static inox_status inox_fs_run_request(void* context) {
 
   if (request->kind == INOX_FS_REQUEST_READ_DIR_DIRENTS) {
     inox_value result = inox_undefined_value();
-    inox_status status = inox_fs_read_dir_dirents_sync(request->loop->allocator, request->path, request->path_len, &result);
+    inox_status status = fs.readdirDirentsSync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3457,8 +3455,8 @@ static inox_status inox_fs_run_request(void* context) {
   if (request->kind == INOX_FS_REQUEST_STAT || request->kind == INOX_FS_REQUEST_LSTAT) {
     inox_value result = inox_undefined_value();
     inox_status status = request->kind == INOX_FS_REQUEST_STAT
-                           ? inox_fs_stat_sync(request->loop->allocator, request->path, request->path_len, &result)
-                           : inox_fs_lstat_sync(request->loop->allocator, request->path, request->path_len, &result);
+                           ? fs.statSync(request->loop->allocator, request->path, request->path_len, &result)
+                           : fs.lstatSync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3473,8 +3471,8 @@ static inox_status inox_fs_run_request(void* context) {
   if (request->kind == INOX_FS_REQUEST_REALPATH || request->kind == INOX_FS_REQUEST_READLINK) {
     inox_value result = inox_undefined_value();
     inox_status status = request->kind == INOX_FS_REQUEST_REALPATH
-                           ? inox_fs_realpath_sync(request->loop->allocator, request->path, request->path_len, &result)
-                           : inox_fs_readlink_sync(request->loop->allocator, request->path, request->path_len, &result);
+                           ? fs.realpathSync(request->loop->allocator, request->path, request->path_len, &result)
+                           : fs.readlinkSync(request->loop->allocator, request->path, request->path_len, &result);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3487,7 +3485,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_ACCESS) {
-    inox_status status = inox_fs_access_sync(request->path, request->path_len, request->mode);
+    inox_status status = fs.accessSync(request->path, request->path_len, request->mode);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3497,7 +3495,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_MKDIR) {
-    inox_status status = inox_fs_mkdir_sync(request->path, request->path_len, request->recursive);
+    inox_status status = fs.mkdirSync(request->path, request->path_len, request->recursive);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3507,7 +3505,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_UNLINK) {
-    inox_status status = inox_fs_unlink_sync(request->path, request->path_len);
+    inox_status status = fs.unlinkSync(request->path, request->path_len);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3517,7 +3515,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_RM) {
-    inox_status status = inox_fs_rm_sync(request->path, request->path_len, request->recursive, request->force);
+    inox_status status = fs.rmSync(request->path, request->path_len, request->recursive, request->force);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3527,7 +3525,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_RENAME) {
-    inox_status status = inox_fs_rename_sync(request->path, request->path_len, request->path2, request->path2_len);
+    inox_status status = fs.renameSync(request->path, request->path_len, request->path2, request->path2_len);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3537,7 +3535,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_APPEND_FILE) {
-    inox_status status = inox_fs_append_file_sync(request->path, request->path_len, request->bytes, request->byte_len);
+    inox_status status = fs.appendFileSync(request->path, request->path_len, request->bytes, request->byte_len);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3547,7 +3545,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_COPY_FILE) {
-    inox_status status = inox_fs_copy_file_sync(request->path, request->path_len, request->path2, request->path2_len);
+    inox_status status = fs.copyFileSync(request->path, request->path_len, request->path2, request->path2_len);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3557,7 +3555,7 @@ static inox_status inox_fs_run_request(void* context) {
   }
 
   if (request->kind == INOX_FS_REQUEST_SYMLINK) {
-    inox_status status = inox_fs_symlink_sync(request->path, request->path_len, request->path2, request->path2_len);
+    inox_status status = fs.symlinkSync(request->path, request->path_len, request->path2, request->path2_len);
 
     if (status != INOX_OK) {
       return inox_fs_reject_status(request->loop, request->promise, status);
@@ -3566,7 +3564,7 @@ static inox_status inox_fs_run_request(void* context) {
     return inox_promise_resolve(request->promise, inox_undefined_value());
   }
 
-  inox_status status = inox_fs_write_file_sync(request->path, request->path_len, request->bytes, request->byte_len);
+  inox_status status = fs.writeFileSync(request->path, request->path_len, request->bytes, request->byte_len);
 
   if (status != INOX_OK) {
     return inox_fs_reject_status(request->loop, request->promise, status);

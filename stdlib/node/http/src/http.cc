@@ -453,7 +453,7 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
 
   inox_value file = inox_undefined_value();
   inox_status read_status =
-    inox_fs_read_file_bytes_sync(response->connection->server->allocator, path, path_len, &file);
+    fs.readFileBytesSync(response->connection->server->allocator, path, path_len, &file);
 
   if (read_status != INOX_OK) {
     return 0;

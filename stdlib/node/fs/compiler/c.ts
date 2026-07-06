@@ -65,12 +65,12 @@ type FsSyncStatementDescriptor = {
 }
 
 const fsSyncStatementDescriptors: Record<string, FsSyncStatementDescriptor> = {
-  appendFileSync: { kind: 'string-bytes', callName: 'inox_fs_append_file_sync' },
-  copyFileSync: { kind: 'path-arg', callName: 'inox_fs_copy_file_sync', tempPrefix: 'inox_fs_dest_path' },
-  renameSync: { kind: 'path-arg', callName: 'inox_fs_rename_sync', tempPrefix: 'inox_fs_new_path' },
-  symlinkSync: { kind: 'path-arg', callName: 'inox_fs_symlink_sync', tempPrefix: 'inox_fs_link_path' },
-  unlinkSync: { kind: 'path', callName: 'inox_fs_unlink_sync' },
-  writeFileSync: { kind: 'string-bytes', callName: 'inox_fs_write_file_sync' }
+  appendFileSync: { kind: 'string-bytes', callName: 'fs.appendFileSync' },
+  copyFileSync: { kind: 'path-arg', callName: 'fs.copyFileSync', tempPrefix: 'inox_fs_dest_path' },
+  renameSync: { kind: 'path-arg', callName: 'fs.renameSync', tempPrefix: 'inox_fs_new_path' },
+  symlinkSync: { kind: 'path-arg', callName: 'fs.symlinkSync', tempPrefix: 'inox_fs_link_path' },
+  unlinkSync: { kind: 'path', callName: 'fs.unlinkSync' },
+  writeFileSync: { kind: 'string-bytes', callName: 'fs.writeFileSync' }
 }
 
 function fsPromiseResultTypeForMethod(method: string | null): string | null {
@@ -106,66 +106,66 @@ function fsPromiseResultTypeForMethod(method: string | null): string | null {
 function fsAsyncCallDescriptorForExpression(expression: AnyNode, method: string | null): FsAsyncCallDescriptor | null {
   if (method === 'appendFile') {
     if (fsUsesBytes(expression)) {
-      return { kind: 'bytes-value-out', callName: 'inox_fs_append_file_bytes' }
+      return { kind: 'bytes-value-out', callName: 'fs.promises.appendFileBytes' }
     }
 
-    return { kind: 'string-bytes-out', callName: 'inox_fs_append_file' }
+    return { kind: 'string-bytes-out', callName: 'fs.promises.appendFile' }
   }
 
   if (method === 'copyFile') {
-    return { kind: 'path-arg-out', callName: 'inox_fs_copy_file', tempPrefix: 'inox_fs_dest_path' }
+    return { kind: 'path-arg-out', callName: 'fs.promises.copyFile', tempPrefix: 'inox_fs_dest_path' }
   }
 
   if (method === 'lstat') {
-    return { kind: 'path-out', callName: 'inox_fs_lstat' }
+    return { kind: 'path-out', callName: 'fs.promises.lstat' }
   }
 
   if (method === 'readFile') {
     if (fsUsesBytes(expression)) {
-      return { kind: 'path-out', callName: 'inox_fs_read_file_bytes' }
+      return { kind: 'path-out', callName: 'fs.promises.readFileBytes' }
     }
 
-    return { kind: 'path-out', callName: 'inox_fs_read_file' }
+    return { kind: 'path-out', callName: 'fs.promises.readFile' }
   }
 
   if (method === 'readdir') {
     if (fsUsesDirents(expression)) {
-      return { kind: 'path-out', callName: 'inox_fs_read_dir_dirents' }
+      return { kind: 'path-out', callName: 'fs.promises.readdirDirents' }
     }
 
-    return { kind: 'path-out', callName: 'inox_fs_read_dir' }
+    return { kind: 'path-out', callName: 'fs.promises.readdir' }
   }
 
   if (method === 'readlink') {
-    return { kind: 'path-out', callName: 'inox_fs_readlink' }
+    return { kind: 'path-out', callName: 'fs.promises.readlink' }
   }
 
   if (method === 'realpath') {
-    return { kind: 'path-out', callName: 'inox_fs_realpath' }
+    return { kind: 'path-out', callName: 'fs.promises.realpath' }
   }
 
   if (method === 'rename') {
-    return { kind: 'path-arg-out', callName: 'inox_fs_rename', tempPrefix: 'inox_fs_new_path' }
+    return { kind: 'path-arg-out', callName: 'fs.promises.rename', tempPrefix: 'inox_fs_new_path' }
   }
 
   if (method === 'stat') {
-    return { kind: 'path-out', callName: 'inox_fs_stat' }
+    return { kind: 'path-out', callName: 'fs.promises.stat' }
   }
 
   if (method === 'symlink') {
-    return { kind: 'path-arg-out', callName: 'inox_fs_symlink', tempPrefix: 'inox_fs_link_path' }
+    return { kind: 'path-arg-out', callName: 'fs.promises.symlink', tempPrefix: 'inox_fs_link_path' }
   }
 
   if (method === 'unlink') {
-    return { kind: 'path-out', callName: 'inox_fs_unlink' }
+    return { kind: 'path-out', callName: 'fs.promises.unlink' }
   }
 
   if (method === 'writeFile') {
     if (fsUsesBytes(expression)) {
-      return { kind: 'bytes-value-out', callName: 'inox_fs_write_file_bytes' }
+      return { kind: 'bytes-value-out', callName: 'fs.promises.writeFileBytes' }
     }
 
-    return { kind: 'string-bytes-out', callName: 'inox_fs_write_file' }
+    return { kind: 'string-bytes-out', callName: 'fs.promises.writeFile' }
   }
 
   return null
@@ -173,35 +173,35 @@ function fsAsyncCallDescriptorForExpression(expression: AnyNode, method: string 
 
 function fsSyncValueCallNameForExpression(expression: AnyNode, method: string | null): string | null {
   if (method === 'lstatSync') {
-    return 'inox_fs_lstat_sync'
+    return 'fs.lstatSync'
   }
 
   if (method === 'readFileSync') {
     if (fsUsesBytes(expression)) {
-      return 'inox_fs_read_file_bytes_sync'
+      return 'fs.readFileBytesSync'
     }
 
-    return 'inox_fs_read_file_sync'
+    return 'fs.readFileSync'
   }
 
   if (method === 'readdirSync') {
     if (fsUsesDirents(expression)) {
-      return 'inox_fs_read_dir_dirents_sync'
+      return 'fs.readdirDirentsSync'
     }
 
-    return 'inox_fs_read_dir_sync'
+    return 'fs.readdirSync'
   }
 
   if (method === 'readlinkSync') {
-    return 'inox_fs_readlink_sync'
+    return 'fs.readlinkSync'
   }
 
   if (method === 'realpathSync') {
-    return 'inox_fs_realpath_sync'
+    return 'fs.realpathSync'
   }
 
   if (method === 'statSync') {
-    return 'inox_fs_stat_sync'
+    return 'fs.statSync'
   }
 
   return null
@@ -216,11 +216,11 @@ function fsSyncStatementDescriptorForExpression(
   }
 
   if (method === 'appendFileSync' && fsUsesBytes(expression)) {
-    return { kind: 'bytes-value', callName: 'inox_fs_append_file_bytes_sync' }
+    return { kind: 'bytes-value', callName: 'fs.appendFileBytesSync' }
   }
 
   if (method === 'writeFileSync' && fsUsesBytes(expression)) {
-    return { kind: 'bytes-value', callName: 'inox_fs_write_file_bytes_sync' }
+    return { kind: 'bytes-value', callName: 'fs.writeFileBytesSync' }
   }
 
   return fsSyncStatementDescriptors[method] ?? null
@@ -334,7 +334,7 @@ export function emitPreparedFsCallExpression(
     appendLines(lines, mode.lines)
     lines.push(
       emitStatusCheck(
-        `inox_fs_access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
+        `fs.promises.access(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${mode.expression}, &${out})`,
         context
       )
     )
@@ -349,7 +349,7 @@ export function emitPreparedFsCallExpression(
   if (method === 'mkdir') {
     lines.push(
       emitStatusCheck(
-        `inox_fs_mkdir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &${out})`,
+        `fs.promises.mkdir(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &${out})`,
         context
       )
     )
@@ -364,7 +364,7 @@ export function emitPreparedFsCallExpression(
   if (method === 'rm') {
     lines.push(
       emitStatusCheck(
-        `inox_fs_rm(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &${out})`,
+        `fs.promises.rm(${emitEventLoopReference(context)}, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &${out})`,
         context
       )
     )
@@ -407,7 +407,7 @@ export function emitPreparedFsAsyncTaskSourceExpression(
 
     appendLines(lines, mode.lines)
     lines.push(
-      `status = inox_fs_access(inox_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
+      `status = fs.promises.access(inox_loop, ${path.bytes}, ${path.length}, ${mode.expression}, &frame->awaited);`
     )
 
     return {
@@ -417,7 +417,7 @@ export function emitPreparedFsAsyncTaskSourceExpression(
 
   if (method === 'mkdir') {
     lines.push(
-      `status = inox_fs_mkdir(inox_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`
+      `status = fs.promises.mkdir(inox_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, &frame->awaited);`
     )
 
     return {
@@ -427,7 +427,7 @@ export function emitPreparedFsAsyncTaskSourceExpression(
 
   if (method === 'rm') {
     lines.push(
-      `status = inox_fs_rm(inox_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &frame->awaited);`
+      `status = fs.promises.rm(inox_loop, ${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')}, &frame->awaited);`
     )
 
     return {
@@ -601,7 +601,7 @@ export function emitPreparedFsSyncStatementExpression(
     const mode = emitPreparedFsAccessModeExpression(expression, context, dependencies)
 
     appendLines(lines, mode.lines)
-    lines.push(emitStatusCheck(`inox_fs_access_sync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
+    lines.push(emitStatusCheck(`fs.accessSync(${path.bytes}, ${path.length}, ${mode.expression})`, context))
 
     return {
       lines
@@ -611,7 +611,7 @@ export function emitPreparedFsSyncStatementExpression(
   if (method === 'mkdirSync') {
     lines.push(
       emitStatusCheck(
-        `inox_fs_mkdir_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')})`,
+        `fs.mkdirSync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')})`,
         context
       )
     )
@@ -624,7 +624,7 @@ export function emitPreparedFsSyncStatementExpression(
   if (method === 'rmSync') {
     lines.push(
       emitStatusCheck(
-        `inox_fs_rm_sync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')})`,
+        `fs.rmSync(${path.bytes}, ${path.length}, ${emitFsBooleanFlag(expression, 'fsRecursive')}, ${emitFsBooleanFlag(expression, 'fsForce')})`,
         context
       )
     )

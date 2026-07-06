@@ -108,56 +108,69 @@ typedef struct inox_fs_adapter {
 void inox_fs_set_adapter(inox_fs_adapter adapter);
 inox_fs_adapter inox_fs_get_adapter(void);
 void inox_fs_clear_adapter(void);
-inox_status inox_fs_read_file_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_read_file_bytes_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_read_dir_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_read_dir_dirents_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_stat_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_lstat_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_realpath_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_readlink_sync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
-inox_status inox_fs_access_sync(const char* path, size_t path_len, int mode);
-inox_status inox_fs_mkdir_sync(const char* path, size_t path_len, bool recursive);
-inox_status inox_fs_unlink_sync(const char* path, size_t path_len);
-inox_status inox_fs_rm_sync(const char* path, size_t path_len, bool recursive, bool force);
-inox_status inox_fs_append_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
-inox_status inox_fs_append_file_bytes_sync(const char* path, size_t path_len, inox_value bytes);
-inox_status inox_fs_copy_file_sync(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len);
-inox_status inox_fs_symlink_sync(const char* target, size_t target_len, const char* path, size_t path_len);
-inox_status inox_fs_rename_sync(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
-inox_status inox_fs_write_file_sync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
-inox_status inox_fs_write_file_bytes_sync(const char* path, size_t path_len, inox_value bytes);
-inox_status inox_fs_read_file(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_read_file_bytes(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_read_dir(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_read_dir_dirents(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_stat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_lstat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_realpath(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_readlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_access(inox_loop* loop, const char* path, size_t path_len, int mode, inox_promise** out);
-inox_status inox_fs_mkdir(inox_loop* loop, const char* path, size_t path_len, bool recursive, inox_promise** out);
-inox_status inox_fs_unlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
-inox_status inox_fs_rm(inox_loop* loop, const char* path, size_t path_len, bool recursive, bool force, inox_promise** out);
-inox_status
-inox_fs_append_file(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out);
-inox_status inox_fs_append_file_bytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out);
-inox_status inox_fs_copy_file(
-  inox_loop* loop,
-  const char* src_path,
-  size_t src_path_len,
-  const char* dest_path,
-  size_t dest_path_len,
-  inox_promise** out
-);
-inox_status
-inox_fs_symlink(inox_loop* loop, const char* target, size_t target_len, const char* path, size_t path_len, inox_promise** out);
-inox_status
-inox_fs_rename(inox_loop* loop, const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len, inox_promise** out);
-inox_status
-inox_fs_write_file(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out);
-inox_status inox_fs_write_file_bytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out);
 #ifdef __cplusplus
+
+class fs_promises {
+public:
+  inox_status readFile(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status readFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status readdir(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status readdirDirents(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status stat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status lstat(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status realpath(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status readlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status access(inox_loop* loop, const char* path, size_t path_len, int mode, inox_promise** out);
+  inox_status mkdir(inox_loop* loop, const char* path, size_t path_len, bool recursive, inox_promise** out);
+  inox_status unlink(inox_loop* loop, const char* path, size_t path_len, inox_promise** out);
+  inox_status rm(inox_loop* loop, const char* path, size_t path_len, bool recursive, bool force, inox_promise** out);
+  inox_status appendFile(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out);
+  inox_status appendFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out);
+  inox_status copyFile(
+    inox_loop* loop,
+    const char* src_path,
+    size_t src_path_len,
+    const char* dest_path,
+    size_t dest_path_len,
+    inox_promise** out
+  );
+  inox_status symlink(inox_loop* loop, const char* target, size_t target_len, const char* path, size_t path_len, inox_promise** out);
+  inox_status rename(
+    inox_loop* loop,
+    const char* old_path,
+    size_t old_path_len,
+    const char* new_path,
+    size_t new_path_len,
+    inox_promise** out
+  );
+  inox_status writeFile(inox_loop* loop, const char* path, size_t path_len, const char* bytes, size_t byte_len, inox_promise** out);
+  inox_status writeFileBytes(inox_loop* loop, const char* path, size_t path_len, inox_value bytes, inox_promise** out);
+};
+
+class fs {
+public:
+  fs_promises promises;
+
+  inox_status readFileSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status readFileBytesSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status readdirSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status readdirDirentsSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status statSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status lstatSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status realpathSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status readlinkSync(inox_allocator* allocator, const char* path, size_t path_len, inox_value* out);
+  inox_status accessSync(const char* path, size_t path_len, int mode);
+  inox_status mkdirSync(const char* path, size_t path_len, bool recursive);
+  inox_status unlinkSync(const char* path, size_t path_len);
+  inox_status rmSync(const char* path, size_t path_len, bool recursive, bool force);
+  inox_status appendFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
+  inox_status appendFileBytesSync(const char* path, size_t path_len, inox_value bytes);
+  inox_status copyFileSync(const char* src_path, size_t src_path_len, const char* dest_path, size_t dest_path_len);
+  inox_status symlinkSync(const char* target, size_t target_len, const char* path, size_t path_len);
+  inox_status renameSync(const char* old_path, size_t old_path_len, const char* new_path, size_t new_path_len);
+  inox_status writeFileSync(const char* path, size_t path_len, const char* bytes, size_t byte_len);
+  inox_status writeFileBytesSync(const char* path, size_t path_len, inox_value bytes);
+};
 
 class FsStats : public inox::Value {
 public:
@@ -180,6 +193,8 @@ public:
   bool isFile() const;
   bool isDirectory() const;
 };
+
+extern fs fs;
 
 #endif
 
