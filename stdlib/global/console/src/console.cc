@@ -103,10 +103,6 @@ static inox_status inox_console_format_append(ConsoleFormatBuffer* buffer, const
   return INOX_OK;
 }
 
-static inox_status inox_console_format_append_literal(ConsoleFormatBuffer* buffer, const char* bytes) {
-  return inox_console_format_append(buffer, bytes, bytes == 0 ? 0 : strlen(bytes));
-}
-
 static inox_status inox_console_format_append_number(ConsoleFormatBuffer* buffer, double value) {
   char bytes[64];
   int len = snprintf(bytes, sizeof(bytes), "%.17g", value);
@@ -176,7 +172,7 @@ static inox_status inox_console_format_error_object(
   inox_status status = inox_console_format_append(buffer, name->bytes, name->len);
 
   if (status == INOX_OK) {
-    status = inox_console_format_append_literal(buffer, ": ");
+    status = inox_console_format_append(buffer, ": ", 2);
   }
 
   if (status == INOX_OK) {
@@ -195,7 +191,7 @@ static inox_status inox_console_format_array(ConsoleFormatBuffer* buffer, inox_v
   }
 
   ArrayStorage* array = (ArrayStorage*)value.as.ref;
-  inox_status status = inox_console_format_append_literal(buffer, "[");
+  inox_status status = inox_console_format_append(buffer, "[", 1);
 
   if (status != INOX_OK) {
     return status;
@@ -203,7 +199,7 @@ static inox_status inox_console_format_array(ConsoleFormatBuffer* buffer, inox_v
 
   for (size_t index = 0; index < array->length; index += 1) {
     if (index != 0) {
-      status = inox_console_format_append_literal(buffer, ", ");
+      status = inox_console_format_append(buffer, ", ", 2);
 
       if (status != INOX_OK) {
         return status;
@@ -217,7 +213,7 @@ static inox_status inox_console_format_array(ConsoleFormatBuffer* buffer, inox_v
     }
   }
 
-  return inox_console_format_append_literal(buffer, "]");
+  return inox_console_format_append(buffer, "]", 1);
 }
 
 static inox_status inox_console_format_class_instance_into(
@@ -227,7 +223,7 @@ static inox_status inox_console_format_class_instance_into(
   unsigned int depth
 ) {
   if (depth > 8) {
-    return inox_console_format_append_literal(buffer, "[Object]");
+    return inox_console_format_append(buffer, "[Object]", 8);
   }
 
   if (buffer == 0 || descriptor == 0 || instance == 0 || descriptor->read_field == 0) {
@@ -238,7 +234,7 @@ static inox_status inox_console_format_class_instance_into(
   inox_status status = inox_console_format_append(buffer, class_name, strlen(class_name));
 
   if (status == INOX_OK) {
-    status = inox_console_format_append_literal(buffer, " {");
+    status = inox_console_format_append(buffer, " {", 2);
   }
 
   if (status != INOX_OK) {
@@ -255,9 +251,9 @@ static inox_status inox_console_format_class_instance_into(
     }
 
     if (printed == 0) {
-      status = inox_console_format_append_literal(buffer, " ");
+      status = inox_console_format_append(buffer, " ", 1);
     } else {
-      status = inox_console_format_append_literal(buffer, ", ");
+      status = inox_console_format_append(buffer, ", ", 2);
     }
 
     if (status != INOX_OK) {
@@ -269,7 +265,7 @@ static inox_status inox_console_format_class_instance_into(
     status = inox_console_format_append(buffer, name, strlen(name));
 
     if (status == INOX_OK) {
-      status = inox_console_format_append_literal(buffer, ": ");
+      status = inox_console_format_append(buffer, ": ", 2);
     }
 
     if (status != INOX_OK) {
@@ -294,10 +290,10 @@ static inox_status inox_console_format_class_instance_into(
   }
 
   if (printed == 0) {
-    return inox_console_format_append_literal(buffer, "}");
+    return inox_console_format_append(buffer, "}", 1);
   }
 
-  return inox_console_format_append_literal(buffer, " }");
+  return inox_console_format_append(buffer, " }", 2);
 }
 
 static inox_status inox_console_format_object(ConsoleFormatBuffer* buffer, inox_value value, unsigned int depth) {
@@ -318,10 +314,10 @@ static inox_status inox_console_format_object(ConsoleFormatBuffer* buffer, inox_
   }
 
   if (object->shape->field_count == 0) {
-    return inox_console_format_append_literal(buffer, "{}");
+    return inox_console_format_append(buffer, "{}", 2);
   }
 
-  inox_status status = inox_console_format_append_literal(buffer, "{ ");
+  inox_status status = inox_console_format_append(buffer, "{ ", 2);
 
   if (status != INOX_OK) {
     return status;
@@ -329,7 +325,7 @@ static inox_status inox_console_format_object(ConsoleFormatBuffer* buffer, inox_
 
   for (uint32_t index = 0; index < object->shape->field_count; index += 1) {
     if (index != 0) {
-      status = inox_console_format_append_literal(buffer, ", ");
+      status = inox_console_format_append(buffer, ", ", 2);
 
       if (status != INOX_OK) {
         return status;
@@ -341,7 +337,7 @@ static inox_status inox_console_format_object(ConsoleFormatBuffer* buffer, inox_
     status = inox_console_format_append(buffer, name, strlen(name));
 
     if (status == INOX_OK) {
-      status = inox_console_format_append_literal(buffer, ": ");
+      status = inox_console_format_append(buffer, ": ", 2);
     }
 
     if (status != INOX_OK) {
@@ -363,24 +359,26 @@ static inox_status inox_console_format_object(ConsoleFormatBuffer* buffer, inox_
     }
   }
 
-  return inox_console_format_append_literal(buffer, " }");
+  return inox_console_format_append(buffer, " }", 2);
 }
 
 static inox_status inox_console_format_value_into(ConsoleFormatBuffer* buffer, inox_value value, unsigned int depth) {
   if (depth > 8) {
-    return inox_console_format_append_literal(buffer, "[Object]");
+    return inox_console_format_append(buffer, "[Object]", 8);
   }
 
   if (value.tag == INOX_TAG_UNDEFINED) {
-    return inox_console_format_append_literal(buffer, "undefined");
+    return inox_console_format_append(buffer, "undefined", 9);
   }
 
   if (value.tag == INOX_TAG_NULL) {
-    return inox_console_format_append_literal(buffer, "null");
+    return inox_console_format_append(buffer, "null", 4);
   }
 
   if (value.tag == INOX_TAG_BOOL) {
-    return inox_console_format_append_literal(buffer, value.as.boolean ? "true" : "false");
+    return value.as.boolean
+      ? inox_console_format_append(buffer, "true", 4)
+      : inox_console_format_append(buffer, "false", 5);
   }
 
   if (value.tag == INOX_TAG_NUMBER) {
@@ -416,27 +414,26 @@ static inox_status inox_console_format_value_into(ConsoleFormatBuffer* buffer, i
   }
 
   if (value.tag == INOX_TAG_MAP) {
-    return inox_console_format_append_literal(buffer, "[Map]");
+    return inox_console_format_append(buffer, "[Map]", 5);
   }
 
   if (value.tag == INOX_TAG_SET) {
-    return inox_console_format_append_literal(buffer, "[Set]");
+    return inox_console_format_append(buffer, "[Set]", 5);
   }
 
   if (value.tag == INOX_TAG_BYTES) {
-    return inox_console_format_append_literal(buffer, "[Bytes]");
+    return inox_console_format_append(buffer, "[Bytes]", 7);
   }
 
   if (value.tag == INOX_TAG_FUNCTION) {
-    return inox_console_format_append_literal(buffer, "[Function]");
+    return inox_console_format_append(buffer, "[Function]", 10);
   }
 
-  return inox_console_format_append_literal(buffer, "undefined");
+  return inox_console_format_append(buffer, "undefined", 9);
 }
 
 namespace inox {
 
-static inox_status console_newline(ConsoleStream stream);
 static inox_status console_write(ConsoleStream stream, const char* bytes, size_t len);
 static inox_status console_write_line(ConsoleStream stream, const char* bytes, size_t len);
 static inox_status console_print_value(ConsoleStream stream, inox_value value);
@@ -643,10 +640,6 @@ ConsoleArg::ConsoleArg(const Value& value)
     string(nullptr),
     value(value.raw()) {}
 
-static inox_status console_newline(ConsoleStream stream) {
-  return console_write(stream, "\n", 1);
-}
-
 static inox_status console_write(ConsoleStream stream, const char* bytes, size_t len) {
   if (bytes == 0 && len != 0) {
     return INOX_ERR_TYPE;
@@ -811,7 +804,7 @@ void console::log() const {
     return;
   }
 
-  inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_write(inox::ConsoleStream::stdout, "\n", 1);
 }
 
 void console::log(inox::StringView text) const {
@@ -884,7 +877,7 @@ void console::info() const {
     return;
   }
 
-  inox::console_newline(inox::ConsoleStream::stdout);
+  inox::console_write(inox::ConsoleStream::stdout, "\n", 1);
 }
 
 void console::info(inox::StringView text) const {
@@ -957,7 +950,7 @@ void console::warn() const {
     return;
   }
 
-  inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_write(inox::ConsoleStream::stderr, "\n", 1);
 }
 
 void console::warn(inox::StringView text) const {
@@ -1030,7 +1023,7 @@ void console::error() const {
     return;
   }
 
-  inox::console_newline(inox::ConsoleStream::stderr);
+  inox::console_write(inox::ConsoleStream::stderr, "\n", 1);
 }
 
 void console::error(inox::StringView text) const {
@@ -1554,7 +1547,7 @@ static inox_status inox_console_printf_line(
     return status;
   }
 
-  return inox::console_newline(stream);
+  return inox::console_write(stream, "\n", 1);
 }
 
 class console console;

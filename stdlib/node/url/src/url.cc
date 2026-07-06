@@ -75,7 +75,6 @@ static inox_status inox_url_normalized_field_value(
   inox_value* out
 );
 static inox_status inox_url_rebuild_href(inox_allocator* allocator, inox_value url);
-static inox_status inox_url_search_params_query(inox_value params, inox_value* retained, const char** bytes, size_t* len);
 static const inox_shape* inox_url_search_params_shape(void);
 static inox_status inox_url_search_params_store_query(inox_allocator* allocator, inox_value params, const char* bytes, size_t len);
 static inox_status inox_url_search_params_from_string(
@@ -498,7 +497,7 @@ void URLSearchParams::append(inox::StringView name, inox::StringView value) {
   inox_value retained = inox_undefined_value();
   const char* query_bytes = 0;
   size_t query_len = 0;
-  inox_status status = inox_url_search_params_query(raw(), &retained, &query_bytes, &query_len);
+  inox_status status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query_bytes, &query_len);
 
   if (status != INOX_OK) {
     inox_url_throw_failed("URLSearchParams.append failed");
@@ -546,7 +545,7 @@ inox::Value URLSearchParams::get(inox::StringView name) const {
   size_t value_len = 0;
   inox::Value out;
 
-  status = inox_url_search_params_query(raw(), &retained, &query, &query_len);
+  status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query, &query_len);
 
   if (status == INOX_OK && inox_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, &value, &value_len)) {
     char* decoded = 0;
@@ -596,7 +595,7 @@ bool URLSearchParams::has(inox::StringView name) const {
   size_t query_len = 0;
   bool found = false;
 
-  status = inox_url_search_params_query(raw(), &retained, &query, &query_len);
+  status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query, &query_len);
 
   if (status == INOX_OK) {
     found = inox_url_search_params_has_encoded_name(query, query_len, encoded_name, encoded_name_len, 0, 0) != 0;
@@ -627,7 +626,7 @@ void URLSearchParams::remove(inox::StringView name) {
   const char* query = 0;
   size_t query_len = 0;
 
-  status = inox_url_search_params_query(raw(), &retained, &query, &query_len);
+  status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query, &query_len);
 
   char* next = 0;
   size_t next_len = 0;
@@ -667,7 +666,7 @@ void URLSearchParams::set(inox::StringView name, inox::StringView value) {
   const char* query_bytes = 0;
   size_t query_len = 0;
 
-  status = inox_url_search_params_query(raw(), &retained, &query_bytes, &query_len);
+  status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query_bytes, &query_len);
 
   char* query = 0;
   size_t next_len = 0;
@@ -711,7 +710,7 @@ inox::String URLSearchParams::toString() const {
   inox_value retained = inox_undefined_value();
   const char* query = 0;
   size_t query_len = 0;
-  inox_status status = inox_url_search_params_query(raw(), &retained, &query, &query_len);
+  inox_status status = inox_url_value_string(raw(), INOX_URL_SEARCH_PARAMS_QUERY_INDEX, &retained, &query, &query_len);
 
   if (status != INOX_OK) {
     inox_release(retained);
@@ -1214,10 +1213,6 @@ static inox_status inox_url_rebuild_href(inox_allocator* allocator, inox_value u
   }
 
   return status;
-}
-
-static inox_status inox_url_search_params_query(inox_value params, inox_value* retained, const char** bytes, size_t* len) {
-  return inox_url_value_string(params, INOX_URL_SEARCH_PARAMS_QUERY_INDEX, retained, bytes, len);
 }
 
 static inox_status inox_url_search_params_store_query(inox_allocator* allocator, inox_value params, const char* bytes, size_t len) {
