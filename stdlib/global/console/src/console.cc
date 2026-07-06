@@ -793,7 +793,7 @@ int console_printf(ConsoleStream stream, const char* format, ...) {
 } // namespace inox
 
 inox_status console::log() const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -801,7 +801,7 @@ inox_status console::log() const {
 }
 
 inox_status console::log(const char* text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -813,7 +813,7 @@ inox_status console::log(const char* text) const {
 }
 
 inox_status console::log(inox::StringView text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -821,7 +821,7 @@ inox_status console::log(inox::StringView text) const {
 }
 
 inox_status console::log(const inox::String& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -829,7 +829,7 @@ inox_status console::log(const inox::String& value) const {
 }
 
 inox_status console::log(inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -837,7 +837,7 @@ inox_status console::log(inox_value value) const {
 }
 
 inox_status console::log(const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -845,7 +845,7 @@ inox_status console::log(const inox::Value& value) const {
 }
 
 inox_status console::log(const char* prefix, inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -873,7 +873,7 @@ inox_status console::log(const char* prefix, inox_value value) const {
 }
 
 inox_status console::log(const char* prefix, const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -954,7 +954,7 @@ inox_status console::log(
 }
 
 inox_status console::info() const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -962,7 +962,7 @@ inox_status console::info() const {
 }
 
 inox_status console::info(const char* text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -974,7 +974,7 @@ inox_status console::info(const char* text) const {
 }
 
 inox_status console::info(inox::StringView text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -982,7 +982,7 @@ inox_status console::info(inox::StringView text) const {
 }
 
 inox_status console::info(const inox::String& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -990,7 +990,7 @@ inox_status console::info(const inox::String& value) const {
 }
 
 inox_status console::info(inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -998,7 +998,7 @@ inox_status console::info(inox_value value) const {
 }
 
 inox_status console::info(const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1006,7 +1006,7 @@ inox_status console::info(const inox::Value& value) const {
 }
 
 inox_status console::info(const char* prefix, inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1034,7 +1034,7 @@ inox_status console::info(const char* prefix, inox_value value) const {
 }
 
 inox_status console::info(const char* prefix, const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1115,7 +1115,7 @@ inox_status console::info(
 }
 
 inox_status console::warn() const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1123,7 +1123,7 @@ inox_status console::warn() const {
 }
 
 inox_status console::warn(const char* text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1135,7 +1135,7 @@ inox_status console::warn(const char* text) const {
 }
 
 inox_status console::warn(inox::StringView text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1143,7 +1143,7 @@ inox_status console::warn(inox::StringView text) const {
 }
 
 inox_status console::warn(const inox::String& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1151,7 +1151,7 @@ inox_status console::warn(const inox::String& value) const {
 }
 
 inox_status console::warn(inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1159,7 +1159,7 @@ inox_status console::warn(inox_value value) const {
 }
 
 inox_status console::warn(const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1167,7 +1167,7 @@ inox_status console::warn(const inox::Value& value) const {
 }
 
 inox_status console::warn(const char* prefix, inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1195,7 +1195,7 @@ inox_status console::warn(const char* prefix, inox_value value) const {
 }
 
 inox_status console::warn(const char* prefix, const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1276,7 +1276,7 @@ inox_status console::warn(
 }
 
 inox_status console::error() const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1284,7 +1284,7 @@ inox_status console::error() const {
 }
 
 inox_status console::error(const char* text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1296,7 +1296,7 @@ inox_status console::error(const char* text) const {
 }
 
 inox_status console::error(inox::StringView text) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1304,7 +1304,7 @@ inox_status console::error(inox::StringView text) const {
 }
 
 inox_status console::error(const inox::String& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1312,7 +1312,7 @@ inox_status console::error(const inox::String& value) const {
 }
 
 inox_status console::error(inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1320,7 +1320,7 @@ inox_status console::error(inox_value value) const {
 }
 
 inox_status console::error(const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1328,7 +1328,7 @@ inox_status console::error(const inox::Value& value) const {
 }
 
 inox_status console::error(const char* prefix, inox_value value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1356,7 +1356,7 @@ inox_status console::error(const char* prefix, inox_value value) const {
 }
 
 inox_status console::error(const char* prefix, const inox::Value& value) const {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 
@@ -1434,10 +1434,6 @@ inox_status console::error(
   };
 
   return printf_line(inox::ConsoleStream::stderr, format, args, 16);
-}
-
-bool console::skip_write() {
-  return inox::thrown();
 }
 
 static bool inox_console_is_format_conversion(char value) {
@@ -1753,7 +1749,7 @@ inox_status console::printf_line(
   const inox::ConsoleArg* args,
   size_t arg_count
 ) {
-  if (skip_write()) {
+  if (inox::thrown()) {
     return INOX_OK;
   }
 

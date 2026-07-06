@@ -1,20 +1,8 @@
 import { osRuntimeConstantValue } from './descriptor.ts'
 import type { AnyNode } from '../../../../compiler/types.ts'
-import { emitPrepareOwnedValueWrite, emitStatusCheck, nextCName, registerOwnedValue } from '../../../../compiler/c/context.ts'
-import { cStringLiteral, utf8ByteLength } from '../../../../compiler/c/identifiers.ts'
 import type { CPreparedExpression as PreparedExpression } from '../../../../compiler/c/types.ts'
 
-type OsCContext = {
-  cleanupEnabled: boolean
-  failureStatement?: string | null
-  failureStatementUsed?: boolean
-  nextId: number
-  ownedValues: string[]
-  returnType?: string
-  statusReturn: boolean
-  throwingFunction: boolean
-  usedCleanupGoto: boolean
-}
+type OsCContext = {}
 
 export function cOsRuntimeMethodName(expression: AnyNode | null | undefined): string | null {
   if (expression === null || typeof expression === 'undefined' || expression.type !== 'CallExpression') {
@@ -49,6 +37,8 @@ export function cOsRuntimeConstantValue(name: string): string | null {
 }
 
 export function emitPreparedOsConstantExpression(expression: AnyNode, context: OsCContext): PreparedExpression | null {
+  void context
+
   const constant = cOsRuntimeConstantName(expression)
   let value: string | null = null
 
@@ -60,20 +50,11 @@ export function emitPreparedOsConstantExpression(expression: AnyNode, context: O
     return null
   }
 
-  const out = nextCName(context, 'inox_os_constant')
-  registerOwnedValue(context, out)
-
-  const lines = emitPrepareOwnedValueWrite(out)
-  lines.push(
-    emitStatusCheck(
-      `inox_string_from_literal(&inox_default_allocator, ${cStringLiteral(value)}, ${utf8ByteLength(value)}, &${out})`,
-      context
-    )
-  )
-
   return {
-    lines,
-    expression: out
+    lines: [],
+    expression: 'os.EOL',
+    cppType: 'inox::String',
+    owned: false
   }
 }
 
@@ -81,20 +62,18 @@ export function emitPreparedOsStringCallExpression(
   expression: AnyNode,
   context: OsCContext
 ): PreparedExpression | null {
+  void context
+
   const method = cOsRuntimeMethodName(expression)
 
   if (method === null || typeof method === 'undefined') {
     return null
   }
 
-  const out = nextCName(context, 'inox_os_value')
-  const lines = emitPrepareOwnedValueWrite(out)
-  registerOwnedValue(context, out)
-
-  lines.push(emitStatusCheck(`inox_os_${method}(&inox_default_allocator, &${out})`, context))
-
   return {
-    lines,
-    expression: out
+    lines: [],
+    expression: `os.${method}()`,
+    cppType: 'inox::String',
+    owned: false
   }
 }

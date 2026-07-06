@@ -198,7 +198,6 @@ public:
   ) const;
 
 private:
-  static bool skip_write();
   static inox_status printf_line(
     inox::ConsoleStream stream,
     const char* format,
