@@ -1345,7 +1345,7 @@ export function emitCUnit(
     jsGlobalRoots,
     topLevelNodes
   )
-  baseContext.processEntryPath = entryPath
+  baseContext.runtimeEntryPath = entryPath
   baseContext.classInfos = createClassInfos(classes, diagnostics)
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, baseContext.classInfos)
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
@@ -1395,9 +1395,7 @@ export function emitCUnit(
   const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
   const needsBinaryRuntime: boolean = preludeRequirements.needsBinaryRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
-  const needsChildProcessRuntime: boolean = preludeRequirements.needsChildProcessRuntime
   const needsFsRuntime: boolean = preludeRequirements.needsFsRuntime
-  const needsProcessRuntime: boolean = preludeRequirements.needsProcessRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
   const needsRegexpRuntime: boolean = preludeRequirements.needsRegexpRuntime
   const needsTimerRuntime: boolean = preludeRequirements.needsTimerRuntime
@@ -1406,7 +1404,7 @@ export function emitCUnit(
   const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
   const needsHttpRuntime: boolean = preludeRequirements.needsHttpRuntime
   const needsNetRuntime: boolean = preludeRequirements.needsNetRuntime
-  baseContext.processRuntime = needsProcessRuntime
+  baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.mathRuntimeInitStatement = needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
   if (needsAsyncRuntime) {
     baseContext.unhandledRejectionFlag = 'inox_unhandled_rejection'
@@ -1432,9 +1430,7 @@ export function emitCUnit(
     needsSetRuntime,
     needsBinaryRuntime,
     needsObjectRuntime,
-    needsChildProcessRuntime,
     needsFsRuntime,
-    needsProcessRuntime,
     needsJsonRuntime,
     needsRegexpRuntime,
     needsTimerRuntime,

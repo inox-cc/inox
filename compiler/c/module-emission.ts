@@ -414,7 +414,7 @@ export function emitCModuleSource(
     functions.push(entry.node)
   }
 
-  context.processRuntime = prelude.needsProcessRuntime
+  context.runtimeEntrypointAdapter = prelude.runtimeEntrypointAdapter
   context.mathRuntimeInitStatement = prelude.needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
   if (prelude.needsAsyncRuntime) {
     context.unhandledRejectionFlag = `${plan.symbolPrefix}_unhandled_rejection`
@@ -462,9 +462,7 @@ export function emitCModuleSource(
       prelude.needsSetRuntime,
       prelude.needsBinaryRuntime,
       prelude.needsObjectRuntime,
-      prelude.needsChildProcessRuntime,
       prelude.needsFsRuntime,
-      prelude.needsProcessRuntime,
       prelude.needsJsonRuntime,
       prelude.needsRegexpRuntime,
       prelude.needsTimerRuntime,
@@ -1383,7 +1381,7 @@ function createCModuleBaseContext(
   }
 
   const context = deps.createBaseContext(diagnostics, functionDeclarations, functionEffects, jsGlobalRoots, ir.body)
-  context.processEntryPath = plan.relativeSourcePath
+  context.runtimeEntryPath = plan.relativeSourcePath
   const classNodes = collectIrTopLevelNodes(ir, 'class')
 
   context.classInfos = createClassInfos(classNodes, diagnostics, plan.classSymbolNames)
@@ -2385,9 +2383,15 @@ function emitCModuleMainFunction(
   lines.push('}')
   lines.push('')
 
-  if (context.processRuntime) {
+  if (context.runtimeEntrypointAdapter !== null) {
     lines.push('int main(int argc, char** argv) {')
-    lines.push(`  return inox::main(argc, argv, ${cStringLiteral(plan.relativeSourcePath)}, inox_main);`)
+    if (context.runtimeEntrypointAdapter.acceptsEntryPath) {
+      lines.push(
+        `  return ${context.runtimeEntrypointAdapter.cFunction}(argc, argv, ${cStringLiteral(plan.relativeSourcePath)}, inox_main);`
+      )
+    } else {
+      lines.push(`  return ${context.runtimeEntrypointAdapter.cFunction}(argc, argv, inox_main);`)
+    }
   } else {
     lines.push('int main(void) {')
     lines.push('  return inox::main(inox_main);')

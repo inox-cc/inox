@@ -270,6 +270,15 @@ export function createObjectProperty(key: AnyNode, value: AnyNode): AnyNode {
   }
 }
 
+export function createObjectSpreadProperty(argument: AnyNode, loc: SourceLocation): AnyNode {
+  return {
+    spread: true,
+    key: '',
+    value: argument,
+    loc
+  }
+}
+
 export function createObjectLiteral(start: Token, properties: AnyNode[]): AnyNode {
   return {
     type: 'ObjectLiteral',

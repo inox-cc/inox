@@ -1,4 +1,5 @@
 import type { AnyNode, Diagnostic, IrFunctionEffect } from '../types.ts'
+import type { RuntimeEntrypointAdapterDescriptor } from '../extensions/types.ts'
 import type { AsyncTaskLoweringDependencies } from './async/tasks.ts'
 import type {
   CArrayElementInfo,
@@ -190,10 +191,10 @@ export type CEmitContext = {
   netImportNames: CStringSet
   nextId: number
   nullableLoweringDependencies: NullableLoweringDependencies
-  processEntryPath: string | null
+  runtimeEntryPath: string | null
+  runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: CPromiseChainWrapperMap
-  processRuntime: boolean
   regexpLiterals: CRegExpLiteralMap
   runtimeFunctionParams: CFunctionTypeMap
   statementLoweringDependencies: StatementLoweringDependencies
@@ -434,8 +435,8 @@ export function createFunctionContext(
     netImportNames: baseContext.netImportNames,
     nextId: baseContext.nextId,
     nullableLoweringDependencies: baseContext.nullableLoweringDependencies,
-    processEntryPath: baseContext.processEntryPath,
-    processRuntime: baseContext.processRuntime,
+    runtimeEntryPath: baseContext.runtimeEntryPath,
+    runtimeEntrypointAdapter: baseContext.runtimeEntrypointAdapter,
     promiseChainArrowWrappers: baseContext.promiseChainArrowWrappers,
     promiseChainWrappers: baseContext.promiseChainWrappers,
     regexpLiterals: cloneCRegExpLiteralMap(baseContext.regexpLiterals),

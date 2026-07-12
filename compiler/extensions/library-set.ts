@@ -61,6 +61,28 @@ export function compilerLibraryOperationForImport(
   return null
 }
 
+export function compilerLibraryOperationForGlobal(
+  libraries: CompilerLibrarySet,
+  globalPath: string[],
+  kind: LibraryOperationKind
+): LibraryOperationDescriptor | null {
+  if (globalPath.length === 0) {
+    return null
+  }
+
+  const bindingId = `global:${globalPath.join('.')}`
+
+  for (let index = 0; index < libraries.operations.length; index = index + 1) {
+    const operation = libraries.operations[index]
+
+    if (operation.kind === kind && operationHasBinding(operation, bindingId)) {
+      return operation
+    }
+  }
+
+  return null
+}
+
 export function compilerLibraryOperationForReceiver(
   libraries: CompilerLibrarySet,
   receiverTypeId: string | null | undefined,
@@ -71,19 +93,23 @@ export function compilerLibraryOperationForReceiver(
     return null
   }
 
-  for (let index = 0; index < libraries.operations.length; index = index + 1) {
-    const operation = libraries.operations[index]
+  const exact = compilerLibraryOperationForReceiverBinding(
+    libraries,
+    receiverTypeId,
+    `${receiverTypeId}.${memberName}`,
+    kind
+  )
 
-    if (
-      operation.kind === kind &&
-      operation.receiverTypeId === receiverTypeId &&
-      operationHasBinding(operation, `${receiverTypeId}.${memberName}`)
-    ) {
-      return operation
-    }
+  if (exact !== null) {
+    return exact
   }
 
-  return null
+  return compilerLibraryOperationForReceiverBinding(
+    libraries,
+    receiverTypeId,
+    `${receiverTypeId}.*`,
+    kind
+  )
 }
 
 export function compilerLibraryHasModuleDeclaration(
@@ -135,4 +161,25 @@ function operationHasBinding(operation: LibraryOperationDescriptor, bindingId: s
   }
 
   return false
+}
+
+function compilerLibraryOperationForReceiverBinding(
+  libraries: CompilerLibrarySet,
+  receiverTypeId: string,
+  bindingId: string,
+  kind: LibraryOperationKind
+): LibraryOperationDescriptor | null {
+  for (let index = 0; index < libraries.operations.length; index = index + 1) {
+    const operation = libraries.operations[index]
+
+    if (
+      operation.kind === kind &&
+      operation.receiverTypeId === receiverTypeId &&
+      operationHasBinding(operation, bindingId)
+    ) {
+      return operation
+    }
+  }
+
+  return null
 }

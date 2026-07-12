@@ -746,7 +746,7 @@ function prepareStdlibRuntimeImportDeclarations(
       continue
     }
 
-    applyImportedDeclarationMetadata(specifier, exported)
+    applyImportedDeclarationMetadata(specifier, exported, importedProgram)
 
     if (exported.type !== 'FunctionDeclaration' && exported.type !== 'ClassDeclaration') {
       continue
@@ -917,9 +917,14 @@ function applyImportedFunctionMetadata(specifier: AnyNode, importedProgram: Prog
   applyImportedFunctionDeclarationMetadata(specifier, declaration)
 }
 
-function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNode): void {
+function applyImportedDeclarationMetadata(
+  specifier: AnyNode,
+  declaration: AnyNode,
+  program: ProgramNode
+): void {
   if (declaration.type === 'FunctionDeclaration') {
     applyImportedFunctionDeclarationMetadata(specifier, declaration)
+    specifier.functionOverloads = findExportedFunctionDeclarations(program, declaration.name)
     return
   }
 
@@ -987,6 +992,18 @@ function findExportedFunctionDeclaration(program: ProgramNode, name: string): An
   }
 
   return null
+}
+
+function findExportedFunctionDeclarations(program: ProgramNode, name: string): AnyNode[] {
+  const declarations: AnyNode[] = []
+
+  for (const item of program.body) {
+    if (item.type === 'FunctionDeclaration' && item.exported === true && item.name === name) {
+      declarations.push(item)
+    }
+  }
+
+  return declarations
 }
 
 function moduleExportedDeclaration(module: ModuleRecord, name: string): AnyNode | null {

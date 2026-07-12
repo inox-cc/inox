@@ -1,27 +1,21 @@
 import type { AnyNode, IrFeature } from '../../types.ts'
 import type { CompilerFeatureDescriptor } from '../../features/types.ts'
 import { binaryFeature, binaryFeatureChildNodes, collectBinaryIrFeatures } from '../../../stdlib/node/buffer/compiler/feature.ts'
-import { childProcessFeature, collectChildProcessIrFeatures } from '../../../stdlib/node/child_process/compiler/feature.ts'
 import { collectCryptoIrFeatures, cryptoFeature } from '../../../stdlib/node/crypto/compiler/feature.ts'
 import { collectFsIrFeatures, fsFeature } from '../../../stdlib/node/fs/compiler/feature.ts'
-import { collectProcessIrFeatures, processFeature } from '../../../stdlib/node/process/compiler/feature.ts'
 import { collectTimersIrFeatures, timersFeature } from '../../../stdlib/node/timers/compiler/feature.ts'
 
 export const nodeStdlibFeatures: CompilerFeatureDescriptor[] = [
   binaryFeature,
-  childProcessFeature,
   cryptoFeature,
   fsFeature,
-  processFeature,
   timersFeature
 ]
 
 export function collectNodeStdlibIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
   collectBinaryIrFeatures(node, features)
-  collectChildProcessIrFeatures(node, features)
   collectCryptoIrFeatures(node, features)
   collectFsIrFeatures(node, features)
-  collectProcessIrFeatures(node, features)
   collectTimersIrFeatures(node, features)
 }
 

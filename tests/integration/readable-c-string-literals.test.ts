@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { cStringLiteral, escapeCPrintfFormatText } from '../../compiler/c/identifiers.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -228,12 +229,13 @@ console.log(process.argv[1])
   const processEntryFiles = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host: processEntryHost,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const processEntrySource = generatedTextFile(processEntryFiles, 'src/index.cc').code
 
-  assert.match(processEntrySource, /inox::main\(argc, argv, "src\/index\.ts", inox_main\)/)
-  assert.doesNotMatch(processEntrySource, /inox::main\(argc, argv, "\/pkg\//)
+  assert.match(processEntrySource, /inox::process_main\(argc, argv, "src\/index\.ts", inox_main\)/)
+  assert.doesNotMatch(processEntrySource, /inox::process_main\(argc, argv, "\/pkg\//)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

@@ -1262,12 +1262,14 @@ export function emitMainWrapper(
   lines.push('}')
   lines.push('')
 
-  if (context.processRuntime) {
+  if (context.runtimeEntrypointAdapter !== null) {
     lines.push('int main(int argc, char** argv) {')
-    if (baseContext.processEntryPath !== null) {
-      lines.push(`  return inox::main(argc, argv, ${cStringLiteral(baseContext.processEntryPath)}, inox_main);`)
+    if (context.runtimeEntrypointAdapter.acceptsEntryPath && baseContext.runtimeEntryPath !== null) {
+      lines.push(
+        `  return ${context.runtimeEntrypointAdapter.cFunction}(argc, argv, ${cStringLiteral(baseContext.runtimeEntryPath)}, inox_main);`
+      )
     } else {
-      lines.push('  return inox::main(argc, argv, inox_main);')
+      lines.push(`  return ${context.runtimeEntrypointAdapter.cFunction}(argc, argv, inox_main);`)
     }
   } else {
     lines.push('int main(void) {')

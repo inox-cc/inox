@@ -23,6 +23,7 @@ type CompilerLibraryExpressionNode = AnyNode & {
 
 export type CompilerLibraryLoweringDependencies = {
   emitCValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
+  emitPreparedNumberExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AnyNode,
     context: CFunctionContext,
@@ -69,7 +70,9 @@ export function emitPreparedCompilerLibraryCallExpression(
   if (
     (expression.type !== 'CallExpression' &&
       expression.type !== 'NewExpression' &&
-      expression.type !== 'AssignmentExpression') ||
+      expression.type !== 'AssignmentExpression' &&
+      expression.type !== 'MemberExpression' &&
+      expression.type !== 'IndexExpression') ||
     target === null ||
     typeof target === 'undefined' ||
     argumentKinds === null ||
@@ -85,6 +88,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   let sourceArgumentIndex = 0
   let optionalArgumentPresent = false
   let receiverExpression = ''
+  let stringViewArrayCount = 0
   const sourceArguments = compilerLibrarySourceArguments(expression)
 
   for (let kindIndex = 0; kindIndex < argumentKinds.length; kindIndex = kindIndex + 1) {
@@ -100,6 +104,30 @@ export function emitPreparedCompilerLibraryCallExpression(
       const prepared = dependencies.emitCValueExpression(receiver, context)
       pushLines(lines, prepared.lines)
       receiverExpression = prepared.expression
+      continue
+    }
+
+    if (kind === 'member-name-string-view') {
+      const memberName = compilerLibraryMemberName(expression)
+
+      if (memberName !== null) {
+        argumentsList.push(cStringLiteral(memberName))
+        continue
+      }
+
+      const memberExpression = compilerLibraryDynamicMemberExpression(expression)
+
+      if (memberExpression === null) {
+        return null
+      }
+
+      const prepared = dependencies.emitPreparedStringBytesOperand(
+        memberExpression,
+        context,
+        'inox_library_member'
+      )
+      pushLines(lines, prepared.lines)
+      argumentsList.push(emitCompilerLibraryStringArgument(prepared))
       continue
     }
 
@@ -147,6 +175,20 @@ export function emitPreparedCompilerLibraryCallExpression(
       continue
     }
 
+    if (kind === 'number') {
+      const sourceArgument = sourceArguments[sourceArgumentIndex]
+      sourceArgumentIndex = sourceArgumentIndex + 1
+
+      if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+        return null
+      }
+
+      const prepared = dependencies.emitPreparedNumberExpression(sourceArgument, context)
+      pushLines(lines, prepared.lines)
+      argumentsList.push(prepared.expression)
+      continue
+    }
+
     if (kind === 'optional-value') {
       let argumentExpression = 'inox_undefined_value()'
 
@@ -161,6 +203,62 @@ export function emitPreparedCompilerLibraryCallExpression(
 
       sourceArgumentIndex = sourceArgumentIndex + 1
       argumentsList.push(argumentExpression)
+      continue
+    }
+
+    if (kind === 'optional-argument') {
+      if (sourceArgumentIndex < sourceArguments.length) {
+        const prepared = dependencies.emitCValueExpression(sourceArguments[sourceArgumentIndex], context)
+        pushLines(lines, prepared.lines)
+        argumentsList.push(prepared.expression)
+      }
+
+      sourceArgumentIndex = sourceArgumentIndex + 1
+      continue
+    }
+
+    if (kind === 'optional-number') {
+      if (sourceArgumentIndex < sourceArguments.length) {
+        const prepared = dependencies.emitPreparedNumberExpression(sourceArguments[sourceArgumentIndex], context)
+        pushLines(lines, prepared.lines)
+        argumentsList.push(prepared.expression)
+      }
+
+      sourceArgumentIndex = sourceArgumentIndex + 1
+      continue
+    }
+
+    if (kind === 'string-view-array' || kind === 'optional-string-view-array') {
+      let sourceArgument: AnyNode | null = null
+
+      if (sourceArgumentIndex < sourceArguments.length) {
+        sourceArgument = sourceArguments[sourceArgumentIndex]
+      }
+
+      if (sourceArgument !== null && sourceArgument.type === 'ArrayLiteral') {
+        sourceArgumentIndex = sourceArgumentIndex + 1
+        const prepared = emitCompilerLibraryStringArray(
+          sourceArgument.elements,
+          context,
+          dependencies,
+          lines
+        )
+        argumentsList.push(prepared.expression)
+        stringViewArrayCount = prepared.count
+        continue
+      }
+
+      if (kind === 'string-view-array') {
+        sourceArgumentIndex = sourceArgumentIndex + 1
+      }
+
+      argumentsList.push('nullptr')
+      stringViewArrayCount = 0
+      continue
+    }
+
+    if (kind === 'string-view-array-count') {
+      argumentsList.push(`${stringViewArrayCount}`)
       continue
     }
 
@@ -200,7 +298,21 @@ export function emitPreparedCompilerLibraryCallExpression(
     callTarget = `${receiverExpression}.${target}`
   }
 
-  const callExpression = `${callTarget}(${joinStrings(argumentsList, ', ')})`
+  let callExpression = `${callTarget}(${joinStrings(argumentsList, ', ')})`
+
+  if (item.libraryCCallStyle === 'index') {
+    if (receiverExpression === '' || argumentsList.length !== 1) {
+      return null
+    }
+
+    callExpression = `${receiverExpression}[${argumentsList[0]}]`
+  } else if (item.libraryCCallStyle === 'member-assignment') {
+    if (receiverExpression === '' || argumentsList.length !== 1) {
+      return null
+    }
+
+    callExpression = `(${receiverExpression}.${target} = ${argumentsList[0]})`
+  }
 
   if (cppType === 'void') {
     lines.push(`${callExpression};`)
@@ -304,7 +416,24 @@ function emitPreparedCompilerLibraryObjectCall(
   return {
     lines,
     expression: out,
-    cppType
+    cppType,
+    valueType: 'object'
+  }
+}
+
+function emitCompilerLibraryStringArray(
+  sourceArguments: AnyNode[],
+  context: CFunctionContext,
+  dependencies: CompilerLibraryLoweringDependencies,
+  lines: string[]
+): { expression: string; count: number } {
+  if (sourceArguments.length === 0) {
+    return { expression: 'nullptr', count: 0 }
+  }
+
+  return {
+    expression: emitCompilerLibraryVariadicStringArray(sourceArguments, context, dependencies, lines),
+    count: sourceArguments.length
   }
 }
 
@@ -340,6 +469,14 @@ function compilerLibrarySourceArguments(expression: AnyNode): AnyNode[] {
     return [expression.value]
   }
 
+  if (expression.type === 'IndexExpression') {
+    return [expression.index]
+  }
+
+  if (expression.type === 'MemberExpression') {
+    return []
+  }
+
   return expression.args
 }
 
@@ -352,8 +489,36 @@ function compilerLibraryReceiver(expression: AnyNode): AnyNode | null {
     return null
   }
 
+  if (expression.type === 'IndexExpression' || expression.type === 'MemberExpression') {
+    return expression.object
+  }
+
   if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression') {
     return expression.callee.object
+  }
+
+  return null
+}
+
+function compilerLibraryMemberName(expression: AnyNode): string | null {
+  if (expression.type === 'MemberExpression') {
+    return expression.property
+  }
+
+  if (expression.type === 'AssignmentExpression' && expression.target.type === 'MemberExpression') {
+    return expression.target.property
+  }
+
+  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
+    return expression.index.value
+  }
+
+  return null
+}
+
+function compilerLibraryDynamicMemberExpression(expression: AnyNode): AnyNode | null {
+  if (expression.type === 'IndexExpression') {
+    return expression.index
   }
 
   return null

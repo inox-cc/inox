@@ -25,11 +25,18 @@ export type LibraryOperationKind =
 
 export type LibraryCArgumentKind =
   | 'receiver'
+  | 'member-name-string-view'
   | 'string-view'
   | 'optional-string-view'
+  | 'optional-argument'
+  | 'optional-number'
   | 'optional-value'
   | 'argument-presence'
   | 'value'
+  | 'number'
+  | 'string-view-array'
+  | 'optional-string-view-array'
+  | 'string-view-array-count'
   | 'variadic-string-view-array'
   | 'variadic-count'
   | 'result-shape'
@@ -38,12 +45,25 @@ export type LibraryResultShapeFieldDescriptor = {
   name: string
   valueType: string
   readonly: boolean
+  resultTypeId?: LibraryObjectTypeId | null
+  resultShapeFields?: LibraryNestedResultShapeFieldDescriptor[]
+  cppType?: string | null
+}
+
+export type LibraryNestedResultShapeFieldDescriptor = {
+  name: string
+  valueType: string
+  readonly: boolean
+  resultTypeId?: LibraryObjectTypeId | null
+  cppType?: string | null
 }
 
 export type LibraryArgumentCheckDescriptor = {
   valueTypes: string[]
   objectTypeIds?: LibraryObjectTypeId[]
   objectFieldValueType?: string | null
+  arrayLiteralRequired?: boolean
+  arrayElementValueTypes?: string[]
 }
 
 export type LibraryOperationDescriptor = {
@@ -56,9 +76,10 @@ export type LibraryOperationDescriptor = {
   cExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
+  resultArrayElementType?: string | null
   receiverTypeId?: LibraryObjectTypeId | null
   resultTypeId?: LibraryObjectTypeId | null
-  cCallStyle?: 'function' | 'member' | null
+  cCallStyle?: 'function' | 'member' | 'index' | 'member-assignment' | null
   cFailureMode?: 'thrown' | 'invalid-result' | null
   minArgs?: number | null
   maxArgs?: number | null
@@ -83,11 +104,17 @@ export type IntrinsicRoleBinding = {
   bindingId: LibraryBindingId
 }
 
+export type RuntimeEntrypointAdapterDescriptor = {
+  cFunction: string
+  acceptsEntryPath: boolean
+}
+
 export type RuntimeRequirementDescriptor = {
   id: RuntimeRequirementId
   dependencies: RuntimeRequirementId[]
   cPreludeIncludes: string[]
   capabilities: PlatformCapabilityId[]
+  cEntrypointAdapter?: RuntimeEntrypointAdapterDescriptor | null
 }
 
 export type CompilerLibraryDescriptor = {

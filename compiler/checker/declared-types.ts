@@ -502,6 +502,7 @@ export function resolveObjectShapeField(
 
   let promiseValueType: ValueType | null = null
   let functionType = fieldInfo.functionType
+  const functionOverloads: FunctionTypeMetadata[] = []
 
   if (functionType === null || typeof functionType === 'undefined') {
     const fieldFunctionType = field.functionType
@@ -515,6 +516,16 @@ export function resolveObjectShapeField(
 
   if (fieldInfo.promiseValueType !== null && typeof fieldInfo.promiseValueType !== 'undefined') {
     promiseValueType = fieldInfo.promiseValueType
+  }
+
+  const sourceFunctionOverloads: FunctionTypeMetadata[] = field.functionOverloads ?? []
+
+  for (const overload of sourceFunctionOverloads) {
+    const resolved = resolveFunctionTypeMetadata(context, overload, field.loc)
+
+    if (resolved !== null && typeof resolved !== 'undefined') {
+      functionOverloads.push(resolved)
+    }
   }
 
   return {
@@ -539,6 +550,7 @@ export function resolveObjectShapeField(
     promiseValueType,
     setElementType: fieldInfo.setElementType,
     functionType,
+    functionOverloads,
     shape: fieldInfo.shape
   }
 }

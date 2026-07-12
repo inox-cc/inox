@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync, compileSource } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -82,13 +83,20 @@ console.log(value)
   assert.doesNotMatch(appMain, /inox_process_string/)
   assert.doesNotMatch(main, /return !inox_promise_has_unhandled_rejection/)
   assert.doesNotMatch(main, /return inox_process_get_exit_code\(\)/)
-  assert.match(main, /return inox::main\(argc, argv, "src\/index\.ts", inox_main\);/)
+  assert.match(main, /return inox::process_main\(argc, argv, "src\/index\.ts", inox_main\);/)
 }
 
 export function assertProcessMainEntryPathUsesStringView(): void {
-  const header = readFileSync(new URL('../../runtime/include/inox/main.h', import.meta.url), 'utf8')
+  const header = readFileSync(
+    new URL('../../stdlib/node/process/include/inox/process.h', import.meta.url),
+    'utf8'
+  )
 
-  assert.match(header, /int main\(int argc, char\*\* argv, StringView entry_path, AppMain app_main\);/)
+  assert.match(
+    header,
+    /int process_main\(int argc, char\*\* argv, StringView entry_path, void \(\*app_main\)\(void\)\);/
+  )
+  assert.doesNotMatch(header, /#include "inox\/main\.h"/)
   assert.doesNotMatch(header, /const char\* entry_path/)
 }
 
@@ -154,6 +162,7 @@ function compileModuleMainSource(source: string): string {
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
 

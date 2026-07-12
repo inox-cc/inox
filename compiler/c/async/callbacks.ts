@@ -1,5 +1,5 @@
 import { collectIrTopLevelNodeEntries } from '../../ir.ts'
-import type { AnyNode, IrProgram } from '../../types.ts'
+import type { AnyNode, IrProgram, ValueType } from '../../types.ts'
 import { isCJsGlobalRoot } from '../globals.ts'
 import { emitCFunctionName, emitCIdentifier, emitCObjectFunctionFieldName } from '../identifiers.ts'
 import { runtimeObjectLikeValueMismatchCondition } from '../runtime-values.ts'
@@ -3086,7 +3086,7 @@ export function emitPlainArrowCallbackWrapperDeclaration(
     }
   }
 
-  const statements = plainArrowCallbackStatements(wrapper.expression)
+  const statements = plainArrowCallbackStatements(wrapper.expression, returnType)
   const statementLines = deps.emitStatementList(statements, context)
   const lines: string[] = [emitPlainArrowCallbackWrapperHead(wrapper) + ' {']
 
@@ -3109,8 +3109,18 @@ export function emitPlainArrowCallbackWrapperDeclaration(
   return lines
 }
 
-function plainArrowCallbackStatements(expression: AnyNode): AnyNode[] {
+function plainArrowCallbackStatements(expression: AnyNode, returnType: ValueType): AnyNode[] {
   if (expression.expressionBody) {
+    if (returnType === 'void') {
+      return [
+        {
+          type: 'ExpressionStatement',
+          expression: expression.body,
+          loc: expression.loc
+        }
+      ]
+    }
+
     return [
       {
         type: 'ReturnStatement',

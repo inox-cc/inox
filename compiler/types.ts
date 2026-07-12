@@ -33,7 +33,6 @@ export type IrFeature =
   | 'async-runtime'
   | 'binary'
   | 'callback-values'
-  | 'child-process'
   | 'clocks'
   | 'collections'
   | 'crypto'
@@ -45,7 +44,6 @@ export type IrFeature =
   | 'number-from-string-null'
   | 'numeric-casts'
   | 'objects'
-  | 'process'
   | 'regexp'
   | 'runtime-values'
   | 'string-bytes'
@@ -160,6 +158,23 @@ export type AliasTypeInfo = {
 
 export type TypeAliasInfo = AliasTypeInfo | FunctionTypeInfo | ObjectShapeInfo
 
+export type CallableOverloadInfo = {
+  kind: string
+  valueType: ValueType
+  params?: AnyNode[]
+  returnType?: ValueType
+  returnNullable?: boolean
+  returnArrayElementType?: ValueType | null
+  returnArrayElementDeclaredType?: string | null
+  returnMapKeyType?: ValueType | null
+  returnMapValueType?: ValueType | null
+  returnPromiseValueType?: ValueType | null
+  returnSetElementType?: ValueType | null
+  returnShape?: ObjectShapeInfo | null
+  async?: boolean
+  loc?: SourceLocation
+}
+
 export type SymbolInfo = {
   kind: string
   mutable?: boolean
@@ -191,6 +206,7 @@ export type SymbolInfo = {
   constructable?: boolean
   constructorParams?: AnyNode[]
   functionType?: any
+  overloads?: CallableOverloadInfo[]
   shape?: ObjectShapeInfo | null
   loc?: SourceLocation
 }

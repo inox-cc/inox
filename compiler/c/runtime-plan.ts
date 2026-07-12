@@ -15,6 +15,7 @@ import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
 import { nodeStdlibHasSupportedCryptoGlobalUsage, nodeStdlibRuntimeImportUsage } from '../stdlib/node/c.ts'
 import type {
   CompilerLibrarySet,
+  RuntimeEntrypointAdapterDescriptor,
   RuntimeRequirementDescriptor
 } from '../extensions/types.ts'
 
@@ -34,9 +35,7 @@ export type CRuntimePreludeRequirements = {
   needsSetRuntime: boolean
   needsBinaryRuntime: boolean
   needsObjectRuntime: boolean
-  needsChildProcessRuntime: boolean
   needsFsRuntime: boolean
-  needsProcessRuntime: boolean
   needsJsonRuntime: boolean
   needsRegexpRuntime: boolean
   needsTimerRuntime: boolean
@@ -45,6 +44,7 @@ export type CRuntimePreludeRequirements = {
   needsFetchRuntime: boolean
   needsHttpRuntime: boolean
   needsNetRuntime: boolean
+  runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
 }
 
@@ -91,9 +91,7 @@ export function resolveCRuntimePreludeRequirements(
     input.hasRuntimeCallbackWrapper ||
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
-  const needsChildProcessRuntime = runtimeRequirements.has('child-process')
   const needsFsRuntime = runtimeRequirements.has('fs')
-  const needsProcessRuntime = runtimeRequirements.has('process')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsRegexpRuntime = irProgramsUseCPreludeFeature(input.irPrograms, 'regexp')
   const needsTimerRuntime = runtimeRequirements.has('timers')
@@ -145,9 +143,7 @@ export function resolveCRuntimePreludeRequirements(
     needsHttpRuntime ||
     needsNetRuntime ||
     needsCallbackRuntime ||
-    needsChildProcessRuntime ||
     needsCollectionRuntime ||
-    needsProcessRuntime ||
     needsObjectRuntime ||
     needsClassRuntime ||
     needsCppValueRuntime ||
@@ -168,9 +164,7 @@ export function resolveCRuntimePreludeRequirements(
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
-    needsChildProcessRuntime ||
     needsFsRuntime ||
-    needsProcessRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime ||
@@ -192,9 +186,7 @@ export function resolveCRuntimePreludeRequirements(
     needsSetRuntime,
     needsBinaryRuntime,
     needsObjectRuntime,
-    needsChildProcessRuntime,
     needsFsRuntime,
-    needsProcessRuntime,
     needsJsonRuntime,
     needsRegexpRuntime,
     needsTimerRuntime,
@@ -203,11 +195,13 @@ export function resolveCRuntimePreludeRequirements(
     needsFetchRuntime,
     needsHttpRuntime,
     needsNetRuntime,
+    runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes
   }
 }
 
 type CLibraryRuntimeResolution = {
+  entrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   includes: string[]
   requirements: Set<string>
 }
@@ -218,13 +212,14 @@ function resolveLibraryRuntimeRequirements(
 ): CLibraryRuntimeResolution {
   const requirements: Set<string> = new Set()
   const includes: string[] = []
+  let entrypointAdapter: RuntimeEntrypointAdapterDescriptor | null = null
 
   for (const requirement of selected) {
     requirements.add(requirement)
   }
 
   if (libraries === null || typeof libraries === 'undefined') {
-    return { includes, requirements }
+    return { entrypointAdapter, includes, requirements }
   }
 
   const pending = orderedRuntimeRequirementIds(requirements)
@@ -234,6 +229,24 @@ function resolveLibraryRuntimeRequirements(
 
     if (descriptor === null) {
       continue
+    }
+
+    const descriptorAdapter = descriptor.cEntrypointAdapter
+
+    if (descriptorAdapter !== null && typeof descriptorAdapter !== 'undefined') {
+      if (
+        entrypointAdapter !== null &&
+        (
+          entrypointAdapter.cFunction !== descriptorAdapter.cFunction ||
+          entrypointAdapter.acceptsEntryPath !== descriptorAdapter.acceptsEntryPath
+        )
+      ) {
+        throw new Error(
+          `runtime requirements select multiple entrypoint adapters: ${entrypointAdapter.cFunction}, ${descriptorAdapter.cFunction}`
+        )
+      }
+
+      entrypointAdapter = descriptorAdapter
     }
 
     for (
@@ -258,7 +271,7 @@ function resolveLibraryRuntimeRequirements(
     }
   }
 
-  return { includes, requirements }
+  return { entrypointAdapter, includes, requirements }
 }
 
 function findRuntimeRequirementDescriptor(

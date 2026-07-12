@@ -3,10 +3,6 @@ import {
   nodeBufferModuleObjectImportNames
 } from '../../../stdlib/node/buffer/compiler/descriptor.ts'
 import {
-  nodeChildProcessImportSource,
-  nodeChildProcessModuleObjectImportNames
-} from '../../../stdlib/node/child_process/compiler/descriptor.ts'
-import {
   nodeCryptoImportSource,
   nodeCryptoModuleObjectImportNames
 } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
@@ -32,10 +28,6 @@ import {
   nodeNetImportSource,
   nodeNetModuleObjectImportNames
 } from '../../../stdlib/node/net/compiler/descriptor.ts'
-import {
-  nodeProcessImportSource,
-  nodeProcessModuleObjectImportNames
-} from '../../../stdlib/node/process/compiler/descriptor.ts'
 import {
   nodeStreamImportSource,
   nodeStreamModuleObjectImportNames
@@ -80,10 +72,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
     libuvRuntimeFeature: 'node:crypto'
   },
   {
-    source: nodeChildProcessImportSource,
-    libuvRuntimeFeature: null
-  },
-  {
     source: nodeDgramImportSource,
     libuvRuntimeFeature: 'node:dgram'
   },
@@ -114,10 +102,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
   {
     source: nodeTimersImportSource,
     libuvRuntimeFeature: null
-  },
-  {
-    source: nodeProcessImportSource,
-    libuvRuntimeFeature: null
   }
 ]
 
@@ -126,11 +110,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     source: nodeBufferImportSource,
     kind: 'module-object',
     importedNames: nodeBufferModuleObjectImportNames
-  },
-  {
-    source: nodeChildProcessImportSource,
-    kind: 'module-object',
-    importedNames: nodeChildProcessModuleObjectImportNames
   },
   {
     source: nodeDgramImportSource,
@@ -176,11 +155,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     source: nodeNetImportSource,
     kind: 'connect',
     importedNames: nodeNetConnectImportNames
-  },
-  {
-    source: nodeProcessImportSource,
-    kind: 'module-object',
-    importedNames: nodeProcessModuleObjectImportNames
   },
   {
     source: nodeStreamImportSource,

@@ -3,7 +3,9 @@ import type {
   CompilerLibrarySet,
   IntrinsicRoleBinding,
   LibraryDeclarationDescriptor,
+  LibraryNestedResultShapeFieldDescriptor,
   LibraryOperationDescriptor,
+  LibraryResultShapeFieldDescriptor,
   RuntimeRequirementDescriptor
 } from './types.ts'
 
@@ -204,7 +206,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
           (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
-          operationResultShapeFingerprint(item) + ':' + (item.receiverTypeId ?? '') + ':' +
+          operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
+          (item.receiverTypeId ?? '') + ':' +
           (item.resultTypeId ?? '') + ':' + (item.cCallStyle ?? '') + ':' + (item.cFailureMode ?? '') + ':' +
           (item.minArgs ?? '') + ':' + (item.maxArgs ?? '') + ':' + operationArgumentChecksFingerprint(item) + ':' +
           (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' + (item.nullable === true ? 'nullable' : 'required') + ':' +
@@ -224,7 +227,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         requirementIds,
         item.id + ':deps=' + sortedStrings(item.dependencies).join(',') +
           ':includes=' + sortedStrings(item.cPreludeIncludes).join(',') +
-          ':capabilities=' + sortedStrings(item.capabilities).join(',')
+          ':capabilities=' + sortedStrings(item.capabilities).join(',') +
+          ':entrypoint=' + runtimeEntrypointAdapterFingerprint(item)
       )
     }
 
@@ -250,7 +254,9 @@ function operationArgumentChecksFingerprint(operation: LibraryOperationDescripto
     rows.push(
       sortedStrings(check.valueTypes).join(',') + ':' +
         sortedStrings(check.objectTypeIds ?? []).join(',') + ':' +
-        (check.objectFieldValueType ?? '')
+        (check.objectFieldValueType ?? '') + ':' +
+        (check.arrayLiteralRequired === true ? 'literal' : '') + ':' +
+        sortedStrings(check.arrayElementValueTypes ?? []).join(',')
     )
   }
 
@@ -264,14 +270,53 @@ function operationResultShapeFingerprint(operation: LibraryOperationDescriptor):
     return ''
   }
 
+  return resultShapeFieldsFingerprint(fields)
+}
+
+function resultShapeFieldsFingerprint(
+  fields: LibraryResultShapeFieldDescriptor[]
+): string {
   const rows: string[] = []
 
   for (let index = 0; index < fields.length; index = index + 1) {
     const field = fields[index]
-    rows.push(`${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}`)
+    const nestedFields = field.resultShapeFields
+    rows.push(
+      `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
+        `${field.resultTypeId ?? ''}:${field.cppType ?? ''}:` +
+        (nestedFields === null || typeof nestedFields === 'undefined'
+          ? ''
+          : `{${nestedResultShapeFieldsFingerprint(nestedFields)}}`)
+    )
   }
 
   return rows.join(',')
+}
+
+function nestedResultShapeFieldsFingerprint(
+  fields: LibraryNestedResultShapeFieldDescriptor[]
+): string {
+  const rows: string[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    rows.push(
+      `${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}:` +
+        `${field.resultTypeId ?? ''}:${field.cppType ?? ''}`
+    )
+  }
+
+  return rows.join(',')
+}
+
+function runtimeEntrypointAdapterFingerprint(requirement: RuntimeRequirementDescriptor): string {
+  const adapter = requirement.cEntrypointAdapter
+
+  if (adapter === null || typeof adapter === 'undefined') {
+    return ''
+  }
+
+  return adapter.cFunction + ':' + (adapter.acceptsEntryPath ? 'entry-path' : 'no-entry-path')
 }
 
 function shortStableHash(value: string): string {

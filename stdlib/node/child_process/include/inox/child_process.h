@@ -16,8 +16,7 @@ public:
     inox::StringView file,
     const inox::StringView* args,
     size_t arg_count,
-    const inox::Value& options,
-    const inox_shape* shape
+    const inox::Value& options
   ) const;
 };
 

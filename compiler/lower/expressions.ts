@@ -360,11 +360,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.bufferRuntimeConstant = bufferRuntimeConstant
   }
 
-  const childProcessRuntimeMethod = nullableString(source.childProcessRuntimeMethod)
-  if (childProcessRuntimeMethod !== null && typeof childProcessRuntimeMethod !== 'undefined') {
-    target.childProcessRuntimeMethod = childProcessRuntimeMethod
-  }
-
   const cryptoHashDigestEncoding = nullableString(source.cryptoHashDigestEncoding)
   if (cryptoHashDigestEncoding !== null && typeof cryptoHashDigestEncoding !== 'undefined') {
     target.cryptoHashDigestEncoding = cryptoHashDigestEncoding
@@ -463,31 +458,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   const objectRuntimeMethod = nullableString(source.objectRuntimeMethod)
   if (objectRuntimeMethod !== null && typeof objectRuntimeMethod !== 'undefined') {
     target.objectRuntimeMethod = objectRuntimeMethod
-  }
-
-  const processRuntimeEnvName = nullableString(source.processRuntimeEnvName)
-  if (processRuntimeEnvName !== null && typeof processRuntimeEnvName !== 'undefined') {
-    target.processRuntimeEnvName = processRuntimeEnvName
-  }
-
-  const processRuntimeMethod = nullableString(source.processRuntimeMethod)
-  if (processRuntimeMethod !== null && typeof processRuntimeMethod !== 'undefined') {
-    target.processRuntimeMethod = processRuntimeMethod
-  }
-
-  const processRuntimeProperty = nullableString(source.processRuntimeProperty)
-  if (processRuntimeProperty !== null && typeof processRuntimeProperty !== 'undefined') {
-    target.processRuntimeProperty = processRuntimeProperty
-  }
-
-  const runtimeObjectName = nullableString(source.runtimeObjectName)
-  if (runtimeObjectName !== null && typeof runtimeObjectName !== 'undefined') {
-    target.runtimeObjectName = runtimeObjectName
-  }
-
-  const runtimeObjectSource = nullableString(source.runtimeObjectSource)
-  if (runtimeObjectSource !== null && typeof runtimeObjectSource !== 'undefined') {
-    target.runtimeObjectSource = runtimeObjectSource
   }
 
   const stringRuntimeMethod = nullableString(source.stringRuntimeMethod)
@@ -1574,11 +1544,17 @@ function lowerObjectProperties(
 }
 
 function cloneObjectProperty(property: LowerExpressionNode, value: LowerExpressionNode): LowerExpressionNode {
-  return {
+  const cloned: LowerExpressionNode = {
     key: property.key,
     value,
     loc: property.loc
   }
+
+  if (property.spread === true) {
+    cloned.spread = true
+  }
+
+  return cloned
 }
 
 function cloneObjectLiteralExpression(

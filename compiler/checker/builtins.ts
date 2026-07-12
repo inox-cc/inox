@@ -171,28 +171,6 @@ export const fetchAbortControllerObjectShape: ObjectShapeInfo = {
   ]
 }
 
-export const childProcessSpawnSyncResultShape: ObjectShapeInfo = {
-  kind: 'object',
-  builtin: 'child_process.SpawnSyncReturns',
-  fields: [
-    {
-      name: 'status',
-      valueType: 'number',
-      readonly: true
-    },
-    {
-      name: 'stdout',
-      valueType: 'string',
-      readonly: true
-    },
-    {
-      name: 'stderr',
-      valueType: 'string',
-      readonly: true
-    }
-  ]
-}
-
 export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'inox.DebugMemoryStats',
@@ -260,14 +238,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
   ],
   [
     'performance',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
-    'process',
     {
       kind: 'global',
       mutable: false,
@@ -514,7 +484,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
     name === 'inox' ||
     name === 'console' ||
     name === 'performance' ||
-    name === 'process' ||
     name === 'Object' ||
     name === 'http' ||
     name === 'JSON' ||

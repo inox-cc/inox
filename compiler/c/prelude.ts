@@ -88,14 +88,9 @@ export function filterUnusedCPreludeIncludes(code: string): string {
   const lines = code.split('\n')
   const body = cPreludeFilterBody(lines)
   const filtered: string[] = []
-  const hasProcessHeader = cPreludeLinesInclude(lines, '#include "inox/process.h"')
 
   for (let index = 0; index < lines.length; index = index + 1) {
     const line = lines[index]
-
-    if (line === '#include "inox/main.h"' && hasProcessHeader) {
-      continue
-    }
 
     if (line === '#include "inox/allocator.h"' && !cPreludeBodyUsesAllocatorHeader(body)) {
       continue
@@ -133,16 +128,6 @@ function cPreludeFilterBody(lines: string[]): string {
   }
 
   return body.join('\n')
-}
-
-function cPreludeLinesInclude(lines: string[], includeLine: string): boolean {
-  for (let index = 0; index < lines.length; index = index + 1) {
-    if (lines[index] === includeLine) {
-      return true
-    }
-  }
-
-  return false
 }
 
 function cPreludeBodyUsesAllocatorHeader(body: string): boolean {
@@ -213,9 +198,7 @@ export function emitCPrelude(
   needsSetRuntime: boolean,
   needsBinaryRuntime: boolean,
   needsObjectRuntime: boolean,
-  needsChildProcessRuntime: boolean,
   needsFsRuntime: boolean,
-  needsProcessRuntime: boolean,
   needsJsonRuntime: boolean,
   needsRegexpRuntime: boolean,
   needsTimerRuntime: boolean,
@@ -286,11 +269,11 @@ export function emitCPrelude(
 
   if (needsRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/allocator.h"')
+    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')
     if (needsCollectionRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/array.h"')
     }
     if (needsAsyncRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/loop.h"')
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/promise.h"')
     }
     if (needsCallbackRuntime) {
@@ -298,9 +281,6 @@ export function emitCPrelude(
     }
     if (needsBinaryRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/binary.h"')
-    }
-    if (needsChildProcessRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/child_process.h"')
     }
     if (needsCryptoRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/crypto.h"')
@@ -310,9 +290,6 @@ export function emitCPrelude(
     }
     if (needsJsonRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/json.h"')
-    }
-    if (needsProcessRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/process.h"')
     }
     if (needsMapRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/map.h"')

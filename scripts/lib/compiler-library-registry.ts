@@ -88,6 +88,7 @@ export function renderCompilerLibraryRegistry(
     Array.from(nativeIncludeDirs).sort()
   )
   const nativeEntrySource =
+    "import fs from 'node:fs'\n" +
     "import process from 'node:process'\n" +
     "import { runCompilerCli } from '../../compiler/cli.ts'\n" +
     "import { defaultCompilerLibrarySet } from './default-registry.ts'\n\n" +
@@ -95,7 +96,15 @@ export function renderCompilerLibraryRegistry(
     'for (let index = 0; index < process.argv.length; index = index + 1) {\n' +
     '  compilerArgs.push(process.argv[index])\n' +
     '}\n\n' +
-    'runCompilerCli(defaultCompilerLibrarySet, compilerArgs)\n'
+    'runCompilerCli(defaultCompilerLibrarySet, {\n' +
+    '  args: compilerArgs,\n' +
+    '  cwd: process.cwd(),\n' +
+    '  error: (message: string) => console.error(message),\n' +
+    '  log: (message: string) => console.log(message),\n' +
+    '  mkdirSync: (path: string) => fs.mkdirSync(path, { recursive: true }),\n' +
+    '  setExitCode: (code: number) => { process.exitCode = code },\n' +
+    '  writeFileSync: (path: string, source: string) => fs.writeFileSync(path, source)\n' +
+    '})\n'
 
   return {
     librarySet,

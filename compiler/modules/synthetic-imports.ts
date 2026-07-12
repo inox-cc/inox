@@ -439,6 +439,12 @@ function collectTypeAliasDependencyNames(valueType: TypeAliasValueNode, names: s
       if (field.functionType !== null && typeof field.functionType !== 'undefined') {
         collectTypeAliasDependencyNames(field.functionType, names)
       }
+
+      const functionOverloads: AnyNode[] = field.functionOverloads ?? []
+
+      for (const overload of functionOverloads) {
+        collectTypeAliasDependencyNames(overload as TypeAliasValueNode, names)
+      }
     }
   }
 }
@@ -598,6 +604,7 @@ function cloneTypeAliasField(field: AnyNode): AnyNode {
     setElementType: nullableNodeValue(field.setElementType),
     shape: nullableNodeValue(field.shape),
     functionType: nullableNodeValue(field.functionType),
+    functionOverloads: nullableNodeValue(field.functionOverloads),
     className: nullableNodeValue(field.className)
   }
 }

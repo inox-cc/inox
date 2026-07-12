@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import fs from 'node:fs'
-import process from 'node:process'
 import { compileFileSync, compileFileToCModuleTextsSync } from './compiler.ts'
 import type { CModuleCompileOptions } from './core.ts'
 import { formatDiagnostics } from './diagnostics.ts'
@@ -17,6 +15,16 @@ type MessageError = {
 }
 
 export type CliArguments = string[]
+
+export type CliEnvironment = {
+  args: CliArguments
+  cwd: string
+  error(message: string): void
+  log(message: string): void
+  mkdirSync(path: string): void
+  setExitCode(code: number): void
+  writeFileSync(path: string, source: string): void
+}
 
 type CliPlan = {
   emitCc: boolean
@@ -224,12 +232,16 @@ function compileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CompileOp
   return options
 }
 
-function cModuleCompileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CModuleCompileOptions {
+function cModuleCompileOptions(
+  plan: CliPlan,
+  libraries: CompilerLibrarySet,
+  environment: CliEnvironment
+): CModuleCompileOptions {
   const options: CModuleCompileOptions = {
     target: 'cc',
     callMain: plan.entryMode,
     libraries,
-    sourceRoot: process.cwd()
+    sourceRoot: environment.cwd
   }
 
   if (plan.loopBackend !== null) {
@@ -243,40 +255,49 @@ function cModuleCompileOptions(plan: CliPlan, libraries: CompilerLibrarySet): CM
   return options
 }
 
-function writeBundledC(plan: CliPlan, libraries: CompilerLibrarySet): void {
+function writeBundledC(
+  plan: CliPlan,
+  libraries: CompilerLibrarySet,
+  environment: CliEnvironment
+): void {
   const output = plan.hasOutput ? plan.output : defaultOutputPath(plan.input)
   const result = compileFileSync(plan.input, compileOptions(plan, libraries))
 
-  ensureParentDirectory(output)
-  fs.writeFileSync(output, `${result.code}\n`)
-  console.log(output)
+  ensureParentDirectory(output, environment)
+  environment.writeFileSync(output, `${result.code}\n`)
+  environment.log(output)
 }
 
-function writeCModules(plan: CliPlan, libraries: CompilerLibrarySet): void {
+function writeCModules(
+  plan: CliPlan,
+  libraries: CompilerLibrarySet,
+  environment: CliEnvironment
+): void {
   const outDir = outputDir(plan)
-  const files = compileFileToCModuleTextsSync(plan.input, cModuleCompileOptions(plan, libraries))
+  const files = compileFileToCModuleTextsSync(
+    plan.input,
+    cModuleCompileOptions(plan, libraries, environment)
+  )
 
   for (let index = 0; index < files.length; index = index + 1) {
     const file = files[index]
     const output = joinPath(outDir, file.path)
 
-    ensureParentDirectory(output)
-    fs.writeFileSync(output, file.code)
+    ensureParentDirectory(output, environment)
+    environment.writeFileSync(output, file.code)
   }
 
-  console.log(outDir)
+  environment.log(outDir)
 }
 
-function ensureParentDirectory(path: string): void {
+function ensureParentDirectory(path: string, environment: CliEnvironment): void {
   const dir = pathDirname(path)
 
   if (dir === '' || dir === '.') {
     return
   }
 
-  fs.mkdirSync(dir, {
-    recursive: true
-  })
+  environment.mkdirSync(dir)
 }
 
 function pathDirname(path: string): string {
@@ -349,36 +370,38 @@ function errorMessage(error: unknown): string | null {
   return null
 }
 
-export function runCompilerCli(libraries: CompilerLibrarySet, processArgs: CliArguments): void {
+export function runCompilerCli(libraries: CompilerLibrarySet, environment: CliEnvironment): void {
   try {
-    const parsed = parseCliArgs(userArgs(processArgs))
+    const parsed = parseCliArgs(userArgs(environment.args))
 
     if (!parsed.ok) {
-      console.error(parsed.error)
-      console.error('')
-      console.error(usage())
-      process.exitCode = 1
+      const parseError = parsed.error ?? 'invalid CLI arguments'
+
+      environment.error(parseError)
+      environment.error('')
+      environment.error(usage())
+      environment.setExitCode(1)
     } else if (parsed.help) {
-      console.log(usage())
+      environment.log(usage())
     } else if (parsed.plan !== null && parsed.plan.hasOutDir) {
-      writeCModules(parsed.plan, libraries)
+      writeCModules(parsed.plan, libraries, environment)
     } else if (parsed.plan !== null) {
-      writeBundledC(parsed.plan, libraries)
+      writeBundledC(parsed.plan, libraries, environment)
     }
   } catch (error) {
     const diagnostics = errorDiagnostics(error)
 
     if (diagnostics !== null && typeof diagnostics !== 'undefined') {
-      console.error(formatDiagnostics(diagnostics))
+      environment.error(formatDiagnostics(diagnostics))
     } else {
       const message = errorMessage(error)
 
       if (message !== null) {
-        console.error(message)
+        environment.error(message)
       } else {
-        console.error('INOX BUILD ERROR')
+        environment.error('INOX BUILD ERROR')
       }
     }
-    process.exitCode = 1
+    environment.setExitCode(1)
   }
 }

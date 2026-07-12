@@ -13,6 +13,7 @@
 
 #include "inox/array.h"
 #include "inox/loop.h"
+#include "inox/main.h"
 #include "inox/object.h"
 #include "inox/promise.h"
 #include "inox/string.h"
@@ -233,18 +234,6 @@ static const char* process_platform_name(void) {
 
 process_number_property::process_number_property(process_number_reader read) : read_(read) {}
 
-double process_number_property::value() const {
-  if (read_ == process_number_reader::argvLength) {
-    return (double)process_argv_length();
-  }
-
-  if (read_ == process_number_reader::pid) {
-    return (double)process_pid();
-  }
-
-  return 0;
-}
-
 process_number_property::operator double() const {
   if (read_ == process_number_reader::argvLength) {
     return (double)process_argv_length();
@@ -255,10 +244,6 @@ process_number_property::operator double() const {
   }
 
   return 0;
-}
-
-double process_exit_code_property::value() const {
-  return (double)process_exit_code;
 }
 
 process_exit_code_property::operator double() const {
@@ -283,7 +268,7 @@ inox::String process_argv::operator[](int index) const {
   return inox::String(value);
 }
 
-inox::String process_env::get(inox::StringView name) const {
+inox::String process_env::operator[](inox::StringView name) const {
   if (name.bytes == 0) {
     return inox::String();
   }
@@ -483,39 +468,11 @@ inox::Value process::memoryUsage() const {
 
 class process process;
 
-int inox::return_code() {
+static int process_return_code() {
   return !inox_promise_has_unhandled_rejection() ? process_exit_code : 1;
 }
 
-int inox::run_app(AppMain app_main) {
-  RuntimeContext runtime(&inox_default_allocator, ::performance.now());
-
-  if (!runtime) {
-    return 1;
-  }
-
-  app_main();
-
-  if (thrown()) {
-    return 1;
-  }
-
-  if (run() != INOX_OK) {
-    return 1;
-  }
-
-  if (thrown()) {
-    return 1;
-  }
-
-  return 0;
-}
-
-int inox::main(AppMain app_main) {
-  return return_code(run_app(app_main));
-}
-
-int inox::main(int argc, char** argv, AppMain app_main) {
+int inox::process_main(int argc, char** argv, void (*app_main)(void)) {
   process_init(argc, argv);
   ::process.init();
   const int code = run_app(app_main);
@@ -524,10 +481,10 @@ int inox::main(int argc, char** argv, AppMain app_main) {
     return return_code(code);
   }
 
-  return return_code();
+  return process_return_code();
 }
 
-int inox::main(int argc, char** argv, inox::StringView entry_path, AppMain app_main) {
+int inox::process_main(int argc, char** argv, inox::StringView entry_path, void (*app_main)(void)) {
   process_init_with_entry(argc, argv, entry_path);
   ::process.init();
   const int code = run_app(app_main);
@@ -536,5 +493,5 @@ int inox::main(int argc, char** argv, inox::StringView entry_path, AppMain app_m
     return return_code(code);
   }
 
-  return return_code();
+  return process_return_code();
 }

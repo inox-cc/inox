@@ -59,6 +59,7 @@ export function applyCallableSymbolCall(
   symbol: SymbolInfo,
   argInfos: CallableCallArgInfo[]
 ): ValueType {
+  symbol = selectCallableOverload(symbol, argInfos, expression.args.length)
   let returnType: ValueType = 'unknown'
   const symbolReturnType = symbol.returnType ?? null
 
@@ -166,4 +167,51 @@ export function applyCallableSymbolCall(
   }
 
   return returnType
+}
+
+function selectCallableOverload(
+  symbol: SymbolInfo,
+  argInfos: CallableCallArgInfo[],
+  argumentCount: number
+): SymbolInfo {
+  const overloads = symbol.overloads ?? []
+
+  for (const overload of overloads) {
+    const params = overload.params ?? []
+
+    if (!acceptsArgumentCount(params, argumentCount)) {
+      continue
+    }
+
+    let accepts = true
+
+    for (let index = 0; index < argInfos.length; index = index + 1) {
+      const param = paramForArgument(params, index)
+      const argInfo = argInfos[index]
+
+      if (
+        param === null ||
+        typeof param === 'undefined' ||
+        !isAssignableType(
+          argInfo.valueType,
+          argumentParamValueType(param),
+          param.nullable === true,
+          argInfo.nullable
+        )
+      ) {
+        accepts = false
+        break
+      }
+    }
+
+    if (accepts) {
+      return overload
+    }
+  }
+
+  if (overloads.length > 0) {
+    return overloads[0]
+  }
+
+  return symbol
 }

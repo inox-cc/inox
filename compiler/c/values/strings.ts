@@ -176,14 +176,6 @@ export type StringLoweringDependencies = {
     tempPrefix: string
   ): PreparedExpression
   emitPreparedClassToStringExpression(expression: AnyNode, context: StringCContext): PreparedExpression | null
-  emitPreparedRuntimeObjectReferenceExpression(
-    expression: AnyNode,
-    context: StringCContext
-  ): PreparedExpression | null
-  emitPreparedRuntimeObjectRootReferenceExpression(
-    name: string,
-    context: StringCContext
-  ): PreparedExpression | null
   emitReference(expression: AnyNode, context: StringCContext): string
   inferExpressionType(expression: AnyNode, context: StringCContext): string
   hasClassToStringExpression(expression: AnyNode, context: StringCContext): boolean
@@ -2076,26 +2068,8 @@ function emitPreparedRuntimeObjectReceiverExpression(
   expression: AnyNode,
   context: StringCContext
 ): PreparedExpression | null {
-  if (isRuntimeObjectMetadataReferenceExpression(expression)) {
-    return stringDeps(context).emitCValueExpression(expression, context)
-  }
-
-  const runtimeObjectReference = stringDeps(context).emitPreparedRuntimeObjectReferenceExpression(expression, context)
-
-  if (runtimeObjectReference !== null && typeof runtimeObjectReference !== 'undefined') {
-    return runtimeObjectReference
-  }
-
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
-
-    if (!hasRuntimeObjectStorageReference(name, context)) {
-      const runtimeObjectRoot = stringDeps(context).emitPreparedRuntimeObjectRootReferenceExpression(name, context)
-
-      if (runtimeObjectRoot !== null && typeof runtimeObjectRoot !== 'undefined') {
-        return runtimeObjectRoot
-      }
-    }
 
     return {
       lines: [],
@@ -2119,24 +2093,6 @@ function emitPreparedRuntimeObjectReceiverExpression(
   }
 
   return stringDeps(context).emitCValueExpression(expression, context)
-}
-
-function hasRuntimeObjectStorageReference(name: string, context: StringCContext): boolean {
-  const localValueNames = context.localValueNames
-
-  if (localValueNames !== null && typeof localValueNames !== 'undefined' && localValueNames.has(name)) {
-    return true
-  }
-
-  const variables = context.variables
-
-  if (variables !== null && typeof variables !== 'undefined' && variables.has(name)) {
-    return true
-  }
-
-  const moduleValueNames = context.moduleValueNames
-
-  return moduleValueNames !== null && typeof moduleValueNames !== 'undefined' && moduleValueNames.has(name)
 }
 
 function isDynamicRuntimeStringFieldExpression(expression: AnyNode, context: StringCContext): boolean {
@@ -2280,10 +2236,6 @@ function runtimeObjectReferenceValueType(name: string, context: StringCContext):
 }
 
 function isRuntimeObjectValueReferenceExpression(expression: AnyNode, context: StringCContext): boolean {
-  if (isRuntimeObjectMetadataReferenceExpression(expression)) {
-    return true
-  }
-
   if (
     expression === null ||
     typeof expression === 'undefined' ||
@@ -2307,24 +2259,6 @@ function isRuntimeObjectValueReferenceExpression(expression: AnyNode, context: S
   }
 
   return runtimeValueReferenceUsesInoxValueStorage(name, valueType, context)
-}
-
-function isRuntimeObjectMetadataReferenceExpression(expression: AnyNode): boolean {
-  if (
-    expression === null ||
-    typeof expression === 'undefined' ||
-    expression.type !== 'Reference' ||
-    expression.path.length !== 1
-  ) {
-    return false
-  }
-
-  return (
-    expression.runtimeObjectSource !== null &&
-    typeof expression.runtimeObjectSource !== 'undefined' &&
-    expression.runtimeObjectName !== null &&
-    typeof expression.runtimeObjectName !== 'undefined'
-  )
 }
 
 function runtimeValueReferenceUsesInoxValueStorage(

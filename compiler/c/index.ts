@@ -141,7 +141,6 @@ import {
 } from './runtime-values.ts'
 import type {
   BinaryLoweringDependencies,
-  ChildProcessLoweringDependencies,
   CryptoLoweringDependencies,
   DgramLoweringDependencies,
   FsLoweringDependencies,
@@ -149,7 +148,6 @@ import type {
   NetLoweringDependencies,
   NodeNetworkLoweringDependencies,
   NodeStdlibAsyncTaskLoweringDependencies,
-  ProcessLoweringDependencies,
   TimerLoweringDependencies
 } from '../stdlib/node/c.ts'
 import {
@@ -163,7 +161,6 @@ import {
   emitPreparedBytesIndexAssignment,
   emitPreparedBytesIndexExpression,
   emitPreparedBytesLengthExpression,
-  emitPreparedChildProcessCallExpression,
   emitPreparedCryptoCallExpression,
   emitPreparedCryptoHashCallExpression,
   emitPreparedCryptoHmacCallExpression,
@@ -173,19 +170,10 @@ import {
   emitPreparedFsSyncStatementExpression,
   emitPreparedFsSyncValueExpression,
   emitPreparedNodeStdlibAsyncTaskSourceExpression,
-  emitPreparedNodeStdlibRuntimeObjectReferenceExpression,
-  emitPreparedNodeStdlibRuntimeObjectRootReferenceExpression,
   emitNodeNetworkCallStatement,
   emitNodeNetworkVariableDeclaration,
   emitPreparedNodeNetworkAddressPortExpression,
-  cProcessRuntimeObjectName,
-  cProcessRuntimePropertyName,
-  emitPreparedProcessNumberExpression,
-  emitPreparedProcessStringExpression,
-  emitPreparedProcessValueExpression,
   emitPreparedTimerCallExpression,
-  emitProcessExitCodeAssignment,
-  emitProcessExitStatement,
   emitTimerVariableDeclaration,
   inferNodeStdlibExpressionType,
   inferNodeStdlibMemberExpressionType,
@@ -193,7 +181,6 @@ import {
   isBinaryConstructorExpression,
   isBinaryRuntimeCall,
   isTimerStartCallExpression,
-  isNodeRuntimeProducedStringExpression,
   resolveBinaryExpressionKind,
   resolveNodeNetworkAddressStringMember,
   timerCallbackFunctionType
@@ -450,7 +437,12 @@ type CAccessorNode = CDynamicObjectFieldNode
 type CObjectLiteralPropertyNode = {
   key: string
   loc?: SourceLocation
+  spread?: boolean
   value: AnyNode
+}
+type CPreparedObjectSpread = {
+  name: string
+  property: CObjectLiteralPropertyNode
 }
 type CStringMap = Map<string, string>
 type CNameSet = Set<string>
@@ -534,9 +526,7 @@ let timerLoweringDependencies = {} as TimerLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let fsLoweringDependencies = {} as FsLoweringDependencies
 let binaryLoweringDependencies = {} as BinaryLoweringDependencies
-let childProcessLoweringDependencies = {} as ChildProcessLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
-let processLoweringDependencies = {} as ProcessLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
 let cryptoLoweringDependencies = {} as CryptoLoweringDependencies
 let dgramLoweringDependencies = {} as DgramLoweringDependencies
@@ -605,11 +595,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedBytesIndexAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBytesIndexAssignment(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
-  emitPreparedChildProcessCallExpression: (
-    expression: AnyNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ) => emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies, options),
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
   emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
@@ -668,10 +653,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUpdateExpression,
-  emitProcessExitCodeAssignment: (expression: AnyNode, context: CFunctionContext) =>
-    emitProcessExitCodeAssignment(expression, context, processLoweringDependencies),
-  emitProcessExitStatement: (expression: AnyNode, context: CFunctionContext) =>
-    emitProcessExitStatement(expression, context, processLoweringDependencies),
   emitPromiseConstructorSettlementCall: (expression: AnyNode, context: CFunctionContext) =>
     emitPromiseConstructorSettlementCall(expression, context, promiseLoweringDependencies),
   emitReference,
@@ -915,24 +896,12 @@ binaryLoweringDependencies = {
   inferExpressionType
 }
 
-childProcessLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedStringBytesOperand,
-  registerObjectShape
-}
-
 compilerLibraryLoweringDependencies = {
   emitCValueExpression,
+  emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   registerObjectShape
 }
-
-processLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedNumberExpression,
-  registerObjectShape
-}
-
 
 const rejectionValueTypeDependencies: RejectionValueTypeDependencies = {
   cFetchRuntimeExpressionMethod,
@@ -996,14 +965,6 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   emitPreparedNativeClassStringFieldExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedClassToStringExpression,
-  emitPreparedRuntimeObjectReferenceExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedNodeStdlibRuntimeObjectReferenceExpression(expression, context, {
-      process: processLoweringDependencies
-    }),
-  emitPreparedRuntimeObjectRootReferenceExpression: (name: string, context: CFunctionContext) =>
-    emitPreparedNodeStdlibRuntimeObjectRootReferenceExpression(name, context, {
-      process: processLoweringDependencies
-    }),
   emitReference,
   inferExpressionType,
   hasClassToStringExpression: hasPreparedClassToStringExpression,
@@ -1034,7 +995,7 @@ function emitPreparedNodeRuntimeStringExpression(
     return libraryExpression
   }
 
-  return emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null)
+  return null
 }
 
 function emitPreparedCompilerLibraryCallExpression(
@@ -1061,7 +1022,7 @@ function runtimeStringConstantValue(expression: AnyNode | null | undefined): str
 }
 
 function isConfiguredRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean {
-  return isCompilerLibraryStringExpression(expression) || isNodeRuntimeProducedStringExpression(expression)
+  return isCompilerLibraryStringExpression(expression)
 }
 
 cryptoLoweringDependencies = {
@@ -1343,7 +1304,8 @@ const cScalarExpressionDependencies = {
     emitPreparedObjectExpressionScalarMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectRuntimeArrayIndexValueExpression,
   emitPreparedNumberExpression,
-  emitPreparedProcessNumberExpression,
+  emitPreparedCompilerLibraryCallExpression,
+  emitPreparedCompilerLibraryExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedCppStringArgument,
   emitPreparedStringCharCodeAtExpression,
@@ -1411,8 +1373,6 @@ const cValueExpressionDependencies = {
   emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedBinaryValueExpression(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
-  emitPreparedChildProcessCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedChildProcessCallExpression(expression, context, childProcessLoweringDependencies),
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionConstructorValueExpression,
@@ -1444,10 +1404,6 @@ const cValueExpressionDependencies = {
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedCompilerLibraryCallExpression,
   emitPreparedCompilerLibraryExpression,
-  emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null),
-  emitPreparedProcessValueExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedProcessValueExpression(expression, context, processLoweringDependencies, null),
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedRuntimeArrayIndexValueExpression,
   inferExpressionType,
@@ -1791,7 +1747,7 @@ function createBaseContext(
     moduleValueTypes: new Map(),
     promiseChainArrowWrappers: new Map(),
     promiseChainWrappers: new Map(),
-    processRuntime: false,
+    runtimeEntrypointAdapter: null,
     regexpLiterals: new Map(),
     httpCreateServerNames: new Set(),
     httpHandlers: new Map(),
@@ -1801,7 +1757,7 @@ function createBaseContext(
     netHandlers: new Map(),
     netImportNames: new Set(),
     runtimeFunctionParams: new Map(),
-    processEntryPath: null,
+    runtimeEntryPath: null,
     externalEventLoopFunctions: new Set(),
     throwingFunctions: throwing.throwingFunctions,
     unhandledRejectionFlag,
@@ -2134,6 +2090,33 @@ function collectModuleObjectLiteralShapeFields(
     }
 
     const value = property.value
+
+    if (property.spread === true) {
+      let spreadFields = moduleObjectReferenceShapeFields(value, knownObjectShapes)
+
+      if (
+        (spreadFields === null || typeof spreadFields === 'undefined') &&
+        value.shape !== null &&
+        typeof value.shape !== 'undefined'
+      ) {
+        spreadFields = value.shape.fields
+      }
+
+      if (spreadFields !== null && typeof spreadFields !== 'undefined') {
+        for (const field of spreadFields) {
+          const fieldIndex = moduleObjectShapeFieldIndex(fields, field.name)
+
+          if (fieldIndex === -1) {
+            fields.push(field)
+          } else {
+            fields[fieldIndex] = field
+          }
+        }
+      }
+
+      continue
+    }
+
     const functionType = resolveModuleObjectFunctionType(
       value,
       functionParams,
@@ -2594,6 +2577,10 @@ function findObjectLiteralPropertyValue(expression: AnyNode, key: string): AnyNo
   const properties: CObjectLiteralPropertyNode[] = expression.properties
 
   for (const property of properties) {
+    if (property.spread === true) {
+      continue
+    }
+
     if (property.key === key) {
       if (property.value !== null && typeof property.value !== 'undefined') {
         return property.value
@@ -4308,6 +4295,10 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     const properties: CObjectLiteralPropertyNode[] = statement.init.properties
 
     for (const property of properties) {
+      if (property.spread === true) {
+        continue
+      }
+
       fields.push({
         name: property.key,
         readonlyField: false,
@@ -4364,6 +4355,7 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
   lines.push(`if (${emitCIdentifier(statement.name)} == 0) ${emitFailureStatement(context)}`)
   lines.push(`*${emitCIdentifier(statement.name)} = inox_undefined_value();`)
   lines.push(emitStatusCheck(`inox_object_new(&inox_default_allocator, &${shapeName}, ${emitCIdentifier(statement.name)})`, context))
+  const spreads = prepareObjectLiteralSpreads(statement.init, context, lines)
   const seenTypes: string[] = []
 
   if (statement.declaredType !== null && typeof statement.declaredType !== 'undefined') {
@@ -4375,6 +4367,22 @@ function emitBoxedObjectVariableDeclaration(statement: AnyNode, context: CFuncti
     const propertyValue = findObjectLiteralPropertyValue(statement.init, field.name)
 
     if (propertyValue === null || typeof propertyValue === 'undefined') {
+      const spread = preparedObjectSpreadForField(spreads, field.name)
+
+      if (spread !== null && typeof spread !== 'undefined') {
+        const spreadValue = nextCName(context, 'inox_spread_value')
+
+        lines.push(`auto ${spreadValue} = inox::get(${spread.name}, ${cStringLiteral(field.name)});`)
+        lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+        lines.push(
+          emitStatusCheck(
+            `inox_object_init_known(*${emitCIdentifier(statement.name)}, ${index}, ${spreadValue})`,
+            context
+          )
+        )
+        continue
+      }
+
       if (field.optional !== true) {
         pushDiagnostic(context, diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
       }
@@ -5091,6 +5099,22 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
     }
   }
 
+  const libraryValue = emitPreparedCompilerLibraryCallExpression(expression, context)
+
+  if (libraryValue !== null && libraryValue.cppType === 'inox::String') {
+    const lines: string[] = []
+    const valueName = nextCName(context, 'inox_library_nullable_string')
+
+    pushAll(lines, libraryValue.lines)
+    lines.push(`auto ${valueName} = ${libraryValue.expression};`)
+
+    return {
+      lines,
+      expression: `${valueName}.release()`,
+      valueType: 'string'
+    }
+  }
+
   if (isNullableScalarRuntimeExpression(expression, context)) {
     return emitPreparedNullableScalarRuntimeValueExpression(expression, context)
   }
@@ -5529,7 +5553,16 @@ function emitCObjectLiteralValueExpression(
   const temp = nextCName(context, 'inox_object')
   const shapeName = nextCName(context, 'inox_shape_value')
   const fieldsName = `${shapeName}_fields`
-  const resolvedShape = shape ?? objectLiteralExpressionRuntimeShape(expression)
+  let resolvedShape = shape ?? objectLiteralExpressionRuntimeShape(expression)
+
+  if (
+    objectLiteralHasSpreadProperty(expression) &&
+    expression.shape !== null &&
+    typeof expression.shape !== 'undefined'
+  ) {
+    resolvedShape = expression.shape
+  }
+
   const fields = objectLiteralValueShapeFields(expression, context, resolvedShape)
   const lines = [`static const inox_field_info ${fieldsName}[] = {`]
 
@@ -5544,19 +5577,32 @@ function emitCObjectLiteralValueExpression(
   lines.push('};')
   lines.push(`auto ${temp} = inox::ObjectValue::create(&${shapeName});`)
   lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+  const spreads = prepareObjectLiteralSpreads(expression, context, lines)
 
   for (let index = 0; index < fields.length; index++) {
     const field = fields[index]
     const propertyValue = findObjectLiteralPropertyValue(expression, field.name)
 
-    if (propertyValue === null || typeof propertyValue === 'undefined') {
-      if (field.optional !== true) {
-        pushDiagnostic(context, diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, expression.loc))
-      }
+    if (field.valueType === 'function') {
       continue
     }
 
-    if (field.valueType === 'function') {
+    if (propertyValue === null || typeof propertyValue === 'undefined') {
+      const spread = preparedObjectSpreadForField(spreads, field.name)
+
+      if (spread !== null && typeof spread !== 'undefined') {
+        const spreadValue = nextCName(context, 'inox_spread_value')
+
+        lines.push(`auto ${spreadValue} = inox::get(${spread.name}, ${cStringLiteral(field.name)});`)
+        lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+        lines.push(`${temp}.init(${index}, ${spreadValue});`)
+        lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+        continue
+      }
+
+      if (field.optional !== true) {
+        pushDiagnostic(context, diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, expression.loc))
+      }
       continue
     }
 
@@ -5574,6 +5620,53 @@ function emitCObjectLiteralValueExpression(
   }
 }
 
+function prepareObjectLiteralSpreads(
+  expression: AnyNode,
+  context: CFunctionContext,
+  lines: string[]
+): CPreparedObjectSpread[] {
+  const spreads: CPreparedObjectSpread[] = []
+  const properties: CObjectLiteralPropertyNode[] = expression.properties
+
+  for (const property of properties) {
+    if (property.spread !== true) {
+      continue
+    }
+
+    const prepared = emitCValueExpression(property.value, context)
+    const name = nextCName(context, 'inox_object_spread')
+
+    pushAll(lines, prepared.lines)
+    lines.push(`auto ${name} = ${prepared.expression};`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    spreads.push({ name, property })
+  }
+
+  return spreads
+}
+
+function preparedObjectSpreadForField(
+  spreads: CPreparedObjectSpread[],
+  fieldName: string
+): CPreparedObjectSpread | null {
+  for (let index = spreads.length - 1; index >= 0; index = index - 1) {
+    const spread = spreads[index]
+    const shape = spread.property.value.shape
+
+    if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+      continue
+    }
+
+    for (const field of shape.fields) {
+      if (field.name === fieldName) {
+        return spread
+      }
+    }
+  }
+
+  return null
+}
+
 function objectLiteralExpressionRuntimeShape(expression: AnyNode): CObjectShape | null {
   const shape = expression.shape
 
@@ -5582,6 +5675,7 @@ function objectLiteralExpressionRuntimeShape(expression: AnyNode): CObjectShape 
   }
 
   if (
+    objectLiteralHasSpreadProperty(expression) ||
     shape.dynamic === true ||
     isCompilerAnyNodeObjectShape(shape) ||
     isEmptyObjectShape(shape) ||
@@ -5594,6 +5688,18 @@ function objectLiteralExpressionRuntimeShape(expression: AnyNode): CObjectShape 
   return null
 }
 
+function objectLiteralHasSpreadProperty(expression: AnyNode): boolean {
+  const properties: CObjectLiteralPropertyNode[] = expression.properties
+
+  for (const property of properties) {
+    if (property.spread === true) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function objectLiteralValueShapeFields(
   expression: AnyNode,
   context: CFunctionContext,
@@ -5601,7 +5707,9 @@ function objectLiteralValueShapeFields(
 ): CObjectShapeField[] {
   const fields: CObjectShapeField[] = []
   const shouldAppendAnyNodeFallback =
-    isCompilerAnyNodeObjectShape(shape) || isEmptyObjectShape(shape) || isCompilerAnyNodeLikeObjectLiteral(expression)
+    isCompilerAnyNodeObjectShape(shape) ||
+    (isEmptyObjectShape(shape) && expression.properties.length > 0) ||
+    isCompilerAnyNodeLikeObjectLiteral(expression)
   const shouldAppendObjectShapeInfoFallback = isCompilerObjectShapeInfoShape(shape)
 
   if (
@@ -5630,6 +5738,10 @@ function objectLiteralValueShapeFields(
   }
 
   for (const property of expression.properties) {
+    if (property.spread === true) {
+      continue
+    }
+
     if (objectLiteralShapeFieldIndex(fields, property.key) !== -1) {
       continue
     }
@@ -6139,14 +6251,6 @@ function emitDirectRuntimeValueConsoleLogStatement(
 }
 
 function emitDirectConsoleObjectExpression(expression: AnyNode): string | null {
-  if (cProcessRuntimeObjectName(expression) === 'process') {
-    return 'process'
-  }
-
-  if (cProcessRuntimePropertyName(expression) === 'versions') {
-    return 'process.versions'
-  }
-
   return null
 }
 

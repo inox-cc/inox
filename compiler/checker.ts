@@ -3,7 +3,6 @@ import {
   binaryInstanceRuntimeMethodName,
   binaryStaticRuntimeMethodName,
   bufferRuntimeConstantName,
-  childProcessRuntimeCallInfo,
   checkCryptoCall as checkPackageCryptoCall,
   checkCryptoHashMethodCall as checkPackageCryptoHashMethodCall,
   cryptoRuntimeCallInfo,
@@ -16,12 +15,6 @@ import {
   isFsRuntimeRootSymbol,
   isTimerHandleMethod,
   isTimerRuntimeImportSymbol,
-  nodeStdlibRuntimeObjectInfo,
-  processRuntimeAssignmentProperty,
-  processRuntimeCallInfo,
-  processRuntimeIndexProperty,
-  processRuntimeMemberInfo,
-  processRuntimePropertyImportInfo,
   timerCallbackFunctionType,
   timerClearMethodName,
   timerRuntimeImportMethodName,
@@ -66,18 +59,6 @@ import {
   isSupportedFetchRedirectLiteral,
   jsonRuntimeMethodName
 } from '../stdlib/global/compiler/checker.ts'
-import {
-  checkChildProcessCall as checkChildProcessCallInContext
-} from './checker/child-process-calls.ts'
-import type {
-  CheckedChildProcessArgsInfo,
-  CheckedChildProcessCallInfo,
-  CheckedChildProcessEnvPropertyInfo,
-  CheckedChildProcessOptionInfo,
-  CheckedChildProcessOptionsInfo,
-  CheckedChildProcessValueInfo,
-  ChildProcessCallCheckerContext
-} from './checker/child-process-calls.ts'
 import { applyCallableSymbolCall as applyCallableSymbolCallInContext } from './checker/callable-symbols.ts'
 import type { CallableSymbolCheckerContext } from './checker/callable-symbols.ts'
 import { runtimeImportValueType } from './stdlib/node/runtime-imports.ts'
@@ -89,13 +70,15 @@ import {
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
   compilerLibraryHasModuleDeclaration,
+  compilerLibraryOperationForGlobal,
   compilerLibraryOperationForImport,
   compilerLibraryOperationForReceiver,
   resolveCompilerLibrarySet
 } from './extensions/library-set.ts'
 import type {
   LibraryOperationDescriptor,
-  LibraryOperationKind
+  LibraryOperationKind,
+  LibraryResultShapeFieldDescriptor
 } from './extensions/types.ts'
 import {
   cloneResolvedTypeInfo as cloneResolvedTypeInfoInContext,
@@ -183,8 +166,6 @@ import type {
   CheckedCallArgInfo,
   GlobalCallCheckerContext
 } from './checker/global-calls.ts'
-import { checkProcessCall as checkProcessCallInContext } from './checker/node-runtime-calls.ts'
-import type { NodeRuntimeCallCheckerContext } from './checker/node-runtime-calls.ts'
 import {
   checkDateConstructorExpression as checkDateConstructorExpressionInContext,
   checkDateInstanceMethodCall as checkDateInstanceMethodCallInContext,
@@ -551,6 +532,16 @@ class Checker {
             symbol.returnSetElementType = specifier.returnSetElementType ?? null
             symbol.returnShape = specifier.returnShape ?? null
             symbol.async = specifier.async === true
+
+            const functionOverloads: AnyNode[] = specifier.functionOverloads ?? []
+
+            if (functionOverloads.length > 1) {
+              symbol.overloads = []
+
+              for (const overload of functionOverloads) {
+                symbol.overloads.push(this.importedFunctionDeclarationSymbol(overload, specifier.loc))
+              }
+            }
           }
 
           this.declare(specifier.local, symbol, specifier.loc)
@@ -673,6 +664,25 @@ class Checker {
     }
 
     return resolved
+  }
+
+  importedFunctionDeclarationSymbol(declaration: AnyNode, loc: SourceLocation): SymbolInfo {
+    return {
+      kind: 'function',
+      valueType: 'function',
+      params: this.resolveImportedParams(declaration.params ?? []),
+      returnType: declaration.returnType ?? declaration.declaredReturnType ?? 'unknown',
+      returnNullable: declaration.returnNullable === true,
+      returnArrayElementType: declaration.returnArrayElementType ?? null,
+      returnArrayElementDeclaredType: declaration.returnArrayElementDeclaredType ?? null,
+      returnMapKeyType: declaration.returnMapKeyType ?? null,
+      returnMapValueType: declaration.returnMapValueType ?? null,
+      returnPromiseValueType: declaration.returnPromiseValueType ?? null,
+      returnSetElementType: declaration.returnSetElementType ?? null,
+      returnShape: declaration.returnShape ?? null,
+      async: declaration.async === true,
+      loc
+    }
   }
 
   resolveParam(param: AnyNode): FunctionTypeParamMetadata {
@@ -1704,6 +1714,19 @@ class Checker {
         }
       }
 
+      if (path.length === 1 && !this.scope.resolve(path[0])) {
+        const globalOperation = compilerLibraryOperationForGlobal(
+          resolveCompilerLibrarySet(this.options.libraries),
+          path,
+          'member-read'
+        )
+
+        if (globalOperation !== null) {
+          this.applyCompilerLibraryOperation(expression, globalOperation)
+          valueType = expression.valueType
+        }
+      }
+
       if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'import') {
         const importSource = symbol.importSource
         const importedName = symbol.importedName
@@ -1719,24 +1742,6 @@ class Checker {
           this.applyCompilerLibraryOperation(expression, libraryOperation)
         }
 
-        const processImportInfo = processRuntimePropertyImportInfo(importSource, importedName)
-
-        if (processImportInfo !== null && typeof processImportInfo !== 'undefined') {
-          expression.processRuntimeProperty = processImportInfo.property
-          expression.valueType = processImportInfo.valueType
-          expression.shape = processImportInfo.shape ?? null
-        }
-
-      }
-
-      const runtimeObject = nodeStdlibRuntimeObjectInfo(path, symbol)
-
-      if (runtimeObject !== null && typeof runtimeObject !== 'undefined') {
-        expression.runtimeObjectSource = runtimeObject.source
-        expression.runtimeObjectName = runtimeObject.name
-        valueType = runtimeObject.valueType
-        expression.valueType = runtimeObject.valueType
-        expression.shape = runtimeObject.shape
       }
 
       return valueType
@@ -2284,12 +2289,6 @@ class Checker {
       return libraryMemberType
     }
 
-    const processMemberType = this.checkProcessMemberExpression(expression)
-
-    if (processMemberType !== null && typeof processMemberType !== 'undefined') {
-      return processMemberType
-    }
-
     const bufferConstantType = this.checkBufferConstantMemberExpression(expression)
 
     if (bufferConstantType !== null && typeof bufferConstantType !== 'undefined') {
@@ -2394,6 +2393,7 @@ class Checker {
     expression.setElementType = resolvedValueTypeMetadata(field.setElementType, fieldType.setElementType)
     expression.shape = resolvedObjectShapeMetadata(field.shape, fieldType.shape)
     expression.functionType = resolvedFunctionTypeMetadata(field.functionType, fieldType.functionType)
+    expression.functionOverloads = field.functionOverloads ?? []
     expression.className = null
 
     if (field.className !== null && typeof field.className !== 'undefined') {
@@ -2505,10 +2505,17 @@ class Checker {
   }
 
   checkMemberAssignment(expression: AnyNode): ValueType {
-    const processAssignmentType = this.checkProcessMemberAssignment(expression)
+    const globalLibraryOperation = this.compilerLibraryOperationForExpression(
+      expression.target,
+      'member-write'
+    )
 
-    if (processAssignmentType !== null && typeof processAssignmentType !== 'undefined') {
-      return processAssignmentType
+    if (globalLibraryOperation !== null) {
+      this.checkExpression(expression.target.object)
+      const valueType = this.checkExpression(expression.value)
+      this.checkCompilerLibrarySingleArgument(expression.value, valueType, globalLibraryOperation)
+      this.applyCompilerLibraryOperation(expression, globalLibraryOperation)
+      return valueType
     }
 
     const targetType = this.checkExpression(expression.target.object)
@@ -2519,6 +2526,12 @@ class Checker {
       expression.target.property,
       'member-write'
     )
+
+    if (libraryOperation !== null) {
+      this.checkCompilerLibrarySingleArgument(expression.value, valueType, libraryOperation)
+      this.applyCompilerLibraryOperation(expression, libraryOperation)
+      return valueType
+    }
 
     if (this.reportUnsupportedClassPrototypeAccess(expression.target, false)) {
       return valueType
@@ -2665,22 +2678,23 @@ class Checker {
       )
     }
 
-    if (libraryOperation !== null) {
-      this.applyCompilerLibraryOperation(expression, libraryOperation)
-    }
-
     return valueType
   }
 
   checkIndexExpression(expression: AnyNode): ValueType {
-    const processIndexType = this.checkProcessIndexExpression(expression)
-
-    if (processIndexType !== null && typeof processIndexType !== 'undefined') {
-      return processIndexType
-    }
-
     const objectType = this.checkExpression(expression.object)
     const indexType = this.checkExpression(expression.index)
+    const libraryOperation = this.compilerLibraryReceiverOperation(
+      expression.object,
+      '',
+      'index-read'
+    )
+
+    if (libraryOperation !== null) {
+      this.checkCompilerLibrarySingleArgument(expression.index, indexType, libraryOperation)
+      this.applyCompilerLibraryOperation(expression, libraryOperation)
+      return (libraryOperation.valueType ?? 'unknown') as ValueType
+    }
 
     const optionalChainReceiver = isOptionalChainProtectedExpression(expression.object)
 
@@ -3471,18 +3485,6 @@ class Checker {
       return cryptoType
     }
 
-    const childProcessType = this.checkChildProcessCall(expression)
-
-    if (childProcessType !== null && typeof childProcessType !== 'undefined') {
-      return childProcessType
-    }
-
-    const processType = this.checkProcessCall(expression)
-
-    if (processType !== null && typeof processType !== 'undefined') {
-      return processType
-    }
-
     const debugMemoryType = this.checkDebugMemoryCall(expression)
 
     if (debugMemoryType !== null && typeof debugMemoryType !== 'undefined') {
@@ -3901,185 +3903,8 @@ class Checker {
     }
   }
 
-  checkChildProcessCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const call = childProcessRuntimeCallInfo(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'child-process'),
-      this.resolveStdlibModuleObjectMemberName(path, 'child-process')
-    )
-
-    if (call === null || typeof call === 'undefined') {
-      return null
-    }
-
-    return checkChildProcessCallInContext(
-      this.childProcessCallContext(),
-      expression,
-      call,
-      this.checkedChildProcessCallInfo(expression, call.method, call.unsupported === true)
-    )
-  }
-
-  checkedChildProcessCallInfo(
-    expression: AnyNode,
-    method: string,
-    unsupported: boolean
-  ): CheckedChildProcessCallInfo {
-    if (unsupported) {
-      return {
-        args: null,
-        firstArg: null,
-        options: null,
-        topLevelArgs: this.checkedChildProcessTopLevelArgs(expression)
-      }
-    }
-
-    if (method === 'execSync') {
-      return {
-        args: null,
-        firstArg: this.checkedChildProcessArg(expression.args[0]),
-        options: this.checkedChildProcessOptionsInfo(expression.args[1]),
-        topLevelArgs: []
-      }
-    }
-
-    const second = expression.args[1]
-    let args: AnyNode | null = null
-    let options: AnyNode | null = null
-
-    if (second !== null && typeof second !== 'undefined' && second.type === 'ObjectLiteral') {
-      options = second
-    } else {
-      if (second !== null && typeof second !== 'undefined') {
-        args = second
-      }
-
-      if (expression.args[2] !== null && typeof expression.args[2] !== 'undefined') {
-        options = expression.args[2]
-      }
-    }
-
-    return {
-      args: this.checkedChildProcessArgsInfo(args),
-      firstArg: this.checkedChildProcessArg(expression.args[0]),
-      options: this.checkedChildProcessOptionsInfo(options),
-      topLevelArgs: []
-    }
-  }
-
-  checkedChildProcessTopLevelArgs(expression: AnyNode): CheckedChildProcessValueInfo[] {
-    const result: CheckedChildProcessValueInfo[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      result.push(this.checkedChildProcessValueInfo(arg))
-    }
-
-    return result
-  }
-
-  checkedChildProcessArg(arg: AnyNode | null | undefined): CheckedChildProcessValueInfo | null {
-    if (arg === null || typeof arg === 'undefined') {
-      return null
-    }
-
-    return this.checkedChildProcessValueInfo(arg)
-  }
-
-  checkedChildProcessValueInfo(node: AnyNode): CheckedChildProcessValueInfo {
-    return {
-      loc: node.loc,
-      node,
-      valueType: this.checkExpression(node)
-    }
-  }
-
-  checkedChildProcessArgsInfo(node: AnyNode | null | undefined): CheckedChildProcessArgsInfo | null {
-    if (node === null || typeof node === 'undefined') {
-      return null
-    }
-
-    const elements: CheckedChildProcessValueInfo[] = []
-
-    if (node.type === 'ArrayLiteral') {
-      for (let index = 0; index < node.elements.length; index = index + 1) {
-        const element = checkerNodeAt(node.elements, index)
-
-        elements.push(this.checkedChildProcessValueInfo(element))
-      }
-    }
-
-    return {
-      elements,
-      node
-    }
-  }
-
-  checkedChildProcessOptionsInfo(node: AnyNode | null | undefined): CheckedChildProcessOptionsInfo | null {
-    if (node === null || typeof node === 'undefined') {
-      return {
-        node: null,
-        properties: []
-      }
-    }
-
-    if (node.type !== 'ObjectLiteral') {
-      return {
-        node,
-        properties: []
-      }
-    }
-
-    const properties: CheckedChildProcessOptionInfo[] = []
-    const optionProperties: CheckerObjectPropertyNode[] = node.properties
-
-    for (const property of optionProperties) {
-      properties.push(this.checkedChildProcessOptionInfo(property.key, property.value, property.loc))
-    }
-
-    return {
-      node,
-      properties
-    }
-  }
-
-  checkedChildProcessOptionInfo(
-    key: string,
-    value: AnyNode,
-    loc: SourceLocation
-  ): CheckedChildProcessOptionInfo {
-    const envProperties: CheckedChildProcessEnvPropertyInfo[] = []
-    let valueType: ValueType = 'unknown'
-
-    if (key === 'env' && value.type === 'ObjectLiteral') {
-      const properties: CheckerObjectPropertyNode[] = value.properties
-
-      for (const property of properties) {
-        envProperties.push({
-          key: property.key,
-          loc: property.loc,
-          value: property.value,
-          valueType: this.checkExpression(property.value)
-        })
-      }
-    } else if (key !== 'encoding' && key !== 'stdio') {
-      valueType = this.checkExpression(value)
-    }
-
-    return {
-      envProperties,
-      key,
-      loc,
-      value,
-      valueType
-    }
-  }
-
   checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
     let operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
-    let receiverOperation = false
 
     if (operation === null && expression.callee.type === 'MemberExpression') {
       this.checkExpression(expression.callee.object)
@@ -4088,7 +3913,6 @@ class Checker {
         expression.callee.property,
         'call'
       )
-      receiverOperation = operation !== null
     }
 
     if (operation === null) {
@@ -4114,12 +3938,8 @@ class Checker {
 
     this.checkCompilerLibraryOperationArguments(expression, operation)
 
-    if (receiverOperation) {
-      this.checkedCallArgInfos(expression)
-      return (operation.valueType ?? 'unknown') as ValueType
-    }
-
-    return null
+    this.checkedCallArgInfos(expression)
+    return (operation.valueType ?? 'unknown') as ValueType
   }
 
   checkCompilerLibraryOperationArguments(expression: AnyNode, operation: LibraryOperationDescriptor): void {
@@ -4153,6 +3973,37 @@ class Checker {
         continue
       }
 
+      const arrayElementValueTypes = check.arrayElementValueTypes ?? []
+      const argument = expression.args[index]
+
+      if (
+        check.arrayLiteralRequired === true &&
+        info.arrayElementType !== null &&
+        typeof info.arrayElementType !== 'undefined' &&
+        argument.type !== 'ArrayLiteral'
+      ) {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          `library operation ${operation.operationId} currently requires an array literal argument`,
+          info.loc
+        )
+      }
+
+      if (argument.type === 'ArrayLiteral' && arrayElementValueTypes.length > 0) {
+        for (let elementIndex = 0; elementIndex < argument.elements.length; elementIndex = elementIndex + 1) {
+          const element = checkerNodeAt(argument.elements, elementIndex)
+          const elementValueType = this.checkExpression(element)
+
+          if (!arrayElementValueTypes.includes(elementValueType)) {
+            this.report(
+              'INOX_TYPE_MISMATCH',
+              `library operation ${operation.operationId} does not accept ${elementValueType} array elements`,
+              element.loc
+            )
+          }
+        }
+      }
+
       if (info.valueType !== 'object') {
         continue
       }
@@ -4177,8 +4028,6 @@ class Checker {
         fieldValueType !== null &&
         typeof fieldValueType !== 'undefined'
       ) {
-        const argument = expression.args[index]
-
         if (argument.type === 'ObjectLiteral') {
           const properties: CheckerObjectPropertyNode[] = argument.properties
 
@@ -4201,6 +4050,26 @@ class Checker {
           }
         }
       }
+    }
+  }
+
+  checkCompilerLibrarySingleArgument(
+    expression: AnyNode,
+    valueType: ValueType,
+    operation: LibraryOperationDescriptor
+  ): void {
+    const check = operation.argumentChecks?.[0]
+
+    if (check === null || typeof check === 'undefined') {
+      return
+    }
+
+    if (!check.valueTypes.includes(valueType)) {
+      this.report(
+        'INOX_TYPE_MISMATCH',
+        `library operation ${operation.operationId} does not accept ${valueType}`,
+        expression.loc
+      )
     }
   }
 
@@ -4268,7 +4137,17 @@ class Checker {
       return null
     }
 
-    const symbol = this.resolveMemberPathRootSymbol(path)
+    const scopedSymbol = this.scope.resolve(path[0])
+
+    if (scopedSymbol === null || typeof scopedSymbol === 'undefined') {
+      return compilerLibraryOperationForGlobal(
+        resolveCompilerLibrarySet(this.options.libraries),
+        path,
+        kind
+      )
+    }
+
+    const symbol = scopedSymbol
 
     if (symbol === null || symbol.kind !== 'import') {
       return null
@@ -4335,12 +4214,7 @@ class Checker {
       for (let index = 0; index < fields.length; index = index + 1) {
         const field = fields[index]
 
-        shapeFields.push({
-          name: field.name,
-          valueType: field.valueType,
-          readonly: field.readonly,
-          loc: expression.loc
-        })
+        shapeFields.push(this.compilerLibraryResultShapeField(field, expression.loc))
         cResultShapeFields.push(field.name)
       }
 
@@ -4359,6 +4233,8 @@ class Checker {
       expression.valueType = valueType
     }
 
+    expression.arrayElementType = operation.resultArrayElementType ?? null
+
     expression.libraryOwned = operation.owned === true
     expression.libraryConstantValue = operation.constantValue ?? null
     expression.libraryReceiverTypeId = operation.receiverTypeId ?? null
@@ -4368,87 +4244,38 @@ class Checker {
     expression.nullable = operation.nullable === true
   }
 
-  checkProcessCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const rootSymbol = this.resolveMemberPathRootSymbol(path)
-    const call = processRuntimeCallInfo(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'process'),
-      this.resolveStdlibModuleObjectMemberName(path, 'process'),
-      rootSymbol
-    )
+  compilerLibraryResultShapeField(
+    field: LibraryResultShapeFieldDescriptor,
+    loc: SourceLocation
+  ): AnyNode {
+    const result: AnyNode = {
+      name: field.name,
+      valueType: field.valueType,
+      readonly: field.readonly,
+      loc
+    }
+    const nestedFields = field.resultShapeFields
+    const nestedTypeId = field.resultTypeId
 
-    if (call === null || typeof call === 'undefined') {
-      return null
+    if (
+      (nestedFields !== null && typeof nestedFields !== 'undefined') ||
+      (nestedTypeId !== null && typeof nestedTypeId !== 'undefined')
+    ) {
+      const fields: AnyNode[] = []
+
+      for (let index = 0; index < (nestedFields ?? []).length; index = index + 1) {
+        fields.push(this.compilerLibraryResultShapeField((nestedFields ?? [])[index], loc))
+      }
+
+      result.shape = {
+        kind: 'object',
+        fields,
+        libraryTypeId: nestedTypeId ?? null,
+        libraryCppType: field.cppType ?? null
+      }
     }
 
-    return checkProcessCallInContext(this.nodeRuntimeCallContext(), expression, call, this.checkedCallArgInfos(expression))
-  }
-
-  checkProcessMemberExpression(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression)
-    const info = processRuntimeMemberInfo(path, this.resolveMemberPathRootSymbol(path))
-
-    if (info === null || typeof info === 'undefined') {
-      return null
-    }
-
-    if (expression.object !== null && typeof expression.object !== 'undefined') {
-      this.checkExpression(expression.object)
-    }
-
-    if (info.kind === 'unsupported-property') {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:process ${info.property} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
-    }
-
-    if (info.kind === 'env-name') {
-      expression.processRuntimeEnvName = info.name
-      expression.valueType = 'string'
-      return 'string'
-    }
-
-    expression.processRuntimeProperty = info.property
-    expression.valueType = info.valueType
-    expression.shape = info.shape ?? null
-    return expression.valueType
-  }
-
-  checkProcessMemberAssignment(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.target)
-    const property = processRuntimeAssignmentProperty(path, this.resolveMemberPathRootSymbol(path))
-
-    if (property === null || typeof property === 'undefined') {
-      return null
-    }
-
-    const valueType = this.checkExpression(expression.value)
-    this.checkAssignableType(valueType, 'number', expression.value.loc, false, false)
-    expression.processRuntimeProperty = property
-    expression.valueType = 'number'
-
-    return 'number'
-  }
-
-  checkProcessIndexExpression(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.object)
-    const property = processRuntimeIndexProperty(path, this.resolveMemberPathRootSymbol(path))
-
-    if (property === null || typeof property === 'undefined') {
-      return null
-    }
-
-    const indexType = this.checkExpression(expression.index)
-    this.checkAssignableType(indexType, 'number', expression.index.loc, false, false)
-    expression.processRuntimeProperty = property
-    expression.valueType = 'string'
-
-    return 'string'
+    return result
   }
 
   checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -4827,7 +4654,13 @@ class Checker {
       return symbol
     }
 
-    return builtinGlobalSymbol(root)
+    const builtin = builtinGlobalSymbol(root)
+
+    if (builtin !== null) {
+      return builtin
+    }
+
+    return this.compilerLibraryGlobalSymbol(root)
   }
 
   resolveStdlibRuntimeDirectImportName(
@@ -7657,8 +7490,29 @@ class Checker {
     expression.shape = shape
 
     const properties = new Map()
+    const spreadShapes: ObjectShapeInfo[] = []
+    let hasExplicitProperty = false
 
     for (const property of expression.properties) {
+      if (property.spread === true) {
+        if (hasExplicitProperty) {
+          this.report(
+            'INOX_NOT_IMPLEMENTED',
+            'object spread after an explicit property is not supported by the current C backend slice',
+            property.loc
+          )
+        }
+
+        const spreadShape = this.checkPlainObjectSpreadProperty(property)
+
+        if (spreadShape !== null && typeof spreadShape !== 'undefined') {
+          spreadShapes.push(spreadShape)
+        }
+
+        continue
+      }
+
+      hasExplicitProperty = true
       properties.set(property.key, property)
     }
 
@@ -7666,7 +7520,20 @@ class Checker {
       const property = properties.get(field.name)
 
       if (property === null || typeof property === 'undefined') {
-        if (field.optional !== true) {
+        const spreadField = this.findObjectSpreadShapeField(spreadShapes, field.name)
+
+        if (spreadField !== null && typeof spreadField !== 'undefined') {
+          const spreadFieldType = this.resolveFieldDeclaredType(spreadField)
+          const fieldType = this.resolveFieldDeclaredType(field)
+
+          this.checkAssignableType(
+            spreadFieldType.valueType,
+            fieldType.valueType,
+            expression.loc,
+            field.nullable === true,
+            spreadField.nullable === true
+          )
+        } else if (field.optional !== true) {
           this.report('INOX_MISSING_FIELD', `missing field ${field.name}`, expression.loc)
         }
         continue
@@ -7768,10 +7635,61 @@ class Checker {
     }
 
     for (const property of expression.properties) {
+      if (property.spread === true) {
+        continue
+      }
+
       if (shape.dynamic !== true && !this.findShapeField(shape, property.key)) {
         this.report('INOX_UNKNOWN_FIELD', `unknown field ${property.key}`, property.loc)
       }
     }
+  }
+
+  findObjectSpreadShapeField(shapes: ObjectShapeInfo[], name: string): AnyNode | null {
+    for (let index = shapes.length - 1; index >= 0; index = index - 1) {
+      const field = this.findShapeField(shapes[index], name)
+
+      if (field !== null && typeof field !== 'undefined') {
+        return field
+      }
+    }
+
+    return null
+  }
+
+  checkPlainObjectSpreadProperty(property: AnyNode): ObjectShapeInfo | null {
+    const spreadType = this.checkExpression(property.value)
+
+    this.checkAssignableType(spreadType, 'object', property.loc, false, this.expressionCanBeNull(property.value))
+    const spreadShape = this.resolveExpressionShape(property.value)
+
+    if (
+      spreadShape === null ||
+      typeof spreadShape === 'undefined' ||
+      spreadShape.dynamic === true
+    ) {
+      this.report(
+        'INOX_NOT_IMPLEMENTED',
+        'object spread requires a plain object with a compiler-known fixed shape',
+        property.loc
+      )
+      return null
+    }
+
+    for (const field of spreadShape.fields) {
+      const fieldType = this.resolveFieldDeclaredType(field)
+
+      if (fieldType.valueType === 'function') {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          'object spread of function fields is not supported by the current C backend slice',
+          property.loc
+        )
+        return null
+      }
+    }
+
+    return spreadShape
   }
 
   resolveExpressionShape(expression: AnyNode): ObjectShapeInfo | null {
@@ -7803,6 +7721,20 @@ class Checker {
   }
 
   getCallableSymbol(callee: AnyNode): SymbolInfo | null {
+    const functionOverloads: FunctionTypeMetadata[] = callee.functionOverloads ?? []
+
+    if (functionOverloads.length > 0) {
+      const overloads: SymbolInfo[] = []
+
+      for (const functionType of functionOverloads) {
+        overloads.push(this.callableSymbolFromFunctionType(functionType, callee.loc))
+      }
+
+      const symbol = overloads[0]
+      symbol.overloads = overloads
+      return symbol
+    }
+
     const calleeFunctionType = callee.functionType
 
     if (calleeFunctionType !== null && typeof calleeFunctionType !== 'undefined') {
@@ -7894,15 +7826,71 @@ class Checker {
 
   checkObjectLiteral(expression: AnyNode): void {
     const keys = new Set()
+    const fields: AnyNode[] = []
+    let hasExplicitProperty = false
 
     for (const property of expression.properties) {
+      if (property.spread === true) {
+        if (hasExplicitProperty) {
+          this.report(
+            'INOX_NOT_IMPLEMENTED',
+            'object spread after an explicit property is not supported by the current C backend slice',
+            property.loc
+          )
+        }
+
+        const spreadShape = this.checkPlainObjectSpreadProperty(property)
+
+        if (spreadShape !== null && typeof spreadShape !== 'undefined') {
+          for (const field of spreadShape.fields) {
+            this.setObjectLiteralShapeField(fields, field)
+          }
+        }
+
+        continue
+      }
+
+      hasExplicitProperty = true
+
       if (keys.has(property.key)) {
         this.report('INOX_DUPLICATE_OBJECT_KEY', `duplicate object property ${property.key}`, property.loc)
       }
 
       keys.add(property.key)
-      this.checkExpression(property.value)
+      const valueType = this.checkExpression(property.value)
+
+      this.setObjectLiteralShapeField(fields, {
+        name: property.key,
+        readonly: false,
+        valueType,
+        nullable: this.expressionCanBeNull(property.value),
+        arrayElementType: this.resolveExpressionArrayElementType(property.value),
+        arrayElementDeclaredType: this.resolveExpressionArrayElementDeclaredType(property.value),
+        mapKeyType: property.value.mapKeyType ?? null,
+        mapValueType: property.value.mapValueType ?? null,
+        promiseValueType: this.resolveExpressionPromiseValueType(property.value),
+        setElementType: this.resolveExpressionSetElementType(property.value),
+        functionType: property.value.functionType ?? null,
+        shape: this.resolveExpressionShape(property.value),
+        loc: property.loc
+      })
     }
+
+    expression.shape = {
+      kind: 'object',
+      fields
+    }
+  }
+
+  setObjectLiteralShapeField(fields: AnyNode[], field: AnyNode): void {
+    for (let index = 0; index < fields.length; index = index + 1) {
+      if (fields[index].name === field.name) {
+        fields[index] = field
+        return
+      }
+    }
+
+    fields.push(field)
   }
 
   checkForStatement(statement: AnyNode): void {
@@ -8510,8 +8498,51 @@ class Checker {
     }
 
     if (symbol === null || typeof symbol === 'undefined') {
+      symbol = this.compilerLibraryGlobalSymbol(root, reference.loc)
+    }
+
+    if (symbol === null || typeof symbol === 'undefined') {
       this.report('INOX_UNKNOWN_NAME', `unknown name ${root}`, reference.loc)
       return null
+    }
+
+    return symbol
+  }
+
+  compilerLibraryGlobalSymbol(name: string, loc?: SourceLocation): SymbolInfo | null {
+    const operation = compilerLibraryOperationForGlobal(
+      resolveCompilerLibrarySet(this.options.libraries),
+      [name],
+      'member-read'
+    )
+
+    if (operation === null) {
+      return null
+    }
+
+    const fields = operation.resultShapeFields ?? []
+    const shapeFields: AnyNode[] = []
+    const fieldLoc = loc ?? { line: 1, column: 1 }
+
+    for (let index = 0; index < fields.length; index = index + 1) {
+      shapeFields.push(this.compilerLibraryResultShapeField(fields[index], fieldLoc))
+    }
+
+    const symbol: SymbolInfo = {
+      kind: 'global',
+      mutable: false,
+      valueType: (operation.valueType ?? 'unknown') as ValueType,
+      nullable: operation.nullable === true,
+      arrayElementType: (operation.resultArrayElementType ?? null) as ValueType | null
+    }
+
+    if (fields.length > 0 || operation.resultTypeId !== null && typeof operation.resultTypeId !== 'undefined') {
+      symbol.shape = {
+        kind: 'object',
+        fields: shapeFields,
+        libraryTypeId: operation.resultTypeId ?? null,
+        libraryCppType: operation.cppType ?? null
+      }
     }
 
     return symbol
@@ -8578,18 +8609,6 @@ class Checker {
   }
 
   callableSymbolContext(): CallableSymbolCheckerContext {
-    return {
-      diagnostics: this.diagnostics
-    }
-  }
-
-  nodeRuntimeCallContext(): NodeRuntimeCallCheckerContext {
-    return {
-      diagnostics: this.diagnostics
-    }
-  }
-
-  childProcessCallContext(): ChildProcessCallCheckerContext {
     return {
       diagnostics: this.diagnostics
     }

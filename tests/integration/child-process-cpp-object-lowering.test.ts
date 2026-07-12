@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
+import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
+
+const defaultCompilerLibrarySet = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
 
 type GeneratedTextFile = {
   path: string
@@ -35,14 +39,16 @@ console.log(result.stdout.trim())
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /child_process\.execSync\("printf hi", inox_object_\d+\);/)
-  assert.match(source, /inox::StringView inox_child_process_args_\d+\[\] = \{ "hi" \};/)
-  assert.match(source, /child_process\.execFileSync\("\/bin\/echo", inox_child_process_args_\d+, 1, inox_object_\d+\);/)
-  assert.match(source, /child_process\.spawnSync\("\/bin\/echo", inox_child_process_args_\d+, 1, inox_object_\d+, &inox_shape_spawn_sync_\d+\);/)
+  assert.match(source, /const inox::StringView inox_library_args_\d+\[\] = \{ "hi" \};/)
+  assert.match(source, /child_process\.execFileSync\("\/bin\/echo", inox_library_args_\d+, 1, inox_object_\d+\);/)
+  assert.match(source, /child_process\.spawnSync\("\/bin\/echo", inox_library_args_\d+, 1, inox_object_\d+\);/)
+  assert.doesNotMatch(source, /inox_shape_spawn_sync/)
   assert.doesNotMatch(source, /inox_value inox_child_process_args_\d+\[\]/)
   assert.doesNotMatch(header, /(?:execSync|execFileSync|spawnSync)\([^)]*inox_value/)
   assert.doesNotMatch(runtime, /child_process::(?:execSync|execFileSync|spawnSync)\([^)]*inox_value/)

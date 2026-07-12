@@ -51,7 +51,6 @@ compiler/runtime-builtins.ts -> ./stdlib/node/modules.ts
 compiler/stdlib/declarations.ts -> ./node/modules.ts
 compiler/stdlib/node/builtins.ts -> ./modules.ts
 compiler/stdlib/node/c.ts -> ../../../stdlib/node/buffer/compiler/c.ts
-compiler/stdlib/node/c.ts -> ../../../stdlib/node/child_process/compiler/c.ts
 compiler/stdlib/node/c.ts -> ../../../stdlib/node/crypto/compiler/c.ts
 compiler/stdlib/node/c.ts -> ../../../stdlib/node/crypto/compiler/descriptor.ts
 compiler/stdlib/node/c.ts -> ../../../stdlib/node/dgram/compiler/c.ts
@@ -64,7 +63,6 @@ compiler/stdlib/node/c.ts -> ../../../stdlib/node/net/compiler/descriptor.ts
 compiler/stdlib/node/c.ts -> ../../../stdlib/node/process/compiler/c.ts
 compiler/stdlib/node/c.ts -> ../../../stdlib/node/timers/compiler/c.ts
 compiler/stdlib/node/checker.ts -> ../../../stdlib/node/buffer/compiler/checker.ts
-compiler/stdlib/node/checker.ts -> ../../../stdlib/node/child_process/compiler/checker.ts
 compiler/stdlib/node/checker.ts -> ../../../stdlib/node/crypto/compiler/checker.ts
 compiler/stdlib/node/checker.ts -> ../../../stdlib/node/events/compiler/checker.ts
 compiler/stdlib/node/checker.ts -> ../../../stdlib/node/fs/compiler/checker.ts
@@ -73,7 +71,6 @@ compiler/stdlib/node/checker.ts -> ../../../stdlib/node/stream/compiler/checker.
 compiler/stdlib/node/checker.ts -> ../../../stdlib/node/timers/compiler/checker.ts
 compiler/stdlib/node/checker.ts -> ../../../stdlib/node/timers/compiler/descriptor.ts
 compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/buffer/compiler/descriptor.ts
-compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/child_process/compiler/descriptor.ts
 compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/crypto/compiler/descriptor.ts
 compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/dgram/compiler/descriptor.ts
 compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/events/compiler/descriptor.ts
@@ -85,7 +82,6 @@ compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/process/compiler/desc
 compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/stream/compiler/descriptor.ts
 compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/timers/compiler/descriptor.ts
 compiler/stdlib/node/feature.ts -> ../../../stdlib/node/buffer/compiler/feature.ts
-compiler/stdlib/node/feature.ts -> ../../../stdlib/node/child_process/compiler/feature.ts
 compiler/stdlib/node/feature.ts -> ../../../stdlib/node/crypto/compiler/feature.ts
 compiler/stdlib/node/feature.ts -> ../../../stdlib/node/fs/compiler/feature.ts
 compiler/stdlib/node/feature.ts -> ../../../stdlib/node/process/compiler/feature.ts

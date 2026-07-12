@@ -36,6 +36,17 @@ struct ChildProcessResult {
   size_t stderr_capacity;
 };
 
+static const inox_field_info inox_child_process_spawn_result_fields[] = {
+  { "status", INOX_FIELD_READONLY },
+  { "stdout", INOX_FIELD_READONLY },
+  { "stderr", INOX_FIELD_READONLY },
+};
+
+static const inox_shape inox_child_process_spawn_result_shape = {
+  3,
+  inox_child_process_spawn_result_fields
+};
+
 static inox_status inox_child_process_string(inox_value value, const char** bytes, size_t* len);
 static inox_status inox_child_process_number(inox_value value, long* out);
 static inox_status inox_child_process_options_init(
@@ -182,8 +193,7 @@ inox::Value child_process::spawnSync(
   inox::StringView file,
   const inox::StringView* args,
   size_t arg_count,
-  const inox::Value& options,
-  const inox_shape* shape
+  const inox::Value& options
 ) const {
   inox_allocator* allocator = &inox_default_allocator;
   inox_value raw_options = options.raw();
@@ -197,7 +207,12 @@ inox::Value child_process::spawnSync(
   inox_value out = inox_undefined_value();
 
   if (status == INOX_OK) {
-    status = inox_child_process_spawn_result_object(allocator, &result, shape, &out);
+    status = inox_child_process_spawn_result_object(
+      allocator,
+      &result,
+      &inox_child_process_spawn_result_shape,
+      &out
+    );
   }
 
   inox_child_process_result_dispose(allocator, &result);

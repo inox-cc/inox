@@ -80,7 +80,13 @@ type ObjectFieldNode = AnyNode
 type ObjectPropertyNode = {
   key: string
   loc?: any
+  spread?: boolean
   value: ObjectFieldNode
+}
+
+type PreparedObjectSpread = {
+  name: string
+  property: ObjectPropertyNode
 }
 
 type ObjectFunctionFieldSource = {
@@ -307,6 +313,10 @@ function objectShapeFieldAt(fields: CObjectShapeField[], expectedIndex: number):
 
 function findObjectProperty(properties: ObjectPropertyNode[], key: string): ObjectPropertyNode | null {
   for (const property of properties) {
+    if (property.spread === true) {
+      continue
+    }
+
     const propertyKey: string = property.key
 
     if (propertyKey === key) {
@@ -1815,6 +1825,7 @@ export function emitObjectVariableDeclaration(
   lines.push('};')
   lines.push(`auto ${reference} = inox::ObjectValue::create(&${shapeName});`)
   lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+  const spreads = prepareObjectVariableSpreads(properties, context, dependencies, lines)
 
   context.variables.set(statement.name, 'object')
   registerObjectShapeFields(context, statement.name, fields, new Set())
@@ -1859,6 +1870,18 @@ export function emitObjectVariableDeclaration(
         )
       )
     } else {
+      const spread = preparedObjectVariableSpreadForField(spreads, field.name)
+
+      if (spread !== null && typeof spread !== 'undefined') {
+        const spreadValue = nextCName(context, 'inox_spread_value')
+
+        lines.push(`auto ${spreadValue} = inox::get(${spread.name}, ${cStringLiteral(field.name)});`)
+        lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+        lines.push(`${reference}.init(${index}, ${spreadValue});`)
+        lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+        continue
+      }
+
       if (field.optional !== true) {
         context.diagnostics.push(diagnostic('INOX_MISSING_FIELD', `missing field ${field.name}`, statement.loc))
       }
@@ -1866,6 +1889,53 @@ export function emitObjectVariableDeclaration(
   }
 
   return lines
+}
+
+function prepareObjectVariableSpreads(
+  properties: ObjectPropertyNode[],
+  context: ObjectFunctionContext,
+  dependencies: ObjectVariableDeclarationDependencies,
+  lines: string[]
+): PreparedObjectSpread[] {
+  const spreads: PreparedObjectSpread[] = []
+
+  for (const property of properties) {
+    if (property.spread !== true) {
+      continue
+    }
+
+    const prepared = dependencies.emitCValueExpression(property.value, context)
+    const name = nextCName(context, 'inox_object_spread')
+
+    appendLines(lines, prepared.lines)
+    lines.push(`auto ${name} = ${prepared.expression};`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+    spreads.push({ name, property })
+  }
+
+  return spreads
+}
+
+function preparedObjectVariableSpreadForField(
+  spreads: PreparedObjectSpread[],
+  fieldName: string
+): PreparedObjectSpread | null {
+  for (let index = spreads.length - 1; index >= 0; index = index - 1) {
+    const spread = spreads[index]
+    const shape = spread.property.value.shape
+
+    if (shape === null || typeof shape === 'undefined' || shape.dynamic === true) {
+      continue
+    }
+
+    for (const field of shape.fields) {
+      if (field.name === fieldName) {
+        return spread
+      }
+    }
+  }
+
+  return null
 }
 
 function isSupportedObjectFunctionField(field: CObjectShapeField): boolean {
@@ -2065,6 +2135,10 @@ function objectVariableShapeFields(
   }
 
   for (const property of initProperties) {
+    if (property.spread === true) {
+      continue
+    }
+
     if (findObjectShapeFieldIndex(fields, property.key) !== -1) {
       continue
     }

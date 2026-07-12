@@ -5,8 +5,14 @@
 
 #ifdef __cplusplus
 
-#include "inox/main.h"
 #include "inox/string.h"
+
+namespace inox {
+
+int process_main(int argc, char** argv, void (*app_main)(void));
+int process_main(int argc, char** argv, StringView entry_path, void (*app_main)(void));
+
+} // namespace inox
 
 enum class process_number_reader {
   argvLength,
@@ -20,13 +26,11 @@ private:
 public:
   explicit process_number_property(process_number_reader read);
 
-  double value() const;
   operator double() const;
 };
 
 class process_exit_code_property {
 public:
-  double value() const;
   operator double() const;
   process_exit_code_property& operator=(int code);
   process_exit_code_property& operator=(double code);
@@ -43,19 +47,24 @@ public:
 
 class process_env {
 public:
-  inox::String get(inox::StringView name) const;
+  inox::String operator[](inox::StringView name) const;
 };
 
 class process_versions : public inox::Value {
+private:
+  void init();
+  friend class process;
+
 public:
   inox::String node;
-
-  using inox::Value::operator=;
-
-  void init();
 };
 
 class process : public inox::Value {
+private:
+  void init();
+  friend int inox::process_main(int argc, char** argv, void (*app_main)(void));
+  friend int inox::process_main(int argc, char** argv, inox::StringView entry_path, void (*app_main)(void));
+
 public:
   process();
 
@@ -70,9 +79,6 @@ public:
   inox::String version;
   process_versions versions;
 
-  using inox::Value::operator=;
-
-  void init();
   inox::String cwd() const;
   void exit(int code = 0) const;
   inox::Value hrtime() const;

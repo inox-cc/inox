@@ -2,9 +2,7 @@ import type { CEmitContext, CFunctionContext } from '../../c/context.ts'
 import type { CPreparedExpression as PreparedExpression } from '../../c/types.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram } from '../../types.ts'
 import type { BinaryLoweringDependencies as PackageBinaryLoweringDependencies } from '../../../stdlib/node/buffer/compiler/c.ts'
-import type { ChildProcessLoweringDependencies as PackageChildProcessLoweringDependencies } from '../../../stdlib/node/child_process/compiler/c.ts'
 import type { CryptoLoweringDependencies as PackageCryptoLoweringDependencies } from '../../../stdlib/node/crypto/compiler/c.ts'
-import { cChildProcessRuntimeMethodName } from '../../../stdlib/node/child_process/compiler/c.ts'
 import { isSupportedNodeCryptoCGlobalUsage } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
 import { cryptoRuntimeMethodName, registerCryptoRuntimeImportNames } from '../../../stdlib/node/crypto/compiler/c.ts'
 import type { DgramLoweringDependencies as PackageDgramLoweringDependencies } from '../../../stdlib/node/dgram/compiler/c.ts'
@@ -59,20 +57,6 @@ import {
   resolveNetAddressStringMember
 } from '../../../stdlib/node/net/compiler/c.ts'
 import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compiler/descriptor.ts'
-import type {
-  ProcessLoweringDependencies as PackageProcessLoweringDependencies,
-  ProcessRuntimeObjectReferenceEmitterDescriptor as PackageProcessRuntimeObjectReferenceEmitterDescriptor
-} from '../../../stdlib/node/process/compiler/c.ts'
-import {
-  cProcessRuntimeEnvName,
-  cProcessRuntimeMethodName,
-  cProcessRuntimePropertyName,
-  cProcessRuntimePropertyValueType,
-  cProcessRuntimeStringPropertyName,
-  emitPreparedProcessRuntimeObjectRootReferenceExpression,
-  emitPreparedProcessRuntimeObjectReferenceExpression,
-  processRuntimeObjectReferenceEmitterDescriptors
-} from '../../../stdlib/node/process/compiler/c.ts'
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export {
@@ -86,7 +70,6 @@ export {
   isBinaryRuntimeCall,
   resolveBinaryExpressionKind
 } from '../../../stdlib/node/buffer/compiler/c.ts'
-export { emitPreparedChildProcessCallExpression } from '../../../stdlib/node/child_process/compiler/c.ts'
 export {
   emitCryptoHandleVariableDeclaration,
   emitCryptoHashVariableDeclaration,
@@ -104,15 +87,6 @@ export {
   emitPreparedFsSyncValueExpression
 } from '../../../stdlib/node/fs/compiler/c.ts'
 export {
-  cProcessRuntimeObjectName,
-  cProcessRuntimePropertyName,
-  emitPreparedProcessNumberExpression,
-  emitPreparedProcessValueExpression,
-  emitPreparedProcessStringExpression,
-  emitProcessExitCodeAssignment,
-  emitProcessExitStatement
-} from '../../../stdlib/node/process/compiler/c.ts'
-export {
   emitPreparedTimerCallExpression,
   emitTimerVariableDeclaration,
   isTimerStartCallExpression,
@@ -120,13 +94,11 @@ export {
 } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export type BinaryLoweringDependencies = PackageBinaryLoweringDependencies
-export type ChildProcessLoweringDependencies = PackageChildProcessLoweringDependencies
 export type CryptoLoweringDependencies = PackageCryptoLoweringDependencies
 export type DgramLoweringDependencies = PackageDgramLoweringDependencies
 export type FsLoweringDependencies = PackageFsLoweringDependencies
 export type HttpLoweringDependencies = PackageHttpLoweringDependencies
 export type NetLoweringDependencies = PackageNetLoweringDependencies
-export type ProcessLoweringDependencies = PackageProcessLoweringDependencies
 export type TimerLoweringDependencies = PackageTimerLoweringDependencies
 
 export type NodeNetworkLoweringDependencies = {
@@ -139,36 +111,6 @@ export type NodeStdlibAsyncTaskLoweringDependencies = {
   fs: FsLoweringDependencies
 }
 
-export type NodeStdlibRuntimeObjectReferenceDependencies = {
-  process: ProcessLoweringDependencies
-}
-
-type NodeStdlibRuntimeObjectReferenceEmitter = {
-  source: string
-  name: string
-  packageName: 'process'
-}
-
-const nodeStdlibRuntimeObjectReferenceEmitters: NodeStdlibRuntimeObjectReferenceEmitter[] =
-  nodeStdlibProcessRuntimeObjectReferenceEmitters(processRuntimeObjectReferenceEmitterDescriptors)
-
-function nodeStdlibProcessRuntimeObjectReferenceEmitters(
-  descriptors: PackageProcessRuntimeObjectReferenceEmitterDescriptor[]
-): NodeStdlibRuntimeObjectReferenceEmitter[] {
-  const result: NodeStdlibRuntimeObjectReferenceEmitter[] = []
-
-  for (let index = 0; index < descriptors.length; index = index + 1) {
-    const descriptor = descriptors[index]
-
-    result.push({
-      source: descriptor.source,
-      name: descriptor.name,
-      packageName: 'process'
-    })
-  }
-
-  return result
-}
 
 type NodeCGlobalNameSet = Set<string>
 
@@ -412,99 +354,6 @@ export function emitPreparedNodeStdlibAsyncTaskSourceExpression(
   return emitPreparedFsAsyncTaskSourceExpression(expression, context, dependencies.fs)
 }
 
-export function emitPreparedNodeStdlibRuntimeObjectReferenceExpression(
-  expression: AnyNode,
-  context: CFunctionContext,
-  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
-): PreparedExpression | null {
-  for (let index = 0; index < nodeStdlibRuntimeObjectReferenceEmitters.length; index = index + 1) {
-    const emitter = nodeStdlibRuntimeObjectReferenceEmitters[index]
-
-    if (nodeStdlibRuntimeObjectReferenceEmitterMatches(emitter, expression)) {
-      return emitPreparedNodeStdlibRuntimeObjectReference(emitter, expression, context, dependencies)
-    }
-  }
-
-  return null
-}
-
-export function emitPreparedNodeStdlibRuntimeObjectRootReferenceExpression(
-  name: string,
-  context: CFunctionContext,
-  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
-): PreparedExpression | null {
-  for (let index = 0; index < nodeStdlibRuntimeObjectReferenceEmitters.length; index = index + 1) {
-    const emitter = nodeStdlibRuntimeObjectReferenceEmitters[index]
-
-    if (emitter.name === name) {
-      return emitPreparedNodeStdlibRuntimeObjectRootReference(emitter, name, context, dependencies)
-    }
-  }
-
-  return null
-}
-
-function nodeStdlibRuntimeObjectReferenceEmitterMatches(
-  emitter: NodeStdlibRuntimeObjectReferenceEmitter,
-  expression: AnyNode
-): boolean {
-  if (expression.type !== 'Reference') {
-    return false
-  }
-
-  return expression.runtimeObjectSource === emitter.source && expression.runtimeObjectName === emitter.name
-}
-
-function emitPreparedNodeStdlibRuntimeObjectRootReference(
-  emitter: NodeStdlibRuntimeObjectReferenceEmitter,
-  name: string,
-  context: CFunctionContext,
-  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
-): PreparedExpression | null {
-  if (emitter.packageName === 'process') {
-    return emitPreparedProcessRuntimeObjectRootReferenceExpression(name, context, dependencies.process)
-  }
-
-  return null
-}
-
-function emitPreparedNodeStdlibRuntimeObjectReference(
-  emitter: NodeStdlibRuntimeObjectReferenceEmitter,
-  expression: AnyNode,
-  context: CFunctionContext,
-  dependencies: NodeStdlibRuntimeObjectReferenceDependencies
-): PreparedExpression | null {
-  if (emitter.packageName === 'process') {
-    return emitPreparedProcessRuntimeObjectReferenceExpression(expression, context, dependencies.process)
-  }
-
-  return null
-}
-
-export function isNodeRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean {
-  if (expression === null || typeof expression === 'undefined') {
-    return false
-  }
-
-  if (cProcessRuntimeStringPropertyName(expression)) {
-    return true
-  }
-
-  if (cProcessRuntimeMethodName(expression) === 'cwd') {
-    return true
-  }
-
-  if (cProcessRuntimeEnvName(expression)) {
-    return true
-  }
-
-  if (cProcessRuntimePropertyName(expression) === 'argv' && expression.type === 'IndexExpression') {
-    return true
-  }
-
-  return false
-}
-
 function nodeExpressionValueTypeOrUnknown(expression: AnyNode): string {
   if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
     return expression.valueType
@@ -514,50 +363,6 @@ function nodeExpressionValueTypeOrUnknown(expression: AnyNode): string {
 }
 
 export function inferNodeStdlibExpressionType(expression: AnyNode): string | null {
-  const childProcessMethod = cChildProcessRuntimeMethodName(expression)
-
-  if (childProcessMethod !== null && typeof childProcessMethod !== 'undefined') {
-    if (childProcessMethod === 'spawnSync') {
-      return 'object'
-    }
-
-    return 'string'
-  }
-
-  const processMethod = cProcessRuntimeMethodName(expression)
-
-  if (processMethod !== null && typeof processMethod !== 'undefined') {
-    if (processMethod === 'cwd') {
-      return 'string'
-    }
-
-    if (processMethod === 'hrtime') {
-      return 'array'
-    }
-
-    if (processMethod === 'memoryUsage') {
-      return 'object'
-    }
-
-    return 'void'
-  }
-
-  const processProperty = cProcessRuntimePropertyName(expression)
-
-  if (processProperty === 'argv' && expression.type === 'IndexExpression') {
-    return 'string'
-  }
-
-  const processPropertyType = cProcessRuntimePropertyValueType(expression)
-
-  if (processPropertyType !== null && typeof processPropertyType !== 'undefined') {
-    return processPropertyType
-  }
-
-  if (cProcessRuntimeEnvName(expression)) {
-    return 'string'
-  }
-
   if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression)) {
     if (expression.valueType === 'promise') {
       return 'promise'

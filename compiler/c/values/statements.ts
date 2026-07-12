@@ -1,5 +1,6 @@
 import { diagnostic } from '../../diagnostics.ts'
 import { emitCRegExpFlags } from '../../../stdlib/global/compiler/feature.ts'
+import type { RuntimeEntrypointAdapterDescriptor } from '../../extensions/types.ts'
 import type { AnyNode, Diagnostic, IrFunctionEffect, SourceLocation } from '../../types.ts'
 import { isRuntimeFunctionType, normalizeFunctionType } from '../async/callbacks.ts'
 import type { AsyncTaskLoweringDependencies } from '../async/tasks.ts'
@@ -202,8 +203,8 @@ type CFunctionContext = {
   objectShapes: Map<string, CObjectShapeField[]>
   ownedPromises: string[]
   ownedValues: string[]
-  processEntryPath: string | null
-  processRuntime: boolean
+  runtimeEntryPath: string | null
+  runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   promiseChainArrowWrappers: Map<AnyNode, CPromiseChainWrapper>
   promiseChainWrappers: Map<string, CPromiseChainWrapper>
   promiseConstructorHandlers: Map<string, CPromiseConstructorHandler>
@@ -412,11 +413,6 @@ export type StatementLoweringDependencies = {
   ): PreparedExpression | null
   emitPreparedBytesIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedStatement | null
   emitPreparedCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
-  emitPreparedChildProcessCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
   emitPreparedClassMethodCallExpression(
     expression: StatementNode,
     context: CFunctionContext,
@@ -509,8 +505,6 @@ export type StatementLoweringDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedUpdateExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
-  emitProcessExitCodeAssignment(expression: StatementNode, context: CFunctionContext): string[] | null
-  emitProcessExitStatement(expression: StatementNode, context: CFunctionContext): string[] | null
   emitPromiseConstructorSettlementCall(expression: StatementNode, context: CFunctionContext): string[] | null
   emitReference(expression: StatementNode, context: CFunctionContext): string
   emitModuleValueVariableAssignment(statement: StatementNode, context: CFunctionContext): string[]
@@ -2083,6 +2077,10 @@ function resolveRuntimeObjectLiteralShapeFields(
   const properties: StatementNode[] = expression.properties
 
   for (const property of properties) {
+    if (property.spread === true) {
+      continue
+    }
+
     if (property.value === null || typeof property.value === 'undefined') {
       continue
     }
@@ -4106,22 +4104,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return deps.emitScalarVariableDeclaration(statement, context)
   }
 
-  const childProcessObject = deps.emitPreparedChildProcessCallExpression(
-    statement.init,
-    context,
-    preparedCallOut(statement.name)
-  )
-
-  if (
-    childProcessObject !== null &&
-    typeof childProcessObject !== 'undefined' &&
-    statement.init !== null &&
-    typeof statement.init !== 'undefined' &&
-    statement.init.childProcessRuntimeMethod === 'spawnSync'
-  ) {
-    return childProcessObject.lines
-  }
-
   const libraryObject = deps.emitPreparedCompilerLibraryCallExpression(
     statement.init,
     context,
@@ -4799,12 +4781,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return []
     }
 
-    const processExit = deps.emitProcessExitStatement(expression, context)
-
-    if (processExit !== null && typeof processExit !== 'undefined') {
-      return processExit
-    }
-
     const collectionCall = deps.emitPreparedCollectionCallExpression(expression, context)
 
     if (collectionCall !== null && typeof collectionCall !== 'undefined') {
@@ -4905,12 +4881,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return moduleValueAssignment
     }
 
-    const processExitCodeAssignment = deps.emitProcessExitCodeAssignment(expression, context)
-
-    if (processExitCodeAssignment !== null && typeof processExitCodeAssignment !== 'undefined') {
-      return processExitCodeAssignment
-    }
-
     const mapIndexAssignment = deps.emitPreparedMapIndexAssignment(expression, context)
 
     if (mapIndexAssignment !== null && typeof mapIndexAssignment !== 'undefined') {
@@ -4920,7 +4890,13 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
     const libraryAssignment = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
 
     if (libraryAssignment !== null) {
-      return libraryAssignment.lines
+      const lines = libraryAssignment.lines
+
+      if (libraryAssignment.expression !== '') {
+        lines.push(`${libraryAssignment.expression};`)
+      }
+
+      return lines
     }
 
     const nativeClassFieldAssignment = emitNativeClassFieldAssignment(expression, context)

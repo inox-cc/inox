@@ -1858,7 +1858,11 @@ export type CScalarExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext
   ): PreparedExpression | null
-  emitPreparedProcessNumberExpression(expression: CValueNode): PreparedExpression | null
+  emitPreparedCompilerLibraryCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
+  emitPreparedCompilerLibraryExpression(expression: CValueNode): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedRuntimeArrayIndexValue(
     expression: CValueNode,
@@ -2760,6 +2764,18 @@ export function emitPreparedNumberExpression(
   context: CFunctionContext,
   deps: CScalarExpressionDependencies
 ): PreparedExpression {
+  const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
+
+  if (libraryCall !== null && libraryCall.expression !== '') {
+    return libraryCall
+  }
+
+  const libraryExpression = deps.emitPreparedCompilerLibraryExpression(expression)
+
+  if (libraryExpression !== null) {
+    return libraryExpression
+  }
+
   const classMethodCall = deps.emitPreparedClassMethodCallExpression(expression, context, {})
 
   if (classMethodCall !== null && typeof classMethodCall !== 'undefined' && classMethodCall.expression !== '') {
@@ -2786,12 +2802,6 @@ export function emitPreparedNumberExpression(
 
   if (arrayIsArrayCall !== null && typeof arrayIsArrayCall !== 'undefined') {
     return arrayIsArrayCall
-  }
-
-  const processNumber = deps.emitPreparedProcessNumberExpression(expression)
-
-  if (processNumber !== null && typeof processNumber !== 'undefined') {
-    return processNumber
   }
 
   if (expression.type === 'NumberLiteral') {
@@ -5047,7 +5057,6 @@ export type CValueExpressionDependencies = {
   emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedBinaryValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedChildProcessCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedClassMethodCallExpression(
     expression: CValueNode,
     context: CFunctionContext,
@@ -5109,8 +5118,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedProcessStringExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedProcessValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -5157,12 +5164,6 @@ export function emitCValueExpression(
     return deps.emitCAwaitValueExpression(expression, context)
   }
 
-  const childProcessCall = deps.emitPreparedChildProcessCallExpression(expression, context)
-
-  if (childProcessCall !== null && typeof childProcessCall !== 'undefined') {
-    return childProcessCall
-  }
-
   const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
 
   if (libraryCall !== null) {
@@ -5173,18 +5174,6 @@ export function emitCValueExpression(
 
   if (libraryExpression !== null) {
     return libraryExpression
-  }
-
-  const processString = deps.emitPreparedProcessStringExpression(expression, context)
-
-  if (processString !== null && typeof processString !== 'undefined') {
-    return processString
-  }
-
-  const processValue = deps.emitPreparedProcessValueExpression(expression, context)
-
-  if (processValue !== null && typeof processValue !== 'undefined') {
-    return processValue
   }
 
   const fsSyncValue = deps.emitPreparedFsSyncValueExpression(expression, context)

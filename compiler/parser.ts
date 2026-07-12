@@ -32,6 +32,7 @@ import {
   createObjectKey,
   createObjectLiteral,
   createObjectProperty,
+  createObjectSpreadProperty,
   createOptionalCallTarget,
   createOptionalIndexExpression,
   createOptionalMemberExpression,
@@ -563,7 +564,7 @@ class Parser {
           'strong'
         )
         field.functionType = this.parseObjectTypeMethodSignature()
-        fields.push(field)
+        appendObjectTypeMethodField(fields, field)
         this.matchValue(',')
         this.matchValue(';')
         continue
@@ -1704,6 +1705,22 @@ class Parser {
     const properties: AnyNode[] = []
 
     while (!this.isValue('}') && !this.is('eof')) {
+      let spread: Token | null = null
+
+      if (this.isValue('...')) {
+        spread = this.advance()
+      }
+
+      if (spread !== null && typeof spread !== 'undefined') {
+        properties.push(createObjectSpreadProperty(this.parseExpression(), locFromToken(spread)))
+
+        if (!this.matchValue(',')) {
+          break
+        }
+
+        continue
+      }
+
       const key = this.parseObjectKey()
       let value: AnyNode = {
         type: 'InvalidExpression'
@@ -2091,4 +2108,21 @@ class Parser {
   previous(): Token {
     return this.tokens[Math.max(0, this.position - 1)]
   }
+}
+
+function appendObjectTypeMethodField(fields: AnyNode[], field: AnyNode): void {
+  for (const existing of fields) {
+    if (
+      existing.name === field.name &&
+      existing.functionType !== null &&
+      typeof existing.functionType !== 'undefined'
+    ) {
+      const overloads: AnyNode[] = existing.functionOverloads ?? [existing.functionType]
+      overloads.push(field.functionType)
+      existing.functionOverloads = overloads
+      return
+    }
+  }
+
+  fields.push(field)
 }
