@@ -400,6 +400,7 @@ export function emitCModuleSource(
     globalUsages,
     hasRuntimeCallbackWrapper: cModuleHasRuntimeCallbackWrapper(context),
     irPrograms,
+    libraries: options.libraries,
     runtimeRequirements,
     signatureRuntimeTypes,
     throwingFunctionCount: context.throwingFunctions.size
@@ -462,7 +463,6 @@ export function emitCModuleSource(
       prelude.needsObjectRuntime,
       prelude.needsChildProcessRuntime,
       prelude.needsFsRuntime,
-      prelude.needsOsRuntime,
       prelude.needsPathRuntime,
       prelude.needsUrlRuntime,
       prelude.needsProcessRuntime,
@@ -474,6 +474,7 @@ export function emitCModuleSource(
       prelude.needsFetchRuntime,
       prelude.needsHttpRuntime,
       prelude.needsNetRuntime,
+      prelude.libraryCPreludeIncludes,
       options
     )
   )
@@ -1554,8 +1555,22 @@ function registerImportedCModuleValueDeclarations(context: CEmitContext, plan: C
       }
 
       const localName = cModuleImportedBindingName(importDeclaration, specifier)
-      context.moduleValueNames.set(localName, emitCModuleValueName(importedModule, specifier.imported))
-      context.moduleValueTypes.set(localName, cModuleValueType(exported))
+
+      if (specifier.local !== specifier.imported) {
+        const syntheticName = specifier.syntheticValueImportName
+
+        if (syntheticName !== null && typeof syntheticName !== 'undefined') {
+          context.moduleValueNames.set(syntheticName, emitCModuleValueName(importedModule, specifier.imported))
+          context.moduleValueTypes.set(syntheticName, cModuleValueType(exported))
+        }
+
+        continue
+      }
+
+      if (!context.moduleValueNames.has(localName)) {
+        context.moduleValueNames.set(localName, emitCModuleValueName(importedModule, specifier.imported))
+        context.moduleValueTypes.set(localName, cModuleValueType(exported))
+      }
     }
   }
 }

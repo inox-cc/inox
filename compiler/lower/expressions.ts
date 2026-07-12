@@ -393,15 +393,37 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.mathRuntimeMethod = mathRuntimeMethod
   }
 
-  const osRuntimeConstant = nullableString(source.osRuntimeConstant)
-  if (osRuntimeConstant !== null && typeof osRuntimeConstant !== 'undefined') {
-    target.osRuntimeConstant = osRuntimeConstant
+  const libraryBindingId = nullableString(source.libraryBindingId)
+  if (libraryBindingId !== null && typeof libraryBindingId !== 'undefined') {
+    target.libraryBindingId = libraryBindingId
   }
 
-  const osRuntimeMethod = nullableString(source.osRuntimeMethod)
-  if (osRuntimeMethod !== null && typeof osRuntimeMethod !== 'undefined') {
-    target.osRuntimeMethod = osRuntimeMethod
+  const libraryOperationId = nullableString(source.libraryOperationId)
+  if (libraryOperationId !== null && typeof libraryOperationId !== 'undefined') {
+    target.libraryOperationId = libraryOperationId
   }
+
+  const libraryCExpression = nullableString(source.libraryCExpression)
+  if (libraryCExpression !== null && typeof libraryCExpression !== 'undefined') {
+    target.libraryCExpression = libraryCExpression
+  }
+
+  const libraryCppType = nullableString(source.libraryCppType)
+  if (libraryCppType !== null && typeof libraryCppType !== 'undefined') {
+    target.libraryCppType = libraryCppType
+  }
+
+  const libraryConstantValue = nullableString(source.libraryConstantValue)
+  if (libraryConstantValue !== null && typeof libraryConstantValue !== 'undefined') {
+    target.libraryConstantValue = libraryConstantValue
+  }
+
+  if (source.libraryOwned === true) {
+    target.libraryOwned = true
+  }
+
+  copyStringMetadataArray(target, source, 'libraryRuntimeRequirements')
+  copyStringMetadataArray(target, source, 'libraryCapabilities')
 
   const objectRuntimeMethod = nullableString(source.objectRuntimeMethod)
   if (objectRuntimeMethod !== null && typeof objectRuntimeMethod !== 'undefined') {
@@ -549,6 +571,22 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   }
 
   return target
+}
+
+function copyStringMetadataArray(target: LowerExpressionNode, source: LowerExpressionNode, field: string): void {
+  const values = source[field]
+
+  if (!Array.isArray(values)) {
+    return
+  }
+
+  const copied: string[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    copied.push(values[index])
+  }
+
+  target[field] = copied
 }
 
 function cloneStringLiteral(expression: LowerExpressionNode): LowerExpressionNode {

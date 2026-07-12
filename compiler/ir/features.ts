@@ -69,7 +69,10 @@ export function collectIrFeatureRequirements(programs: FeatureProgram[]): IrFeat
   return result
 }
 
-export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequirement[] {
+export function collectRuntimeRequirements(
+  features: IrFeature[],
+  program: ProgramNode | null = null
+): IrRuntimeRequirement[] {
   const requirements = createRuntimeRequirementSet()
 
   for (let index = 0; index < features.length; index = index + 1) {
@@ -81,9 +84,82 @@ export function collectRuntimeRequirements(features: IrFeature[]): IrRuntimeRequ
     }
   }
 
+  if (program !== null) {
+    visitRuntimeRequirementNode(program, requirements)
+  }
+
   const result = sortCompilerRuntimeRequirements(requirements)
 
   return result
+}
+
+function visitRuntimeRequirementNode(
+  node: FeatureRawNode | FeatureRawNode[] | null | undefined,
+  requirements: IrRuntimeRequirementSet
+): void {
+  if (node === null || typeof node === 'undefined') {
+    return
+  }
+
+  if (Array.isArray(node)) {
+    for (let index = 0; index < node.length; index = index + 1) {
+      visitRuntimeRequirementNode(featureArrayNodeAt(node, index), requirements)
+    }
+    return
+  }
+
+  const item = node as FeatureNode
+  const libraryRequirements: unknown = item.libraryRuntimeRequirements
+
+  if (Array.isArray(libraryRequirements)) {
+    for (let index = 0; index < libraryRequirements.length; index = index + 1) {
+      requirements.add(libraryRequirements[index])
+    }
+  }
+
+  const featureChildren = compilerFeatureChildNodes(item)
+
+  if (featureChildren !== null && typeof featureChildren !== 'undefined') {
+    visitRuntimeRequirementNode(featureChildren, requirements)
+    return
+  }
+
+  visitRuntimeRequirementChild(item.body, requirements)
+  visitRuntimeRequirementChild(item.params, requirements)
+  visitRuntimeRequirementChild(item.fields, requirements)
+  visitRuntimeRequirementChild(item.methods, requirements)
+  visitRuntimeRequirementChild(item.init, requirements)
+  visitRuntimeRequirementChild(item.condition, requirements)
+  visitRuntimeRequirementChild(item.consequent, requirements)
+  visitRuntimeRequirementChild(item.alternate, requirements)
+  visitRuntimeRequirementChild(item.test, requirements)
+  visitRuntimeRequirementChild(item.update, requirements)
+  visitRuntimeRequirementChild(item.iterable, requirements)
+  visitRuntimeRequirementChild(item.discriminant, requirements)
+  visitRuntimeRequirementChild(item.cases, requirements)
+  visitRuntimeRequirementChild(item.block, requirements)
+  visitRuntimeRequirementChild(item.handler, requirements)
+  visitRuntimeRequirementChild(item.finalizer, requirements)
+  visitRuntimeRequirementChild(item.argument, requirements)
+  visitRuntimeRequirementChild(item.args, requirements)
+  visitRuntimeRequirementChild(item.callee, requirements)
+  visitRuntimeRequirementChild(item.object, requirements)
+  visitRuntimeRequirementChild(item.index, requirements)
+  visitRuntimeRequirementChild(item.target, requirements)
+  visitRuntimeRequirementChild(item.value, requirements)
+  visitRuntimeRequirementChild(item.left, requirements)
+  visitRuntimeRequirementChild(item.right, requirements)
+  visitRuntimeRequirementChild(item.elements, requirements)
+  visitRuntimeRequirementChild(item.properties, requirements)
+  visitRuntimeRequirementChild(item.expression, requirements)
+}
+
+function visitRuntimeRequirementChild(value: unknown, requirements: IrRuntimeRequirementSet): void {
+  if (value === null || typeof value === 'undefined' || typeof value !== 'object') {
+    return
+  }
+
+  visitRuntimeRequirementNode(value as AnyNode, requirements)
 }
 
 export function collectIrRuntimeRequirements(programs: RuntimeRequirementProgram[]): IrRuntimeRequirement[] {

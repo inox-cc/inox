@@ -14,15 +14,12 @@ import {
   fsStatsRuntimeMethodInfo,
   isFsPromisesImportSymbol,
   isFsRuntimeRootSymbol,
-  isOsRuntimeConstantImport,
   isPathRuntimeConstantImport,
   isTimerHandleMethod,
   isTimerRuntimeImportSymbol,
   isUrlMutableObjectField,
   isUrlSearchParamsRuntimeMethod,
   nodeStdlibRuntimeObjectInfo,
-  osRuntimeCallInfo,
-  osRuntimeConstantName,
   pathRuntimeCallInfo,
   pathRuntimeConstantName,
   processRuntimeAssignmentProperty,
@@ -99,6 +96,15 @@ import {
   timeRuntimeCallInfo
 } from '../stdlib/global/compiler/checker.ts'
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
+import {
+  compilerLibraryHasModuleDeclaration,
+  compilerLibraryOperationForImport,
+  resolveCompilerLibrarySet
+} from './extensions/library-set.ts'
+import type {
+  LibraryOperationDescriptor,
+  LibraryOperationKind
+} from './extensions/types.ts'
 import {
   cloneResolvedTypeInfo as cloneResolvedTypeInfoInContext,
   declareTypeAlias as declareTypeAliasInContext,
@@ -186,7 +192,6 @@ import type {
   GlobalCallCheckerContext
 } from './checker/global-calls.ts'
 import {
-  checkOsCall as checkOsCallInContext,
   checkPathCall as checkPathCallInContext,
   checkProcessCall as checkProcessCallInContext,
   checkUrlCall as checkUrlCallInContext,
@@ -1676,13 +1681,16 @@ class Checker {
       if (symbol !== null && typeof symbol !== 'undefined' && symbol.kind === 'import') {
         const importSource = symbol.importSource
         const importedName = symbol.importedName
+        const libraryOperation = compilerLibraryOperationForImport(
+          resolveCompilerLibrarySet(this.options.libraries),
+          importSource,
+          importedName,
+          [],
+          'member-read'
+        )
 
-        if (
-          importedName !== null &&
-          typeof importedName !== 'undefined' &&
-          isOsRuntimeConstantImport(importSource, importedName)
-        ) {
-          expression.osRuntimeConstant = importedName
+        if (libraryOperation !== null) {
+          this.applyCompilerLibraryOperation(expression, libraryOperation)
         }
 
         const processImportInfo = processRuntimePropertyImportInfo(importSource, importedName)
@@ -2243,10 +2251,10 @@ class Checker {
   }
 
   checkMemberExpression(expression: AnyNode): ValueType {
-    const osConstantType = this.checkOsConstantMemberExpression(expression)
+    const libraryMemberType = this.applyCompilerLibraryMemberOperation(expression)
 
-    if (osConstantType !== null && typeof osConstantType !== 'undefined') {
-      return osConstantType
+    if (libraryMemberType !== null) {
+      return libraryMemberType
     }
 
     const processMemberType = this.checkProcessMemberExpression(expression)
@@ -3250,6 +3258,12 @@ class Checker {
   }
 
   checkCallExpression(expression: AnyNode): ValueType {
+    const libraryDiagnosticType = this.checkCompilerLibraryCallOperation(expression)
+
+    if (libraryDiagnosticType !== null) {
+      return libraryDiagnosticType
+    }
+
     const consoleType = this.checkConsoleCall(expression)
 
     if (consoleType !== null && typeof consoleType !== 'undefined') {
@@ -3452,12 +3466,6 @@ class Checker {
 
     if (childProcessType !== null && typeof childProcessType !== 'undefined') {
       return childProcessType
-    }
-
-    const osType = this.checkOsCall(expression)
-
-    if (osType !== null && typeof osType !== 'undefined') {
-      return osType
     }
 
     const processType = this.checkProcessCall(expression)
@@ -4072,38 +4080,114 @@ class Checker {
     }
   }
 
-  checkOsCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const call = osRuntimeCallInfo(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'os'),
-      this.resolveStdlibModuleObjectMemberName(path, 'os')
-    )
+  checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
+    const operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
 
-    if (call === null || typeof call === 'undefined') {
+    if (operation === null) {
       return null
     }
 
-    this.checkedCallArgInfos(expression)
+    this.applyCompilerLibraryOperation(expression, operation)
 
-    return checkOsCallInContext(this.nodeRuntimeCallContext(), expression, call)
+    const diagnosticCode = operation.diagnosticCode
+    const diagnosticMessage = operation.diagnosticMessage
+
+    if (
+      diagnosticCode !== null &&
+      typeof diagnosticCode !== 'undefined' &&
+      diagnosticMessage !== null &&
+      typeof diagnosticMessage !== 'undefined'
+    ) {
+      this.checkedCallArgInfos(expression)
+      this.report(diagnosticCode, diagnosticMessage, expression.loc)
+      expression.valueType = 'unknown'
+      return 'unknown'
+    }
+
+    return null
   }
 
-  checkOsConstantMemberExpression(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression)
-    const constant = osRuntimeConstantName(
-      this.resolveStdlibRuntimeDirectImportName(path, 'os'),
-      this.resolveStdlibModuleObjectMemberName(path, 'os')
-    )
+  applyCompilerLibraryMemberOperation(expression: AnyNode): ValueType | null {
+    const operation = this.compilerLibraryOperationForExpression(expression, 'member-read')
 
-    if (constant === null || typeof constant === 'undefined') {
+    if (operation !== null) {
+      this.applyCompilerLibraryOperation(expression, operation)
+
+      const valueType = operation.valueType
+
+      if (valueType !== null && typeof valueType !== 'undefined') {
+        return valueType as ValueType
+      }
+    }
+
+    return null
+  }
+
+  compilerLibraryOperationForExpression(
+    expression: AnyNode,
+    kind: LibraryOperationKind
+  ): LibraryOperationDescriptor | null {
+    const path = memberExpressionPath(expression)
+
+    if (path.length === 0) {
       return null
     }
 
-    expression.osRuntimeConstant = constant
-    expression.valueType = 'string'
+    const symbol = this.resolveMemberPathRootSymbol(path)
 
-    return 'string'
+    if (symbol === null || symbol.kind !== 'import') {
+      return null
+    }
+
+    const memberPath: string[] = []
+
+    for (let index = 1; index < path.length; index = index + 1) {
+      memberPath.push(path[index])
+    }
+
+    return compilerLibraryOperationForImport(
+      resolveCompilerLibrarySet(this.options.libraries),
+      symbol.importSource,
+      symbol.importedName,
+      memberPath,
+      kind
+    )
+  }
+
+  applyCompilerLibraryOperation(expression: AnyNode, operation: LibraryOperationDescriptor): void {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+    const capabilities: string[] = []
+
+    for (let requirementIndex = 0; requirementIndex < operation.runtimeRequirements.length; requirementIndex = requirementIndex + 1) {
+      const requirementId = operation.runtimeRequirements[requirementIndex]
+
+      for (let descriptorIndex = 0; descriptorIndex < libraries.runtimeRequirements.length; descriptorIndex = descriptorIndex + 1) {
+        const requirement = libraries.runtimeRequirements[descriptorIndex]
+
+        if (requirement.id !== requirementId) {
+          continue
+        }
+
+        for (let capabilityIndex = 0; capabilityIndex < requirement.capabilities.length; capabilityIndex = capabilityIndex + 1) {
+          capabilities.push(requirement.capabilities[capabilityIndex])
+        }
+      }
+    }
+
+    expression.libraryBindingId = operation.bindingId
+    expression.libraryOperationId = operation.operationId
+    expression.libraryRuntimeRequirements = operation.runtimeRequirements
+    expression.libraryCapabilities = capabilities
+    expression.libraryCExpression = operation.cExpression ?? null
+    expression.libraryCppType = operation.cppType ?? null
+    const valueType = operation.valueType
+
+    if (valueType !== null && typeof valueType !== 'undefined') {
+      expression.valueType = valueType
+    }
+
+    expression.libraryOwned = operation.owned === true
+    expression.libraryConstantValue = operation.constantValue ?? null
   }
 
   checkProcessCall(expression: AnyNode): ValueType | null {
@@ -4695,7 +4779,16 @@ class Checker {
       return
     }
 
-    if (!isStdlibModuleImportSource(statement.source) && !isRelativeImportSource(statement.source)) {
+    const libraryDeclaration = compilerLibraryHasModuleDeclaration(
+      resolveCompilerLibrarySet(this.options.libraries),
+      statement.source
+    )
+
+    if (
+      !isStdlibModuleImportSource(statement.source) &&
+      !isRelativeImportSource(statement.source) &&
+      !libraryDeclaration
+    ) {
       this.report(
         'INOX_UNSUPPORTED_IMPORT_SOURCE',
         `only relative imports are implemented, got ${statement.source}`,
@@ -4704,10 +4797,14 @@ class Checker {
       return
     }
 
-    if (isUnsupportedRuntimeBuiltinImportSource(statement.source)) {
+    if (isUnsupportedRuntimeBuiltinImportSource(statement.source) && !libraryDeclaration) {
       const unsupportedMessage = unsupportedRuntimeBuiltinImportMessageFromKnownSource(statement.source)
 
       this.report('INOX_NOT_IMPLEMENTED', unsupportedMessage, statement.loc)
+      return
+    }
+
+    if (libraryDeclaration && isUnsupportedRuntimeBuiltinImportSource(statement.source)) {
       return
     }
 

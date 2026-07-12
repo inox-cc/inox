@@ -40,8 +40,11 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'fsRuntimeMethod',
   'jsonRuntimeMethod',
   'mathRuntimeMethod',
-  'osRuntimeConstant',
-  'osRuntimeMethod',
+  'libraryBindingId',
+  'libraryOperationId',
+  'libraryCExpression',
+  'libraryCppType',
+  'libraryConstantValue',
   'objectRuntimeMethod',
   'stringRuntimeMethod',
   'timeRuntimeMethod',
@@ -59,7 +62,8 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'collectionKind',
   'param',
   'functionTypeOwnership',
-  'shapeOwnership'
+  'shapeOwnership',
+  'syntheticValueImportName'
 ]
 
 export const compilerAnyNodeBooleanFields: readonly string[] = [
@@ -76,6 +80,7 @@ export const compilerAnyNodeBooleanFields: readonly string[] = [
   'optionalChainProtected',
   'readonly',
   'readonlyField',
+  'libraryOwned',
   'returnNullable',
   'static',
   'typeOnly',
@@ -87,6 +92,8 @@ export const compilerAnyNodeArrayFields: readonly string[] = [
   'cases',
   'elements',
   'expressions',
+  'libraryCapabilities',
+  'libraryRuntimeRequirements',
   'fields',
   'methods',
   'params',

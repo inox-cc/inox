@@ -32,7 +32,6 @@ import {
   nodeNetImportSource,
   nodeNetModuleObjectImportNames
 } from '../../../stdlib/node/net/compiler/descriptor.ts'
-import { nodeOsImportSource, nodeOsModuleObjectImportNames } from '../../../stdlib/node/os/compiler/descriptor.ts'
 import {
   nodePathImportSource,
   nodePathModuleObjectImportNames
@@ -120,10 +119,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
     libuvRuntimeFeature: 'node:net'
   },
   {
-    source: nodeOsImportSource,
-    libuvRuntimeFeature: null
-  },
-  {
     source: nodeStreamImportSource,
     libuvRuntimeFeature: null
   },
@@ -196,11 +191,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     source: nodeNetImportSource,
     kind: 'connect',
     importedNames: nodeNetConnectImportNames
-  },
-  {
-    source: nodeOsImportSource,
-    kind: 'module-object',
-    importedNames: nodeOsModuleObjectImportNames
   },
   {
     source: nodePathImportSource,

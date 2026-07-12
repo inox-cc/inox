@@ -395,6 +395,18 @@ export function emitStringExpression(expression: AnyNode | null | undefined, con
     return JSON.stringify(runtimeConstant)
   }
 
+  if (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    stringDeps(context).isNodeRuntimeProducedStringExpression(expression)
+  ) {
+    const runtimeString = emitPreparedNodeRuntimeStringExpression(expression, context)
+
+    if (runtimeString !== null && runtimeString.lines.length === 0) {
+      return runtimeString.expression
+    }
+  }
+
   if (expression !== null && typeof expression !== 'undefined' && expression.type === 'Reference') {
     return stringDeps(context).emitReference(expression, context)
   }

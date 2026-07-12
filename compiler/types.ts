@@ -45,7 +45,6 @@ export type IrFeature =
   | 'number-from-string-null'
   | 'numeric-casts'
   | 'objects'
-  | 'os'
   | 'path'
   | 'process'
   | 'regexp'
@@ -55,26 +54,7 @@ export type IrFeature =
   | 'url'
   | 'weak-references'
 
-export type IrRuntimeRequirement =
-  | 'async-runtime'
-  | 'binary'
-  | 'callback-values'
-  | 'child-process'
-  | 'clocks'
-  | 'crypto'
-  | 'debug-memory'
-  | 'collections'
-  | 'fs'
-  | 'json'
-  | 'managed-values'
-  | 'objects'
-  | 'os'
-  | 'path'
-  | 'process'
-  | 'string-bytes'
-  | 'timers'
-  | 'url'
-  | 'weak-references'
+export type IrRuntimeRequirement = string
 
 export type IrThrowValueType = 'error' | 'other' | 'string'
 
@@ -245,11 +225,11 @@ export type RuntimeProfile = 'embedded' | 'hosted'
 export type RuntimeLoopBackend = 'embedded' | 'libuv'
 
 export type RuntimeCapabilities = {
+  [key: string]: boolean | undefined
   entropy?: boolean
   fs?: boolean
   heap?: boolean
   monotonicClock?: boolean
-  os?: boolean
   timers?: boolean
   wallClock?: boolean
 }

@@ -11,6 +11,7 @@ export type LibraryDeclarationDescriptor = {
   kind: LibraryDeclarationKind
   source: string
   declarationSource: string
+  compilerImplemented?: boolean
 }
 
 export type LibraryOperationKind =
@@ -24,9 +25,17 @@ export type LibraryOperationKind =
 export type LibraryOperationDescriptor = {
   libraryId: LibraryId
   bindingId: LibraryBindingId
+  bindingAliases?: LibraryBindingId[]
   operationId: LibraryOperationId
   kind: LibraryOperationKind
   runtimeRequirements: RuntimeRequirementId[]
+  cExpression?: string | null
+  cppType?: string | null
+  valueType?: string | null
+  owned?: boolean
+  constantValue?: string | null
+  diagnosticCode?: string | null
+  diagnosticMessage?: string | null
 }
 
 export type IntrinsicRole =
@@ -51,6 +60,14 @@ export type CompilerLibraryDescriptor = {
   id: LibraryId
   dependencies: LibraryId[]
   declarations: LibraryDeclarationDescriptor[]
+  operations: LibraryOperationDescriptor[]
+  intrinsicBindings: IntrinsicRoleBinding[]
+  runtimeRequirements: RuntimeRequirementDescriptor[]
+}
+
+export type CompilerLibraryPackageDescriptor = {
+  id: LibraryId
+  dependencies: LibraryId[]
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
   runtimeRequirements: RuntimeRequirementDescriptor[]

@@ -13,6 +13,10 @@ import {
 } from './diagnostics.ts'
 import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
 import { nodeStdlibHasSupportedCryptoGlobalUsage, nodeStdlibRuntimeImportUsage } from '../stdlib/node/c.ts'
+import type {
+  CompilerLibrarySet,
+  RuntimeRequirementDescriptor
+} from '../extensions/types.ts'
 
 export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
@@ -32,7 +36,6 @@ export type CRuntimePreludeRequirements = {
   needsObjectRuntime: boolean
   needsChildProcessRuntime: boolean
   needsFsRuntime: boolean
-  needsOsRuntime: boolean
   needsPathRuntime: boolean
   needsUrlRuntime: boolean
   needsProcessRuntime: boolean
@@ -44,6 +47,7 @@ export type CRuntimePreludeRequirements = {
   needsFetchRuntime: boolean
   needsHttpRuntime: boolean
   needsNetRuntime: boolean
+  libraryCPreludeIncludes: string[]
 }
 
 export type CRuntimePreludeRequirementInput = {
@@ -53,6 +57,7 @@ export type CRuntimePreludeRequirementInput = {
   globalUsages: IrGlobalUsage[]
   hasRuntimeCallbackWrapper: boolean
   irPrograms: IrProgram[]
+  libraries?: CompilerLibrarySet
   runtimeRequirements: Set<IrRuntimeRequirement>
   signatureRuntimeTypes?: Set<string>
   throwingFunctionCount: number
@@ -78,30 +83,34 @@ export function addDateStringRuntimeRequirements(
 export function resolveCRuntimePreludeRequirements(
   input: CRuntimePreludeRequirementInput
 ): CRuntimePreludeRequirements {
+  const libraryRuntime = resolveLibraryRuntimeRequirements(
+    input.runtimeRequirements,
+    input.libraries
+  )
+  const runtimeRequirements = libraryRuntime.requirements
   const signatureRuntimeTypes: Set<string> = input.signatureRuntimeTypes ?? new Set()
   const needsCallbackRuntime =
     input.hasRuntimeCallbackWrapper ||
-    input.runtimeRequirements.has('callback-values') ||
+    runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
-  const needsChildProcessRuntime = input.runtimeRequirements.has('child-process')
-  const needsFsRuntime = input.runtimeRequirements.has('fs')
-  const needsOsRuntime = input.runtimeRequirements.has('os')
-  const needsPathRuntime = input.runtimeRequirements.has('path')
-  const needsUrlRuntime = input.runtimeRequirements.has('url')
-  const needsProcessRuntime = input.runtimeRequirements.has('process')
-  const needsJsonRuntime = input.runtimeRequirements.has('json')
+  const needsChildProcessRuntime = runtimeRequirements.has('child-process')
+  const needsFsRuntime = runtimeRequirements.has('fs')
+  const needsPathRuntime = runtimeRequirements.has('path')
+  const needsUrlRuntime = runtimeRequirements.has('url')
+  const needsProcessRuntime = runtimeRequirements.has('process')
+  const needsJsonRuntime = runtimeRequirements.has('json')
   const needsRegexpRuntime = irProgramsUseCPreludeFeature(input.irPrograms, 'regexp')
-  const needsTimerRuntime = input.runtimeRequirements.has('timers')
-  const needsDebugMemoryRuntime = input.runtimeRequirements.has('debug-memory')
+  const needsTimerRuntime = runtimeRequirements.has('timers')
+  const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
   const needsFetchRuntime = runtimePlanHasSupportedFetchGlobalUsage(input.globalUsages)
   const needsAsyncRuntime =
-    input.runtimeRequirements.has('async-runtime') ||
+    runtimeRequirements.has('async-runtime') ||
     needsFetchRuntime ||
     needsFsRuntime ||
     needsTimerRuntime ||
     signatureRuntimeTypes.has('promise')
   const needsCollectionRuntime =
-    input.runtimeRequirements.has('collections') ||
+    runtimeRequirements.has('collections') ||
     irProgramsUseArrayIsArray(input.irPrograms) ||
     irProgramsUseArrayIncludes(input.irPrograms) ||
     signatureRuntimeTypes.has('array') ||
@@ -113,19 +122,19 @@ export function resolveCRuntimePreludeRequirements(
   const needsSetRuntime =
     signatureRuntimeTypes.has('set') ||
     irProgramsUseCollectionKind(input.irPrograms, 'set')
-  const needsBinaryRuntime = input.runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
+  const needsBinaryRuntime = runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const needsCppValueRuntime =
     input.cppValueRuntime ||
-    input.runtimeRequirements.has('managed-values') ||
-    input.runtimeRequirements.has('string-bytes') ||
+    runtimeRequirements.has('managed-values') ||
+    runtimeRequirements.has('string-bytes') ||
     needsAsyncRuntime ||
     signatureRuntimeTypes.size > 0
   const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
   const needsDgramRuntime = nodeRuntimeImports.dgram
   const needsObjectRuntime =
-    input.runtimeRequirements.has('objects') ||
+    runtimeRequirements.has('objects') ||
     needsFsRuntime ||
     needsFetchRuntime ||
     needsClassRuntime ||
@@ -144,7 +153,6 @@ export function resolveCRuntimePreludeRequirements(
     needsCallbackRuntime ||
     needsChildProcessRuntime ||
     needsCollectionRuntime ||
-    needsOsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
@@ -153,9 +161,9 @@ export function resolveCRuntimePreludeRequirements(
     needsCppValueRuntime ||
     needsJsonRuntime ||
     signatureRuntimeTypes.size > 0 ||
-    input.runtimeRequirements.has('managed-values')
+    runtimeRequirements.has('managed-values')
   const needsTimeRuntime =
-    input.runtimeRequirements.has('clocks') ||
+    runtimeRequirements.has('clocks') ||
     needsAsyncRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
@@ -163,14 +171,13 @@ export function resolveCRuntimePreludeRequirements(
     needsNetRuntime
   const needsMathRuntime = runtimePlanHasSupportedMathGlobalUsage(input.globalUsages)
   const needsCryptoRuntime =
-    input.runtimeRequirements.has('crypto') ||
+    runtimeRequirements.has('crypto') ||
     nodeStdlibHasSupportedCryptoGlobalUsage(input.globalUsages, input.cryptoContext)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
-    input.runtimeRequirements.has('string-bytes') ||
+    runtimeRequirements.has('string-bytes') ||
     needsChildProcessRuntime ||
     needsFsRuntime ||
-    needsOsRuntime ||
     needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
@@ -197,7 +204,6 @@ export function resolveCRuntimePreludeRequirements(
     needsObjectRuntime,
     needsChildProcessRuntime,
     needsFsRuntime,
-    needsOsRuntime,
     needsPathRuntime,
     needsUrlRuntime,
     needsProcessRuntime,
@@ -208,8 +214,106 @@ export function resolveCRuntimePreludeRequirements(
     needsDgramRuntime,
     needsFetchRuntime,
     needsHttpRuntime,
-    needsNetRuntime
+    needsNetRuntime,
+    libraryCPreludeIncludes: libraryRuntime.includes
   }
+}
+
+type CLibraryRuntimeResolution = {
+  includes: string[]
+  requirements: Set<string>
+}
+
+function resolveLibraryRuntimeRequirements(
+  selected: Set<IrRuntimeRequirement>,
+  libraries: CompilerLibrarySet | null | undefined
+): CLibraryRuntimeResolution {
+  const requirements: Set<string> = new Set()
+  const includes: string[] = []
+
+  for (const requirement of selected) {
+    requirements.add(requirement)
+  }
+
+  if (libraries === null || typeof libraries === 'undefined') {
+    return { includes, requirements }
+  }
+
+  const pending = orderedRuntimeRequirementIds(requirements)
+
+  for (let index = 0; index < pending.length; index = index + 1) {
+    const descriptor = findRuntimeRequirementDescriptor(libraries.runtimeRequirements, pending[index])
+
+    if (descriptor === null) {
+      continue
+    }
+
+    for (
+      let dependencyIndex = 0;
+      dependencyIndex < descriptor.dependencies.length;
+      dependencyIndex = dependencyIndex + 1
+    ) {
+      const dependency = descriptor.dependencies[dependencyIndex]
+
+      if (!requirements.has(dependency)) {
+        requirements.add(dependency)
+        pending.push(dependency)
+      }
+    }
+
+    for (
+      let includeIndex = 0;
+      includeIndex < descriptor.cPreludeIncludes.length;
+      includeIndex = includeIndex + 1
+    ) {
+      insertOrderedRuntimeRequirementId(includes, descriptor.cPreludeIncludes[includeIndex])
+    }
+  }
+
+  return { includes, requirements }
+}
+
+function findRuntimeRequirementDescriptor(
+  descriptors: RuntimeRequirementDescriptor[],
+  id: string
+): RuntimeRequirementDescriptor | null {
+  for (let index = 0; index < descriptors.length; index = index + 1) {
+    const descriptor = descriptors[index]
+
+    if (descriptor.id === id) {
+      return descriptor
+    }
+  }
+
+  return null
+}
+
+function orderedRuntimeRequirementIds(values: Set<string>): string[] {
+  const ordered: string[] = []
+
+  for (const value of values) {
+    insertOrderedRuntimeRequirementId(ordered, value)
+  }
+
+  return ordered
+}
+
+function insertOrderedRuntimeRequirementId(values: string[], value: string): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    if (values[index] === value) {
+      return
+    }
+  }
+
+  values.push(value)
+  let index = values.length - 1
+
+  while (index > 0 && values[index - 1] > value) {
+    values[index] = values[index - 1]
+    index = index - 1
+  }
+
+  values[index] = value
 }
 
 function irProgramsUseArrayIncludes(programs: IrProgram[]): boolean {

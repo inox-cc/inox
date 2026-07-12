@@ -113,7 +113,20 @@ function isUnknownSyntheticTypeImport(declaration: AnyNode): boolean {
 }
 
 export function createImportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {
-  return createAliasDeclaration(specifier, importedProgram, false, specifier.imported)
+  const declaration = findExportedDeclaration(importedProgram, specifier.imported)
+
+  if (declaration === null || typeof declaration === 'undefined') {
+    return null
+  }
+
+  if (declaration.type === 'FunctionDeclaration') {
+    return createAliasDeclaration(specifier, importedProgram, false, specifier.imported)
+  }
+
+  const targetName = `__inox_import_${specifier.local}`
+  specifier.syntheticValueImportName = targetName
+
+  return createAliasDeclaration(specifier, importedProgram, false, targetName)
 }
 
 export function createExportAliasDeclaration(specifier: AnyNode, importedProgram: ProgramNode): AnyNode | null {

@@ -4,12 +4,6 @@ import { isAssignableType } from './assignability.ts'
 import { pathParseObjectShape, urlObjectShape } from './builtins.ts'
 import type { CheckedCallArgInfo } from './global-calls.ts'
 
-type OsRuntimeCall = {
-  label: string
-  method: string
-  unsupported?: boolean
-}
-
 type PathRuntimeCall = {
   label: string
   method: string
@@ -67,37 +61,6 @@ function checkAssignableType(
   }
 
   report(context, 'INOX_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
-}
-
-export function checkOsCall(
-  context: NodeRuntimeCallCheckerContext,
-  expression: AnyNode,
-  call: OsRuntimeCall
-): ValueType {
-  if (call.unsupported) {
-    report(
-      context,
-      'INOX_NOT_IMPLEMENTED',
-      `node:os ${call.method} is not implemented by the current C backend`,
-      expression.loc
-    )
-    expression.valueType = 'unknown'
-    return 'unknown'
-  }
-
-  if (expression.args.length !== 0) {
-    report(
-      context,
-      'INOX_ARG_COUNT',
-      `function ${call.label} expects 0 argument(s), got ${expression.args.length}`,
-      expression.loc
-    )
-  }
-
-  expression.osRuntimeMethod = call.method
-  expression.valueType = 'string'
-
-  return 'string'
 }
 
 export function checkProcessCall(

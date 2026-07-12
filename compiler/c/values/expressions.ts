@@ -4306,8 +4306,11 @@ function isDynamicObjectFieldValueExpression(
     return deps.inferExpressionType(expression.object, context) === 'object'
   }
 
-  if (expression.type === 'IndexExpression' && expression.index.type === 'StringLiteral') {
-    return deps.inferExpressionType(expression.object, context) === 'object'
+  if (expression.type === 'IndexExpression') {
+    return (
+      deps.inferExpressionType(expression.object, context) === 'object' &&
+      deps.inferExpressionType(expression.index, context) === 'string'
+    )
   }
 
   return false
@@ -5140,8 +5143,7 @@ export type CValueExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext
   ): PreparedExpression | null
-  emitPreparedOsConstantExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedOsStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCompilerLibraryExpression(expression: CValueNode): PreparedExpression | null
   emitPreparedPathConstantExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathObjectCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPathStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -5209,16 +5211,10 @@ export function emitCValueExpression(
     return childProcessCall
   }
 
-  const osConstant = deps.emitPreparedOsConstantExpression(expression, context)
+  const libraryExpression = deps.emitPreparedCompilerLibraryExpression(expression)
 
-  if (osConstant !== null && typeof osConstant !== 'undefined') {
-    return osConstant
-  }
-
-  const osStringCall = deps.emitPreparedOsStringCallExpression(expression, context)
-
-  if (osStringCall !== null && typeof osStringCall !== 'undefined') {
-    return osStringCall
+  if (libraryExpression !== null) {
+    return libraryExpression
   }
 
   const processString = deps.emitPreparedProcessStringExpression(expression, context)

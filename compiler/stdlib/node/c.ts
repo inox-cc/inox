@@ -59,7 +59,6 @@ import {
   resolveNetAddressStringMember
 } from '../../../stdlib/node/net/compiler/c.ts'
 import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compiler/descriptor.ts'
-import { cOsRuntimeConstantName, cOsRuntimeConstantValue, cOsRuntimeMethodName } from '../../../stdlib/node/os/compiler/c.ts'
 import type { PathLoweringDependencies as PackagePathLoweringDependencies } from '../../../stdlib/node/path/compiler/c.ts'
 import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from '../../../stdlib/node/path/compiler/c.ts'
 import type {
@@ -108,7 +107,6 @@ export {
   emitPreparedFsSyncStatementExpression,
   emitPreparedFsSyncValueExpression
 } from '../../../stdlib/node/fs/compiler/c.ts'
-export { emitPreparedOsConstantExpression, emitPreparedOsStringCallExpression } from '../../../stdlib/node/os/compiler/c.ts'
 export {
   emitPreparedPathBooleanCallExpression,
   emitPreparedPathConstantExpression,
@@ -503,12 +501,6 @@ function emitPreparedNodeStdlibRuntimeObjectReference(
 }
 
 export function nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null {
-  const osConstant = cOsRuntimeConstantName(expression)
-
-  if (osConstant !== null && typeof osConstant !== 'undefined') {
-    return cOsRuntimeConstantValue(osConstant)
-  }
-
   const pathConstant = cPathRuntimeConstantName(expression)
 
   if (pathConstant !== null && typeof pathConstant !== 'undefined') {
@@ -521,14 +513,6 @@ export function nodeRuntimeStringConstantValue(expression: AnyNode | null | unde
 export function isNodeRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean {
   if (expression === null || typeof expression === 'undefined') {
     return false
-  }
-
-  if (cOsRuntimeConstantName(expression)) {
-    return true
-  }
-
-  if (cOsRuntimeMethodName(expression)) {
-    return true
   }
 
   if (cPathRuntimeConstantName(expression)) {
@@ -576,10 +560,6 @@ export function inferNodeStdlibExpressionType(expression: AnyNode): string | nul
       return 'object'
     }
 
-    return 'string'
-  }
-
-  if (cOsRuntimeConstantName(expression) || cOsRuntimeMethodName(expression)) {
     return 'string'
   }
 

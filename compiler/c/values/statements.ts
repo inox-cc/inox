@@ -1669,6 +1669,10 @@ export function emitRuntimeValueVariableDeclaration(
   let valueType = valueTypeOverride ?? statementDeps(context).inferExpressionType(expression, context)
   const statementValueType = statement.valueType
 
+  if (statement.declaredType === 'unknown') {
+    valueType = 'unknown'
+  }
+
   if (
     valueType === 'unknown' &&
     statementValueType !== null &&

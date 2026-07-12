@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 
 import { CompileError, formatDiagnostics } from '../../compiler/diagnostics.ts'
 import { compileFile } from '../../compiler/compiler.ts'
+import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
+import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
 import {
   compileRuntimeProgram,
   compileSource,
@@ -58,6 +60,9 @@ const featureRoots = [featureMainRoot, fileURLToPath(new URL('../../stdlib/', im
 const defaultFeatureTestCompiler: FeatureTestCompiler = {
   kind: 'hosted'
 }
+const defaultCompilerLibrarySetPromise = discoverCompilerLibraries().then((libraries) =>
+  createCompilerLibrarySetFromDiscovered(libraries)
+)
 
 export async function collectFeatureTestFiles(args: string[]): Promise<string[]> {
   const requestedArgs = args.filter((arg) => arg !== '--')
@@ -518,16 +523,20 @@ async function compileFeatureTestToC(featureFile: FeatureTestFile, compiler: Fea
     return await compileFeatureTestWithBinary(featureFile, compiler)
   }
 
+  const libraries = await defaultCompilerLibrarySetPromise
+
   if (featureFile.usesModuleGraph) {
     const result = await compileFile(featureFile.path, {
-      target: 'cc'
+      target: 'cc',
+      libraries
     })
 
     return result.code
   }
 
   const result = compileSource(featureFile.source, {
-    target: 'cc'
+    target: 'cc',
+    libraries
   })
 
   return result.code

@@ -1,6 +1,8 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
+import type { CompilerLibraryPackageDescriptor } from '../../compiler/extensions/types.ts'
 import { rootDir } from './repo-root.ts'
 
 export type DiscoveredCompilerLibraryKind = 'global' | 'node'
@@ -13,6 +15,7 @@ export type DiscoveredCompilerLibrary = {
   declarationPath: string | null
   declarationSource: string | null
   compilerEntrypoint: string | null
+  compilerPackage: CompilerLibraryPackageDescriptor | null
   nativeSources: string[]
   nativeIncludeDirs: string[]
 }
@@ -99,6 +102,7 @@ async function discoverPackage(
   let declarationPath: string | null = null
   let declarationSource: string | null = null
   let compilerEntrypoint: string | null = null
+  let compilerPackage: CompilerLibraryPackageDescriptor | null = null
   const nativeSources: string[] = []
   const nativeIncludeDirs: string[] = []
 
@@ -109,6 +113,7 @@ async function discoverPackage(
 
   if (await isFile(compilerFile)) {
     compilerEntrypoint = projectPath(projectRoot, compilerFile)
+    compilerPackage = await loadCompilerLibraryPackage(compilerFile, id)
   }
 
   if (await isDirectory(sourceRoot)) {
@@ -127,9 +132,46 @@ async function discoverPackage(
     declarationPath,
     declarationSource,
     compilerEntrypoint,
+    compilerPackage,
     nativeSources,
     nativeIncludeDirs
   }
+}
+
+async function loadCompilerLibraryPackage(
+  compilerFile: string,
+  expectedId: string
+): Promise<CompilerLibraryPackageDescriptor> {
+  const module = (await import(pathToFileURL(compilerFile).href)) as {
+    compilerLibraryPackage?: unknown
+  }
+  const descriptor = module.compilerLibraryPackage
+
+  if (!isCompilerLibraryPackageDescriptor(descriptor)) {
+    throw new Error(`Invalid compiler library package entrypoint ${compilerFile}`)
+  }
+
+  if (descriptor.id !== expectedId) {
+    throw new Error(`Compiler library package id mismatch ${expectedId} != ${descriptor.id}`)
+  }
+
+  return descriptor
+}
+
+function isCompilerLibraryPackageDescriptor(value: unknown): value is CompilerLibraryPackageDescriptor {
+  if (value === null || typeof value !== 'object') {
+    return false
+  }
+
+  const descriptor = value as { [key: string]: unknown }
+
+  return (
+    typeof descriptor.id === 'string' &&
+    Array.isArray(descriptor.dependencies) &&
+    Array.isArray(descriptor.operations) &&
+    Array.isArray(descriptor.intrinsicBindings) &&
+    Array.isArray(descriptor.runtimeRequirements)
+  )
 }
 
 async function collectNativeSources(projectRoot: string, directory: string): Promise<string[]> {

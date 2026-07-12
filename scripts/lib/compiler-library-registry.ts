@@ -2,7 +2,14 @@ import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { createCompilerLibrarySet } from '../../compiler/extensions/library-set-builder.ts'
-import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.ts'
+import type {
+  CompilerLibraryDescriptor,
+  CompilerLibraryPackageDescriptor,
+  CompilerLibrarySet,
+  IntrinsicRoleBinding,
+  LibraryOperationDescriptor,
+  RuntimeRequirementDescriptor
+} from '../../compiler/extensions/types.ts'
 import {
   discoverCompilerLibraries,
   type DiscoveredCompilerLibrary
@@ -13,6 +20,7 @@ export type RenderedCompilerLibraryRegistry = {
   registrySource: string
   manifestSource: string
   nativePlanSource: string
+  nativePlanCMakeSource: string
   nativeEntrySource: string
 }
 
@@ -27,6 +35,7 @@ export async function generateCompilerLibraryRegistry(
   await writeAtomic(join(outputDirectory, 'default-registry.ts'), rendered.registrySource)
   await writeAtomic(join(outputDirectory, 'default-registry.json'), rendered.manifestSource)
   await writeAtomic(join(outputDirectory, 'native-plan.json'), rendered.nativePlanSource)
+  await writeAtomic(join(outputDirectory, 'native-plan.cmake'), rendered.nativePlanCMakeSource)
   await writeAtomic(join(outputDirectory, 'native-entry.ts'), rendered.nativeEntrySource)
 
   return rendered
@@ -38,14 +47,11 @@ export function renderCompilerLibraryRegistry(
   const discovered = discoveredLibraries.slice()
   discovered.sort((left, right) => left.id.localeCompare(right.id))
 
-  const descriptors: CompilerLibraryDescriptor[] = []
   const manifestPackages = []
   const nativeSources = new Set<string>()
   const nativeIncludeDirs = new Set<string>()
 
   for (const library of discovered) {
-    const descriptor = compilerLibraryDescriptor(library)
-    descriptors.push(descriptor)
     manifestPackages.push({
       id: library.id,
       kind: library.kind,
@@ -64,8 +70,8 @@ export function renderCompilerLibraryRegistry(
     }
   }
 
-  const librarySet = createCompilerLibrarySet(descriptors)
-  const registrySource = renderRegistrySource(librarySet)
+  const librarySet = createCompilerLibrarySetFromDiscovered(discovered)
+  const registrySource = renderRegistrySource(librarySet, discovered)
   const manifestSource = jsonSource({
     version: 1,
     fingerprint: librarySet.fingerprint,
@@ -76,6 +82,10 @@ export function renderCompilerLibraryRegistry(
     sources: Array.from(nativeSources).sort(),
     includeDirs: Array.from(nativeIncludeDirs).sort()
   })
+  const nativePlanCMakeSource = renderNativePlanCMake(
+    Array.from(nativeSources).sort(),
+    Array.from(nativeIncludeDirs).sort()
+  )
   const nativeEntrySource =
     "import process from 'node:process'\n" +
     "import { runCompilerCli } from '../../compiler/cli.ts'\n" +
@@ -90,12 +100,46 @@ export function renderCompilerLibraryRegistry(
     registrySource,
     manifestSource,
     nativePlanSource,
+    nativePlanCMakeSource,
     nativeEntrySource
   }
 }
 
+function renderNativePlanCMake(sources: string[], includeDirs: string[]): string {
+  return (
+    renderNativePlanCMakeList('INOX_STDLIB_SOURCES', sources) +
+    renderNativePlanCMakeList('INOX_STDLIB_INCLUDE_DIRS', includeDirs)
+  )
+}
+
+function renderNativePlanCMakeList(name: string, paths: string[]): string {
+  let source = `set(${name}\n`
+
+  for (const path of paths) {
+    source = `${source}  "\${INOX_REPO_ROOT}/${path}"\n`
+  }
+
+  return `${source})\n`
+}
+
+export function createCompilerLibrarySetFromDiscovered(
+  discoveredLibraries: DiscoveredCompilerLibrary[]
+): CompilerLibrarySet {
+  const discovered = discoveredLibraries.slice()
+  const descriptors: CompilerLibraryDescriptor[] = []
+
+  discovered.sort((left, right) => left.id.localeCompare(right.id))
+
+  for (const library of discovered) {
+    descriptors.push(compilerLibraryDescriptor(library))
+  }
+
+  return createCompilerLibrarySet(descriptors)
+}
+
 function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): CompilerLibraryDescriptor {
   const declarations = []
+  const compilerPackage = library.compilerPackage
 
   if (
     library.declarationSource !== null &&
@@ -106,27 +150,130 @@ function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): Compiler
       libraryId: library.id,
       kind: 'module' as const,
       source: library.importSource,
-      declarationSource: library.declarationSource
+      declarationSource: library.declarationSource,
+      compilerImplemented: compilerPackage !== null
     })
   }
 
   return {
     id: library.id,
-    dependencies: [],
+    dependencies: compilerPackage === null ? [] : compilerPackage.dependencies,
     declarations,
-    operations: [],
-    intrinsicBindings: [],
-    runtimeRequirements: []
+    operations: compilerPackage === null ? [] : compilerPackage.operations,
+    intrinsicBindings: compilerPackage === null ? [] : compilerPackage.intrinsicBindings,
+    runtimeRequirements: compilerPackage === null ? [] : compilerPackage.runtimeRequirements
   }
 }
 
-function renderRegistrySource(librarySet: ReturnType<typeof createCompilerLibrarySet>): string {
-  return (
-    "import type { CompilerLibrarySet } from '../../compiler/extensions/types.ts'\n\n" +
-    'export const defaultCompilerLibrarySet: CompilerLibrarySet = ' +
-    JSON.stringify(librarySet, null, 2) +
-    '\n'
-  )
+function renderRegistrySource(
+  librarySet: CompilerLibrarySet,
+  discovered: DiscoveredCompilerLibrary[]
+): string {
+  let source = "import type { CompilerLibrarySet } from '../../compiler/extensions/types.ts'\n"
+  const packageNames: Map<string, string> = new Map()
+  let packageIndex = 0
+
+  for (const library of discovered) {
+    if (library.compilerEntrypoint === null || library.compilerPackage === null) {
+      continue
+    }
+
+    const name = `compilerLibraryPackage${packageIndex}`
+    packageIndex = packageIndex + 1
+    packageNames.set(library.id, name)
+    source =
+      source +
+      `import { compilerLibraryPackage as ${name} } from '../../${library.compilerEntrypoint}'\n`
+  }
+
+  source = source + '\nexport const defaultCompilerLibrarySet: CompilerLibrarySet = {\n'
+  source = source + `  "fingerprint": ${JSON.stringify(librarySet.fingerprint)},\n`
+  source = source + `  "declarations": ${JSON.stringify(librarySet.declarations, null, 2)},\n`
+  source = source + `  "operations": ${renderPackageArray(
+    librarySet.operations,
+    discovered,
+    packageNames,
+    'operations'
+  )},\n`
+  source = source + `  "intrinsicBindings": ${renderPackageArray(
+    librarySet.intrinsicBindings,
+    discovered,
+    packageNames,
+    'intrinsicBindings'
+  )},\n`
+  source = source + `  "runtimeRequirements": ${renderPackageArray(
+    librarySet.runtimeRequirements,
+    discovered,
+    packageNames,
+    'runtimeRequirements'
+  )}\n`
+  source = source + '}\n'
+
+  return source
+}
+
+type PackageArrayItem = LibraryOperationDescriptor | IntrinsicRoleBinding | RuntimeRequirementDescriptor
+type PackageArrayName = 'operations' | 'intrinsicBindings' | 'runtimeRequirements'
+
+function renderPackageArray(
+  values: PackageArrayItem[],
+  discovered: DiscoveredCompilerLibrary[],
+  packageNames: Map<string, string>,
+  arrayName: PackageArrayName
+): string {
+  const rows: string[] = []
+
+  for (const value of values) {
+    const reference = compilerPackageItemReference(value, discovered, packageNames, arrayName)
+    rows.push(reference === null ? JSON.stringify(value) : reference)
+  }
+
+  if (rows.length === 0) {
+    return '[]'
+  }
+
+  return '[\n    ' + rows.join(',\n    ') + '\n  ]'
+}
+
+function compilerPackageItemReference(
+  value: PackageArrayItem,
+  discovered: DiscoveredCompilerLibrary[],
+  packageNames: Map<string, string>,
+  arrayName: PackageArrayName
+): string | null {
+  for (const library of discovered) {
+    const compilerPackage = library.compilerPackage
+    const packageName = packageNames.get(library.id)
+
+    if (compilerPackage === null || packageName === null || typeof packageName === 'undefined') {
+      continue
+    }
+
+    const items = compilerPackageArray(compilerPackage, arrayName)
+
+    for (let index = 0; index < items.length; index = index + 1) {
+      if (items[index] === value) {
+        return `${packageName}.${arrayName}[${index}]`
+      }
+    }
+  }
+
+  return null
+}
+
+function compilerPackageArray(
+  compilerPackage: CompilerLibraryPackageDescriptor,
+  arrayName: PackageArrayName
+): PackageArrayItem[] {
+  if (arrayName === 'operations') {
+    return compilerPackage.operations
+  }
+
+  if (arrayName === 'intrinsicBindings') {
+    return compilerPackage.intrinsicBindings
+  }
+
+  return compilerPackage.runtimeRequirements
 }
 
 function jsonSource(value: unknown): string {

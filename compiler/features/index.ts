@@ -116,6 +116,7 @@ export function sortCompilerFeatures(features: Set<IrFeature>): IrFeature[] {
 
 export function sortCompilerRuntimeRequirements(requirements: Set<IrRuntimeRequirement>): IrRuntimeRequirement[] {
   const result: IrRuntimeRequirement[] = []
+  const extensionRequirements: IrRuntimeRequirement[] = []
 
   for (let index = 0; index < compilerRuntimeRequirementOrder.length; index = index + 1) {
     const requirement = compilerRuntimeRequirementOrderAt(index)
@@ -125,7 +126,42 @@ export function sortCompilerRuntimeRequirements(requirements: Set<IrRuntimeRequi
     }
   }
 
+  for (const requirement of requirements) {
+    if (!compilerRuntimeRequirementOrderHas(requirement)) {
+      insertOrderedRuntimeRequirement(extensionRequirements, requirement)
+    }
+  }
+
+  for (let index = 0; index < extensionRequirements.length; index = index + 1) {
+    result.push(extensionRequirements[index])
+  }
+
   return result
+}
+
+function compilerRuntimeRequirementOrderHas(requirement: IrRuntimeRequirement): boolean {
+  for (let index = 0; index < compilerRuntimeRequirementOrder.length; index = index + 1) {
+    if (compilerRuntimeRequirementOrderAt(index) === requirement) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function insertOrderedRuntimeRequirement(
+  requirements: IrRuntimeRequirement[],
+  requirement: IrRuntimeRequirement
+): void {
+  requirements.push(requirement)
+  let index = requirements.length - 1
+
+  while (index > 0 && requirements[index - 1] > requirement) {
+    requirements[index] = requirements[index - 1]
+    index = index - 1
+  }
+
+  requirements[index] = requirement
 }
 
 function createCompilerFeatureDescriptors(): CompilerFeatureDescriptor[] {

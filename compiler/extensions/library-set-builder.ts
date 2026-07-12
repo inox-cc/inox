@@ -190,7 +190,9 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       const item = library.declarations[itemIndex]
       insertSortedString(
         declarationIds,
-        item.kind + ':' + item.source + ':' + item.libraryId + ':' + item.declarationSource
+        item.kind + ':' + item.source + ':' + item.libraryId + ':' +
+          (item.compilerImplemented === true ? 'implemented' : 'declaration-only') + ':' +
+          item.declarationSource
       )
     }
 
@@ -199,7 +201,11 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       insertSortedString(
         operationIds,
         item.libraryId + ':' + item.bindingId + ':' + item.operationId + ':' + item.kind + ':' +
-          sortedStrings(item.runtimeRequirements).join(',')
+          sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
+          sortedStrings(item.runtimeRequirements).join(',') + ':' +
+          (item.cExpression ?? '') + ':' + (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' +
+          (item.owned === true ? 'owned' : 'borrowed') + ':' + (item.constantValue ?? '') + ':' +
+          (item.diagnosticCode ?? '') + ':' + (item.diagnosticMessage ?? '')
       )
     }
 

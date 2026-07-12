@@ -57,6 +57,24 @@ function pushCPreludeIncludes(systemIncludes: string[], localIncludes: string[],
   }
 }
 
+function pushLibraryCPreludeIncludes(
+  systemIncludes: string[],
+  localIncludes: string[],
+  includes: string[]
+): void {
+  for (let index = 0; index < includes.length; index = index + 1) {
+    const include = includes[index]
+
+    if (include.startsWith('#include ')) {
+      pushCPreludeInclude(systemIncludes, localIncludes, include)
+    } else if (include.startsWith('<')) {
+      pushCPreludeInclude(systemIncludes, localIncludes, `#include ${include}`)
+    } else {
+      pushCPreludeInclude(systemIncludes, localIncludes, `#include "${include}"`)
+    }
+  }
+}
+
 function emitCPreludeIncludeLines(systemIncludes: string[], localIncludes: string[]): string[] {
   const lines: string[] = []
 
@@ -197,7 +215,6 @@ export function emitCPrelude(
   needsObjectRuntime: boolean,
   needsChildProcessRuntime: boolean,
   needsFsRuntime: boolean,
-  needsOsRuntime: boolean,
   needsPathRuntime: boolean,
   needsUrlRuntime: boolean,
   needsProcessRuntime: boolean,
@@ -209,6 +226,7 @@ export function emitCPrelude(
   needsFetchRuntime: boolean,
   needsHttpRuntime: boolean,
   needsNetRuntime: boolean,
+  libraryCPreludeIncludes: string[],
   options: CEmitOptions = {}
 ): string[] {
   const systemIncludes = ['#include <stdio.h>']
@@ -254,6 +272,8 @@ export function emitCPrelude(
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/net.h"')
   }
 
+  pushLibraryCPreludeIncludes(systemIncludes, localIncludes, libraryCPreludeIncludes)
+
   if (needsCryptoRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include <stdint.h>')
   }
@@ -292,9 +312,6 @@ export function emitCPrelude(
     }
     if (needsJsonRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/json.h"')
-    }
-    if (needsOsRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/os.h"')
     }
     if (needsPathRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/path.h"')

@@ -12,5 +12,6 @@ test('generated compiler library registry is independent of discovery order', as
   assert.equal(forward.registrySource, reversed.registrySource)
   assert.equal(forward.manifestSource, reversed.manifestSource)
   assert.equal(forward.nativePlanSource, reversed.nativePlanSource)
+  assert.equal(forward.nativePlanCMakeSource, reversed.nativePlanCMakeSource)
   assert.equal(forward.nativeEntrySource, reversed.nativeEntrySource)
 })

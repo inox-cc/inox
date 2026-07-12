@@ -49,7 +49,6 @@ export {
   isFsPromisesImportSymbol,
   isFsRuntimeRootSymbol
 } from '../../../stdlib/node/fs/compiler/checker.ts'
-export { isOsRuntimeConstantImport, osRuntimeCallInfo, osRuntimeConstantName } from '../../../stdlib/node/os/compiler/checker.ts'
 export {
   isPathRuntimeConstantImport,
   pathRuntimeCallInfo,

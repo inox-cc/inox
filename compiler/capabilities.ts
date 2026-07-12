@@ -16,9 +16,9 @@ type NodeList = AnyNode[]
 
 type CapabilityNode = AnyNode & {
   callee?: CapabilityMemberNode | null
+  libraryCapabilities?: string[] | null
+  libraryOperationId?: string | null
   loc?: SourceLocation
-  osRuntimeConstant?: string | null
-  osRuntimeMethod?: string | null
   timeRuntimeMethod?: string | null
   timerRuntimeMethod?: string | null
   type?: string | null
@@ -35,7 +35,7 @@ type CapabilityMemberNode = AnyNode & {
   type?: string | null
 }
 
-type RuntimeCapabilityKey = 'entropy' | 'fs' | 'heap' | 'monotonicClock' | 'os' | 'timers' | 'wallClock'
+type RuntimeCapabilityKey = string
 
 type RequiredCapability = {
   key: RuntimeCapabilityKey
@@ -201,14 +201,22 @@ function visitCapabilityChildren(item: CapabilityNode, usages: CapabilityUsage[]
 }
 
 function recordNodeCapabilityUsages(expression: CapabilityNode, usages: CapabilityUsage[]): void {
-  const osMethod = expression.osRuntimeMethod
-  const osConstant = expression.osRuntimeConstant
   const loc = expression.loc
+  const libraryCapabilities = expression.libraryCapabilities
+  const libraryOperationId = expression.libraryOperationId
 
-  if (osMethod !== null && typeof osMethod !== 'undefined') {
-    pushCapability(usages, 'os', 'os', `os.${osMethod}`, loc)
-  } else if (osConstant !== null && typeof osConstant !== 'undefined') {
-    pushCapability(usages, 'os', 'os', `os.${osConstant}`, loc)
+  if (libraryCapabilities !== null && typeof libraryCapabilities !== 'undefined') {
+    let path = 'compiler-library operation'
+
+    if (libraryOperationId !== null && typeof libraryOperationId !== 'undefined') {
+      path = libraryOperationId
+    }
+
+    for (let index = 0; index < libraryCapabilities.length; index = index + 1) {
+      const capability = libraryCapabilities[index]
+
+      pushCapability(usages, capability, capability, path, loc)
+    }
   }
 
   const timerMethod = expression.timerRuntimeMethod
@@ -319,35 +327,7 @@ function capabilityEnabled(capabilities: RuntimeCapabilities | null | undefined,
     return false
   }
 
-  if (key === 'entropy') {
-    return capabilities.entropy === true
-  }
-
-  if (key === 'fs') {
-    return capabilities.fs === true
-  }
-
-  if (key === 'heap') {
-    return capabilities.heap === true
-  }
-
-  if (key === 'monotonicClock') {
-    return capabilities.monotonicClock === true
-  }
-
-  if (key === 'os') {
-    return capabilities.os === true
-  }
-
-  if (key === 'timers') {
-    return capabilities.timers === true
-  }
-
-  if (key === 'wallClock') {
-    return capabilities.wallClock === true
-  }
-
-  return false
+  return capabilities[key] === true
 }
 
 function pushCapabilityUsage(

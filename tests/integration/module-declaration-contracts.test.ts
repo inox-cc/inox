@@ -19,6 +19,10 @@ import {
 import { parse } from '../../compiler/parser.ts'
 import { stdlibDeclarationExportValueType } from '../../compiler/stdlib/declarations.ts'
 import type { AnyNode, Diagnostic, ProgramNode } from '../../compiler/types.ts'
+import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
+import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
+
+const defaultCompilerLibrarySet = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
 
 export function assertModuleDeclarationContracts(): void {
   assertModuleDeclarationContractRoundTrip()
@@ -358,7 +362,8 @@ console.log(params.get('a'))
 
   const result = compileGraphToIrModulesSync('/project/compiler/index.ts', {
     host,
-    loopBackend: 'libuv'
+    loopBackend: 'libuv',
+    libraries: defaultCompilerLibrarySet
   })
   const entry = result.graph.modules.find((module) => module.path === '/project/compiler/index.ts')
 

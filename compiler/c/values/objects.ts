@@ -1052,7 +1052,49 @@ export function emitDynamicObjectFieldAssignment(
     )
   }
 
+  if (target.type === 'IndexExpression') {
+    return emitDynamicObjectIndexAssignmentLines(
+      expression,
+      target.object,
+      target.index,
+      context,
+      dependencies
+    )
+  }
+
   return null
+}
+
+function emitDynamicObjectIndexAssignmentLines(
+  expression: ObjectFieldNode,
+  objectExpression: ObjectFieldNode,
+  keyExpression: ObjectFieldNode,
+  context: ObjectFunctionContext,
+  dependencies: ObjectExpressionFieldDependencies
+): string[] | null {
+  if (
+    dependencies.inferExpressionType(objectExpression, context) !== 'object' ||
+    dependencies.inferExpressionType(keyExpression, context) !== 'string'
+  ) {
+    return null
+  }
+
+  const object = dependencies.emitCValueExpression(objectExpression, context)
+  const key = dependencies.emitPreparedStringBytesOperand(keyExpression, context, 'inox_object_key')
+  const value = dependencies.emitCValueExpression(expression.value, context)
+  const lines: string[] = []
+
+  appendLines(lines, object.lines)
+  appendLines(lines, key.lines)
+  appendLines(lines, value.lines)
+  lines.push(
+    emitStatusCheck(
+      `inox_object_set(${object.expression}, ${key.bytes}, ${key.length}, ${value.expression})`,
+      context
+    )
+  )
+
+  return lines
 }
 
 export function emitPreparedObjectExpressionScalarIndexValueExpression(

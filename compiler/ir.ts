@@ -41,7 +41,7 @@ export function lowerHirToIr(program: ProgramNode, librarySetFingerprint: string
     version: 2,
     librarySetFingerprint,
     features,
-    runtimeRequirements: collectRuntimeRequirements(features),
+    runtimeRequirements: collectRuntimeRequirements(features, program),
     topLevelItems,
     functionDeclarations: collectFunctionDeclarations(program, topLevelItems),
     functionEffects: collectIrFunctionEffects([{ body: program.body, topLevelItems }]),

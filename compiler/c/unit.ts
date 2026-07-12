@@ -310,6 +310,47 @@ function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValu
   }
 }
 
+function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrProgram[]): void {
+  for (let programIndex = 0; programIndex < programs.length; programIndex = programIndex + 1) {
+    const nodes = programs[programIndex].body
+
+    for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex = nodeIndex + 1) {
+      const node = unitNodeAt(nodes, nodeIndex)
+
+      if (node.type !== 'ImportDeclaration') {
+        continue
+      }
+
+      const specifiers = node.specifiers
+
+      if (!Array.isArray(specifiers)) {
+        continue
+      }
+
+      for (let specifierIndex = 0; specifierIndex < specifiers.length; specifierIndex = specifierIndex + 1) {
+        const specifier = unitNodeAt(specifiers, specifierIndex)
+        const syntheticName = specifier.syntheticValueImportName
+
+        if (
+          syntheticName === null ||
+          typeof syntheticName === 'undefined' ||
+          typeof specifier.imported !== 'string'
+        ) {
+          continue
+        }
+
+        context.moduleValueNames.set(syntheticName, emitCIdentifier(specifier.imported))
+
+        const valueType = context.moduleValueTypes.get(specifier.imported)
+
+        if (valueType !== null && typeof valueType !== 'undefined') {
+          context.moduleValueTypes.set(syntheticName, valueType)
+        }
+      }
+    }
+  }
+}
+
 function emitCUnitValueDefinitions(lines: string[], values: CUnitValueDeclaration[]): void {
   if (values.length === 0) {
     return
@@ -1363,6 +1404,7 @@ export function emitCUnit(
   const classDescriptorNames = collectCClassDescriptorNames(irPrograms, baseContext.classInfos)
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
+  registerCUnitSyntheticImportNames(baseContext, irPrograms)
   registerNodeStdlibRuntimeImportNames(baseContext, irPrograms)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext, deps.callbackLoweringDependencies)
@@ -1387,6 +1429,7 @@ export function emitCUnit(
     globalUsages,
     hasRuntimeCallbackWrapper: hasCUnitRuntimeCallbackWrapper(baseContext),
     irPrograms,
+    libraries: options.libraries,
     runtimeRequirements,
     signatureRuntimeTypes,
     throwingFunctionCount: baseContext.throwingFunctions.size
@@ -1408,7 +1451,6 @@ export function emitCUnit(
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   const needsChildProcessRuntime: boolean = preludeRequirements.needsChildProcessRuntime
   const needsFsRuntime: boolean = preludeRequirements.needsFsRuntime
-  const needsOsRuntime: boolean = preludeRequirements.needsOsRuntime
   const needsPathRuntime: boolean = preludeRequirements.needsPathRuntime
   const needsUrlRuntime: boolean = preludeRequirements.needsUrlRuntime
   const needsProcessRuntime: boolean = preludeRequirements.needsProcessRuntime
@@ -1448,7 +1490,6 @@ export function emitCUnit(
     needsObjectRuntime,
     needsChildProcessRuntime,
     needsFsRuntime,
-    needsOsRuntime,
     needsPathRuntime,
     needsUrlRuntime,
     needsProcessRuntime,
@@ -1460,6 +1501,7 @@ export function emitCUnit(
     needsFetchRuntime,
     needsHttpRuntime,
     needsNetRuntime,
+    preludeRequirements.libraryCPreludeIncludes,
     options
   )
   const declarationLines: string[] = []

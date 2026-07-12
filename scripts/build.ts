@@ -1042,6 +1042,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${cmakeString(cmakeBinDir)}")
+set(INOX_STDLIB_NATIVE_PLAN "${cmakeString(join(rootDir, 'dist/compiler-libraries/native-plan.cmake'))}")
 
 add_subdirectory("${cmakeString(join(rootDir, 'runtime'))}" "${cmakeString(join(cmakeBuildDir, 'inox_runtime'))}")
 

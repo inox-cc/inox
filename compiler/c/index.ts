@@ -127,6 +127,11 @@ import type { CModuleFileEmitters } from './modules.ts'
 import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
 import { mathRuntimeMethodName } from './runtime-methods.ts'
 import {
+  compilerLibraryStringConstantValue,
+  emitPreparedCompilerLibraryExpression,
+  isCompilerLibraryStringExpression
+} from './library-operations.ts'
+import {
   emitRuntimeNullableValueCheck,
   emitRuntimeValueCheck,
   runtimeFetchAbortControllerValueMismatchCondition,
@@ -173,8 +178,6 @@ import {
   emitNodeNetworkCallStatement,
   emitNodeNetworkVariableDeclaration,
   emitPreparedNodeNetworkAddressPortExpression,
-  emitPreparedOsConstantExpression,
-  emitPreparedOsStringCallExpression,
   emitPreparedPathBooleanCallExpression,
   emitPreparedPathConstantExpression,
   emitPreparedPathObjectCallExpression,
@@ -1036,8 +1039,8 @@ const stringLoweringDependencies: StringLoweringDependencies = {
   isBoxedRuntimeStringName,
   isBoxedRuntimeStringReference,
   isMemberAccessExpression,
-  isNodeRuntimeProducedStringExpression,
-  nodeRuntimeStringConstantValue,
+  isNodeRuntimeProducedStringExpression: isConfiguredRuntimeProducedStringExpression,
+  nodeRuntimeStringConstantValue: runtimeStringConstantValue,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
   resolveNodeNetworkAddressStringMember,
@@ -1048,16 +1051,10 @@ function emitPreparedNodeRuntimeStringExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression | null {
-  const osConstant = emitPreparedOsConstantExpression(expression, context)
+  const libraryExpression = emitPreparedCompilerLibraryExpression(expression)
 
-  if (osConstant !== null && typeof osConstant !== 'undefined') {
-    return osConstant
-  }
-
-  const osCall = emitPreparedOsStringCallExpression(expression, context)
-
-  if (osCall !== null && typeof osCall !== 'undefined') {
-    return osCall
+  if (libraryExpression !== null) {
+    return libraryExpression
   }
 
   const pathConstant = emitPreparedPathConstantExpression(expression, context)
@@ -1073,6 +1070,20 @@ function emitPreparedNodeRuntimeStringExpression(
   }
 
   return emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null)
+}
+
+function runtimeStringConstantValue(expression: AnyNode | null | undefined): string | null {
+  const libraryValue = compilerLibraryStringConstantValue(expression)
+
+  if (libraryValue !== null) {
+    return libraryValue
+  }
+
+  return nodeRuntimeStringConstantValue(expression)
+}
+
+function isConfiguredRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean {
+  return isCompilerLibraryStringExpression(expression) || isNodeRuntimeProducedStringExpression(expression)
 }
 
 cryptoLoweringDependencies = {
@@ -1462,8 +1473,7 @@ const cValueExpressionDependencies = {
     emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
-  emitPreparedOsConstantExpression,
-  emitPreparedOsStringCallExpression,
+  emitPreparedCompilerLibraryExpression,
   emitPreparedPathConstantExpression,
   emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, null),
