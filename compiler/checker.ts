@@ -14,14 +14,11 @@ import {
   fsStatsRuntimeMethodInfo,
   isFsPromisesImportSymbol,
   isFsRuntimeRootSymbol,
-  isPathRuntimeConstantImport,
   isTimerHandleMethod,
   isTimerRuntimeImportSymbol,
   isUrlMutableObjectField,
   isUrlSearchParamsRuntimeMethod,
   nodeStdlibRuntimeObjectInfo,
-  pathRuntimeCallInfo,
-  pathRuntimeConstantName,
   processRuntimeAssignmentProperty,
   processRuntimeCallInfo,
   processRuntimeIndexProperty,
@@ -192,7 +189,6 @@ import type {
   GlobalCallCheckerContext
 } from './checker/global-calls.ts'
 import {
-  checkPathCall as checkPathCallInContext,
   checkProcessCall as checkProcessCallInContext,
   checkUrlCall as checkUrlCallInContext,
   checkUrlSearchParamsMethodCall as checkUrlSearchParamsMethodCallInContext
@@ -529,6 +525,11 @@ class Checker {
 
         for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
           const specifier = checkerNodeAt(item.specifiers, specifierIndex)
+
+          if (specifier.typeOnly) {
+            continue
+          }
+
           const symbol: SymbolInfo = {
             kind: 'import',
             mutable: false,
@@ -542,7 +543,7 @@ class Checker {
 
           if (specifier.returnType !== null && typeof specifier.returnType !== 'undefined') {
             symbol.valueType = 'function'
-            symbol.params = specifier.params ?? []
+            symbol.params = this.resolveImportedParams(specifier.params ?? [])
             symbol.returnType = specifier.returnType
             symbol.returnNullable = specifier.returnNullable === true
             symbol.returnArrayElementType = specifier.returnArrayElementType ?? null
@@ -560,7 +561,7 @@ class Checker {
       }
 
       if (item.type === 'FunctionDeclaration') {
-        const returnInfo = this.resolveDeclaredType(item.returnType, item.loc)
+        const returnInfo = this.resolveFunctionDeclarationReturnType(item)
 
         this.declare(
           item.name,
@@ -651,6 +652,27 @@ class Checker {
     for (let index = 0; index < params.length; index = index + 1) {
       const param = params[index]
       resolved.push(this.resolveParam(param))
+    }
+
+    return resolved
+  }
+
+  resolveImportedParams(params: AnyNode[]): FunctionTypeParamMetadata[] {
+    const resolved: FunctionTypeParamMetadata[] = []
+
+    for (let index = 0; index < params.length; index = index + 1) {
+      const param = params[index]
+      const declaredType = param.declaredType
+      const valueType = nodeValueTypeOrUnknown(param)
+
+      if (
+        (declaredType !== null && typeof declaredType !== 'undefined') ||
+        isBuiltinValueType(valueType)
+      ) {
+        resolved.push(param as FunctionTypeParamMetadata)
+      } else {
+        resolved.push(this.resolveParam(param))
+      }
     }
 
     return resolved
@@ -820,7 +842,7 @@ class Checker {
 
       try {
         const previousReturnType = this.currentReturnType
-        const returnInfo = this.resolveDeclaredType(item.returnType, item.loc)
+        const returnInfo = this.resolveFunctionDeclarationReturnType(item)
         this.currentReturnType = returnInfo.valueType
         const previousReturnNullable = this.currentReturnNullable
         this.currentReturnNullable = returnInfo.nullable
@@ -1701,13 +1723,6 @@ class Checker {
           expression.shape = processImportInfo.shape ?? null
         }
 
-        if (
-          importedName !== null &&
-          typeof importedName !== 'undefined' &&
-          isPathRuntimeConstantImport(importSource, importedName)
-        ) {
-          expression.pathRuntimeConstant = importedName
-        }
       }
 
       const runtimeObject = nodeStdlibRuntimeObjectInfo(path, symbol)
@@ -2261,12 +2276,6 @@ class Checker {
 
     if (processMemberType !== null && typeof processMemberType !== 'undefined') {
       return processMemberType
-    }
-
-    const pathConstantType = this.checkPathConstantMemberExpression(expression)
-
-    if (pathConstantType !== null && typeof pathConstantType !== 'undefined') {
-      return pathConstantType
     }
 
     const bufferConstantType = this.checkBufferConstantMemberExpression(expression)
@@ -3480,12 +3489,6 @@ class Checker {
       return urlType
     }
 
-    const pathType = this.checkPathCall(expression)
-
-    if (pathType !== null && typeof pathType !== 'undefined') {
-      return pathType
-    }
-
     const debugMemoryType = this.checkDebugMemoryCall(expression)
 
     if (debugMemoryType !== null && typeof debugMemoryType !== 'undefined') {
@@ -4113,6 +4116,20 @@ class Checker {
     if (operation !== null) {
       this.applyCompilerLibraryOperation(expression, operation)
 
+      const diagnosticCode = operation.diagnosticCode
+      const diagnosticMessage = operation.diagnosticMessage
+
+      if (
+        diagnosticCode !== null &&
+        typeof diagnosticCode !== 'undefined' &&
+        diagnosticMessage !== null &&
+        typeof diagnosticMessage !== 'undefined'
+      ) {
+        this.report(diagnosticCode, diagnosticMessage, expression.loc)
+        expression.valueType = 'unknown'
+        return 'unknown'
+      }
+
       const valueType = operation.valueType
 
       if (valueType !== null && typeof valueType !== 'undefined') {
@@ -4179,6 +4196,35 @@ class Checker {
     expression.libraryRuntimeRequirements = operation.runtimeRequirements
     expression.libraryCapabilities = capabilities
     expression.libraryCExpression = operation.cExpression ?? null
+    const cArgumentKinds = operation.cArgumentKinds
+
+    if (cArgumentKinds !== null && typeof cArgumentKinds !== 'undefined') {
+      expression.libraryCArgumentKinds = cArgumentKinds
+    }
+
+    const resultShapeFields = operation.resultShapeFields
+
+    if (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') {
+      const shapeFields: AnyNode[] = []
+      const cResultShapeFields: string[] = []
+
+      for (let index = 0; index < resultShapeFields.length; index = index + 1) {
+        const field = resultShapeFields[index]
+
+        shapeFields.push({
+          name: field.name,
+          valueType: field.valueType,
+          readonly: field.readonly
+        })
+        cResultShapeFields.push(field.name)
+      }
+
+      expression.shape = {
+        kind: 'object',
+        fields: shapeFields
+      }
+      expression.libraryCResultShapeFields = cResultShapeFields
+    }
     expression.libraryCppType = operation.cppType ?? null
     const valueType = operation.valueType
 
@@ -4311,40 +4357,6 @@ class Checker {
       expression.callee.property,
       this.checkedCallArgInfos(expression)
     )
-  }
-
-  checkPathCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const call = pathRuntimeCallInfo(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'path'),
-      this.resolveStdlibModuleObjectMemberName(path, 'path'),
-      this.resolveMemberPathRootSymbol(path)
-    )
-
-    if (call === null || typeof call === 'undefined') {
-      return null
-    }
-
-    return checkPathCallInContext(this.nodeRuntimeCallContext(), expression, call, this.checkedCallArgInfos(expression))
-  }
-
-  checkPathConstantMemberExpression(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression)
-    const constant = pathRuntimeConstantName(
-      path,
-      this.resolveStdlibModuleObjectMemberName(path, 'path'),
-      this.resolveMemberPathRootSymbol(path)
-    )
-
-    if (constant === null || typeof constant === 'undefined') {
-      return null
-    }
-
-    expression.valueType = 'string'
-    expression.pathRuntimeConstant = constant
-
-    return 'string'
   }
 
   checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -8615,6 +8627,17 @@ class Checker {
 
   resolveDeclaredType(name: string | null | undefined, loc: SourceLocation): ResolvedTypeInfo {
     return resolveDeclaredTypeInContext(this.declaredTypeContext(), name, loc)
+  }
+
+  resolveFunctionDeclarationReturnType(item: AnyNode): ResolvedTypeInfo {
+    const resolved = this.resolveDeclaredType(item.returnType, item.loc)
+
+    if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
+      resolved.valueType = 'object'
+      resolved.shape = this.resolveObjectShape(item.returnShape)
+    }
+
+    return resolved
   }
 
   resolveUnionDeclaredType(names: string[], loc: SourceLocation): ResolvedTypeInfo {

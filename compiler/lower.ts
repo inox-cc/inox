@@ -1,6 +1,6 @@
 import { lowerParam, lowerStatementList } from './lower/statements.ts'
 import type { LowerContext } from './lower/type-resolution.ts'
-import { createLowerContext, resolveDeclaredType } from './lower/type-resolution.ts'
+import { createLowerContext, resolveDeclaredType, resolveObjectShape } from './lower/type-resolution.ts'
 import type { AnyNode, ProgramNode } from './types.ts'
 
 export function lowerProgram(ast: ProgramNode): ProgramNode {
@@ -28,11 +28,19 @@ function appendLoweredTopLevelItem(out: AnyNode[], items: LoweredTopLevelItem): 
 
 function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLevelItem {
   if (item.type === 'ImportDeclaration') {
+    const specifiers: AnyNode[] = []
+
+    for (const specifier of item.specifiers) {
+      if (!specifier.typeOnly) {
+        specifiers.push(specifier)
+      }
+    }
+
     return [
       {
         type: 'ImportDeclaration',
         typeOnly: item.typeOnly,
-        specifiers: item.specifiers,
+        specifiers,
         source: item.source,
         loc: item.loc
       }
@@ -54,6 +62,11 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
   if (item.type === 'FunctionDeclaration') {
     const returnTypeName = lowerNodeReturnTypeName(item)
     const returnType = resolveDeclaredType(returnTypeName, context)
+
+    if (item.returnShape !== null && typeof item.returnShape !== 'undefined') {
+      returnType.valueType = 'object'
+      returnType.shape = resolveObjectShape(item.returnShape, context)
+    }
 
     return [
       {

@@ -225,6 +225,11 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
     for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
       const specifier = item.specifiers[specifierIndex]
+
+      if (specifier.typeOnly) {
+        continue
+      }
+
       const exported = moduleExportedDeclaration(importedModule, specifier.imported)
 
       if (exported === null || typeof exported === 'undefined') {
@@ -623,7 +628,7 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
     const declarationIndex = importIndex
     importIndex = importIndex + 1
 
-    if (!item.typeOnly) {
+    if (!item.typeOnly && !hasTypeOnlyImportSpecifier(item)) {
       continue
     }
 
@@ -663,6 +668,10 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
     const typeNames: Set<string> = new Set()
 
     for (const specifier of item.specifiers) {
+      if (!item.typeOnly && !specifier.typeOnly) {
+        continue
+      }
+
       const exported = moduleExportedDeclaration(importedModule, specifier.imported)
 
       if (exported === null || typeof exported === 'undefined') {
@@ -695,6 +704,16 @@ function prepareModuleTypeImportDeclarations(context: ModuleGraphContext, module
   }
 }
 
+function hasTypeOnlyImportSpecifier(item: AnyNode): boolean {
+  for (const specifier of item.specifiers) {
+    if (specifier.typeOnly) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function prepareStdlibRuntimeImportDeclarations(
   context: ModuleGraphContext,
   item: AnyNode,
@@ -716,6 +735,11 @@ function prepareStdlibRuntimeImportDeclarations(
 
   for (let specifierIndex = 0; specifierIndex < item.specifiers.length; specifierIndex = specifierIndex + 1) {
     const specifier = item.specifiers[specifierIndex]
+
+    if (specifier.typeOnly) {
+      continue
+    }
+
     const exported = findStdlibDeclarationExport(importedProgram, specifier.imported)
 
     if (exported === null || typeof exported === 'undefined') {

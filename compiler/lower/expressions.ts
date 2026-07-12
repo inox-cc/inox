@@ -408,6 +408,9 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCExpression = libraryCExpression
   }
 
+  copyStringMetadataArray(target, source, 'libraryCArgumentKinds')
+  copyStringMetadataArray(target, source, 'libraryCResultShapeFields')
+
   const libraryCppType = nullableString(source.libraryCppType)
   if (libraryCppType !== null && typeof libraryCppType !== 'undefined') {
     target.libraryCppType = libraryCppType
@@ -428,16 +431,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   const objectRuntimeMethod = nullableString(source.objectRuntimeMethod)
   if (objectRuntimeMethod !== null && typeof objectRuntimeMethod !== 'undefined') {
     target.objectRuntimeMethod = objectRuntimeMethod
-  }
-
-  const pathRuntimeConstant = nullableString(source.pathRuntimeConstant)
-  if (pathRuntimeConstant !== null && typeof pathRuntimeConstant !== 'undefined') {
-    target.pathRuntimeConstant = pathRuntimeConstant
-  }
-
-  const pathRuntimeMethod = nullableString(source.pathRuntimeMethod)
-  if (pathRuntimeMethod !== null && typeof pathRuntimeMethod !== 'undefined') {
-    target.pathRuntimeMethod = pathRuntimeMethod
   }
 
   const processRuntimeEnvName = nullableString(source.processRuntimeEnvName)

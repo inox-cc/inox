@@ -360,7 +360,7 @@ function isHttpFsReadFileSyncCall(expression: AnyNode): boolean {
 }
 
 function isHttpPathJoinCall(expression: AnyNode): boolean {
-  if (expression.pathRuntimeMethod === 'join') {
+  if (expression.libraryOperationId === 'node:path#join') {
     return true
   }
 

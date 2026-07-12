@@ -1864,7 +1864,6 @@ export type CScalarExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext
   ): PreparedExpression | null
-  emitPreparedPathBooleanCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessNumberExpression(expression: CValueNode): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedRuntimeArrayIndexValue(
@@ -1932,6 +1931,11 @@ export type CCallExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression
   emitNullableScalarValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedCompilerLibraryCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedArrayFilterCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -1957,8 +1961,6 @@ export type CCallExpressionDependencies = {
   emitPreparedFsStatsMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedPathBooleanCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedPathStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedPromiseStaticExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValue(
@@ -2023,22 +2025,16 @@ export function emitPreparedCallExpression(
   context: CFunctionContext,
   deps: CCallExpressionDependencies
 ): PreparedExpression {
+  const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
+
+  if (libraryCall !== null) {
+    return libraryCall
+  }
+
   const mathCall = emitPreparedMathCallExpression(expression, context, deps)
 
   if (mathCall !== null && typeof mathCall !== 'undefined') {
     return mathCall
-  }
-
-  const pathStringCall = deps.emitPreparedPathStringCallExpression(expression, context)
-
-  if (pathStringCall !== null && typeof pathStringCall !== 'undefined') {
-    return pathStringCall
-  }
-
-  const pathBooleanCall = deps.emitPreparedPathBooleanCallExpression(expression, context)
-
-  if (pathBooleanCall !== null && typeof pathBooleanCall !== 'undefined') {
-    return pathBooleanCall
   }
 
   const fsStatsMethod = deps.emitPreparedFsStatsMethodExpression(expression, context)
@@ -2804,12 +2800,6 @@ export function emitPreparedNumberExpression(
       lines: [],
       expression: '((double)((size_t)-1))'
     }
-  }
-
-  const pathBooleanCall = deps.emitPreparedPathBooleanCallExpression(expression, context)
-
-  if (pathBooleanCall !== null && typeof pathBooleanCall !== 'undefined') {
-    return pathBooleanCall
   }
 
   const arrayIsArrayCall = deps.emitPreparedArrayIsArrayCallExpression(expression, context)
@@ -5144,9 +5134,11 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedCompilerLibraryExpression(expression: CValueNode): PreparedExpression | null
-  emitPreparedPathConstantExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedPathObjectCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedPathStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitPreparedCompilerLibraryCallExpression(
+    expression: CValueNode,
+    context: CFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedProcessStringExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedProcessValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedRuntimeArrayIndexValueExpression(
@@ -5211,6 +5203,12 @@ export function emitCValueExpression(
     return childProcessCall
   }
 
+  const libraryCall = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
+
+  if (libraryCall !== null) {
+    return libraryCall
+  }
+
   const libraryExpression = deps.emitPreparedCompilerLibraryExpression(expression)
 
   if (libraryExpression !== null) {
@@ -5245,24 +5243,6 @@ export function emitCValueExpression(
 
   if (urlSearchParamsObject !== null && typeof urlSearchParamsObject !== 'undefined') {
     return urlSearchParamsObject
-  }
-
-  const pathConstant = deps.emitPreparedPathConstantExpression(expression, context)
-
-  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
-    return pathConstant
-  }
-
-  const pathObject = deps.emitPreparedPathObjectCallExpression(expression, context)
-
-  if (pathObject !== null && typeof pathObject !== 'undefined') {
-    return pathObject
-  }
-
-  const pathCall = deps.emitPreparedPathStringCallExpression(expression, context)
-
-  if (pathCall !== null && typeof pathCall !== 'undefined') {
-    return pathCall
   }
 
   const fsSyncValue = deps.emitPreparedFsSyncValueExpression(expression, context)

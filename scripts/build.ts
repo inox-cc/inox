@@ -16,6 +16,7 @@ import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
 import { generateCompilerLibraryRegistry } from './lib/compiler-library-registry.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
+import type { CompilerLibrarySet } from '../compiler/extensions/types.ts'
 
 type BuildOptions = {
   generatedDir: string
@@ -98,7 +99,8 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
     force: true
   })
 
-  await generateCompilerLibraryRegistry(rootDir)
+  const generatedRegistry = await generateCompilerLibraryRegistry(rootDir)
+  const bootstrapLibraries = generatedRegistry.librarySet
 
   const compilerFiles = await readCompilerSources()
   compilerFiles.push(...(await readGeneratedCompilerLibrarySources()))
@@ -106,11 +108,23 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
   const driverPath = `${generatedLibrarySourceRoot}/native-entry.ts`
 
   console.log('emitting self-hosted compiler declaration contracts')
-  const declarationContracts = await emitCompilerDeclarationContracts(driverPath, compilerFiles, stdlibDeclarationFiles)
+  const declarationContracts = await emitCompilerDeclarationContracts(
+    driverPath,
+    compilerFiles,
+    stdlibDeclarationFiles,
+    bootstrapLibraries
+  )
   const generatedFiles: GeneratedFileMap = new Map()
 
   console.log('emitting self-hosted compiler C++ modules')
-  await emitCompilerModules(compilerFiles, driverPath, declarationContracts, generatedFiles, stdlibDeclarationFiles)
+  await emitCompilerModules(
+    compilerFiles,
+    driverPath,
+    declarationContracts,
+    generatedFiles,
+    stdlibDeclarationFiles,
+    bootstrapLibraries
+  )
   addFunctionEffectSidecarFiles(generatedFiles, declarationContracts)
 
   await rm(options.generatedDir, {
@@ -164,26 +178,33 @@ function addGeneratedFiles(files: GeneratedFileMap, generated: { path: string; c
 async function emitCompilerDeclarationContracts(
   driverPath: string,
   compilerFiles: SourceFile[],
-  stdlibDeclarationFiles: SourceFile[]
+  stdlibDeclarationFiles: SourceFile[],
+  bootstrapLibraries: CompilerLibrarySet
 ): Promise<DeclarationContract[]> {
   const modules = compilerSourceModules(compilerFiles)
   const contracts = seedCompilerDeclarationContracts(modules)
   const orderedFiles = orderCompilerFilesByDependencies(driverPath, modules)
 
-  return await refineCompilerDeclarationContracts(orderedFiles, contracts, stdlibDeclarationFiles)
+  return await refineCompilerDeclarationContracts(
+    orderedFiles,
+    contracts,
+    stdlibDeclarationFiles,
+    bootstrapLibraries
+  )
 }
 
 async function refineCompilerDeclarationContracts(
   compilerFiles: SourceFile[],
   contracts: DeclarationContract[],
-  stdlibDeclarationFiles: SourceFile[]
+  stdlibDeclarationFiles: SourceFile[],
+  bootstrapLibraries: CompilerLibrarySet
 ): Promise<DeclarationContract[]> {
   const refined = copyDeclarationContracts(contracts)
   const compiledModules: DeclarationEffectModule[] = []
 
   for (const file of compilerFiles) {
     console.log(`refining compiler declaration ${file.path.slice('/project/'.length)}`)
-    const modules = await compileCompilerModuleIr(file, refined, stdlibDeclarationFiles)
+    const modules = await compileCompilerModuleIr(file, refined, stdlibDeclarationFiles, bootstrapLibraries)
     const module = compiledDeclarationModule(modules.graph.modules, file.path)
     const declarationProgram = module.declarationProgram
 
@@ -210,11 +231,18 @@ async function emitCompilerModules(
   driverPath: string,
   declarationContracts: DeclarationContract[],
   generatedFiles: GeneratedFileMap,
-  stdlibDeclarationFiles: SourceFile[]
+  stdlibDeclarationFiles: SourceFile[],
+  bootstrapLibraries: CompilerLibrarySet
 ): Promise<void> {
   for (const file of compilerFiles) {
     console.log(`emitting compiler module ${file.path.slice('/project/'.length)}`)
-    const modules = await compileCompilerModule(file, file.path === driverPath, declarationContracts, stdlibDeclarationFiles)
+    const modules = await compileCompilerModule(
+      file,
+      file.path === driverPath,
+      declarationContracts,
+      stdlibDeclarationFiles,
+      bootstrapLibraries
+    )
 
     addGeneratedFiles(generatedFiles, modules.files)
   }
@@ -224,7 +252,8 @@ async function compileCompilerModule(
   file: SourceFile,
   callMain: boolean,
   declarationContracts: DeclarationContract[],
-  stdlibDeclarationFiles: SourceFile[]
+  stdlibDeclarationFiles: SourceFile[],
+  bootstrapLibraries: CompilerLibrarySet
 ): Promise<{
   files: GeneratedFile[]
 }> {
@@ -234,6 +263,7 @@ async function compileCompilerModule(
   return await compileMemoryPackageToCModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     callMain,
     declarationImports,
+    libraries: bootstrapLibraries,
     loopBackend: buildLoopBackend,
     sourceRoot: projectSourceRoot,
     target: 'cc',
@@ -244,7 +274,8 @@ async function compileCompilerModule(
 async function compileCompilerModuleIr(
   file: SourceFile,
   declarationContracts: DeclarationContract[],
-  stdlibDeclarationFiles: SourceFile[]
+  stdlibDeclarationFiles: SourceFile[],
+  bootstrapLibraries: CompilerLibrarySet
 ): Promise<{
   graph: {
     modules: DeclarationEffectModule[]
@@ -255,6 +286,7 @@ async function compileCompilerModuleIr(
 
   return await compileMemoryPackageToIrModules(file.path, [file, ...contractFiles, ...stdlibDeclarationFiles], {
     declarationImports,
+    libraries: bootstrapLibraries,
     loopBackend: buildLoopBackend,
     target: 'cc',
     tlsBackend: buildTlsBackend

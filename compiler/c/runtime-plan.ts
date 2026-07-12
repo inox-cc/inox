@@ -36,7 +36,6 @@ export type CRuntimePreludeRequirements = {
   needsObjectRuntime: boolean
   needsChildProcessRuntime: boolean
   needsFsRuntime: boolean
-  needsPathRuntime: boolean
   needsUrlRuntime: boolean
   needsProcessRuntime: boolean
   needsJsonRuntime: boolean
@@ -95,7 +94,6 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('function')
   const needsChildProcessRuntime = runtimeRequirements.has('child-process')
   const needsFsRuntime = runtimeRequirements.has('fs')
-  const needsPathRuntime = runtimeRequirements.has('path')
   const needsUrlRuntime = runtimeRequirements.has('url')
   const needsProcessRuntime = runtimeRequirements.has('process')
   const needsJsonRuntime = runtimeRequirements.has('json')
@@ -138,7 +136,6 @@ export function resolveCRuntimePreludeRequirements(
     needsFsRuntime ||
     needsFetchRuntime ||
     needsClassRuntime ||
-    needsPathRuntime ||
     needsUrlRuntime ||
     signatureRuntimeTypes.has('object')
   const needsHttpRuntime = nodeRuntimeImports.http
@@ -153,7 +150,6 @@ export function resolveCRuntimePreludeRequirements(
     needsCallbackRuntime ||
     needsChildProcessRuntime ||
     needsCollectionRuntime ||
-    needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
     needsObjectRuntime ||
@@ -178,7 +174,6 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('string-bytes') ||
     needsChildProcessRuntime ||
     needsFsRuntime ||
-    needsPathRuntime ||
     needsUrlRuntime ||
     needsProcessRuntime ||
     needsDgramRuntime ||
@@ -204,7 +199,6 @@ export function resolveCRuntimePreludeRequirements(
     needsObjectRuntime,
     needsChildProcessRuntime,
     needsFsRuntime,
-    needsPathRuntime,
     needsUrlRuntime,
     needsProcessRuntime,
     needsJsonRuntime,

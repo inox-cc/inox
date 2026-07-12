@@ -128,8 +128,10 @@ import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } fr
 import { mathRuntimeMethodName } from './runtime-methods.ts'
 import {
   compilerLibraryStringConstantValue,
+  emitPreparedCompilerLibraryCallExpression as emitPreparedCompilerLibraryCallExpressionWithDependencies,
   emitPreparedCompilerLibraryExpression,
-  isCompilerLibraryStringExpression
+  isCompilerLibraryStringExpression,
+  type CompilerLibraryLoweringDependencies
 } from './library-operations.ts'
 import {
   emitRuntimeNullableValueCheck,
@@ -147,7 +149,6 @@ import type {
   NetLoweringDependencies,
   NodeNetworkLoweringDependencies,
   NodeStdlibAsyncTaskLoweringDependencies,
-  PathLoweringDependencies,
   ProcessLoweringDependencies,
   TimerLoweringDependencies,
   UrlLoweringDependencies
@@ -178,10 +179,6 @@ import {
   emitNodeNetworkCallStatement,
   emitNodeNetworkVariableDeclaration,
   emitPreparedNodeNetworkAddressPortExpression,
-  emitPreparedPathBooleanCallExpression,
-  emitPreparedPathConstantExpression,
-  emitPreparedPathObjectCallExpression,
-  emitPreparedPathStringCallExpression,
   cProcessRuntimeObjectName,
   cProcessRuntimePropertyName,
   emitPreparedProcessNumberExpression,
@@ -203,7 +200,6 @@ import {
   isBinaryRuntimeCall,
   isTimerStartCallExpression,
   isNodeRuntimeProducedStringExpression,
-  nodeRuntimeStringConstantValue,
   resolveBinaryExpressionKind,
   resolveNodeNetworkAddressStringMember,
   timerCallbackFunctionType
@@ -545,7 +541,7 @@ let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let fsLoweringDependencies = {} as FsLoweringDependencies
 let binaryLoweringDependencies = {} as BinaryLoweringDependencies
 let childProcessLoweringDependencies = {} as ChildProcessLoweringDependencies
-let pathLoweringDependencies = {} as PathLoweringDependencies
+let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let processLoweringDependencies = {} as ProcessLoweringDependencies
 let urlLoweringDependencies = {} as UrlLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
@@ -652,12 +648,8 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
   emitPreparedInlineObjectRuntimeCallExpression,
+  emitPreparedCompilerLibraryCallExpression,
   emitPreparedRuntimeTruthinessExpression: emitPreparedStatementRuntimeTruthinessExpression,
-  emitPreparedPathObjectCallExpression: (
-    expression: AnyNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ) => emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, options),
   emitPreparedPromiseConstructorExpression: (
     expression: AnyNode,
     context: CFunctionContext,
@@ -945,7 +937,7 @@ childProcessLoweringDependencies = {
   registerObjectShape
 }
 
-pathLoweringDependencies = {
+compilerLibraryLoweringDependencies = {
   emitCValueExpression,
   emitPreparedStringBytesOperand,
   registerObjectShape
@@ -1051,25 +1043,32 @@ function emitPreparedNodeRuntimeStringExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression | null {
+  const libraryCall = emitPreparedCompilerLibraryCallExpression(expression, context)
+
+  if (libraryCall !== null && libraryCall.cppType === 'inox::String') {
+    return libraryCall
+  }
+
   const libraryExpression = emitPreparedCompilerLibraryExpression(expression)
 
   if (libraryExpression !== null) {
     return libraryExpression
   }
 
-  const pathConstant = emitPreparedPathConstantExpression(expression, context)
-
-  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
-    return pathConstant
-  }
-
-  const pathCall = emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, null)
-
-  if (pathCall !== null && typeof pathCall !== 'undefined') {
-    return pathCall
-  }
-
   return emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null)
+}
+
+function emitPreparedCompilerLibraryCallExpression(
+  expression: AnyNode,
+  context: CFunctionContext,
+  options?: PreparedCallOptions
+): PreparedExpression | null {
+  return emitPreparedCompilerLibraryCallExpressionWithDependencies(
+    expression,
+    context,
+    compilerLibraryLoweringDependencies,
+    options
+  )
 }
 
 function runtimeStringConstantValue(expression: AnyNode | null | undefined): string | null {
@@ -1079,7 +1078,7 @@ function runtimeStringConstantValue(expression: AnyNode | null | undefined): str
     return libraryValue
   }
 
-  return nodeRuntimeStringConstantValue(expression)
+  return null
 }
 
 function isConfiguredRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean {
@@ -1285,6 +1284,7 @@ const cCallExpressionDependencies = {
   emitFunctionValueExpression,
   emitNullableFunctionValueExpression,
   emitNullableScalarValueExpression,
+  emitPreparedCompilerLibraryCallExpression,
   emitPreparedArrayFilterCallExpression,
   emitPreparedArrayJoinCallExpression,
   emitPreparedArrayLengthExpression,
@@ -1309,10 +1309,6 @@ const cCallExpressionDependencies = {
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedNumberExpression,
-  emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
-  emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, null),
   emitPreparedPromiseMethodExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPromiseMethodExpression(expression, context, promiseLoweringDependencies),
   emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -1369,8 +1365,6 @@ const cScalarExpressionDependencies = {
   emitPreparedObjectExpressionScalarMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionScalarMemberValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectRuntimeArrayIndexValueExpression,
-  emitPreparedPathBooleanCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathBooleanCallExpression(expression, context, pathLoweringDependencies),
   emitPreparedNumberExpression,
   emitPreparedProcessNumberExpression,
   emitPreparedRuntimeArrayIndexValue,
@@ -1473,12 +1467,8 @@ const cValueExpressionDependencies = {
     emitPreparedObjectExpressionIndexValueExpression(expression, context, objectExpressionFieldDependencies),
   emitPreparedObjectExpressionMemberValueExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedObjectExpressionMemberValueExpression(expression, context, objectExpressionFieldDependencies),
+  emitPreparedCompilerLibraryCallExpression,
   emitPreparedCompilerLibraryExpression,
-  emitPreparedPathConstantExpression,
-  emitPreparedPathObjectCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathObjectCallExpression(expression, context, pathLoweringDependencies, null),
-  emitPreparedPathStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedPathStringCallExpression(expression, context, pathLoweringDependencies, null),
   emitPreparedProcessStringExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedProcessStringExpression(expression, context, processLoweringDependencies, null),
   emitPreparedProcessValueExpression: (expression: AnyNode, context: CFunctionContext) =>

@@ -17,6 +17,7 @@ import {
 import { rootDir } from './repo-root.ts'
 
 export type RenderedCompilerLibraryRegistry = {
+  librarySet: CompilerLibrarySet
   registrySource: string
   manifestSource: string
   nativePlanSource: string
@@ -97,6 +98,7 @@ export function renderCompilerLibraryRegistry(
     'runCompilerCli(defaultCompilerLibrarySet, compilerArgs)\n'
 
   return {
+    librarySet,
     registrySource,
     manifestSource,
     nativePlanSource,

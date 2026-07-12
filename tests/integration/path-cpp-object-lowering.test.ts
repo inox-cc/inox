@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
+import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
+
+const defaultCompilerLibrarySet = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
 
 type GeneratedTextFile = {
   path: string
@@ -39,6 +43,7 @@ console.log(path.resolve('/tmp', 'file.txt'))
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
@@ -47,17 +52,17 @@ console.log(path.resolve('/tmp', 'file.txt'))
   assert.match(source, /path\.dirname\("\/tmp\/file\.txt"\)/)
   assert.match(source, /path\.extname\("\/tmp\/file\.txt"\)/)
   assert.match(source, /path\.isAbsolute\("\/tmp\/file\.txt"\)/)
-  assert.match(source, /const inox::StringView inox_path_args_\d+\[\] = \{ "\/tmp", "a", "\.\.", "b" \};/)
+  assert.match(source, /const inox::StringView inox_library_args_\d+\[\] = \{ "\/tmp", "a", "\.\.", "b" \};/)
   assert.match(source, /path\.normalize\("\/tmp\/\.\.\/tmp\/file\.txt"\)/)
-  assert.match(source, /path\.parse\("\/tmp\/file\.txt", &inox_shape_path_parse_\d+\)/)
+  assert.match(source, /path\.parse\("\/tmp\/file\.txt", &inox_shape_library_result_\d+\)/)
   assert.match(source, /auto inox_object_\d+ = inox::ObjectValue::create\(&inox_shape_value_\d+\);/)
   assert.match(source, /inox_object_\d+\.init\(0, inox::String\("\/tmp", 4\)\);/)
   assert.match(source, /path\.format\(inox_object_\d+\)/)
   assert.match(source, /path\.relative\("\/tmp\/a", "\/tmp\/b"\)/)
-  assert.match(source, /const inox::StringView inox_path_args_\d+\[\] = \{ "\/tmp", "file\.txt" \};/)
+  assert.match(source, /const inox::StringView inox_library_args_\d+\[\] = \{ "\/tmp", "file\.txt" \};/)
   assert.doesNotMatch(source, /inox_object_new/)
   assert.doesNotMatch(source, /inox_object_init_known/)
-  assert.doesNotMatch(source, /const inox_value inox_path_args_\d+\[\]/)
+  assert.doesNotMatch(source, /const inox_value inox_library_args_\d+\[\]/)
 
   const header = readFileSync(resolve('stdlib/node/path/include/inox/path.h'), 'utf8')
   assert.match(header, /inox::String format\(const inox::Value& path_object\) const;/)

@@ -33,10 +33,6 @@ import {
   nodeNetModuleObjectImportNames
 } from '../../../stdlib/node/net/compiler/descriptor.ts'
 import {
-  nodePathImportSource,
-  nodePathModuleObjectImportNames
-} from '../../../stdlib/node/path/compiler/descriptor.ts'
-import {
   nodeProcessImportSource,
   nodeProcessModuleObjectImportNames
 } from '../../../stdlib/node/process/compiler/descriptor.ts'
@@ -53,7 +49,6 @@ import { nodeUrlImportSource, nodeUrlModuleObjectImportNames } from '../../../st
 export { isBinaryGlobalUsagePath } from '../../../stdlib/node/buffer/compiler/descriptor.ts'
 export { isCryptoRuntimeMethodPath } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
 export { fsGlobalUsagePathForRuntimeMethod } from '../../../stdlib/node/fs/compiler/descriptor.ts'
-export { pathParseObjectFields } from '../../../stdlib/node/path/compiler/descriptor.ts'
 export {
   isTimerRuntimeMethod,
   timerRuntimeMethodNameFromPath
@@ -78,10 +73,6 @@ export type NodeStdlibRuntimeImportDescriptor = {
 }
 
 export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
-  {
-    source: nodePathImportSource,
-    libuvRuntimeFeature: null
-  },
   {
     source: nodeBufferImportSource,
     libuvRuntimeFeature: null
@@ -191,11 +182,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     source: nodeNetImportSource,
     kind: 'connect',
     importedNames: nodeNetConnectImportNames
-  },
-  {
-    source: nodePathImportSource,
-    kind: 'module-object',
-    importedNames: nodePathModuleObjectImportNames
   },
   {
     source: nodeProcessImportSource,

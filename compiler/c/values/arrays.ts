@@ -3418,6 +3418,21 @@ function emitPreparedArrayReceiver(
     }
   }
 
+  if (
+    expression.type === 'BinaryExpression' &&
+    expression.operator === '??' &&
+    arrayDeps(context).inferExpressionType(expression, context) === 'array'
+  ) {
+    const value = arrayDeps(context).emitCValueExpression(expression, context)
+
+    return {
+      lines: value.lines,
+      expression: value.expression,
+      elementType: resolvePreparedArrayReceiverElementType(expression, context),
+      cppType: value.cppType
+    }
+  }
+
   if (expression.type === 'Reference' && expression.path.length === 1) {
     const name = expression.path[0]
 

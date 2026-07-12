@@ -259,8 +259,6 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('functionType', 'object', null, true, loc),
       anyNodeField('shape', 'object', null, true, loc),
       anyNodeField('rest', 'boolean', null, false, loc),
-      anyNodeField('pathRuntimeMethod', 'string', null, true, loc),
-      anyNodeField('pathRuntimeConstant', 'string', null, true, loc),
       anyNodeField('processRuntimeMethod', 'string', null, true, loc),
       anyNodeField('processRuntimeProperty', 'string', null, true, loc),
       anyNodeField('processRuntimeEnvName', 'string', null, true, loc),

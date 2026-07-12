@@ -290,7 +290,7 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
   }
 }
 
-function resolveObjectShape(shape: LowerTypeNode, context: LowerContext): LowerTypeNode {
+export function resolveObjectShape(shape: LowerTypeNode, context: LowerContext): LowerTypeNode {
   const bases = resolveObjectShapeBases(shape, context)
   const fields = concatFields(bases.fields, shape.fields)
   const resolvedFields: LowerTypeNode[] = []

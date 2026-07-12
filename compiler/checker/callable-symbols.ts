@@ -123,7 +123,11 @@ export function applyCallableSymbolCall(
   expression.mapValueType = returnMapValueType
   expression.promiseValueType = returnPromiseValueType
   expression.setElementType = returnSetElementType
-  expression.shape = returnShape
+  if (returnShape !== null) {
+    expression.shape = returnShape
+  } else if (expression.shape === null || typeof expression.shape === 'undefined') {
+    expression.shape = null
+  }
 
   const params = symbol.params ?? null
 

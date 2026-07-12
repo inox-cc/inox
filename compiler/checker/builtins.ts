@@ -1,6 +1,6 @@
 import { debugMemoryStatsFields } from '../../stdlib/global/compiler/descriptor.ts'
 import { stdlibModuleLibuvRuntimeFeature } from '../stdlib/node/modules.ts'
-import { pathParseObjectFields, urlObjectFields } from '../stdlib/node/descriptor.ts'
+import { urlObjectFields } from '../stdlib/node/descriptor.ts'
 import type { AnyNode, ObjectShapeInfo, SymbolInfo } from '../types.ts'
 
 type DebugMemoryStatsField = {
@@ -204,12 +204,6 @@ export const childProcessSpawnSyncResultShape: ObjectShapeInfo = {
       readonly: true
     }
   ]
-}
-
-export const pathParseObjectShape: ObjectShapeInfo = {
-  kind: 'object',
-  builtin: 'path.ParsedPath',
-  fields: readonlyStringFields(pathParseObjectFields)
 }
 
 export const debugMemoryStatsObjectShape: ObjectShapeInfo = {

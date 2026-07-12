@@ -302,7 +302,7 @@ class Parser {
     }
 
     if (this.matchValue('{')) {
-      pushAllNodes(specifiers, this.parseNamedImportSpecifiers())
+      pushAllNodes(specifiers, this.parseNamedImportSpecifiers(true))
     }
 
     if (specifiers.length === 0) {
@@ -325,7 +325,7 @@ class Parser {
     const specifiers: AnyNode[] = []
 
     if (this.matchValue('{')) {
-      pushAllNodes(specifiers, this.parseNamedImportSpecifiers())
+      pushAllNodes(specifiers, this.parseNamedImportSpecifiers(false))
     }
 
     if (specifiers.length === 0) {
@@ -344,10 +344,17 @@ class Parser {
     return createExportDeclaration(typeOnly, specifiers, source)
   }
 
-  parseNamedImportSpecifiers(): AnyNode[] {
+  parseNamedImportSpecifiers(allowInlineTypeOnly: boolean): AnyNode[] {
     const specifiers: AnyNode[] = []
 
     while (!this.isValue('}') && !this.is('eof')) {
+      let typeOnly = false
+
+      if (allowInlineTypeOnly && this.is('keyword') && this.current().value === 'type' && this.peek(1).value !== 'as') {
+        this.advance()
+        typeOnly = true
+      }
+
       const imported = this.parseImportSpecifierName()
       let local = imported.value
 
@@ -355,7 +362,13 @@ class Parser {
         local = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected local import name').value
       }
 
-      specifiers.push(createImportSpecifier(imported.value, local, imported, false))
+      const specifier = createImportSpecifier(imported.value, local, imported, false)
+
+      if (typeOnly) {
+        specifier.typeOnly = true
+      }
+
+      specifiers.push(specifier)
 
       if (!this.matchValue(',')) {
         break
@@ -391,9 +404,15 @@ class Parser {
 
     this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after function parameters')
     let returnType = 'void'
+    let returnShape: AnyNode | null = null
 
     if (this.matchValue(':')) {
-      returnType = this.parseTypeAnnotation(['{'], null)
+      if (this.isValue('{')) {
+        returnType = 'object'
+        returnShape = this.parseObjectType(null)
+      } else {
+        returnType = this.parseTypeAnnotation(['{'], null)
+      }
     }
 
     return createFunctionDeclaration({
@@ -402,6 +421,7 @@ class Parser {
       name,
       params,
       returnType,
+      returnShape,
       body: this.parseBlock()
     })
   }
@@ -735,7 +755,14 @@ class Parser {
     while (matched) {
       matched = false
 
-      if (!readOnly && this.matchKeyword('readonly')) {
+      if (
+        !readOnly &&
+        this.isKeywordValue('readonly') &&
+        this.peek(1).value !== ':' &&
+        this.peek(1).value !== '?' &&
+        this.peek(1).value !== '('
+      ) {
+        this.advance()
         readOnly = true
         matched = true
         continue

@@ -125,7 +125,11 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
     const imports: CModuleImportPlan[] = []
 
     for (const declaration of declarations) {
-      if (declaration.typeOnly || isRuntimeBuiltinImportSource(declaration.source)) {
+      if (
+        declaration.typeOnly ||
+        !hasRuntimeImportSpecifier(declaration) ||
+        isRuntimeBuiltinImportSource(declaration.source)
+      ) {
         continue
       }
 
@@ -380,6 +384,10 @@ function reportUnsupportedCModuleImports(
   const specifiers: CModuleNode[] = declaration.specifiers
 
   for (const specifier of specifiers) {
+    if (specifier.typeOnly) {
+      continue
+    }
+
     const exported = moduleExportedDeclaration(importedModule.record, specifier.imported)
 
     if (
@@ -399,6 +407,18 @@ function reportUnsupportedCModuleImports(
       )
     )
   }
+}
+
+function hasRuntimeImportSpecifier(declaration: AnyNode): boolean {
+  const specifiers: CModuleNode[] = declaration.specifiers
+
+  for (const specifier of specifiers) {
+    if (!specifier.typeOnly) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function moduleExportedDeclaration(module: ModuleRecord, name: string): AnyNode | null {

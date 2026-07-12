@@ -758,6 +758,10 @@ function isCUnitRuntimeStringInitializer(expression: AnyNode | null | undefined)
     return true
   }
 
+  if (expression.type === 'CallExpression' && expression.libraryCppType === 'inox::String') {
+    return true
+  }
+
   if (
     expression.type === 'CallExpression' &&
     expression.fsRuntimeMethod !== null &&
@@ -1451,7 +1455,6 @@ export function emitCUnit(
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   const needsChildProcessRuntime: boolean = preludeRequirements.needsChildProcessRuntime
   const needsFsRuntime: boolean = preludeRequirements.needsFsRuntime
-  const needsPathRuntime: boolean = preludeRequirements.needsPathRuntime
   const needsUrlRuntime: boolean = preludeRequirements.needsUrlRuntime
   const needsProcessRuntime: boolean = preludeRequirements.needsProcessRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
@@ -1490,7 +1493,6 @@ export function emitCUnit(
     needsObjectRuntime,
     needsChildProcessRuntime,
     needsFsRuntime,
-    needsPathRuntime,
     needsUrlRuntime,
     needsProcessRuntime,
     needsJsonRuntime,

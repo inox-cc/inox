@@ -16,10 +16,70 @@ export function assertModuleDeclarationImports(): void {
   assertModuleDeclarationImportChecksFunctionParamShape()
   assertModuleDeclarationTypeOnlyImport()
   assertModuleDeclarationImportedObjectShape()
+  assertModuleDeclarationImportedMapFieldMetadata()
   assertModuleDeclarationTransitiveImport()
   assertModuleDeclarationFunctionEffectsPath()
   assertModuleDeclarationUnsupportedReexportDiagnostic()
   assertModuleDeclarationTypeReexport()
+}
+
+function assertModuleDeclarationImportedMapFieldMetadata(): void {
+  const host = createMemoryCompilerHost(
+    [
+      {
+        path: '/pkg/src/index.ts',
+        source: `
+import { useMapContext } from './context.ts'
+import type { MapContext } from './context.ts'
+
+type LocalContext = MapContext
+
+function readValue(context: LocalContext): string | null {
+  const value = context.values.get('item')
+
+  if (value !== null && typeof value !== 'undefined' && value.startsWith('value')) {
+    return value
+  }
+
+  return null
+}
+`
+      }
+    ],
+    {
+      root: '/'
+    }
+  )
+
+  assert.doesNotThrow(() =>
+    compileFileToCModulesSync('/pkg/src/index.ts', {
+      callMain: true,
+      declarationImports: [
+        {
+          sourcePath: '/pkg/src/context.ts',
+          declarationSource: `
+type LocalContext = MapContext;
+type MapDependencies = {
+  use: (context: LocalContext) => void;
+}
+
+type MapContextBase = {
+  dependencies: MapDependencies;
+  values: Map<string, string>;
+}
+
+export type MapContext = MapContextBase & {
+  marker: string;
+}
+
+export function useMapContext(context: MapContext): void;
+`
+        }
+      ],
+      host,
+      sourceRoot: '/pkg'
+    })
+  )
 }
 
 function assertModuleDeclarationImportSkipsExternalEmission(): void {

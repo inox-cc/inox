@@ -59,8 +59,6 @@ import {
   resolveNetAddressStringMember
 } from '../../../stdlib/node/net/compiler/c.ts'
 import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compiler/descriptor.ts'
-import type { PathLoweringDependencies as PackagePathLoweringDependencies } from '../../../stdlib/node/path/compiler/c.ts'
-import { cPathRuntimeConstantName, cPathRuntimeConstantValue, cPathRuntimeMethodName } from '../../../stdlib/node/path/compiler/c.ts'
 import type {
   ProcessLoweringDependencies as PackageProcessLoweringDependencies,
   ProcessRuntimeObjectReferenceEmitterDescriptor as PackageProcessRuntimeObjectReferenceEmitterDescriptor
@@ -108,12 +106,6 @@ export {
   emitPreparedFsSyncValueExpression
 } from '../../../stdlib/node/fs/compiler/c.ts'
 export {
-  emitPreparedPathBooleanCallExpression,
-  emitPreparedPathConstantExpression,
-  emitPreparedPathObjectCallExpression,
-  emitPreparedPathStringCallExpression
-} from '../../../stdlib/node/path/compiler/c.ts'
-export {
   cProcessRuntimeObjectName,
   cProcessRuntimePropertyName,
   emitPreparedProcessNumberExpression,
@@ -143,7 +135,6 @@ export type DgramLoweringDependencies = PackageDgramLoweringDependencies
 export type FsLoweringDependencies = PackageFsLoweringDependencies
 export type HttpLoweringDependencies = PackageHttpLoweringDependencies
 export type NetLoweringDependencies = PackageNetLoweringDependencies
-export type PathLoweringDependencies = PackagePathLoweringDependencies
 export type ProcessLoweringDependencies = PackageProcessLoweringDependencies
 export type TimerLoweringDependencies = PackageTimerLoweringDependencies
 export type UrlLoweringDependencies = PackageUrlLoweringDependencies
@@ -500,29 +491,9 @@ function emitPreparedNodeStdlibRuntimeObjectReference(
   return null
 }
 
-export function nodeRuntimeStringConstantValue(expression: AnyNode | null | undefined): string | null {
-  const pathConstant = cPathRuntimeConstantName(expression)
-
-  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
-    return cPathRuntimeConstantValue(pathConstant)
-  }
-
-  return null
-}
-
 export function isNodeRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean {
   if (expression === null || typeof expression === 'undefined') {
     return false
-  }
-
-  if (cPathRuntimeConstantName(expression)) {
-    return true
-  }
-
-  const pathMethod = cPathRuntimeMethodName(expression)
-
-  if (pathMethod !== null && typeof pathMethod !== 'undefined' && pathMethod !== 'isAbsolute' && pathMethod !== 'parse') {
-    return true
   }
 
   if (cProcessRuntimeStringPropertyName(expression)) {
@@ -621,26 +592,6 @@ export function inferNodeStdlibExpressionType(expression: AnyNode): string | nul
     }
 
     return 'object'
-  }
-
-  const pathConstant = cPathRuntimeConstantName(expression)
-
-  if (pathConstant !== null && typeof pathConstant !== 'undefined') {
-    return 'string'
-  }
-
-  const pathMethod = cPathRuntimeMethodName(expression)
-
-  if (pathMethod !== null && typeof pathMethod !== 'undefined') {
-    if (pathMethod === 'isAbsolute') {
-      return 'boolean'
-    }
-
-    if (pathMethod === 'parse') {
-      return 'object'
-    }
-
-    return 'string'
   }
 
   if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression)) {

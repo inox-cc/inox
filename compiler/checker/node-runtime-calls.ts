@@ -1,14 +1,8 @@
 import { diagnostic } from '../diagnostics.ts'
 import type { AnyNode, Diagnostic, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 import { isAssignableType } from './assignability.ts'
-import { pathParseObjectShape, urlObjectShape } from './builtins.ts'
+import { urlObjectShape } from './builtins.ts'
 import type { CheckedCallArgInfo } from './global-calls.ts'
-
-type PathRuntimeCall = {
-  label: string
-  method: string
-  unsupported?: boolean
-}
 
 type ProcessRuntimeCall = {
   arrayElementType?: ValueType | null
@@ -135,88 +129,6 @@ export function checkProcessCall(
 
   expression.valueType = 'void'
   return 'void'
-}
-
-export function checkPathCall(
-  context: NodeRuntimeCallCheckerContext,
-  expression: AnyNode,
-  call: PathRuntimeCall,
-  argInfos: CheckedCallArgInfo[]
-): ValueType {
-  if (call.unsupported) {
-    report(
-      context,
-      'INOX_NOT_IMPLEMENTED',
-      `node:path ${call.method} is not implemented by the current C backend`,
-      expression.loc
-    )
-    expression.valueType = 'unknown'
-    return 'unknown'
-  }
-
-  const method = call.method
-  let returnType: ValueType = 'string'
-
-  if (method === 'isAbsolute') {
-    returnType = 'boolean'
-  } else if (method === 'parse') {
-    returnType = 'object'
-  }
-
-  expression.valueType = returnType
-  expression.pathRuntimeMethod = method
-
-  if (method === 'parse') {
-    checkExactArgCount(context, expression, call.label, 1)
-    checkStringArgs(context, argInfos)
-
-    expression.shape = pathParseObjectShape
-    return 'object'
-  }
-
-  if (method === 'format') {
-    checkExactArgCount(context, expression, call.label, 1)
-
-    if (argInfos.length > 0) {
-      const firstArg = argInfos[0]
-
-      checkAssignableType(context, firstArg.valueType, 'object', firstArg.loc, false, firstArg.nullable)
-    }
-
-    return 'string'
-  }
-
-  if (method === 'join' || method === 'resolve') {
-    checkStringArgs(context, argInfos)
-
-    return returnType
-  }
-
-  if (method === 'basename') {
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      report(
-        context,
-        'INOX_ARG_COUNT',
-        `function ${call.label} expects 1 or 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    checkStringArgs(context, argInfos)
-
-    return 'string'
-  }
-
-  let expectedArgs = 1
-
-  if (method === 'relative') {
-    expectedArgs = 2
-  }
-
-  checkExactArgCount(context, expression, call.label, expectedArgs)
-  checkStringArgs(context, argInfos)
-
-  return returnType
 }
 
 export function checkUrlCall(

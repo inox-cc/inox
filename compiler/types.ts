@@ -45,7 +45,6 @@ export type IrFeature =
   | 'number-from-string-null'
   | 'numeric-casts'
   | 'objects'
-  | 'path'
   | 'process'
   | 'regexp'
   | 'runtime-values'

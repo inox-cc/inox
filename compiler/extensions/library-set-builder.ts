@@ -203,7 +203,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         item.libraryId + ':' + item.bindingId + ':' + item.operationId + ':' + item.kind + ':' +
           sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
-          (item.cExpression ?? '') + ':' + (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' +
+          (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
+          operationResultShapeFingerprint(item) + ':' + (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' +
           (item.owned === true ? 'owned' : 'borrowed') + ':' + (item.constantValue ?? '') + ':' +
           (item.diagnosticCode ?? '') + ':' + (item.diagnosticMessage ?? '')
       )
@@ -235,6 +236,23 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
   }
 
   return 'inox:library-set:v1:' + shortStableHash(rows.join(';'))
+}
+
+function operationResultShapeFingerprint(operation: LibraryOperationDescriptor): string {
+  const fields = operation.resultShapeFields
+
+  if (fields === null || typeof fields === 'undefined') {
+    return ''
+  }
+
+  const rows: string[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    rows.push(`${field.name}=${field.valueType}:${field.readonly ? 'readonly' : 'mutable'}`)
+  }
+
+  return rows.join(',')
 }
 
 function shortStableHash(value: string): string {

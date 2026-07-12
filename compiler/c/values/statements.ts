@@ -472,7 +472,7 @@ export type StatementLoweringDependencies = {
     expression: StatementNode,
     context: CFunctionContext
   ): PreparedExpression | null
-  emitPreparedPathObjectCallExpression(
+  emitPreparedCompilerLibraryCallExpression(
     expression: StatementNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
@@ -4132,10 +4132,14 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return childProcessObject.lines
   }
 
-  const pathObject = deps.emitPreparedPathObjectCallExpression(statement.init, context, preparedCallOut(statement.name))
+  const libraryObject = deps.emitPreparedCompilerLibraryCallExpression(
+    statement.init,
+    context,
+    preparedCallOut(statement.name)
+  )
 
-  if (pathObject !== null && typeof pathObject !== 'undefined') {
-    return pathObject.lines
+  if (libraryObject !== null && libraryObject.cppType === 'inox::Value') {
+    return libraryObject.lines
   }
 
   const urlObject = deps.emitPreparedUrlObjectExpression(statement.init, context, preparedCallOut(statement.name))

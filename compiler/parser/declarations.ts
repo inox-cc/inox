@@ -7,6 +7,7 @@ type FunctionDeclarationOptions = {
   name: Token
   params: AnyNode[]
   returnType: string
+  returnShape: AnyNode | null
   body: AnyNode[]
 }
 
@@ -109,7 +110,7 @@ export function createParam(
 }
 
 export function createFunctionDeclaration(options: FunctionDeclarationOptions): AnyNode {
-  return {
+  const declaration: AnyNode = {
     type: 'FunctionDeclaration',
     exported: options.exported,
     async: options.isAsync,
@@ -119,6 +120,12 @@ export function createFunctionDeclaration(options: FunctionDeclarationOptions): 
     returnType: options.returnType,
     body: options.body
   }
+
+  if (options.returnShape !== null && typeof options.returnShape !== 'undefined') {
+    declaration.returnShape = options.returnShape
+  }
+
+  return declaration
 }
 
 export function createTypeAliasDeclaration(exported: boolean, name: Token, valueType: AnyNode): AnyNode {

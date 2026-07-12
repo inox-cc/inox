@@ -50,11 +50,6 @@ export {
   isFsRuntimeRootSymbol
 } from '../../../stdlib/node/fs/compiler/checker.ts'
 export {
-  isPathRuntimeConstantImport,
-  pathRuntimeCallInfo,
-  pathRuntimeConstantName
-} from '../../../stdlib/node/path/compiler/checker.ts'
-export {
   processRuntimeAssignmentProperty,
   processRuntimeCallInfo,
   processRuntimeIndexProperty,

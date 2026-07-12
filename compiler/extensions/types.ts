@@ -22,6 +22,21 @@ export type LibraryOperationKind =
   | 'index-read'
   | 'index-write'
 
+export type LibraryCArgumentKind =
+  | 'string-view'
+  | 'optional-string-view'
+  | 'argument-presence'
+  | 'value'
+  | 'variadic-string-view-array'
+  | 'variadic-count'
+  | 'result-shape'
+
+export type LibraryResultShapeFieldDescriptor = {
+  name: string
+  valueType: string
+  readonly: boolean
+}
+
 export type LibraryOperationDescriptor = {
   libraryId: LibraryId
   bindingId: LibraryBindingId
@@ -30,6 +45,8 @@ export type LibraryOperationDescriptor = {
   kind: LibraryOperationKind
   runtimeRequirements: RuntimeRequirementId[]
   cExpression?: string | null
+  cArgumentKinds?: LibraryCArgumentKind[]
+  resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   cppType?: string | null
   valueType?: string | null
   owned?: boolean
