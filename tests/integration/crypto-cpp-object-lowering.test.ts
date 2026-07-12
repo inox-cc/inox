@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
+import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
+
+const defaultCompilerLibrarySet = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
 
 type GeneratedTextFile = {
   path: string
@@ -44,6 +48,7 @@ console.log(bytes.length, filled.length, value, small, uuid.length, digest, dige
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     loopBackend: 'libuv',
     sourceRoot: '/pkg',
     tlsBackend: 'boringssl'
@@ -51,22 +56,22 @@ console.log(bytes.length, filled.length, value, small, uuid.length, digest, dige
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /crypto\.randomBytes\(8\)/)
-  assert.match(source, /crypto\.randomFillSync\((?:bytes|Uint8Array\(bytes\)), 0, 4, true\)/)
+  assert.match(source, /crypto\.randomFillSync\((?:bytes|Uint8Array\(bytes\)), 0, 4\)/)
   assert.match(source, /crypto\.randomInt\(5, 10\)/)
   assert.match(source, /crypto\.randomInt\(5\)/)
   assert.match(source, /crypto\.randomUUID\(\)/)
-  assert.match(source, /crypto\.hashHex\("sha256", "test"\)/)
-  assert.match(source, /static Hash hash;/)
-  assert.match(source, /hash = crypto\.createHash\("sha256"\);/)
+  assert.match(source, /crypto\.hash\("sha256", "test"\)/)
+  assert.match(source, /auto hash = crypto\.createHash\("sha256"\);/)
   assert.match(source, /hash\.update\("test"\);/)
-  assert.match(source, /auto digestHex = hash\.digestHex\(\);/)
+  assert.match(source, /hash\.digest\("hex"\)/)
+  assert.match(source, /auto digestHex = inox_library_result_\d+;/)
   assert.match(source, /crypto\.createHash\("sha256"\)/)
   assert.match(source, /\.update\("test"\);/)
-  assert.match(source, /\.digestHex\(\)/)
-  assert.match(source, /static Hmac hmac;/)
-  assert.match(source, /hmac = crypto\.createHmac\("sha256", "key"\);/)
+  assert.match(source, /\.digest\("hex"\)/)
+  assert.match(source, /auto hmac = crypto\.createHmac\("sha256", "key"\);/)
   assert.match(source, /hmac\.update\("test"\);/)
-  assert.match(source, /auto hmacDigest = hmac\.digestHex\(\);/)
+  assert.match(source, /hmac\.digest\("hex"\)/)
+  assert.match(source, /auto hmacDigest = inox_library_result_\d+;/)
   assert.match(source, /crypto\.timingSafeEqual\(/)
   assert.doesNotMatch(
     source,

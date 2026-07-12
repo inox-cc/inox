@@ -35,7 +35,6 @@ export type IrFeature =
   | 'callback-values'
   | 'clocks'
   | 'collections'
-  | 'crypto'
   | 'debug-memory'
   | 'fs'
   | 'json'

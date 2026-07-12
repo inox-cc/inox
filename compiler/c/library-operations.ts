@@ -12,10 +12,12 @@ import type {
 
 type CompilerLibraryExpressionNode = AnyNode & {
   libraryCExpression?: string | null
+  libraryCArgumentAdapters?: string[] | null
   libraryCArgumentKinds?: string[] | null
   libraryCResultShapeFields?: string[] | null
   libraryCCallStyle?: string | null
   libraryCFailureMode?: string | null
+  libraryCResultMode?: string | null
   libraryConstantValue?: string | null
   libraryCppType?: string | null
   libraryOwned?: boolean | null
@@ -29,6 +31,7 @@ export type CompilerLibraryLoweringDependencies = {
     context: CFunctionContext,
     tempPrefix?: string
   ): PreparedStringBytesOperand
+  inferExpressionType(expression: AnyNode, context: CFunctionContext): string
   registerObjectShape(context: CFunctionContext, name: string, shape: CObjectShape | null | undefined): void
 }
 
@@ -153,6 +156,36 @@ export function emitPreparedCompilerLibraryCallExpression(
       )
       pushLines(lines, prepared.lines)
       argumentsList.push(emitCompilerLibraryStringArgument(prepared))
+      continue
+    }
+
+    if (kind === 'string-view-or-value') {
+      const sourceArgument = sourceArguments[sourceArgumentIndex]
+      sourceArgumentIndex = sourceArgumentIndex + 1
+
+      if (sourceArgument === null || typeof sourceArgument === 'undefined') {
+        return null
+      }
+
+      if (dependencies.inferExpressionType(sourceArgument, context) === 'string') {
+        const prepared = dependencies.emitPreparedStringBytesOperand(
+          sourceArgument,
+          context,
+          'inox_library_arg'
+        )
+        pushLines(lines, prepared.lines)
+        argumentsList.push(emitCompilerLibraryStringArgument(prepared))
+      } else {
+        const prepared = dependencies.emitCValueExpression(sourceArgument, context)
+        pushLines(lines, prepared.lines)
+
+        if (prepared.cppType !== null && typeof prepared.cppType !== 'undefined') {
+          argumentsList.push(prepared.expression)
+        } else {
+          argumentsList.push(`inox::Value(${prepared.expression})`)
+        }
+      }
+
       continue
     }
 
@@ -290,6 +323,8 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   let callTarget = target
 
+  applyCompilerLibraryArgumentAdapters(argumentsList, item.libraryCArgumentAdapters)
+
   if (item.libraryCCallStyle === 'member') {
     if (receiverExpression === '') {
       return null
@@ -351,6 +386,7 @@ export function emitPreparedCompilerLibraryCallExpression(
       cppType,
       nullable: item.nullable === true,
       owned: item.libraryOwned === true,
+      runtimeTypeChecked: cppType !== 'inox::Value',
       valueType: item.valueType ?? undefined
     }
   }
@@ -360,6 +396,7 @@ export function emitPreparedCompilerLibraryCallExpression(
     expression: callExpression,
     cppType,
     nullable: item.nullable === true,
+    runtimeTypeChecked: cppType !== 'inox::Value',
     valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
@@ -383,6 +420,26 @@ function emitPreparedCompilerLibraryObjectCall(
     typeof options.out !== 'undefined'
   ) {
     out = options.out
+  }
+
+  if ((expression as CompilerLibraryExpressionNode).libraryCResultMode === 'borrowed') {
+    lines.push(`auto& ${out} = ${callExpression};`)
+    context.variables.set(out, 'object')
+    context.cppValueTypes.set(out, cppType)
+    dependencies.registerObjectShape(context, out, expression.shape)
+    pushCompilerLibraryFailureCheck(
+      lines,
+      (expression as CompilerLibraryExpressionNode).libraryCFailureMode,
+      out,
+      context
+    )
+
+    return {
+      lines,
+      expression: out,
+      cppType,
+      valueType: 'object'
+    }
   }
 
   if (cppType === 'inox::Value') {
@@ -418,6 +475,23 @@ function emitPreparedCompilerLibraryObjectCall(
     expression: out,
     cppType,
     valueType: 'object'
+  }
+}
+
+function applyCompilerLibraryArgumentAdapters(
+  argumentsList: string[],
+  adapters: string[] | null | undefined
+): void {
+  if (adapters === null || typeof adapters === 'undefined') {
+    return
+  }
+
+  for (let index = 0; index < argumentsList.length && index < adapters.length; index = index + 1) {
+    const adapter = adapters[index]
+
+    if (adapter.length > 0) {
+      argumentsList[index] = adapter.split('$value').join(argumentsList[index])
+    }
   }
 }
 

@@ -360,16 +360,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.bufferRuntimeConstant = bufferRuntimeConstant
   }
 
-  const cryptoHashDigestEncoding = nullableString(source.cryptoHashDigestEncoding)
-  if (cryptoHashDigestEncoding !== null && typeof cryptoHashDigestEncoding !== 'undefined') {
-    target.cryptoHashDigestEncoding = cryptoHashDigestEncoding
-  }
-
-  const cryptoRuntimeMethod = nullableString(source.cryptoRuntimeMethod)
-  if (cryptoRuntimeMethod !== null && typeof cryptoRuntimeMethod !== 'undefined') {
-    target.cryptoRuntimeMethod = cryptoRuntimeMethod
-  }
-
   const debugRuntimeMethod = nullableString(source.debugRuntimeMethod)
   if (debugRuntimeMethod !== null && typeof debugRuntimeMethod !== 'undefined') {
     target.debugRuntimeMethod = debugRuntimeMethod
@@ -425,6 +415,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCCallStyle = libraryCCallStyle
   }
 
+  const libraryCResultMode = nullableString(source.libraryCResultMode)
+  if (libraryCResultMode !== null && typeof libraryCResultMode !== 'undefined') {
+    target.libraryCResultMode = libraryCResultMode
+  }
+
   const libraryCFailureMode = nullableString(source.libraryCFailureMode)
   if (libraryCFailureMode !== null && typeof libraryCFailureMode !== 'undefined') {
     target.libraryCFailureMode = libraryCFailureMode
@@ -435,6 +430,7 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCExpression = libraryCExpression
   }
 
+  copyStringMetadataArray(target, source, 'libraryCArgumentAdapters')
   copyStringMetadataArray(target, source, 'libraryCArgumentKinds')
   copyStringMetadataArray(target, source, 'libraryCResultShapeFields')
 

@@ -40,6 +40,16 @@ export type LibraryCArgumentKind =
   | 'variadic-string-view-array'
   | 'variadic-count'
   | 'result-shape'
+  | 'string-view-or-value'
+
+export type LibraryCResultMode = 'value' | 'borrowed'
+
+export type LibraryBackendConstraintDescriptor = {
+  option: 'loopBackend' | 'tlsBackend'
+  allowedValues: string[]
+  diagnosticCode: string
+  diagnosticMessage: string
+}
 
 export type LibraryResultShapeFieldDescriptor = {
   name: string
@@ -64,6 +74,27 @@ export type LibraryArgumentCheckDescriptor = {
   objectFieldValueType?: string | null
   arrayLiteralRequired?: boolean
   arrayElementValueTypes?: string[]
+  stringLiterals?: string[]
+  literalDiagnosticCode?: string | null
+  literalDiagnosticMessage?: string | null
+}
+
+export type LibraryOperationVariantDescriptor = {
+  minArgs?: number | null
+  maxArgs?: number | null
+  argumentIndex?: number | null
+  stringLiterals?: string[]
+  cExpression?: string | null
+  cArgumentKinds?: LibraryCArgumentKind[]
+  cArgumentAdapters?: string[]
+  cResultMode?: LibraryCResultMode | null
+  resultShapeFields?: LibraryResultShapeFieldDescriptor[]
+  resultArrayElementType?: string | null
+  resultTypeId?: LibraryObjectTypeId | null
+  cppType?: string | null
+  valueType?: string | null
+  nullable?: boolean
+  owned?: boolean
 }
 
 export type LibraryOperationDescriptor = {
@@ -75,6 +106,8 @@ export type LibraryOperationDescriptor = {
   runtimeRequirements: RuntimeRequirementId[]
   cExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
+  cArgumentAdapters?: string[]
+  cResultMode?: LibraryCResultMode | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
   receiverTypeId?: LibraryObjectTypeId | null
@@ -84,6 +117,7 @@ export type LibraryOperationDescriptor = {
   minArgs?: number | null
   maxArgs?: number | null
   argumentChecks?: LibraryArgumentCheckDescriptor[]
+  variants?: LibraryOperationVariantDescriptor[]
   cppType?: string | null
   valueType?: string | null
   nullable?: boolean
@@ -114,6 +148,7 @@ export type RuntimeRequirementDescriptor = {
   dependencies: RuntimeRequirementId[]
   cPreludeIncludes: string[]
   capabilities: PlatformCapabilityId[]
+  backendConstraints?: LibraryBackendConstraintDescriptor[]
   cEntrypointAdapter?: RuntimeEntrypointAdapterDescriptor | null
 }
 

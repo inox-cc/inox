@@ -141,7 +141,6 @@ import {
 } from './runtime-values.ts'
 import type {
   BinaryLoweringDependencies,
-  CryptoLoweringDependencies,
   DgramLoweringDependencies,
   FsLoweringDependencies,
   HttpLoweringDependencies,
@@ -154,17 +153,11 @@ import {
   binaryRuntimeExpressionReturnType,
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
-  emitCryptoHandleVariableDeclaration,
-  emitCryptoHashVariableDeclaration,
   emitPreparedBinaryNumberCallExpression,
   emitPreparedBinaryValueExpression,
   emitPreparedBytesIndexAssignment,
   emitPreparedBytesIndexExpression,
   emitPreparedBytesLengthExpression,
-  emitPreparedCryptoCallExpression,
-  emitPreparedCryptoHashCallExpression,
-  emitPreparedCryptoHmacCallExpression,
-  emitPreparedCryptoNumberCallExpression,
   emitPreparedFsCallExpression,
   emitPreparedFsStatsMethodExpression,
   emitPreparedFsSyncStatementExpression,
@@ -528,7 +521,6 @@ let fsLoweringDependencies = {} as FsLoweringDependencies
 let binaryLoweringDependencies = {} as BinaryLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
-let cryptoLoweringDependencies = {} as CryptoLoweringDependencies
 let dgramLoweringDependencies = {} as DgramLoweringDependencies
 let httpLoweringDependencies = {} as HttpLoweringDependencies
 let netLoweringDependencies = {} as NetLoweringDependencies
@@ -597,20 +589,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies, options),
-  emitPreparedCryptoHashCallExpression: (
-    expression: AnyNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ) => emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies, options),
-  emitPreparedCryptoHmacCallExpression: (
-    expression: AnyNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ) => emitPreparedCryptoHmacCallExpression(expression, context, cryptoLoweringDependencies, options),
-  emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
   emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
@@ -900,6 +878,7 @@ compilerLibraryLoweringDependencies = {
   emitCValueExpression,
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
+  inferExpressionType,
   registerObjectShape
 }
 
@@ -1023,14 +1002,6 @@ function runtimeStringConstantValue(expression: AnyNode | null | undefined): str
 
 function isConfiguredRuntimeProducedStringExpression(expression: AnyNode | null | undefined): boolean {
   return isCompilerLibraryStringExpression(expression)
-}
-
-cryptoLoweringDependencies = {
-  cStringLiteralNode,
-  emitCValueExpression,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType
 }
 
 dgramLoweringDependencies = {
@@ -1234,12 +1205,6 @@ const cCallExpressionDependencies = {
   emitPreparedArraySortCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
-  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies),
-  emitPreparedCryptoHashCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoHashCallExpression(expression, context, cryptoLoweringDependencies),
-  emitPreparedCryptoHmacCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoHmacCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
   emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -1292,8 +1257,7 @@ const cScalarExpressionDependencies = {
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionSizeExpression,
-  emitPreparedCryptoNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoNumberCallExpression(expression, context, cryptoLoweringDependencies),
+  emitNullableScalarValueExpression,
   emitPreparedNodeNetworkAddressPortExpression,
   emitPreparedJsonScalarParseExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonScalarParseExpression(expression, context, jsonDeclarationDependencies),
@@ -1377,8 +1341,6 @@ const cValueExpressionDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedCollectionConstructorValueExpression,
   emitPreparedCollectionSizeExpression,
-  emitPreparedCryptoCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedCryptoCallExpression(expression, context, cryptoLoweringDependencies),
   emitPreparedDebugMemoryCallExpression,
   emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
@@ -1406,6 +1368,7 @@ const cValueExpressionDependencies = {
   emitPreparedCompilerLibraryExpression,
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedRuntimeArrayIndexValueExpression,
+  emitPreparedRuntimeTruthinessExpression: emitPreparedStatementRuntimeTruthinessExpression,
   inferExpressionType,
   isBoxedRuntimeValueName,
   isClassConstructorExpression,
@@ -1717,7 +1680,6 @@ function createBaseContext(
     collectionLoweringDependencies,
     arrayLoweringDependencies,
     stringLoweringDependencies,
-    cryptoImportNames: new Set(),
     diagnostics,
     dgramCreateSocketNames: new Set(),
     dgramImportNames: new Set(),
@@ -2969,12 +2931,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return timerDeclaration
   }
 
-  const cryptoHashDeclaration = emitCryptoHashVariableDeclaration(statement, context, cryptoLoweringDependencies)
-
-  if (cryptoHashDeclaration !== null && typeof cryptoHashDeclaration !== 'undefined') {
-    return cryptoHashDeclaration
-  }
-
   const fetchHeadersBooleanDeclaration = emitFetchHeadersBooleanVariableDeclaration(
     statement,
     context,
@@ -3024,17 +2980,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
 
   if (timerHandleDeclaration !== null && typeof timerHandleDeclaration !== 'undefined') {
     return timerHandleDeclaration
-  }
-
-  const cryptoHandleDeclaration = emitCryptoHandleVariableDeclaration(
-    statement,
-    context,
-    cryptoLoweringDependencies,
-    inferred
-  )
-
-  if (cryptoHandleDeclaration !== null && typeof cryptoHandleDeclaration !== 'undefined') {
-    return cryptoHandleDeclaration
   }
 
   return emitNumberBooleanScalarVariableDeclaration(statement, context, inferred)
@@ -3176,14 +3121,6 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
     return [`${prefix}inox_timer_handle* ${emitCIdentifier(statement.name)} = 0;`]
   }
 
-  if (inferred === 'crypto-hash') {
-    return [`${prefix}Hash ${emitCIdentifier(statement.name)};`]
-  }
-
-  if (inferred === 'crypto-hmac') {
-    return [`${prefix}Hmac ${emitCIdentifier(statement.name)};`]
-  }
-
   if (inferred === 'function') {
     return [`${prefix}void* ${emitCIdentifier(statement.name)} = 0;`]
   }
@@ -3311,32 +3248,6 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
       context.variables.set(statement.name, 'timer')
       context.moduleValueTypes.set(statement.name, 'timer')
       return timer.lines
-    }
-  }
-
-  if (inferred === 'crypto-hash') {
-    const hash = emitPreparedCryptoHashCallExpression(statement.init, context, cryptoLoweringDependencies, {
-      out: name,
-      prepareOut: false
-    })
-
-    if (hash !== null && typeof hash !== 'undefined') {
-      context.variables.set(statement.name, 'crypto-hash')
-      context.moduleValueTypes.set(statement.name, 'crypto-hash')
-      return hash.lines
-    }
-  }
-
-  if (inferred === 'crypto-hmac') {
-    const hmac = emitPreparedCryptoHmacCallExpression(statement.init, context, cryptoLoweringDependencies, {
-      out: name,
-      prepareOut: false
-    })
-
-    if (hmac !== null && typeof hmac !== 'undefined') {
-      context.variables.set(statement.name, 'crypto-hmac')
-      context.moduleValueTypes.set(statement.name, 'crypto-hmac')
-      return hmac.lines
     }
   }
 
@@ -5206,6 +5117,10 @@ function emitPreparedNullableScalarRuntimeValueExpression(
   expression: AnyNode,
   context: CFunctionContext
 ): PreparedExpression {
+  if (isCoalesceExpression(expression)) {
+    return emitCNullishCoalescingValueExpression(expression, context)
+  }
+
   if (
     expression !== null &&
     typeof expression !== 'undefined' &&
@@ -6079,10 +5994,19 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
     }
   }
 
-  const left = emitCValueExpression(expression.left, context)
-  const right = emitCValueExpression(expression.right, context)
-  const temp = nextCName(context, 'inox_value')
   const resultType = inferExpressionType(expression, context)
+  let left = emitCValueExpression(expression.left, context)
+  let right = emitCValueExpression(expression.right, context)
+
+  if (isNullableScalarType(resultType) && isNullableScalarRuntimeExpression(expression.left, context)) {
+    left = emitNullableScalarValueExpression(expression.left, context)
+  }
+
+  if (isNullableScalarType(resultType) && isNullableScalarRuntimeExpression(expression.right, context)) {
+    right = emitNullableScalarValueExpression(expression.right, context)
+  }
+
+  const temp = nextCName(context, 'inox_value')
   const expectedTag = cRuntimeValueTag(resultType)
   const lines: string[] = []
   registerOwnedValue(context, temp)

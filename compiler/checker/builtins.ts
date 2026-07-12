@@ -361,14 +361,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'crypto',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
     'Math',
     {
       kind: 'global',
@@ -487,7 +479,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
     name === 'Object' ||
     name === 'http' ||
     name === 'JSON' ||
-    name === 'crypto' ||
     name === 'Math' ||
     name === 'Buffer'
   ) {

@@ -617,6 +617,7 @@ export function canLowerCScalarNullishCoalescingExpression(
   const resultType = nullableDeps(context).inferExpressionType(expression, context)
 
   return (
+    expression.nullable !== true &&
     isNullableScalarType(resultType) &&
     (nullableDeps(context).inferExpressionType(expression.left, context) === 'null' ||
       isNullableRuntimeExpression(expression.left, context) ||
@@ -658,7 +659,10 @@ export function isNullableRuntimeExpression(expression: AnyNode, context: Nullab
   }
 
   if (isCoalesceExpression(expression)) {
-    return false
+    return (
+      expression.nullable === true &&
+      isRuntimeNullableType(nullableDeps(context).inferExpressionType(expression, context))
+    )
   }
 
   return (

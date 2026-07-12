@@ -3,9 +3,6 @@ import {
   binaryInstanceRuntimeMethodName,
   binaryStaticRuntimeMethodName,
   bufferRuntimeConstantName,
-  checkCryptoCall as checkPackageCryptoCall,
-  checkCryptoHashMethodCall as checkPackageCryptoHashMethodCall,
-  cryptoRuntimeCallInfo,
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
   fsRuntimeCallPlan,
@@ -24,9 +21,6 @@ import {
   unsupportedStreamRuntimeExport
 } from './stdlib/node/checker.ts'
 import type {
-  CryptoCheckerContext,
-  CryptoCheckerDiagnostic,
-  CryptoHashMethodCheckerContext,
   FsBooleanOptions,
   FsRuntimeArgumentCheck,
   FsRuntimeCallInfo
@@ -78,6 +72,7 @@ import {
 import type {
   LibraryOperationDescriptor,
   LibraryOperationKind,
+  LibraryOperationVariantDescriptor,
   LibraryResultShapeFieldDescriptor
 } from './extensions/types.ts'
 import {
@@ -1011,6 +1006,18 @@ class Checker {
             this.narrowedNullableNames.add(name)
           }
         }
+      } else if (consequentNarrowedNames !== null && typeof consequentNarrowedNames !== 'undefined') {
+        const consequentNames: string[] = []
+
+        for (const name of consequentNarrowedNames) {
+          consequentNames.push(name)
+        }
+
+        const commonNames = intersectNames(consequentNames, narrowing.falseNames)
+
+        for (const name of commonNames) {
+          this.narrowedNullableNames.add(name)
+        }
       }
 
       return
@@ -1703,6 +1710,31 @@ class Checker {
 
         if (symbol.functionType !== null && typeof symbol.functionType !== 'undefined') {
           expression.functionType = symbol.functionType
+        } else if (
+          symbol.kind === 'function' &&
+          symbol.returnType !== null &&
+          typeof symbol.returnType !== 'undefined'
+        ) {
+          let params: AnyNode[] = []
+
+          if (symbol.params !== null && typeof symbol.params !== 'undefined') {
+            params = symbol.params
+          }
+
+          expression.functionType = {
+            kind: 'function',
+            resolved: true,
+            params,
+            returnType: symbol.returnType,
+            returnNullable: symbol.returnNullable === true,
+            returnArrayElementType: symbol.returnArrayElementType ?? null,
+            returnArrayElementDeclaredType: symbol.returnArrayElementDeclaredType ?? null,
+            returnMapKeyType: symbol.returnMapKeyType ?? null,
+            returnMapValueType: symbol.returnMapValueType ?? null,
+            returnPromiseValueType: symbol.returnPromiseValueType ?? null,
+            returnSetElementType: symbol.returnSetElementType ?? null,
+            returnShape: symbol.returnShape ?? null
+          }
         }
 
         if (symbol.shape !== null && typeof symbol.shape !== 'undefined') {
@@ -3455,12 +3487,6 @@ class Checker {
       return fetchHeadersMethodType
     }
 
-    const cryptoHashMethodType = this.checkCryptoHashMethodCall(expression)
-
-    if (cryptoHashMethodType !== null && typeof cryptoHashMethodType !== 'undefined') {
-      return cryptoHashMethodType
-    }
-
     const fsType = this.checkFsCall(expression)
 
     if (fsType !== null && typeof fsType !== 'undefined') {
@@ -3477,12 +3503,6 @@ class Checker {
 
     if (jsonType !== null && typeof jsonType !== 'undefined') {
       return jsonType
-    }
-
-    const cryptoType = this.checkCryptoCall(expression)
-
-    if (cryptoType !== null && typeof cryptoType !== 'undefined') {
-      return cryptoType
     }
 
     const debugMemoryType = this.checkDebugMemoryCall(expression)
@@ -3787,122 +3807,6 @@ class Checker {
     }
   }
 
-  checkCryptoCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const importedName = this.resolveStdlibRuntimeDirectImportName(path, 'crypto')
-    const moduleObjectMemberName = this.resolveStdlibModuleObjectMemberName(path, 'crypto')
-    const call = cryptoRuntimeCallInfo(path, importedName, moduleObjectMemberName)
-
-    if (call === null || typeof call === 'undefined') {
-      return null
-    }
-
-    const diagnostics: CryptoCheckerDiagnostic[] = []
-    const context: CryptoCheckerContext = {
-      argNullables: this.cryptoArgumentNullables(expression),
-      argTypes: this.cryptoArgumentTypes(expression),
-      diagnostics,
-      importedName,
-      moduleObjectMemberName,
-      supportsCryptoHash: this.supportsCryptoHash()
-    }
-    const valueType = checkPackageCryptoCall(expression, context)
-
-    this.reportCryptoCheckerDiagnostics(diagnostics)
-
-    return valueType
-  }
-
-  checkCryptoHashMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression') {
-      return null
-    }
-
-    const method = expression.callee.property
-
-    if (method !== 'update' && method !== 'digest') {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-
-    if (objectType !== 'crypto-hash' && objectType !== 'crypto-hmac') {
-      return null
-    }
-
-    const diagnostics: CryptoCheckerDiagnostic[] = []
-    const context: CryptoHashMethodCheckerContext = {
-      argNullables: this.cryptoHashMethodArgumentNullables(expression, method),
-      argTypes: this.cryptoHashMethodArgumentTypes(expression, method),
-      diagnostics
-    }
-    const valueType = checkPackageCryptoHashMethodCall(expression, objectType, context)
-
-    this.reportCryptoCheckerDiagnostics(diagnostics)
-
-    return valueType
-  }
-
-  cryptoArgumentTypes(expression: AnyNode): ValueType[] {
-    const result: ValueType[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      result.push(this.checkExpression(arg))
-    }
-
-    return result
-  }
-
-  cryptoArgumentNullables(expression: AnyNode): boolean[] {
-    const result: boolean[] = []
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      result.push(this.expressionCanBeNull(arg))
-    }
-
-    return result
-  }
-
-  cryptoHashMethodArgumentTypes(expression: AnyNode, method: string): ValueType[] {
-    const result: ValueType[] = []
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      result.push(this.checkExpression(expression.args[0]))
-    }
-
-    if (method === 'update' && expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-      result.push(this.checkExpression(expression.args[1]))
-    }
-
-    return result
-  }
-
-  cryptoHashMethodArgumentNullables(expression: AnyNode, method: string): boolean[] {
-    const result: boolean[] = []
-
-    if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-      result.push(this.expressionCanBeNull(expression.args[0]))
-    }
-
-    if (method === 'update' && expression.args[1] !== null && typeof expression.args[1] !== 'undefined') {
-      result.push(this.expressionCanBeNull(expression.args[1]))
-    }
-
-    return result
-  }
-
-  reportCryptoCheckerDiagnostics(diagnostics: CryptoCheckerDiagnostic[]): void {
-    for (let index = 0; index < diagnostics.length; index = index + 1) {
-      const item = diagnostics[index]
-
-      this.report(item.code, item.message, item.loc)
-    }
-  }
-
   checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
     let operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
 
@@ -3919,7 +3823,9 @@ class Checker {
       return null
     }
 
-    this.applyCompilerLibraryOperation(expression, operation)
+    const variant = this.compilerLibraryOperationVariant(expression, operation)
+
+    this.applyCompilerLibraryOperation(expression, operation, variant)
 
     const diagnosticCode = operation.diagnosticCode
     const diagnosticMessage = operation.diagnosticMessage
@@ -3937,9 +3843,50 @@ class Checker {
     }
 
     this.checkCompilerLibraryOperationArguments(expression, operation)
+    this.checkCompilerLibraryBackendConstraints(expression, operation)
 
     this.checkedCallArgInfos(expression)
-    return (operation.valueType ?? 'unknown') as ValueType
+    return (variant?.valueType ?? operation.valueType ?? 'unknown') as ValueType
+  }
+
+  compilerLibraryOperationVariant(
+    expression: AnyNode,
+    operation: LibraryOperationDescriptor
+  ): LibraryOperationVariantDescriptor | null {
+    const variants = operation.variants ?? []
+
+    for (let index = 0; index < variants.length; index = index + 1) {
+      const variant = variants[index]
+      const minArgs = variant.minArgs
+      const maxArgs = variant.maxArgs
+
+      if (
+        (minArgs !== null && typeof minArgs !== 'undefined' && expression.args.length < minArgs) ||
+        (maxArgs !== null && typeof maxArgs !== 'undefined' && expression.args.length > maxArgs)
+      ) {
+        continue
+      }
+
+      const argumentIndex = variant.argumentIndex
+
+      if (argumentIndex !== null && typeof argumentIndex !== 'undefined') {
+        const argument = expression.args[argumentIndex]
+        const literals = variant.stringLiterals ?? []
+
+        if (
+          argument === null ||
+          typeof argument === 'undefined' ||
+          argument.type !== 'StringLiteral' ||
+          !literals.includes(argument.value)
+        ) {
+          continue
+        }
+      }
+
+      return variant
+    }
+
+    return null
   }
 
   checkCompilerLibraryOperationArguments(expression: AnyNode, operation: LibraryOperationDescriptor): void {
@@ -3975,6 +3922,20 @@ class Checker {
 
       const arrayElementValueTypes = check.arrayElementValueTypes ?? []
       const argument = expression.args[index]
+
+      const stringLiterals = check.stringLiterals ?? []
+
+      if (
+        stringLiterals.length > 0 &&
+        (argument.type !== 'StringLiteral' || !stringLiterals.includes(argument.value))
+      ) {
+        this.report(
+          check.literalDiagnosticCode ?? 'INOX_NOT_IMPLEMENTED',
+          check.literalDiagnosticMessage ??
+            `library operation ${operation.operationId} does not support this string literal`,
+          argument.loc
+        )
+      }
 
       if (
         check.arrayLiteralRequired === true &&
@@ -4047,6 +4008,41 @@ class Checker {
             const field = info.shape.fields[fieldIndex]
             const resolved = this.resolveFieldDeclaredType(field)
             this.checkAssignableType(resolved.valueType, fieldValueType, info.loc, false, resolved.nullable)
+          }
+        }
+      }
+    }
+  }
+
+  checkCompilerLibraryBackendConstraints(expression: AnyNode, operation: LibraryOperationDescriptor): void {
+    const libraries = resolveCompilerLibrarySet(this.options.libraries)
+
+    for (let requirementIndex = 0; requirementIndex < operation.runtimeRequirements.length; requirementIndex = requirementIndex + 1) {
+      const requirementId = operation.runtimeRequirements[requirementIndex]
+
+      for (let descriptorIndex = 0; descriptorIndex < libraries.runtimeRequirements.length; descriptorIndex = descriptorIndex + 1) {
+        const requirement = libraries.runtimeRequirements[descriptorIndex]
+
+        if (requirement.id !== requirementId) {
+          continue
+        }
+
+        const constraints = requirement.backendConstraints ?? []
+
+        for (let constraintIndex = 0; constraintIndex < constraints.length; constraintIndex = constraintIndex + 1) {
+          const constraint = constraints[constraintIndex]
+          let actual: string = this.options.loopBackend ?? 'embedded'
+
+          if (constraint.option === 'tlsBackend') {
+            actual = this.options.tlsBackend ?? 'none'
+          }
+
+          if (!constraint.allowedValues.includes(actual)) {
+            this.report(
+              constraint.diagnosticCode,
+              constraint.diagnosticMessage,
+              expression.loc
+            )
           }
         }
       }
@@ -4168,7 +4164,11 @@ class Checker {
     )
   }
 
-  applyCompilerLibraryOperation(expression: AnyNode, operation: LibraryOperationDescriptor): void {
+  applyCompilerLibraryOperation(
+    expression: AnyNode,
+    operation: LibraryOperationDescriptor,
+    variant: LibraryOperationVariantDescriptor | null = null
+  ): void {
     const libraries = resolveCompilerLibrarySet(this.options.libraries)
     const capabilities: string[] = []
 
@@ -4192,15 +4192,24 @@ class Checker {
     expression.libraryOperationId = operation.operationId
     expression.libraryRuntimeRequirements = operation.runtimeRequirements
     expression.libraryCapabilities = capabilities
-    expression.libraryCExpression = operation.cExpression ?? null
-    const cArgumentKinds = operation.cArgumentKinds
+    expression.libraryCExpression = variant?.cExpression ?? operation.cExpression ?? null
+    const cArgumentKinds = variant?.cArgumentKinds ?? operation.cArgumentKinds
 
     if (cArgumentKinds !== null && typeof cArgumentKinds !== 'undefined') {
       expression.libraryCArgumentKinds = cArgumentKinds
     }
 
-    const resultShapeFields = operation.resultShapeFields
-    const resultTypeId = operation.resultTypeId
+    const cArgumentAdapters = variant?.cArgumentAdapters ?? operation.cArgumentAdapters
+
+    if (cArgumentAdapters !== null && typeof cArgumentAdapters !== 'undefined') {
+      expression.libraryCArgumentAdapters = cArgumentAdapters
+    }
+
+    expression.libraryCResultMode = variant?.cResultMode ?? operation.cResultMode ?? null
+
+    const resultShapeFields = variant?.resultShapeFields ?? operation.resultShapeFields
+    const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
+    const cppType = variant?.cppType ?? operation.cppType
 
     if (
       (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') ||
@@ -4222,26 +4231,26 @@ class Checker {
         kind: 'object',
         fields: shapeFields,
         libraryTypeId: resultTypeId ?? null,
-        libraryCppType: operation.cppType ?? null
+        libraryCppType: cppType ?? null
       }
       expression.libraryCResultShapeFields = cResultShapeFields
     }
-    expression.libraryCppType = operation.cppType ?? null
-    const valueType = operation.valueType
+    expression.libraryCppType = cppType ?? null
+    const valueType = variant?.valueType ?? operation.valueType
 
     if (valueType !== null && typeof valueType !== 'undefined') {
       expression.valueType = valueType
     }
 
-    expression.arrayElementType = operation.resultArrayElementType ?? null
+    expression.arrayElementType = variant?.resultArrayElementType ?? operation.resultArrayElementType ?? null
 
-    expression.libraryOwned = operation.owned === true
+    expression.libraryOwned = (variant?.owned ?? operation.owned) === true
     expression.libraryConstantValue = operation.constantValue ?? null
     expression.libraryReceiverTypeId = operation.receiverTypeId ?? null
-    expression.libraryResultTypeId = operation.resultTypeId ?? null
+    expression.libraryResultTypeId = resultTypeId ?? null
     expression.libraryCCallStyle = operation.cCallStyle ?? null
     expression.libraryCFailureMode = operation.cFailureMode ?? null
-    expression.nullable = operation.nullable === true
+    expression.nullable = (variant?.nullable ?? operation.nullable) === true
   }
 
   compilerLibraryResultShapeField(
@@ -4635,10 +4644,6 @@ class Checker {
   }
 
   supportsFetchHttps(): boolean {
-    return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
-  }
-
-  supportsCryptoHash(): boolean {
     return this.options.tlsBackend === 'boringssl' || this.options.tlsBackend === 'openssl'
   }
 
@@ -5967,6 +5972,27 @@ class Checker {
       const callbackType = this.checkExpression(expression)
 
       this.checkAssignableType(callbackType, 'function', expression.loc, false, false)
+
+      const functionType = expression.functionType
+
+      if (
+        functionType !== null &&
+        typeof functionType !== 'undefined' &&
+        functionType.returnType !== null &&
+        typeof functionType.returnType !== 'undefined'
+      ) {
+        if (returnType !== null) {
+          this.checkAssignableType(
+            functionType.returnType,
+            returnType,
+            expression.loc,
+            false,
+            functionType.returnNullable === true
+          )
+        }
+
+        return functionType.returnType
+      }
 
       return 'unknown'
     }

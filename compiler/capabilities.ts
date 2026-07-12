@@ -1,6 +1,6 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
-import { isCryptoRuntimeMethodPath, isTimerRuntimeMethod } from './stdlib/node/descriptor.ts'
+import { isTimerRuntimeMethod } from './stdlib/node/descriptor.ts'
 import { timeRuntimeCapabilityFromPath } from '../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
@@ -132,8 +132,6 @@ function collectEntropyCapabilityUsages(
     const path = dotPath(usage.path)
 
     if (path === 'Math.random' && random !== null && typeof random !== 'undefined' && random.backend === 'os') {
-      pushCapability(usages, 'entropy', 'entropy', path, usage.loc)
-    } else if (isCryptoRuntimeMethodPath(usage.path)) {
       pushCapability(usages, 'entropy', 'entropy', path, usage.loc)
     }
   }

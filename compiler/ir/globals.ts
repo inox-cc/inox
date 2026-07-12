@@ -295,7 +295,6 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Uint8Array' ||
     name === 'Uint16Array' ||
     name === 'Uint32Array' ||
-    name === 'crypto' ||
     name === 'fetch' ||
     name === 'fs' ||
     name === 'http' ||
@@ -353,7 +352,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'clearImmediate')
   pushStringIfPresent(values, result, 'clearInterval')
   pushStringIfPresent(values, result, 'clearTimeout')
-  pushStringIfPresent(values, result, 'crypto')
   pushStringIfPresent(values, result, 'fetch')
   pushStringIfPresent(values, result, 'fs')
   pushStringIfPresent(values, result, 'http')

@@ -152,7 +152,6 @@ export type CEmitContext = {
   classInfos: Map<string, CClassInfo>
   classLoweringDependencies: ClassLoweringDependencies
   collectionLoweringDependencies: CollectionLoweringDependencies
-  cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
   dgramCreateSocketNames: CStringSet
   dgramImportNames: CStringSet
@@ -397,7 +396,6 @@ export function createFunctionContext(
     classInfos: baseContext.classInfos,
     classLoweringDependencies: baseContext.classLoweringDependencies,
     collectionLoweringDependencies: baseContext.collectionLoweringDependencies,
-    cryptoImportNames: baseContext.cryptoImportNames,
     diagnostics: baseContext.diagnostics,
     dgramCreateSocketNames: baseContext.dgramCreateSocketNames,
     dgramImportNames: baseContext.dgramImportNames,

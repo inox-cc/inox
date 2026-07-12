@@ -1,17 +1,14 @@
 #ifndef INOX_CRYPTO_H
 #define INOX_CRYPTO_H
 
-#include "inox/value.h"
-
-#ifdef __cplusplus
-
-struct CryptoHashState;
-struct CryptoHmacState;
-
 #include "inox/array.h"
 #include "inox/binary.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
+#include "inox/value.h"
+
+struct CryptoHashState;
+struct CryptoHmacState;
 
 class Hash {
 private:
@@ -29,11 +26,12 @@ public:
   Hash(Hash&& other) noexcept;
   Hash& operator=(Hash&& other) noexcept;
 
-  bool valid() const;
   Hash& update(inox::StringView data);
+  Hash& update(inox::StringView data, inox::StringView encoding);
   Hash& update(const inox::Value& data);
+  Hash& update(const inox::Value& data, inox::StringView encoding);
   Buffer digest();
-  inox::String digestHex();
+  inox::String digest(inox::StringView encoding);
 };
 
 class Hmac {
@@ -52,11 +50,12 @@ public:
   Hmac(Hmac&& other) noexcept;
   Hmac& operator=(Hmac&& other) noexcept;
 
-  bool valid() const;
   Hmac& update(inox::StringView data);
+  Hmac& update(inox::StringView data, inox::StringView encoding);
   Hmac& update(const inox::Value& data);
+  Hmac& update(const inox::Value& data, inox::StringView encoding);
   Buffer digest();
-  inox::String digestHex();
+  inox::String digest(inox::StringView encoding);
 };
 
 class crypto {
@@ -64,22 +63,22 @@ public:
   ArrayClass getHashes() const;
   Uint8Array getRandomValues(Uint8Array value) const;
   Buffer randomBytes(inox_number size) const;
-  Uint8Array randomFillSync(Uint8Array value, inox_number offset, inox_number size, bool has_size) const;
+  Uint8Array randomFillSync(Uint8Array value) const;
+  Uint8Array randomFillSync(Uint8Array value, inox_number offset) const;
+  Uint8Array randomFillSync(Uint8Array value, inox_number offset, inox_number size) const;
   inox_number randomInt(inox_number max) const;
   inox_number randomInt(inox_number min, inox_number max) const;
   inox::String randomUUID() const;
   Hash createHash(inox::StringView algorithm) const;
   Hmac createHmac(inox::StringView algorithm, inox::StringView key) const;
   Hmac createHmac(inox::StringView algorithm, const inox::Value& key) const;
-  Buffer hash(inox::StringView algorithm, inox::StringView data) const;
-  Buffer hash(inox::StringView algorithm, const inox::Value& data) const;
-  inox::String hashHex(inox::StringView algorithm, inox::StringView data) const;
-  inox::String hashHex(inox::StringView algorithm, const inox::Value& data) const;
+  inox::String hash(inox::StringView algorithm, inox::StringView data) const;
+  inox::String hash(inox::StringView algorithm, const inox::Value& data) const;
+  Buffer hash(inox::StringView algorithm, inox::StringView data, inox::StringView output_encoding) const;
+  Buffer hash(inox::StringView algorithm, const inox::Value& data, inox::StringView output_encoding) const;
   bool timingSafeEqual(const Uint8Array& left, const Uint8Array& right) const;
 };
 
 extern crypto crypto;
-
-#endif
 
 #endif

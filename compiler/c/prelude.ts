@@ -186,7 +186,6 @@ export function emitCPrelude(
   needsMainRuntime: boolean,
   needsTimeRuntime: boolean,
   needsMathRuntime: boolean,
-  needsCryptoRuntime: boolean,
   needsDebugMemoryRuntime: boolean,
   needsAsyncRuntime: boolean,
   needsCallbackRuntime: boolean,
@@ -255,10 +254,6 @@ export function emitCPrelude(
 
   pushLibraryCPreludeIncludes(systemIncludes, localIncludes, libraryCPreludeIncludes)
 
-  if (needsCryptoRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include <stdint.h>')
-  }
-
   if (needsMathRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/math.h"')
   }
@@ -281,9 +276,6 @@ export function emitCPrelude(
     }
     if (needsBinaryRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/binary.h"')
-    }
-    if (needsCryptoRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/crypto.h"')
     }
     if (needsFsRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/fs.h"')

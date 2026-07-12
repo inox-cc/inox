@@ -206,13 +206,15 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
           (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
+          (item.cArgumentAdapters ?? []).join(',') + ':' + (item.cResultMode ?? '') + ':' +
           operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
           (item.receiverTypeId ?? '') + ':' +
           (item.resultTypeId ?? '') + ':' + (item.cCallStyle ?? '') + ':' + (item.cFailureMode ?? '') + ':' +
           (item.minArgs ?? '') + ':' + (item.maxArgs ?? '') + ':' + operationArgumentChecksFingerprint(item) + ':' +
           (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' + (item.nullable === true ? 'nullable' : 'required') + ':' +
           (item.owned === true ? 'owned' : 'borrowed') + ':' + (item.constantValue ?? '') + ':' +
-          (item.diagnosticCode ?? '') + ':' + (item.diagnosticMessage ?? '')
+          (item.diagnosticCode ?? '') + ':' + (item.diagnosticMessage ?? '') + ':' +
+          operationVariantsFingerprint(item)
       )
     }
 
@@ -228,6 +230,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         item.id + ':deps=' + sortedStrings(item.dependencies).join(',') +
           ':includes=' + sortedStrings(item.cPreludeIncludes).join(',') +
           ':capabilities=' + sortedStrings(item.capabilities).join(',') +
+          ':backend=' + runtimeBackendConstraintsFingerprint(item) +
           ':entrypoint=' + runtimeEntrypointAdapterFingerprint(item)
       )
     }
@@ -256,10 +259,50 @@ function operationArgumentChecksFingerprint(operation: LibraryOperationDescripto
         sortedStrings(check.objectTypeIds ?? []).join(',') + ':' +
         (check.objectFieldValueType ?? '') + ':' +
         (check.arrayLiteralRequired === true ? 'literal' : '') + ':' +
-        sortedStrings(check.arrayElementValueTypes ?? []).join(',')
+        sortedStrings(check.arrayElementValueTypes ?? []).join(',') + ':' +
+        sortedStrings(check.stringLiterals ?? []).join(',') + ':' +
+        (check.literalDiagnosticCode ?? '') + ':' + (check.literalDiagnosticMessage ?? '')
     )
   }
 
+  return rows.join(';')
+}
+
+function operationVariantsFingerprint(operation: LibraryOperationDescriptor): string {
+  const variants = operation.variants ?? []
+  const rows: string[] = []
+
+  for (let index = 0; index < variants.length; index = index + 1) {
+    const variant = variants[index]
+    rows.push(
+      (variant.minArgs ?? '') + ':' + (variant.maxArgs ?? '') + ':' +
+        (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
+        (variant.cExpression ?? '') + ':' + (variant.cArgumentKinds ?? []).join(',') + ':' +
+        (variant.cArgumentAdapters ?? []).join(',') + ':' + (variant.cResultMode ?? '') + ':' +
+        resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) + ':' +
+        (variant.resultArrayElementType ?? '') + ':' + (variant.resultTypeId ?? '') + ':' +
+        (variant.cppType ?? '') + ':' + (variant.valueType ?? '') + ':' +
+        (variant.nullable === true ? 'nullable' : 'required') + ':' +
+        (variant.owned === true ? 'owned' : 'borrowed')
+    )
+  }
+
+  return rows.join(';')
+}
+
+function runtimeBackendConstraintsFingerprint(requirement: RuntimeRequirementDescriptor): string {
+  const constraints = requirement.backendConstraints ?? []
+  const rows: string[] = []
+
+  for (let index = 0; index < constraints.length; index = index + 1) {
+    const constraint = constraints[index]
+    rows.push(
+      constraint.option + ':' + sortedStrings(constraint.allowedValues).join(',') + ':' +
+        constraint.diagnosticCode + ':' + constraint.diagnosticMessage
+    )
+  }
+
+  rows.sort()
   return rows.join(';')
 }
 

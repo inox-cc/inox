@@ -52,8 +52,6 @@ export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
     valueType !== 'regexp' &&
     valueType !== 'date' &&
     valueType !== 'timer' &&
-    valueType !== 'crypto-hash' &&
-    valueType !== 'crypto-hmac' &&
     valueType !== 'optional' &&
     valueType !== 'js-global'
   )
@@ -98,14 +96,6 @@ export function emitCType(valueType: CValueTypeInput): string {
 
   if (valueType === 'timer') {
     return 'inox_timer_handle*'
-  }
-
-  if (valueType === 'crypto-hash') {
-    return 'Hash'
-  }
-
-  if (valueType === 'crypto-hmac') {
-    return 'Hmac'
   }
 
   return 'double'

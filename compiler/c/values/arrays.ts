@@ -2385,7 +2385,7 @@ export function emitPreparedArrayMapCallExpression(
     return null
   }
 
-  const callback = expression.args[0]
+  const callback = arrayMapCallbackExpression(expression.args[0])
 
   if (
     callback === null ||
@@ -2465,6 +2465,75 @@ export function emitPreparedArrayMapCallExpression(
   }
 
   return null
+}
+
+function arrayMapCallbackExpression(callback: ArrayMaybeNode | null | undefined): ArrayMaybeNode | null {
+  if (callback === null || typeof callback === 'undefined') {
+    return null
+  }
+
+  if (callback.type === 'ArrowFunctionExpression') {
+    return callback
+  }
+
+  const functionType = callback.functionType
+
+  if (
+    callback.type !== 'Reference' ||
+    functionType === null ||
+    typeof functionType === 'undefined' ||
+    functionType.params.length > 2
+  ) {
+    return null
+  }
+
+  const params: AnyNode[] = []
+  const args: AnyNode[] = []
+
+  for (let index = 0; index < functionType.params.length; index = index + 1) {
+    const param = functionType.params[index]
+    params.push(param)
+    args.push({
+      type: 'Reference',
+      path: [param.name],
+      valueType: param.valueType,
+      nullable: param.nullable === true,
+      arrayElementType: param.arrayElementType ?? null,
+      arrayElementDeclaredType: param.arrayElementDeclaredType ?? null,
+      mapKeyType: param.mapKeyType ?? null,
+      mapValueType: param.mapValueType ?? null,
+      promiseValueType: param.promiseValueType ?? null,
+      setElementType: param.setElementType ?? null,
+      functionType: param.functionType ?? null,
+      shape: param.shape ?? null,
+      loc: callback.loc
+    })
+  }
+
+  return {
+    type: 'ArrowFunctionExpression',
+    async: false,
+    expressionBody: true,
+    params,
+    body: {
+      type: 'CallExpression',
+      callee: callback,
+      args,
+      valueType: functionType.returnType,
+      nullable: functionType.returnNullable === true,
+      arrayElementType: functionType.returnArrayElementType ?? null,
+      arrayElementDeclaredType: functionType.returnArrayElementDeclaredType ?? null,
+      mapKeyType: functionType.returnMapKeyType ?? null,
+      mapValueType: functionType.returnMapValueType ?? null,
+      promiseValueType: functionType.returnPromiseValueType ?? null,
+      setElementType: functionType.returnSetElementType ?? null,
+      shape: functionType.returnShape ?? null,
+      loc: callback.loc
+    },
+    returnType: functionType.returnType,
+    returnNullable: functionType.returnNullable === true,
+    loc: callback.loc
+  }
 }
 
 export function emitPreparedArrayFilterCallExpression(

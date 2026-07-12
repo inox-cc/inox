@@ -1764,13 +1764,14 @@ function lowerArrayMapVariableDeclaration(
 ): LowerNode[] | null {
   const callback = init.args[0]
 
-  if (!isArrowCallbackWithMaxParams(callback, 2)) {
+  if (callback === null || typeof callback === 'undefined') {
     return null
   }
 
-  const mapped = resolveSimpleArrowReturnExpression(callback)
+  const arrowCallback = isArrowCallbackWithMaxParams(callback, 2)
+  const functionReferenceCallback = isFunctionReferenceArrayCallback(callback)
 
-  if (mapped === null || typeof mapped === 'undefined') {
+  if (!arrowCallback && !functionReferenceCallback) {
     return null
   }
 
@@ -1785,6 +1786,18 @@ function lowerArrayMapVariableDeclaration(
   const valueParam = arrowCallbackParam(callback, 0)
   const indexParam = arrowCallbackParam(callback, 1)
   const itemName = arrayMethodItemName(valueParam, statement.name, context, 'inox_map_item')
+  let mapped: LowerNode | null = null
+
+  if (arrowCallback) {
+    mapped = resolveSimpleArrowReturnExpression(callback)
+  } else {
+    mapped = createFunctionReferenceArrayMapCall(callback, itemName, indexName, receiverElement, init.loc)
+  }
+
+  if (mapped === null || typeof mapped === 'undefined') {
+    return null
+  }
+
   const replacements = createCallbackReplacements(valueParam, itemName, indexParam, indexName)
   const mappedValue = lowerStatementExpression(replaceExpressionReferences(mapped, replacements), context)
   const mappedElementType = arrayMapElementType(statement, init, mappedValue)
@@ -1803,6 +1816,53 @@ function lowerArrayMapVariableDeclaration(
   return createArrayLoopStatements(output, receiver, receiverElement, indexName, itemName, [
     createArrayPushStatement(statement.name, output, mappedValue, init.loc)
   ])
+}
+
+function isFunctionReferenceArrayCallback(callback: LowerNode | null | undefined): boolean {
+  return (
+    callback !== null &&
+    typeof callback !== 'undefined' &&
+    callback.type === 'Reference' &&
+    callback.functionType !== null &&
+    typeof callback.functionType !== 'undefined'
+  )
+}
+
+function createFunctionReferenceArrayMapCall(
+  callback: LowerNode,
+  itemName: string,
+  indexName: string,
+  receiverElement: ArrayElementInfo,
+  loc: LowerNode['loc']
+): LowerNode | null {
+  const functionType = callback.functionType
+
+  if (functionType === null || typeof functionType === 'undefined') {
+    return null
+  }
+
+  const args: LowerNode[] = [createReference(itemName, receiverElement, loc)]
+
+  if (functionType.params.length > 1) {
+    args.push(createNumberReference(indexName, loc))
+  }
+
+  return {
+    type: 'CallExpression',
+    callee: callback,
+    args,
+    valueType: functionType.returnType,
+    nullable: functionType.returnNullable === true,
+    arrayElementType: functionType.returnArrayElementType ?? null,
+    arrayElementDeclaredType: functionType.returnArrayElementDeclaredType ?? null,
+    mapKeyType: functionType.returnMapKeyType ?? null,
+    mapValueType: functionType.returnMapValueType ?? null,
+    promiseValueType: functionType.returnPromiseValueType ?? null,
+    setElementType: functionType.returnSetElementType ?? null,
+    shape: functionType.returnShape ?? null,
+    functionType: null,
+    loc
+  }
 }
 
 function arrowCallbackParam(callback: LowerNode | null | undefined, index: number): LowerNode | null {

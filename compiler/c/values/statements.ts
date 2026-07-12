@@ -139,7 +139,6 @@ type CFunctionContext = {
   cppSetValues: CStringSet
   cppStringValues: CStringSet
   cppValueTypes: CStringMap
-  cryptoImportNames: CStringSet
   diagnostics: Diagnostic[]
   dgramBoundSockets: CStringSet
   dgramCreateSocketNames: CStringSet
@@ -419,25 +418,6 @@ export type StatementLoweringDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCryptoCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedCryptoHashCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedCryptoHmacCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedCryptoNumberCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
   emitPreparedDebugMemoryCallExpression(
     expression: StatementNode,
     context: CFunctionContext,
@@ -4179,41 +4159,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return promiseCall.lines
   }
 
-  const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(
-    statement.init,
-    context,
-    preparedCallOut(statement.name)
-  )
-
-  if (cryptoHashCall !== null && typeof cryptoHashCall !== 'undefined') {
-    return cryptoHashCall.lines
-  }
-
-  const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(
-    statement.init,
-    context,
-    preparedCallOut(statement.name)
-  )
-
-  if (cryptoHmacCall !== null && typeof cryptoHmacCall !== 'undefined') {
-    return cryptoHmacCall.lines
-  }
-
-  if (
-    statement.init.type === 'CallExpression' &&
-    (statement.init.cryptoRuntimeMethod === 'Hash.digest' || statement.init.cryptoRuntimeMethod === 'Hmac.digest')
-  ) {
-    const cryptoDigestCall = deps.emitPreparedCryptoCallExpression(
-      statement.init,
-      context,
-      preparedCallOut(statement.name)
-    )
-
-    if (cryptoDigestCall !== null && typeof cryptoDigestCall !== 'undefined') {
-      return cryptoDigestCall.lines
-    }
-  }
-
   if (statement.init.valueType === 'promise') {
     const classMethodCall = deps.emitPreparedClassMethodCallExpression(
       statement.init,
@@ -4311,12 +4256,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
 
   if (jsonParseDeclaration !== null && typeof jsonParseDeclaration !== 'undefined') {
     return jsonParseDeclaration
-  }
-
-  const cryptoHandleValueType = statement.valueType ?? deps.inferExpressionType(statement.init, context)
-
-  if (cryptoHandleValueType === 'crypto-hash' || cryptoHandleValueType === 'crypto-hmac') {
-    return deps.emitScalarVariableDeclaration(statement, context)
   }
 
   if (statement.init !== null && typeof statement.init !== 'undefined' && statement.init.type === 'ObjectLiteral') {
@@ -4793,18 +4732,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return debugMemoryCall.lines
     }
 
-    const cryptoCall = deps.emitPreparedCryptoCallExpression(expression, context, preparedCallDiscard())
-
-    if (cryptoCall !== null && typeof cryptoCall !== 'undefined') {
-      return cryptoCall.lines
-    }
-
-    const cryptoNumberCall = deps.emitPreparedCryptoNumberCallExpression(expression, context)
-
-    if (cryptoNumberCall !== null && typeof cryptoNumberCall !== 'undefined') {
-      return cryptoNumberCall.lines
-    }
-
     const fetchCall = deps.emitPreparedFetchCallExpression(expression, context)
 
     if (fetchCall !== null && typeof fetchCall !== 'undefined') {
@@ -4827,18 +4754,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (timerCall !== null && typeof timerCall !== 'undefined') {
       return timerCall.lines
-    }
-
-    const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(expression, context)
-
-    if (cryptoHashCall !== null && typeof cryptoHashCall !== 'undefined') {
-      return cryptoHashCall.lines
-    }
-
-    const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(expression, context)
-
-    if (cryptoHmacCall !== null && typeof cryptoHmacCall !== 'undefined') {
-      return cryptoHmacCall.lines
     }
 
     const promise = deps.emitPreparedPromiseStaticExpression(expression, context)

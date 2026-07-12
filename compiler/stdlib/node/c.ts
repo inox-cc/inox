@@ -2,9 +2,6 @@ import type { CEmitContext, CFunctionContext } from '../../c/context.ts'
 import type { CPreparedExpression as PreparedExpression } from '../../c/types.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram } from '../../types.ts'
 import type { BinaryLoweringDependencies as PackageBinaryLoweringDependencies } from '../../../stdlib/node/buffer/compiler/c.ts'
-import type { CryptoLoweringDependencies as PackageCryptoLoweringDependencies } from '../../../stdlib/node/crypto/compiler/c.ts'
-import { isSupportedNodeCryptoCGlobalUsage } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
-import { cryptoRuntimeMethodName, registerCryptoRuntimeImportNames } from '../../../stdlib/node/crypto/compiler/c.ts'
 import type { DgramLoweringDependencies as PackageDgramLoweringDependencies } from '../../../stdlib/node/dgram/compiler/c.ts'
 import {
   collectDgramMessageHandlers,
@@ -71,14 +68,6 @@ export {
   resolveBinaryExpressionKind
 } from '../../../stdlib/node/buffer/compiler/c.ts'
 export {
-  emitCryptoHandleVariableDeclaration,
-  emitCryptoHashVariableDeclaration,
-  emitPreparedCryptoCallExpression,
-  emitPreparedCryptoHashCallExpression,
-  emitPreparedCryptoHmacCallExpression,
-  emitPreparedCryptoNumberCallExpression
-} from '../../../stdlib/node/crypto/compiler/c.ts'
-export {
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
   emitPreparedFsCallExpression,
@@ -94,7 +83,6 @@ export {
 } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export type BinaryLoweringDependencies = PackageBinaryLoweringDependencies
-export type CryptoLoweringDependencies = PackageCryptoLoweringDependencies
 export type DgramLoweringDependencies = PackageDgramLoweringDependencies
 export type FsLoweringDependencies = PackageFsLoweringDependencies
 export type HttpLoweringDependencies = PackageHttpLoweringDependencies
@@ -115,7 +103,6 @@ export type NodeStdlibAsyncTaskLoweringDependencies = {
 type NodeCGlobalNameSet = Set<string>
 
 export type NodeStdlibCGlobalUsageContext = {
-  cryptoImportNames?: NodeCGlobalNameSet
   dgramCreateSocketNames?: NodeCGlobalNameSet
   dgramImportNames?: NodeCGlobalNameSet
   httpCreateServerNames?: NodeCGlobalNameSet
@@ -133,7 +120,6 @@ export type NodeStdlibRuntimeImportUsage = {
 
 export function registerNodeStdlibRuntimeImportNames(context: CEmitContext, irPrograms: IrProgram[]): void {
   registerDgramRuntimeImportNames(context, irPrograms)
-  registerCryptoRuntimeImportNames(context, irPrograms)
   registerHttpRuntimeImportNames(context, irPrograms)
   registerNetRuntimeImportNames(context, irPrograms)
 }
@@ -153,24 +139,8 @@ export function isSupportedNodeStdlibCGlobalUsage(
   return (
     isSupportedNodeDgramCGlobalUsage(usage, context) ||
     isSupportedNodeHttpCGlobalUsage(usage, context) ||
-    isSupportedNodeNetCGlobalUsage(usage, context) ||
-    isSupportedNodeCryptoCGlobalUsage(usage, context)
+    isSupportedNodeNetCGlobalUsage(usage, context)
   )
-}
-
-export function nodeStdlibHasSupportedCryptoGlobalUsage(
-  globalUsages: IrGlobalUsage[],
-  context: NodeStdlibCGlobalUsageContext
-): boolean {
-  for (let index = 0; index < globalUsages.length; index = index + 1) {
-    const usage = globalUsages[index] as IrGlobalUsage
-
-    if (isSupportedNodeCryptoCGlobalUsage(usage, context)) {
-      return true
-    }
-  }
-
-  return false
 }
 
 function pushNodeStdlibLines(target: string[], lines: string[]): void {
@@ -369,40 +339,6 @@ export function inferNodeStdlibExpressionType(expression: AnyNode): string | nul
     }
 
     return nodeExpressionValueTypeOrUnknown(expression)
-  }
-
-  const cryptoMethod = cryptoRuntimeMethodName(expression)
-
-  if (cryptoMethod === 'createHash' || cryptoMethod === 'Hash.update') {
-    return 'crypto-hash'
-  }
-
-  if (cryptoMethod === 'createHmac' || cryptoMethod === 'Hmac.update') {
-    return 'crypto-hmac'
-  }
-
-  if (cryptoMethod === 'Hash.digest' || cryptoMethod === 'Hmac.digest' || cryptoMethod === 'hash') {
-    return nodeExpressionValueTypeOrUnknown(expression)
-  }
-
-  if (cryptoMethod === 'getHashes') {
-    return 'array'
-  }
-
-  if (cryptoMethod === 'getRandomValues' || cryptoMethod === 'randomBytes' || cryptoMethod === 'randomFillSync') {
-    return 'bytes'
-  }
-
-  if (cryptoMethod === 'randomInt') {
-    return 'number'
-  }
-
-  if (cryptoMethod === 'timingSafeEqual') {
-    return 'boolean'
-  }
-
-  if (cryptoMethod === 'randomUUID') {
-    return 'string'
   }
 
   return null

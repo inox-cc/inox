@@ -6,13 +6,12 @@ import {
   dateInstanceRuntimeMethodReturnType
 } from '../../stdlib/global/compiler/descriptor.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram, IrRuntimeRequirement } from '../types.ts'
-import type { CGlobalUsageSupportContext } from './diagnostics.ts'
 import {
   isSupportedCFetchGlobalUsage,
   isSupportedCMathGlobalUsage
 } from './diagnostics.ts'
 import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
-import { nodeStdlibHasSupportedCryptoGlobalUsage, nodeStdlibRuntimeImportUsage } from '../stdlib/node/c.ts'
+import { nodeStdlibRuntimeImportUsage } from '../stdlib/node/c.ts'
 import type {
   CompilerLibrarySet,
   RuntimeEntrypointAdapterDescriptor,
@@ -23,7 +22,6 @@ export type CRuntimePreludeRequirements = {
   needsRuntime: boolean
   needsTimeRuntime: boolean
   needsMathRuntime: boolean
-  needsCryptoRuntime: boolean
   needsDebugMemoryRuntime: boolean
   needsAsyncRuntime: boolean
   needsCallbackRuntime: boolean
@@ -51,7 +49,6 @@ export type CRuntimePreludeRequirements = {
 export type CRuntimePreludeRequirementInput = {
   classDescriptorCount: number
   cppValueRuntime: boolean
-  cryptoContext: CGlobalUsageSupportContext
   globalUsages: IrGlobalUsage[]
   hasRuntimeCallbackWrapper: boolean
   irPrograms: IrProgram[]
@@ -158,9 +155,6 @@ export function resolveCRuntimePreludeRequirements(
     needsHttpRuntime ||
     needsNetRuntime
   const needsMathRuntime = runtimePlanHasSupportedMathGlobalUsage(input.globalUsages)
-  const needsCryptoRuntime =
-    runtimeRequirements.has('crypto') ||
-    nodeStdlibHasSupportedCryptoGlobalUsage(input.globalUsages, input.cryptoContext)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
@@ -174,7 +168,6 @@ export function resolveCRuntimePreludeRequirements(
     needsRuntime,
     needsTimeRuntime,
     needsMathRuntime,
-    needsCryptoRuntime,
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,

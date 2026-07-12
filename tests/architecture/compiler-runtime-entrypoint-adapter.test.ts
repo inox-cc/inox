@@ -11,7 +11,6 @@ test('runtime plan selects a package-provided entrypoint adapter', () => {
   const requirements = resolveCRuntimePreludeRequirements({
     classDescriptorCount: 0,
     cppValueRuntime: false,
-    cryptoContext: {},
     globalUsages: [],
     hasRuntimeCallbackWrapper: false,
     irPrograms: [],
@@ -36,7 +35,6 @@ test('runtime plan rejects multiple different entrypoint adapters', () => {
     () => resolveCRuntimePreludeRequirements({
       classDescriptorCount: 0,
       cppValueRuntime: false,
-      cryptoContext: {},
       globalUsages: [],
       hasRuntimeCallbackWrapper: false,
       irPrograms: [],

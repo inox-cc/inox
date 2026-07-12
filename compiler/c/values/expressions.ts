@@ -445,8 +445,6 @@ function isRawPointerType(valueType: string): boolean {
   return (
     valueType === 'function' ||
     valueType === 'timer' ||
-    valueType === 'crypto-hash' ||
-    valueType === 'crypto-hmac' ||
     valueType === 'dgram-socket' ||
     valueType === 'net-address' ||
     valueType === 'net-server' ||
@@ -1836,7 +1834,7 @@ export type CScalarExpressionDependencies = {
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCryptoNumberCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
+  emitNullableScalarValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedNodeNetworkAddressPortExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -1947,9 +1945,6 @@ export type CCallExpressionDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCryptoCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCryptoHashCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCryptoHmacCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFsCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFsStatsMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -2085,24 +2080,6 @@ export function emitPreparedCallExpression(
 
   if (collectionCall !== null && typeof collectionCall !== 'undefined') {
     return collectionCall
-  }
-
-  const cryptoHashCall = deps.emitPreparedCryptoHashCallExpression(expression, context)
-
-  if (cryptoHashCall !== null && typeof cryptoHashCall !== 'undefined') {
-    return cryptoHashCall
-  }
-
-  const cryptoHmacCall = deps.emitPreparedCryptoHmacCallExpression(expression, context)
-
-  if (cryptoHmacCall !== null && typeof cryptoHmacCall !== 'undefined') {
-    return cryptoHmacCall
-  }
-
-  const cryptoCall = deps.emitPreparedCryptoCallExpression(expression, context)
-
-  if (cryptoCall !== null && typeof cryptoCall !== 'undefined') {
-    return cryptoCall
   }
 
   const fsCall = deps.emitPreparedFsCallExpression(expression, context)
@@ -2718,28 +2695,6 @@ export function emitCExpression(
     return '0'
   }
 
-  if (valueType === 'crypto-hash') {
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_C_CRYPTO_HASH',
-        'crypto hash handles can only be stored or used through Hash.update() and Hash.digest() in the current C backend slice',
-        expressionLocation(expression)
-      )
-    )
-    return '0'
-  }
-
-  if (valueType === 'crypto-hmac') {
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_C_CRYPTO_HMAC',
-        'crypto hmac handles can only be stored or used through Hmac.update() and Hmac.digest() in the current C backend slice',
-        expressionLocation(expression)
-      )
-    )
-    return '0'
-  }
-
   if (valueType === 'optional') {
     context.diagnostics.push(
       diagnostic(
@@ -3061,12 +3016,6 @@ export function emitPreparedNumberExpression(
       return binaryCall
     }
 
-    const cryptoCall = deps.emitPreparedCryptoNumberCallExpression(expression, context)
-
-    if (cryptoCall !== null && typeof cryptoCall !== 'undefined') {
-      return cryptoCall
-    }
-
     const numericCast = emitPreparedNumericCastExpression(expression, context, deps)
 
     if (numericCast !== null && typeof numericCast !== 'undefined') {
@@ -3339,7 +3288,11 @@ export function emitPreparedRuntimeTruthinessExpression(
   }
 
   if (deps.isNullableRuntimeExpression(expression, context)) {
-    const value = deps.emitCValueExpression(expression, context)
+    let value = deps.emitCValueExpression(expression, context)
+
+    if (isNullableScalarType(deps.inferExpressionType(expression, context))) {
+      value = deps.emitNullableScalarValueExpression(expression, context)
+    }
 
     return {
       lines: value.lines,
@@ -4038,7 +3991,7 @@ function emitPreparedNullableBooleanLiteralCompareExpression(
     return null
   }
 
-  const value = deps.emitCValueExpression(nullable, context)
+  const value = deps.emitNullableScalarValueExpression(nullable, context)
   let expected = '0'
 
   if (literal.value) {
@@ -5068,7 +5021,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedCryptoCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDebugMemoryCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFsSyncValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -5104,6 +5056,10 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext
   ): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
+  emitPreparedRuntimeTruthinessExpression(
+    expression: CValueNode,
+    context: CFunctionContext
+  ): PreparedExpression | null
   emitPreparedObjectExpressionIndexValueExpression(
     expression: CValueNode,
     context: CFunctionContext
@@ -5198,12 +5154,6 @@ export function emitCValueExpression(
 
   if (debugMemoryCall !== null && typeof debugMemoryCall !== 'undefined') {
     return debugMemoryCall
-  }
-
-  const cryptoCall = deps.emitPreparedCryptoCallExpression(expression, context)
-
-  if (cryptoCall !== null && typeof cryptoCall !== 'undefined') {
-    return cryptoCall
   }
 
   const binaryValue = deps.emitPreparedBinaryValueExpression(expression, context)
@@ -5794,7 +5744,11 @@ function emitCConditionalValueExpression(
   context: CFunctionContext,
   deps: CValueExpressionDependencies
 ): PreparedExpression {
-  const test = deps.emitPreparedNumberExpression(expression.test, context)
+  let test = deps.emitPreparedRuntimeTruthinessExpression(expression.test, context)
+
+  if (test === null || typeof test === 'undefined') {
+    test = deps.emitPreparedNumberExpression(expression.test, context)
+  }
   const consequent = emitCConditionalBranchValueExpression(expression.consequent, expression, context, deps)
   const alternate = emitCConditionalBranchValueExpression(expression.alternate, expression, context, deps)
   const temp = nextCName(context, 'inox_conditional_value')

@@ -3,10 +3,6 @@ import {
   nodeBufferModuleObjectImportNames
 } from '../../../stdlib/node/buffer/compiler/descriptor.ts'
 import {
-  nodeCryptoImportSource,
-  nodeCryptoModuleObjectImportNames
-} from '../../../stdlib/node/crypto/compiler/descriptor.ts'
-import {
   nodeDgramCreateSocketImportNames,
   nodeDgramImportSource,
   nodeDgramModuleObjectImportNames
@@ -38,7 +34,6 @@ import {
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
 
 export { isBinaryGlobalUsagePath } from '../../../stdlib/node/buffer/compiler/descriptor.ts'
-export { isCryptoRuntimeMethodPath } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
 export { fsGlobalUsagePathForRuntimeMethod } from '../../../stdlib/node/fs/compiler/descriptor.ts'
 export {
   isTimerRuntimeMethod,
@@ -66,10 +61,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
   {
     source: nodeBufferImportSource,
     libuvRuntimeFeature: null
-  },
-  {
-    source: nodeCryptoImportSource,
-    libuvRuntimeFeature: 'node:crypto'
   },
   {
     source: nodeDgramImportSource,
@@ -120,11 +111,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     source: nodeDgramImportSource,
     kind: 'create-socket',
     importedNames: nodeDgramCreateSocketImportNames
-  },
-  {
-    source: nodeCryptoImportSource,
-    kind: 'module-object',
-    importedNames: nodeCryptoModuleObjectImportNames
   },
   {
     source: nodeEventsImportSource,

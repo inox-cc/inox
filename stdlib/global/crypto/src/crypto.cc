@@ -2,8 +2,6 @@
 
 #include <limits.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
 #include <utility>
 #include "inox/array.h"
 #include "inox/binary.h"
@@ -60,6 +58,15 @@ static inox_status CryptoHmacState_create(
 static void CryptoHmacState_free(CryptoHmacState* hmac);
 static inox_status CryptoHashState_digest_raw(CryptoHashState* hash, uint8_t* digest, size_t* len);
 static inox_status CryptoHmacState_digest_raw(CryptoHmacState* hmac, uint8_t* digest, size_t* len);
+static inox_status CryptoHashState_update(CryptoHashState* hash, const uint8_t* bytes, size_t len);
+static inox_status CryptoHmacState_update(CryptoHmacState* hmac, const uint8_t* bytes, size_t len);
+static Uint8Array inox_crypto_random_fill_sync(
+  Uint8Array value,
+  inox_number offset,
+  inox_number size,
+  bool has_size
+);
+static bool inox_crypto_string_equals(inox::StringView value, const char* expected, size_t expected_len);
 static char inox_crypto_hex_digit(uint8_t value);
 static void inox_crypto_throw_failed(const char* message);
 
@@ -101,53 +108,44 @@ Hash& Hash::operator=(Hash&& other) noexcept {
   return *this;
 }
 
-bool Hash::valid() const {
-  return handle_ != 0;
+Hash& Hash::update(inox::StringView data) {
+  if (CryptoHashState_update(handle_, (const uint8_t*)data.bytes, data.len) != INOX_OK) {
+    inox_crypto_throw_failed("crypto.Hash.update failed");
+  }
+
+  return *this;
 }
 
-Hash& Hash::update(inox::StringView data) {
-  if (handle_ == 0 || handle_->finalized || (data.bytes == 0 && data.len != 0)) {
+Hash& Hash::update(inox::StringView data, inox::StringView encoding) {
+  if (!inox_crypto_string_equals(encoding, "utf8", 4)) {
     inox_crypto_throw_failed("crypto.Hash.update failed");
     return *this;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
-  if (EVP_DigestUpdate(handle_->ctx, (const uint8_t*)data.bytes, data.len) != 1) {
-    inox_crypto_throw_failed("crypto.Hash.update failed");
-  }
-#else
-  (void)data;
-  inox_crypto_throw_failed("crypto.Hash.update failed");
-#endif
-
-  return *this;
+  return update(data);
 }
 
 Hash& Hash::update(const inox::Value& data) {
-  if (handle_ == 0 || handle_->finalized) {
-    inox_crypto_throw_failed("crypto.Hash.update failed");
-    return *this;
-  }
-
   const uint8_t* bytes = 0;
   size_t len = 0;
 
-  if (CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK) {
+  if (
+    CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK ||
+    CryptoHashState_update(handle_, bytes, len) != INOX_OK
+  ) {
+    inox_crypto_throw_failed("crypto.Hash.update failed");
+  }
+
+  return *this;
+}
+
+Hash& Hash::update(const inox::Value& data, inox::StringView encoding) {
+  if (!inox_crypto_string_equals(encoding, "utf8", 4)) {
     inox_crypto_throw_failed("crypto.Hash.update failed");
     return *this;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
-  if (EVP_DigestUpdate(handle_->ctx, bytes, len) != 1) {
-    inox_crypto_throw_failed("crypto.Hash.update failed");
-  }
-#else
-  (void)bytes;
-  (void)len;
-  inox_crypto_throw_failed("crypto.Hash.update failed");
-#endif
-
-  return *this;
+  return update(data);
 }
 
 Buffer Hash::digest() {
@@ -175,7 +173,12 @@ Buffer Hash::digest() {
 #endif
 }
 
-inox::String Hash::digestHex() {
+inox::String Hash::digest(inox::StringView encoding) {
+  if (!inox_crypto_string_equals(encoding, "hex", 3)) {
+    inox_crypto_throw_failed("crypto.Hash.digest failed");
+    return inox::String();
+  }
+
 #if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   char hex[EVP_MAX_MD_SIZE * 2];
@@ -228,53 +231,44 @@ Hmac& Hmac::operator=(Hmac&& other) noexcept {
   return *this;
 }
 
-bool Hmac::valid() const {
-  return handle_ != 0;
+Hmac& Hmac::update(inox::StringView data) {
+  if (CryptoHmacState_update(handle_, (const uint8_t*)data.bytes, data.len) != INOX_OK) {
+    inox_crypto_throw_failed("crypto.Hmac.update failed");
+  }
+
+  return *this;
 }
 
-Hmac& Hmac::update(inox::StringView data) {
-  if (handle_ == 0 || handle_->finalized || (data.bytes == 0 && data.len != 0)) {
+Hmac& Hmac::update(inox::StringView data, inox::StringView encoding) {
+  if (!inox_crypto_string_equals(encoding, "utf8", 4)) {
     inox_crypto_throw_failed("crypto.Hmac.update failed");
     return *this;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
-  if (HMAC_Update(handle_->ctx, (const uint8_t*)data.bytes, data.len) != 1) {
-    inox_crypto_throw_failed("crypto.Hmac.update failed");
-  }
-#else
-  (void)data;
-  inox_crypto_throw_failed("crypto.Hmac.update failed");
-#endif
-
-  return *this;
+  return update(data);
 }
 
 Hmac& Hmac::update(const inox::Value& data) {
-  if (handle_ == 0 || handle_->finalized) {
-    inox_crypto_throw_failed("crypto.Hmac.update failed");
-    return *this;
-  }
-
   const uint8_t* bytes = 0;
   size_t len = 0;
 
-  if (CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK) {
+  if (
+    CryptoHashState_data(data.raw(), &bytes, &len) != INOX_OK ||
+    CryptoHmacState_update(handle_, bytes, len) != INOX_OK
+  ) {
+    inox_crypto_throw_failed("crypto.Hmac.update failed");
+  }
+
+  return *this;
+}
+
+Hmac& Hmac::update(const inox::Value& data, inox::StringView encoding) {
+  if (!inox_crypto_string_equals(encoding, "utf8", 4)) {
     inox_crypto_throw_failed("crypto.Hmac.update failed");
     return *this;
   }
 
-#if INOX_CRYPTO_HASH_HAS_EVP
-  if (HMAC_Update(handle_->ctx, bytes, len) != 1) {
-    inox_crypto_throw_failed("crypto.Hmac.update failed");
-  }
-#else
-  (void)bytes;
-  (void)len;
-  inox_crypto_throw_failed("crypto.Hmac.update failed");
-#endif
-
-  return *this;
+  return update(data);
 }
 
 Buffer Hmac::digest() {
@@ -302,7 +296,12 @@ Buffer Hmac::digest() {
 #endif
 }
 
-inox::String Hmac::digestHex() {
+inox::String Hmac::digest(inox::StringView encoding) {
+  if (!inox_crypto_string_equals(encoding, "hex", 3)) {
+    inox_crypto_throw_failed("crypto.Hmac.digest failed");
+    return inox::String();
+  }
+
 #if INOX_CRYPTO_HASH_HAS_EVP
   uint8_t digest[EVP_MAX_MD_SIZE];
   char hex[EVP_MAX_MD_SIZE * 2];
@@ -408,7 +407,24 @@ Buffer crypto::randomBytes(inox_number size) const {
   return out;
 }
 
-Uint8Array crypto::randomFillSync(Uint8Array value, inox_number offset_value, inox_number size_value, bool has_size) const {
+Uint8Array crypto::randomFillSync(Uint8Array value) const {
+  return inox_crypto_random_fill_sync(value, 0, 0, false);
+}
+
+Uint8Array crypto::randomFillSync(Uint8Array value, inox_number offset) const {
+  return inox_crypto_random_fill_sync(value, offset, 0, false);
+}
+
+Uint8Array crypto::randomFillSync(Uint8Array value, inox_number offset, inox_number size) const {
+  return inox_crypto_random_fill_sync(value, offset, size, true);
+}
+
+static Uint8Array inox_crypto_random_fill_sync(
+  Uint8Array value,
+  inox_number offset_value,
+  inox_number size_value,
+  bool has_size
+) {
   size_t offset = 0;
   size_t size = 0;
 
@@ -592,7 +608,48 @@ Hmac crypto::createHmac(inox::StringView algorithm, const inox::Value& key) cons
   return Hmac(hmac);
 }
 
-Buffer crypto::hash(inox::StringView algorithm, inox::StringView data) const {
+inox::String crypto::hash(inox::StringView algorithm, inox::StringView data) const {
+  Hash hash = createHash(algorithm);
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  hash.update(data);
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return hash.digest("hex");
+}
+
+inox::String crypto::hash(inox::StringView algorithm, const inox::Value& data) const {
+  Hash hash = createHash(algorithm);
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  hash.update(data);
+
+  if (inox::thrown()) {
+    return inox::String();
+  }
+
+  return hash.digest("hex");
+}
+
+Buffer crypto::hash(
+  inox::StringView algorithm,
+  inox::StringView data,
+  inox::StringView output_encoding
+) const {
+  if (!inox_crypto_string_equals(output_encoding, "buffer", 6)) {
+    inox_crypto_throw_failed("crypto.hash failed");
+    return Buffer();
+  }
+
   Hash hash = createHash(algorithm);
 
   if (inox::thrown()) {
@@ -608,7 +665,16 @@ Buffer crypto::hash(inox::StringView algorithm, inox::StringView data) const {
   return hash.digest();
 }
 
-Buffer crypto::hash(inox::StringView algorithm, const inox::Value& data) const {
+Buffer crypto::hash(
+  inox::StringView algorithm,
+  const inox::Value& data,
+  inox::StringView output_encoding
+) const {
+  if (!inox_crypto_string_equals(output_encoding, "buffer", 6)) {
+    inox_crypto_throw_failed("crypto.hash failed");
+    return Buffer();
+  }
+
   Hash hash = createHash(algorithm);
 
   if (inox::thrown()) {
@@ -622,38 +688,6 @@ Buffer crypto::hash(inox::StringView algorithm, const inox::Value& data) const {
   }
 
   return hash.digest();
-}
-
-inox::String crypto::hashHex(inox::StringView algorithm, inox::StringView data) const {
-  Hash hash = createHash(algorithm);
-
-  if (inox::thrown()) {
-    return inox::String();
-  }
-
-  hash.update(data);
-
-  if (inox::thrown()) {
-    return inox::String();
-  }
-
-  return hash.digestHex();
-}
-
-inox::String crypto::hashHex(inox::StringView algorithm, const inox::Value& data) const {
-  Hash hash = createHash(algorithm);
-
-  if (inox::thrown()) {
-    return inox::String();
-  }
-
-  hash.update(data);
-
-  if (inox::thrown()) {
-    return inox::String();
-  }
-
-  return hash.digestHex();
 }
 
 bool crypto::timingSafeEqual(const Uint8Array& left, const Uint8Array& right) const {
@@ -956,6 +990,36 @@ static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, 
   return INOX_ERR_TYPE;
 }
 
+static inox_status CryptoHashState_update(CryptoHashState* hash, const uint8_t* bytes, size_t len) {
+  if (hash == 0 || hash->finalized || (bytes == 0 && len != 0)) {
+    return INOX_ERR_FIELD;
+  }
+
+#if INOX_CRYPTO_HASH_HAS_EVP
+  return EVP_DigestUpdate(hash->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
+#else
+  (void)bytes;
+  (void)len;
+
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
+static inox_status CryptoHmacState_update(CryptoHmacState* hmac, const uint8_t* bytes, size_t len) {
+  if (hmac == 0 || hmac->finalized || (bytes == 0 && len != 0)) {
+    return INOX_ERR_FIELD;
+  }
+
+#if INOX_CRYPTO_HASH_HAS_EVP
+  return HMAC_Update(hmac->ctx, bytes, len) == 1 ? INOX_OK : INOX_ERR_UNSUPPORTED;
+#else
+  (void)bytes;
+  (void)len;
+
+  return INOX_ERR_UNSUPPORTED;
+#endif
+}
+
 static inox_status CryptoHashState_digest_raw(CryptoHashState* hash, uint8_t* digest, size_t* len) {
   if (hash == 0 || hash->finalized || digest == 0 || len == 0) {
     return INOX_ERR_FIELD;
@@ -1016,6 +1080,20 @@ static inox_status CryptoHmacState_digest_raw(CryptoHmacState* hmac, uint8_t* di
 
   return INOX_ERR_UNSUPPORTED;
 #endif
+}
+
+static bool inox_crypto_string_equals(inox::StringView value, const char* expected, size_t expected_len) {
+  if (expected == 0 || value.len != expected_len) {
+    return false;
+  }
+
+  for (size_t index = 0; index < expected_len; index += 1) {
+    if (value.bytes[index] != expected[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 static char inox_crypto_hex_digit(uint8_t value) {

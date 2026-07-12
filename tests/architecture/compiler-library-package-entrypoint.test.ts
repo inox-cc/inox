@@ -18,7 +18,11 @@ test('entrypoint package node:os добавляет generated operations и runt
   assert.deepEqual(osPackage.compilerPackage.runtimeRequirements[0].cPreludeIncludes, ['inox/os.h'])
 
   const rendered = renderCompilerLibraryRegistry(discovered)
-  assert.match(rendered.registrySource, /stdlib\/node\/os\/compiler\/index\.ts/)
-  assert.match(rendered.registrySource, /compilerLibraryPackage0\.operations\[4\]/)
+  const packageImport = rendered.registrySource.match(
+    /compilerLibraryPackage as compilerLibraryPackage(\d+) \} from '[^']*stdlib\/node\/os\/compiler\/index\.ts'/
+  )
+
+  assert.ok(packageImport)
+  assert.match(rendered.registrySource, new RegExp(`compilerLibraryPackage${packageImport[1]}\\.operations\\[4\\]`))
   assert.equal(rendered.manifestSource.includes('stdlib/node/os/compiler/index.ts'), true)
 })

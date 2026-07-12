@@ -1371,7 +1371,6 @@ export function emitCUnit(
   const preludeRequirements = resolveCRuntimePreludeRequirements({
     classDescriptorCount: classDescriptorNames.size,
     cppValueRuntime: classInfosUseCppValueRuntime(baseContext),
-    cryptoContext: baseContext,
     globalUsages,
     hasRuntimeCallbackWrapper: hasCUnitRuntimeCallbackWrapper(baseContext),
     irPrograms,
@@ -1383,7 +1382,6 @@ export function emitCUnit(
   const needsRuntime: boolean = preludeRequirements.needsRuntime
   const needsTimeRuntime: boolean = preludeRequirements.needsTimeRuntime
   const needsMathRuntime: boolean = preludeRequirements.needsMathRuntime
-  const needsCryptoRuntime: boolean = preludeRequirements.needsCryptoRuntime
   const needsDebugMemoryRuntime: boolean = preludeRequirements.needsDebugMemoryRuntime
   const needsAsyncRuntime: boolean = preludeRequirements.needsAsyncRuntime
   const needsCallbackRuntime: boolean = preludeRequirements.needsCallbackRuntime
@@ -1418,7 +1416,6 @@ export function emitCUnit(
     true,
     needsTimeRuntime,
     needsMathRuntime,
-    needsCryptoRuntime,
     needsDebugMemoryRuntime,
     needsAsyncRuntime,
     needsCallbackRuntime,

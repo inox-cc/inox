@@ -15,7 +15,6 @@ import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } 
 type CGlobalNameSet = Set<string>
 
 export type CGlobalUsageSupportContext = {
-  cryptoImportNames?: CGlobalNameSet
   dgramCreateSocketNames?: CGlobalNameSet
   dgramImportNames?: CGlobalNameSet
   httpCreateServerNames?: CGlobalNameSet

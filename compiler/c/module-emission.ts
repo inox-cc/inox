@@ -397,7 +397,6 @@ export function emitCModuleSource(
   const prelude = resolveCRuntimePreludeRequirements({
     classDescriptorCount: classDescriptorNames.size,
     cppValueRuntime: classInfosUseCppValueRuntime(context),
-    cryptoContext: context,
     globalUsages,
     hasRuntimeCallbackWrapper: cModuleHasRuntimeCallbackWrapper(context),
     irPrograms,
@@ -450,7 +449,6 @@ export function emitCModuleSource(
       emitsMain,
       prelude.needsTimeRuntime,
       prelude.needsMathRuntime,
-      prelude.needsCryptoRuntime,
       prelude.needsDebugMemoryRuntime,
       prelude.needsAsyncRuntime,
       prelude.needsCallbackRuntime,
@@ -1687,9 +1685,7 @@ function isCModuleEntryLocalValueType(valueType: string): boolean {
   return (
     valueType !== 'function' &&
     valueType !== 'promise' &&
-    valueType !== 'timer' &&
-    valueType !== 'crypto-hash' &&
-    valueType !== 'crypto-hmac'
+    valueType !== 'timer'
   )
 }
 
@@ -2280,11 +2276,7 @@ function cModuleValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (
-    valueType === 'regexp' ||
-    valueType === 'crypto-hash' ||
-    valueType === 'crypto-hmac'
-  ) {
+  if (valueType === 'regexp') {
     return ''
   }
 
