@@ -152,6 +152,7 @@ type CUnitFunctionNodeEntry = {
 }
 
 type CUnitValueDeclaration = {
+  cppType?: string | null
   functionType?: CFunctionType | null
   name: string
   shapeBuiltin?: string | null
@@ -274,15 +275,10 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
       context.regexpLiterals.set(item.name, item.init)
     }
 
-    let valueType = cUnitValueType(item, context)
-
-    const urlObjectValueType = cUnitUrlObjectValueType(item)
-
-    if (urlObjectValueType !== null) {
-      valueType = urlObjectValueType
-    }
+    const valueType = cUnitValueType(item, context)
 
     values.push({
+      cppType: cUnitValueLibraryCppType(item),
       functionType: cUnitValueFunctionType(item),
       name: item.name,
       shapeBuiltin: cUnitValueShapeBuiltin(item),
@@ -297,17 +293,24 @@ function collectCUnitValueDeclarations(programs: IrProgram[], context: CEmitCont
 function registerCUnitValueDeclarations(context: CEmitContext, values: CUnitValueDeclaration[]): void {
   for (let index = 0; index < values.length; index = index + 1) {
     const item = unitValueDeclarationAt(values, index)
-    let valueType = item.valueType
-
-    if (item.shapeBuiltin === 'url.URL') {
-      valueType = 'url.URL'
-    } else if (item.shapeBuiltin === 'url.URLSearchParams') {
-      valueType = 'url.URLSearchParams'
-    }
-
     context.moduleValueNames.set(item.name, item.symbolName)
-    context.moduleValueTypes.set(item.name, valueType)
+    context.moduleValueTypes.set(item.name, item.valueType)
+
+    if (item.cppType !== null && typeof item.cppType !== 'undefined') {
+      context.moduleValueCppTypes.set(item.name, item.cppType)
+    }
   }
+}
+
+function cUnitValueLibraryCppType(node: AnyNode): string | null {
+  const shape = node.shape ?? node.init?.shape
+  const cppType = shape?.libraryCppType
+
+  if (cppType === null || typeof cppType === 'undefined') {
+    return null
+  }
+
+  return cppType
 }
 
 function registerCUnitSyntheticImportNames(context: CEmitContext, programs: IrProgram[]): void {
@@ -506,15 +509,10 @@ function emitCUnitObjectFunctionFieldDefinitions(
 function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cUnitTimeExpressionValueType(node.init)
-  const urlObjectValueType = cUnitUrlObjectValueType(node)
   const classValueType = cUnitNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
-  }
-
-  if (urlObjectValueType !== null && typeof urlObjectValueType !== 'undefined') {
-    return urlObjectValueType
   }
 
   if (
@@ -551,54 +549,6 @@ function cUnitValueType(node: AnyNode, context: CEmitContext): string {
   }
 
   return valueType
-}
-
-function cUnitUrlObjectValueType(node: AnyNode): string | null {
-  if (node.shape !== null && typeof node.shape !== 'undefined' && node.shape.builtin === 'url.URL') {
-    return 'url.URL'
-  }
-
-  if (
-    node.shape !== null &&
-    typeof node.shape !== 'undefined' &&
-    node.shape.builtin === 'url.URLSearchParams'
-  ) {
-    return 'url.URLSearchParams'
-  }
-
-  const expression = node.init
-
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  if (expression.shape !== null && typeof expression.shape !== 'undefined' && expression.shape.builtin === 'url.URL') {
-    return 'url.URL'
-  }
-
-  if (
-    expression.shape !== null &&
-    typeof expression.shape !== 'undefined' &&
-    expression.shape.builtin === 'url.URLSearchParams'
-  ) {
-    return 'url.URLSearchParams'
-  }
-
-  if (
-    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
-    (expression.urlRuntimeMethod === 'URL' || expression.urlRuntimeMethod === 'pathToFileURL')
-  ) {
-    return 'url.URL'
-  }
-
-  if (
-    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
-    expression.urlRuntimeMethod === 'URLSearchParams'
-  ) {
-    return 'url.URLSearchParams'
-  }
-
-  return null
 }
 
 function cUnitValueShapeBuiltin(node: AnyNode): string | null {
@@ -803,12 +753,8 @@ function cUnitValueCType(valueType: string): string {
 }
 
 function cUnitValueDeclarationCType(item: CUnitValueDeclaration): string {
-  if (item.shapeBuiltin === 'url.URL') {
-    return 'URL'
-  }
-
-  if (item.shapeBuiltin === 'url.URLSearchParams') {
-    return 'URLSearchParams'
+  if (item.cppType !== null && typeof item.cppType !== 'undefined') {
+    return item.cppType
   }
 
   return cUnitValueCType(item.valueType)
@@ -823,7 +769,7 @@ function cUnitValueGlobalInitializer(valueType: string): string {
     return '""'
   }
 
-  if (valueType === 'regexp' || valueType === 'url.URL' || valueType === 'url.URLSearchParams') {
+  if (valueType === 'regexp') {
     return ''
   }
 
@@ -835,11 +781,7 @@ function cUnitValueGlobalInitializer(valueType: string): string {
 }
 
 function cUnitValueDeclarationGlobalInitializer(item: CUnitValueDeclaration): string {
-  if (item.shapeBuiltin === 'url.URL') {
-    return ''
-  }
-
-  if (item.shapeBuiltin === 'url.URLSearchParams') {
+  if (item.cppType !== null && typeof item.cppType !== 'undefined') {
     return ''
   }
 
@@ -1455,7 +1397,6 @@ export function emitCUnit(
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   const needsChildProcessRuntime: boolean = preludeRequirements.needsChildProcessRuntime
   const needsFsRuntime: boolean = preludeRequirements.needsFsRuntime
-  const needsUrlRuntime: boolean = preludeRequirements.needsUrlRuntime
   const needsProcessRuntime: boolean = preludeRequirements.needsProcessRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
   const needsRegexpRuntime: boolean = preludeRequirements.needsRegexpRuntime
@@ -1493,7 +1434,6 @@ export function emitCUnit(
     needsObjectRuntime,
     needsChildProcessRuntime,
     needsFsRuntime,
-    needsUrlRuntime,
     needsProcessRuntime,
     needsJsonRuntime,
     needsRegexpRuntime,

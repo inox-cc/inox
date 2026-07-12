@@ -927,7 +927,7 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
     specifier.valueType = 'function'
     specifier.className = declaration.name
     specifier.constructable = true
-    specifier.constructorParams = declaration.constructorParams ?? []
+    specifier.constructorParams = importedClassConstructorParams(declaration)
     return
   }
 
@@ -943,6 +943,24 @@ function applyImportedDeclarationMetadata(specifier: AnyNode, declaration: AnyNo
   specifier.promiseValueType = declaration.promiseValueType ?? null
   specifier.setElementType = declaration.setElementType ?? null
   specifier.shape = declaration.shape ?? null
+}
+
+function importedClassConstructorParams(declaration: AnyNode): AnyNode[] {
+  if (declaration.constructorParams !== null && typeof declaration.constructorParams !== 'undefined') {
+    return declaration.constructorParams
+  }
+
+  const methods: AnyNode[] = declaration.methods ?? []
+
+  for (let index = 0; index < methods.length; index = index + 1) {
+    const method = methods[index]
+
+    if (method.name === 'constructor') {
+      return method.params ?? []
+    }
+  }
+
+  return []
 }
 
 function applyImportedFunctionDeclarationMetadata(specifier: AnyNode, declaration: AnyNode): void {

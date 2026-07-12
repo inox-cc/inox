@@ -44,7 +44,6 @@ import {
   nodeTimersImportSource,
   nodeTimersModuleObjectImportNames
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
-import { nodeUrlImportSource, nodeUrlModuleObjectImportNames } from '../../../stdlib/node/url/compiler/descriptor.ts'
 
 export { isBinaryGlobalUsagePath } from '../../../stdlib/node/buffer/compiler/descriptor.ts'
 export { isCryptoRuntimeMethodPath } from '../../../stdlib/node/crypto/compiler/descriptor.ts'
@@ -53,7 +52,6 @@ export {
   isTimerRuntimeMethod,
   timerRuntimeMethodNameFromPath
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
-export { urlObjectFields } from '../../../stdlib/node/url/compiler/descriptor.ts'
 
 export type NodeStdlibRuntimeImportKind =
   | 'connect'
@@ -115,10 +113,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
   },
   {
     source: nodeTimersImportSource,
-    libuvRuntimeFeature: null
-  },
-  {
-    source: nodeUrlImportSource,
     libuvRuntimeFeature: null
   },
   {
@@ -198,11 +192,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     kind: 'module-object',
     importedNames: nodeTimersModuleObjectImportNames
   },
-  {
-    source: nodeUrlImportSource,
-    kind: 'module-object',
-    importedNames: nodeUrlModuleObjectImportNames
-  }
 ]
 
 export function nodeStdlibPackageDescriptorCount(): number {

@@ -6,7 +6,6 @@ import { collectCryptoIrFeatures, cryptoFeature } from '../../../stdlib/node/cry
 import { collectFsIrFeatures, fsFeature } from '../../../stdlib/node/fs/compiler/feature.ts'
 import { collectProcessIrFeatures, processFeature } from '../../../stdlib/node/process/compiler/feature.ts'
 import { collectTimersIrFeatures, timersFeature } from '../../../stdlib/node/timers/compiler/feature.ts'
-import { collectUrlIrFeatures, urlFeature } from '../../../stdlib/node/url/compiler/feature.ts'
 
 export const nodeStdlibFeatures: CompilerFeatureDescriptor[] = [
   binaryFeature,
@@ -14,8 +13,7 @@ export const nodeStdlibFeatures: CompilerFeatureDescriptor[] = [
   cryptoFeature,
   fsFeature,
   processFeature,
-  timersFeature,
-  urlFeature
+  timersFeature
 ]
 
 export function collectNodeStdlibIrFeatures(node: AnyNode, features: Set<IrFeature>): void {
@@ -25,7 +23,6 @@ export function collectNodeStdlibIrFeatures(node: AnyNode, features: Set<IrFeatu
   collectFsIrFeatures(node, features)
   collectProcessIrFeatures(node, features)
   collectTimersIrFeatures(node, features)
-  collectUrlIrFeatures(node, features)
 }
 
 export function nodeStdlibFeatureChildNodes(node: AnyNode): AnyNode[] | null {

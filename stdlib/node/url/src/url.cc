@@ -372,6 +372,18 @@ void URL::setField(uint32_t field_index, const inox::Value& value) {
   }
 }
 
+void URL::setPathname(const inox::Value& value) {
+  setField(INOX_URL_PATHNAME_INDEX, value);
+}
+
+void URL::setSearch(const inox::Value& value) {
+  setField(INOX_URL_SEARCH_INDEX, value);
+}
+
+void URL::setHash(const inox::Value& value) {
+  setField(INOX_URL_HASH_INDEX, value);
+}
+
 class url url;
 
 static const inox_shape* inox_url_search_params_shape(void) {

@@ -1,5 +1,5 @@
 import type { AnyNode } from '../types.ts'
-import { emitPrepareOwnedValueWrite, nextCName, registerOwnedValue } from './context.ts'
+import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, nextCName, registerOwnedValue } from './context.ts'
 import type { CFunctionContext } from './context.ts'
 import { cStringLiteral } from './identifiers.ts'
 import type {
@@ -14,6 +14,8 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryCExpression?: string | null
   libraryCArgumentKinds?: string[] | null
   libraryCResultShapeFields?: string[] | null
+  libraryCCallStyle?: string | null
+  libraryCFailureMode?: string | null
   libraryConstantValue?: string | null
   libraryCppType?: string | null
   libraryOwned?: boolean | null
@@ -65,7 +67,9 @@ export function emitPreparedCompilerLibraryCallExpression(
   const cppType = item.libraryCppType
 
   if (
-    expression.type !== 'CallExpression' ||
+    (expression.type !== 'CallExpression' &&
+      expression.type !== 'NewExpression' &&
+      expression.type !== 'AssignmentExpression') ||
     target === null ||
     typeof target === 'undefined' ||
     argumentKinds === null ||
@@ -80,15 +84,30 @@ export function emitPreparedCompilerLibraryCallExpression(
   const argumentsList: string[] = []
   let sourceArgumentIndex = 0
   let optionalArgumentPresent = false
+  let receiverExpression = ''
+  const sourceArguments = compilerLibrarySourceArguments(expression)
 
   for (let kindIndex = 0; kindIndex < argumentKinds.length; kindIndex = kindIndex + 1) {
     const kind = argumentKinds[kindIndex]
 
+    if (kind === 'receiver') {
+      const receiver = compilerLibraryReceiver(expression)
+
+      if (receiver === null) {
+        return null
+      }
+
+      const prepared = dependencies.emitCValueExpression(receiver, context)
+      pushLines(lines, prepared.lines)
+      receiverExpression = prepared.expression
+      continue
+    }
+
     if (kind === 'string-view' || kind === 'optional-string-view') {
       let sourceArgument: AnyNode | null = null
 
-      if (sourceArgumentIndex < expression.args.length) {
-        sourceArgument = expression.args[sourceArgumentIndex]
+      if (sourceArgumentIndex < sourceArguments.length) {
+        sourceArgument = sourceArguments[sourceArgumentIndex]
       }
 
       sourceArgumentIndex = sourceArgumentIndex + 1
@@ -115,7 +134,7 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
 
     if (kind === 'value') {
-      const sourceArgument = expression.args[sourceArgumentIndex]
+      const sourceArgument = sourceArguments[sourceArgumentIndex]
       sourceArgumentIndex = sourceArgumentIndex + 1
 
       if (sourceArgument === null || typeof sourceArgument === 'undefined') {
@@ -128,9 +147,26 @@ export function emitPreparedCompilerLibraryCallExpression(
       continue
     }
 
+    if (kind === 'optional-value') {
+      let argumentExpression = 'inox_undefined_value()'
+
+      if (sourceArgumentIndex < sourceArguments.length) {
+        const prepared = dependencies.emitCValueExpression(sourceArguments[sourceArgumentIndex], context)
+        pushLines(lines, prepared.lines)
+        argumentExpression = prepared.expression
+        optionalArgumentPresent = true
+      } else {
+        optionalArgumentPresent = false
+      }
+
+      sourceArgumentIndex = sourceArgumentIndex + 1
+      argumentsList.push(argumentExpression)
+      continue
+    }
+
     if (kind === 'variadic-string-view-array') {
       const variadicArrayExpression = emitCompilerLibraryVariadicStringArray(
-        expression,
+        sourceArguments,
         context,
         dependencies,
         lines
@@ -140,7 +176,7 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
 
     if (kind === 'variadic-count') {
-      argumentsList.push(`${expression.args.length}`)
+      argumentsList.push(`${sourceArguments.length}`)
       continue
     }
 
@@ -154,9 +190,33 @@ export function emitPreparedCompilerLibraryCallExpression(
     return null
   }
 
-  const callExpression = `${target}(${joinStrings(argumentsList, ', ')})`
+  let callTarget = target
 
-  if (item.libraryCResultShapeFields !== null && typeof item.libraryCResultShapeFields !== 'undefined') {
+  if (item.libraryCCallStyle === 'member') {
+    if (receiverExpression === '') {
+      return null
+    }
+
+    callTarget = `${receiverExpression}.${target}`
+  }
+
+  const callExpression = `${callTarget}(${joinStrings(argumentsList, ', ')})`
+
+  if (cppType === 'void') {
+    lines.push(`${callExpression};`)
+    pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, '', context)
+    return {
+      lines,
+      expression: '',
+      valueType: 'void'
+    }
+  }
+
+  if (
+    item.valueType === 'object' &&
+    item.libraryCResultShapeFields !== null &&
+    typeof item.libraryCResultShapeFields !== 'undefined'
+  ) {
     return emitPreparedCompilerLibraryObjectCall(
       expression,
       context,
@@ -168,10 +228,27 @@ export function emitPreparedCompilerLibraryCallExpression(
     )
   }
 
+  if (item.libraryCFailureMode !== null && typeof item.libraryCFailureMode !== 'undefined') {
+    const out = nextCName(context, 'inox_library_result')
+    lines.push(`auto ${out} = ${callExpression};`)
+    pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, out, context)
+
+    return {
+      lines,
+      expression: out,
+      cppType,
+      nullable: item.nullable === true,
+      owned: item.libraryOwned === true,
+      valueType: item.valueType ?? undefined
+    }
+  }
+
   return {
     lines,
     expression: callExpression,
     cppType,
+    nullable: item.nullable === true,
+    valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
 }
@@ -196,15 +273,33 @@ function emitPreparedCompilerLibraryObjectCall(
     out = options.out
   }
 
-  pushLines(lines, emitPrepareOwnedValueWrite(out))
+  if (cppType === 'inox::Value') {
+    pushLines(lines, emitPrepareOwnedValueWrite(out))
+  } else {
+    lines.push(`auto ${out} = ${callExpression};`)
+  }
 
-  if (options === null || typeof options === 'undefined' || options.owned !== false) {
+  if (
+    cppType === 'inox::Value' &&
+    (options === null || typeof options === 'undefined' || options.owned !== false)
+  ) {
     registerOwnedValue(context, out)
   }
 
   context.variables.set(out, 'object')
+  context.cppValueTypes.set(out, cppType)
   dependencies.registerObjectShape(context, out, expression.shape)
-  lines.push(`${out} = ${callExpression};`)
+
+  if (cppType === 'inox::Value') {
+    lines.push(`${out} = ${callExpression};`)
+  }
+
+  pushCompilerLibraryFailureCheck(
+    lines,
+    (expression as CompilerLibraryExpressionNode).libraryCFailureMode,
+    out,
+    context
+  )
 
   return {
     lines,
@@ -214,20 +309,20 @@ function emitPreparedCompilerLibraryObjectCall(
 }
 
 function emitCompilerLibraryVariadicStringArray(
-  expression: AnyNode,
+  sourceArguments: AnyNode[],
   context: CFunctionContext,
   dependencies: CompilerLibraryLoweringDependencies,
   lines: string[]
 ): string {
-  if (expression.args.length === 0) {
+  if (sourceArguments.length === 0) {
     return 'nullptr'
   }
 
   const values: string[] = []
 
-  for (let index = 0; index < expression.args.length; index = index + 1) {
+  for (let index = 0; index < sourceArguments.length; index = index + 1) {
     const prepared = dependencies.emitPreparedStringBytesOperand(
-      expression.args[index],
+      sourceArguments[index],
       context,
       'inox_library_arg'
     )
@@ -238,6 +333,43 @@ function emitCompilerLibraryVariadicStringArray(
   const name = nextCName(context, 'inox_library_args')
   lines.push(`const inox::StringView ${name}[] = { ${joinStrings(values, ', ')} };`)
   return name
+}
+
+function compilerLibrarySourceArguments(expression: AnyNode): AnyNode[] {
+  if (expression.type === 'AssignmentExpression') {
+    return [expression.value]
+  }
+
+  return expression.args
+}
+
+function compilerLibraryReceiver(expression: AnyNode): AnyNode | null {
+  if (expression.type === 'AssignmentExpression') {
+    if (expression.target.type === 'MemberExpression') {
+      return expression.target.object
+    }
+
+    return null
+  }
+
+  if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression') {
+    return expression.callee.object
+  }
+
+  return null
+}
+
+function pushCompilerLibraryFailureCheck(
+  lines: string[],
+  mode: string | null | undefined,
+  result: string,
+  context: CFunctionContext
+): void {
+  if (mode === 'thrown') {
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
+  } else if (mode === 'invalid-result' && result !== '') {
+    lines.push(emitRuntimeTypeCheck(`!${result}.valid()`, context))
+  }
 }
 
 function emitCompilerLibraryResultShape(

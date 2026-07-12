@@ -190,6 +190,18 @@ function lowerExpressionWithContext(
     return loweredArray
   }
 
+  if (expression.type === 'SpreadElement') {
+    const argument = lowerExpressionWithContext(expression.argument, context)
+
+    return {
+      type: 'SpreadElement',
+      argument,
+      valueType: 'array',
+      arrayElementType: fallbackString(expression.arrayElementType, 'unknown'),
+      loc: expression.loc
+    }
+  }
+
   if (expression.type === 'ObjectLiteral') {
     const properties = lowerObjectProperties(expression.properties, context)
     const object = cloneObjectLiteralExpression(expression, properties)
@@ -403,6 +415,26 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryOperationId = libraryOperationId
   }
 
+  const libraryReceiverTypeId = nullableString(source.libraryReceiverTypeId)
+  if (libraryReceiverTypeId !== null && typeof libraryReceiverTypeId !== 'undefined') {
+    target.libraryReceiverTypeId = libraryReceiverTypeId
+  }
+
+  const libraryResultTypeId = nullableString(source.libraryResultTypeId)
+  if (libraryResultTypeId !== null && typeof libraryResultTypeId !== 'undefined') {
+    target.libraryResultTypeId = libraryResultTypeId
+  }
+
+  const libraryCCallStyle = nullableString(source.libraryCCallStyle)
+  if (libraryCCallStyle !== null && typeof libraryCCallStyle !== 'undefined') {
+    target.libraryCCallStyle = libraryCCallStyle
+  }
+
+  const libraryCFailureMode = nullableString(source.libraryCFailureMode)
+  if (libraryCFailureMode !== null && typeof libraryCFailureMode !== 'undefined') {
+    target.libraryCFailureMode = libraryCFailureMode
+  }
+
   const libraryCExpression = nullableString(source.libraryCExpression)
   if (libraryCExpression !== null && typeof libraryCExpression !== 'undefined') {
     target.libraryCExpression = libraryCExpression
@@ -476,16 +508,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   const timerRuntimeMethod = nullableString(source.timerRuntimeMethod)
   if (timerRuntimeMethod !== null && typeof timerRuntimeMethod !== 'undefined') {
     target.timerRuntimeMethod = timerRuntimeMethod
-  }
-
-  const urlRuntimeField = nullableString(source.urlRuntimeField)
-  if (urlRuntimeField !== null && typeof urlRuntimeField !== 'undefined') {
-    target.urlRuntimeField = urlRuntimeField
-  }
-
-  const urlRuntimeMethod = nullableString(source.urlRuntimeMethod)
-  if (urlRuntimeMethod !== null && typeof urlRuntimeMethod !== 'undefined') {
-    target.urlRuntimeMethod = urlRuntimeMethod
   }
 
   const numericCast = nullableString(source.numericCast)
@@ -1518,7 +1540,11 @@ function commonArrayElementTypeFromElements(elements: LowerExpressionNode[]): st
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const element = elements[index]
-    const valueType = fallbackString(element.valueType, 'unknown')
+    let valueType = fallbackString(element.valueType, 'unknown')
+
+    if (element.type === 'SpreadElement') {
+      valueType = fallbackString(element.arrayElementType, 'unknown')
+    }
 
     if (first === null || typeof first === 'undefined') {
       first = valueType
@@ -1660,11 +1686,18 @@ function isBooleanBinaryOperator(operator: string): boolean {
 }
 
 function inferNullishBinaryExpressionType(left: LowerExpressionNode, right: LowerExpressionNode): string {
-  if (left.valueType === 'null' || left.valueType === 'unknown') {
-    return fallbackString(right.valueType, 'unknown')
+  const leftType = fallbackString(left.valueType, 'unknown')
+  const rightType = fallbackString(right.valueType, 'unknown')
+
+  if (leftType === 'null' || leftType === 'unknown') {
+    return rightType
   }
 
-  return fallbackString(left.valueType, 'unknown')
+  if (rightType === 'null' || rightType === 'unknown' || rightType === leftType) {
+    return leftType
+  }
+
+  return 'unknown'
 }
 
 function inferConditionalExpressionType(consequent: LowerExpressionNode, alternate: LowerExpressionNode): string {

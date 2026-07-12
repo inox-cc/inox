@@ -65,11 +65,6 @@ export {
   timerRuntimeMethodName
 } from '../../../stdlib/node/timers/compiler/checker.ts'
 export { isTimerHandleMethod } from '../../../stdlib/node/timers/compiler/descriptor.ts'
-export { urlRuntimeCallInfo, urlRuntimeConstructorImportInfo } from '../../../stdlib/node/url/compiler/checker.ts'
-export {
-  isUrlMutableObjectField,
-  isUrlSearchParamsRuntimeMethod
-} from '../../../stdlib/node/url/compiler/descriptor.ts'
 
 export type CryptoCheckerContext = PackageCryptoCheckerContext
 export type CryptoCheckerDiagnostic = PackageCryptoCheckerDiagnostic

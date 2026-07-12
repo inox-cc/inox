@@ -130,6 +130,7 @@ import type { StatementLoweringDependencies } from './values/statements.ts'
 import type { StringLoweringDependencies } from './values/strings.ts'
 
 type CModuleValueDeclaration = {
+  cppType?: string | null
   exported: boolean
   functionType?: CFunctionType | null
   name: string
@@ -463,7 +464,6 @@ export function emitCModuleSource(
       prelude.needsObjectRuntime,
       prelude.needsChildProcessRuntime,
       prelude.needsFsRuntime,
-      prelude.needsUrlRuntime,
       prelude.needsProcessRuntime,
       prelude.needsJsonRuntime,
       prelude.needsRegexpRuntime,
@@ -1509,16 +1509,12 @@ function registerCModuleValueDeclarations(context: CEmitContext, plan: CModulePl
 
   for (let index = 0; index < values.length; index = index + 1) {
     const item = cModuleValueDeclarationAt(values, index)
-    let valueType = item.valueType
-
-    if (item.shapeBuiltin === 'url.URL') {
-      valueType = 'url.URL'
-    } else if (item.shapeBuiltin === 'url.URLSearchParams') {
-      valueType = 'url.URLSearchParams'
-    }
-
     context.moduleValueNames.set(item.name, item.symbolName)
-    context.moduleValueTypes.set(item.name, valueType)
+    context.moduleValueTypes.set(item.name, item.valueType)
+
+    if (item.cppType !== null && typeof item.cppType !== 'undefined') {
+      context.moduleValueCppTypes.set(item.name, item.cppType)
+    }
   }
 }
 
@@ -1611,15 +1607,10 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
       context.regexpLiterals.set(item.name, item.init)
     }
 
-    let valueType = cModuleValueType(item, context)
-
-    const urlObjectValueType = cModuleUrlObjectValueType(item)
-
-    if (urlObjectValueType !== null) {
-      valueType = urlObjectValueType
-    }
+    const valueType = cModuleValueType(item, context)
 
     values.push({
+      cppType: cModuleValueLibraryCppType(item),
       exported: item.exported === true,
       functionType: cModuleValueFunctionType(item),
       name: item.name,
@@ -1630,6 +1621,17 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
   }
 
   return values
+}
+
+function cModuleValueLibraryCppType(node: AnyNode): string | null {
+  const shape = node.shape ?? node.init?.shape
+  const cppType = shape?.libraryCppType
+
+  if (cppType === null || typeof cppType === 'undefined') {
+    return null
+  }
+
+  return cppType
 }
 
 function collectCModuleStaticValueDeclarations(plan: CModulePlan, context: CEmitContext): CModuleValueDeclaration[] {
@@ -2014,15 +2016,10 @@ function emitCModuleObjectFunctionFieldDefinitions(
 function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   const valueType = node.valueType
   const timeValueType = cModuleTimeExpressionValueType(node.init)
-  const urlObjectValueType = cModuleUrlObjectValueType(node)
   const classValueType = cModuleNativeClassValueType(node, context)
 
   if (classValueType !== null && typeof classValueType !== 'undefined') {
     return classValueType
-  }
-
-  if (urlObjectValueType !== null && typeof urlObjectValueType !== 'undefined') {
-    return urlObjectValueType
   }
 
   if (
@@ -2059,54 +2056,6 @@ function cModuleValueType(node: AnyNode, context?: CEmitContext): string {
   }
 
   return valueType
-}
-
-function cModuleUrlObjectValueType(node: AnyNode): string | null {
-  if (node.shape !== null && typeof node.shape !== 'undefined' && node.shape.builtin === 'url.URL') {
-    return 'url.URL'
-  }
-
-  if (
-    node.shape !== null &&
-    typeof node.shape !== 'undefined' &&
-    node.shape.builtin === 'url.URLSearchParams'
-  ) {
-    return 'url.URLSearchParams'
-  }
-
-  const expression = node.init
-
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  if (expression.shape !== null && typeof expression.shape !== 'undefined' && expression.shape.builtin === 'url.URL') {
-    return 'url.URL'
-  }
-
-  if (
-    expression.shape !== null &&
-    typeof expression.shape !== 'undefined' &&
-    expression.shape.builtin === 'url.URLSearchParams'
-  ) {
-    return 'url.URLSearchParams'
-  }
-
-  if (
-    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
-    (expression.urlRuntimeMethod === 'URL' || expression.urlRuntimeMethod === 'pathToFileURL')
-  ) {
-    return 'url.URL'
-  }
-
-  if (
-    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
-    expression.urlRuntimeMethod === 'URLSearchParams'
-  ) {
-    return 'url.URLSearchParams'
-  }
-
-  return null
 }
 
 function cModuleValueShapeBuiltin(node: AnyNode): string | null {
@@ -2317,12 +2266,8 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
 }
 
 function cModuleValueDeclarationCType(item: CModuleValueDeclaration, context: CEmitContext): string {
-  if (item.shapeBuiltin === 'url.URL') {
-    return 'URL'
-  }
-
-  if (item.shapeBuiltin === 'url.URLSearchParams') {
-    return 'URLSearchParams'
+  if (item.cppType !== null && typeof item.cppType !== 'undefined') {
+    return item.cppType
   }
 
   return cModuleValueCType(item.valueType, context)
@@ -2339,8 +2284,6 @@ function cModuleValueGlobalInitializer(valueType: string): string {
 
   if (
     valueType === 'regexp' ||
-    valueType === 'url.URL' ||
-    valueType === 'url.URLSearchParams' ||
     valueType === 'crypto-hash' ||
     valueType === 'crypto-hmac'
   ) {
@@ -2355,11 +2298,7 @@ function cModuleValueGlobalInitializer(valueType: string): string {
 }
 
 function cModuleValueDeclarationGlobalInitializer(item: CModuleValueDeclaration): string {
-  if (item.shapeBuiltin === 'url.URL') {
-    return ''
-  }
-
-  if (item.shapeBuiltin === 'url.URLSearchParams') {
+  if (item.cppType !== null && typeof item.cppType !== 'undefined') {
     return ''
   }
 

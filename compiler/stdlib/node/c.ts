@@ -74,8 +74,6 @@ import {
   processRuntimeObjectReferenceEmitterDescriptors
 } from '../../../stdlib/node/process/compiler/c.ts'
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
-import type { UrlLoweringDependencies as PackageUrlLoweringDependencies } from '../../../stdlib/node/url/compiler/c.ts'
-import { cUrlRuntimeMethodName } from '../../../stdlib/node/url/compiler/c.ts'
 
 export {
   binaryRuntimeExpressionReturnType,
@@ -120,13 +118,6 @@ export {
   isTimerStartCallExpression,
   timerCallbackFunctionType
 } from '../../../stdlib/node/timers/compiler/c.ts'
-export {
-  emitPreparedUrlObjectExpression,
-  emitPreparedUrlSearchParamsCallExpression,
-  emitPreparedUrlSearchParamsObjectExpression,
-  emitPreparedUrlStringCallExpression,
-  emitUrlObjectFieldAssignment
-} from '../../../stdlib/node/url/compiler/c.ts'
 
 export type BinaryLoweringDependencies = PackageBinaryLoweringDependencies
 export type ChildProcessLoweringDependencies = PackageChildProcessLoweringDependencies
@@ -137,7 +128,6 @@ export type HttpLoweringDependencies = PackageHttpLoweringDependencies
 export type NetLoweringDependencies = PackageNetLoweringDependencies
 export type ProcessLoweringDependencies = PackageProcessLoweringDependencies
 export type TimerLoweringDependencies = PackageTimerLoweringDependencies
-export type UrlLoweringDependencies = PackageUrlLoweringDependencies
 
 export type NodeNetworkLoweringDependencies = {
   dgram: DgramLoweringDependencies
@@ -566,32 +556,6 @@ export function inferNodeStdlibExpressionType(expression: AnyNode): string | nul
 
   if (cProcessRuntimeEnvName(expression)) {
     return 'string'
-  }
-
-  const urlMethod = cUrlRuntimeMethodName(expression)
-
-  if (urlMethod !== null && typeof urlMethod !== 'undefined') {
-    if (
-      urlMethod === 'fileURLToPath' ||
-      urlMethod === 'URLSearchParams.get' ||
-      urlMethod === 'URLSearchParams.toString'
-    ) {
-      return 'string'
-    }
-
-    if (urlMethod === 'URLSearchParams.has') {
-      return 'boolean'
-    }
-
-    if (
-      urlMethod === 'URLSearchParams.append' ||
-      urlMethod === 'URLSearchParams.delete' ||
-      urlMethod === 'URLSearchParams.set'
-    ) {
-      return 'void'
-    }
-
-    return 'object'
   }
 
   if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression)) {

@@ -150,8 +150,7 @@ import type {
   NodeNetworkLoweringDependencies,
   NodeStdlibAsyncTaskLoweringDependencies,
   ProcessLoweringDependencies,
-  TimerLoweringDependencies,
-  UrlLoweringDependencies
+  TimerLoweringDependencies
 } from '../stdlib/node/c.ts'
 import {
   binaryRuntimeExpressionReturnType,
@@ -185,14 +184,9 @@ import {
   emitPreparedProcessStringExpression,
   emitPreparedProcessValueExpression,
   emitPreparedTimerCallExpression,
-  emitPreparedUrlObjectExpression,
-  emitPreparedUrlSearchParamsCallExpression,
-  emitPreparedUrlSearchParamsObjectExpression,
-  emitPreparedUrlStringCallExpression,
   emitProcessExitCodeAssignment,
   emitProcessExitStatement,
   emitTimerVariableDeclaration,
-  emitUrlObjectFieldAssignment,
   inferNodeStdlibExpressionType,
   inferNodeStdlibMemberExpressionType,
   isAsyncNodeStdlibRuntimeCallExpression,
@@ -543,7 +537,6 @@ let binaryLoweringDependencies = {} as BinaryLoweringDependencies
 let childProcessLoweringDependencies = {} as ChildProcessLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let processLoweringDependencies = {} as ProcessLoweringDependencies
-let urlLoweringDependencies = {} as UrlLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
 let cryptoLoweringDependencies = {} as CryptoLoweringDependencies
 let dgramLoweringDependencies = {} as DgramLoweringDependencies
@@ -675,13 +668,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUpdateExpression,
-  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies, options),
-  emitPreparedUrlSearchParamsObjectExpression: (
-    expression: AnyNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ) => emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies, options),
   emitProcessExitCodeAssignment: (expression: AnyNode, context: CFunctionContext) =>
     emitProcessExitCodeAssignment(expression, context, processLoweringDependencies),
   emitProcessExitStatement: (expression: AnyNode, context: CFunctionContext) =>
@@ -694,8 +680,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitScalarVariableDeclaration,
   emitStatement,
   emitStringExpression,
-  emitUrlObjectFieldAssignment: (expression: AnyNode, context: CFunctionContext) =>
-    emitUrlObjectFieldAssignment(expression, context, urlLoweringDependencies),
   inferCatchBindingValueType,
   inferExpressionType,
   isArrayMethodCall,
@@ -949,11 +933,6 @@ processLoweringDependencies = {
   registerObjectShape
 }
 
-urlLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedStringBytesOperand,
-  registerObjectShape
-}
 
 const rejectionValueTypeDependencies: RejectionValueTypeDependencies = {
   cFetchRuntimeExpressionMethod,
@@ -1316,8 +1295,6 @@ const cCallExpressionDependencies = {
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
-  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
   emitRuntimeCallbackCall,
   emitRuntimeCallbackValue,
   inferExpressionType,
@@ -1375,8 +1352,6 @@ const cScalarExpressionDependencies = {
   emitPreparedStringIndexCallExpression,
   emitPreparedStringLengthExpression,
   emitPreparedStringPredicateCall,
-  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
   emitReference,
   emitStringExpression,
   inferExpressionType,
@@ -1475,14 +1450,6 @@ const cValueExpressionDependencies = {
     emitPreparedProcessValueExpression(expression, context, processLoweringDependencies, null),
   emitPreparedRuntimeArrayIndexValue,
   emitPreparedRuntimeArrayIndexValueExpression,
-  emitPreparedUrlObjectExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedUrlObjectExpression(expression, context, urlLoweringDependencies),
-  emitPreparedUrlSearchParamsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedUrlSearchParamsCallExpression(expression, context, urlLoweringDependencies),
-  emitPreparedUrlSearchParamsObjectExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedUrlSearchParamsObjectExpression(expression, context, urlLoweringDependencies),
-  emitPreparedUrlStringCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedUrlStringCallExpression(expression, context, urlLoweringDependencies),
   inferExpressionType,
   isBoxedRuntimeValueName,
   isClassConstructorExpression,
@@ -1818,6 +1785,7 @@ function createBaseContext(
     jsGlobalRoots,
     mathRuntimeInitStatement: null,
     moduleValueNames: new Map(),
+    moduleValueCppTypes: new Map(),
     objectAccessorReturnPaths,
     moduleObjectShapes,
     moduleValueTypes: new Map(),
@@ -3256,6 +3224,22 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
   }
 
+  const libraryObject = emitPreparedCompilerLibraryCallExpression(statement.init, context)
+
+  if (libraryObject !== null && libraryObject.valueType === 'object') {
+    const lines: string[] = []
+    pushAll(lines, libraryObject.lines)
+    lines.push(`${name} = ${libraryObject.expression};`)
+    context.variables.set(statement.name, 'object')
+    context.moduleValueTypes.set(statement.name, 'object')
+
+    if (libraryObject.cppType !== null && typeof libraryObject.cppType !== 'undefined') {
+      context.cppValueTypes.set(statement.name, libraryObject.cppType)
+    }
+
+    return lines
+  }
+
   const moduleClassName = cClassNameFromValueType(moduleValueType)
 
   if (moduleClassName !== null && typeof moduleClassName !== 'undefined') {
@@ -3307,22 +3291,6 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
     context.moduleValueTypes.set(statement.name, inferred)
     return [`${name} = ${emitStringExpression(statement.init, context)};`]
-  }
-
-  if (moduleValueType === 'url.URLSearchParams') {
-    const value = emitPreparedUrlSearchParamsObjectExpression(statement.init, context, urlLoweringDependencies)
-
-    if (value !== null && typeof value !== 'undefined') {
-      const lines: string[] = []
-
-      context.variables.set(statement.name, moduleValueType)
-      context.moduleValueTypes.set(statement.name, moduleValueType)
-      context.objectDeclaredTypes.set(statement.name, moduleValueType)
-      pushAll(lines, value.lines)
-      lines.push(`${name} = ${value.expression};`)
-
-      return lines
-    }
   }
 
   if (inferred === 'promise') {
@@ -3653,9 +3621,7 @@ function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
     cppType === 'Set' ||
     cppType === 'Buffer' ||
     cppType === 'Uint8Array' ||
-    cppType === 'FsStats' ||
-    cppType === 'URL' ||
-    cppType === 'URLSearchParams'
+    cppType === 'FsStats'
   )
 }
 
@@ -3663,12 +3629,18 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
   const lines: string[] = []
   const shapes: CArrayElementInfo[] = []
   const elements: AnyNode[] = statement.init.elements
+  let hasSpread = false
 
   context.variables.set(statement.name, 'array')
   context.moduleValueTypes.set(statement.name, 'array')
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const element = elements[index] as AnyNode
+
+    if (element.type === 'SpreadElement') {
+      hasSpread = true
+      continue
+    }
 
     shapes.push({
       functionType: arrayDeclarationElementFunctionType(statement, element),
@@ -3685,14 +3657,34 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
     context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType)
   }
 
-  context.arrayLengths.set(statement.name, elements.length)
-  context.arrayShapes.set(statement.name, shapes)
+  if (hasSpread) {
+    context.runtimeArrayElementTypes.set(statement.name, statement.arrayElementType ?? 'unknown')
+  } else {
+    context.arrayLengths.set(statement.name, elements.length)
+    context.arrayShapes.set(statement.name, shapes)
+  }
+
   pushAll(lines, emitPrepareOwnedValueWrite(name))
-  lines.push(`${name} = ArrayClass::create(${elements.length}).release();`)
+  lines.push(`${name} = ArrayClass::create(${hasSpread ? 0 : elements.length}).release();`)
   pushAll(lines, emitThrownCheckLines(context))
 
   for (let index = 0; index < elements.length; index = index + 1) {
     const element = elements[index] as AnyNode
+
+    if (element.type === 'SpreadElement') {
+      const spread = emitCValueExpression(element.argument, context)
+      const spreadArray = nextCName(context, 'inox_spread_array')
+      const spreadIndex = nextCName(context, 'inox_spread_index')
+
+      pushAll(lines, spread.lines)
+      lines.push(`ArrayClass ${spreadArray}(${spread.expression});`)
+      lines.push(`for (size_t ${spreadIndex} = 0; ${spreadIndex} < ${spreadArray}.length(); ${spreadIndex} = ${spreadIndex} + 1) {`)
+      lines.push(`  ArrayClass(${name}).push(${spreadArray}.get(${spreadIndex}));`)
+      lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
+      lines.push('}')
+      continue
+    }
+
     let value = emitCValueExpression(element, context)
     const elementFunctionType = arrayDeclarationElementFunctionType(statement, element)
 
@@ -3704,7 +3696,11 @@ function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, cont
     }
 
     pushAll(lines, value.lines)
-    lines.push(`ArrayClass(${name}).set(${index}, ${value.expression});`)
+    if (hasSpread) {
+      lines.push(`ArrayClass(${name}).push(${value.expression});`)
+    } else {
+      lines.push(`ArrayClass(${name}).set(${index}, ${value.expression});`)
+    }
     pushAll(lines, emitThrownCheckLines(context))
   }
 
@@ -5107,6 +5103,15 @@ function emitNullableScalarValueExpression(expression: AnyNode, context: CFuncti
 
   const valueType = inferExpressionType(expression, context)
 
+  if (
+    valueType === 'unknown' &&
+    expression.type === 'Reference' &&
+    expression.path.length === 1 &&
+    expression.path[0] === 'undefined'
+  ) {
+    return emitCValueExpression(expression, context)
+  }
+
   if (valueType === 'string') {
     return emitCValueExpression(expression, context)
   }
@@ -5424,15 +5429,38 @@ function emitNullableFunctionValueExpression(
 function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctionContext): PreparedExpression {
   const temp = nextCName(context, 'inox_array')
   const lines: string[] = []
+  let hasSpread = false
+
+  for (let index = 0; index < expression.elements.length; index = index + 1) {
+    if (expression.elements[index].type === 'SpreadElement') {
+      hasSpread = true
+      break
+    }
+  }
 
   registerOwnedValue(context, temp)
 
   pushAll(lines, emitPrepareOwnedValueWrite(temp))
-  lines.push(`${temp} = ArrayClass::create(${expression.elements.length});`)
+  lines.push(`${temp} = ArrayClass::create(${hasSpread ? 0 : expression.elements.length});`)
   pushAll(lines, emitThrownCheckLines(context))
 
   for (let index = 0; index < expression.elements.length; index++) {
     const element = expression.elements[index]
+
+    if (element.type === 'SpreadElement') {
+      const spread = emitCValueExpression(element.argument, context)
+      const spreadArray = nextCName(context, 'inox_spread_array')
+      const spreadIndex = nextCName(context, 'inox_spread_index')
+
+      pushAll(lines, spread.lines)
+      lines.push(`ArrayClass ${spreadArray}(${spread.expression});`)
+      lines.push(`for (size_t ${spreadIndex} = 0; ${spreadIndex} < ${spreadArray}.length(); ${spreadIndex} = ${spreadIndex} + 1) {`)
+      lines.push(`  ArrayClass(${temp}).push(${spreadArray}.get(${spreadIndex}));`)
+      lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
+      lines.push('}')
+      continue
+    }
+
     let value = emitCValueExpression(element, context)
     const elementFunctionType = arrayLiteralElementFunctionType(expression, element)
 
@@ -5444,7 +5472,11 @@ function emitCArrayLiteralValueExpression(expression: AnyNode, context: CFunctio
     }
 
     pushAll(lines, value.lines)
-    lines.push(`ArrayClass(${temp}).set(${index}, ${value.expression});`)
+    if (hasSpread) {
+      lines.push(`ArrayClass(${temp}).push(${value.expression});`)
+    } else {
+      lines.push(`ArrayClass(${temp}).set(${index}, ${value.expression});`)
+    }
     pushAll(lines, emitThrownCheckLines(context))
   }
 
@@ -5938,7 +5970,8 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
   const left = emitCValueExpression(expression.left, context)
   const right = emitCValueExpression(expression.right, context)
   const temp = nextCName(context, 'inox_value')
-  const expectedTag = cRuntimeValueTag(inferExpressionType(expression, context))
+  const resultType = inferExpressionType(expression, context)
+  const expectedTag = cRuntimeValueTag(resultType)
   const lines: string[] = []
   registerOwnedValue(context, temp)
 
@@ -5957,7 +5990,9 @@ function emitCNullishCoalescingValueExpression(expression: AnyNode, context: CFu
 
   return {
     lines,
-    expression: temp
+    expression: temp,
+    nullable: expression.nullable === true,
+    valueType: resultType
   }
 }
 
@@ -6142,6 +6177,18 @@ function isDirectRuntimeConsoleValueExpression(
 ): boolean {
   if (valueType === 'boolean' || valueType === 'number' || valueType === 'string') {
     return false
+  }
+
+  if (
+    valueType === 'unknown' &&
+    ((expression.type === 'BinaryExpression' && expression.operator === '??') ||
+      (expression.type === 'Reference' &&
+        expression.path.length === 1 &&
+        expression.path[0] === 'undefined' &&
+        !context.variables.has('undefined') &&
+        !context.moduleValueNames.has('undefined')))
+  ) {
+    return true
   }
 
   const nativeClassInstance = emitPreparedNativeClassInstanceExpression(expression, context)
@@ -6546,18 +6593,13 @@ function emitRuntimeObjectMemberLogValue(expression: AnyNode, context: CFunction
 }
 
 function emitRuntimeStringCallLogValue(expression: AnyNode, context: CFunctionContext): ConsoleLogValue | null {
-  if (expression.type !== 'CallExpression') {
+  if (
+    expression.type !== 'CallExpression' ||
+    expression.libraryOperationId === null ||
+    typeof expression.libraryOperationId === 'undefined' ||
+    expression.valueType !== 'string'
+  ) {
     return null
-  }
-
-  const method = consoleRuntimeStringCallMethod(expression)
-
-  if (method === null || typeof method === 'undefined') {
-    return null
-  }
-
-  if (expression.urlRuntimeMethod === null || typeof expression.urlRuntimeMethod === 'undefined') {
-    expression.urlRuntimeMethod = method
   }
 
   const value = emitCValueExpression(expression, context)
@@ -6567,46 +6609,6 @@ function emitRuntimeStringCallLogValue(expression: AnyNode, context: CFunctionCo
   }
 
   return emitPreparedStringLogValue(value, context)
-}
-
-function consoleRuntimeStringCallMethod(expression: AnyNode): string | null {
-  const method = expression.urlRuntimeMethod
-
-  if (method === 'fileURLToPath') {
-    return method
-  }
-
-  if (method === 'URLSearchParams.get') {
-    return method
-  }
-
-  if (method === 'URLSearchParams.toString') {
-    return method
-  }
-
-  if (expression.callee.type !== 'MemberExpression') {
-    return null
-  }
-
-  const receiver = expression.callee.object
-
-  if (
-    receiver.shape === null ||
-    typeof receiver.shape === 'undefined' ||
-    receiver.shape.builtin !== 'url.URLSearchParams'
-  ) {
-    return null
-  }
-
-  if (expression.callee.property === 'get') {
-    return 'URLSearchParams.get'
-  }
-
-  if (expression.callee.property === 'toString') {
-    return 'URLSearchParams.toString'
-  }
-
-  return null
 }
 
 function emitPreparedStringLogValue(value: PreparedExpression, context: CFunctionContext): ConsoleLogValue {

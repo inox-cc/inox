@@ -153,27 +153,19 @@ export function resolveExpressionArrayElementType(
     return null
   }
 
-  if (expression.type === 'ArrayLiteral') {
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      return expression.arrayElementType
-    }
+  if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
+    return expression.arrayElementType
+  }
 
+  if (expression.type === 'ArrayLiteral') {
     return null
   }
 
   if (expression.type === 'CallExpression') {
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      return expression.arrayElementType
-    }
-
     return null
   }
 
   if (expression.type === 'AwaitExpression') {
-    if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
-      return expression.arrayElementType
-    }
-
     return null
   }
 
@@ -244,11 +236,11 @@ export function resolveExpressionArrayElementDeclaredType(
     return null
   }
 
-  if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
-    if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
-      return expression.arrayElementDeclaredType
-    }
+  if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
+    return expression.arrayElementDeclaredType
+  }
 
+  if (expression.type === 'ArrayLiteral' || expression.type === 'CallExpression') {
     if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
       return expression.arrayElementType
     }
@@ -257,10 +249,6 @@ export function resolveExpressionArrayElementDeclaredType(
   }
 
   if (expression.type === 'AwaitExpression') {
-    if (expression.arrayElementDeclaredType !== null && typeof expression.arrayElementDeclaredType !== 'undefined') {
-      return expression.arrayElementDeclaredType
-    }
-
     if (expression.arrayElementType !== null && typeof expression.arrayElementType !== 'undefined') {
       return expression.arrayElementType
     }

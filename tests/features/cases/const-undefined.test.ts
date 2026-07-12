@@ -1,5 +1,6 @@
 // @targets cc
-// @expect diagnostics INOX_UNKNOWN_NAME
+// @expect pass
+// @stdout undefined
 
 const value = undefined
 console.log(value)

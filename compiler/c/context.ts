@@ -180,6 +180,7 @@ export type CEmitContext = {
   jsGlobalRoots: CStringSet
   mathRuntimeInitStatement: string | null
   moduleValueNames: CStringMap
+  moduleValueCppTypes: CStringMap
   objectAccessorReturnPaths: CObjectAccessorReturnPathMap
   moduleObjectShapes: CObjectShapeFieldMap
   moduleValueTypes: CStringMap
@@ -423,6 +424,7 @@ export function createFunctionContext(
     jsGlobalRoots: baseContext.jsGlobalRoots,
     mathRuntimeInitStatement: baseContext.mathRuntimeInitStatement,
     moduleValueNames: baseContext.moduleValueNames,
+    moduleValueCppTypes: baseContext.moduleValueCppTypes,
     objectAccessorReturnPaths: baseContext.objectAccessorReturnPaths,
     moduleObjectShapes: baseContext.moduleObjectShapes,
     moduleValueTypes: baseContext.moduleValueTypes,
@@ -455,7 +457,7 @@ export function createFunctionContext(
     cppMapValues: new Set(),
     cppSetValues: new Set(),
     cppStringValues: new Set(),
-    cppValueTypes: new Map(),
+    cppValueTypes: cloneCStringMap(baseContext.moduleValueCppTypes),
     continueFlowUsed: false,
     continueTargets: [],
     cleanupEnabled: true,

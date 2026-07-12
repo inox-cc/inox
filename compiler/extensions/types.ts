@@ -1,6 +1,7 @@
 export type LibraryId = string
 export type LibraryBindingId = string
 export type LibraryOperationId = string
+export type LibraryObjectTypeId = string
 export type RuntimeRequirementId = string
 export type PlatformCapabilityId = string
 
@@ -23,8 +24,10 @@ export type LibraryOperationKind =
   | 'index-write'
 
 export type LibraryCArgumentKind =
+  | 'receiver'
   | 'string-view'
   | 'optional-string-view'
+  | 'optional-value'
   | 'argument-presence'
   | 'value'
   | 'variadic-string-view-array'
@@ -37,6 +40,12 @@ export type LibraryResultShapeFieldDescriptor = {
   readonly: boolean
 }
 
+export type LibraryArgumentCheckDescriptor = {
+  valueTypes: string[]
+  objectTypeIds?: LibraryObjectTypeId[]
+  objectFieldValueType?: string | null
+}
+
 export type LibraryOperationDescriptor = {
   libraryId: LibraryId
   bindingId: LibraryBindingId
@@ -47,8 +56,16 @@ export type LibraryOperationDescriptor = {
   cExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
+  receiverTypeId?: LibraryObjectTypeId | null
+  resultTypeId?: LibraryObjectTypeId | null
+  cCallStyle?: 'function' | 'member' | null
+  cFailureMode?: 'thrown' | 'invalid-result' | null
+  minArgs?: number | null
+  maxArgs?: number | null
+  argumentChecks?: LibraryArgumentCheckDescriptor[]
   cppType?: string | null
   valueType?: string | null
+  nullable?: boolean
   owned?: boolean
   constantValue?: string | null
   diagnosticCode?: string | null

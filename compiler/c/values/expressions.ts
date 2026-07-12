@@ -231,12 +231,6 @@ type NullableScalarNarrowingSnapshot = {
   narrowedNullableScalars: CStringSet
 }
 
-type PreparedUrlSearchParamsExpression = {
-  lines: string[]
-  expression: string
-  valueType?: string
-}
-
 type TypeofOperandStorage = 'runtime-value' | 'raw-string' | 'raw-number' | 'raw-boolean' | 'raw-pointer'
 
 type PreparedTypeofOperand = {
@@ -1887,10 +1881,6 @@ export type CScalarExpressionDependencies = {
   emitPreparedStringIndexCallExpression(expression: any, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedStringPredicateCall(expression: CValueNode, context: CFunctionContext): PreparedExpression
-  emitPreparedUrlSearchParamsCallExpression(
-    expression: CValueNode,
-    context: CFunctionContext
-  ): PreparedUrlSearchParamsExpression | null
   emitReference(expression: CValueNode, context: CFunctionContext): string
   emitStringExpression(expression: CValueNode, context: CFunctionContext): string
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
@@ -1973,10 +1963,6 @@ export type CCallExpressionDependencies = {
     expression: CValueNode,
     context: CFunctionContext,
     options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression(
-    expression: CValueNode,
-    context: CFunctionContext
   ): PreparedExpression | null
   emitRuntimeCallbackCall(
     expression: CValueNode,
@@ -2125,12 +2111,6 @@ export function emitPreparedCallExpression(
 
   if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined') {
     return fetchHeadersCall
-  }
-
-  const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
-
-  if (urlSearchParamsCall !== null && typeof urlSearchParamsCall !== 'undefined') {
-    return urlSearchParamsCall
   }
 
   const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
@@ -2806,16 +2786,6 @@ export function emitPreparedNumberExpression(
 
   if (arrayIsArrayCall !== null && typeof arrayIsArrayCall !== 'undefined') {
     return arrayIsArrayCall
-  }
-
-  const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
-
-  if (
-    urlSearchParamsCall !== null &&
-    typeof urlSearchParamsCall !== 'undefined' &&
-    urlSearchParamsCall.valueType === 'boolean'
-  ) {
-    return urlSearchParamsCall
   }
 
   const processNumber = deps.emitPreparedProcessNumberExpression(expression)
@@ -5151,16 +5121,6 @@ export type CValueExpressionDependencies = {
     context: CFunctionContext,
     tempPrefix: string
   ): PreparedExpression
-  emitPreparedUrlObjectExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedUrlSearchParamsCallExpression(
-    expression: CValueNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression(
-    expression: CValueNode,
-    context: CFunctionContext
-  ): PreparedExpression | null
-  emitPreparedUrlStringCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   inferExpressionType(expression: CValueNode, context: CFunctionContext): string
   isBoxedRuntimeValueName(name: string, context: CFunctionContext): boolean
   isClassConstructorExpression(expression: CValueNode, context: CFunctionContext): boolean
@@ -5227,24 +5187,6 @@ export function emitCValueExpression(
     return processValue
   }
 
-  const urlStringCall = deps.emitPreparedUrlStringCallExpression(expression, context)
-
-  if (urlStringCall !== null && typeof urlStringCall !== 'undefined') {
-    return urlStringCall
-  }
-
-  const urlObject = deps.emitPreparedUrlObjectExpression(expression, context)
-
-  if (urlObject !== null && typeof urlObject !== 'undefined') {
-    return urlObject
-  }
-
-  const urlSearchParamsObject = deps.emitPreparedUrlSearchParamsObjectExpression(expression, context)
-
-  if (urlSearchParamsObject !== null && typeof urlSearchParamsObject !== 'undefined') {
-    return urlSearchParamsObject
-  }
-
   const fsSyncValue = deps.emitPreparedFsSyncValueExpression(expression, context)
 
   if (fsSyncValue !== null && typeof fsSyncValue !== 'undefined') {
@@ -5255,12 +5197,6 @@ export function emitCValueExpression(
 
   if (fetchHeadersCall !== null && typeof fetchHeadersCall !== 'undefined') {
     return fetchHeadersCall
-  }
-
-  const urlSearchParamsCall = deps.emitPreparedUrlSearchParamsCallExpression(expression, context)
-
-  if (urlSearchParamsCall !== null && typeof urlSearchParamsCall !== 'undefined') {
-    return urlSearchParamsCall
   }
 
   const jsonCall = deps.emitPreparedJsonCallExpression(expression, context)
@@ -5453,6 +5389,20 @@ export function emitCValueExpression(
     let valueType = context.variables.get(name) ?? ''
     let moduleValueName = ''
 
+    if (
+      expression.path.length === 1 &&
+      expression.path[0] === 'undefined' &&
+      !context.localValueNames.has(name) &&
+      !context.moduleValueNames.has(name)
+    ) {
+      return {
+        lines: [],
+        expression: 'inox_undefined_value()',
+        nullable: true,
+        valueType: 'unknown'
+      }
+    }
+
     if (!(expression.path.length === 1 && context.localValueNames.has(name))) {
       const resolvedModuleValueName = context.moduleValueNames.get(name)
 
@@ -5477,21 +5427,13 @@ export function emitCValueExpression(
       }
 
       const moduleValueType = context.moduleValueTypes.get(name)
+      const moduleCppType = context.cppValueTypes.get(name)
 
-      if (moduleValueType === 'url.URL') {
+      if (moduleCppType !== null && typeof moduleCppType !== 'undefined') {
         return {
           lines: [],
           expression: moduleValueName,
-          cppType: 'URL',
-          valueType: 'object'
-        }
-      }
-
-      if (moduleValueType === 'url.URLSearchParams') {
-        return {
-          lines: [],
-          expression: moduleValueName,
-          cppType: 'URLSearchParams',
+          cppType: moduleCppType,
           valueType: 'object'
         }
       }
@@ -5590,24 +5532,6 @@ export function emitCValueExpression(
         cppType: 'inox::String',
         runtimeTypeChecked: true,
         valueType: 'string'
-      }
-    }
-
-    if (valueType === 'url.URL') {
-      return {
-        lines: [],
-        expression: reference,
-        cppType: 'URL',
-        valueType: 'object'
-      }
-    }
-
-    if (valueType === 'url.URLSearchParams') {
-      return {
-        lines: [],
-        expression: reference,
-        cppType: 'URLSearchParams',
-        valueType: 'object'
       }
     }
 

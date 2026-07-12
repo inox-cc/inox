@@ -1375,7 +1375,11 @@ class Parser {
       return false
     }
 
-    return this.current().value === 'type' || this.current().value === 'from'
+    return (
+      this.current().value === 'type' ||
+      this.current().value === 'from' ||
+      this.current().value === 'readonly'
+    )
   }
 
   parseNullish(): AnyNode {
@@ -1669,7 +1673,21 @@ class Parser {
     const elements: AnyNode[] = []
 
     while (!this.isValue(']') && !this.is('eof')) {
-      elements.push(this.parseExpression())
+      let spread: Token | null = null
+
+      if (this.isValue('...')) {
+        spread = this.advance()
+      }
+
+      if (spread !== null && typeof spread !== 'undefined') {
+        elements.push({
+          type: 'SpreadElement',
+          argument: this.parseExpression(),
+          loc: locFromToken(spread)
+        })
+      } else {
+        elements.push(this.parseExpression())
+      }
 
       if (!this.matchValue(',')) {
         break

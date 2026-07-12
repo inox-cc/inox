@@ -184,6 +184,7 @@ type CFunctionContext = {
   mapTypes: Map<string, CFunctionReturnMapType>
   moduleObjectShapes: Map<string, CObjectShapeField[]>
   moduleValueDeclarationScope: boolean
+  moduleValueCppTypes: CStringMap
   moduleValueNames: CStringMap
   moduleValueTypes: CStringMap
   netConnectNames: CStringSet
@@ -508,16 +509,6 @@ export type StatementLoweringDependencies = {
     options?: PreparedCallOptions
   ): PreparedExpression | null
   emitPreparedUpdateExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
-  emitPreparedUrlObjectExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedUrlSearchParamsObjectExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
   emitProcessExitCodeAssignment(expression: StatementNode, context: CFunctionContext): string[] | null
   emitProcessExitStatement(expression: StatementNode, context: CFunctionContext): string[] | null
   emitPromiseConstructorSettlementCall(expression: StatementNode, context: CFunctionContext): string[] | null
@@ -527,7 +518,6 @@ export type StatementLoweringDependencies = {
   emitScalarVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
   emitStatement(statement: StatementNode, context: CFunctionContext): string[]
   emitStringExpression(expression: StatementNode, context: CFunctionContext): string
-  emitUrlObjectFieldAssignment(expression: StatementNode, context: CFunctionContext): string[] | null
   inferCatchBindingValueType(statement: StatementNode, context: CFunctionContext): string
   inferExpressionType(expression: StatementNode, context: CFunctionContext): string
   isArrayMethodCall(expression: StatementNode): boolean
@@ -4138,24 +4128,8 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     preparedCallOut(statement.name)
   )
 
-  if (libraryObject !== null && libraryObject.cppType === 'inox::Value') {
+  if (libraryObject !== null && libraryObject.valueType === 'object') {
     return libraryObject.lines
-  }
-
-  const urlObject = deps.emitPreparedUrlObjectExpression(statement.init, context, preparedCallOut(statement.name))
-
-  if (urlObject !== null && typeof urlObject !== 'undefined') {
-    return urlObject.lines
-  }
-
-  const urlSearchParamsObject = deps.emitPreparedUrlSearchParamsObjectExpression(
-    statement.init,
-    context,
-    preparedCallOut(statement.name)
-  )
-
-  if (urlSearchParamsObject !== null && typeof urlSearchParamsObject !== 'undefined') {
-    return urlSearchParamsObject.lines
   }
 
   const asyncPromiseCall = deps.emitPreparedAsyncFunctionPromiseCallExpression(
@@ -4943,10 +4917,10 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
       return mapIndexAssignment.lines
     }
 
-    const urlFieldAssignment = deps.emitUrlObjectFieldAssignment(expression, context)
+    const libraryAssignment = deps.emitPreparedCompilerLibraryCallExpression(expression, context)
 
-    if (urlFieldAssignment !== null && typeof urlFieldAssignment !== 'undefined') {
-      return urlFieldAssignment
+    if (libraryAssignment !== null) {
+      return libraryAssignment.lines
     }
 
     const nativeClassFieldAssignment = emitNativeClassFieldAssignment(expression, context)
@@ -5380,9 +5354,7 @@ function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
     cppType === 'Set' ||
     cppType === 'Buffer' ||
     cppType === 'Uint8Array' ||
-    cppType === 'FsStats' ||
-    cppType === 'URL' ||
-    cppType === 'URLSearchParams'
+    cppType === 'FsStats'
   )
 }
 

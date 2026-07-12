@@ -1,5 +1,6 @@
 // @targets cc
-// @expect diagnostics INOX_C_NUMBER_EXPR
+// @expect pass
+// @stdout none
 
 const values: number[] = []
 const value = values.pop()

@@ -16,8 +16,6 @@ import {
   isFsRuntimeRootSymbol,
   isTimerHandleMethod,
   isTimerRuntimeImportSymbol,
-  isUrlMutableObjectField,
-  isUrlSearchParamsRuntimeMethod,
   nodeStdlibRuntimeObjectInfo,
   processRuntimeAssignmentProperty,
   processRuntimeCallInfo,
@@ -30,9 +28,7 @@ import {
   timerRuntimeMethodName,
   unsupportedBufferRuntimeExport,
   unsupportedEventsRuntimeExport,
-  unsupportedStreamRuntimeExport,
-  urlRuntimeCallInfo,
-  urlRuntimeConstructorImportInfo
+  unsupportedStreamRuntimeExport
 } from './stdlib/node/checker.ts'
 import type {
   CryptoCheckerContext,
@@ -57,9 +53,7 @@ import {
   errorObjectShape,
   fetchAbortControllerObjectShape,
   fsDirentObjectShape,
-  libuvOnlyRuntimeImportFeature,
-  urlObjectShape,
-  urlSearchParamsObjectShape
+  libuvOnlyRuntimeImportFeature
 } from './checker/builtins.ts'
 import {
   fetchAbortControllerConstructorName,
@@ -96,6 +90,7 @@ import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
   compilerLibraryHasModuleDeclaration,
   compilerLibraryOperationForImport,
+  compilerLibraryOperationForReceiver,
   resolveCompilerLibrarySet
 } from './extensions/library-set.ts'
 import type {
@@ -188,11 +183,7 @@ import type {
   CheckedCallArgInfo,
   GlobalCallCheckerContext
 } from './checker/global-calls.ts'
-import {
-  checkProcessCall as checkProcessCallInContext,
-  checkUrlCall as checkUrlCallInContext,
-  checkUrlSearchParamsMethodCall as checkUrlSearchParamsMethodCallInContext
-} from './checker/node-runtime-calls.ts'
+import { checkProcessCall as checkProcessCallInContext } from './checker/node-runtime-calls.ts'
 import type { NodeRuntimeCallCheckerContext } from './checker/node-runtime-calls.ts'
 import {
   checkDateConstructorExpression as checkDateConstructorExpressionInContext,
@@ -540,6 +531,12 @@ class Checker {
           }
 
           this.applyImportSpecifierValueMetadata(symbol, specifier)
+
+          if (specifier.constructable === true) {
+            symbol.constructable = true
+            symbol.className = specifier.className ?? null
+            symbol.constructorParams = this.resolveImportedParams(specifier.constructorParams ?? [])
+          }
 
           if (specifier.returnType !== null && typeof specifier.returnType !== 'undefined') {
             symbol.valueType = 'function'
@@ -1632,8 +1629,10 @@ class Checker {
     }
 
     if (expression.type === 'Reference') {
-      const symbol = this.resolveReference(expression)
       const path: string[] = expression.path
+      const isUndefinedValue =
+        path.length === 1 && path[0] === 'undefined' && !this.scope.resolve('undefined')
+      const symbol = isUndefinedValue ? null : this.resolveReference(expression)
       let valueType: ValueType = 'unknown'
 
       expression.nullable = false
@@ -1649,6 +1648,11 @@ class Checker {
       expression.functionType = null
       expression.shape = null
       expression.className = null
+
+      if (isUndefinedValue) {
+        expression.nullable = true
+        return valueType
+      }
 
       if (symbol !== null && typeof symbol !== 'undefined') {
         valueType = symbol.valueType
@@ -1945,7 +1949,15 @@ class Checker {
       for (let index = 0; index < expression.elements.length; index = index + 1) {
         const element = checkerNodeAt(expression.elements, index)
 
-        elementTypes.push(this.checkExpression(element))
+        if (element.type === 'SpreadElement') {
+          const argumentType = this.checkExpression(element.argument)
+          this.checkAssignableType(argumentType, 'array', element.argument.loc, false, false)
+          element.valueType = 'array'
+          element.arrayElementType = this.resolveExpressionArrayElementType(element.argument)
+          elementTypes.push(element.arrayElementType ?? 'unknown')
+        } else {
+          elementTypes.push(this.checkExpression(element))
+        }
       }
 
       expression.arrayElementType = commonArrayElementType(elementTypes)
@@ -2502,6 +2514,11 @@ class Checker {
     const targetType = this.checkExpression(expression.target.object)
     const shape = this.resolveExpressionShape(expression.target.object)
     const valueType = this.checkExpression(expression.value)
+    const libraryOperation = this.compilerLibraryReceiverOperation(
+      expression.target.object,
+      expression.target.property,
+      'member-write'
+    )
 
     if (this.reportUnsupportedClassPrototypeAccess(expression.target, false)) {
       return valueType
@@ -2531,21 +2548,6 @@ class Checker {
 
     if (shape === null || typeof shape === 'undefined') {
       return valueType
-    }
-
-    if (shape.builtin === 'url.URL') {
-      if (isUrlMutableObjectField(expression.target.property)) {
-        this.checkAssignableType(
-          valueType,
-          'string',
-          expression.value.loc,
-          false,
-          this.expressionCanBeNull(expression.value)
-        )
-        expression.urlRuntimeMethod = 'URL.setField'
-        expression.urlRuntimeField = expression.target.property
-        return valueType
-      }
     }
 
     const field = this.findShapeField(shape, expression.target.property)
@@ -2661,6 +2663,10 @@ class Checker {
         false,
         false
       )
+    }
+
+    if (libraryOperation !== null) {
+      this.applyCompilerLibraryOperation(expression, libraryOperation)
     }
 
     return valueType
@@ -3435,12 +3441,6 @@ class Checker {
       return fetchHeadersMethodType
     }
 
-    const urlSearchParamsMethodType = this.checkUrlSearchParamsMethodCall(expression)
-
-    if (urlSearchParamsMethodType !== null && typeof urlSearchParamsMethodType !== 'undefined') {
-      return urlSearchParamsMethodType
-    }
-
     const cryptoHashMethodType = this.checkCryptoHashMethodCall(expression)
 
     if (cryptoHashMethodType !== null && typeof cryptoHashMethodType !== 'undefined') {
@@ -3481,12 +3481,6 @@ class Checker {
 
     if (processType !== null && typeof processType !== 'undefined') {
       return processType
-    }
-
-    const urlType = this.checkUrlCall(expression)
-
-    if (urlType !== null && typeof urlType !== 'undefined') {
-      return urlType
     }
 
     const debugMemoryType = this.checkDebugMemoryCall(expression)
@@ -4084,7 +4078,18 @@ class Checker {
   }
 
   checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
-    const operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
+    let operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
+    let receiverOperation = false
+
+    if (operation === null && expression.callee.type === 'MemberExpression') {
+      this.checkExpression(expression.callee.object)
+      operation = this.compilerLibraryReceiverOperation(
+        expression.callee.object,
+        expression.callee.property,
+        'call'
+      )
+      receiverOperation = operation !== null
+    }
 
     if (operation === null) {
       return null
@@ -4107,11 +4112,105 @@ class Checker {
       return 'unknown'
     }
 
+    this.checkCompilerLibraryOperationArguments(expression, operation)
+
+    if (receiverOperation) {
+      this.checkedCallArgInfos(expression)
+      return (operation.valueType ?? 'unknown') as ValueType
+    }
+
     return null
   }
 
+  checkCompilerLibraryOperationArguments(expression: AnyNode, operation: LibraryOperationDescriptor): void {
+    const minArgs = operation.minArgs
+    const maxArgs = operation.maxArgs
+
+    if (
+      (minArgs !== null && typeof minArgs !== 'undefined' && expression.args.length < minArgs) ||
+      (maxArgs !== null && typeof maxArgs !== 'undefined' && expression.args.length > maxArgs)
+    ) {
+      this.report(
+        'INOX_ARG_COUNT',
+        `library operation ${operation.operationId} expects ${minArgs ?? 0} to ${maxArgs ?? 'many'} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+
+    const checks = operation.argumentChecks ?? []
+    const argInfos = this.checkedCallArgInfos(expression)
+
+    for (let index = 0; index < checks.length && index < argInfos.length; index = index + 1) {
+      const check = checks[index]
+      const info = argInfos[index]
+
+      if (!check.valueTypes.includes(info.valueType)) {
+        this.report(
+          'INOX_TYPE_MISMATCH',
+          `library operation ${operation.operationId} does not accept ${info.valueType}`,
+          info.loc
+        )
+        continue
+      }
+
+      if (info.valueType !== 'object') {
+        continue
+      }
+
+      const objectTypeIds = check.objectTypeIds ?? []
+
+      if (objectTypeIds.length > 0) {
+        const objectTypeId = info.shape?.libraryTypeId
+
+        if (objectTypeId === null || typeof objectTypeId === 'undefined' || !objectTypeIds.includes(objectTypeId)) {
+          this.report(
+            'INOX_TYPE_MISMATCH',
+            `library operation ${operation.operationId} does not accept this object type`,
+            info.loc
+          )
+        }
+      }
+
+      const fieldValueType = check.objectFieldValueType
+
+      if (
+        fieldValueType !== null &&
+        typeof fieldValueType !== 'undefined'
+      ) {
+        const argument = expression.args[index]
+
+        if (argument.type === 'ObjectLiteral') {
+          const properties: CheckerObjectPropertyNode[] = argument.properties
+
+          for (let fieldIndex = 0; fieldIndex < properties.length; fieldIndex = fieldIndex + 1) {
+            const property = properties[fieldIndex]
+            const actual = this.checkExpression(property.value)
+            this.checkAssignableType(
+              actual,
+              fieldValueType,
+              property.value.loc,
+              false,
+              this.expressionCanBeNull(property.value)
+            )
+          }
+        } else if (info.shape !== null && typeof info.shape !== 'undefined') {
+          for (let fieldIndex = 0; fieldIndex < info.shape.fields.length; fieldIndex = fieldIndex + 1) {
+            const field = info.shape.fields[fieldIndex]
+            const resolved = this.resolveFieldDeclaredType(field)
+            this.checkAssignableType(resolved.valueType, fieldValueType, info.loc, false, resolved.nullable)
+          }
+        }
+      }
+    }
+  }
+
   applyCompilerLibraryMemberOperation(expression: AnyNode): ValueType | null {
-    const operation = this.compilerLibraryOperationForExpression(expression, 'member-read')
+    let operation = this.compilerLibraryOperationForExpression(expression, 'member-read')
+
+    if (operation === null && expression.type === 'MemberExpression') {
+      this.checkExpression(expression.object)
+      operation = this.compilerLibraryReceiverOperation(expression.object, expression.property, 'member-read')
+    }
 
     if (operation !== null) {
       this.applyCompilerLibraryOperation(expression, operation)
@@ -4138,6 +4237,25 @@ class Checker {
     }
 
     return null
+  }
+
+  compilerLibraryReceiverOperation(
+    receiver: AnyNode,
+    memberName: string,
+    kind: LibraryOperationKind
+  ): LibraryOperationDescriptor | null {
+    const shape = this.resolveExpressionShape(receiver)
+
+    if (shape === null || typeof shape === 'undefined') {
+      return null
+    }
+
+    return compilerLibraryOperationForReceiver(
+      resolveCompilerLibrarySet(this.options.libraries),
+      shape.libraryTypeId,
+      memberName,
+      kind
+    )
   }
 
   compilerLibraryOperationForExpression(
@@ -4203,25 +4321,34 @@ class Checker {
     }
 
     const resultShapeFields = operation.resultShapeFields
+    const resultTypeId = operation.resultTypeId
 
-    if (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') {
+    if (
+      (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') ||
+      (resultTypeId !== null && typeof resultTypeId !== 'undefined')
+    ) {
       const shapeFields: AnyNode[] = []
       const cResultShapeFields: string[] = []
 
-      for (let index = 0; index < resultShapeFields.length; index = index + 1) {
-        const field = resultShapeFields[index]
+      const fields = resultShapeFields ?? []
+
+      for (let index = 0; index < fields.length; index = index + 1) {
+        const field = fields[index]
 
         shapeFields.push({
           name: field.name,
           valueType: field.valueType,
-          readonly: field.readonly
+          readonly: field.readonly,
+          loc: expression.loc
         })
         cResultShapeFields.push(field.name)
       }
 
       expression.shape = {
         kind: 'object',
-        fields: shapeFields
+        fields: shapeFields,
+        libraryTypeId: resultTypeId ?? null,
+        libraryCppType: operation.cppType ?? null
       }
       expression.libraryCResultShapeFields = cResultShapeFields
     }
@@ -4234,6 +4361,11 @@ class Checker {
 
     expression.libraryOwned = operation.owned === true
     expression.libraryConstantValue = operation.constantValue ?? null
+    expression.libraryReceiverTypeId = operation.receiverTypeId ?? null
+    expression.libraryResultTypeId = operation.resultTypeId ?? null
+    expression.libraryCCallStyle = operation.cCallStyle ?? null
+    expression.libraryCFailureMode = operation.cFailureMode ?? null
+    expression.nullable = operation.nullable === true
   }
 
   checkProcessCall(expression: AnyNode): ValueType | null {
@@ -4317,46 +4449,6 @@ class Checker {
     expression.valueType = 'string'
 
     return 'string'
-  }
-
-  checkUrlCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const call = urlRuntimeCallInfo(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'url'),
-      this.resolveStdlibModuleObjectMemberName(path, 'url')
-    )
-
-    if (call === null || typeof call === 'undefined') {
-      return null
-    }
-
-    return checkUrlCallInContext(this.nodeRuntimeCallContext(), expression, call, this.checkedCallArgInfos(expression))
-  }
-
-  checkUrlSearchParamsMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression' || !isUrlSearchParamsRuntimeMethod(expression.callee.property)) {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const shape = this.resolveExpressionShape(expression.callee.object)
-
-    if (
-      objectType !== 'object' ||
-      shape === null ||
-      typeof shape === 'undefined' ||
-      shape.builtin !== 'url.URLSearchParams'
-    ) {
-      return null
-    }
-
-    return checkUrlSearchParamsMethodCallInContext(
-      this.nodeRuntimeCallContext(),
-      expression,
-      expression.callee.property,
-      this.checkedCallArgInfos(expression)
-    )
   }
 
   checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
@@ -6423,16 +6515,16 @@ class Checker {
       argTypes.push(this.checkExpression(arg))
     }
 
+    const libraryConstructorType = this.checkCompilerLibraryConstructOperation(expression)
+
+    if (libraryConstructorType !== null) {
+      return libraryConstructorType
+    }
+
     const eventStreamConstructorType = this.checkEventStreamUnsupportedConstructor(expression)
 
     if (eventStreamConstructorType !== null && typeof eventStreamConstructorType !== 'undefined') {
       return eventStreamConstructorType
-    }
-
-    const urlType = this.checkUrlConstructorExpression(expression, argTypes)
-
-    if (urlType !== null && typeof urlType !== 'undefined') {
-      return urlType
     }
 
     if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
@@ -6571,6 +6663,7 @@ class Checker {
     }
 
     if (symbol.constructable) {
+      this.checkImportedClassConstructorArguments(expression, symbol.constructorParams)
       return 'object'
     }
 
@@ -6612,6 +6705,43 @@ class Checker {
     return 'object'
   }
 
+  checkCompilerLibraryConstructOperation(expression: AnyNode): ValueType | null {
+    const operation = this.compilerLibraryOperationForExpression(expression.callee, 'construct')
+
+    if (operation === null) {
+      return null
+    }
+
+    this.applyCompilerLibraryOperation(expression, operation)
+    this.checkCompilerLibraryOperationArguments(expression, operation)
+
+    return (operation.valueType ?? 'object') as ValueType
+  }
+
+  checkImportedClassConstructorArguments(
+    expression: AnyNode,
+    rawParams: AnyNode[] | null | undefined
+  ): void {
+    const params = rawParams ?? []
+    let minimum = params.length
+
+    for (let index = params.length - 1; index >= 0; index = index - 1) {
+      if (params[index].optional === true) {
+        minimum = index
+      } else {
+        break
+      }
+    }
+
+    if (expression.args.length < minimum || expression.args.length > params.length) {
+      this.report(
+        'INOX_ARG_COUNT',
+        `class constructor expects ${minimum} to ${params.length} argument(s), got ${expression.args.length}`,
+        expression.loc
+      )
+    }
+  }
+
   resolveMapConstructorType(expression: AnyNode, argTypes: ValueType[]): CheckerMapType | null {
     if (expression.args.length === 0 || argTypes.length === 0) {
       return null
@@ -6628,126 +6758,6 @@ class Checker {
     }
 
     return null
-  }
-
-  checkUrlConstructorExpression(expression: AnyNode, argTypes: ValueType[]): ValueType | null {
-    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
-      return null
-    }
-
-    const importedName = this.resolveStdlibRuntimeDirectImportName(expression.callee.path, 'url')
-    const constructorImport = urlRuntimeConstructorImportInfo(importedName)
-
-    if (constructorImport === null || typeof constructorImport === 'undefined') {
-      return null
-    }
-
-    if (constructorImport.unsupported) {
-      this.report(
-        'INOX_NOT_IMPLEMENTED',
-        `node:url ${constructorImport.name} is not implemented by the current C backend`,
-        expression.loc
-      )
-      expression.valueType = 'unknown'
-      return 'unknown'
-    }
-
-    const constructorName = constructorImport.name
-
-    if (constructorName === 'URLSearchParams') {
-      if (expression.args.length > 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `URLSearchParams constructor expects 0 or 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-        const argType = argTypes[0]
-
-        if (argType !== 'string' && argType !== 'object') {
-          this.report(
-            'INOX_TYPE_MISMATCH',
-            `URLSearchParams constructor expects string or object, got ${argType}`,
-            expression.args[0].loc
-          )
-        }
-
-        if (expression.args[0].type === 'ObjectLiteral') {
-          const properties: CheckerObjectPropertyNode[] = expression.args[0].properties
-
-          for (const property of properties) {
-            let propertyValueType: ValueType = 'unknown'
-            const knownPropertyValueType = property.value.valueType
-
-            if (knownPropertyValueType === null || typeof knownPropertyValueType === 'undefined') {
-              propertyValueType = this.checkExpression(property.value)
-            } else {
-              propertyValueType = knownPropertyValueType
-            }
-
-            this.checkAssignableType(
-              propertyValueType,
-              'string',
-              property.value.loc,
-              false,
-              this.expressionCanBeNull(property.value)
-            )
-          }
-        } else {
-          const shape = this.resolveExpressionShape(expression.args[0])
-
-          if (shape !== null && typeof shape !== 'undefined') {
-            for (const field of shape.fields) {
-              const fieldType = this.resolveFieldDeclaredType(field)
-
-              this.checkAssignableType(fieldType.valueType, 'string', expression.args[0].loc, fieldType.nullable, false)
-            }
-          }
-        }
-      }
-
-      expression.urlRuntimeMethod = 'URLSearchParams'
-      expression.valueType = 'object'
-      expression.shape = urlSearchParamsObjectShape
-
-      return 'object'
-    }
-
-    if (expression.args.length < 1 || expression.args.length > 2) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `URL constructor expects 1 or 2 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    for (let index = 0; index < argTypes.length; index++) {
-      const argType = argTypes[index]
-
-      if (index === 1 && argType === 'object') {
-        const shape = this.resolveExpressionShape(expression.args[index])
-
-        if (shape !== null && typeof shape !== 'undefined' && shape.builtin === 'url.URL') {
-          continue
-        }
-      }
-
-      this.checkAssignableType(
-        argType,
-        'string',
-        expression.args[index].loc,
-        false,
-        this.expressionCanBeNull(expression.args[index])
-      )
-    }
-
-    expression.urlRuntimeMethod = 'URL'
-    expression.valueType = 'object'
-    expression.shape = urlObjectShape
-
-    return 'object'
   }
 
   checkPromiseConstructorExpression(expression: AnyNode): ValueType | null {

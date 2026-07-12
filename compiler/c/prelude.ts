@@ -215,7 +215,6 @@ export function emitCPrelude(
   needsObjectRuntime: boolean,
   needsChildProcessRuntime: boolean,
   needsFsRuntime: boolean,
-  needsUrlRuntime: boolean,
   needsProcessRuntime: boolean,
   needsJsonRuntime: boolean,
   needsRegexpRuntime: boolean,
@@ -311,9 +310,6 @@ export function emitCPrelude(
     }
     if (needsJsonRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/json.h"')
-    }
-    if (needsUrlRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/url.h"')
     }
     if (needsProcessRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/process.h"')

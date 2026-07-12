@@ -170,6 +170,8 @@ export function anyNodeResolvedTypeInfo(loc: SourceLocation): ResolvedTypeInfo {
 }
 
 export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
+  const objectShapeMetadata = objectShapeInfoMetadataShape(loc)
+
   return {
     kind: 'object',
     builtin: 'compiler.AnyNode',
@@ -255,9 +257,9 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('returnPromiseValueType', 'string', null, true, loc),
       anyNodeField('returnSetElementType', 'string', null, true, loc),
       anyNodeField('returnNullable', 'boolean', null, false, loc),
-      anyNodeField('returnShape', 'object', null, true, loc),
+      anyNodeField('returnShape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('functionType', 'object', null, true, loc),
-      anyNodeField('shape', 'object', null, true, loc),
+      anyNodeField('shape', 'object', null, true, loc, { shape: objectShapeMetadata }),
       anyNodeField('rest', 'boolean', null, false, loc),
       anyNodeField('processRuntimeMethod', 'string', null, true, loc),
       anyNodeField('processRuntimeProperty', 'string', null, true, loc),
@@ -266,9 +268,27 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('runtimeObjectSource', 'string', null, true, loc),
       anyNodeField('dgramMessageHandlerName', 'string', null, true, loc),
       anyNodeField('regexpRuntimeMethod', 'string', null, true, loc),
-      anyNodeField('urlRuntimeMethod', 'string', null, true, loc),
-      anyNodeField('urlRuntimeField', 'string', null, true, loc),
+      anyNodeField('libraryReceiverTypeId', 'string', null, true, loc),
+      anyNodeField('libraryResultTypeId', 'string', null, true, loc),
+      anyNodeField('libraryCCallStyle', 'string', null, true, loc),
+      anyNodeField('libraryCFailureMode', 'string', null, true, loc),
       anyNodeField('httpHandlerName', 'string', null, true, loc)
+    ]
+  }
+}
+
+function objectShapeInfoMetadataShape(loc: SourceLocation): ObjectShapeInfo {
+  return {
+    kind: 'object',
+    fields: [
+      anyNodeField('kind', 'string', null, false, loc),
+      anyNodeField('baseTypes', 'array', null, true, loc, { arrayElementType: 'string' }),
+      anyNodeField('builtin', 'string', null, true, loc),
+      anyNodeField('dynamic', 'boolean', null, true, loc),
+      anyNodeField('dynamicField', 'object', null, true, loc),
+      anyNodeField('fields', 'array', null, false, loc, { arrayElementType: 'object' }),
+      anyNodeField('libraryTypeId', 'string', null, true, loc),
+      anyNodeField('libraryCppType', 'string', null, true, loc)
     ]
   }
 }

@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
+import { createCompilerLibrarySetFromDiscovered } from '../../scripts/lib/compiler-library-registry.ts'
+
+const defaultCompilerLibrarySet = createCompilerLibrarySetFromDiscovered(await discoverCompilerLibraries())
 
 type GeneratedTextFile = {
   path: string
@@ -60,6 +64,7 @@ console.log(params.toString())
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code

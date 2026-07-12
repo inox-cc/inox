@@ -140,6 +140,10 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/module-declaration-function-keyword-type.test.ts')
   const { assertModuleDeclarationInferredConsts } =
     await import('./integration/module-declaration-inferred-consts.test.ts')
+  const { assertModuleDeclarationImportedNestedArrayShape } =
+    await import('./integration/module-declaration-imported-nested-array-shape.test.ts')
+  const { assertModuleDeclarationImportedOptionalFields } =
+    await import('./integration/module-declaration-imported-optional-fields.test.ts')
   const { assertModuleDeclarationImports } = await import('./integration/module-declaration-imports.test.ts')
   const { assertModuleDeclarationWeakTypeMarker } =
     await import('./integration/module-declaration-weak-type-marker.test.ts')
@@ -283,6 +287,14 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('module-declaration-inferred-consts', () => {
       assertModuleDeclarationInferredConsts()
+    })
+
+    await t.test('module-declaration-imported-nested-array-shape', () => {
+      assertModuleDeclarationImportedNestedArrayShape()
+    })
+
+    await t.test('module-declaration-imported-optional-fields', () => {
+      assertModuleDeclarationImportedOptionalFields()
     })
 
     await t.test('module-declaration-import-boundary', () => {

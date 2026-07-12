@@ -2479,9 +2479,23 @@ function referencePathObjectExpression(expression: AnyNode): AnyNode {
 }
 
 export function emitCStringConcatValueExpression(expression: AnyNode, context: StringCContext): PreparedExpression {
-  const leftCpp = emitPreparedCppStringExpression(expression.left, context)
-  const right = emitPreparedCppStringArgument(expression.right, context, 'inox_concat_string')
+  let leftCpp = emitPreparedCppStringExpression(expression.left, context)
+  const rightType = stringDeps(context).inferExpressionType(expression.right, context)
+  let right: PreparedExpression | null = null
   const lines: string[] = []
+
+  if (
+    leftCpp === null &&
+    stringDeps(context).inferExpressionType(expression.left, context) !== 'string'
+  ) {
+    leftCpp = emitCStringConversionValueExpression(stringConversionExpression(expression.left), context)
+  }
+
+  if (rightType === 'string') {
+    right = emitPreparedCppStringArgument(expression.right, context, 'inox_concat_string')
+  } else {
+    right = emitCStringConversionValueExpression(stringConversionExpression(expression.right), context)
+  }
 
   if (right === null || typeof right === 'undefined') {
     return {
@@ -2517,6 +2531,19 @@ export function emitCStringConcatValueExpression(expression: AnyNode, context: S
     cppType: 'inox::String',
     runtimeTypeChecked: true,
     valueType: 'string'
+  }
+}
+
+function stringConversionExpression(expression: AnyNode): AnyNode {
+  return {
+    type: 'CallExpression',
+    callee: {
+      type: 'Reference',
+      path: ['String'],
+      loc: expression.loc
+    },
+    args: [expression],
+    loc: expression.loc
   }
 }
 
@@ -3133,7 +3160,7 @@ export function isStringConcatExpression(expression: AnyNode | null | undefined,
   }
 
   return (
-    stringDeps(context).inferExpressionType(expression.left, context) === 'string' &&
+    stringDeps(context).inferExpressionType(expression.left, context) === 'string' ||
     stringDeps(context).inferExpressionType(expression.right, context) === 'string'
   )
 }

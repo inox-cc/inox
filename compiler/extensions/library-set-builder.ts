@@ -204,7 +204,10 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
           (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
-          operationResultShapeFingerprint(item) + ':' + (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' +
+          operationResultShapeFingerprint(item) + ':' + (item.receiverTypeId ?? '') + ':' +
+          (item.resultTypeId ?? '') + ':' + (item.cCallStyle ?? '') + ':' + (item.cFailureMode ?? '') + ':' +
+          (item.minArgs ?? '') + ':' + (item.maxArgs ?? '') + ':' + operationArgumentChecksFingerprint(item) + ':' +
+          (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' + (item.nullable === true ? 'nullable' : 'required') + ':' +
           (item.owned === true ? 'owned' : 'borrowed') + ':' + (item.constantValue ?? '') + ':' +
           (item.diagnosticCode ?? '') + ':' + (item.diagnosticMessage ?? '')
       )
@@ -236,6 +239,22 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
   }
 
   return 'inox:library-set:v1:' + shortStableHash(rows.join(';'))
+}
+
+function operationArgumentChecksFingerprint(operation: LibraryOperationDescriptor): string {
+  const checks = operation.argumentChecks ?? []
+  const rows: string[] = []
+
+  for (let index = 0; index < checks.length; index = index + 1) {
+    const check = checks[index]
+    rows.push(
+      sortedStrings(check.valueTypes).join(',') + ':' +
+        sortedStrings(check.objectTypeIds ?? []).join(',') + ':' +
+        (check.objectFieldValueType ?? '')
+    )
+  }
+
+  return rows.join(';')
 }
 
 function operationResultShapeFingerprint(operation: LibraryOperationDescriptor): string {

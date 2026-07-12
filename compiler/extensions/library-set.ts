@@ -61,6 +61,31 @@ export function compilerLibraryOperationForImport(
   return null
 }
 
+export function compilerLibraryOperationForReceiver(
+  libraries: CompilerLibrarySet,
+  receiverTypeId: string | null | undefined,
+  memberName: string,
+  kind: LibraryOperationKind
+): LibraryOperationDescriptor | null {
+  if (receiverTypeId === null || typeof receiverTypeId === 'undefined') {
+    return null
+  }
+
+  for (let index = 0; index < libraries.operations.length; index = index + 1) {
+    const operation = libraries.operations[index]
+
+    if (
+      operation.kind === kind &&
+      operation.receiverTypeId === receiverTypeId &&
+      operationHasBinding(operation, `${receiverTypeId}.${memberName}`)
+    ) {
+      return operation
+    }
+  }
+
+  return null
+}
+
 export function compilerLibraryHasModuleDeclaration(
   libraries: CompilerLibrarySet,
   source: string

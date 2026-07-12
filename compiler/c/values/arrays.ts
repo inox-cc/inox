@@ -146,6 +146,10 @@ function isSupportedRuntimeArrayElementType(valueType: string): boolean {
   return valueType === 'number' || valueType === 'boolean' || valueType === 'string'
 }
 
+function isSupportedArrayMapElementType(valueType: string): boolean {
+  return isSupportedRuntimeArrayElementType(valueType) || valueType === 'object'
+}
+
 function appendLines(out: string[], lines: string[]): void {
   for (const line of lines) {
     out.push(line)
@@ -2401,7 +2405,7 @@ export function emitPreparedArrayMapCallExpression(
   const receiver = emitPreparedArrayReceiver(callee.object, context)
 
   if (receiver !== null && typeof receiver !== 'undefined') {
-    if (!isSupportedRuntimeArrayElementType(receiver.elementType)) {
+    if (!isSupportedArrayMapElementType(receiver.elementType)) {
       return null
     }
 
@@ -2425,7 +2429,7 @@ export function emitPreparedArrayMapCallExpression(
       mappedElementType = resolveArrayCallbackReturnType(callbackBody, context)
     }
 
-    if (!isSupportedRuntimeArrayElementType(mappedElementType)) {
+    if (!isSupportedArrayMapElementType(mappedElementType)) {
       bodyReady = false
     } else {
       appendLines(body, input)
@@ -3116,6 +3120,9 @@ function emitPreparedArrayCallbackInput(
       context.runtimeStrings.add(valueParam.name)
       lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
       lines.push(`inox_string* ${valueParam.name} = (inox_string*)${value}.as.ref;`)
+    } else if (receiver.elementType === 'object') {
+      lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(value), context))
+      lines.push(`auto ${valueParam.name} = ${value};`)
     } else if (receiver.elementType === 'boolean') {
       lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
       lines.push(`double ${valueParam.name} = (double)(${value}.as.boolean != 0);`)

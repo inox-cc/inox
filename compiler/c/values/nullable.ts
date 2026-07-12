@@ -393,6 +393,12 @@ function resolveNullableScalarNullCheckNarrowing(
     return emptyNullableScalarNarrowing()
   }
 
+  const typeofNarrowing = resolveNullableScalarTypeofUndefinedNarrowing(expression, context)
+
+  if (typeofNarrowing !== null) {
+    return typeofNarrowing
+  }
+
   let nullable = expression.left
   let maybeNull = expression.right
 
@@ -428,6 +434,41 @@ function resolveNullableScalarNullCheckNarrowing(
     trueNames: [],
     falseNames: [name]
   }
+}
+
+function resolveNullableScalarTypeofUndefinedNarrowing(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): NullableScalarNarrowing | null {
+  let typeofExpression = expression.left
+  let literal = expression.right
+
+  if (expression.right.type === 'UnaryExpression' && expression.right.operator === 'typeof') {
+    typeofExpression = expression.right
+    literal = expression.left
+  }
+
+  if (
+    typeofExpression.type !== 'UnaryExpression' ||
+    typeofExpression.operator !== 'typeof' ||
+    literal.type !== 'StringLiteral' ||
+    literal.value !== 'undefined'
+  ) {
+    return null
+  }
+
+  const argument = typeofExpression.argument
+  const name = nullableScalarNarrowingKey(argument)
+
+  if (name === null || typeof name === 'undefined' || !isNullableScalarNarrowingExpression(argument, name, context)) {
+    return emptyNullableScalarNarrowing()
+  }
+
+  if (expression.operator === '!==') {
+    return { trueNames: [name], falseNames: [] }
+  }
+
+  return { trueNames: [], falseNames: [name] }
 }
 
 function nullableScalarNarrowingKey(expression: AnyNode | null | undefined): string | null {
@@ -578,7 +619,8 @@ export function canLowerCScalarNullishCoalescingExpression(
   return (
     isNullableScalarType(resultType) &&
     (nullableDeps(context).inferExpressionType(expression.left, context) === 'null' ||
-      isNullableRuntimeExpression(expression.left, context))
+      isNullableRuntimeExpression(expression.left, context) ||
+      expression.left.nullable === true)
   )
 }
 
@@ -764,17 +806,30 @@ export function emitCOptionalMemberValueExpression(
     return emitCOptionalObjectReadValueExpression(objectExpression, member.valueType, context, access)
   }
 
-  context.diagnostics.push(
-    diagnostic(
-      'INOX_C_OPTIONAL_CHAINING',
-      'optional member access for this field is not supported by the current C backend slice',
-      expression.loc
-    )
-  )
+  return emitCOptionalDynamicObjectMemberValueExpression(expression, context)
+}
+
+function emitCOptionalDynamicObjectMemberValueExpression(
+  expression: AnyNode,
+  context: NullableFunctionContext
+): PreparedExpression {
+  const object = nullableDeps(context).emitCValueExpression(expression.object, context)
+  const out = nextCName(context, 'inox_optional_member')
+  const lines: string[] = []
+
+  registerOwnedValue(context, out)
+  appendLines(lines, object.lines)
+  appendLines(lines, emitPrepareOwnedValueWrite(out))
+  lines.push(`if (${object.expression}.tag != INOX_TAG_NULL && ${object.expression}.tag != INOX_TAG_UNDEFINED) {`)
+  lines.push(`  ${out} = inox::get(${object.expression}, ${cStringLiteral(expression.property)});`)
+  lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
+  lines.push('}')
 
   return {
-    lines: [],
-    expression: 'inox_undefined_value()'
+    lines,
+    expression: out,
+    nullable: true,
+    valueType: expression.valueType ?? 'unknown'
   }
 }
 

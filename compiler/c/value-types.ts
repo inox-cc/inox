@@ -92,14 +92,6 @@ export function emitCType(valueType: CValueTypeInput): string {
     return 'RegExp'
   }
 
-  if (valueType === 'url.URLSearchParams') {
-    return 'URLSearchParams'
-  }
-
-  if (valueType === 'url.URL') {
-    return 'URL'
-  }
-
   if (valueType === 'date') {
     return 'double'
   }

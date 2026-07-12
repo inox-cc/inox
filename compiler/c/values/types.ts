@@ -472,6 +472,16 @@ function cReferenceExpressionType(
     return 'js-global'
   }
 
+  if (
+    expression.path.length === 1 &&
+    name === 'undefined' &&
+    !context.variables.has(name) &&
+    !context.moduleValueNames.has(name) &&
+    !context.functionNames.has(name)
+  ) {
+    return 'unknown'
+  }
+
   if (metadataType !== null && typeof metadataType !== 'undefined') {
     return metadataType
   }
@@ -788,12 +798,9 @@ export function inferExpressionType(
 
     if (expression.operator === '??') {
       const left = inferExpressionType(expression.left, context, deps)
+      const right = inferExpressionType(expression.right, context, deps)
 
-      if (left === 'null' || left === 'unknown') {
-        return inferExpressionType(expression.right, context, deps)
-      }
-
-      return left
+      return inferConditionalExpressionType(left, right)
     }
 
     if (

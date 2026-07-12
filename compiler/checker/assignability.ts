@@ -30,7 +30,11 @@ export function inferBinaryExpressionType(operator: string, left: ValueType, rig
       return right
     }
 
-    return left
+    if (right === 'null' || right === 'unknown' || right === left) {
+      return left
+    }
+
+    return 'unknown'
   }
 
   if (operator === '+' && (left === 'string' || right === 'string')) {

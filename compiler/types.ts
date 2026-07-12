@@ -50,7 +50,6 @@ export type IrFeature =
   | 'runtime-values'
   | 'string-bytes'
   | 'timers'
-  | 'url'
   | 'weak-references'
 
 export type IrRuntimeRequirement = string
@@ -145,9 +144,12 @@ export type FunctionTypeInfo = {
 export type ObjectShapeInfo = {
   kind: 'object'
   baseTypes?: string[]
+  builtin?: string | null
   dynamic?: boolean
   dynamicField?: AnyNode | null
   fields: AnyNode[]
+  libraryTypeId?: string | null
+  libraryCppType?: string | null
   [key: string]: any
 }
 
