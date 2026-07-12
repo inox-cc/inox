@@ -13,6 +13,7 @@ import { parse } from '../compiler/parser.ts'
 import { isRuntimeBuiltinImportSource } from '../compiler/runtime-builtins.ts'
 import type { AnyNode, IrFunctionEffect, IrProgram, ModuleDeclarationImport, ProgramNode } from '../compiler/types.ts'
 import { quietCMakeConfigureArgs } from './lib/cmake-args.ts'
+import { generateCompilerLibraryRegistry } from './lib/compiler-library-registry.ts'
 import { rootDir } from './lib/repo-root.ts'
 import { runCommand } from './lib/run-command.ts'
 
@@ -66,7 +67,9 @@ const cmakeBuildDir = join(compilerDistDir, 'build')
 const cmakeBinDir = join(compilerDistDir, 'bin')
 const projectSourceRoot = '/project'
 const compilerSourceRoot = `${projectSourceRoot}/compiler`
+const generatedLibrarySourceRoot = `${projectSourceRoot}/dist/compiler-libraries`
 const selfHostedSourceDirs = ['compiler', 'stdlib']
+const selfHostedExcludedSourcePaths = new Set([join(rootDir, 'compiler/index.ts')])
 const buildLoopBackend = 'libuv'
 const buildTlsBackend = 'boringssl'
 
@@ -95,9 +98,12 @@ async function buildSelfHostedCompiler(options: BuildOptions): Promise<void> {
     force: true
   })
 
+  await generateCompilerLibraryRegistry(rootDir)
+
   const compilerFiles = await readCompilerSources()
+  compilerFiles.push(...(await readGeneratedCompilerLibrarySources()))
   const stdlibDeclarationFiles = await readStdlibDeclarationSources()
-  const driverPath = `${compilerSourceRoot}/index.ts`
+  const driverPath = `${generatedLibrarySourceRoot}/native-entry.ts`
 
   console.log('emitting self-hosted compiler declaration contracts')
   const declarationContracts = await emitCompilerDeclarationContracts(driverPath, compilerFiles, stdlibDeclarationFiles)
@@ -862,6 +868,21 @@ async function readCompilerSources(): Promise<SourceFile[]> {
   return files
 }
 
+async function readGeneratedCompilerLibrarySources(): Promise<SourceFile[]> {
+  const root = join(rootDir, 'dist/compiler-libraries')
+  const names = ['default-registry.ts', 'native-entry.ts']
+  const files: SourceFile[] = []
+
+  for (const name of names) {
+    files.push({
+      path: `${generatedLibrarySourceRoot}/${name}`,
+      source: await readFile(join(root, name), 'utf8')
+    })
+  }
+
+  return files
+}
+
 async function readStdlibDeclarationSources(): Promise<SourceFile[]> {
   const root = join(rootDir, 'stdlib/node')
   const paths = await readStdlibDeclarationSourcePaths(root)
@@ -913,7 +934,8 @@ async function readCompilerSourcePaths(dir: string): Promise<string[]> {
       entry.isFile() &&
       entry.name.endsWith('.ts') &&
       !entry.name.endsWith('.d.ts') &&
-      !entry.name.endsWith('.test.ts')
+      !entry.name.endsWith('.test.ts') &&
+      !selfHostedExcludedSourcePaths.has(path)
     ) {
       paths.push(path)
     }

@@ -4,6 +4,8 @@ import { checkCProfileCapabilities } from './capabilities.ts'
 import { checkProgram } from './checker.ts'
 import { emitCBundleFromIrModules, emitCFromIr, emitCModuleFilesFromGraph } from './codegen-c.ts'
 import type { CompilerHost } from './host.ts'
+import { resolveCompilerLibrarySet } from './extensions/library-set.ts'
+import type { CompilerLibrarySet } from './extensions/types.ts'
 import { collectIrModuleRecords, collectIrRuntimeRequirements, lowerHirToIr } from './ir.ts'
 import type { IrModuleRecord } from './ir/top-level.ts'
 import { tokenize } from './lexer.ts'
@@ -36,6 +38,7 @@ export type CModuleCompileOptions = {
   capabilities?: RuntimeCapabilities
   declarationImports?: ModuleDeclarationImport[]
   host?: CompilerHost
+  libraries?: CompilerLibrarySet
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions
@@ -49,6 +52,7 @@ export type MemoryCompileOptions = {
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
   declarationImports?: ModuleDeclarationImport[]
+  libraries?: CompilerLibrarySet
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions
@@ -62,6 +66,7 @@ export type MemoryCModuleCompileOptions = {
   budgets?: RuntimeBudgets
   capabilities?: RuntimeCapabilities
   declarationImports?: ModuleDeclarationImport[]
+  libraries?: CompilerLibrarySet
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions
@@ -110,11 +115,12 @@ export function compileSource(source: string, options: CompileOptions = {}): Sou
 
 export function compileSourceToIr(source: string, options: CompileOptions = {}): SourceIrCompileResult {
   const target = resolveCompileTarget(options)
+  const libraries = resolveCompilerLibrarySet(options.libraries)
   const tokens = tokenize(source, {})
   const ast = parse(tokens)
-  const checked = checkProgram(ast, compileOptionsWithTarget(options, target))
+  const checked = checkProgram(ast, compileOptionsWithTargetAndLibraries(options, target, libraries))
   const hir = lowerProgram(checked.ast)
-  const ir = lowerHirToIr(hir)
+  const ir = lowerHirToIr(hir, libraries.fingerprint)
 
   return {
     target,
@@ -125,6 +131,8 @@ export function compileSourceToIr(source: string, options: CompileOptions = {}):
 }
 
 export function emitTargetFromIr(target: CompileTarget, ir: IrProgram, options: CompileOptions = {}): string {
+  assertIrLibrarySetFingerprint(ir, options)
+
   if (target === 'cc') {
     const emitOptions: CEmitOptions = options
 
@@ -206,6 +214,7 @@ export function compileFileToCModulesWithHostSync(
   const emitOptions: CModuleEmitOptions = {
     callMain: options.callMain,
     host,
+    libraries: options.libraries,
     random: options.random,
     sourceRoot: options.sourceRoot
   }
@@ -247,6 +256,7 @@ export function compileFileToCModuleTextsWithHostSync(
   const emitOptions: CModuleEmitOptions = {
     callMain: options.callMain,
     host,
+    libraries: options.libraries,
     random: options.random,
     sourceRoot: options.sourceRoot
   }
@@ -317,6 +327,10 @@ export function compileGraphToIrModulesWithHostSync(
 }
 
 export function runCStaticChecks(irs: IrProgram[], options: CompileOptions = {}): void {
+  for (let index = 0; index < irs.length; index = index + 1) {
+    assertIrLibrarySetFingerprint(irs[index], options)
+  }
+
   checkCProfileCapabilities(irs, options)
   checkCCompileBudgets(irs, options)
 }
@@ -331,7 +345,11 @@ function resolveCompileTarget(options: CompileOptions): CompileTarget {
   throw new Error(`Unsupported target ${target}`)
 }
 
-function compileOptionsWithTarget(options: CompileOptions, target: CompileTarget): CompileOptions {
+function compileOptionsWithTargetAndLibraries(
+  options: CompileOptions,
+  target: CompileTarget,
+  libraries: CompilerLibrarySet
+): CompileOptions {
   return {
     target,
     callMain: options.callMain,
@@ -339,6 +357,7 @@ function compileOptionsWithTarget(options: CompileOptions, target: CompileTarget
     capabilities: options.capabilities,
     declarationImports: options.declarationImports,
     host: options.host,
+    libraries,
     loopBackend: options.loopBackend,
     profile: options.profile,
     random: options.random,
@@ -358,6 +377,7 @@ function compileOptionsWithHostAndTarget(
     capabilities: options.capabilities,
     declarationImports: options.declarationImports,
     host,
+    libraries: options.libraries,
     loopBackend: options.loopBackend,
     profile: options.profile,
     random: options.random,
@@ -377,6 +397,7 @@ function cModuleOptionsWithHostAndTarget(
     capabilities: options.capabilities,
     declarationImports: options.declarationImports,
     host,
+    libraries: options.libraries,
     loopBackend: options.loopBackend,
     profile: options.profile,
     random: options.random,
@@ -392,6 +413,7 @@ function memoryCompileOptions(options: MemoryCompileOptions, host: any): Compile
     capabilities: options.capabilities,
     declarationImports: options.declarationImports,
     host,
+    libraries: options.libraries,
     loopBackend: options.loopBackend,
     profile: options.profile,
     random: options.random,
@@ -409,10 +431,21 @@ function memoryCModuleCompileOptions(options: MemoryCModuleCompileOptions, host:
     capabilities: base.capabilities,
     declarationImports: base.declarationImports,
     host: base.host,
+    libraries: base.libraries,
     loopBackend: base.loopBackend,
     profile: base.profile,
     random: base.random,
     tlsBackend: base.tlsBackend,
     sourceRoot: options.sourceRoot
+  }
+}
+
+function assertIrLibrarySetFingerprint(ir: IrProgram, options: CompileOptions): void {
+  const actual = resolveCompilerLibrarySet(options.libraries).fingerprint
+
+  if (ir.librarySetFingerprint !== actual) {
+    throw new Error(
+      `Compiler library set fingerprint mismatch: IR uses ${ir.librarySetFingerprint}, emission uses ${actual}`
+    )
   }
 }

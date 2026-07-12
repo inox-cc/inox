@@ -1755,7 +1755,7 @@ function registerCppValueType(
   cppType: string | null | undefined,
   context: CFunctionContext
 ): void {
-  if (isCppRuntimeValueType(cppType)) {
+  if (typeof cppType === 'string' && isCppRuntimeValueType(cppType)) {
     context.cppValueTypes.set(name, cppType)
     return
   }

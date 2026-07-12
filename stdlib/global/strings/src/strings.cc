@@ -413,6 +413,75 @@ inox::Value inox::String::toNumber(StringView value) {
 
 namespace inox {
 
+static bool string_next_utf16_code_unit(
+  StringView value,
+  size_t* index,
+  uint16_t* pending,
+  bool* has_pending,
+  uint16_t* out
+) {
+  if (*has_pending) {
+    *has_pending = false;
+    *out = *pending;
+    return true;
+  }
+
+  if (*index >= value.len) {
+    return false;
+  }
+
+  size_t step = 0;
+  const uint32_t code_point = utf8_code_point_at(value.bytes, value.len, *index, &step);
+  *index += step;
+
+  if (code_point <= 0xffffu) {
+    *out = (uint16_t)code_point;
+    return true;
+  }
+
+  const uint32_t adjusted = code_point - 0x10000u;
+  *out = (uint16_t)(0xd800u + (adjusted >> 10));
+  *pending = (uint16_t)(0xdc00u + (adjusted & 0x3ffu));
+  *has_pending = true;
+  return true;
+}
+
+int compareStrings(StringView left, StringView right) {
+  size_t left_index = 0;
+  size_t right_index = 0;
+  uint16_t left_pending = 0;
+  uint16_t right_pending = 0;
+  bool left_has_pending = false;
+  bool right_has_pending = false;
+
+  for (;;) {
+    uint16_t left_unit = 0;
+    uint16_t right_unit = 0;
+    const bool has_left = string_next_utf16_code_unit(left, &left_index, &left_pending, &left_has_pending, &left_unit);
+    const bool has_right = string_next_utf16_code_unit(right, &right_index, &right_pending, &right_has_pending, &right_unit);
+
+    if (!has_left || !has_right) {
+      if (has_left) {
+        return 1;
+      }
+
+      if (has_right) {
+        return -1;
+      }
+
+      return 0;
+    }
+
+    if (left_unit < right_unit) {
+      return -1;
+    }
+
+    if (left_unit > right_unit) {
+      return 1;
+    }
+  }
+}
+
 Value String::make(const char* bytes, size_t len) {
   if (bytes == nullptr) {
     return Value();

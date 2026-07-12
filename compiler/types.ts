@@ -1,4 +1,5 @@
 import type { CompilerHost } from './host.ts'
+import type { CompilerLibrarySet } from './extensions/types.ts'
 
 export type SourceLocation = {
   file?: string
@@ -124,7 +125,8 @@ export type IrTopLevelItem = {
 
 export type IrProgram = {
   type: 'IrProgram'
-  version: 1
+  version: 2
+  librarySetFingerprint: string
   features: IrFeature[]
   runtimeRequirements: IrRuntimeRequirement[]
   topLevelItems: IrTopLevelItem[]
@@ -275,6 +277,7 @@ export type CompileOptions = {
   capabilities?: RuntimeCapabilities
   declarationImports?: ModuleDeclarationImport[]
   host?: CompilerHost
+  libraries?: CompilerLibrarySet
   loopBackend?: RuntimeLoopBackend
   profile?: RuntimeProfile
   random?: RandomOptions

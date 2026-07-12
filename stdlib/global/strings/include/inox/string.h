@@ -20,6 +20,8 @@ class Array;
 
 namespace inox {
 
+int compareStrings(StringView left, StringView right);
+
 class String : public Value {
 private:
   static Value make(const char* bytes, size_t len);

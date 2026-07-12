@@ -539,6 +539,9 @@ export function emitPreparedStringCompareExpression(expression: AnyNode, context
   const left = emitPreparedStringBytesOperand(expression.left, context, 'inox_cmp_string')
   const right = emitPreparedStringBytesOperand(expression.right, context, 'inox_cmp_string')
   const equals = `(${left.length} == ${right.length} && memcmp(${left.bytes}, ${right.bytes}, ${left.length}) == 0)`
+  const compare =
+    `inox::compareStrings(inox::StringView(${left.bytes}, ${left.length}), ` +
+    `inox::StringView(${right.bytes}, ${right.length}))`
   const lines: string[] = []
   let resultExpression = `(!${equals})`
 
@@ -547,6 +550,14 @@ export function emitPreparedStringCompareExpression(expression: AnyNode, context
 
   if (expression.operator === '===') {
     resultExpression = equals
+  } else if (expression.operator === '<') {
+    resultExpression = `(${compare} < 0)`
+  } else if (expression.operator === '<=') {
+    resultExpression = `(${compare} <= 0)`
+  } else if (expression.operator === '>') {
+    resultExpression = `(${compare} > 0)`
+  } else if (expression.operator === '>=') {
+    resultExpression = `(${compare} >= 0)`
   }
 
   return {

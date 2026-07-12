@@ -930,8 +930,15 @@ function formatObjectTypeBody(info: AnyNode): string {
 
   if (info.dynamic === true) {
     const dynamicType = objectFieldTypeName(info.dynamicField)
+    let readonlyPrefix = ''
 
-    lines.push(`  [key: string]: ${dynamicType};`)
+    if (info.dynamicField !== null && typeof info.dynamicField !== 'undefined') {
+      if (info.dynamicField.readonly === true) {
+        readonlyPrefix = 'readonly '
+      }
+    }
+
+    lines.push(`  ${readonlyPrefix}[key: string]: ${dynamicType};`)
   }
 
   const fields = info.fields

@@ -1,4 +1,5 @@
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
+import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import type { CompilerHost } from '../host.ts'
 import { collectIrTopLevelNodes, lowerHirToIr } from '../ir.ts'
 import { emitModuleDeclarationContractResult } from '../modules/declarations.ts'
@@ -74,7 +75,7 @@ function createCModulePlans(graph: ModuleGraph, options: CModuleEmitOptions, dia
 
   for (let moduleIndex = 0; moduleIndex < graphModules.length; moduleIndex = moduleIndex + 1) {
     const record = graphModules[moduleIndex]
-    const ir = cModulePlanIr(record)
+    const ir = cModulePlanIr(record, options)
 
     if (ir === null || typeof ir === 'undefined') {
       continue
@@ -273,7 +274,7 @@ function collectCModuleImportDeclarations(record: ModuleRecord): CModuleNode[] {
   return declarations
 }
 
-function cModulePlanIr(record: ModuleRecord): IrProgram | null {
+function cModulePlanIr(record: ModuleRecord, options: CModuleEmitOptions): IrProgram | null {
   if (record.ir !== null && typeof record.ir !== 'undefined') {
     return record.ir
   }
@@ -283,13 +284,17 @@ function cModulePlanIr(record: ModuleRecord): IrProgram | null {
     record.declarationProgram !== null &&
     typeof record.declarationProgram !== 'undefined'
   ) {
-    const ir = lowerHirToIr(record.declarationProgram)
+    const ir = lowerHirToIr(
+      record.declarationProgram,
+      resolveCompilerLibrarySet(options.libraries).fingerprint
+    )
     const externalFunctionEffects = record.externalFunctionEffects
 
     if (externalFunctionEffects !== null && typeof externalFunctionEffects !== 'undefined') {
       return {
         type: ir.type,
         version: ir.version,
+        librarySetFingerprint: ir.librarySetFingerprint,
         features: ir.features,
         runtimeRequirements: ir.runtimeRequirements,
         topLevelItems: ir.topLevelItems,

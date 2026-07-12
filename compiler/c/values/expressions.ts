@@ -345,6 +345,16 @@ function isEqualityOperator(operator: string): boolean {
   return operator === '===' || operator === '!=='
 }
 
+function isStringComparisonOperator(operator: string): boolean {
+  return (
+    isEqualityOperator(operator) ||
+    operator === '<' ||
+    operator === '<=' ||
+    operator === '>' ||
+    operator === '>='
+  )
+}
+
 function isPositiveEqualityOperator(operator: string): boolean {
   return operator === '==='
 }
@@ -3008,7 +3018,7 @@ export function emitPreparedNumberExpression(
     }
 
     if (
-      isEqualityOperator(expression.operator) &&
+      isStringComparisonOperator(expression.operator) &&
       (shouldEmitTypedStringValueCompare(expression) ||
         ((leftType === 'string' || rightType === 'string') &&
           canEmitStringCompareOperands(expression, leftType, rightType, context, deps)))

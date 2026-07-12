@@ -1,7 +1,9 @@
 import type { CompilerHost } from '../host.ts'
+import type { CompilerLibrarySet } from '../extensions/types.ts'
 import type { AnyNode, IrProgram, ModuleRecord, RandomOptions } from '../types.ts'
 
 export type CEmitOptions = {
+  libraries?: CompilerLibrarySet
   random?: RandomOptions
 }
 

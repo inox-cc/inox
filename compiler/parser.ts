@@ -521,15 +521,16 @@ class Parser {
     this.expectValue('{', 'INOX_EXPECTED_TYPE', 'expected { in object type')
 
     while (!this.isValue('}') && !this.is('eof')) {
+      const modifiers = this.parseFieldModifiers()
+
       if (this.isValue('[')) {
         dynamic = true
-        dynamicField = this.parseTypeIndexSignature()
+        dynamicField = this.parseTypeIndexSignature(modifiers.readOnly)
         this.matchValue(',')
         this.matchValue(';')
         continue
       }
 
-      const modifiers = this.parseFieldModifiers()
       const name = this.expectTypeFieldName()
       const optional = this.matchValue('?')
 
@@ -618,7 +619,7 @@ class Parser {
     return createFunctionType(params, returnType)
   }
 
-  parseTypeIndexSignature(): AnyNode | null {
+  parseTypeIndexSignature(readOnly: boolean): AnyNode | null {
     const start = this.expectValue('[', 'INOX_EXPECTED_TYPE', 'expected [ in type index signature')
 
     while (!this.is('eof') && !this.isValue(']')) {
@@ -638,7 +639,7 @@ class Parser {
     return {
       name: '',
       optional: false,
-      readonly: false,
+      readonly: readOnly,
       ownership: 'strong',
       valueType,
       loc: locFromToken(start)

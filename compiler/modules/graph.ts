@@ -1,5 +1,6 @@
 import { checkProgram } from '../checker.ts'
 import { diagnostic, throwDiagnostics } from '../diagnostics.ts'
+import { resolveCompilerLibrarySet } from '../extensions/library-set.ts'
 import type { CompilerHost } from '../host.ts'
 import { lowerHirToIr } from '../ir.ts'
 import { tokenize } from '../lexer.ts'
@@ -81,6 +82,7 @@ export function buildModuleGraphWithHostSync(entry: string, options: CompileOpti
       capabilities: options.capabilities,
       declarationImports: options.declarationImports,
       host,
+      libraries: options.libraries,
       loopBackend: options.loopBackend,
       profile: options.profile,
       random: options.random,
@@ -425,7 +427,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
   )
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
   module.exports = collectExports(module.declarationProgram)
-  module.ir = lowerHirToIr(module.hir)
+  module.ir = lowerHirToIr(module.hir, resolveCompilerLibrarySet(context.options.libraries).fingerprint)
   context.visiting.delete(path)
   context.order.push(module)
 

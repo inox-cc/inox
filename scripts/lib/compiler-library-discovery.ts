@@ -1,0 +1,172 @@
+import { readdir, readFile, stat } from 'node:fs/promises'
+import { join, relative, sep } from 'node:path'
+
+import { rootDir } from './repo-root.ts'
+
+export type DiscoveredCompilerLibraryKind = 'global' | 'node'
+
+export type DiscoveredCompilerLibrary = {
+  id: string
+  kind: DiscoveredCompilerLibraryKind
+  root: string
+  importSource: string | null
+  declarationPath: string | null
+  declarationSource: string | null
+  compilerEntrypoint: string | null
+  nativeSources: string[]
+  nativeIncludeDirs: string[]
+}
+
+const nodePackageChildSkipNames = new Set(['compiler', 'include', 'src', 'tests'])
+
+export async function discoverCompilerLibraries(projectRoot: string = rootDir): Promise<DiscoveredCompilerLibrary[]> {
+  const libraries: DiscoveredCompilerLibrary[] = []
+
+  await discoverGlobalLibraries(projectRoot, libraries)
+  await discoverNodeLibraries(projectRoot, libraries)
+
+  libraries.sort((left, right) => left.id.localeCompare(right.id))
+  return libraries
+}
+
+async function discoverGlobalLibraries(
+  projectRoot: string,
+  libraries: DiscoveredCompilerLibrary[]
+): Promise<void> {
+  const globalRoot = join(projectRoot, 'stdlib/global')
+  const entries = await readdir(globalRoot, { withFileTypes: true })
+
+  entries.sort((left, right) => left.name.localeCompare(right.name))
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === 'compiler') {
+      continue
+    }
+
+    libraries.push(
+      await discoverPackage(projectRoot, join(globalRoot, entry.name), 'global', `global:${entry.name}`, null)
+    )
+  }
+}
+
+async function discoverNodeLibraries(
+  projectRoot: string,
+  libraries: DiscoveredCompilerLibrary[]
+): Promise<void> {
+  const nodeRoot = join(projectRoot, 'stdlib/node')
+
+  await discoverNodeDirectory(projectRoot, nodeRoot, '', libraries)
+}
+
+async function discoverNodeDirectory(
+  projectRoot: string,
+  directory: string,
+  relativeName: string,
+  libraries: DiscoveredCompilerLibrary[]
+): Promise<void> {
+  const declarationPath = join(directory, 'index.d.ts')
+
+  if (relativeName !== '' && (await isFile(declarationPath))) {
+    const importSource = `node:${relativeName}`
+    libraries.push(await discoverPackage(projectRoot, directory, 'node', importSource, importSource))
+  }
+
+  const entries = await readdir(directory, { withFileTypes: true })
+  entries.sort((left, right) => left.name.localeCompare(right.name))
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || nodePackageChildSkipNames.has(entry.name)) {
+      continue
+    }
+
+    const childName = relativeName === '' ? entry.name : `${relativeName}/${entry.name}`
+
+    await discoverNodeDirectory(projectRoot, join(directory, entry.name), childName, libraries)
+  }
+}
+
+async function discoverPackage(
+  projectRoot: string,
+  packageRoot: string,
+  kind: DiscoveredCompilerLibraryKind,
+  id: string,
+  importSource: string | null
+): Promise<DiscoveredCompilerLibrary> {
+  const declarationFile = join(packageRoot, 'index.d.ts')
+  const compilerFile = join(packageRoot, 'compiler/index.ts')
+  const sourceRoot = join(packageRoot, 'src')
+  const includeRoot = join(packageRoot, 'include')
+  let declarationPath: string | null = null
+  let declarationSource: string | null = null
+  let compilerEntrypoint: string | null = null
+  const nativeSources: string[] = []
+  const nativeIncludeDirs: string[] = []
+
+  if (await isFile(declarationFile)) {
+    declarationPath = projectPath(projectRoot, declarationFile)
+    declarationSource = await readFile(declarationFile, 'utf8')
+  }
+
+  if (await isFile(compilerFile)) {
+    compilerEntrypoint = projectPath(projectRoot, compilerFile)
+  }
+
+  if (await isDirectory(sourceRoot)) {
+    nativeSources.push(...(await collectNativeSources(projectRoot, sourceRoot)))
+  }
+
+  if (await isDirectory(includeRoot)) {
+    nativeIncludeDirs.push(projectPath(projectRoot, includeRoot))
+  }
+
+  return {
+    id,
+    kind,
+    root: projectPath(projectRoot, packageRoot),
+    importSource,
+    declarationPath,
+    declarationSource,
+    compilerEntrypoint,
+    nativeSources,
+    nativeIncludeDirs
+  }
+}
+
+async function collectNativeSources(projectRoot: string, directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const sources: string[] = []
+
+  entries.sort((left, right) => left.name.localeCompare(right.name))
+
+  for (const entry of entries) {
+    const path = join(directory, entry.name)
+
+    if (entry.isDirectory()) {
+      sources.push(...(await collectNativeSources(projectRoot, path)))
+    } else if (entry.isFile() && (entry.name.endsWith('.c') || entry.name.endsWith('.cc'))) {
+      sources.push(projectPath(projectRoot, path))
+    }
+  }
+
+  return sources
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile()
+  } catch {
+    return false
+  }
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function projectPath(projectRoot: string, path: string): string {
+  return relative(projectRoot, path).split(sep).join('/')
+}
