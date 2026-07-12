@@ -8,6 +8,7 @@ export function compilerLibrary(
     id,
     dependencies,
     declarations: [],
+    nativeTypes: [],
     operations: [],
     intrinsicBindings: [],
     runtimeRequirements: []

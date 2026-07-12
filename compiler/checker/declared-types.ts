@@ -48,10 +48,13 @@ import type {
   TypeAliasDeclarationNode
 } from './resolved-types.ts'
 import { mergeShapeFields } from './helpers.ts'
+import { compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
+import type { CompilerLibrarySet } from '../extensions/types.ts'
 
 export type DeclaredTypeResolverContext = {
   classNames: Set<string>
   diagnostics: Diagnostic[]
+  libraries: CompilerLibrarySet
   resolvedDeclaredTypes: Map<string, ResolvedTypeInfo>
   resolvingDeclaredTypes: Set<string>
   symbols: Map<string, SymbolInfo>
@@ -85,6 +88,22 @@ export function resolveDeclaredType(
   if (name === 'ValueType') {
     const info = unresolvedTypeInfo()
     info.valueType = 'string'
+
+    return info
+  }
+
+  const nativeType = compilerLibraryNativeTypeForName(context.libraries, name)
+
+  if (nativeType !== null) {
+    const info = unresolvedTypeInfo()
+    info.valueType = nativeType.valueType as ValueType
+    info.shape = {
+      kind: 'object',
+      baseTypes: nativeType.baseTypeIds,
+      fields: [],
+      libraryTypeId: nativeType.typeId,
+      libraryCppType: nativeType.cppType
+    }
 
     return info
   }

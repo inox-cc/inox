@@ -13,6 +13,8 @@ import {
   unionTypeNamesFromTypeName
 } from '../type-names.ts'
 import type { AnyNode, ProgramNode } from '../types.ts'
+import { compilerLibraryNativeTypeForName, resolveCompilerLibrarySet } from '../extensions/library-set.ts'
+import type { CompilerLibrarySet } from '../extensions/types.ts'
 
 type LowerTypeNode = AnyNode
 
@@ -20,6 +22,7 @@ export type LowerContext = {
   types: Map<string, LowerTypeNode>
   resolvedTypes: Map<string, LowerResolvedType>
   classNames: Set<string>
+  libraries: CompilerLibrarySet
   nextId: number
   variables: Map<string, LowerTypeNode>
   resolvingTypes: Set<string>
@@ -28,6 +31,7 @@ export type LowerContext = {
 export type LowerResolvedType = {
   valueType: string | null
   nullable: boolean
+  libraryRuntimeRequirements?: string[]
   arrayElementType: string | null
   arrayElementDeclaredType: string | null
   arrayElementFunctionType?: LowerTypeNode | null
@@ -56,11 +60,15 @@ type LowerResolvedStringKey =
 
 type LowerTypeNameResolver = (name: string, context: LowerContext) => LowerResolvedType
 
-export function createLowerContext(ast: ProgramNode): LowerContext {
+export function createLowerContext(
+  ast: ProgramNode,
+  libraries: CompilerLibrarySet | null | undefined = undefined
+): LowerContext {
   return {
     types: collectTypes(ast),
     resolvedTypes: new Map(),
     classNames: collectClassNames(ast),
+    libraries: resolveCompilerLibrarySet(libraries),
     nextId: 0,
     variables: new Map(),
     resolvingTypes: new Set()
@@ -135,6 +143,22 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     const valueType = resolveDeclaredType(promiseValueTypeName, context)
 
     return promiseResolvedType(valueType)
+  }
+
+  const nativeType = compilerLibraryNativeTypeForName(context.libraries, name)
+
+  if (nativeType !== null) {
+    const resolved = namedResolvedType(nativeType.valueType)
+    resolved.shape = {
+      kind: 'object',
+      baseTypes: nativeType.baseTypeIds,
+      fields: [],
+      libraryTypeId: nativeType.typeId,
+      libraryCppType: nativeType.cppType
+    }
+    resolved.libraryRuntimeRequirements = nativeType.runtimeRequirements
+
+    return resolved
   }
 
   if (isBytesTypeName(name)) {
@@ -1059,6 +1083,7 @@ function cloneResolvedType(source: LowerResolvedType): LowerResolvedType {
   const resolved: LowerResolvedType = {
     valueType: source.valueType,
     nullable: source.nullable,
+    libraryRuntimeRequirements: copyStringArray(source.libraryRuntimeRequirements),
     arrayElementType: source.arrayElementType,
     arrayElementDeclaredType: source.arrayElementDeclaredType,
     arrayElementFunctionType: nullableNode(source.arrayElementFunctionType),

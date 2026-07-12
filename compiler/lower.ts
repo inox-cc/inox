@@ -2,9 +2,13 @@ import { lowerParam, lowerStatementList } from './lower/statements.ts'
 import type { LowerContext } from './lower/type-resolution.ts'
 import { createLowerContext, resolveDeclaredType, resolveObjectShape } from './lower/type-resolution.ts'
 import type { AnyNode, ProgramNode } from './types.ts'
+import type { CompilerLibrarySet } from './extensions/types.ts'
 
-export function lowerProgram(ast: ProgramNode): ProgramNode {
-  const context = createLowerContext(ast)
+export function lowerProgram(
+  ast: ProgramNode,
+  libraries: CompilerLibrarySet | null | undefined = undefined
+): ProgramNode {
+  const context = createLowerContext(ast, libraries)
   const body: AnyNode[] = []
 
   for (let itemIndex = 0; itemIndex < ast.body.length; itemIndex = itemIndex + 1) {
@@ -78,6 +82,7 @@ function lowerTopLevelItem(item: AnyNode, context: LowerContext): LoweredTopLeve
         params: lowerParamList(item.params, context),
         declaredReturnType: item.returnType,
         returnType: resolvedValueType(returnType.valueType, returnTypeName),
+        libraryRuntimeRequirements: returnType.libraryRuntimeRequirements,
         returnNullable: returnType.nullable,
         returnArrayElementType: returnType.arrayElementType,
         returnArrayElementDeclaredType: returnType.arrayElementDeclaredType,

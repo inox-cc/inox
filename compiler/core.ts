@@ -119,7 +119,7 @@ export function compileSourceToIr(source: string, options: CompileOptions = {}):
   const tokens = tokenize(source, {})
   const ast = parse(tokens)
   const checked = checkProgram(ast, compileOptionsWithTargetAndLibraries(options, target, libraries))
-  const hir = lowerProgram(checked.ast)
+  const hir = lowerProgram(checked.ast, libraries)
   const ir = lowerHirToIr(hir, libraries.fingerprint)
 
   return {

@@ -1,5 +1,6 @@
 import type {
   CompilerLibrarySet,
+  LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   LibraryOperationKind
 } from './types.ts'
@@ -7,9 +8,89 @@ import type {
 export const emptyCompilerLibrarySet: CompilerLibrarySet = {
   fingerprint: 'inox:library-set:v1:811c9dc5',
   declarations: [],
+  nativeTypes: [],
   operations: [],
   intrinsicBindings: [],
   runtimeRequirements: []
+}
+
+export function compilerLibraryNativeTypeForName(
+  libraries: CompilerLibrarySet,
+  name: string
+): LibraryNativeTypeDescriptor | null {
+  for (let typeIndex = 0; typeIndex < libraries.nativeTypes.length; typeIndex = typeIndex + 1) {
+    const nativeType = libraries.nativeTypes[typeIndex]
+
+    for (let nameIndex = 0; nameIndex < nativeType.declarationNames.length; nameIndex = nameIndex + 1) {
+      if (nativeType.declarationNames[nameIndex] === name) {
+        return nativeType
+      }
+    }
+  }
+
+  return null
+}
+
+export function compilerLibraryNativeTypeIsAssignable(
+  libraries: CompilerLibrarySet,
+  sourceTypeId: string | null | undefined,
+  targetTypeId: string | null | undefined
+): boolean {
+  if (
+    sourceTypeId === null ||
+    typeof sourceTypeId === 'undefined' ||
+    targetTypeId === null ||
+    typeof targetTypeId === 'undefined'
+  ) {
+    return false
+  }
+
+  if (sourceTypeId === targetTypeId) {
+    return true
+  }
+
+  const pending: string[] = [sourceTypeId]
+  const visited: Set<string> = new Set()
+
+  while (pending.length > 0) {
+    const current = pending.pop()
+
+    if (current === null || typeof current === 'undefined' || visited.has(current)) {
+      continue
+    }
+
+    visited.add(current)
+    const nativeType = compilerLibraryNativeTypeForId(libraries, current)
+
+    if (nativeType === null) {
+      continue
+    }
+
+    for (let index = 0; index < nativeType.baseTypeIds.length; index = index + 1) {
+      const baseTypeId = nativeType.baseTypeIds[index]
+
+      if (baseTypeId === targetTypeId) {
+        return true
+      }
+
+      pending.push(baseTypeId)
+    }
+  }
+
+  return false
+}
+
+export function compilerLibraryNativeTypeForId(
+  libraries: CompilerLibrarySet,
+  typeId: string
+): LibraryNativeTypeDescriptor | null {
+  for (let index = 0; index < libraries.nativeTypes.length; index = index + 1) {
+    if (libraries.nativeTypes[index].typeId === typeId) {
+      return libraries.nativeTypes[index]
+    }
+  }
+
+  return null
 }
 
 export function resolveCompilerLibrarySet(

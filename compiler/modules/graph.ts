@@ -427,7 +427,7 @@ function visitModuleGraphFile(context: ModuleGraphContext, file: string): boolea
 
   const checked = checkProgram(insertImportSyntheticDeclarations(ast, importTypeDeclarations), context.options)
   module.hir = appendSyntheticDeclarations(
-    insertImportSyntheticDeclarations(lowerProgram(checked.ast), importAliasDeclarations),
+    insertImportSyntheticDeclarations(lowerProgram(checked.ast, context.options.libraries), importAliasDeclarations),
     reexportAliasDeclarations
   )
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
@@ -501,7 +501,7 @@ function visitModuleGraphDeclarationImport(
     insertImportSyntheticDeclarations(program, module.typeImportDeclarations),
     context.options
   )
-  module.hir = lowerProgram(checked.ast)
+  module.hir = lowerProgram(checked.ast, context.options.libraries)
   module.declarationProgram = createModuleDeclarationProgram(module.hir)
   module.exports = collectExports(module.declarationProgram)
   context.visiting.delete(path)

@@ -20,6 +20,7 @@ function testLibrarySet(fingerprint: string): CompilerLibrarySet {
   return {
     fingerprint,
     declarations: [],
+    nativeTypes: [],
     operations: [],
     intrinsicBindings: [],
     runtimeRequirements: []

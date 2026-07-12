@@ -2,6 +2,7 @@ export type LibraryId = string
 export type LibraryBindingId = string
 export type LibraryOperationId = string
 export type LibraryObjectTypeId = string
+export type LibraryNativeTypeId = string
 export type RuntimeRequirementId = string
 export type PlatformCapabilityId = string
 
@@ -13,6 +14,16 @@ export type LibraryDeclarationDescriptor = {
   source: string
   declarationSource: string
   compilerImplemented?: boolean
+}
+
+export type LibraryNativeTypeDescriptor = {
+  libraryId: LibraryId
+  typeId: LibraryNativeTypeId
+  declarationNames: string[]
+  valueType: string
+  cppType: string
+  baseTypeIds: LibraryNativeTypeId[]
+  runtimeRequirements: RuntimeRequirementId[]
 }
 
 export type LibraryOperationKind =
@@ -156,6 +167,7 @@ export type CompilerLibraryDescriptor = {
   id: LibraryId
   dependencies: LibraryId[]
   declarations: LibraryDeclarationDescriptor[]
+  nativeTypes?: LibraryNativeTypeDescriptor[]
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
   runtimeRequirements: RuntimeRequirementDescriptor[]
@@ -164,6 +176,7 @@ export type CompilerLibraryDescriptor = {
 export type CompilerLibraryPackageDescriptor = {
   id: LibraryId
   dependencies: LibraryId[]
+  nativeTypes?: LibraryNativeTypeDescriptor[]
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
   runtimeRequirements: RuntimeRequirementDescriptor[]
@@ -172,6 +185,7 @@ export type CompilerLibraryPackageDescriptor = {
 export type CompilerLibrarySet = {
   fingerprint: string
   declarations: LibraryDeclarationDescriptor[]
+  nativeTypes: LibraryNativeTypeDescriptor[]
   operations: LibraryOperationDescriptor[]
   intrinsicBindings: IntrinsicRoleBinding[]
   runtimeRequirements: RuntimeRequirementDescriptor[]

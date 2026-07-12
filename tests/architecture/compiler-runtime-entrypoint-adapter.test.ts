@@ -72,6 +72,7 @@ function librarySet(runtimeRequirements: RuntimeRequirementDescriptor[]): Compil
   return {
     fingerprint: 'entrypoint-adapter-test',
     declarations: [],
+    nativeTypes: [],
     operations: [],
     intrinsicBindings: [],
     runtimeRequirements

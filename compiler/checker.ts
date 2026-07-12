@@ -64,6 +64,7 @@ import {
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
   compilerLibraryHasModuleDeclaration,
+  compilerLibraryNativeTypeIsAssignable,
   compilerLibraryOperationForGlobal,
   compilerLibraryOperationForImport,
   compilerLibraryOperationForReceiver,
@@ -377,6 +378,7 @@ type CheckerReturnContextState = {
   returnType: ValueType
   returnNullable: boolean
   returnPromiseValueType: ValueType | null
+  returnShape: ObjectShapeInfo | null
   returnAsync: boolean
 }
 
@@ -421,6 +423,7 @@ class Checker {
   currentReturnType: ValueType
   currentReturnNullable: boolean
   currentReturnPromiseValueType: ValueType | null
+  currentReturnShape: ObjectShapeInfo | null
   currentReturnAsync: boolean
   currentClassConstructor: boolean
   asyncDepth: number
@@ -442,6 +445,7 @@ class Checker {
     this.currentReturnType = 'void'
     this.currentReturnNullable = false
     this.currentReturnPromiseValueType = null
+    this.currentReturnShape = null
     this.currentReturnAsync = false
     this.currentClassConstructor = false
     this.asyncDepth = 0
@@ -849,6 +853,8 @@ class Checker {
         const previousReturnNullable = this.currentReturnNullable
         this.currentReturnNullable = returnInfo.nullable
         const previousReturnPromiseValueType = this.currentReturnPromiseValueType
+        const previousReturnShape = this.currentReturnShape
+        this.currentReturnShape = returnInfo.shape
         let returnPromiseValueType: ValueType | null = null
 
         if (returnInfo.promiseValueType !== null && typeof returnInfo.promiseValueType !== 'undefined') {
@@ -897,6 +903,7 @@ class Checker {
           this.currentReturnType = previousReturnType
           this.currentReturnNullable = previousReturnNullable
           this.currentReturnPromiseValueType = previousReturnPromiseValueType
+          this.currentReturnShape = previousReturnShape
           this.currentReturnAsync = previousReturnAsync
           this.asyncDepth = previousAsyncDepth
           this.functionDepth = previousFunctionDepth
@@ -1330,6 +1337,11 @@ class Checker {
           declared.nullable,
           this.expressionCanBeNull(statement.init)
         )
+        this.checkAssignableLibraryNativeType(
+          this.resolveExpressionShape(statement.init),
+          declared.shape,
+          statement.loc
+        )
 
         if (
           declared.valueType === 'array' &&
@@ -1442,6 +1454,13 @@ class Checker {
         this.currentReturnNullable,
         this.expressionCanBeNull(statement.argument)
       )
+      if (statement.argument !== null && typeof statement.argument !== 'undefined') {
+        this.checkAssignableLibraryNativeType(
+          this.resolveExpressionShape(statement.argument),
+          this.currentReturnShape,
+          statement.loc
+        )
+      }
 
       if (
         this.currentReturnType === 'promise' &&
@@ -1886,6 +1905,11 @@ class Checker {
               expression.args[index].loc,
               param.nullable === true,
               this.expressionCanBeNull(expression.args[index])
+            )
+            this.checkAssignableLibraryNativeType(
+              this.resolveExpressionShape(expression.args[index]),
+              param.shape as ObjectShapeInfo | null | undefined,
+              expression.args[index].loc
             )
           }
         }
@@ -3965,16 +3989,26 @@ class Checker {
         }
       }
 
-      if (info.valueType !== 'object') {
-        continue
-      }
-
       const objectTypeIds = check.objectTypeIds ?? []
 
       if (objectTypeIds.length > 0) {
         const objectTypeId = info.shape?.libraryTypeId
+        let assignable = false
 
-        if (objectTypeId === null || typeof objectTypeId === 'undefined' || !objectTypeIds.includes(objectTypeId)) {
+        for (let typeIndex = 0; typeIndex < objectTypeIds.length; typeIndex = typeIndex + 1) {
+          if (
+            compilerLibraryNativeTypeIsAssignable(
+              resolveCompilerLibrarySet(this.options.libraries),
+              objectTypeId,
+              objectTypeIds[typeIndex]
+            )
+          ) {
+            assignable = true
+            break
+          }
+        }
+
+        if (!assignable) {
           this.report(
             'INOX_TYPE_MISMATCH',
             `library operation ${operation.operationId} does not accept this object type`,
@@ -8605,6 +8639,7 @@ class Checker {
     return {
       classNames: this.classNames,
       diagnostics: this.diagnostics,
+      libraries: resolveCompilerLibrarySet(this.options.libraries),
       resolvedDeclaredTypes: this.resolvedDeclaredTypes,
       resolvingDeclaredTypes: this.resolvingDeclaredTypes,
       symbols: this.typeSymbols,
@@ -8850,18 +8885,21 @@ class Checker {
   pushReturnContext(
     returnType: ValueType,
     returnNullable: boolean,
-    returnPromiseValueType: ValueType | null
+    returnPromiseValueType: ValueType | null,
+    returnShape: ObjectShapeInfo | null = null
   ): CheckerReturnContextState {
     const previous = {
       returnType: this.currentReturnType,
       returnNullable: this.currentReturnNullable,
       returnPromiseValueType: this.currentReturnPromiseValueType,
+      returnShape: this.currentReturnShape,
       returnAsync: this.currentReturnAsync
     }
 
     this.currentReturnType = returnType
     this.currentReturnNullable = returnNullable
     this.currentReturnPromiseValueType = returnPromiseValueType
+    this.currentReturnShape = returnShape
     this.currentReturnAsync = false
 
     return previous
@@ -8871,6 +8909,7 @@ class Checker {
     this.currentReturnType = previous.returnType
     this.currentReturnNullable = previous.returnNullable
     this.currentReturnPromiseValueType = previous.returnPromiseValueType
+    this.currentReturnShape = previous.returnShape
     this.currentReturnAsync = previous.returnAsync
   }
 
@@ -8927,6 +8966,36 @@ class Checker {
 
       this.report('INOX_TYPE_MISMATCH', `cannot assign ${actualLabel} to ${expected}`, loc)
     }
+  }
+
+  checkAssignableLibraryNativeType(
+    actualShape: ObjectShapeInfo | null | undefined,
+    expectedShape: ObjectShapeInfo | null | undefined,
+    loc: SourceLocation
+  ): void {
+    const expectedTypeId = expectedShape?.libraryTypeId
+
+    if (expectedTypeId === null || typeof expectedTypeId === 'undefined') {
+      return
+    }
+
+    const actualTypeId = actualShape?.libraryTypeId
+
+    if (
+      compilerLibraryNativeTypeIsAssignable(
+        resolveCompilerLibrarySet(this.options.libraries),
+        actualTypeId,
+        expectedTypeId
+      )
+    ) {
+      return
+    }
+
+    this.report(
+      'INOX_TYPE_MISMATCH',
+      `cannot assign library type ${actualTypeId ?? 'unknown'} to ${expectedTypeId}`,
+      loc
+    )
   }
 
   report(code: string, message: string, loc: SourceLocation): void {

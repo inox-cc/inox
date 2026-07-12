@@ -3,6 +3,7 @@ import type {
   CompilerLibrarySet,
   IntrinsicRoleBinding,
   LibraryDeclarationDescriptor,
+  LibraryNativeTypeDescriptor,
   LibraryNestedResultShapeFieldDescriptor,
   LibraryOperationDescriptor,
   LibraryResultShapeFieldDescriptor,
@@ -12,6 +13,7 @@ import type {
 export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[]): CompilerLibrarySet {
   const ordered = orderCompilerLibraries(libraries)
   const declarations: LibraryDeclarationDescriptor[] = []
+  const nativeTypes: LibraryNativeTypeDescriptor[] = []
   const operations: LibraryOperationDescriptor[] = []
   const intrinsicBindings: IntrinsicRoleBinding[] = []
   const runtimeRequirements: RuntimeRequirementDescriptor[] = []
@@ -20,16 +22,18 @@ export function createCompilerLibrarySet(libraries: CompilerLibraryDescriptor[])
     const library = ordered[libraryIndex]
 
     pushDeclarations(declarations, library.declarations)
+    pushNativeTypes(nativeTypes, library.nativeTypes ?? [])
     pushOperations(operations, library.operations)
     pushIntrinsicBindings(intrinsicBindings, library.intrinsicBindings)
     pushRuntimeRequirements(runtimeRequirements, library.runtimeRequirements)
   }
 
-  validateCompilerLibrarySet(declarations, operations, intrinsicBindings, runtimeRequirements)
+  validateCompilerLibrarySet(declarations, nativeTypes, operations, intrinsicBindings, runtimeRequirements)
 
   return {
     fingerprint: compilerLibrarySetFingerprint(ordered),
     declarations,
+    nativeTypes,
     operations,
     intrinsicBindings,
     runtimeRequirements
@@ -110,14 +114,53 @@ function validateLibraryDependencies(
 
 function validateCompilerLibrarySet(
   declarations: LibraryDeclarationDescriptor[],
+  nativeTypes: LibraryNativeTypeDescriptor[],
   operations: LibraryOperationDescriptor[],
   intrinsicBindings: IntrinsicRoleBinding[],
   runtimeRequirements: RuntimeRequirementDescriptor[]
 ): void {
   validateUniqueDeclarationSources(declarations)
+  validateNativeTypes(nativeTypes)
   validateUniqueOperationIds(operations)
   validateUniqueIntrinsicRoles(intrinsicBindings)
   validateUniqueRuntimeRequirementIds(runtimeRequirements)
+}
+
+function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
+  const typeIds: Set<string> = new Set()
+  const declarationNames: Set<string> = new Set()
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    const nativeType = nativeTypes[index]
+
+    if (typeIds.has(nativeType.typeId)) {
+      throw new Error(`Duplicate compiler library native type id ${nativeType.typeId}`)
+    }
+
+    typeIds.add(nativeType.typeId)
+
+    for (let nameIndex = 0; nameIndex < nativeType.declarationNames.length; nameIndex = nameIndex + 1) {
+      const name = nativeType.declarationNames[nameIndex]
+
+      if (declarationNames.has(name)) {
+        throw new Error(`Duplicate compiler library native type declaration ${name}`)
+      }
+
+      declarationNames.add(name)
+    }
+  }
+
+  for (let index = 0; index < nativeTypes.length; index = index + 1) {
+    const nativeType = nativeTypes[index]
+
+    for (let baseIndex = 0; baseIndex < nativeType.baseTypeIds.length; baseIndex = baseIndex + 1) {
+      const baseTypeId = nativeType.baseTypeIds[baseIndex]
+
+      if (!typeIds.has(baseTypeId)) {
+        throw new Error(`Missing compiler library native base type ${nativeType.typeId} -> ${baseTypeId}`)
+      }
+    }
+  }
 }
 
 function validateUniqueDeclarationSources(declarations: LibraryDeclarationDescriptor[]): void {
@@ -184,6 +227,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
     const library = libraries[index]
     const dependencyIds = sortedStrings(library.dependencies)
     const declarationIds: string[] = []
+    const nativeTypeIds: string[] = []
     const operationIds: string[] = []
     const intrinsicIds: string[] = []
     const requirementIds: string[] = []
@@ -218,6 +262,19 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       )
     }
 
+    const libraryNativeTypes = library.nativeTypes ?? []
+
+    for (let itemIndex = 0; itemIndex < libraryNativeTypes.length; itemIndex = itemIndex + 1) {
+      const item = libraryNativeTypes[itemIndex]
+      insertSortedString(
+        nativeTypeIds,
+        item.libraryId + ':' + item.typeId + ':names=' + sortedStrings(item.declarationNames).join(',') +
+          ':value=' + item.valueType + ':cpp=' + item.cppType +
+          ':bases=' + sortedStrings(item.baseTypeIds).join(',') +
+          ':requirements=' + sortedStrings(item.runtimeRequirements).join(',')
+      )
+    }
+
     for (let itemIndex = 0; itemIndex < library.intrinsicBindings.length; itemIndex = itemIndex + 1) {
       const item = library.intrinsicBindings[itemIndex]
       insertSortedString(intrinsicIds, item.role + ':' + item.bindingId)
@@ -239,6 +296,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
       library.id +
         '|deps=' + dependencyIds.join(',') +
         '|decl=' + declarationIds.join(',') +
+        '|types=' + nativeTypeIds.join(',') +
         '|ops=' + operationIds.join(',') +
         '|intrinsics=' + intrinsicIds.join(',') +
         '|requirements=' + requirementIds.join(',')
@@ -246,6 +304,12 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
   }
 
   return 'inox:library-set:v1:' + shortStableHash(rows.join(';'))
+}
+
+function pushNativeTypes(target: LibraryNativeTypeDescriptor[], values: LibraryNativeTypeDescriptor[]): void {
+  for (let index = 0; index < values.length; index = index + 1) {
+    target.push(values[index])
+  }
 }
 
 function operationArgumentChecksFingerprint(operation: LibraryOperationDescriptor): string {

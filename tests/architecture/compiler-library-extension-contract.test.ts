@@ -100,6 +100,7 @@ function fingerprintLibrary(options: FingerprintLibraryOptions = {}): CompilerLi
     id: 'platform:host',
     dependencies: [],
     declarations: [],
+    nativeTypes: [],
     operations: [
       {
         ...operation('global:host.values', 'call'),
@@ -156,6 +157,7 @@ function librarySet(operations: LibraryOperationDescriptor[]): CompilerLibrarySe
   return {
     fingerprint: 'test',
     declarations: [],
+    nativeTypes: [],
     operations,
     intrinsicBindings: [],
     runtimeRequirements: []

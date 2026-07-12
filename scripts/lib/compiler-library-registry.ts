@@ -7,6 +7,7 @@ import type {
   CompilerLibraryPackageDescriptor,
   CompilerLibrarySet,
   IntrinsicRoleBinding,
+  LibraryNativeTypeDescriptor,
   LibraryOperationDescriptor,
   RuntimeRequirementDescriptor
 } from '../../compiler/extensions/types.ts'
@@ -170,6 +171,7 @@ function compilerLibraryDescriptor(library: DiscoveredCompilerLibrary): Compiler
     id: library.id,
     dependencies: compilerPackage === null ? [] : compilerPackage.dependencies,
     declarations,
+    nativeTypes: compilerPackage === null ? [] : compilerPackage.nativeTypes ?? [],
     operations: compilerPackage === null ? [] : compilerPackage.operations,
     intrinsicBindings: compilerPackage === null ? [] : compilerPackage.intrinsicBindings,
     runtimeRequirements: compilerPackage === null ? [] : compilerPackage.runtimeRequirements
@@ -200,6 +202,12 @@ function renderRegistrySource(
   source = source + '\nexport const defaultCompilerLibrarySet: CompilerLibrarySet = {\n'
   source = source + `  "fingerprint": ${JSON.stringify(librarySet.fingerprint)},\n`
   source = source + `  "declarations": ${JSON.stringify(librarySet.declarations, null, 2)},\n`
+  source = source + `  "nativeTypes": ${renderPackageArray(
+    librarySet.nativeTypes,
+    discovered,
+    packageNames,
+    'nativeTypes'
+  )},\n`
   source = source + `  "operations": ${renderPackageArray(
     librarySet.operations,
     discovered,
@@ -223,8 +231,12 @@ function renderRegistrySource(
   return source
 }
 
-type PackageArrayItem = LibraryOperationDescriptor | IntrinsicRoleBinding | RuntimeRequirementDescriptor
-type PackageArrayName = 'operations' | 'intrinsicBindings' | 'runtimeRequirements'
+type PackageArrayItem =
+  | LibraryNativeTypeDescriptor
+  | LibraryOperationDescriptor
+  | IntrinsicRoleBinding
+  | RuntimeRequirementDescriptor
+type PackageArrayName = 'nativeTypes' | 'operations' | 'intrinsicBindings' | 'runtimeRequirements'
 
 function renderPackageArray(
   values: PackageArrayItem[],
@@ -278,6 +290,10 @@ function compilerPackageArray(
 ): PackageArrayItem[] {
   if (arrayName === 'operations') {
     return compilerPackage.operations
+  }
+
+  if (arrayName === 'nativeTypes') {
+    return compilerPackage.nativeTypes ?? []
   }
 
   if (arrayName === 'intrinsicBindings') {
