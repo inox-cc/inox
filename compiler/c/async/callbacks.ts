@@ -563,11 +563,17 @@ function isPlainFunctionPointerReturn(functionType: CFunctionType): boolean {
 }
 
 function isManagedRuntimeCallbackParamValueType(valueType: string): boolean {
-  return valueType === 'string' || valueType === 'object'
+  return valueType === 'string' || valueType === 'object' || valueType === 'bytes'
 }
 
 function isSupportedRuntimeCallbackParamValueType(valueType: string): boolean {
-  return valueType === 'number' || valueType === 'boolean' || valueType === 'string' || valueType === 'object'
+  return (
+    valueType === 'number' ||
+    valueType === 'boolean' ||
+    valueType === 'string' ||
+    valueType === 'object' ||
+    valueType === 'bytes'
+  )
 }
 
 function externalEventLoopNodeUses(
@@ -3728,6 +3734,12 @@ function emitRuntimeArrowCallbackParamPrelude(
       continue
     }
 
+    if (param.valueType === 'bytes') {
+      lines.push(`inox_value ${name} = args[${index}];`)
+      index = index + 1
+      continue
+    }
+
     if (param.valueType === 'number') {
       lines.push(`double ${name} = args[${index}].as.number;`)
       index = index + 1
@@ -3835,6 +3847,10 @@ function emitRuntimeCallbackWrapperArgChecks(param: CFunctionParam, index: numbe
 
   if (param.valueType === 'object') {
     return [`if (${runtimeObjectLikeValueMismatchCondition(`args[${index}]`)}) return INOX_ERR_TYPE;`]
+  }
+
+  if (param.valueType === 'bytes') {
+    return [`if (args[${index}].tag != INOX_TAG_BYTES || args[${index}].as.ref == 0) return INOX_ERR_TYPE;`]
   }
 
   if (param.valueType === 'number') {

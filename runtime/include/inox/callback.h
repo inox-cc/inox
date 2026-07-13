@@ -32,4 +32,34 @@ inox_status inox_callback_call(inox_value callback, const inox_value* args, size
 }
 #endif
 
+#ifdef __cplusplus
+
+#include <span>
+
+namespace inox {
+
+class Callback {
+private:
+  Value value_;
+
+public:
+  Callback();
+  Callback(inox_value value);
+  Callback(const Value& value);
+  Callback(Value&& value);
+  Callback(const Callback& other);
+  Callback(Callback&& other) noexcept;
+  Callback& operator=(const Callback& other);
+  Callback& operator=(Callback&& other) noexcept;
+  ~Callback();
+
+  bool valid() const;
+  Value call() const;
+  Value call(std::span<const Value> args) const;
+};
+
+} // namespace inox
+
+#endif
+
 #endif

@@ -140,6 +140,7 @@ set(INOX_RUNTIME_SOURCES
   "${INOX_RUNTIME_DIR}/src/async/promise.c"
   "${INOX_RUNTIME_DIR}/src/core/allocator.c"
   "${INOX_RUNTIME_DIR}/src/core/callback.c"
+  "${INOX_RUNTIME_DIR}/src/core/callback_bridge.cc"
   "${INOX_RUNTIME_DIR}/src/core/class_descriptor.c"
   "${INOX_RUNTIME_DIR}/src/core/debug_bridge.cc"
   "${INOX_RUNTIME_DIR}/src/core/main.cc"
