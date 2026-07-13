@@ -54,11 +54,17 @@ export type LibraryCArgumentKind =
   | 'result-shape'
   | 'string-view-or-value'
   | 'object-boolean-field'
+  | 'object-string-field'
+  | 'object-number-field'
+  | 'runtime-callback'
+  | 'optional-runtime-callback'
 
 export type LibraryCArgumentSourceDescriptor = {
   argumentIndex: number
-  objectFieldName: string
+  objectFieldName?: string
 }
+
+export type LibraryCallbackLifetime = 'call' | 'event-loop'
 
 export type LibraryCResultMode = 'value' | 'borrowed'
 
@@ -130,6 +136,7 @@ export type LibraryOperationVariantDescriptor = {
   promiseRejectionValueType?: string | null
   nullable?: boolean
   owned?: boolean
+  callbackLifetime?: LibraryCallbackLifetime | null
 }
 
 export type LibraryOperationDescriptor = {
@@ -165,6 +172,7 @@ export type LibraryOperationDescriptor = {
   constantValue?: string | null
   diagnosticCode?: string | null
   diagnosticMessage?: string | null
+  callbackLifetime?: LibraryCallbackLifetime | null
 }
 
 export type IntrinsicRole =

@@ -16,19 +16,34 @@ export const emptyCompilerLibrarySet: CompilerLibrarySet = {
 
 export function compilerLibraryNativeTypeForName(
   libraries: CompilerLibrarySet,
-  name: string
+  name: string,
+  libraryId?: string | null
 ): LibraryNativeTypeDescriptor | null {
+  let result: LibraryNativeTypeDescriptor | null = null
+
   for (let typeIndex = 0; typeIndex < libraries.nativeTypes.length; typeIndex = typeIndex + 1) {
     const nativeType = libraries.nativeTypes[typeIndex]
 
+    if (
+      libraryId !== null &&
+      typeof libraryId !== 'undefined' &&
+      nativeType.libraryId !== libraryId
+    ) {
+      continue
+    }
+
     for (let nameIndex = 0; nameIndex < nativeType.declarationNames.length; nameIndex = nameIndex + 1) {
       if (nativeType.declarationNames[nameIndex] === name) {
-        return nativeType
+        if (result !== null) {
+          return null
+        }
+
+        result = nativeType
       }
     }
   }
 
-  return null
+  return result
 }
 
 export function compilerLibraryNativeTypeIsAssignable(

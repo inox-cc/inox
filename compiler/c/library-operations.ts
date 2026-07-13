@@ -10,6 +10,7 @@ import {
 import type { CFunctionContext } from './context.ts'
 import { cStringLiteral } from './identifiers.ts'
 import type {
+  CFunctionType,
   CObjectShape,
   CObjectShapeField,
   CPreparedCallOptions as PreparedCallOptions,
@@ -19,7 +20,7 @@ import type {
 
 type CompilerLibraryCArgumentSource = {
   argumentIndex: number
-  objectFieldName: string
+  objectFieldName?: string
 }
 
 type CompilerLibraryExpressionNode = AnyNode & {
@@ -33,6 +34,7 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryCResultMode?: string | null
   libraryCReceiverAdapter?: string | null
   libraryConstantValue?: string | null
+  libraryCallbackLifetime?: string | null
   libraryCppType?: string | null
   libraryOwned?: boolean | null
   promiseRejectionValueType?: string | null
@@ -47,6 +49,11 @@ export type CompilerLibraryLoweringDependencies = {
     context: CFunctionContext,
     tempPrefix?: string
   ): PreparedStringBytesOperand
+  emitRuntimeCallbackValue(
+    expression: AnyNode,
+    functionType: CFunctionType | null | undefined,
+    context: CFunctionContext
+  ): PreparedExpression
   emitThrownCheckLines(context: CFunctionContext): string[]
   inferExpressionType(expression: AnyNode, context: CFunctionContext): string
   registerObjectShape(context: CFunctionContext, name: string, shape: CObjectShape | null | undefined): void
@@ -223,7 +230,9 @@ export function emitPreparedCompilerLibraryCallExpression(
 
     if (kind === 'object-boolean-field') {
       if (
-        argumentSource === null
+        argumentSource === null ||
+        argumentSource.objectFieldName === null ||
+        typeof argumentSource.objectFieldName === 'undefined'
       ) {
         return null
       }
@@ -234,6 +243,99 @@ export function emitPreparedCompilerLibraryCallExpression(
           argumentSource.objectFieldName
         ) ? 'true' : 'false'
       )
+      continue
+    }
+
+    if (kind === 'object-string-field') {
+      if (
+        argumentSource === null ||
+        argumentSource.objectFieldName === null ||
+        typeof argumentSource.objectFieldName === 'undefined'
+      ) {
+        return null
+      }
+
+      const field = compilerLibraryObjectField(
+        sourceArguments[argumentSource.argumentIndex],
+        argumentSource.objectFieldName
+      )
+
+      optionalArgumentPresent = field !== null
+
+      if (field === null) {
+        argumentsList.push('inox::StringView("", 0)')
+        continue
+      }
+
+      const prepared = dependencies.emitPreparedStringBytesOperand(
+        field,
+        context,
+        'inox_library_option'
+      )
+      pushLines(lines, prepared.lines)
+      argumentsList.push(emitCompilerLibraryStringArgument(prepared))
+      continue
+    }
+
+    if (kind === 'object-number-field') {
+      if (
+        argumentSource === null ||
+        argumentSource.objectFieldName === null ||
+        typeof argumentSource.objectFieldName === 'undefined'
+      ) {
+        return null
+      }
+
+      const field = compilerLibraryObjectField(
+        sourceArguments[argumentSource.argumentIndex],
+        argumentSource.objectFieldName
+      )
+
+      optionalArgumentPresent = field !== null
+
+      if (field === null) {
+        argumentsList.push('0')
+        continue
+      }
+
+      const prepared = dependencies.emitPreparedNumberExpression(field, context)
+      pushLines(lines, prepared.lines)
+      argumentsList.push(prepared.expression)
+      continue
+    }
+
+    if (kind === 'runtime-callback' || kind === 'optional-runtime-callback') {
+      let callbackArgumentIndex = sourceArgumentIndex
+
+      if (argumentSource !== null) {
+        callbackArgumentIndex = argumentSource.argumentIndex
+      } else {
+        sourceArgumentIndex = sourceArgumentIndex + 1
+      }
+
+      const callback = sourceArguments[callbackArgumentIndex]
+
+      if (callback === null || typeof callback === 'undefined') {
+        if (kind === 'runtime-callback') {
+          return null
+        }
+
+        argumentsList.push('inox_undefined_value()')
+        continue
+      }
+
+      const prepared = dependencies.emitRuntimeCallbackValue(
+        callback,
+        callback.functionType,
+        context
+      )
+      pushLines(lines, prepared.lines)
+      argumentsList.push(prepared.expression)
+
+      if (item.libraryCallbackLifetime === 'event-loop') {
+        registerEventLoop(context)
+      }
+
       continue
     }
 
@@ -483,6 +585,88 @@ export function emitPreparedCompilerLibraryCallExpression(
   }
 }
 
+export function compilerLibraryRuntimeCallbackArgumentInfo(
+  expression: AnyNode
+): { functionType: CFunctionType; index: number } | null {
+  if (expression.type !== 'CallExpression' && expression.type !== 'NewExpression') {
+    return null
+  }
+
+  const item = expression as CompilerLibraryExpressionNode
+  const argumentKinds = item.libraryCArgumentKinds
+  const argumentSources = item.libraryCArgumentSources
+
+  if (argumentKinds === null || typeof argumentKinds === 'undefined') {
+    return null
+  }
+
+  let sourceArgumentIndex = 0
+
+  for (let kindIndex = 0; kindIndex < argumentKinds.length; kindIndex = kindIndex + 1) {
+    const kind = argumentKinds[kindIndex]
+    let argumentSource: CompilerLibraryCArgumentSource | null = null
+
+    if (
+      argumentSources !== null &&
+      typeof argumentSources !== 'undefined' &&
+      kindIndex < argumentSources.length
+    ) {
+      argumentSource = argumentSources[kindIndex]
+    }
+
+    if (kind === 'runtime-callback' || kind === 'optional-runtime-callback') {
+      const index = argumentSource?.argumentIndex ?? sourceArgumentIndex
+      const callback = expression.args[index]
+      const functionType = callback?.functionType
+
+      if (functionType !== null && typeof functionType !== 'undefined') {
+        return { functionType: functionType as CFunctionType, index }
+      }
+
+      return null
+    }
+
+    if (compilerLibraryCArgumentKindConsumesSource(kind, argumentSource)) {
+      sourceArgumentIndex = sourceArgumentIndex + 1
+    }
+  }
+
+  return null
+}
+
+export function isCompilerLibraryExternalEventLoopCallExpression(
+  expression: AnyNode | null | undefined
+): boolean {
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    (expression.type === 'CallExpression' || expression.type === 'NewExpression') &&
+    expression.libraryCallbackLifetime === 'event-loop'
+  )
+}
+
+function compilerLibraryCArgumentKindConsumesSource(
+  kind: string,
+  source: CompilerLibraryCArgumentSource | null
+): boolean {
+  if (source !== null) {
+    return false
+  }
+
+  return (
+    kind === 'string-view' ||
+    kind === 'optional-string-view' ||
+    kind === 'string-view-or-value' ||
+    kind === 'value' ||
+    kind === 'number' ||
+    kind === 'optional-value' ||
+    kind === 'optional-argument' ||
+    kind === 'optional-number' ||
+    kind === 'string-view-array' ||
+    kind === 'optional-string-view-array'
+  )
+}
+
 export function isCompilerLibraryPromiseExpression(expression: AnyNode | null | undefined): boolean {
   return (
     expression !== null &&
@@ -511,6 +695,25 @@ function compilerLibraryObjectBooleanLiteral(
   }
 
   return false
+}
+
+function compilerLibraryObjectField(
+  argument: AnyNode | null | undefined,
+  fieldName: string
+): AnyNode | null {
+  if (argument === null || typeof argument === 'undefined' || argument.type !== 'ObjectLiteral') {
+    return null
+  }
+
+  for (let index = 0; index < argument.properties.length; index = index + 1) {
+    const property = argument.properties[index]
+
+    if (property.key === fieldName) {
+      return property.value
+    }
+  }
+
+  return null
 }
 
 function applyCompilerLibraryValueAdapter(value: string, adapter: string | null | undefined): string {

@@ -141,12 +141,13 @@ function validateNativeTypes(nativeTypes: LibraryNativeTypeDescriptor[]): void {
 
     for (let nameIndex = 0; nameIndex < nativeType.declarationNames.length; nameIndex = nameIndex + 1) {
       const name = nativeType.declarationNames[nameIndex]
+      const declarationKey = `${nativeType.libraryId}:${name}`
 
-      if (declarationNames.has(name)) {
-        throw new Error(`Duplicate compiler library native type declaration ${name}`)
+      if (declarationNames.has(declarationKey)) {
+        throw new Error(`Duplicate compiler library native type declaration ${declarationKey}`)
       }
 
-      declarationNames.add(name)
+      declarationNames.add(declarationKey)
     }
   }
 
@@ -251,6 +252,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
           (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
           (item.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(item.cArgumentSources) + ':' +
+          (item.callbackLifetime ?? '') + ':' +
           (item.cResultMode ?? '') + ':' +
           (item.cReceiverAdapter ?? '') + ':' +
           operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
@@ -352,6 +354,7 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
         (variant.objectFieldName ?? '') + ':' + sortedBooleans(variant.booleanLiterals ?? []).join(',') + ':' +
         (variant.cExpression ?? '') + ':' + (variant.cArgumentKinds ?? []).join(',') + ':' +
         (variant.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(variant.cArgumentSources) + ':' +
+        (variant.callbackLifetime ?? '') + ':' +
         (variant.cResultMode ?? '') + ':' +
         (variant.cReceiverAdapter ?? '') + ':' +
         resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) + ':' +
@@ -385,13 +388,13 @@ function objectLiteralFieldsFingerprint(fields: { name: string; valueTypes: stri
 }
 
 function operationArgumentSourcesFingerprint(
-  sources: Array<{ argumentIndex: number; objectFieldName: string } | null> | null | undefined
+  sources: Array<{ argumentIndex: number; objectFieldName?: string } | null> | null | undefined
 ): string {
   const rows: string[] = []
 
   for (let index = 0; index < (sources ?? []).length; index = index + 1) {
     const source = (sources ?? [])[index]
-    rows.push(source === null ? '' : `${source.argumentIndex}:${source.objectFieldName}`)
+    rows.push(source === null ? '' : `${source.argumentIndex}:${source.objectFieldName ?? ''}`)
   }
 
   return rows.join(',')

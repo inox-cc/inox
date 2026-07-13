@@ -189,7 +189,8 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
         arrayElementDeclaredType: 'string'
       }),
       anyNodeField('args', 'array', null, false, loc, {
-        arrayElementType: 'object'
+        arrayElementType: 'object',
+        arrayElementDeclaredType: 'AnyNode'
       }),
       anyNodeField('params', 'array', null, false, loc, {
         arrayElementType: 'object'
@@ -267,6 +268,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryResultTypeId', 'string', null, true, loc),
       anyNodeField('libraryCCallStyle', 'string', null, true, loc),
       anyNodeField('libraryCFailureMode', 'string', null, true, loc),
+      anyNodeField('libraryCallbackLifetime', 'string', null, true, loc),
       anyNodeField('httpHandlerName', 'string', null, true, loc)
     ]
   }

@@ -415,6 +415,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.libraryCExpression = libraryCExpression
   }
 
+  const libraryCallbackLifetime = nullableString(source.libraryCallbackLifetime)
+  if (libraryCallbackLifetime !== null && typeof libraryCallbackLifetime !== 'undefined') {
+    target.libraryCallbackLifetime = libraryCallbackLifetime
+  }
+
   copyStringMetadataArray(target, source, 'libraryCArgumentAdapters')
   copyStringMetadataArray(target, source, 'libraryCArgumentKinds')
   copyStringMetadataArray(target, source, 'libraryCResultShapeFields')

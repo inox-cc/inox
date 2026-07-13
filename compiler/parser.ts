@@ -411,6 +411,14 @@ class Parser {
       if (this.isValue('{')) {
         returnType = 'object'
         returnShape = this.parseObjectType(null)
+
+        if (this.matchValue('|')) {
+          const unionMember = this.parseTypeAnnotation(['{'], null)
+
+          if (unionMember === 'null') {
+            returnType = 'nullable<object>'
+          }
+        }
       } else {
         returnType = this.parseTypeAnnotation(['{'], null)
       }

@@ -127,9 +127,11 @@ import type { CModuleFileEmitters } from './modules.ts'
 import { emitCModuleFilesFromGraph as emitCModuleFilesFromGraphWithEmitters } from './modules.ts'
 import { mathRuntimeMethodName } from './runtime-methods.ts'
 import {
+  compilerLibraryRuntimeCallbackArgumentInfo,
   compilerLibraryStringConstantValue,
   emitPreparedCompilerLibraryCallExpression as emitPreparedCompilerLibraryCallExpressionWithDependencies,
   emitPreparedCompilerLibraryExpression,
+  isCompilerLibraryExternalEventLoopCallExpression,
   isCompilerLibraryPromiseExpression,
   isCompilerLibraryStringExpression,
   type CompilerLibraryLoweringDependencies
@@ -833,6 +835,7 @@ compilerLibraryLoweringDependencies = {
   emitCValueExpression,
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
+  emitRuntimeCallbackValue,
   emitThrownCheckLines,
   inferExpressionType,
   registerObjectShape
@@ -975,6 +978,12 @@ httpLoweringDependencies = {
 }
 
 function runtimeCallbackArgumentInfoForNodeStdlibCall(expression: AnyNode): RuntimeCallbackArgumentInfo | null {
+  const libraryCallback = compilerLibraryRuntimeCallbackArgumentInfo(expression)
+
+  if (libraryCallback !== null) {
+    return libraryCallback
+  }
+
   if (isTimerStartCallExpression(expression)) {
     return {
       functionType: timerCallbackFunctionType(),
@@ -989,6 +998,7 @@ function isConfiguredExternalEventLoopCallExpression(
   expression: AnyNode | null | undefined
 ): boolean {
   return (
+    isCompilerLibraryExternalEventLoopCallExpression(expression) ||
     isTimerStartCallExpression(expression) ||
     isCompilerLibraryPromiseExpression(expression) ||
     isAsyncFetchRuntimeCallExpression(expression)

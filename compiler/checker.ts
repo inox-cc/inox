@@ -4184,6 +4184,7 @@ class Checker {
 
     expression.libraryCResultMode = variant?.cResultMode ?? operation.cResultMode ?? null
     expression.libraryCReceiverAdapter = variant?.cReceiverAdapter ?? operation.cReceiverAdapter ?? null
+    expression.libraryCallbackLifetime = variant?.callbackLifetime ?? operation.callbackLifetime ?? null
 
     const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
     const cppType = variant?.cppType ?? operation.cppType
