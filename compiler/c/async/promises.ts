@@ -55,11 +55,13 @@ type PromiseEmitContext = {
 type PromiseFunctionContext = PromiseEmitContext & {
   boxedVariables: PromiseStringSet
   cleanupEnabled: boolean
+  cppValueTypes: PromiseStringMap
   eventLoopUsed: boolean
   explicitEventLoop: boolean
   externalEventLoop: boolean
   failureStatement?: string | null
   failureStatementUsed?: boolean
+  localValueNames: PromiseStringSet
   nextId: number
   objectShapes: PromiseObjectShapeMap
   ownedPromises: string[]

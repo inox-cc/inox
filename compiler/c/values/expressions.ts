@@ -448,10 +448,7 @@ function cBooleanLiteral(value: boolean): string {
 function isRawPointerType(valueType: string): boolean {
   return (
     valueType === 'function' ||
-    valueType === 'timer' ||
-    valueType === 'http-request' ||
-    valueType === 'http-response' ||
-    valueType === 'http-server'
+    valueType === 'timer'
   )
 }
 
@@ -1690,7 +1687,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'ClassFunctionContext' ||
     value === 'CollectionFunctionContext' ||
     value === 'FetchFunctionContext' ||
-    value === 'HttpFunctionContext' ||
     value === 'NullableFunctionContext' ||
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||
@@ -1710,7 +1706,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
     value === 'CollectionLoweringDependencies' ||
-    value === 'HttpLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
     value === 'PromiseChainLoweringDependencies' ||
     value === 'StatementLoweringDependencies' ||

@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -44,47 +43,30 @@ createServer((request, response) => {
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     loopBackend: 'libuv',
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
-  assert.match(source, /HttpServer server;/)
-  assert.match(source, /server\.create\(0, 0\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /server\.listen\("127\.0\.0\.1", \(int\)\(8080\), 128\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /server\.close\(\);/)
-  assert.match(source, /HttpServer inox_http_server_\d+;/)
-  assert.match(source, /inox_http_server_\d+\.create\(0, 0\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /inox_http_server_\d+\.listen\("127\.0\.0\.1", \(int\)\(8081\), 128\);\n  if \(inox::thrown\(\)\) return;/)
-  assert.match(source, /static void inox_http_handler_\d+\(void\* user, HttpRequest inox_request, HttpResponse inox_response\)/)
-  assert.match(source, /HttpRequest request = inox_request;/)
-  assert.match(source, /HttpResponse response = inox_response;/)
-  assert.match(source, /response\.end\(inox::StringView\(request\.raw\(\)->url\.bytes, request\.raw\(\)->url\.len\)\);\n\s+if \(inox::thrown\(\)\) return;/)
-  assert.doesNotMatch(source, /inox_http_server\* inox_http_server_\d+ = 0;/)
-  assert.doesNotMatch(source, /inox_http_status_\d+/)
-  assert.doesNotMatch(source, /static inox_status inox_http_handler_\d+/)
-  assert.doesNotMatch(source, /const HttpRequestData\* request = inox_request;/)
-  assert.doesNotMatch(source, /inox_http_response\* response = inox_response;/)
-  assert.doesNotMatch(source, /HttpResponse\(response\)\./)
-  assert.doesNotMatch(source, /\.create\([^;]+ != INOX_OK/)
-  assert.doesNotMatch(source, /\.listen\([^;]+ != INOX_OK/)
-
-  const header = readFileSync(resolve('stdlib/node/http/include/inox/http.h'), 'utf8')
-  assert.match(header, /void listen\(inox::StringView host, int port, int backlog\) const;/)
-  assert.match(header, /inox::StringView method;/)
-  assert.match(header, /inox::StringView url;/)
-  assert.match(header, /inox::StringView body;/)
-  assert.match(header, /inox::StringView name;/)
-  assert.match(header, /inox::StringView value;/)
-  assert.match(header, /typedef void \(\*HttpHandlerFn\)\(void\* user, HttpRequest request, HttpResponse response\);/)
-  assert.doesNotMatch(header, /typedef inox_status \(\*HttpHandlerFn\)/)
-  assert.doesNotMatch(header, /HttpHandlerFn\)\(\s*void\* user,\s*const HttpRequestData\* request,\s*inox_http_response\* response/)
-  assert.doesNotMatch(header, /listen\(const char\* host/)
-  assert.doesNotMatch(header, /\bmethod_len\b/)
-  assert.doesNotMatch(header, /\burl_len\b/)
-  assert.doesNotMatch(header, /\bbody_len\b/)
-  assert.doesNotMatch(header, /\bname_len\b/)
-  assert.doesNotMatch(header, /\bvalue_len\b/)
+  assert.match(source, /#include "inox\/http\.h"/)
+  assert.match(source, /auto server = http\.createServer\(\);/)
+  assert.match(source, /server\.listen\(8080, "127\.0\.0\.1"\)/)
+  assert.match(source, /server\.close\(\)/)
+  assert.match(source, /inox_library_object_\d+\.listen\(8081, "127\.0\.0\.1"\)/)
+  assert.match(
+    source,
+    /static inox_status inox_callback_arrow_\d+\(void\* inox_context, const inox_value\* args, size_t arg_count, inox_value\* out\)/
+  )
+  assert.match(source, /arg_count != 2/)
+  assert.match(source, /inox_value request = args\[0\];/)
+  assert.match(source, /inox_value response = args\[1\];/)
+  assert.match(source, /HttpRequest\(request\)\.url\(\)/)
+  assert.match(source, /HttpResponse\(response\)\.end\(/)
+  assert.match(source, /HttpResponse\(response\)\.setStatusCode\(404\)/)
+  assert.match(source, /http\.createServer\(inox_callback_\d+\)/)
+  assert.doesNotMatch(source, /inox_http_|inox_http_handler_|HttpHandlerFn/)
+  assert.doesNotMatch(source, /sendFsFile|\.raw\(\)/)
 }
 
 function generatedTextFile(files: GeneratedTextFile[], path: string): GeneratedTextFile {

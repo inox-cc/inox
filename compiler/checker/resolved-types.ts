@@ -280,8 +280,7 @@ export function anyNodeObjectShape(loc: SourceLocation): ObjectShapeInfo {
       anyNodeField('libraryResultTypeId', 'string', null, true, loc),
       anyNodeField('libraryCCallStyle', 'string', null, true, loc),
       anyNodeField('libraryCFailureMode', 'string', null, true, loc),
-      anyNodeField('libraryCallbackLifetime', 'string', null, true, loc),
-      anyNodeField('httpHandlerName', 'string', null, true, loc)
+      anyNodeField('libraryCallbackLifetime', 'string', null, true, loc)
     ]
   }
 }

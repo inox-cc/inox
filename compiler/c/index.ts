@@ -144,13 +144,8 @@ import {
   runtimeFetchAbortControllerValueMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
-import type {
-  HttpLoweringDependencies,
-  TimerLoweringDependencies
-} from '../stdlib/node/c.ts'
+import type { TimerLoweringDependencies } from '../stdlib/node/c.ts'
 import {
-  emitNodeHttpCallStatement,
-  emitNodeHttpVariableDeclaration,
   emitPreparedTimerCallExpression,
   emitTimerVariableDeclaration,
   isTimerStartCallExpression,
@@ -498,7 +493,6 @@ let timerLoweringDependencies = {} as TimerLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
-let httpLoweringDependencies = {} as HttpLoweringDependencies
 
 const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCObjectLiteralValueExpression,
@@ -539,9 +533,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitKnownArrayIndexVariableDeclaration,
   emitKnownObjectMemberAssignment,
   emitKnownObjectMemberVariableDeclaration,
-  emitNodeHttpCallStatement: (expression: AnyNode, context: CFunctionContext) =>
-    emitNodeHttpCallStatement(expression, context, httpLoweringDependencies),
-  emitNodeHttpVariableDeclaration,
   emitNullableScalarValueExpression,
   emitNullableRuntimeValueAssignment,
   emitObjectVariableDeclaration: (statement: AnyNode, context: CFunctionContext) =>
@@ -952,12 +943,6 @@ function isConfiguredRuntimeProducedStringExpression(expression: AnyNode | null 
   return isCompilerLibraryStringExpression(expression)
 }
 
-httpLoweringDependencies = {
-  emitConsoleLogStatement,
-  emitPreparedNumberExpression,
-  emitStatementList
-}
-
 function runtimeCallbackArgumentInfoForNodeStdlibCall(expression: AnyNode): RuntimeCallbackArgumentInfo | null {
   const libraryCallback = compilerLibraryRuntimeCallbackArgumentInfo(expression)
 
@@ -1321,7 +1306,6 @@ const cUnitDependencies = {
   emitFunctionHead,
   emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) =>
     emitMainWrapperWithDependencies(irPrograms, baseContext, declarationEmissionDependencies),
-  httpLoweringDependencies,
   nullableLoweringDependencies,
   promiseChainLoweringDependencies,
   statementLoweringDependencies,
@@ -1346,7 +1330,6 @@ const cModuleEmissionDependencies = {
     emitFunctionDeclarationWithDependencies(statement, baseContext, declarationEmissionDependencies),
   emitFunctionHead,
   emitStatementList,
-  httpLoweringDependencies,
   nullableLoweringDependencies,
   promiseChainLoweringDependencies,
   statementLoweringDependencies,
@@ -1618,9 +1601,6 @@ function createBaseContext(
     promiseChainWrappers: new Map(),
     runtimeEntrypointAdapter: null,
     regexpLiterals: new Map(),
-    httpCreateServerNames: new Set(),
-    httpHandlers: new Map(),
-    httpImportNames: new Set(),
     runtimeFunctionParams: new Map(),
     runtimeEntryPath: null,
     externalEventLoopFunctions: new Set(),

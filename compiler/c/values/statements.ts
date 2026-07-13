@@ -35,7 +35,6 @@ import type {
   CFunctionPointerAdapter,
   CFunctionReturnMapType,
   CFunctionType,
-  CHttpHandler,
   CKnownArrayElement,
   CKnownObjectField,
   CKnownObjectIndexField,
@@ -165,9 +164,6 @@ type CFunctionContext = {
   functionReturnTypes: CStringMap
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   functionTypes: Map<string, CFunctionType>
-  httpCreateServerNames: CStringSet
-  httpHandlers: Map<string, CHttpHandler>
-  httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
   mathRuntimeInitStatement: string | null
   localValueNames: CStringSet
@@ -348,8 +344,6 @@ export type StatementLoweringDependencies = {
     member: CKnownObjectField,
     context: CFunctionContext
   ): string[]
-  emitNodeHttpCallStatement(expression: StatementNode, context: CFunctionContext): string[] | null
-  emitNodeHttpVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null
   emitNullableScalarValueExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitNullableRuntimeValueAssignment(expression: StatementNode, context: CFunctionContext): string[]
   emitObjectVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[]
@@ -3982,12 +3976,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     }
   }
 
-  const nodeHttpDeclaration = deps.emitNodeHttpVariableDeclaration(statement, context)
-
-  if (nodeHttpDeclaration !== null && typeof nodeHttpDeclaration !== 'undefined') {
-    return nodeHttpDeclaration
-  }
-
   const fetchAbortController = deps.emitFetchAbortControllerVariableDeclaration(statement, context)
 
   if (fetchAbortController !== null && typeof fetchAbortController !== 'undefined') {
@@ -4568,12 +4556,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
   }
 
   if (expression.type === 'CallExpression') {
-    const nodeHttpCall = deps.emitNodeHttpCallStatement(expression, context)
-
-    if (nodeHttpCall !== null && typeof nodeHttpCall !== 'undefined') {
-      return nodeHttpCall
-    }
-
     const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, preparedCallDiscard())
 
     if (arrayPopCall !== null && typeof arrayPopCall !== 'undefined') {

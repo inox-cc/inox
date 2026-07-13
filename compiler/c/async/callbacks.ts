@@ -74,9 +74,11 @@ type CallbackEmitContext = {
 type CallbackFunctionContext = CallbackEmitContext & {
   boxedVariables: CallbackStringSet
   cleanupEnabled: boolean
+  cppValueTypes: CallbackStringMap
   eventLoopUsed: boolean
   explicitEventLoop: boolean
   externalEventLoop: boolean
+  localValueNames: CallbackStringSet
   objectShapes: CallbackObjectShapeMap
   promiseConstructorHandlers: CallbackPromiseConstructorHandlerMap
   runtimeCallbackCleanupLabel?: string
@@ -398,7 +400,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'ClassFunctionContext' ||
     value === 'CollectionFunctionContext' ||
     value === 'FetchFunctionContext' ||
-    value === 'HttpFunctionContext' ||
     value === 'NullableFunctionContext' ||
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||
@@ -418,7 +419,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
     value === 'CollectionLoweringDependencies' ||
-    value === 'HttpLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
     value === 'PromiseChainLoweringDependencies' ||
     value === 'StatementLoweringDependencies' ||
@@ -3554,9 +3554,15 @@ function emitRuntimeArrowCallbackWrapperDeclaration(
   pushIndentedLines(lines, deps.emitOwnedValueDeclarations(context))
   pushIndentedLines(lines, deps.emitErrorChannelDeclarations(context))
   pushIndentedLines(lines, deps.emitBoxedValueDeclarations(context))
-  pushIndentedLines(lines, statementLines)
   if (context.usedRuntimeCallbackCleanupGoto === true) {
+    lines.push('  {')
+    for (const line of statementLines) {
+      lines.push(`    ${line}`)
+    }
+    lines.push('  }')
     lines.push(`${context.runtimeCallbackCleanupLabel}:`)
+  } else {
+    pushIndentedLines(lines, statementLines)
   }
   pushIndentedLines(lines, deps.emitOwnedValueCleanup(context))
   pushIndentedLines(lines, deps.emitBoxedValueCleanup(context))
@@ -3638,6 +3644,9 @@ export function emitRuntimeArrowCallbackContextLocals(
 
   for (let index = 0; index < captures.length; index = index + 1) {
     const capture = callbackRuntimeArrowCaptureAt(captures, index)
+    context.localValueNames.add(capture.name)
+    context.cppValueTypes.delete(capture.name)
+
     if (capture.valueType === 'promise-settlement') {
       const promise = capture.name
       let kind: 'reject' | 'resolve' = 'resolve'

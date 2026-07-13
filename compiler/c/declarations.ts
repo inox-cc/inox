@@ -560,7 +560,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'ClassFunctionContext' ||
     value === 'CollectionFunctionContext' ||
     value === 'FetchFunctionContext' ||
-    value === 'HttpFunctionContext' ||
     value === 'NullableFunctionContext' ||
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||
@@ -580,7 +579,6 @@ function isDependencyCarrierDeclaredType(value: string): boolean {
     value === 'CallbackLoweringDependencies' ||
     value === 'ClassLoweringDependencies' ||
     value === 'CollectionLoweringDependencies' ||
-    value === 'HttpLoweringDependencies' ||
     value === 'NullableLoweringDependencies' ||
     value === 'PromiseChainLoweringDependencies' ||
     value === 'StatementLoweringDependencies' ||

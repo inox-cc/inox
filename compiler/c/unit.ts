@@ -70,14 +70,6 @@ import { emitCIdentifier, emitCObjectFunctionFieldName } from './identifiers.ts'
 import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
-import {
-  collectNodeHttpHandlers,
-  emitNodeHttpHandlerDeclarations,
-  emitNodeHttpHandlerPrototypeLines,
-  hasNodeHttpHandlers,
-  registerNodeStdlibRuntimeImportNames
-} from '../stdlib/node/c.ts'
-import type { HttpLoweringDependencies } from '../stdlib/node/c.ts'
 import type {
   CClassInfo,
   CClassMethod,
@@ -134,7 +126,6 @@ export type CUnitDependencies = {
   emitFunctionDeclaration: (statement: AnyNode, baseContext: CEmitContext) => string[]
   emitFunctionHead: (statement: AnyNode, context: CEmitContext) => string
   emitMainWrapper: (irPrograms: IrProgram[], baseContext: CEmitContext) => string[]
-  httpLoweringDependencies: HttpLoweringDependencies
   nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
   statementLoweringDependencies: StatementLoweringDependencies
@@ -1349,7 +1340,6 @@ export function emitCUnit(
   const valueDeclarations = collectCUnitValueDeclarations(irPrograms, baseContext)
   registerCUnitValueDeclarations(baseContext, valueDeclarations)
   registerCUnitSyntheticImportNames(baseContext, irPrograms)
-  registerNodeStdlibRuntimeImportNames(baseContext, irPrograms)
   baseContext.externalEventLoopFunctions = deps.collectExternalEventLoopFunctions(functions)
   baseContext.callbackWrappers = collectCallbackWrappers(irPrograms, baseContext, deps.callbackLoweringDependencies)
   baseContext.promiseChainWrappers = collectPromiseChainWrappers(
@@ -1362,7 +1352,6 @@ export function emitCUnit(
     baseContext,
     deps.asyncTaskLoweringDependencies
   )
-  collectNodeHttpHandlers(irPrograms, baseContext)
   const classMethods = collectClassMethods(baseContext)
   addDateStringRuntimeRequirements(runtimeRequirements, irPrograms, baseContext)
   const signatureRuntimeTypes = collectCUnitContextRuntimeTypes(baseContext)
@@ -1395,7 +1384,6 @@ export function emitCUnit(
   const needsTimerRuntime: boolean = preludeRequirements.needsTimerRuntime
   const needsConsoleRuntime: boolean = preludeRequirements.needsConsoleRuntime
   const needsFetchRuntime: boolean = preludeRequirements.needsFetchRuntime
-  const needsHttpRuntime: boolean = preludeRequirements.needsHttpRuntime
   baseContext.runtimeEntrypointAdapter = preludeRequirements.runtimeEntrypointAdapter
   baseContext.mathRuntimeInitStatement = needsMathRuntime ? emitMathRuntimeInitLines(options)[0] : null
   if (needsAsyncRuntime) {
@@ -1404,7 +1392,7 @@ export function emitCUnit(
     baseContext.unhandledRejectionFlag = null
   }
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
-  reportUnsupportedCGlobalUsages(globalUsages, diagnostics, baseContext)
+  reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
   const lines = emitCPrelude(
     needsRuntime,
     true,
@@ -1425,7 +1413,6 @@ export function emitCUnit(
     needsTimerRuntime,
     needsConsoleRuntime,
     needsFetchRuntime,
-    needsHttpRuntime,
     preludeRequirements.libraryCPreludeIncludes,
     options
   )
@@ -1524,15 +1511,12 @@ export function emitCUnit(
     }
   }
 
-  pushUnitLines(lines, emitNodeHttpHandlerPrototypeLines(baseContext))
-
   if (
     functions.length > 0 ||
     classMethods.length > 0 ||
     asyncTaskWrappers.size > 0 ||
     callbackWrappers.size > 0 ||
-    promiseChainWrappers.size > 0 ||
-    hasNodeHttpHandlers(baseContext)
+    promiseChainWrappers.size > 0
   ) {
     lines.push('')
   }
@@ -1586,11 +1570,6 @@ export function emitCUnit(
       lines.push('')
     }
   }
-
-  pushUnitLines(
-    lines,
-    emitNodeHttpHandlerDeclarations(baseContext, deps.httpLoweringDependencies)
-  )
 
   for (const item of functions) {
     pushUnitLines(lines, deps.emitFunctionDeclaration(item, baseContext))

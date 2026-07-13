@@ -1,11 +1,12 @@
 // @targets cc
 // @expect diagnostics INOX_NOT_IMPLEMENTED
 
-import httpServer from 'node:http'
+import http from 'node:http'
 
 function boot(enabled: boolean): void {
   if (enabled) {
-    httpServer.createServer(() => {})
+    const server = http.createServer(() => {})
+    server.close()
   }
 }
 

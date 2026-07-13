@@ -1,77 +1,99 @@
 #ifndef INOX_HTTP_H
 #define INOX_HTTP_H
 
-#include <stddef.h>
+#include <optional>
 
+#include "inox/binary.h"
+#include "inox/callback.h"
+#include "inox/string.h"
 #include "inox/string_view.h"
+#include "inox/value.h"
 
-struct inox_http_server;
-struct inox_http_response;
+class HttpListenOptions {
+public:
+  HttpListenOptions();
+  explicit HttpListenOptions(const inox::Value& value);
 
-struct HttpHeader {
-  inox::StringView name;
-  inox::StringView value;
-};
-
-struct HttpRequestData {
-  inox::StringView method;
-  inox::StringView url;
-  const HttpHeader* headers;
-  size_t header_count;
-  inox::StringView body;
-};
-
-#ifdef __cplusplus
-
-class HttpRequest;
-class HttpResponse;
-
-typedef void (*HttpHandlerFn)(void* user, HttpRequest request, HttpResponse response);
-
-class HttpServer {
 private:
-  inox_http_server* server_;
+  bool valid_;
+  std::optional<double> port_;
+  std::optional<inox::String> host_;
+  std::optional<double> backlog_;
 
+  friend class HttpServer;
+};
+
+class HttpHeaders {
+public:
+  HttpHeaders();
+  explicit HttpHeaders(const inox::Value& value);
+
+private:
+  inox::Value value_;
+
+  friend class HttpResponse;
+};
+
+class HttpServer : public inox::Value {
 public:
   HttpServer();
-  explicit HttpServer(inox_http_server* server);
+  explicit HttpServer(const inox::Value& value);
+  explicit HttpServer(inox::Value&& value);
 
-  inox_http_server* raw() const;
-  void create(HttpHandlerFn handler, void* user);
-  void listen(inox::StringView host, int port, int backlog) const;
-  int localPort() const;
-  void onRequest(HttpHandlerFn handler, void* user) const;
-  void close() const;
+  using inox::Value::operator=;
+
+  HttpServer& close();
+  HttpServer& close(inox::Callback callback);
+  HttpServer& listen();
+  HttpServer& listen(inox::Callback callback);
+  HttpServer& listen(double port);
+  HttpServer& listen(double port, inox::Callback callback);
+  HttpServer& listen(double port, inox::StringView host);
+  HttpServer& listen(double port, inox::StringView host, inox::Callback callback);
+  HttpServer& listen(double port, inox::StringView host, double backlog, inox::Callback callback);
+  HttpServer& listen(const HttpListenOptions& options);
+  HttpServer& listen(const HttpListenOptions& options, inox::Callback callback);
+  HttpServer& on(inox::StringView event_name, inox::Callback listener);
 };
 
-class HttpRequest {
-private:
-  const HttpRequestData* request_;
-
+class HttpRequest : public inox::Value {
 public:
-  explicit HttpRequest(const HttpRequestData* request);
+  HttpRequest();
+  explicit HttpRequest(const inox::Value& value);
+  explicit HttpRequest(inox::Value&& value);
 
-  bool methodEquals(inox::StringView method) const;
-  bool urlEquals(inox::StringView url) const;
-  const HttpRequestData* raw() const;
+  using inox::Value::operator=;
+
+  inox::String method() const;
+  inox::String url() const;
 };
 
-class HttpResponse {
-private:
-  inox_http_response* response_;
-
+class HttpResponse : public inox::Value {
 public:
-  explicit HttpResponse(inox_http_response* response);
+  HttpResponse();
+  explicit HttpResponse(const inox::Value& value);
+  explicit HttpResponse(inox::Value&& value);
 
-  void setStatus(int status) const;
-  void setHeader(inox::StringView name, inox::StringView value) const;
-  void writeHead(int status, const HttpHeader* headers, size_t header_count) const;
-  void write(inox::StringView bytes) const;
-  void end(inox::StringView bytes) const;
-  void text(int status, inox::StringView body) const;
-  int sendFsFile(const HttpRequest& request, inox::StringView url_prefix, inox::StringView root) const;
+  using inox::Value::operator=;
+
+  void end();
+  void end(inox::StringView body);
+  void end(const Uint8Array& body);
+  void setHeader(inox::StringView name, inox::StringView value);
+  void setStatusCode(double value);
+  double statusCode() const;
+  bool write(inox::StringView body);
+  bool write(const Uint8Array& body);
+  HttpResponse& writeHead(double status_code);
+  HttpResponse& writeHead(double status_code, const HttpHeaders& headers);
 };
 
-#endif
+class HttpModule {
+public:
+  HttpServer createServer() const;
+  HttpServer createServer(inox::Callback listener) const;
+};
+
+extern const HttpModule http;
 
 #endif

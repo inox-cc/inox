@@ -23,9 +23,9 @@ export class IncomingMessage {
 export class ServerResponse {
   statusCode: number;
 
-  end(body?: string): void;
+  end(body?: string | Uint8Array): void;
   setHeader(name: string, value: string): void;
-  write(body: string): boolean;
+  write(body: string | Uint8Array): boolean;
   writeHead(statusCode: number, headers?: Record<string, string>): ServerResponse;
 }
 
@@ -33,7 +33,7 @@ export class Server {
   close(callback?: ServerCallback): Server;
   listen(port?: number, host?: string, callback?: ServerCallback): Server;
   listen(options: ListenOptions, callback?: ServerCallback): Server;
-  on(eventName: string, listener: RequestListener): Server;
+  on(eventName: 'request', listener: RequestListener): Server;
 }
 
 export function createServer(listener?: RequestListener): Server;

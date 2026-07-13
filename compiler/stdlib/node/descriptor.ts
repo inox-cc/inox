@@ -3,11 +3,6 @@ import {
   nodeEventsModuleObjectImportNames
 } from '../../../stdlib/node/events/compiler/descriptor.ts'
 import {
-  nodeHttpCreateServerImportNames,
-  nodeHttpImportSource,
-  nodeHttpModuleObjectImportNames
-} from '../../../stdlib/node/http/compiler/descriptor.ts'
-import {
   nodeStreamImportSource,
   nodeStreamModuleObjectImportNames
 } from '../../../stdlib/node/stream/compiler/descriptor.ts'
@@ -21,9 +16,7 @@ export {
   timerRuntimeMethodNameFromPath
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
 
-export type NodeStdlibRuntimeImportKind =
-  | 'create-server'
-  | 'module-object'
+export type NodeStdlibRuntimeImportKind = 'module-object'
 
 export type NodeStdlibPackageDescriptor = {
   source: string
@@ -42,10 +35,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
     libuvRuntimeFeature: null
   },
   {
-    source: nodeHttpImportSource,
-    libuvRuntimeFeature: 'node:http'
-  },
-  {
     source: nodeStreamImportSource,
     libuvRuntimeFeature: null
   },
@@ -60,16 +49,6 @@ export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescript
     source: nodeEventsImportSource,
     kind: 'module-object',
     importedNames: nodeEventsModuleObjectImportNames
-  },
-  {
-    source: nodeHttpImportSource,
-    kind: 'module-object',
-    importedNames: nodeHttpModuleObjectImportNames
-  },
-  {
-    source: nodeHttpImportSource,
-    kind: 'create-server',
-    importedNames: nodeHttpCreateServerImportNames
   },
   {
     source: nodeStreamImportSource,

@@ -11,7 +11,6 @@ import {
   isSupportedCMathGlobalUsage
 } from './diagnostics.ts'
 import { irProgramsUseConsoleRuntime } from '../../stdlib/global/compiler/c.ts'
-import { nodeStdlibRuntimeImportUsage } from '../stdlib/node/c.ts'
 import type {
   CompilerLibrarySet,
   RuntimeEntrypointAdapterDescriptor,
@@ -37,7 +36,6 @@ export type CRuntimePreludeRequirements = {
   needsTimerRuntime: boolean
   needsConsoleRuntime: boolean
   needsFetchRuntime: boolean
-  needsHttpRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
   libraryCPreludeIncludes: string[]
 }
@@ -115,18 +113,15 @@ export function resolveCRuntimePreludeRequirements(
     runtimeRequirements.has('string-bytes') ||
     needsAsyncRuntime ||
     signatureRuntimeTypes.size > 0
-  const nodeRuntimeImports = nodeStdlibRuntimeImportUsage(input.irPrograms)
   const needsObjectRuntime =
     runtimeRequirements.has('objects') ||
     needsFetchRuntime ||
     needsClassRuntime ||
     signatureRuntimeTypes.has('object')
-  const needsHttpRuntime = nodeRuntimeImports.http
   const needsRuntime =
     input.throwingFunctionCount > 0 ||
     needsAsyncRuntime ||
     needsFetchRuntime ||
-    needsHttpRuntime ||
     needsCallbackRuntime ||
     needsCollectionRuntime ||
     needsObjectRuntime ||
@@ -138,8 +133,7 @@ export function resolveCRuntimePreludeRequirements(
   const needsTimeRuntime =
     runtimeRequirements.has('clocks') ||
     needsAsyncRuntime ||
-    needsFetchRuntime ||
-    needsHttpRuntime
+    needsFetchRuntime
   const needsMathRuntime = runtimePlanHasSupportedMathGlobalUsage(input.globalUsages)
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
@@ -166,7 +160,6 @@ export function resolveCRuntimePreludeRequirements(
     needsTimerRuntime,
     needsConsoleRuntime,
     needsFetchRuntime,
-    needsHttpRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,
     libraryCPreludeIncludes: libraryRuntime.includes
   }

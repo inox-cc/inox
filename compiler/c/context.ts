@@ -10,7 +10,6 @@ import type {
   CFunctionPointerAdapter,
   CFunctionReturnMapType,
   CFunctionType,
-  CHttpHandler,
   CObjectAccessorReturnPath,
   CObjectShape,
   CObjectShapeField,
@@ -39,7 +38,6 @@ export type CCallbackWrapperMap = Map<string, CCallbackWrapper>
 export type CFunctionReturnMapTypeMap = Map<string, CFunctionReturnMapType>
 export type CFunctionTypeMap = Map<string, CFunctionType>
 export type CFunctionPointerAdapterMap = Map<string, string>
-export type CHttpHandlerMap = Map<string, CHttpHandler>
 export type CNumberMap = Map<string, number>
 export type CObjectShapeFieldMap = Map<string, CObjectShapeField[]>
 export type CObjectAccessorReturnPathMap = Map<string, CObjectAccessorReturnPath>
@@ -167,9 +165,6 @@ export type CEmitContext = {
   functionReturnTypes: CStringMap
   functionThrowValueTypes: Map<string, IrFunctionEffect['throwValueTypes']>
   forceRuntimeStringDeclarations?: CStringSet
-  httpCreateServerNames: CStringSet
-  httpHandlers: CHttpHandlerMap
-  httpImportNames: CStringSet
   jsGlobalRoots: CStringSet
   mathRuntimeInitStatement: string | null
   moduleValueNames: CStringMap
@@ -396,9 +391,6 @@ export function createFunctionContext(
     functionReturnShapes: baseContext.functionReturnShapes,
     functionReturnTypes: baseContext.functionReturnTypes,
     functionThrowValueTypes: baseContext.functionThrowValueTypes,
-    httpCreateServerNames: baseContext.httpCreateServerNames,
-    httpHandlers: baseContext.httpHandlers,
-    httpImportNames: baseContext.httpImportNames,
     jsGlobalRoots: baseContext.jsGlobalRoots,
     mathRuntimeInitStatement: baseContext.mathRuntimeInitStatement,
     moduleValueNames: baseContext.moduleValueNames,

@@ -84,14 +84,6 @@ import { relativeCIncludePath, uniqueCModuleImports } from './modules.ts'
 import { emitCPrelude, emitMathRuntimeInitLines, filterUnusedCPreludeIncludes } from './prelude.ts'
 import { collectCReferencedFunctionPrototypeNames } from './prototype-references.ts'
 import { addDateStringRuntimeRequirements, resolveCRuntimePreludeRequirements } from './runtime-plan.ts'
-import {
-  collectNodeHttpHandlers,
-  emitNodeHttpHandlerDeclarations,
-  emitNodeHttpHandlerPrototypeLines,
-  hasNodeHttpHandlers,
-  registerNodeStdlibRuntimeImportNames
-} from '../stdlib/node/c.ts'
-import type { HttpLoweringDependencies } from '../stdlib/node/c.ts'
 import type {
   CCallbackWrapper,
   CClassInfo,
@@ -363,7 +355,6 @@ export type CModuleEmissionDependencies = {
   emitFunctionDeclaration(statement: AnyNode, baseContext: CEmitContext): string[]
   emitFunctionHead(statement: AnyNode, context: CEmitContext): string
   emitStatementList(body: AnyNode[], context: CFunctionContext): string[]
-  httpLoweringDependencies: HttpLoweringDependencies
   nullableLoweringDependencies: NullableLoweringDependencies
   promiseChainLoweringDependencies: PromiseChainLoweringDependencies
   statementLoweringDependencies: StatementLoweringDependencies
@@ -415,7 +406,7 @@ export function emitCModuleSource(
     context.unhandledRejectionFlag = null
   }
   reportUnsupportedCSyntaxFeatures(syntaxFeatures, diagnostics)
-  reportUnsupportedCGlobalUsages(globalUsages, diagnostics, context)
+  reportUnsupportedCGlobalUsages(globalUsages, diagnostics)
 
   const emitsMain = plan.isEntry || plan.initName === null || typeof plan.initName === 'undefined'
   const lines: string[] = []
@@ -458,7 +449,6 @@ export function emitCModuleSource(
       prelude.needsTimerRuntime,
       prelude.needsConsoleRuntime,
       prelude.needsFetchRuntime,
-      prelude.needsHttpRuntime,
       prelude.libraryCPreludeIncludes,
       options
     )
@@ -511,11 +501,6 @@ export function emitCModuleSource(
     )
     bodyLines.push('')
   }
-
-  pushCModuleLines(
-    bodyLines,
-    emitNodeHttpHandlerDeclarations(context, deps.httpLoweringDependencies)
-  )
 
   for (let functionIndex = 0; functionIndex < functions.length; functionIndex = functionIndex + 1) {
     const item = cModuleNodeAt(functions, functionIndex)
@@ -758,15 +743,12 @@ function emitCModuleDeclarations(
     lines.push(`${emitPromiseChainCallbackWrapperHead(wrapper)};`)
   }
 
-  pushCModuleLines(lines, emitNodeHttpHandlerPrototypeLines(context))
-
   if (
     functionPrototypeNames.size > 0 ||
     emittedClassMethodPrototype ||
     context.asyncTaskWrappers.size > 0 ||
     context.callbackWrappers.size > 0 ||
-    context.promiseChainWrappers.size > 0 ||
-    hasNodeHttpHandlers(context)
+    context.promiseChainWrappers.size > 0
   ) {
     lines.push('')
   }
@@ -1373,7 +1355,6 @@ function createCModuleBaseContext(
   registerCModuleValueDeclarations(context, plan)
   registerImportedCModuleValueDeclarations(context, plan)
 
-  registerNodeStdlibRuntimeImportNames(context, irPrograms)
   context.functionNames = createCModuleFunctionNames(plan)
   context.externalEventLoopFunctions = collectCModuleExternalEventLoopFunctionNames(
     plan,
@@ -1384,7 +1365,6 @@ function createCModuleBaseContext(
   context.callbackWrappers = collectCallbackWrappers(irPrograms, context, deps.callbackLoweringDependencies)
   context.promiseChainWrappers = collectPromiseChainWrappers(irPrograms, context, deps.promiseChainLoweringDependencies)
   context.asyncTaskWrappers = collectAsyncTaskWrappers(functionEntries, context, deps.asyncTaskLoweringDependencies)
-  collectNodeHttpHandlers(irPrograms, context)
 
   return context
 }

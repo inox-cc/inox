@@ -8,15 +8,7 @@ import {
   mathRuntimeMethodNameFromPath,
   timeRuntimeMethodNameFromPath
 } from '../../stdlib/global/compiler/descriptor.ts'
-import { isSupportedNodeStdlibCGlobalUsage } from '../stdlib/node/c.ts'
 import type { Diagnostic, IrGlobalUsage, IrSyntaxFeatureUsage, SourceLocation } from '../types.ts'
-
-type CGlobalNameSet = Set<string>
-
-export type CGlobalUsageSupportContext = {
-  httpCreateServerNames?: CGlobalNameSet
-  httpImportNames?: CGlobalNameSet
-}
 
 export function reportUnsupportedCSyntaxFeatures(
   _syntaxFeatures: IrSyntaxFeatureUsage[],
@@ -25,19 +17,18 @@ export function reportUnsupportedCSyntaxFeatures(
 
 export function reportUnsupportedCGlobalUsages(
   globalUsages: IrGlobalUsage[],
-  diagnostics: Diagnostic[],
-  context: CGlobalUsageSupportContext
+  diagnostics: Diagnostic[]
 ): void {
   for (let index = 0; index < globalUsages.length; index = index + 1) {
     const usage = globalUsages[index] as IrGlobalUsage
 
-    if (!isSupportedCGlobalUsage(usage, context)) {
+    if (!isSupportedCGlobalUsage(usage)) {
       reportCJsGlobalDiagnostic(diagnostics, usage.loc)
     }
   }
 }
 
-function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupportContext): boolean {
+function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
   const path = joinStrings(usage.path, '.')
 
   return (
@@ -60,7 +51,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'setInterval' ||
     path === 'setTimeout' ||
     isCollectionConstructorGlobalUsagePath(usage.path) ||
-    isSupportedNodeStdlibCGlobalUsage(usage, context) ||
     isSupportedCFetchGlobalUsage(usage) ||
     isSupportedCDebugGlobalUsage(usage) ||
     isSupportedCMathGlobalUsage(usage)

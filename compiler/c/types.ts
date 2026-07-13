@@ -349,11 +349,6 @@ export type CAsyncTaskWrapper = {
   tryPhases: CAsyncTaskPhase[]
 }
 
-export type CHttpHandler = {
-  name: string
-  expression: AnyNode
-}
-
 export type CPromiseConstructorHandler = {
   kind: 'reject' | 'resolve'
   promise: string

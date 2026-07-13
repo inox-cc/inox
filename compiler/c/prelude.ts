@@ -201,7 +201,6 @@ export function emitCPrelude(
   needsTimerRuntime: boolean,
   needsConsoleRuntime: boolean,
   needsFetchRuntime: boolean,
-  needsHttpRuntime: boolean,
   libraryCPreludeIncludes: string[],
   options: CEmitOptions = {}
 ): string[] {
@@ -234,10 +233,6 @@ export function emitCPrelude(
 
   if (needsFetchRuntime) {
     pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/fetch.h"')
-  }
-
-  if (needsHttpRuntime) {
-    pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/http.h"')
   }
 
   pushLibraryCPreludeIncludes(systemIncludes, localIncludes, libraryCPreludeIncludes)
