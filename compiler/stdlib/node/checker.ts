@@ -1,5 +1,3 @@
-export { unsupportedEventsRuntimeExport } from '../../../stdlib/node/events/compiler/checker.ts'
-export { unsupportedStreamRuntimeExport } from '../../../stdlib/node/stream/compiler/checker.ts'
 export {
   isTimerRuntimeImportSymbol,
   timerCallbackFunctionType,

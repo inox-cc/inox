@@ -1,12 +1,4 @@
 import {
-  nodeEventsImportSource,
-  nodeEventsModuleObjectImportNames
-} from '../../../stdlib/node/events/compiler/descriptor.ts'
-import {
-  nodeStreamImportSource,
-  nodeStreamModuleObjectImportNames
-} from '../../../stdlib/node/stream/compiler/descriptor.ts'
-import {
   nodeTimersImportSource,
   nodeTimersModuleObjectImportNames
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
@@ -31,30 +23,12 @@ export type NodeStdlibRuntimeImportDescriptor = {
 
 export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
   {
-    source: nodeEventsImportSource,
-    libuvRuntimeFeature: null
-  },
-  {
-    source: nodeStreamImportSource,
-    libuvRuntimeFeature: null
-  },
-  {
     source: nodeTimersImportSource,
     libuvRuntimeFeature: null
   }
 ]
 
 export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescriptor[] = [
-  {
-    source: nodeEventsImportSource,
-    kind: 'module-object',
-    importedNames: nodeEventsModuleObjectImportNames
-  },
-  {
-    source: nodeStreamImportSource,
-    kind: 'module-object',
-    importedNames: nodeStreamModuleObjectImportNames
-  },
   {
     source: nodeTimersImportSource,
     kind: 'module-object',

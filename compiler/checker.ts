@@ -4,9 +4,7 @@ import {
   timerCallbackFunctionType,
   timerClearMethodName,
   timerRuntimeImportMethodName,
-  timerRuntimeMethodName,
-  unsupportedEventsRuntimeExport,
-  unsupportedStreamRuntimeExport
+  timerRuntimeMethodName
 } from './stdlib/node/checker.ts'
 import {
   commonArrayElementType,
@@ -1770,7 +1768,12 @@ class Checker {
 
         if (globalOperation !== null) {
           this.applyCompilerLibraryOperation(expression, globalOperation)
-          valueType = expression.valueType
+
+          if (this.reportCompilerLibraryOperationDiagnostic(expression, globalOperation)) {
+            valueType = 'unknown'
+          } else {
+            valueType = expression.valueType
+          }
         }
       }
 
@@ -1787,6 +1790,10 @@ class Checker {
 
         if (libraryOperation !== null) {
           this.applyCompilerLibraryOperation(expression, libraryOperation)
+
+          if (this.reportCompilerLibraryOperationDiagnostic(expression, libraryOperation)) {
+            valueType = 'unknown'
+          }
         }
 
       }
@@ -2572,6 +2579,7 @@ class Checker {
       const valueType = this.checkExpression(expression.value)
       this.checkCompilerLibrarySingleArgument(expression.value, valueType, globalLibraryOperation)
       this.applyCompilerLibraryOperation(expression, globalLibraryOperation)
+      this.reportCompilerLibraryOperationDiagnostic(expression, globalLibraryOperation)
       return valueType
     }
 
@@ -2587,6 +2595,7 @@ class Checker {
     if (libraryOperation !== null) {
       this.checkCompilerLibrarySingleArgument(expression.value, valueType, libraryOperation)
       this.applyCompilerLibraryOperation(expression, libraryOperation)
+      this.reportCompilerLibraryOperationDiagnostic(expression, libraryOperation)
       return valueType
     }
 
@@ -2750,6 +2759,11 @@ class Checker {
     if (libraryOperation !== null) {
       this.checkCompilerLibrarySingleArgument(expression.index, indexType, libraryOperation)
       this.applyCompilerLibraryOperation(expression, libraryOperation)
+
+      if (this.reportCompilerLibraryOperationDiagnostic(expression, libraryOperation)) {
+        return 'unknown'
+      }
+
       return (libraryOperation.valueType ?? 'unknown') as ValueType
     }
 
@@ -3006,6 +3020,7 @@ class Checker {
       this.checkCompilerLibrarySingleArgument(expression.target.index, indexType, libraryOperation, 0)
       this.checkCompilerLibrarySingleArgument(expression.value, valueType, libraryOperation, 1)
       this.applyCompilerLibraryOperation(expression, libraryOperation)
+      this.reportCompilerLibraryOperationDiagnostic(expression, libraryOperation)
       return valueType
     }
 
@@ -3380,12 +3395,6 @@ class Checker {
       return timeType
     }
 
-    const eventStreamUnsupportedType = this.checkEventStreamUnsupportedCall(expression)
-
-    if (eventStreamUnsupportedType !== null && typeof eventStreamUnsupportedType !== 'undefined') {
-      return eventStreamUnsupportedType
-    }
-
     const stringConversionType = this.checkStringConversionCall(expression)
 
     if (stringConversionType !== null && typeof stringConversionType !== 'undefined') {
@@ -3592,68 +3601,6 @@ class Checker {
     return valueType
   }
 
-  checkEventStreamUnsupportedCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const rootSymbol = this.resolveMemberPathRootSymbol(path)
-    const eventsUsage = unsupportedEventsRuntimeExport(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'events'),
-      rootSymbol
-    )
-    const usage =
-      eventsUsage ??
-      unsupportedStreamRuntimeExport(path, this.resolveStdlibRuntimeDirectImportName(path, 'stream'), rootSymbol)
-
-    if (usage === null || typeof usage === 'undefined') {
-      return null
-    }
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkExpression(arg)
-    }
-
-    this.report(
-      'INOX_NOT_IMPLEMENTED',
-      `${usage.source} ${usage.name} is not implemented by the current C backend: ${usage.reason}`,
-      expression.loc
-    )
-    expression.valueType = 'unknown'
-
-    return 'unknown'
-  }
-
-  checkEventStreamUnsupportedConstructor(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
-      return null
-    }
-
-    const path = expression.callee.path
-    const rootSymbol = this.resolveMemberPathRootSymbol(path)
-    const eventsUsage = unsupportedEventsRuntimeExport(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'events'),
-      rootSymbol
-    )
-    const usage =
-      eventsUsage ??
-      unsupportedStreamRuntimeExport(path, this.resolveStdlibRuntimeDirectImportName(path, 'stream'), rootSymbol)
-
-    if (usage === null || typeof usage === 'undefined') {
-      return null
-    }
-
-    this.report(
-      'INOX_NOT_IMPLEMENTED',
-      `${usage.source} ${usage.name} is not implemented by the current C backend: ${usage.reason}`,
-      expression.loc
-    )
-    expression.valueType = 'unknown'
-
-    return 'unknown'
-  }
-
   checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
     let operation = this.compilerLibraryOperationForExpression(expression.callee, 'call')
 
@@ -3674,18 +3621,8 @@ class Checker {
 
     this.applyCompilerLibraryOperation(expression, operation, variant)
 
-    const diagnosticCode = operation.diagnosticCode
-    const diagnosticMessage = operation.diagnosticMessage
-
-    if (
-      diagnosticCode !== null &&
-      typeof diagnosticCode !== 'undefined' &&
-      diagnosticMessage !== null &&
-      typeof diagnosticMessage !== 'undefined'
-    ) {
+    if (this.reportCompilerLibraryOperationDiagnostic(expression, operation)) {
       this.checkedCallArgInfos(expression)
-      this.report(diagnosticCode, diagnosticMessage, expression.loc)
-      expression.valueType = 'unknown'
       return 'unknown'
     }
 
@@ -4162,17 +4099,7 @@ class Checker {
     if (operation !== null) {
       this.applyCompilerLibraryOperation(expression, operation)
 
-      const diagnosticCode = operation.diagnosticCode
-      const diagnosticMessage = operation.diagnosticMessage
-
-      if (
-        diagnosticCode !== null &&
-        typeof diagnosticCode !== 'undefined' &&
-        diagnosticMessage !== null &&
-        typeof diagnosticMessage !== 'undefined'
-      ) {
-        this.report(diagnosticCode, diagnosticMessage, expression.loc)
-        expression.valueType = 'unknown'
+      if (this.reportCompilerLibraryOperationDiagnostic(expression, operation)) {
         return 'unknown'
       }
 
@@ -4362,6 +4289,27 @@ class Checker {
     expression.libraryCCallStyle = operation.cCallStyle ?? null
     expression.libraryCFailureMode = operation.cFailureMode ?? null
     expression.nullable = (variant?.nullable ?? operation.nullable) === true
+  }
+
+  reportCompilerLibraryOperationDiagnostic(
+    expression: AnyNode,
+    operation: LibraryOperationDescriptor
+  ): boolean {
+    const diagnosticCode = operation.diagnosticCode
+    const diagnosticMessage = operation.diagnosticMessage
+
+    if (
+      diagnosticCode === null ||
+      typeof diagnosticCode === 'undefined' ||
+      diagnosticMessage === null ||
+      typeof diagnosticMessage === 'undefined'
+    ) {
+      return false
+    }
+
+    this.report(diagnosticCode, diagnosticMessage, expression.loc)
+    expression.valueType = 'unknown'
+    return true
   }
 
   compilerLibraryResultShapeField(
@@ -6178,12 +6126,6 @@ class Checker {
       return libraryConstructorType
     }
 
-    const eventStreamConstructorType = this.checkEventStreamUnsupportedConstructor(expression)
-
-    if (eventStreamConstructorType !== null && typeof eventStreamConstructorType !== 'undefined') {
-      return eventStreamConstructorType
-    }
-
     if (expression.callee.type !== 'Reference' || expression.callee.path.length !== 1) {
       this.checkExpression(expression.callee)
       return 'object'
@@ -6338,6 +6280,11 @@ class Checker {
     const variant = this.compilerLibraryOperationVariant(expression, operation)
 
     this.applyCompilerLibraryOperation(expression, operation, variant)
+
+    if (this.reportCompilerLibraryOperationDiagnostic(expression, operation)) {
+      return 'unknown'
+    }
+
     this.checkCompilerLibraryOperationArguments(expression, operation, variant)
     this.checkCompilerLibraryBackendConstraints(expression, operation)
 
