@@ -1,4 +1,4 @@
-import { errorObjectShape, fsDirentObjectShape } from './builtins.ts'
+import { errorObjectShape } from './builtins.ts'
 import { resolveDeclaredType, resolveFieldDeclaredType as resolveFieldDeclaredTypeInContext } from './declared-types.ts'
 import type { DeclaredTypeResolverContext } from './declared-types.ts'
 import { dynamicShapeField } from './expression-helpers.ts'
@@ -98,10 +98,6 @@ export function resolveArrayElementObjectShape(
 ): ObjectShapeInfo | null {
   if (valueType !== 'object' || declaredType === null || typeof declaredType === 'undefined') {
     return null
-  }
-
-  if (declaredType === 'fs.Dirent') {
-    return fsDirentObjectShape
   }
 
   return resolveDeclaredType(context.declaredTypes, declaredType, loc).shape

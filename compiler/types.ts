@@ -35,7 +35,6 @@ export type IrFeature =
   | 'clocks'
   | 'collections'
   | 'debug-memory'
-  | 'fs'
   | 'json'
   | 'map-index-set'
   | 'map-get-null'
@@ -242,7 +241,6 @@ export type RuntimeLoopBackend = 'embedded' | 'libuv'
 export type RuntimeCapabilities = {
   [key: string]: boolean | undefined
   entropy?: boolean
-  fs?: boolean
   heap?: boolean
   monotonicClock?: boolean
   timers?: boolean

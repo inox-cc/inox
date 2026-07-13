@@ -1691,7 +1691,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'CollectionFunctionContext' ||
     value === 'DgramFunctionContext' ||
     value === 'FetchFunctionContext' ||
-    value === 'FsFunctionContext' ||
     value === 'HttpFunctionContext' ||
     value === 'NullableFunctionContext' ||
     value === 'PromiseEmitContext' ||
@@ -1814,7 +1813,6 @@ function restoreNullableScalarNarrowing(context: CFunctionContext, snapshot: Nul
 
 export type CScalarExpressionDependencies = {
   canEmitStringBytesOperand(expression: CValueNode, context: CFunctionContext): boolean
-  cFsRuntimeConstantExpression(expression: CValueNode): string | null
   emitCAwaitValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitCValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitObjectValueReference(name: string, context: CFunctionContext): string
@@ -1943,8 +1941,6 @@ export type CCallExpressionDependencies = {
   ): PreparedExpression | null
   emitPreparedCollectionCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedFsCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedFsStatsMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedPromiseMethodExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
@@ -2019,12 +2015,6 @@ export function emitPreparedCallExpression(
     return mathCall
   }
 
-  const fsStatsMethod = deps.emitPreparedFsStatsMethodExpression(expression, context)
-
-  if (fsStatsMethod !== null && typeof fsStatsMethod !== 'undefined') {
-    return fsStatsMethod
-  }
-
   const numberConversion = deps.emitCNumberConversionValueExpression(expression, context)
 
   if (numberConversion !== null && typeof numberConversion !== 'undefined') {
@@ -2077,12 +2067,6 @@ export function emitPreparedCallExpression(
 
   if (collectionCall !== null && typeof collectionCall !== 'undefined') {
     return collectionCall
-  }
-
-  const fsCall = deps.emitPreparedFsCallExpression(expression, context)
-
-  if (fsCall !== null && typeof fsCall !== 'undefined') {
-    return fsCall
   }
 
   const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(expression, context)
@@ -2732,15 +2716,6 @@ export function emitPreparedNumberExpression(
 
   if (classMethodCall !== null && typeof classMethodCall !== 'undefined' && classMethodCall.expression !== '') {
     return classMethodCall
-  }
-
-  const fsConstant = deps.cFsRuntimeConstantExpression(expression)
-
-  if (fsConstant !== null && typeof fsConstant !== 'undefined') {
-    return {
-      lines: [],
-      expression: fsConstant
-    }
   }
 
   const arrayIsArrayCall = deps.emitPreparedArrayIsArrayCallExpression(expression, context)
@@ -4995,7 +4970,6 @@ export type CValueExpressionDependencies = {
   emitPreparedCollectionSizeExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedDebugMemoryCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedFetchHeadersCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedFsSyncValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedJsonCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedKnownArrayIndexValueExpression(
     expression: CValueNode,
@@ -5102,12 +5076,6 @@ export function emitCValueExpression(
 
   if (libraryExpression !== null) {
     return libraryExpression
-  }
-
-  const fsSyncValue = deps.emitPreparedFsSyncValueExpression(expression, context)
-
-  if (fsSyncValue !== null && typeof fsSyncValue !== 'undefined') {
-    return fsSyncValue
   }
 
   const fetchHeadersCall = deps.emitPreparedFetchHeadersCallExpression(expression, context)

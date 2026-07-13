@@ -717,14 +717,6 @@ function isCUnitRuntimeStringInitializer(expression: AnyNode | null | undefined)
   }
 
   if (
-    expression.type === 'CallExpression' &&
-    expression.fsRuntimeMethod !== null &&
-    typeof expression.fsRuntimeMethod !== 'undefined'
-  ) {
-    return true
-  }
-
-  if (
     (expression.type === 'ConditionalExpression' || expression.type === 'BinaryExpression') &&
     expression.valueType === 'string'
   ) {
@@ -1404,7 +1396,6 @@ export function emitCUnit(
   const needsMapRuntime: boolean = preludeRequirements.needsMapRuntime
   const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
-  const needsFsRuntime: boolean = preludeRequirements.needsFsRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
   const needsRegexpRuntime: boolean = preludeRequirements.needsRegexpRuntime
   const needsTimerRuntime: boolean = preludeRequirements.needsTimerRuntime
@@ -1437,7 +1428,6 @@ export function emitCUnit(
     needsMapRuntime,
     needsSetRuntime,
     needsObjectRuntime,
-    needsFsRuntime,
     needsJsonRuntime,
     needsRegexpRuntime,
     needsTimerRuntime,

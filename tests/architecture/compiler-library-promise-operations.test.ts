@@ -38,9 +38,11 @@ test('data-only library Promise operations preserve fulfilled metadata and lower
   assert.equal(awaitedEntries.arrayElementDeclaredType, 'FixtureItem')
 
   assert.match(result.code, /static inox::Promise pending;/)
+  assert.match(result.code, /static FixtureItem item;/)
   assert.match(result.code, /pending = fixture\.load\(\);/)
   assert.match(result.code, /inox::await_value<FixtureItem>\(pending\)/)
   assert.match(result.code, /inox::await_value<ArrayClass>\(inox_library_promise_\d+\)/)
+  assert.doesNotMatch(result.code, /item = [^;]+\.release\(\);/)
   assert.doesNotMatch(result.code, /\bfs(?:Runtime|Lowering|Feature)|emitPreparedFs|inox\/fs\.h/)
 
   const asyncResult = compileSource(

@@ -49,6 +49,7 @@ import type {
 import { mergeShapeFields } from './helpers.ts'
 import { compilerLibraryNativeTypeForName } from '../extensions/library-set.ts'
 import type { CompilerLibrarySet } from '../extensions/types.ts'
+import type { LibraryResultShapeFieldDescriptor } from '../extensions/types.ts'
 
 export type DeclaredTypeResolverContext = {
   classNames: Set<string>
@@ -95,11 +96,17 @@ export function resolveDeclaredType(
 
   if (nativeType !== null) {
     const info = unresolvedTypeInfo()
+    const fields: AnyNode[] = []
+
+    for (let index = 0; index < (nativeType.fields ?? []).length; index = index + 1) {
+      fields.push(libraryNativeTypeField((nativeType.fields ?? [])[index], loc))
+    }
+
     info.valueType = nativeType.valueType as ValueType
     info.shape = {
       kind: 'object',
       baseTypes: nativeType.baseTypeIds,
-      fields: [],
+      fields,
       libraryTypeId: nativeType.typeId,
       libraryCppType: nativeType.cppType
     }
@@ -335,6 +342,46 @@ export function resolveDeclaredType(
   context.diagnostics.push(diagnostic('INOX_UNKNOWN_TYPE', `unknown type ${name}`, loc))
 
   return unresolvedTypeInfo()
+}
+
+function libraryNativeTypeField(
+  field: LibraryResultShapeFieldDescriptor,
+  loc: SourceLocation
+): AnyNode {
+  const result: AnyNode = {
+    name: field.name,
+    valueType: field.valueType,
+    readonly: field.readonly,
+    loc
+  }
+  const nestedFields = field.resultShapeFields
+  const nestedTypeId = field.resultTypeId
+
+  if (
+    (nestedFields !== null && typeof nestedFields !== 'undefined') ||
+    (nestedTypeId !== null && typeof nestedTypeId !== 'undefined')
+  ) {
+    const fields: AnyNode[] = []
+
+    for (let index = 0; index < (nestedFields ?? []).length; index = index + 1) {
+      const nestedField = (nestedFields ?? [])[index]
+      fields.push({
+        name: nestedField.name,
+        valueType: nestedField.valueType,
+        readonly: nestedField.readonly,
+        loc
+      })
+    }
+
+    result.shape = {
+      kind: 'object',
+      fields,
+      libraryTypeId: nestedTypeId ?? null,
+      libraryCppType: field.cppType ?? null
+    }
+  }
+
+  return result
 }
 
 function resolveDeclaredFunctionAlias(

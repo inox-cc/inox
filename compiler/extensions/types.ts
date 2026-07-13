@@ -24,6 +24,7 @@ export type LibraryNativeTypeDescriptor = {
   cppType: string
   baseTypeIds: LibraryNativeTypeId[]
   runtimeRequirements: RuntimeRequirementId[]
+  fields?: LibraryResultShapeFieldDescriptor[]
 }
 
 export type LibraryOperationKind =

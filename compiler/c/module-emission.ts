@@ -459,7 +459,6 @@ export function emitCModuleSource(
       prelude.needsMapRuntime,
       prelude.needsSetRuntime,
       prelude.needsObjectRuntime,
-      prelude.needsFsRuntime,
       prelude.needsJsonRuntime,
       prelude.needsRegexpRuntime,
       prelude.needsTimerRuntime,
@@ -2222,11 +2221,7 @@ function isCModuleRuntimeStringInitializer(expression: AnyNode | null | undefine
     return true
   }
 
-  if (
-    expression.type === 'CallExpression' &&
-    expression.fsRuntimeMethod !== null &&
-    typeof expression.fsRuntimeMethod !== 'undefined'
-  ) {
+  if (expression.type === 'CallExpression' && expression.libraryCppType === 'inox::String') {
     return true
   }
 

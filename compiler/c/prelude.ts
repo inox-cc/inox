@@ -196,7 +196,6 @@ export function emitCPrelude(
   needsMapRuntime: boolean,
   needsSetRuntime: boolean,
   needsObjectRuntime: boolean,
-  needsFsRuntime: boolean,
   needsJsonRuntime: boolean,
   needsRegexpRuntime: boolean,
   needsTimerRuntime: boolean,
@@ -272,9 +271,6 @@ export function emitCPrelude(
     }
     if (needsCallbackRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/callback.h"')
-    }
-    if (needsFsRuntime) {
-      pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/fs.h"')
     }
     if (needsJsonRuntime) {
       pushCPreludeInclude(systemIncludes, localIncludes, '#include "inox/json.h"')

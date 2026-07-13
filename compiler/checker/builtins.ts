@@ -64,40 +64,6 @@ export const errorObjectShape: ObjectShapeInfo = {
   ]
 }
 
-export const fsStatsObjectShape: ObjectShapeInfo = {
-  kind: 'object',
-  builtin: 'fs.Stats',
-  fields: [
-    {
-      name: 'size',
-      valueType: 'number',
-      readonly: true
-    },
-    {
-      name: 'mode',
-      valueType: 'number',
-      readonly: true
-    },
-    {
-      name: 'mtimeMs',
-      valueType: 'number',
-      readonly: true
-    }
-  ]
-}
-
-export const fsDirentObjectShape: ObjectShapeInfo = {
-  kind: 'object',
-  builtin: 'fs.Dirent',
-  fields: [
-    {
-      name: 'name',
-      valueType: 'string',
-      readonly: true
-    }
-  ]
-}
-
 export const fetchResponseObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'fetch.Response',
@@ -175,17 +141,6 @@ export const debugMemoryStatsObjectShape: ObjectShapeInfo = {
   kind: 'object',
   builtin: 'inox.DebugMemoryStats',
   fields: readonlyDebugMemoryStatsFields(debugMemoryStatsFields)
-}
-
-export const fsConstantValues = new Map([
-  ['F_OK', 0],
-  ['X_OK', 1],
-  ['W_OK', 2],
-  ['R_OK', 4]
-])
-
-export function isFsConstantValue(name: string): boolean {
-  return name === 'F_OK' || name === 'X_OK' || name === 'W_OK' || name === 'R_OK'
 }
 
 export function libuvOnlyRuntimeImportFeature(source: string): string | null {

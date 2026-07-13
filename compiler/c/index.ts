@@ -142,29 +142,18 @@ import {
 } from './runtime-values.ts'
 import type {
   DgramLoweringDependencies,
-  FsLoweringDependencies,
   HttpLoweringDependencies,
   NetLoweringDependencies,
   NodeNetworkLoweringDependencies,
-  NodeStdlibAsyncTaskLoweringDependencies,
   TimerLoweringDependencies
 } from '../stdlib/node/c.ts'
 import {
-  cFsRuntimeConstantExpression,
-  cFsRuntimeExpressionMethod,
-  emitPreparedFsCallExpression,
-  emitPreparedFsStatsMethodExpression,
-  emitPreparedFsSyncStatementExpression,
-  emitPreparedFsSyncValueExpression,
-  emitPreparedNodeStdlibAsyncTaskSourceExpression,
   emitNodeNetworkCallStatement,
   emitNodeNetworkVariableDeclaration,
   emitPreparedNodeNetworkAddressPortExpression,
   emitPreparedTimerCallExpression,
   emitTimerVariableDeclaration,
-  inferNodeStdlibExpressionType,
   inferNodeStdlibMemberExpressionType,
-  isAsyncNodeStdlibRuntimeCallExpression,
   isTimerStartCallExpression,
   resolveNodeNetworkAddressStringMember,
   timerCallbackFunctionType
@@ -509,7 +498,6 @@ let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
 let timeLoweringDependencies = {} as TimeLoweringDependencies
 let timerLoweringDependencies = {} as TimerLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
-let fsLoweringDependencies = {} as FsLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
 let dgramLoweringDependencies = {} as DgramLoweringDependencies
@@ -587,10 +575,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ) => emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
-  emitPreparedFsSyncStatementExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFsSyncStatementExpression(expression, context, fsLoweringDependencies),
   emitPreparedMapIndexAssignment,
   emitPreparedNumberExpression,
   emitPreparedInlineObjectRuntimeCallExpression,
@@ -845,17 +829,6 @@ fetchLoweringDependencies = {
   inferExpressionType
 }
 
-fsLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType
-}
-
-const nodeStdlibAsyncTaskLoweringDependencies: NodeStdlibAsyncTaskLoweringDependencies = {
-  fs: fsLoweringDependencies
-}
-
 compilerLibraryLoweringDependencies = {
   emitCValueExpression,
   emitPreparedNumberExpression,
@@ -866,7 +839,6 @@ compilerLibraryLoweringDependencies = {
 
 const rejectionValueTypeDependencies: RejectionValueTypeDependencies = {
   cFetchRuntimeExpressionMethod,
-  cFsRuntimeExpressionMethod,
   cPromiseRuntimeCallName,
   inferExpressionType,
   isErrorConstructorExpression,
@@ -880,8 +852,6 @@ promiseLoweringDependencies = {
   emitPreparedCompilerLibraryCallExpression,
   emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedFsCallExpression(expression, context, fsLoweringDependencies, options),
   emitRuntimeArrowCaptureStoreLines,
   emitStatementList,
   inferExpressionType,
@@ -1020,7 +990,6 @@ function isConfiguredExternalEventLoopCallExpression(
   return (
     isTimerStartCallExpression(expression) ||
     isCompilerLibraryPromiseExpression(expression) ||
-    isAsyncNodeStdlibRuntimeCallExpression(expression) ||
     isAsyncFetchRuntimeCallExpression(expression)
   )
 }
@@ -1076,18 +1045,11 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitPreparedCompilerLibraryCallExpression,
   emitPreparedFetchInitOperand: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchInitOperand(expression, context, fetchLoweringDependencies),
-  emitPreparedNodeStdlibAsyncTaskSourceExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedNodeStdlibAsyncTaskSourceExpression(
-      expression,
-      context,
-      nodeStdlibAsyncTaskLoweringDependencies
-    ),
   emitPreparedNumberExpression,
   emitPreparedStringBytesOperand,
   emitRuntimeArrowCaptureStoreLines,
   emitStatementList,
   inferExpressionType,
-  isAsyncNodeStdlibRuntimeCallExpression,
   isCompilerLibraryPromiseExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
@@ -1136,7 +1098,6 @@ const expressionTypeDependencies = {
   cPromiseRuntimeCallName,
   cTimeRuntimeCallName,
   collectionConstructorName,
-  inferNodeStdlibExpressionType,
   inferNodeStdlibMemberExpressionType,
   isArrayIncludesCall,
   isArrayIsArrayCall,
@@ -1200,10 +1161,6 @@ const cCallExpressionDependencies = {
   emitPreparedCollectionCallExpression,
   emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
-  emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFsCallExpression(expression, context, fsLoweringDependencies),
-  emitPreparedFsStatsMethodExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFsStatsMethodExpression(expression, context, fsLoweringDependencies),
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedNumberExpression,
@@ -1231,7 +1188,6 @@ const cCallExpressionDependencies = {
 
 const cScalarExpressionDependencies = {
   canEmitStringBytesOperand,
-  cFsRuntimeConstantExpression,
   emitCAwaitValueExpression,
   emitCValueExpression,
   emitObjectValueReference,
@@ -1329,8 +1285,6 @@ const cValueExpressionDependencies = {
   emitPreparedDebugMemoryCallExpression,
   emitPreparedFetchHeadersCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchHeadersCallExpression(expression, context, fetchLoweringDependencies),
-  emitPreparedFsSyncValueExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedFsSyncValueExpression(expression, context, fsLoweringDependencies),
   emitPreparedJsonCallExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedJsonCallExpression(expression, context, jsonDeclarationDependencies, null),
   emitPreparedKnownArrayIndexValueExpression,
@@ -3298,9 +3252,13 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
   registerModuleRuntimeValueMetadata(statement, inferred, context)
   pushAll(lines, value.lines)
   pushAll(lines, emitModuleObjectFunctionFieldAssignments(statement.name, statement.init, context))
-  pushModuleRuntimeValueAssignment(lines, name, value, context)
+  const moduleValueCppType = context.moduleValueCppTypes.get(statement.name)
+  pushModuleRuntimeValueAssignment(lines, name, value, context, moduleValueCppType)
 
-  if (inferred === 'unknown' || isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
+  if (
+    (moduleValueCppType === null || typeof moduleValueCppType === 'undefined') &&
+    (inferred === 'unknown' || isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred))
+  ) {
     lines.push(`inox_retain(${name});`)
   }
 
@@ -3512,7 +3470,8 @@ function pushModuleRuntimeValueAssignment(
   lines: string[],
   name: string,
   value: PreparedExpression,
-  context: CFunctionContext
+  context: CFunctionContext,
+  targetCppType?: string | null
 ): void {
   if (
     value.cppType !== null &&
@@ -3522,7 +3481,12 @@ function pushModuleRuntimeValueAssignment(
     const temp = nextCName(context, 'inox_module_value')
 
     lines.push(`auto ${temp} = ${value.expression};`)
-    lines.push(`${name} = ${temp}.release();`)
+
+    if (targetCppType !== null && typeof targetCppType !== 'undefined') {
+      lines.push(`${name} = ${temp};`)
+    } else {
+      lines.push(`${name} = ${temp}.release();`)
+    }
     return
   }
 
@@ -8046,14 +8010,6 @@ function emitPreparedAwaitValuePromiseExpression(expression: AnyNode, context: C
     return preparedExpressionOrEmpty(fetchPromise)
   }
 
-  const fsPromise = emitPreparedFsCallExpression(expression.argument, context, fsLoweringDependencies, {
-    cppExpression: true
-  })
-
-  if (fsPromise !== null && typeof fsPromise !== 'undefined') {
-    return preparedExpressionOrEmpty(fsPromise)
-  }
-
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)
 
   if (promise !== null && typeof promise !== 'undefined') {
@@ -8132,14 +8088,6 @@ function emitCAwaitValueExpression(expression: AnyNode, context: CFunctionContex
 
   if (fetchPromise !== null && typeof fetchPromise !== 'undefined') {
     return emitPreparedAwaitedPromiseValueExpression(expression, fetchPromise, context)
-  }
-
-  const fsPromise = emitPreparedFsCallExpression(expression.argument, context, fsLoweringDependencies, {
-    cppExpression: true
-  })
-
-  if (fsPromise !== null && typeof fsPromise !== 'undefined') {
-    return emitPreparedAwaitedPromiseValueExpression(expression, fsPromise, context)
   }
 
   const promise = emitPreparedAwaitPromiseExpression(expression.argument, context)

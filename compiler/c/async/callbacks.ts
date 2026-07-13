@@ -399,7 +399,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'CollectionFunctionContext' ||
     value === 'DgramFunctionContext' ||
     value === 'FetchFunctionContext' ||
-    value === 'FsFunctionContext' ||
     value === 'HttpFunctionContext' ||
     value === 'NullableFunctionContext' ||
     value === 'PromiseEmitContext' ||

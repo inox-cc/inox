@@ -57,40 +57,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'Object.entries' ||
     path === 'Object.keys' ||
     path === 'Object.values' ||
-    path === 'fs.promises.access' ||
-    path === 'fs.promises.appendFile' ||
-    path === 'fs.promises.copyFile' ||
-    path === 'fs.promises.lstat' ||
-    path === 'fs.promises.mkdir' ||
-    path === 'fs.promises.readFile' ||
-    path === 'fs.promises.readdir' ||
-    path === 'fs.promises.readlink' ||
-    path === 'fs.promises.realpath' ||
-    path === 'fs.promises.rename' ||
-    path === 'fs.promises.rm' ||
-    path === 'fs.promises.stat' ||
-    path === 'fs.promises.symlink' ||
-    path === 'fs.promises.unlink' ||
-    path === 'fs.promises.writeFile' ||
-    path === 'fs.accessSync' ||
-    path === 'fs.appendFileSync' ||
-    path === 'fs.copyFileSync' ||
-    path === 'fs.lstatSync' ||
-    path === 'fs.mkdirSync' ||
-    path === 'fs.readFileSync' ||
-    path === 'fs.readdirSync' ||
-    path === 'fs.readlinkSync' ||
-    path === 'fs.realpathSync' ||
-    path === 'fs.renameSync' ||
-    path === 'fs.rmSync' ||
-    path === 'fs.statSync' ||
-    path === 'fs.symlinkSync' ||
-    path === 'fs.unlinkSync' ||
-    path === 'fs.writeFileSync' ||
-    path === 'fs.constants.F_OK' ||
-    path === 'fs.constants.R_OK' ||
-    path === 'fs.constants.W_OK' ||
-    path === 'fs.constants.X_OK' ||
     !!jsonRuntimeMethodNameFromPath(usage.path) ||
     path === 'clearImmediate' ||
     path === 'clearInterval' ||

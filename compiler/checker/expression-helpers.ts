@@ -1,8 +1,6 @@
 import { commonValueType } from './assignability.ts'
-import { fsStatsObjectShape } from './builtins.ts'
 import { checkerNodeAt, nodeValueTypeOrUnknown } from './resolved-types.ts'
 import type { CheckerMapType, FunctionTypeMetadata, FunctionTypeParamMetadata } from './resolved-types.ts'
-import type { FsBooleanOptions, FsRuntimeCallPlan } from '../stdlib/node/checker.ts'
 import type { AnyNode, ObjectShapeInfo, SourceLocation, ValueType } from '../types.ts'
 
 export function callExpressionArgumentLabel(expression: AnyNode): string {
@@ -30,51 +28,6 @@ export function callExpressionArgumentLabel(expression: AnyNode): string {
   }
 
   return 'function'
-}
-
-export function applyFsRuntimeCallPlan(
-  expression: AnyNode,
-  plan: FsRuntimeCallPlan,
-  options: FsBooleanOptions
-): void {
-  expression.fsRuntimeMethod = plan.runtimeMethod
-  expression.valueType = plan.valueType
-  expression.promiseValueType = plan.promiseValueType
-  expression.shape = null
-  expression.arrayElementType = plan.arrayElementType
-  expression.arrayElementDeclaredType = plan.arrayElementDeclaredType
-
-  if (plan.shape === 'stats') {
-    expression.shape = fsStatsObjectShape
-  } else if (plan.resultTypeId !== null && typeof plan.resultTypeId !== 'undefined') {
-    expression.shape = {
-      kind: 'object',
-      fields: [],
-      libraryTypeId: plan.resultTypeId
-    }
-  }
-
-  if (plan.bytes !== null && typeof plan.bytes !== 'undefined') {
-    expression.fsBytes = plan.bytes
-  }
-
-  if (plan.bytesFromWriteData) {
-    expression.fsBytes = options.bytes === true
-  }
-
-  if (plan.direntsFromOptions && options.withFileTypes === true) {
-    expression.fsDirents = true
-    expression.arrayElementType = 'object'
-    expression.arrayElementDeclaredType = 'fs.Dirent'
-  }
-
-  if (plan.recursiveFromOptions) {
-    expression.fsRecursive = options.recursive === true
-  }
-
-  if (plan.forceFromOptions) {
-    expression.fsForce = options.force === true
-  }
 }
 
 export function resolveMapEntryArrayType(expression: AnyNode): CheckerMapType | null {

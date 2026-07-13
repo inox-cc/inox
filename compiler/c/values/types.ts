@@ -30,7 +30,6 @@ export type CExpressionTypeDependencies = {
   collectionConstructorName: (expression: AnyNode) => string | null
   isArrayIncludesCall: (expression: AnyNode) => boolean
   isArrayIsArrayCall: (expression: AnyNode) => boolean
-  inferNodeStdlibExpressionType(expression: AnyNode): string | null
   inferNodeStdlibMemberExpressionType(expression: AnyNode, context: CFunctionContext): string | null
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
@@ -532,12 +531,6 @@ export function inferExpressionType(
     typeof expression.libraryOperationId !== 'undefined'
   ) {
     return cValueTypeOrUnknown(expression)
-  }
-
-  const nodeStdlibType = deps.inferNodeStdlibExpressionType(expression)
-
-  if (nodeStdlibType !== null && typeof nodeStdlibType !== 'undefined') {
-    return nodeStdlibType
   }
 
   if (expression.type === 'CallExpression' && deps.cTimeRuntimeCallName(expression.callee)) {

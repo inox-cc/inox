@@ -48,8 +48,7 @@ import type {
   CPromiseConstructorHandler,
   CRuntimeArrayElement,
   CPreparedCallOptions as PreparedCallOptions,
-  CPreparedExpression as PreparedExpression,
-  CPreparedStatement as PreparedStatement
+  CPreparedExpression as PreparedExpression
 } from '../types.ts'
 import {
   cRuntimeValueTag,
@@ -431,12 +430,6 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedFsCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
-  emitPreparedFsSyncStatementExpression(expression: StatementNode, context: CFunctionContext): PreparedStatement | null
   emitPreparedMapIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedNumberExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitPreparedInlineObjectRuntimeCallExpression(
@@ -2152,12 +2145,6 @@ function resolveRuntimeArrayMetadataElementType(
     return expression.arrayElementType
   }
 
-  if (expression !== null && typeof expression !== 'undefined') {
-    if (expression.fsDirents === true) {
-      return 'object'
-    }
-  }
-
   return 'unknown'
 }
 
@@ -2611,46 +2598,6 @@ function emitSetConstructorValues(
   return lines
 }
 
-function emitDirentArrayIndexVariableDeclaration(statement: StatementNode, context: CFunctionContext): string[] | null {
-  const expression = statement.init
-
-  if (expression === null || typeof expression === 'undefined') {
-    return null
-  }
-
-  if (expression.type !== 'IndexExpression') {
-    return null
-  }
-
-  if (
-    expression.object.type !== 'Reference' ||
-    expression.index.type !== 'NumberLiteral' ||
-    expression.arrayElementDeclaredType !== 'fs.Dirent'
-  ) {
-    return null
-  }
-
-  const index = expression.index.value
-
-  if (!isUnsignedIntegerLiteral(index)) {
-    return null
-  }
-
-  const array = statementDeps(context).emitCValueExpression(expression.object, context)
-  registerOwnedValue(context, statement.name)
-  context.variables.set(statement.name, 'object')
-  registerObjectShape(context, statement.name, expression.shape)
-
-  const lines: string[] = []
-  pushAllLines(lines, array.lines)
-  pushAllLines(lines, emitPrepareOwnedValueWrite(statement.name))
-  lines.push(`${emitCIdentifier(statement.name)} = ArrayClass(${array.expression}).get(${index});`)
-  lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
-  lines.push(emitRuntimeValueCheck(emitCIdentifier(statement.name), 'INOX_TAG_OBJECT', context))
-
-  return lines
-}
-
 function emitPreparedForInitializer(
   init: StatementNode | null | undefined,
   context: CFunctionContext
@@ -2677,16 +2624,6 @@ function emitPreparedForVariableDeclaration(statement: StatementNode, context: C
     registerPromiseVariableMetadata(statement, fetchCall, context)
     return {
       lines: fetchCall.lines,
-      expression: ''
-    }
-  }
-
-  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, preparedCallOut(statement.name))
-
-  if (fsCall !== null && typeof fsCall !== 'undefined') {
-    registerPromiseVariableMetadata(statement, fsCall, context)
-    return {
-      lines: fsCall.lines,
       expression: ''
     }
   }
@@ -4137,13 +4074,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return fetchCall.lines
   }
 
-  const fsCall = deps.emitPreparedFsCallExpression(statement.init, context, preparedCallOut(statement.name))
-
-  if (fsCall !== null && typeof fsCall !== 'undefined') {
-    registerPromiseVariableMetadata(statement, fsCall, context)
-    return fsCall.lines
-  }
-
   const promiseConstructor = deps.emitPreparedPromiseConstructorExpression(
     statement.init,
     context,
@@ -4303,12 +4233,6 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
   }
 
   if (deps.isIndexAccessExpression(statement.init)) {
-    const direntElement = emitDirentArrayIndexVariableDeclaration(statement, context)
-
-    if (direntElement !== null && typeof direntElement !== 'undefined') {
-      return direntElement
-    }
-
     const element = deps.resolveKnownArrayIndex(statement.init, context)
 
     if (element !== null && typeof element !== 'undefined') {
@@ -4752,18 +4676,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (fetchCall !== null && typeof fetchCall !== 'undefined') {
       return fetchCall.lines
-    }
-
-    const fsCall = deps.emitPreparedFsCallExpression(expression, context)
-
-    if (fsCall !== null && typeof fsCall !== 'undefined') {
-      return fsCall.lines
-    }
-
-    const fsSyncCall = deps.emitPreparedFsSyncStatementExpression(expression, context)
-
-    if (fsSyncCall !== null && typeof fsSyncCall !== 'undefined') {
-      return fsSyncCall.lines
     }
 
     const timerCall = deps.emitPreparedTimerCallExpression(expression, context)

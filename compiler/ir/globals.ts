@@ -1,22 +1,15 @@
-import { fsGlobalUsagePathForRuntimeMethod } from '../stdlib/node/descriptor.ts'
 import type { AnyNode, IrGlobalUsage, ProgramNode, SourceLocation } from '../types.ts'
 
 type NodeList = AnyNode[]
 
 type GlobalUsageNode = AnyNode & {
   args?: AnyNode[] | null
-  fsRuntimeMethod?: string | null
   index?: AnyNode | null
   loc?: SourceLocation
   object?: AnyNode | null
   path?: string[]
   property?: string | null
   type?: string | null
-}
-
-type GlobalUsageCallNode = {
-  args?: NodeList | null
-  fsRuntimeMethod?: string | null
 }
 
 type GlobalUsageIndexNode = {
@@ -85,22 +78,6 @@ function visitGlobalUsage(node: AnyNode | NodeList | null | undefined, usages: I
   const item: GlobalUsageNode = node
   const itemType = item.type
 
-  const callItem = item as GlobalUsageCallNode
-  const fsRuntimeMethod = callItem.fsRuntimeMethod
-
-  if (itemType === 'CallExpression' && fsRuntimeMethod !== null && typeof fsRuntimeMethod !== 'undefined') {
-    const path = fsGlobalUsagePathForRuntimeMethod(fsRuntimeMethod)
-
-    if (path !== null && typeof path !== 'undefined') {
-      pushGlobalUsage(usages, path, item)
-
-      const args = callItem.args
-      visitOptionalGlobalUsageList(args, usages)
-
-      return
-    }
-  }
-
   if (itemType === 'MemberExpression' || itemType === 'OptionalMemberExpression') {
     const path = globalUsagePath(item)
 
@@ -151,14 +128,6 @@ function visitGlobalUsageList(nodes: NodeList, usages: IrGlobalUsage[]): void {
     const item = nodes[index]
     visitGlobalUsage(item, usages)
   }
-}
-
-function visitOptionalGlobalUsageList(nodes: NodeList | null | undefined, usages: IrGlobalUsage[]): void {
-  if (nodes === null || typeof nodes === 'undefined') {
-    return
-  }
-
-  visitGlobalUsageList(nodes, usages)
 }
 
 function visitGlobalUsageChild(value: any, usages: IrGlobalUsage[]): void {
@@ -294,7 +263,6 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Uint16Array' ||
     name === 'Uint32Array' ||
     name === 'fetch' ||
-    name === 'fs' ||
     name === 'http' ||
     name === 'performance' ||
     name === 'clearTimeout' ||
@@ -349,7 +317,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'clearInterval')
   pushStringIfPresent(values, result, 'clearTimeout')
   pushStringIfPresent(values, result, 'fetch')
-  pushStringIfPresent(values, result, 'fs')
   pushStringIfPresent(values, result, 'http')
   pushStringIfPresent(values, result, 'inox')
   pushStringIfPresent(values, result, 'performance')

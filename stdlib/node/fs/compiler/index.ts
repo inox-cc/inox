@@ -52,7 +52,12 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'FsStats',
       baseTypeIds: [],
-      runtimeRequirements: [runtimeRequirement]
+      runtimeRequirements: [runtimeRequirement],
+      fields: [
+        { name: 'size', valueType: 'number', readonly: true },
+        { name: 'mode', valueType: 'number', readonly: true },
+        { name: 'mtimeMs', valueType: 'number', readonly: true }
+      ]
     },
     {
       libraryId,
@@ -61,7 +66,10 @@ export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
       valueType: 'object',
       cppType: 'FsDirent',
       baseTypeIds: [],
-      runtimeRequirements: [runtimeRequirement]
+      runtimeRequirements: [runtimeRequirement],
+      fields: [
+        { name: 'name', valueType: 'string', readonly: true }
+      ]
     }
   ],
   operations,

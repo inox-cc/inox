@@ -6,7 +6,6 @@ type RejectionStringMap = Map<string, string>
 
 export type RejectionValueTypeDependencies = {
   cFetchRuntimeExpressionMethod(expression: AnyNode): string | null
-  cFsRuntimeExpressionMethod(expression: AnyNode): string | null
   cPromiseRuntimeCallName(callee: AnyNode): string | null
   inferExpressionType(expression: AnyNode, context: CFunctionContext): string
   isErrorConstructorExpression(expression: AnyNode): boolean
@@ -199,10 +198,6 @@ function inferPromiseRejectionValueType(
 
   if (expression.type === 'CallExpression' && deps.cPromiseRuntimeCallName(expression.callee) === 'reject') {
     return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames, deps)
-  }
-
-  if (expression.type === 'CallExpression' && deps.cFsRuntimeExpressionMethod(expression)) {
-    return 'error'
   }
 
   if (expression.type === 'CallExpression' && deps.cFetchRuntimeExpressionMethod(expression)) {

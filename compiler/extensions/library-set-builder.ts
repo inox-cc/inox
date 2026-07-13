@@ -276,7 +276,8 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
         item.libraryId + ':' + item.typeId + ':names=' + sortedStrings(item.declarationNames).join(',') +
           ':value=' + item.valueType + ':cpp=' + item.cppType +
           ':bases=' + sortedStrings(item.baseTypeIds).join(',') +
-          ':requirements=' + sortedStrings(item.runtimeRequirements).join(',')
+          ':requirements=' + sortedStrings(item.runtimeRequirements).join(',') +
+          ':fields=' + resultShapeFieldsFingerprint(item.fields ?? [])
       )
     }
 

@@ -227,10 +227,6 @@ export type AsyncTaskLoweringDependencies = {
     options?: CPreparedCallOptions
   ): PreparedExpression | null
   emitPreparedFetchInitOperand(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
-  emitPreparedNodeStdlibAsyncTaskSourceExpression(
-    expression: AsyncTaskAstNode,
-    context: AsyncTaskFunctionContext
-  ): PreparedAsyncTaskPromise | null
   emitPreparedNumberExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedStringBytesOperand(
     expression: AsyncTaskAstNode,
@@ -246,7 +242,6 @@ export type AsyncTaskLoweringDependencies = {
   inferExpressionType(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): string
   isIndexAccessExpression(expression: AsyncTaskAstNode): boolean
   isMemberAccessExpression(expression: AsyncTaskAstNode): boolean
-  isAsyncNodeStdlibRuntimeCallExpression(expression: AsyncTaskAstNode | null | undefined): boolean
   isCompilerLibraryPromiseExpression(expression: AsyncTaskAstNode | null | undefined): boolean
   isRuntimeProducedStringExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
   isThrowingFunctionCallee(callee: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
@@ -2481,10 +2476,6 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
     return true
   }
 
-  if (asyncTaskDeps(context).isAsyncNodeStdlibRuntimeCallExpression(expression)) {
-    return true
-  }
-
   if (isAsyncFetchRuntimeCallExpression(expression)) {
     return true
   }
@@ -3262,14 +3253,6 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
     lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
     appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
     return { lines }
-  }
-
-  const nodeStdlibCall = asyncTaskDeps(context).emitPreparedNodeStdlibAsyncTaskSourceExpression(expression, context)
-
-  if (nodeStdlibCall !== null && typeof nodeStdlibCall !== 'undefined') {
-    appendAsyncTaskLines(nodeStdlibCall.lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
-
-    return nodeStdlibCall
   }
 
   const fetchCall = emitPreparedAsyncTaskFetchSourceExpression(expression, wrapper, context, options)

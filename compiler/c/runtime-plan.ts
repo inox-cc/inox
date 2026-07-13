@@ -32,7 +32,6 @@ export type CRuntimePreludeRequirements = {
   needsMapRuntime: boolean
   needsSetRuntime: boolean
   needsObjectRuntime: boolean
-  needsFsRuntime: boolean
   needsJsonRuntime: boolean
   needsRegexpRuntime: boolean
   needsTimerRuntime: boolean
@@ -87,7 +86,6 @@ export function resolveCRuntimePreludeRequirements(
     input.hasRuntimeCallbackWrapper ||
     runtimeRequirements.has('callback-values') ||
     signatureRuntimeTypes.has('function')
-  const needsFsRuntime = runtimeRequirements.has('fs')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsRegexpRuntime = irProgramsUseCPreludeFeature(input.irPrograms, 'regexp')
   const needsTimerRuntime = runtimeRequirements.has('timers')
@@ -96,7 +94,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsAsyncRuntime =
     runtimeRequirements.has('async-runtime') ||
     needsFetchRuntime ||
-    needsFsRuntime ||
     needsTimerRuntime ||
     signatureRuntimeTypes.has('promise')
   const needsCollectionRuntime =
@@ -124,7 +121,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsDgramRuntime = nodeRuntimeImports.dgram
   const needsObjectRuntime =
     runtimeRequirements.has('objects') ||
-    needsFsRuntime ||
     needsFetchRuntime ||
     needsClassRuntime ||
     signatureRuntimeTypes.has('object')
@@ -156,7 +152,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsConsoleRuntime = irProgramsUseConsoleRuntime(input.irPrograms)
   const needsStringHeader =
     runtimeRequirements.has('string-bytes') ||
-    needsFsRuntime ||
     needsDgramRuntime ||
     needsFetchRuntime ||
     needsNetRuntime ||
@@ -176,7 +171,6 @@ export function resolveCRuntimePreludeRequirements(
     needsMapRuntime,
     needsSetRuntime,
     needsObjectRuntime,
-    needsFsRuntime,
     needsJsonRuntime,
     needsRegexpRuntime,
     needsTimerRuntime,

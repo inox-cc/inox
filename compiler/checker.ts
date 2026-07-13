@@ -1,11 +1,4 @@
 import {
-  fsRuntimeCallInfo,
-  fsRuntimeCallInfoFromImportSymbol,
-  fsRuntimeCallPlan,
-  fsRuntimeConstantName,
-  fsStatsRuntimeMethodInfo,
-  isFsPromisesImportSymbol,
-  isFsRuntimeRootSymbol,
   isTimerHandleMethod,
   isTimerRuntimeImportSymbol,
   timerCallbackFunctionType,
@@ -14,11 +7,6 @@ import {
   timerRuntimeMethodName,
   unsupportedEventsRuntimeExport,
   unsupportedStreamRuntimeExport
-} from './stdlib/node/checker.ts'
-import type {
-  FsBooleanOptions,
-  FsRuntimeArgumentCheck,
-  FsRuntimeCallInfo
 } from './stdlib/node/checker.ts'
 import {
   commonArrayElementType,
@@ -34,7 +22,6 @@ import {
   builtinGlobalSymbol,
   errorObjectShape,
   fetchAbortControllerObjectShape,
-  fsDirentObjectShape,
   libuvOnlyRuntimeImportFeature
 } from './checker/builtins.ts'
 import {
@@ -99,7 +86,6 @@ import {
   resolveClassConstructorFieldType as resolveClassConstructorFieldInitializerType
 } from './checker/class-helpers.ts'
 import {
-  applyFsRuntimeCallPlan,
   callExpressionArgumentLabel,
   createArrowFunctionTypeMetadata,
   createMapEntryShape,
@@ -107,14 +93,6 @@ import {
   resolveExpressionPromiseRejectionValueType,
   resolveMapEntryArrayType
 } from './checker/expression-helpers.ts'
-import { checkFsCall as checkFsCallInContext } from './checker/fs-calls.ts'
-import type {
-  CheckedFsArgInfo,
-  CheckedFsCallInfo,
-  CheckedFsIndexedArgInfo,
-  CheckedFsObjectPropertyInfo,
-  FsCallCheckerContext
-} from './checker/fs-calls.ts'
 import {
   checkCollectionMethodCall as checkCollectionMethodCallInContext,
   isCollectionMethodCandidate
@@ -1184,7 +1162,7 @@ class Checker {
         nullable = true
       }
 
-      let statementArrayElementDeclaredType = arrayElementDeclaredType
+      const statementArrayElementDeclaredType = arrayElementDeclaredType
 
       let mapKeyType: ValueType | null = null
       let mapValueType: ValueType | null = null
@@ -1251,13 +1229,6 @@ class Checker {
         typeof statement.init.shape !== 'undefined'
       ) {
         shape = statement.init.shape
-      } else if (
-        valueType === 'object' &&
-        statementArrayElementDeclaredType !== null &&
-        typeof statementArrayElementDeclaredType !== 'undefined' &&
-        statementArrayElementDeclaredType === 'fs.Dirent'
-      ) {
-        shape = fsDirentObjectShape
       }
 
       let className: string | null = null
@@ -2350,12 +2321,6 @@ class Checker {
 
     if (libraryMemberType !== null) {
       return libraryMemberType
-    }
-
-    const fsConstantType = this.checkFsConstantMemberExpression(expression)
-
-    if (fsConstantType !== null && typeof fsConstantType !== 'undefined') {
-      return fsConstantType
     }
 
     const unsupportedFetchBodyType = this.checkFetchUnsupportedResponseBodyMember(expression)
@@ -3488,12 +3453,6 @@ class Checker {
       return timerHandleMethodType
     }
 
-    const fsStatsMethodType = this.checkFsStatsMethodCall(expression)
-
-    if (fsStatsMethodType !== null && typeof fsStatsMethodType !== 'undefined') {
-      return fsStatsMethodType
-    }
-
     const fetchAbortControllerMethodType = this.checkFetchAbortControllerMethodCall(expression)
 
     if (fetchAbortControllerMethodType !== null && typeof fetchAbortControllerMethodType !== 'undefined') {
@@ -3510,12 +3469,6 @@ class Checker {
 
     if (fetchHeadersMethodType !== null && typeof fetchHeadersMethodType !== 'undefined') {
       return fetchHeadersMethodType
-    }
-
-    const fsType = this.checkFsCall(expression)
-
-    if (fsType !== null && typeof fsType !== 'undefined') {
-      return fsType
     }
 
     const fetchType = this.checkFetchCall(expression)
@@ -4226,13 +4179,14 @@ class Checker {
     expression.libraryCResultMode = variant?.cResultMode ?? operation.cResultMode ?? null
     expression.libraryCReceiverAdapter = variant?.cReceiverAdapter ?? operation.cReceiverAdapter ?? null
 
-    const resultShapeFields = variant?.resultShapeFields ?? operation.resultShapeFields
     const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
     const cppType = variant?.cppType ?? operation.cppType
     const valueType = variant?.valueType ?? operation.valueType
     const nativeResultType = resultTypeId === null || typeof resultTypeId === 'undefined'
       ? null
       : compilerLibraryNativeTypeForId(libraries, resultTypeId)
+    const resultShapeFields =
+      variant?.resultShapeFields ?? operation.resultShapeFields ?? nativeResultType?.fields
     const resultCppType = valueType === 'promise' && nativeResultType !== null
       ? nativeResultType.cppType
       : cppType
@@ -4512,62 +4466,6 @@ class Checker {
     }
 
     return checkObjectStaticCallInContext(this.globalCallContext(), expression, this.checkedCallArgInfos(expression))
-  }
-
-  checkFsConstantMemberExpression(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression)
-    let symbol: SymbolInfo | null = null
-
-    if (path !== null && typeof path !== 'undefined') {
-      symbol = this.scope.resolve(firstPathSegment(path))
-    }
-
-    const constantName = fsRuntimeConstantName(path, symbol)
-
-    if (constantName === null || typeof constantName === 'undefined') {
-      return null
-    }
-
-    expression.fsRuntimeConstant = constantName
-    expression.valueType = 'number'
-
-    return 'number'
-  }
-
-  checkFsStatsMethodCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression') {
-      return null
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-    const shape = this.resolveExpressionShape(expression.callee.object)
-
-    if (
-      objectType !== 'object' ||
-      shape === null ||
-      typeof shape === 'undefined'
-    ) {
-      return null
-    }
-
-    const info = fsStatsRuntimeMethodInfo(expression.callee.property, shape.builtin)
-
-    if (info === null || typeof info === 'undefined') {
-      return null
-    }
-
-    if (expression.args.length !== 0) {
-      this.report(
-        'INOX_ARG_COUNT',
-        `function ${info.receiverName}.${expression.callee.property} expects 0 argument(s), got ${expression.args.length}`,
-        expression.loc
-      )
-    }
-
-    expression.fsRuntimeMethod = info.method
-    expression.valueType = 'boolean'
-
-    return 'boolean'
   }
 
   checkFetchCall(expression: AnyNode): ValueType | null {
@@ -4905,251 +4803,6 @@ class Checker {
     }
 
     return null
-  }
-
-  checkFsCall(expression: AnyNode): ValueType | null {
-    const info = this.resolveFsRuntimeCallInfo(expression)
-
-    if (info === null || typeof info === 'undefined') {
-      return null
-    }
-
-    const promisesApi = info.viaPromises || isFsPromisesImportSymbol(this.scope.resolve(info.root))
-    const plan = fsRuntimeCallPlan(info, promisesApi, expression.args.length)
-    const callInfo = plan.unsupportedMessage !== null && typeof plan.unsupportedMessage !== 'undefined'
-      ? { argCount: expression.args.length, args: [] }
-      : this.checkedFsCallInfo(expression, plan.argumentChecks)
-    const options = this.fsCallOptionsFromInfo(plan.argumentChecks, callInfo)
-
-    checkFsCallInContext(this.fsCallContext(), expression, plan, callInfo)
-
-    if (plan.unsupportedMessage === null || typeof plan.unsupportedMessage === 'undefined') {
-      applyFsRuntimeCallPlan(expression, plan, options)
-
-      if (plan.bytesFromWriteData) {
-        expression.fsBytes = options.bytes === true
-      }
-
-      if (plan.direntsFromOptions && options.withFileTypes === true) {
-        expression.fsDirents = true
-        expression.arrayElementType = 'object'
-        expression.arrayElementDeclaredType = 'fs.Dirent'
-      }
-
-      if (plan.recursiveFromOptions) {
-        expression.fsRecursive = options.recursive === true
-      }
-
-      if (plan.forceFromOptions) {
-        expression.fsForce = options.force === true
-      }
-    }
-
-    expression.fsRuntimeMethod = plan.runtimeMethod
-    expression.valueType = plan.valueType
-    expression.promiseValueType = plan.promiseValueType
-
-    if (plan.bytes !== null && typeof plan.bytes !== 'undefined') {
-      expression.fsBytes = plan.bytes
-    }
-
-    if (expression.arrayElementType === null || typeof expression.arrayElementType === 'undefined') {
-      expression.arrayElementType = plan.arrayElementType
-    }
-
-    if (
-      expression.arrayElementDeclaredType === null ||
-      typeof expression.arrayElementDeclaredType === 'undefined'
-    ) {
-      expression.arrayElementDeclaredType = plan.arrayElementDeclaredType
-    }
-
-    return plan.valueType
-  }
-
-  resolveFsRuntimeCallInfo(expression: AnyNode): FsRuntimeCallInfo | null {
-    const info = fsRuntimeCallInfo(expression.callee)
-
-    if (info !== null && typeof info !== 'undefined') {
-      if (isFsRuntimeRootSymbol(this.scope.resolve(info.root))) {
-        return info
-      }
-
-      return null
-    }
-
-    let symbol: SymbolInfo | null = null
-
-    if (expression.callee.type === 'Reference' && expression.callee.path.length === 1) {
-      symbol = this.scope.resolve(expression.callee.path[0])
-    }
-
-    return fsRuntimeCallInfoFromImportSymbol(expression.callee, symbol)
-  }
-
-  checkedFsCallInfo(expression: AnyNode, checks: FsRuntimeArgumentCheck[]): CheckedFsCallInfo {
-    const args: CheckedFsIndexedArgInfo[] = []
-
-    for (const check of checks) {
-      if (
-        check.index >= expression.args.length ||
-        this.hasCheckedFsIndexedArg(args, check.index)
-      ) {
-        continue
-      }
-
-      const arg = checkerNodeAt(expression.args, check.index)
-
-      args.push({
-        arg: this.checkedFsArgInfo(arg, this.fsCheckInspectsObjectLiteral(checks, check.index)),
-        index: check.index
-      })
-    }
-
-    return {
-      argCount: expression.args.length,
-      args
-    }
-  }
-
-  hasCheckedFsIndexedArg(args: CheckedFsIndexedArgInfo[], index: number): boolean {
-    for (const arg of args) {
-      if (arg.index === index) {
-        return true
-      }
-    }
-
-    return false
-  }
-
-  fsCheckInspectsObjectLiteral(checks: FsRuntimeArgumentCheck[], index: number): boolean {
-    for (const check of checks) {
-      if (check.index === index && (check.kind === 'boolean-options' || check.kind === 'readdir-options')) {
-        return true
-      }
-    }
-
-    return false
-  }
-
-  checkedFsArgInfo(node: AnyNode, inspectObjectLiteral: boolean): CheckedFsArgInfo {
-    if (inspectObjectLiteral && node.type === 'ObjectLiteral') {
-      const properties: CheckedFsObjectPropertyInfo[] = []
-      const nodeProperties: CheckerObjectPropertyNode[] = node.properties
-
-      for (const property of nodeProperties) {
-        properties.push(this.checkedFsObjectPropertyInfo(property))
-      }
-
-      let valueType: ValueType = 'object'
-
-      if (node.valueType !== null && typeof node.valueType !== 'undefined') {
-        valueType = node.valueType
-      }
-
-      return this.checkedFsValueInfoFromType(node, valueType, properties)
-    }
-
-    return this.checkedFsValueInfoFromType(node, this.checkExpression(node), [])
-  }
-
-  checkedFsObjectPropertyInfo(property: CheckerObjectPropertyNode): CheckedFsObjectPropertyInfo {
-    let valueType: ValueType = 'unknown'
-
-    if (property.value.valueType === null || typeof property.value.valueType === 'undefined') {
-      valueType = this.checkExpression(property.value)
-    } else {
-      valueType = property.value.valueType
-    }
-
-    return {
-      key: property.key,
-      loc: property.loc,
-      value: this.checkedFsValueInfoFromType(property.value, valueType, [])
-    }
-  }
-
-  checkedFsValueInfoFromType(
-    node: AnyNode,
-    valueType: ValueType,
-    properties: CheckedFsObjectPropertyInfo[]
-  ): CheckedFsArgInfo {
-    let stringLiteralValue: string | null = null
-    let booleanLiteralValue: boolean | null = null
-
-    if (node.type === 'StringLiteral') {
-      stringLiteralValue = node.value
-    }
-
-    if (node.type === 'BooleanLiteral') {
-      booleanLiteralValue = node.value === true
-    }
-
-    return {
-      booleanLiteralValue,
-      loc: node.loc,
-      nullable: this.expressionCanBeNull(node),
-      properties,
-      stringLiteralValue,
-      type: node.type,
-      valueType
-    }
-  }
-
-  fsCallOptionsFromInfo(checks: FsRuntimeArgumentCheck[], info: CheckedFsCallInfo): FsBooleanOptions {
-    const options: FsBooleanOptions = {}
-
-    for (const check of checks) {
-      if (check.kind === 'write-data') {
-        const arg = this.checkedFsArgAt(info, check.index)
-
-        options.bytes = arg !== null && typeof arg !== 'undefined' && arg.valueType === 'bytes'
-      } else if (check.kind === 'readdir-options') {
-        options.withFileTypes = this.checkedFsBooleanOption(info, check.index, 'withFileTypes')
-      } else if (
-        check.kind === 'boolean-options' &&
-        check.allowedOptions !== null &&
-        typeof check.allowedOptions !== 'undefined'
-      ) {
-        for (const optionName of check.allowedOptions) {
-          if (optionName === 'recursive') {
-            options.recursive = this.checkedFsBooleanOption(info, check.index, optionName)
-          } else if (optionName === 'force') {
-            options.force = this.checkedFsBooleanOption(info, check.index, optionName)
-          } else if (optionName === 'withFileTypes') {
-            options.withFileTypes = this.checkedFsBooleanOption(info, check.index, optionName)
-          }
-        }
-      }
-    }
-
-    return options
-  }
-
-  checkedFsArgAt(info: CheckedFsCallInfo, index: number): CheckedFsArgInfo | null {
-    for (const item of info.args) {
-      if (item.index === index) {
-        return item.arg
-      }
-    }
-
-    return null
-  }
-
-  checkedFsBooleanOption(info: CheckedFsCallInfo, index: number, key: string): boolean {
-    const arg = this.checkedFsArgAt(info, index)
-
-    if (arg === null || typeof arg === 'undefined') {
-      return false
-    }
-
-    for (const property of arg.properties) {
-      if (property.key === key) {
-        return property.value.booleanLiteralValue === true
-      }
-    }
-
-    return false
   }
 
   checkJsonCall(expression: AnyNode, declared?: ResolvedTypeInfo | null): ValueType | null {
@@ -8630,12 +8283,6 @@ class Checker {
   }
 
   callableSymbolContext(): CallableSymbolCheckerContext {
-    return {
-      diagnostics: this.diagnostics
-    }
-  }
-
-  fsCallContext(): FsCallCheckerContext {
     return {
       diagnostics: this.diagnostics
     }

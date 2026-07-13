@@ -360,16 +360,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.fetchRuntimeMethod = fetchRuntimeMethod
   }
 
-  const fsRuntimeConstant = nullableString(source.fsRuntimeConstant)
-  if (fsRuntimeConstant !== null && typeof fsRuntimeConstant !== 'undefined') {
-    target.fsRuntimeConstant = fsRuntimeConstant
-  }
-
-  const fsRuntimeMethod = nullableString(source.fsRuntimeMethod)
-  if (fsRuntimeMethod !== null && typeof fsRuntimeMethod !== 'undefined') {
-    target.fsRuntimeMethod = fsRuntimeMethod
-  }
-
   const jsonRuntimeMethod = nullableString(source.jsonRuntimeMethod)
   if (jsonRuntimeMethod !== null && typeof jsonRuntimeMethod !== 'undefined') {
     target.jsonRuntimeMethod = jsonRuntimeMethod
@@ -534,22 +524,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   const returnShape = nullableNode(source.returnShape)
   if (returnShape !== null && typeof returnShape !== 'undefined') {
     target.returnShape = returnShape
-  }
-
-  if (source.fsRecursive === true) {
-    target.fsRecursive = true
-  }
-
-  if (source.fsForce === true) {
-    target.fsForce = true
-  }
-
-  if (source.fsBytes === true) {
-    target.fsBytes = true
-  }
-
-  if (source.fsDirents === true) {
-    target.fsDirents = true
   }
 
   return target

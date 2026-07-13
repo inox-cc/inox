@@ -7,8 +7,6 @@ import {
   nodeEventsImportSource,
   nodeEventsModuleObjectImportNames
 } from '../../../stdlib/node/events/compiler/descriptor.ts'
-import { nodeFsImportSource } from '../../../stdlib/node/fs/compiler/descriptor.ts'
-import { nodeFsPromisesImportSource } from '../../../stdlib/node/fs/promises/compiler/descriptor.ts'
 import {
   nodeHttpCreateServerImportNames,
   nodeHttpImportSource,
@@ -29,7 +27,6 @@ import {
   nodeTimersModuleObjectImportNames
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
 
-export { fsGlobalUsagePathForRuntimeMethod } from '../../../stdlib/node/fs/compiler/descriptor.ts'
 export {
   isTimerRuntimeMethod,
   timerRuntimeMethodNameFromPath
@@ -59,14 +56,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
   },
   {
     source: nodeEventsImportSource,
-    libuvRuntimeFeature: null
-  },
-  {
-    source: nodeFsImportSource,
-    libuvRuntimeFeature: null
-  },
-  {
-    source: nodeFsPromisesImportSource,
     libuvRuntimeFeature: null
   },
   {

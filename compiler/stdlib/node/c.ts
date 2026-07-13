@@ -15,15 +15,6 @@ import {
   registerDgramRuntimeImportNames
 } from '../../../stdlib/node/dgram/compiler/c.ts'
 import { isSupportedNodeDgramCGlobalUsage } from '../../../stdlib/node/dgram/compiler/descriptor.ts'
-import type {
-  FsAsyncTaskSourceExpression,
-  FsLoweringDependencies as PackageFsLoweringDependencies
-} from '../../../stdlib/node/fs/compiler/c.ts'
-import {
-  cFsRuntimeExpressionMethod,
-  emitPreparedFsAsyncTaskSourceExpression,
-  isAsyncFsRuntimeCallExpression
-} from '../../../stdlib/node/fs/compiler/c.ts'
 import type { HttpLoweringDependencies as PackageHttpLoweringDependencies } from '../../../stdlib/node/http/compiler/c.ts'
 import {
   collectHttpHandlers,
@@ -56,14 +47,6 @@ import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compile
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export {
-  cFsRuntimeConstantExpression,
-  cFsRuntimeExpressionMethod,
-  emitPreparedFsCallExpression,
-  emitPreparedFsStatsMethodExpression,
-  emitPreparedFsSyncStatementExpression,
-  emitPreparedFsSyncValueExpression
-} from '../../../stdlib/node/fs/compiler/c.ts'
-export {
   emitPreparedTimerCallExpression,
   emitTimerVariableDeclaration,
   isTimerStartCallExpression,
@@ -71,7 +54,6 @@ export {
 } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export type DgramLoweringDependencies = PackageDgramLoweringDependencies
-export type FsLoweringDependencies = PackageFsLoweringDependencies
 export type HttpLoweringDependencies = PackageHttpLoweringDependencies
 export type NetLoweringDependencies = PackageNetLoweringDependencies
 export type TimerLoweringDependencies = PackageTimerLoweringDependencies
@@ -81,11 +63,6 @@ export type NodeNetworkLoweringDependencies = {
   http: HttpLoweringDependencies
   net: NetLoweringDependencies
 }
-
-export type NodeStdlibAsyncTaskLoweringDependencies = {
-  fs: FsLoweringDependencies
-}
-
 
 type NodeCGlobalNameSet = Set<string>
 
@@ -297,38 +274,6 @@ export function emitPreparedNodeNetworkAddressPortExpression(
 
 export function resolveNodeNetworkAddressStringMember(expression: AnyNode, context: CFunctionContext): string | null {
   return resolveNetAddressStringMember(expression, context)
-}
-
-export function isAsyncNodeStdlibRuntimeCallExpression(expression: AnyNode | null | undefined): boolean {
-  return isAsyncFsRuntimeCallExpression(expression)
-}
-
-export function emitPreparedNodeStdlibAsyncTaskSourceExpression(
-  expression: AnyNode,
-  context: CFunctionContext,
-  dependencies: NodeStdlibAsyncTaskLoweringDependencies
-): FsAsyncTaskSourceExpression | null {
-  return emitPreparedFsAsyncTaskSourceExpression(expression, context, dependencies.fs)
-}
-
-function nodeExpressionValueTypeOrUnknown(expression: AnyNode): string {
-  if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
-    return expression.valueType
-  }
-
-  return 'unknown'
-}
-
-export function inferNodeStdlibExpressionType(expression: AnyNode): string | null {
-  if (expression.type === 'CallExpression' && cFsRuntimeExpressionMethod(expression)) {
-    if (expression.valueType === 'promise') {
-      return 'promise'
-    }
-
-    return nodeExpressionValueTypeOrUnknown(expression)
-  }
-
-  return null
 }
 
 export function inferNodeStdlibMemberExpressionType(expression: AnyNode, context: CFunctionContext): string | null {

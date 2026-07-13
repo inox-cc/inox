@@ -258,13 +258,6 @@ function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapabil
     return timeCapability
   }
 
-  if (usage.root === 'fs') {
-    return {
-      key: 'fs',
-      name: 'filesystem'
-    }
-  }
-
   if (isTimerRuntimeMethod(path)) {
     return {
       key: 'timers',
