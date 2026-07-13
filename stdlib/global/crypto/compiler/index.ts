@@ -5,6 +5,7 @@ import type {
 
 const libraryId = 'global:crypto'
 const runtimeRequirement = libraryId
+const uint8ArrayTypeId = 'global:binary#Uint8Array'
 
 const operations: LibraryOperationDescriptor[] = [
   {
@@ -16,6 +17,8 @@ const operations: LibraryOperationDescriptor[] = [
     cExpression: 'crypto.getRandomValues',
     cArgumentKinds: ['value'],
     cArgumentAdapters: ['Uint8Array($value)'],
+    cResultMode: 'value',
+    resultTypeId: uint8ArrayTypeId,
     cFailureMode: 'thrown',
     minArgs: 1,
     maxArgs: 1,
@@ -29,7 +32,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: [],
+  dependencies: ['global:binary'],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [

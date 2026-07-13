@@ -11,6 +11,8 @@ const runtimeRequirement = 'node:crypto'
 const hashRuntimeRequirement = 'node:crypto:hash'
 const hashTypeId = `${libraryId}#Hash`
 const hmacTypeId = `${libraryId}#Hmac`
+const uint8ArrayTypeId = 'global:binary#Uint8Array'
+const bufferTypeId = 'node:buffer#Buffer'
 
 const randomRequirements = [runtimeRequirement]
 const hashRequirements = [runtimeRequirement, hashRuntimeRequirement]
@@ -28,7 +30,8 @@ const operations: LibraryOperationDescriptor[] = [
     1,
     1,
     [bytesArgument()],
-    randomRequirements
+    randomRequirements,
+    { resultTypeId: uint8ArrayTypeId }
   ),
   moduleCall(
     'randomBytes',
@@ -39,7 +42,8 @@ const operations: LibraryOperationDescriptor[] = [
     1,
     1,
     [numberArgument()],
-    randomRequirements
+    randomRequirements,
+    { resultTypeId: bufferTypeId }
   ),
   moduleCall(
     'randomFillSync',
@@ -50,7 +54,8 @@ const operations: LibraryOperationDescriptor[] = [
     1,
     3,
     [bytesArgument(), numberArgument(), numberArgument()],
-    randomRequirements
+    randomRequirements,
+    { resultTypeId: uint8ArrayTypeId }
   ),
   moduleCall(
     'randomInt',
@@ -109,7 +114,7 @@ const operations: LibraryOperationDescriptor[] = [
 
 export const compilerLibraryPackage: CompilerLibraryPackageDescriptor = {
   id: libraryId,
-  dependencies: ['global:crypto'],
+  dependencies: ['global:crypto', 'global:binary', 'node:buffer'],
   operations,
   intrinsicBindings: [],
   runtimeRequirements: [
@@ -216,7 +221,8 @@ function hashOperation(): LibraryOperationDescriptor {
         ['buffer'],
         ['string-view', 'string-view-or-value', 'string-view'],
         'Buffer',
-        'bytes'
+        'bytes',
+        bufferTypeId
       )
     ]
   }
@@ -282,7 +288,7 @@ function digestOperation(receiverTypeId: string, label: string): LibraryOperatio
       )
     ],
     variants: [
-      receiverScalarVariant(0, 0, null, [], ['receiver'], 'Buffer', 'bytes'),
+      receiverScalarVariant(0, 0, null, [], ['receiver'], 'Buffer', 'bytes', bufferTypeId),
       receiverScalarVariant(1, 1, 0, ['hex'], ['receiver', 'string-view'], 'inox::String', 'string')
     ]
   }
@@ -295,7 +301,8 @@ function callVariant(
   stringLiterals: string[],
   cArgumentKinds: LibraryCArgumentKind[],
   cppType: string,
-  valueType: string
+  valueType: string,
+  resultTypeId?: string
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
@@ -304,6 +311,8 @@ function callVariant(
     stringLiterals,
     cExpression: 'crypto.hash',
     cArgumentKinds,
+    cResultMode: resultTypeId ? 'value' : null,
+    resultTypeId,
     cppType,
     valueType,
     nullable: false,
@@ -340,7 +349,8 @@ function receiverScalarVariant(
   stringLiterals: string[],
   cArgumentKinds: LibraryCArgumentKind[],
   cppType: string,
-  valueType: string
+  valueType: string,
+  resultTypeId?: string
 ): LibraryOperationVariantDescriptor {
   return {
     minArgs,
@@ -349,6 +359,8 @@ function receiverScalarVariant(
     stringLiterals,
     cExpression: 'digest',
     cArgumentKinds,
+    cResultMode: resultTypeId ? 'value' : null,
+    resultTypeId,
     cppType,
     valueType,
     nullable: false,

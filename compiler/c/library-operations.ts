@@ -18,6 +18,7 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryCCallStyle?: string | null
   libraryCFailureMode?: string | null
   libraryCResultMode?: string | null
+  libraryCReceiverAdapter?: string | null
   libraryConstantValue?: string | null
   libraryCppType?: string | null
   libraryOwned?: boolean | null
@@ -324,6 +325,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   let callTarget = target
 
   applyCompilerLibraryArgumentAdapters(argumentsList, item.libraryCArgumentAdapters)
+  receiverExpression = applyCompilerLibraryValueAdapter(receiverExpression, item.libraryCReceiverAdapter)
 
   if (item.libraryCCallStyle === 'member') {
     if (receiverExpression === '') {
@@ -341,6 +343,12 @@ export function emitPreparedCompilerLibraryCallExpression(
     }
 
     callExpression = `${receiverExpression}[${argumentsList[0]}]`
+  } else if (item.libraryCCallStyle === 'index-assignment') {
+    if (receiverExpression === '' || argumentsList.length !== 2) {
+      return null
+    }
+
+    callExpression = `(${receiverExpression}[${argumentsList[0]}] = ${argumentsList[1]})`
   } else if (item.libraryCCallStyle === 'member-assignment') {
     if (receiverExpression === '' || argumentsList.length !== 1) {
       return null
@@ -400,6 +408,14 @@ export function emitPreparedCompilerLibraryCallExpression(
     valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
+}
+
+function applyCompilerLibraryValueAdapter(value: string, adapter: string | null | undefined): string {
+  if (value === '' || adapter === null || typeof adapter === 'undefined' || adapter === '') {
+    return value
+  }
+
+  return adapter.split('$value').join(value)
 }
 
 function emitPreparedCompilerLibraryObjectCall(
@@ -540,6 +556,10 @@ function emitCompilerLibraryVariadicStringArray(
 
 function compilerLibrarySourceArguments(expression: AnyNode): AnyNode[] {
   if (expression.type === 'AssignmentExpression') {
+    if (expression.target.type === 'IndexExpression') {
+      return [expression.target.index, expression.value]
+    }
+
     return [expression.value]
   }
 
@@ -557,6 +577,10 @@ function compilerLibrarySourceArguments(expression: AnyNode): AnyNode[] {
 function compilerLibraryReceiver(expression: AnyNode): AnyNode | null {
   if (expression.type === 'AssignmentExpression') {
     if (expression.target.type === 'MemberExpression') {
+      return expression.target.object
+    }
+
+    if (expression.target.type === 'IndexExpression') {
       return expression.target.object
     }
 

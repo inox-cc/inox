@@ -335,6 +335,7 @@ export function lowerParam(param: LowerNode, context: LowerContext): LowerNode {
     loc: param.loc,
     declaredType,
     optional: param.optional === true,
+    rest: param.rest === true,
     valueType: fallbackString(declared.valueType, fallbackString(param.valueType, 'unknown')),
     nullable: declared.nullable,
     libraryRuntimeRequirements: declared.libraryRuntimeRequirements,

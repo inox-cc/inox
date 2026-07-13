@@ -1,8 +1,4 @@
 import {
-  nodeBufferImportSource,
-  nodeBufferModuleObjectImportNames
-} from '../../../stdlib/node/buffer/compiler/descriptor.ts'
-import {
   nodeDgramCreateSocketImportNames,
   nodeDgramImportSource,
   nodeDgramModuleObjectImportNames
@@ -33,7 +29,6 @@ import {
   nodeTimersModuleObjectImportNames
 } from '../../../stdlib/node/timers/compiler/descriptor.ts'
 
-export { isBinaryGlobalUsagePath } from '../../../stdlib/node/buffer/compiler/descriptor.ts'
 export { fsGlobalUsagePathForRuntimeMethod } from '../../../stdlib/node/fs/compiler/descriptor.ts'
 export {
   isTimerRuntimeMethod,
@@ -58,10 +53,6 @@ export type NodeStdlibRuntimeImportDescriptor = {
 }
 
 export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
-  {
-    source: nodeBufferImportSource,
-    libuvRuntimeFeature: null
-  },
   {
     source: nodeDgramImportSource,
     libuvRuntimeFeature: 'node:dgram'
@@ -97,11 +88,6 @@ export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
 ]
 
 export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescriptor[] = [
-  {
-    source: nodeBufferImportSource,
-    kind: 'module-object',
-    importedNames: nodeBufferModuleObjectImportNames
-  },
   {
     source: nodeDgramImportSource,
     kind: 'module-object',

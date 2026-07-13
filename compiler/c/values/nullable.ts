@@ -197,6 +197,7 @@ export type NullableLoweringDependencies = {
     functionType: CFunctionType | null | undefined,
     context: NullableFunctionContext
   ): PreparedExpression
+  emitPreparedNumberExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression
   emitNullableScalarValueExpression(expression: AnyNode, context: NullableFunctionContext): PreparedExpression
   inferExpressionType(expression: AnyNode, context: NullableFunctionContext): string
   isNumberConversionCall(expression: AnyNode, context: NullableFunctionContext): boolean
@@ -967,6 +968,7 @@ function emitCOptionalArrayIndexValueExpression(
     `${array.expression}.tag != INOX_TAG_ARRAY || ${array.expression}.as.ref == 0`,
     context
   )
+  const index = emitOptionalArrayIndexExpression(element, context)
   const lines: string[] = []
 
   registerOwnedValue(context, temp)
@@ -977,7 +979,8 @@ function emitCOptionalArrayIndexValueExpression(
   lines.push(`  ${temp} = inox_null_value();`)
   lines.push('} else {')
   lines.push(`  ${typeCheck}`)
-  lines.push(`  ${temp} = ArrayClass(${array.expression}).get(${element.index});`)
+  appendPrefixedLines(lines, index.lines, '  ')
+  lines.push(`  ${temp} = ArrayClass(${array.expression}).get(${index.expression});`)
   lines.push(`  ${emitRuntimeTypeCheck('inox::thrown()', context)}`)
   appendPrefixedLines(lines, emitRuntimeNullableValueCheck(temp, expectedTag, context), '  ')
   lines.push('}')
@@ -988,17 +991,29 @@ function emitCOptionalArrayIndexValueExpression(
   }
 }
 
+function emitOptionalArrayIndexExpression(
+  element: CRuntimeArrayElement,
+  context: NullableFunctionContext
+): PreparedExpression {
+  const expression = element.indexExpression
+
+  if (expression === null || typeof expression === 'undefined') {
+    return { lines: [], expression: `${element.index}` }
+  }
+
+  const index = nullableDeps(context).emitPreparedNumberExpression(expression, context)
+
+  return {
+    lines: index.lines,
+    expression: `(size_t)(${index.expression})`
+  }
+}
+
 function resolveNullableOptionalRuntimeArrayIndex(
   expression: AnyNode,
   context: NullableFunctionContext
 ): CRuntimeArrayElement | null {
-  if (expression.type !== 'OptionalIndexExpression' || expression.index.type !== 'NumberLiteral') {
-    return null
-  }
-
-  const index = parseNonNegativeIntegerLiteral(expression.index.value)
-
-  if (index < 0) {
+  if (expression.type !== 'OptionalIndexExpression') {
     return null
   }
 
@@ -1008,10 +1023,25 @@ function resolveNullableOptionalRuntimeArrayIndex(
     return null
   }
 
-  return {
-    index,
-    valueType
+  if (expression.index.type !== 'NumberLiteral') {
+    if (nullableDeps(context).inferExpressionType(expression.index, context) !== 'number') {
+      return null
+    }
+
+    return {
+      index: 0,
+      indexExpression: expression.index,
+      valueType
+    }
   }
+
+  const index = parseNonNegativeIntegerLiteral(expression.index.value)
+
+  if (index < 0) {
+    return null
+  }
+
+  return { index, indexExpression: null, valueType }
 }
 
 function resolveNullableRuntimeArrayElementType(expression: AnyNode, context: NullableFunctionContext): string | null {

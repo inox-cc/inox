@@ -156,6 +156,7 @@ export type CFunctionParam = {
   optional?: boolean
   ownership?: string
   promiseValueType?: string | null
+  rest?: boolean
   setElementType?: string | null
   shape?: CObjectShape | null
   valueType: string

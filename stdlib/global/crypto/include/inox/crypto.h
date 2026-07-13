@@ -3,6 +3,7 @@
 
 #include "inox/array.h"
 #include "inox/binary.h"
+#include "inox/buffer.h"
 #include "inox/string.h"
 #include "inox/string_view.h"
 #include "inox/value.h"

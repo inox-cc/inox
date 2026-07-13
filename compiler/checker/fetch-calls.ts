@@ -307,7 +307,7 @@ function checkFetchInitObject(context: FetchCallCheckerContext, expression: Chec
         report(
           context,
           'INOX_FETCH',
-          'fetch init body must be a string, Buffer or Uint8Array in the current C/libuv fetch slice',
+          'fetch init body must be a string or byte sequence in the current C/libuv fetch slice',
           property.valueLoc
         )
       }

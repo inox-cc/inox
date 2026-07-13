@@ -65,10 +65,6 @@ function stdlibDeclarationTypeNameValueType(typeName: string): ValueType {
     return typeName
   }
 
-  if (typeName === 'Buffer' || typeName === 'Uint8Array') {
-    return 'bytes'
-  }
-
   if (typeName.startsWith('array<') || typeName.endsWith('[]')) {
     return 'array'
   }

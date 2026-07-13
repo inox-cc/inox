@@ -251,6 +251,7 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
           (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
           (item.cArgumentAdapters ?? []).join(',') + ':' + (item.cResultMode ?? '') + ':' +
+          (item.cReceiverAdapter ?? '') + ':' +
           operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
           (item.receiverTypeId ?? '') + ':' +
           (item.resultTypeId ?? '') + ':' + (item.cCallStyle ?? '') + ':' + (item.cFailureMode ?? '') + ':' +
@@ -341,8 +342,10 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
     rows.push(
       (variant.minArgs ?? '') + ':' + (variant.maxArgs ?? '') + ':' +
         (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
+        sortedStrings(variant.argumentValueTypes ?? []).join(',') + ':' +
         (variant.cExpression ?? '') + ':' + (variant.cArgumentKinds ?? []).join(',') + ':' +
         (variant.cArgumentAdapters ?? []).join(',') + ':' + (variant.cResultMode ?? '') + ':' +
+        (variant.cReceiverAdapter ?? '') + ':' +
         resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) + ':' +
         (variant.resultArrayElementType ?? '') + ':' + (variant.resultTypeId ?? '') + ':' +
         (variant.cppType ?? '') + ':' + (variant.valueType ?? '') + ':' +

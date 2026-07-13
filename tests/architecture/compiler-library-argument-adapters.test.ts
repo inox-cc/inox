@@ -7,13 +7,14 @@ import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.
 
 test('library C arguments поддерживают templates и string-view-or-value lowering', () => {
   const result = compileSource(
-    "const payload = { ok: true }\nbridge.take(3)\nbridge.accept('text')\nbridge.accept(payload)\n",
+    "const payload = { ok: true }\nbridge.take(3)\nbridge.accept('text')\nbridge.accept(payload)\nbridge.box.touch()\n",
     { libraries: createCompilerLibrarySet([bridgeLibrary()]), target: 'cc' }
   )
 
   assert.match(result.code, /bridge\.take\(static_cast<int>\(3(?:\.0)?\)\)/)
   assert.match(result.code, /bridge\.accept\("text"\)/)
   assert.match(result.code, /bridge\.accept\(inox::Value\(payload\)\)/)
+  assert.match(result.code, /BridgeBox\(inox_value_\d+\)\.touch\(\)/)
 })
 
 function bridgeLibrary(): CompilerLibraryDescriptor {
@@ -22,6 +23,42 @@ function bridgeLibrary(): CompilerLibraryDescriptor {
     dependencies: [],
     declarations: [],
     operations: [
+      {
+        libraryId: 'bridge',
+        bindingId: 'global:bridge',
+        operationId: 'bridge#global',
+        kind: 'member-read',
+        runtimeRequirements: [],
+        cExpression: 'bridge',
+        resultShapeFields: [
+          {
+            name: 'box',
+            valueType: 'object',
+            readonly: true,
+            resultTypeId: 'bridge#Box',
+            cppType: 'BridgeBox'
+          }
+        ],
+        cppType: 'Bridge',
+        valueType: 'object'
+      },
+      {
+        libraryId: 'bridge',
+        bindingId: 'bridge#Box.touch',
+        operationId: 'bridge#Box.touch',
+        kind: 'call',
+        runtimeRequirements: [],
+        receiverTypeId: 'bridge#Box',
+        cExpression: 'touch',
+        cCallStyle: 'member',
+        cArgumentKinds: ['receiver'],
+        cReceiverAdapter: 'BridgeBox($value)',
+        minArgs: 0,
+        maxArgs: 0,
+        argumentChecks: [],
+        cppType: 'void',
+        valueType: 'void'
+      },
       {
         libraryId: 'bridge',
         bindingId: 'global:bridge.take',

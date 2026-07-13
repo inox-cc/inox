@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "inox/array.h"
-#include "inox/binary.h"
+#include "inox/buffer.h"
 #include "inox/promise.h"
 #include "inox/string.h"
 #include "inox/string_view.h"

@@ -1,8 +1,9 @@
 #include <stdint.h>
+#include <span>
 #include <string.h>
 #include <utility>
 #include "inox/array.h"
-#include "inox/binary.h"
+#include "inox/buffer.h"
 #include "inox/fs.h"
 #include "inox/loop.h"
 #include "inox/object.h"
@@ -800,14 +801,14 @@ void fs::appendFileSync(inox::StringView path, inox::StringView bytes) {
 }
 
 void fs::appendFileSync(inox::StringView path, Buffer bytes) {
-  BytesStorage* data = bytes.data();
+  const auto data = bytes.bytes();
 
-  if (data == nullptr || (path.bytes == 0 && path.len != 0)) {
+  if (inox::thrown() || (path.bytes == 0 && path.len != 0)) {
     inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
     return;
   }
 
-  inox::StringView bytes_view((const char*)data->bytes, data->length);
+  inox::StringView bytes_view(reinterpret_cast<const char*>(data.data()), data.size());
 
   if (fs_active_adapter.append_file != 0) {
     fs_active_adapter.append_file(fs_active_adapter.user, path, bytes_view);
@@ -919,14 +920,14 @@ void fs::writeFileSync(inox::StringView path, inox::StringView bytes) {
 }
 
 void fs::writeFileSync(inox::StringView path, Buffer bytes) {
-  BytesStorage* data = bytes.data();
+  const auto data = bytes.bytes();
 
-  if (data == nullptr || (path.bytes == 0 && path.len != 0)) {
+  if (inox::thrown() || (path.bytes == 0 && path.len != 0)) {
     inox_fs_throw_status_if_needed(INOX_ERR_TYPE);
     return;
   }
 
-  inox::StringView bytes_view((const char*)data->bytes, data->length);
+  inox::StringView bytes_view(reinterpret_cast<const char*>(data.data()), data.size());
 
   if (fs_active_adapter.write_file != 0) {
     fs_active_adapter.write_file(fs_active_adapter.user, path, bytes_view);
@@ -1162,14 +1163,14 @@ inox::Promise fs_promises::writeFile(inox::StringView path, inox::StringView byt
 }
 
 inox::Promise fs_promises::writeFile(inox::StringView path, Buffer bytes) {
-  BytesStorage* data = bytes.data();
+  const auto data = bytes.bytes();
 
-  if (data == nullptr) {
+  if (inox::thrown()) {
     return inox::Promise();
   }
 
-  const char* bytes_data = (const char*)data->bytes;
-  const size_t byte_len = data->length;
+  const char* bytes_data = reinterpret_cast<const char*>(data.data());
+  const size_t byte_len = data.size();
   inox_promise* promise = 0;
   inox_status status = INOX_ERR_UNSUPPORTED;
 
@@ -1210,14 +1211,14 @@ inox::Promise fs_promises::appendFile(inox::StringView path, inox::StringView by
 }
 
 inox::Promise fs_promises::appendFile(inox::StringView path, Buffer bytes) {
-  BytesStorage* data = bytes.data();
+  const auto data = bytes.bytes();
 
-  if (data == nullptr) {
+  if (inox::thrown()) {
     return inox::Promise();
   }
 
-  const char* bytes_data = (const char*)data->bytes;
-  const size_t byte_len = data->length;
+  const char* bytes_data = reinterpret_cast<const char*>(data.data());
+  const size_t byte_len = data.size();
   inox_promise* promise = 0;
   inox_status status = INOX_ERR_UNSUPPORTED;
 
@@ -1620,7 +1621,7 @@ inox_fs_libuv_read_file_bytes(void* user, inox_allocator* allocator, const char*
   inox_status status = inox_fs_libuv_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    Uint8Array bytes = Uint8Array::from((const uint8_t*)buffer, byte_len);
+    Buffer bytes(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(buffer), byte_len));
 
     if (inox::thrown()) {
       inox::take_exception();
@@ -2580,7 +2581,9 @@ static inox_status inox_fs_libuv_settle(FsLibuvRequest* request, inox_status sta
     auto value = inox::String(request->data == 0 ? "" : request->data, request->data_len);
     status = value.valid() ? value.copy_to(&result) : INOX_ERR_OOM;
   } else if (request->kind == INOX_FS_REQUEST_READ_FILE_BYTES) {
-    Uint8Array bytes = Uint8Array::from((const uint8_t*)request->data, request->data_len);
+    Uint8Array bytes(
+      std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(request->data), request->data_len)
+    );
 
     if (inox::thrown()) {
       inox::take_exception();
@@ -2965,7 +2968,7 @@ inox_fs_default_read_file_bytes(void* user, inox_allocator* allocator, const cha
   inox_status status = inox_fs_default_read_file_data(path, path_len, &buffer, &byte_len);
 
   if (status == INOX_OK) {
-    Uint8Array bytes = Uint8Array::from((const uint8_t*)buffer, byte_len);
+    Buffer bytes(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(buffer), byte_len));
 
     if (inox::thrown()) {
       inox::take_exception();

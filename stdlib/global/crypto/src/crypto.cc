@@ -2,9 +2,11 @@
 
 #include <limits.h>
 #include <stdint.h>
+#include <span>
 #include <utility>
 #include "inox/array.h"
 #include "inox/binary.h"
+#include "inox/buffer.h"
 #include "inox/loop.h"
 #include "inox/string.h"
 
@@ -159,14 +161,14 @@ Buffer Hash::digest() {
     return Buffer();
   }
 
-  Uint8Array bytes = Uint8Array::from(digest, len);
+  Buffer bytes(std::span<const uint8_t>(digest, len));
 
   if (inox::thrown() || !bytes.valid()) {
     inox_crypto_throw_failed("crypto.Hash.digest failed");
     return Buffer();
   }
 
-  return Buffer(std::move(bytes));
+  return bytes;
 #else
   inox_crypto_throw_failed("crypto.Hash.digest failed");
   return Buffer();
@@ -282,14 +284,14 @@ Buffer Hmac::digest() {
     return Buffer();
   }
 
-  Uint8Array bytes = Uint8Array::from(digest, len);
+  Buffer bytes(std::span<const uint8_t>(digest, len));
 
   if (inox::thrown() || !bytes.valid()) {
     inox_crypto_throw_failed("crypto.Hmac.digest failed");
     return Buffer();
   }
 
-  return Buffer(std::move(bytes));
+  return bytes;
 #else
   inox_crypto_throw_failed("crypto.Hmac.digest failed");
   return Buffer();
@@ -368,7 +370,7 @@ Uint8Array crypto::getRandomValues(Uint8Array value) const {
     return Uint8Array();
   }
 
-  inox_status status = inox_crypto_random_bytes_raw(value.bytes(), value.length());
+  inox_status status = inox_crypto_random_bytes_raw(value.bytes().data(), value.length());
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.getRandomValues failed");
@@ -386,7 +388,7 @@ Buffer crypto::randomBytes(inox_number size) const {
     return Buffer();
   }
 
-  Buffer out(Uint8Array::create(len));
+  Buffer out = Buffer::alloc(static_cast<double>(len));
 
   if (inox::thrown()) {
     return Buffer();
@@ -397,7 +399,7 @@ Buffer crypto::randomBytes(inox_number size) const {
     return Buffer();
   }
 
-  inox_status status = inox_crypto_random_bytes_raw(out.bytes(), out.length());
+  inox_status status = inox_crypto_random_bytes_raw(out.bytes().data(), out.length());
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.randomBytes failed");
@@ -452,7 +454,7 @@ static Uint8Array inox_crypto_random_fill_sync(
     return Uint8Array();
   }
 
-  inox_status status = inox_crypto_random_bytes_raw(value.bytes() + offset, size);
+  inox_status status = inox_crypto_random_bytes_raw(value.bytes().data() + offset, size);
 
   if (status != INOX_OK) {
     inox_crypto_throw_failed("crypto.randomFillSync failed");
@@ -979,10 +981,16 @@ static inox_status CryptoHashState_data(inox_value data, const uint8_t** bytes, 
       return INOX_ERR_TYPE;
     }
 
-    BytesStorage* buffer = (BytesStorage*)data.as.ref;
+    inox::Value value(data);
+    Uint8Array buffer(value);
+    const auto view = buffer.bytes();
 
-    *bytes = buffer->bytes;
-    *len = buffer->length;
+    if (inox::thrown()) {
+      return INOX_ERR_TYPE;
+    }
+
+    *bytes = view.data();
+    *len = view.size();
 
     return INOX_OK;
   }

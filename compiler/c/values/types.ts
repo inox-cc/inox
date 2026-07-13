@@ -22,7 +22,6 @@ import {
 import { isMemberAccessExpression, resolveKnownObjectMember, resolveObjectExpressionMember, isIndexAccessExpression, resolveKnownObjectIndex, resolveObjectExpressionIndex } from './objects.ts'
 
 export type CExpressionTypeDependencies = {
-  binaryRuntimeExpressionReturnType: (expression: AnyNode) => string | null
   cDebugRuntimeMethodName: (expression: AnyNode) => string | null
   cFetchRuntimeExpressionMethod: (expression: AnyNode) => string | null
   cJsonRuntimeCallName: (callee: AnyNode) => string | null
@@ -35,8 +34,6 @@ export type CExpressionTypeDependencies = {
   inferNodeStdlibMemberExpressionType(expression: AnyNode, context: CFunctionContext): string | null
   isArrayJoinCall: (expression: AnyNode, context: CFunctionContext) => boolean
   isArrayLengthExpression: (expression: AnyNode, context: CFunctionContext) => boolean
-  isBinaryConstructorExpression: (expression: AnyNode) => boolean
-  isBinaryRuntimeCall: (expression: AnyNode) => boolean
   isClassConstructorExpression: (expression: AnyNode, context: CFunctionContext) => boolean
   isErrorConstructorExpression: (expression: AnyNode) => boolean
   isFetchAbortControllerConstructorExpression: (expression: AnyNode) => boolean
@@ -530,6 +527,13 @@ export function inferExpressionType(
   context: CFunctionContext,
   deps: CExpressionTypeDependencies
 ): string {
+  if (
+    expression.libraryOperationId !== null &&
+    typeof expression.libraryOperationId !== 'undefined'
+  ) {
+    return cValueTypeOrUnknown(expression)
+  }
+
   const nodeStdlibType = deps.inferNodeStdlibExpressionType(expression)
 
   if (nodeStdlibType !== null && typeof nodeStdlibType !== 'undefined') {
@@ -674,24 +678,6 @@ export function inferExpressionType(
 
   if (deps.isStringPredicateCall(expression, context)) {
     return 'boolean'
-  }
-
-  if (deps.isBinaryRuntimeCall(expression)) {
-    if (expression.valueType !== null && typeof expression.valueType !== 'undefined') {
-      return expression.valueType
-    }
-
-    const binaryReturnType = deps.binaryRuntimeExpressionReturnType(expression)
-
-    if (binaryReturnType !== null && typeof binaryReturnType !== 'undefined') {
-      return binaryReturnType
-    }
-
-    return 'bytes'
-  }
-
-  if (deps.isBinaryConstructorExpression(expression)) {
-    return 'bytes'
   }
 
   if (

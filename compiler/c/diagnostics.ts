@@ -1,5 +1,4 @@
 import { diagnostic } from '../diagnostics.ts'
-import { isBinaryGlobalUsagePath } from '../stdlib/node/descriptor.ts'
 import {
   dateConstructorRuntimeMethodNameFromPath,
   isCollectionConstructorGlobalUsagePath,
@@ -93,7 +92,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage, context: CGlobalUsageSupp
     path === 'fs.constants.W_OK' ||
     path === 'fs.constants.X_OK' ||
     !!jsonRuntimeMethodNameFromPath(usage.path) ||
-    isBinaryGlobalUsagePath(usage.path) ||
     path === 'clearImmediate' ||
     path === 'clearInterval' ||
     path === 'clearTimeout' ||

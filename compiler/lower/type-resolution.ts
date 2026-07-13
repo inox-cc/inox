@@ -2,7 +2,6 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
   isBuiltinValueType,
-  isBytesTypeName,
   isNullableTypeName,
   isPromiseTypeName,
   isSetTypeName,
@@ -161,10 +160,6 @@ export function resolveDeclaredType(name: string | null | undefined, context: Lo
     return resolved
   }
 
-  if (isBytesTypeName(name)) {
-    return namedResolvedType('bytes')
-  }
-
   if (name === 'ValueType') {
     return namedResolvedType('string')
   }
@@ -298,6 +293,7 @@ function resolveFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
   return {
     name: param.name,
     optional: param.optional === true,
+    rest: param.rest === true,
     declaredType,
     valueType: resolvedValueType(declared, lowerNodeValueTypeOrUnknown(param)),
     nullable: declared.nullable,
@@ -552,6 +548,7 @@ function hydrateFunctionParam(param: LowerTypeNode, context: LowerContext): Lowe
   return {
     name: param.name,
     optional: param.optional === true,
+    rest: param.rest === true,
     declaredType: fieldDeclaredType(param),
     valueType: lowerNodeValueTypeOrUnknown(param),
     nullable: param.nullable,
@@ -719,10 +716,6 @@ function resolveWeakTargetShapeTypeName(name: string | null | undefined, context
     return setResolvedType(elementType)
   }
 
-  if (isBytesTypeName(name)) {
-    return namedResolvedType('bytes')
-  }
-
   if (name === 'ValueType') {
     return namedResolvedType('string')
   }
@@ -830,6 +823,7 @@ function collectFunctionParams(params: LowerTypeNode[] | null | undefined): Lowe
     const collectedParam: LowerTypeNode = {
       name: param.name,
       optional: param.optional === true,
+      rest: param.rest === true,
       declaredType,
       valueType: lowerNodeValueTypeOrUnknown(param),
       nullable: param.nullable,

@@ -10,7 +10,10 @@ test('entrypoint package node:crypto владеет operations и backend requir
   assert.ok(cryptoPackage)
   assert.equal(cryptoPackage.compilerEntrypoint, 'stdlib/node/crypto/compiler/index.ts')
   assert.ok(cryptoPackage.compilerPackage)
-  assert.deepEqual(cryptoPackage.compilerPackage.dependencies, ['global:crypto'])
+  assert.deepEqual(
+    cryptoPackage.compilerPackage.dependencies,
+    ['global:crypto', 'global:binary', 'node:buffer']
+  )
 
   const operations = cryptoPackage.compilerPackage.operations
   const createHash = operations.find((operation) => operation.operationId === 'node:crypto#createHash')
@@ -26,9 +29,11 @@ test('entrypoint package node:crypto владеет operations и backend requir
   assert.ok(createHash?.bindingAliases?.includes('node:crypto#module:node:crypto:default.createHash'))
   assert.equal(hash?.variants?.[0].valueType, 'string')
   assert.equal(hash?.variants?.[2].valueType, 'bytes')
+  assert.equal(hash?.variants?.[2].resultTypeId, 'node:buffer#Buffer')
   assert.equal(update?.receiverTypeId, 'node:crypto#Hash')
   assert.equal(update?.cResultMode, 'borrowed')
   assert.equal(digest?.variants?.[0].cppType, 'Buffer')
+  assert.equal(digest?.variants?.[0].resultTypeId, 'node:buffer#Buffer')
   assert.equal(digest?.variants?.[1].cppType, 'inox::String')
   assert.deepEqual(randomFillSync?.cArgumentKinds, ['value', 'optional-number', 'optional-number'])
   assert.deepEqual(randomFillSync?.cArgumentAdapters, ['Uint8Array($value)'])

@@ -140,7 +140,6 @@ import {
   runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
 import type {
-  BinaryLoweringDependencies,
   DgramLoweringDependencies,
   FsLoweringDependencies,
   HttpLoweringDependencies,
@@ -150,14 +149,8 @@ import type {
   TimerLoweringDependencies
 } from '../stdlib/node/c.ts'
 import {
-  binaryRuntimeExpressionReturnType,
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
-  emitPreparedBinaryNumberCallExpression,
-  emitPreparedBinaryValueExpression,
-  emitPreparedBytesIndexAssignment,
-  emitPreparedBytesIndexExpression,
-  emitPreparedBytesLengthExpression,
   emitPreparedFsCallExpression,
   emitPreparedFsStatsMethodExpression,
   emitPreparedFsSyncStatementExpression,
@@ -171,10 +164,7 @@ import {
   inferNodeStdlibExpressionType,
   inferNodeStdlibMemberExpressionType,
   isAsyncNodeStdlibRuntimeCallExpression,
-  isBinaryConstructorExpression,
-  isBinaryRuntimeCall,
   isTimerStartCallExpression,
-  resolveBinaryExpressionKind,
   resolveNodeNetworkAddressStringMember,
   timerCallbackFunctionType
 } from '../stdlib/node/c.ts'
@@ -518,7 +508,6 @@ let timeLoweringDependencies = {} as TimeLoweringDependencies
 let timerLoweringDependencies = {} as TimerLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let fsLoweringDependencies = {} as FsLoweringDependencies
-let binaryLoweringDependencies = {} as BinaryLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
 let dgramLoweringDependencies = {} as DgramLoweringDependencies
@@ -531,6 +520,7 @@ const nullableLoweringDependencies: NullableLoweringDependencies = {
   emitCValueExpression,
   emitNullableFunctionValueExpression,
   emitNullableScalarValueExpression,
+  emitPreparedNumberExpression,
   inferExpressionType,
   isNumberConversionCall,
   resolveRuntimeCallbackCalleeType
@@ -584,8 +574,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   emitPreparedArraySortCallExpression,
   emitPreparedArrayUnshiftCallExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
-  emitPreparedBytesIndexAssignment: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedBytesIndexAssignment(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
@@ -657,7 +645,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
   registerErrorObjectShape,
   resolveForOfElementType,
   resolveKnownArrayIndex,
-  resolveBytesExpressionKind: resolveBinaryExpressionKind,
   resolveKnownForOfArray,
   resolveKnownObjectIndex,
   resolveKnownObjectMember,
@@ -865,13 +852,6 @@ fsLoweringDependencies = {
 
 const nodeStdlibAsyncTaskLoweringDependencies: NodeStdlibAsyncTaskLoweringDependencies = {
   fs: fsLoweringDependencies
-}
-
-binaryLoweringDependencies = {
-  emitCValueExpression,
-  emitPreparedNumberExpression,
-  emitPreparedStringBytesOperand,
-  inferExpressionType
 }
 
 compilerLibraryLoweringDependencies = {
@@ -1134,7 +1114,6 @@ nodeNetworkLoweringDependencies = {
 }
 
 const expressionTypeDependencies = {
-  binaryRuntimeExpressionReturnType,
   cDebugRuntimeMethodName,
   cFetchRuntimeExpressionMethod,
   cJsonRuntimeCallName,
@@ -1147,8 +1126,6 @@ const expressionTypeDependencies = {
   isArrayIsArrayCall,
   isArrayJoinCall,
   isArrayLengthExpression,
-  isBinaryConstructorExpression,
-  isBinaryRuntimeCall,
   isClassConstructorExpression,
   isErrorConstructorExpression,
   isFetchAbortControllerConstructorExpression,
@@ -1247,12 +1224,6 @@ const cScalarExpressionDependencies = {
   emitPreparedArrayIsArrayCallExpression,
   emitPreparedArrayReduceCallExpression,
   emitPreparedArrayUnshiftCallExpression,
-  emitPreparedBinaryNumberCallExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedBinaryNumberCallExpression(expression, context, binaryLoweringDependencies),
-  emitPreparedBytesIndexExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedBytesIndexExpression(expression, context, binaryLoweringDependencies),
-  emitPreparedBytesLengthExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedBytesLengthExpression(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
@@ -1334,8 +1305,6 @@ const cValueExpressionDependencies = {
   emitPreparedArrayReduceCallExpression,
   emitPreparedArrayJoinCallExpression,
   emitPreparedArraySliceCallExpression,
-  emitPreparedBinaryValueExpression: (expression: AnyNode, context: CFunctionContext) =>
-    emitPreparedBinaryValueExpression(expression, context, binaryLoweringDependencies),
   emitPreparedCallExpression,
   emitPreparedClassMethodCallExpression,
   emitPreparedCollectionCallExpression,
@@ -3150,15 +3119,26 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
 
   const libraryObject = emitPreparedCompilerLibraryCallExpression(statement.init, context)
 
-  if (libraryObject !== null && libraryObject.valueType === 'object') {
+  if (
+    libraryObject !== null &&
+    libraryObject.cppType !== null &&
+    typeof libraryObject.cppType !== 'undefined' &&
+    libraryObject.valueType !== null &&
+    typeof libraryObject.valueType !== 'undefined' &&
+    isManagedRuntimeReturnType(libraryObject.valueType)
+  ) {
     const lines: string[] = []
+    const targetCppType = context.moduleValueCppTypes.get(statement.name)
     pushAll(lines, libraryObject.lines)
-    lines.push(`${name} = ${libraryObject.expression};`)
-    context.variables.set(statement.name, 'object')
-    context.moduleValueTypes.set(statement.name, 'object')
+    context.variables.set(statement.name, libraryObject.valueType)
+    context.moduleValueTypes.set(statement.name, libraryObject.valueType)
 
-    if (libraryObject.cppType !== null && typeof libraryObject.cppType !== 'undefined') {
-      context.cppValueTypes.set(statement.name, libraryObject.cppType)
+    if (targetCppType !== null && typeof targetCppType !== 'undefined') {
+      lines.push(`${name} = ${libraryObject.expression};`)
+      context.cppValueTypes.set(statement.name, targetCppType)
+    } else {
+      pushModuleRuntimeValueAssignment(lines, name, libraryObject, context)
+      context.cppValueTypes.delete(statement.name)
     }
 
     return lines
@@ -3498,29 +3478,19 @@ function pushModuleRuntimeValueAssignment(
   value: PreparedExpression,
   context: CFunctionContext
 ): void {
-  if (isCppRuntimeValueType(value.cppType)) {
+  if (
+    value.cppType !== null &&
+    typeof value.cppType !== 'undefined' &&
+    isManagedRuntimeReturnType(value.valueType)
+  ) {
     const temp = nextCName(context, 'inox_module_value')
 
     lines.push(`auto ${temp} = ${value.expression};`)
-    lines.push(`${name} = ${temp};`)
+    lines.push(`${name} = ${temp}.release();`)
     return
   }
 
   lines.push(`${name} = ${value.expression};`)
-}
-
-function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
-  return (
-    cppType === 'inox::String' ||
-    cppType === 'inox::Value' ||
-    cppType === 'inox::ObjectValue' ||
-    cppType === 'Array' ||
-    cppType === 'Map' ||
-    cppType === 'Set' ||
-    cppType === 'Buffer' ||
-    cppType === 'Uint8Array' ||
-    cppType === 'FsStats'
-  )
 }
 
 function emitModuleArrayLiteralAssignment(statement: AnyNode, name: string, context: CFunctionContext): string[] {

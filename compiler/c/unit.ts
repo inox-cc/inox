@@ -1391,7 +1391,6 @@ export function emitCUnit(
   const needsCollectionRuntime: boolean = preludeRequirements.needsCollectionRuntime
   const needsMapRuntime: boolean = preludeRequirements.needsMapRuntime
   const needsSetRuntime: boolean = preludeRequirements.needsSetRuntime
-  const needsBinaryRuntime: boolean = preludeRequirements.needsBinaryRuntime
   const needsObjectRuntime: boolean = preludeRequirements.needsObjectRuntime
   const needsFsRuntime: boolean = preludeRequirements.needsFsRuntime
   const needsJsonRuntime: boolean = preludeRequirements.needsJsonRuntime
@@ -1425,7 +1424,6 @@ export function emitCUnit(
     needsCollectionRuntime,
     needsMapRuntime,
     needsSetRuntime,
-    needsBinaryRuntime,
     needsObjectRuntime,
     needsFsRuntime,
     needsJsonRuntime,

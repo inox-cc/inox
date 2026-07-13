@@ -1,7 +1,6 @@
 import type { CEmitContext, CFunctionContext } from '../../c/context.ts'
 import type { CPreparedExpression as PreparedExpression } from '../../c/types.ts'
 import type { AnyNode, IrGlobalUsage, IrProgram } from '../../types.ts'
-import type { BinaryLoweringDependencies as PackageBinaryLoweringDependencies } from '../../../stdlib/node/buffer/compiler/c.ts'
 import type { DgramLoweringDependencies as PackageDgramLoweringDependencies } from '../../../stdlib/node/dgram/compiler/c.ts'
 import {
   collectDgramMessageHandlers,
@@ -57,17 +56,6 @@ import { isSupportedNodeNetCGlobalUsage } from '../../../stdlib/node/net/compile
 import type { TimerLoweringDependencies as PackageTimerLoweringDependencies } from '../../../stdlib/node/timers/compiler/c.ts'
 
 export {
-  binaryRuntimeExpressionReturnType,
-  emitPreparedBinaryNumberCallExpression,
-  emitPreparedBinaryValueExpression,
-  emitPreparedBytesIndexAssignment,
-  emitPreparedBytesIndexExpression,
-  emitPreparedBytesLengthExpression,
-  isBinaryConstructorExpression,
-  isBinaryRuntimeCall,
-  resolveBinaryExpressionKind
-} from '../../../stdlib/node/buffer/compiler/c.ts'
-export {
   cFsRuntimeConstantExpression,
   cFsRuntimeExpressionMethod,
   emitPreparedFsCallExpression,
@@ -82,7 +70,6 @@ export {
   timerCallbackFunctionType
 } from '../../../stdlib/node/timers/compiler/c.ts'
 
-export type BinaryLoweringDependencies = PackageBinaryLoweringDependencies
 export type DgramLoweringDependencies = PackageDgramLoweringDependencies
 export type FsLoweringDependencies = PackageFsLoweringDependencies
 export type HttpLoweringDependencies = PackageHttpLoweringDependencies

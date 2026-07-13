@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { compileFileToCModuleTextsSync } from '../../compiler/core.ts'
 import { createMemoryCompilerHost } from '../../compiler/memory-host.ts'
+import { defaultCompilerLibrarySet } from '../helpers/compiler-libraries.ts'
 
 type GeneratedTextFile = {
   path: string
@@ -32,37 +33,38 @@ console.log(text.toString(), allocated.toString(), Buffer.isBuffer(text))
   const files = compileFileToCModuleTextsSync('/pkg/src/index.ts', {
     callMain: true,
     host,
+    libraries: defaultCompilerLibrarySet,
     sourceRoot: '/pkg'
   }) as GeneratedTextFile[]
   const source = generatedTextFile(files, 'src/index.cc').code
 
   assert.match(source, /Buffer::from\("inox"\)/)
-  assert.match(source, /Buffer::alloc\(\(size_t\)\(2\)\)/)
+  assert.match(source, /Buffer::alloc\(2(?:\.0)?\)/)
   assert.match(source, /Buffer::isBuffer\(text\)/)
   assert.doesNotMatch(source, /Buffer::from\(inox::StringView\("inox", 4\)\)/)
 }
 
 export function assertBufferNativeFacadeHidesAllocatorOverloads(): void {
-  const header = readFileSync(resolve('stdlib/node/buffer/include/inox/binary.h'), 'utf8')
-  const source = readFileSync(resolve('stdlib/node/buffer/src/buffer.cc'), 'utf8')
+  const binaryHeader = readFileSync(resolve('stdlib/global/binary/include/inox/binary.h'), 'utf8')
+  const bufferHeader = readFileSync(resolve('stdlib/node/buffer/include/inox/buffer.h'), 'utf8')
+  const binarySource = readFileSync(resolve('stdlib/global/binary/src/binary.cc'), 'utf8')
+  const bufferSource = readFileSync(resolve('stdlib/node/buffer/src/buffer.cc'), 'utf8')
   const fsSource = readFileSync(resolve('stdlib/node/fs/src/fs.cc'), 'utf8')
 
-  assert.doesNotMatch(header, /(?:Uint8Array\s+)?(?:create|from)\(inox_allocator/)
-  assert.doesNotMatch(header, /(?:Buffer\s+)?from\(inox_allocator/)
-  assert.doesNotMatch(header, /isBuffer\(inox_value value\)/)
-  assert.doesNotMatch(header, /Uint8Array\(inox_value/)
-  assert.doesNotMatch(header, /Uint8Array\(inox::AdoptValue/)
-  assert.doesNotMatch(header, /Buffer\(inox_value/)
-  assert.doesNotMatch(header, /Buffer\(inox::AdoptValue/)
-  assert.doesNotMatch(source, /Uint8Array Uint8Array::(?:create|from)\(inox_allocator/)
-  assert.doesNotMatch(source, /Buffer Buffer::from\(inox_allocator/)
-  assert.doesNotMatch(source, /Buffer::isBuffer\(inox_value value\)/)
-  assert.doesNotMatch(source, /Uint8Array::Uint8Array\(inox_value/)
-  assert.doesNotMatch(source, /Uint8Array::Uint8Array\(inox::AdoptValue/)
-  assert.doesNotMatch(source, /Uint8Array\(inox::adopt_value/)
-  assert.doesNotMatch(source, /Buffer::Buffer\(inox_value/)
-  assert.doesNotMatch(source, /Buffer::Buffer\(inox::AdoptValue/)
-  assert.doesNotMatch(source, /Buffer\(inox::adopt_value/)
+  assert.doesNotMatch(binaryHeader, /BytesStorage/)
+  assert.doesNotMatch(binaryHeader, /#ifdef __cplusplus/)
+  assert.doesNotMatch(bufferHeader, /#ifdef __cplusplus/)
+  assert.doesNotMatch(bufferHeader, /(?:Buffer\s+)?from\(inox_allocator/)
+  assert.doesNotMatch(bufferHeader, /isBuffer\(inox_value value\)/)
+  assert.doesNotMatch(binaryHeader, /Uint8Array\(inox_value/)
+  assert.doesNotMatch(bufferHeader, /Buffer\(inox_value/)
+  assert.doesNotMatch(binarySource, /Uint8Array Uint8Array::(?:create|from)\(inox_allocator/)
+  assert.doesNotMatch(bufferSource, /Buffer Buffer::from\(inox_allocator/)
+  assert.doesNotMatch(bufferSource, /Buffer::isBuffer\(inox_value value\)/)
+  assert.doesNotMatch(binarySource, /Uint8Array::Uint8Array\(inox_value/)
+  assert.doesNotMatch(binarySource, /Uint8Array\(inox::adopt_value/)
+  assert.doesNotMatch(bufferSource, /Buffer::Buffer\(inox_value/)
+  assert.doesNotMatch(bufferSource, /Buffer\(inox::adopt_value/)
   assert.doesNotMatch(fsSource, /Buffer\(inox::adopt_value/)
 }
 

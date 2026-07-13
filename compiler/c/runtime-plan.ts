@@ -31,7 +31,6 @@ export type CRuntimePreludeRequirements = {
   needsCollectionRuntime: boolean
   needsMapRuntime: boolean
   needsSetRuntime: boolean
-  needsBinaryRuntime: boolean
   needsObjectRuntime: boolean
   needsFsRuntime: boolean
   needsJsonRuntime: boolean
@@ -113,7 +112,6 @@ export function resolveCRuntimePreludeRequirements(
   const needsSetRuntime =
     signatureRuntimeTypes.has('set') ||
     irProgramsUseCollectionKind(input.irPrograms, 'set')
-  const needsBinaryRuntime = runtimeRequirements.has('binary') || signatureRuntimeTypes.has('bytes')
   const needsClassRuntime = input.classDescriptorCount > 0
   const needsClassDescriptorRuntime = needsClassRuntime
   const needsCppValueRuntime =
@@ -177,7 +175,6 @@ export function resolveCRuntimePreludeRequirements(
     needsCollectionRuntime,
     needsMapRuntime,
     needsSetRuntime,
-    needsBinaryRuntime,
     needsObjectRuntime,
     needsFsRuntime,
     needsJsonRuntime,

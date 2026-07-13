@@ -258,7 +258,7 @@ function assertStdlibDeclarationExportValueTypes(): void {
   assert.equal(stdlibDeclarationExportValueType(bufferProgram, 'default'), 'object')
   assert.equal(stdlibDeclarationExportValueType(bufferProgram, 'Buffer'), 'function')
   assert.equal(stdlibDeclarationExportValueType(bufferProgram, 'constants'), 'object')
-  assert.equal(stdlibDeclarationExportValueType(bufferProgram, 'Uint8Array'), 'function')
+  assert.equal(stdlibDeclarationExportValueType(bufferProgram, 'Uint8Array'), null)
   assert.equal(stdlibDeclarationExportValueType(childProcessProgram, 'default'), 'object')
   assert.equal(stdlibDeclarationExportValueType(childProcessProgram, 'execSync'), 'function')
   assert.equal(stdlibDeclarationExportValueType(childProcessProgram, 'spawnSync'), 'function')
@@ -312,7 +312,7 @@ function assertStdlibRuntimeImportMetadataFromDeclarations(): void {
         path: '/project/compiler/index.ts',
         source: `
 import childProcess, { execSync, spawnSync } from 'node:child_process'
-import buffer, { Buffer, constants, Uint8Array } from 'node:buffer'
+import buffer, { Buffer, constants } from 'node:buffer'
 import crypto, { createHash, Hash, randomUUID } from 'node:crypto'
 import dgram, { createSocket as createDgramSocket, Socket as DgramSocket } from 'node:dgram'
 import events, { EventEmitter, defaultMaxListeners, once as eventOnce } from 'node:events'
@@ -393,7 +393,6 @@ console.log(params.get('a'))
   const bufferDefault = findImportSpecifier(bufferImport, 'default')
   const bufferConstructor = findImportSpecifier(bufferImport, 'Buffer')
   const bufferConstants = findImportSpecifier(bufferImport, 'constants')
-  const uint8ArrayConstructor = findImportSpecifier(bufferImport, 'Uint8Array')
   const childProcessDefault = findImportSpecifier(childProcessImport, 'default')
   const childProcessExecSync = findImportSpecifier(childProcessImport, 'execSync')
   const childProcessSpawnSync = findImportSpecifier(childProcessImport, 'spawnSync')
@@ -452,9 +451,6 @@ console.log(params.get('a'))
   assert.equal(bufferConstructor?.className, 'Buffer')
   assert.equal(bufferConstructor?.constructable, true)
   assert.equal(bufferConstants?.valueType, 'object')
-  assert.equal(uint8ArrayConstructor?.valueType, 'function')
-  assert.equal(uint8ArrayConstructor?.className, 'Uint8Array')
-  assert.equal(uint8ArrayConstructor?.constructable, true)
   assert.equal(childProcessDefault?.valueType, 'object')
   assert.equal(childProcessExecSync?.valueType, 'function')
   assert.equal(childProcessExecSync?.returnType, 'string')

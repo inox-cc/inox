@@ -4,13 +4,6 @@ import type {
   FsRuntimeCallInfo as PackageFsRuntimeCallInfo,
   FsRuntimeCallPlan as PackageFsRuntimeCallPlan
 } from '../../../stdlib/node/fs/compiler/checker.ts'
-export {
-  binaryConstructorName,
-  binaryInstanceRuntimeMethodName,
-  binaryStaticRuntimeMethodName,
-  bufferRuntimeConstantName,
-  unsupportedBufferRuntimeExport
-} from '../../../stdlib/node/buffer/compiler/checker.ts'
 export { unsupportedEventsRuntimeExport } from '../../../stdlib/node/events/compiler/checker.ts'
 export {
   fsRuntimeCallInfo,

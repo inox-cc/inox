@@ -44,7 +44,7 @@ static void inox_http_throw_status(inox_status status, const char* message) {
 }
 
 #ifdef INOX_LOOP_BACKEND_LIBUV
-#include "inox/binary.h"
+#include "inox/buffer.h"
 #include "inox/fs.h"
 #include "inox/net.h"
 
@@ -501,13 +501,13 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
     return 0;
   }
 
-  BytesStorage* bytes = file.data();
-  if (bytes == nullptr) {
+  const auto bytes = file.bytes();
+  if (inox::thrown()) {
     text(500, "internal server error");
     return inox_http_response_succeeded();
   }
 
-  if (bytes->length > INOX_HTTP_MAX_RESPONSE_BODY) {
+  if (bytes.size() > INOX_HTTP_MAX_RESPONSE_BODY) {
     text(413, "payload too large");
     return inox_http_response_succeeded();
   }
@@ -526,7 +526,7 @@ int HttpResponse::sendFsFile(const HttpRequest& request, inox::StringView url_pr
     return inox_http_response_succeeded();
   }
 
-  end(inox::StringView((const char*)bytes->bytes, bytes->length));
+  end(inox::StringView(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
   return inox_http_response_succeeded();
 }
 

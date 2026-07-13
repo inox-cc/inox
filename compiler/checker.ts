@@ -1,8 +1,4 @@
 import {
-  binaryConstructorName,
-  binaryInstanceRuntimeMethodName,
-  binaryStaticRuntimeMethodName,
-  bufferRuntimeConstantName,
   fsRuntimeCallInfo,
   fsRuntimeCallInfoFromImportSymbol,
   fsRuntimeCallPlan,
@@ -16,7 +12,6 @@ import {
   timerClearMethodName,
   timerRuntimeImportMethodName,
   timerRuntimeMethodName,
-  unsupportedBufferRuntimeExport,
   unsupportedEventsRuntimeExport,
   unsupportedStreamRuntimeExport
 } from './stdlib/node/checker.ts'
@@ -1949,6 +1944,15 @@ class Checker {
 
       if (valueType === 'object') {
         expression.shape = this.resolveExpressionShape(expression.argument)
+      } else {
+        const argumentShape = this.resolveExpressionShape(expression.argument)
+
+        if (
+          argumentShape?.libraryTypeId !== null &&
+          typeof argumentShape?.libraryTypeId !== 'undefined'
+        ) {
+          expression.shape = argumentShape
+        }
       }
 
       return valueType
@@ -2343,12 +2347,6 @@ class Checker {
 
     if (libraryMemberType !== null) {
       return libraryMemberType
-    }
-
-    const bufferConstantType = this.checkBufferConstantMemberExpression(expression)
-
-    if (bufferConstantType !== null && typeof bufferConstantType !== 'undefined') {
-      return bufferConstantType
     }
 
     const fsConstantType = this.checkFsConstantMemberExpression(expression)
@@ -2989,6 +2987,18 @@ class Checker {
     const objectType = this.checkExpression(expression.target.object)
     const indexType = this.checkExpression(expression.target.index)
     const valueType = this.checkExpression(expression.value)
+    const libraryOperation = this.compilerLibraryReceiverOperation(
+      expression.target.object,
+      '',
+      'index-write'
+    )
+
+    if (libraryOperation !== null) {
+      this.checkCompilerLibrarySingleArgument(expression.target.index, indexType, libraryOperation, 0)
+      this.checkCompilerLibrarySingleArgument(expression.value, valueType, libraryOperation, 1)
+      this.applyCompilerLibraryOperation(expression, libraryOperation)
+      return valueType
+    }
 
     if (this.reportUnsupportedClassPrototypeAccess(expression.target, false)) {
       return valueType
@@ -3361,18 +3371,6 @@ class Checker {
       return timeType
     }
 
-    const binaryType = this.checkBinaryCall(expression)
-
-    if (binaryType !== null && typeof binaryType !== 'undefined') {
-      return binaryType
-    }
-
-    const bufferUnsupportedType = this.checkBufferUnsupportedCall(expression)
-
-    if (bufferUnsupportedType !== null && typeof bufferUnsupportedType !== 'undefined') {
-      return bufferUnsupportedType
-    }
-
     const eventStreamUnsupportedType = this.checkEventStreamUnsupportedCall(expression)
 
     if (eventStreamUnsupportedType !== null && typeof eventStreamUnsupportedType !== 'undefined') {
@@ -3597,162 +3595,6 @@ class Checker {
     return valueType
   }
 
-  checkBinaryCall(expression: AnyNode): ValueType | null {
-    if (expression.callee.type !== 'MemberExpression') {
-      return null
-    }
-
-    const path = memberExpressionPath(expression.callee)
-    const staticMethod = binaryStaticRuntimeMethodName(path, this.resolveMemberPathRootSymbol(path))
-
-    if (staticMethod !== null && typeof staticMethod !== 'undefined') {
-      if (staticMethod === 'from') {
-        if (expression.args.length < 1 || expression.args.length > 2) {
-          this.report(
-            'INOX_ARG_COUNT',
-            `function Buffer.from expects 1 or 2 argument(s), got ${expression.args.length}`,
-            expression.loc
-          )
-        }
-
-        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-          this.checkAssignableType(
-            this.checkExpression(expression.args[0]),
-            'string',
-            expression.args[0].loc,
-            false,
-            this.expressionCanBeNull(expression.args[0])
-          )
-        }
-
-        this.checkUtf8EncodingArg(expression, 1, 'Buffer.from')
-        expression.binaryRuntimeMethod = staticMethod
-        expression.valueType = 'bytes'
-
-        return 'bytes'
-      }
-
-      if (staticMethod === 'isBuffer') {
-        if (expression.args.length !== 1) {
-          this.report(
-            'INOX_ARG_COUNT',
-            `function Buffer.isBuffer expects 1 argument(s), got ${expression.args.length}`,
-            expression.loc
-          )
-        }
-
-        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-          this.checkExpression(expression.args[0])
-        }
-
-        expression.binaryRuntimeMethod = staticMethod
-        expression.valueType = 'boolean'
-
-        return 'boolean'
-      }
-
-      if (staticMethod === 'alloc') {
-        if (expression.args.length !== 1) {
-          this.report(
-            'INOX_ARG_COUNT',
-            `function Buffer.alloc expects 1 argument(s), got ${expression.args.length}`,
-            expression.loc
-          )
-        }
-
-        if (expression.args[0] !== null && typeof expression.args[0] !== 'undefined') {
-          this.checkAssignableType(
-            this.checkExpression(expression.args[0]),
-            'number',
-            expression.args[0].loc,
-            false,
-            false
-          )
-        }
-
-        expression.binaryRuntimeMethod = staticMethod
-        expression.valueType = 'bytes'
-
-        return 'bytes'
-      }
-    }
-
-    const objectType = this.checkExpression(expression.callee.object)
-
-    if (objectType !== 'bytes') {
-      return null
-    }
-
-    const instanceMethod = binaryInstanceRuntimeMethodName(expression.callee.property)
-
-    if (instanceMethod === 'slice') {
-      if (expression.args.length < 1 || expression.args.length > 2) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `bytes.slice expects 1 or 2 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      for (let index = 0; index < expression.args.length; index = index + 1) {
-        const arg = checkerNodeAt(expression.args, index)
-
-        this.checkAssignableType(this.checkExpression(arg), 'number', arg.loc, false, false)
-      }
-
-      expression.binaryRuntimeMethod = instanceMethod
-      expression.valueType = 'bytes'
-
-      return 'bytes'
-    }
-
-    if (instanceMethod === 'toString') {
-      if (expression.args.length > 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `bytes.toString expects 0 or 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      this.checkUtf8EncodingArg(expression, 0, 'bytes.toString')
-      expression.binaryRuntimeMethod = instanceMethod
-      expression.valueType = 'string'
-
-      return 'string'
-    }
-
-    return null
-  }
-
-  checkBufferUnsupportedCall(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression.callee)
-    const unsupported = unsupportedBufferRuntimeExport(
-      path,
-      this.resolveStdlibRuntimeDirectImportName(path, 'buffer'),
-      this.resolveMemberPathRootSymbol(path)
-    )
-
-    if (unsupported === null || typeof unsupported === 'undefined') {
-      return null
-    }
-
-    for (let index = 0; index < expression.args.length; index = index + 1) {
-      const arg = checkerNodeAt(expression.args, index)
-
-      this.checkExpression(arg)
-    }
-
-    this.report(
-      'INOX_NOT_IMPLEMENTED',
-      `node:buffer ${unsupported} is not implemented by the current C backend`,
-      expression.loc
-    )
-    expression.valueType = 'unknown'
-
-    return 'unknown'
-  }
-
   checkEventStreamUnsupportedCall(expression: AnyNode): ValueType | null {
     const path = memberExpressionPath(expression.callee)
     const rootSymbol = this.resolveMemberPathRootSymbol(path)
@@ -3813,22 +3655,6 @@ class Checker {
     expression.valueType = 'unknown'
 
     return 'unknown'
-  }
-
-  checkUtf8EncodingArg(expression: AnyNode, index: number, label: string): void {
-    const arg = expression.args[index]
-
-    if (arg === null || typeof arg === 'undefined') {
-      return
-    }
-
-    const argType = this.checkExpression(arg)
-
-    this.checkAssignableType(argType, 'string', arg.loc, false, this.expressionCanBeNull(arg))
-
-    if (arg.type !== 'StringLiteral' || arg.value !== 'utf8') {
-      this.report('INOX_TYPE_MISMATCH', `${label} encoding must be 'utf8' in the MVP`, arg.loc)
-    }
   }
 
   checkCompilerLibraryCallOperation(expression: AnyNode): ValueType | null {
@@ -3896,13 +3722,23 @@ class Checker {
       if (argumentIndex !== null && typeof argumentIndex !== 'undefined') {
         const argument = expression.args[argumentIndex]
         const literals = variant.stringLiterals ?? []
+        const valueTypes = variant.argumentValueTypes ?? []
 
         if (
           argument === null ||
-          typeof argument === 'undefined' ||
-          argument.type !== 'StringLiteral' ||
-          !literals.includes(argument.value)
+          typeof argument === 'undefined'
         ) {
+          continue
+        }
+
+        if (
+          literals.length > 0 &&
+          (argument.type !== 'StringLiteral' || !literals.includes(argument.value))
+        ) {
+          continue
+        }
+
+        if (valueTypes.length > 0 && !valueTypes.includes(this.inferCheckedExpressionType(argument))) {
           continue
         }
       }
@@ -3991,7 +3827,7 @@ class Checker {
 
       const objectTypeIds = check.objectTypeIds ?? []
 
-      if (objectTypeIds.length > 0) {
+      if (objectTypeIds.length > 0 && info.valueType === 'object') {
         const objectTypeId = info.shape?.libraryTypeId
         let assignable = false
 
@@ -4086,9 +3922,10 @@ class Checker {
   checkCompilerLibrarySingleArgument(
     expression: AnyNode,
     valueType: ValueType,
-    operation: LibraryOperationDescriptor
+    operation: LibraryOperationDescriptor,
+    argumentIndex: number = 0
   ): void {
-    const check = operation.argumentChecks?.[0]
+    const check = operation.argumentChecks?.[argumentIndex]
 
     if (check === null || typeof check === 'undefined') {
       return
@@ -4240,6 +4077,7 @@ class Checker {
     }
 
     expression.libraryCResultMode = variant?.cResultMode ?? operation.cResultMode ?? null
+    expression.libraryCReceiverAdapter = variant?.cReceiverAdapter ?? operation.cReceiverAdapter ?? null
 
     const resultShapeFields = variant?.resultShapeFields ?? operation.resultShapeFields
     const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
@@ -4319,20 +4157,6 @@ class Checker {
     }
 
     return result
-  }
-
-  checkBufferConstantMemberExpression(expression: AnyNode): ValueType | null {
-    const path = memberExpressionPath(expression)
-    const constant = bufferRuntimeConstantName(path, this.resolveMemberPathRootSymbol(path))
-
-    if (constant === null || typeof constant === 'undefined') {
-      return null
-    }
-
-    expression.bufferRuntimeConstant = constant
-    expression.valueType = 'number'
-
-    return 'number'
   }
 
   checkDebugMemoryCall(expression: AnyNode): ValueType | null {
@@ -6495,40 +6319,6 @@ class Checker {
       return 'object'
     }
 
-    if (binaryConstructorName(expression.callee.path) === 'Uint8Array') {
-      if (expression.args.length !== 1) {
-        this.report(
-          'INOX_ARG_COUNT',
-          `Uint8Array constructor expects 1 argument(s), got ${expression.args.length}`,
-          expression.loc
-        )
-      }
-
-      if (
-        expression.args[0] !== null &&
-        typeof expression.args[0] !== 'undefined' &&
-        argTypes[0] !== 'number' &&
-        argTypes[0] !== 'array'
-      ) {
-        this.report(
-          'INOX_TYPE_MISMATCH',
-          `Uint8Array constructor expects number or number[], got ${argTypes[0]}`,
-          expression.args[0].loc
-        )
-      }
-
-      if (argTypes[0] === 'array') {
-        const elementType = this.resolveExpressionArrayElementType(expression.args[0])
-
-        if (elementType !== null && typeof elementType !== 'undefined') {
-          this.checkAssignableType(elementType, 'number', expression.args[0].loc, false, false)
-        }
-      }
-
-      expression.valueType = 'bytes'
-      return 'bytes'
-    }
-
     if (constructorName === 'Error') {
       this.checkErrorConstructorExpression(expression, argTypes)
       expression.valueType = 'object'
@@ -6605,10 +6395,13 @@ class Checker {
       return null
     }
 
-    this.applyCompilerLibraryOperation(expression, operation)
-    this.checkCompilerLibraryOperationArguments(expression, operation)
+    const variant = this.compilerLibraryOperationVariant(expression, operation)
 
-    return (operation.valueType ?? 'object') as ValueType
+    this.applyCompilerLibraryOperation(expression, operation, variant)
+    this.checkCompilerLibraryOperationArguments(expression, operation)
+    this.checkCompilerLibraryBackendConstraints(expression, operation)
+
+    return (variant?.valueType ?? operation.valueType ?? 'object') as ValueType
   }
 
   checkImportedClassConstructorArguments(

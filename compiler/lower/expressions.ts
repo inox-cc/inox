@@ -350,16 +350,6 @@ function nullableNode(value: LowerExpressionNode | null | undefined): LowerExpre
 }
 
 function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressionNode): LowerExpressionNode {
-  const binaryRuntimeMethod = nullableString(source.binaryRuntimeMethod)
-  if (binaryRuntimeMethod !== null && typeof binaryRuntimeMethod !== 'undefined') {
-    target.binaryRuntimeMethod = binaryRuntimeMethod
-  }
-
-  const bufferRuntimeConstant = nullableString(source.bufferRuntimeConstant)
-  if (bufferRuntimeConstant !== null && typeof bufferRuntimeConstant !== 'undefined') {
-    target.bufferRuntimeConstant = bufferRuntimeConstant
-  }
-
   const debugRuntimeMethod = nullableString(source.debugRuntimeMethod)
   if (debugRuntimeMethod !== null && typeof debugRuntimeMethod !== 'undefined') {
     target.debugRuntimeMethod = debugRuntimeMethod
@@ -418,6 +408,11 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   const libraryCResultMode = nullableString(source.libraryCResultMode)
   if (libraryCResultMode !== null && typeof libraryCResultMode !== 'undefined') {
     target.libraryCResultMode = libraryCResultMode
+  }
+
+  const libraryCReceiverAdapter = nullableString(source.libraryCReceiverAdapter)
+  if (libraryCReceiverAdapter !== null && typeof libraryCReceiverAdapter !== 'undefined') {
+    target.libraryCReceiverAdapter = libraryCReceiverAdapter
   }
 
   const libraryCFailureMode = nullableString(source.libraryCFailureMode)

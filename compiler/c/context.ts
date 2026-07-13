@@ -246,7 +246,6 @@ type CNullableScalarContext = {
 type CVariableScopeContext = {
   arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
-  byteKinds: CStringMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
@@ -279,7 +278,6 @@ type CVariableScopeContext = {
 export type CFunctionContext = CEmitContext & {
   arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
-  byteKinds: CStringMap
   breakFlowUsed: boolean
   breakTargets: CLoopFlowTarget[]
   boxedValueTypes: CStringMap
@@ -347,7 +345,6 @@ export type CFunctionContext = CEmitContext & {
 export type CVariableScopeSnapshot = {
   arrayLengths: CNumberMap
   arrayShapes: CArrayShapeMap
-  byteKinds: CStringMap
   boxedVariables: CStringSet
   classInstanceTypes: CStringMap
   cppArrayValues: CStringSet
@@ -445,7 +442,6 @@ export function createFunctionContext(
     unhandledRejectionFlag: baseContext.unhandledRejectionFlag,
     arrayLengths: new Map(),
     arrayShapes: new Map(),
-    byteKinds: new Map(),
     breakFlowUsed: false,
     breakTargets: [],
     boxedValueTypes: new Map(),
@@ -939,7 +935,6 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   const previousVariables = context.variables
   const previousArrayLengths = context.arrayLengths
   const previousArrayShapes = context.arrayShapes
-  const previousByteKinds = context.byteKinds
   const previousBoxedVariables = context.boxedVariables
   const previousClassInstanceTypes = context.classInstanceTypes
   const previousCppArrayValues = context.cppArrayValues
@@ -969,7 +964,6 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   context.variables = cloneCStringMap(previousVariables)
   context.arrayLengths = cloneCNumberMap(previousArrayLengths)
   context.arrayShapes = cloneCArrayShapeMap(previousArrayShapes)
-  context.byteKinds = cloneCStringMap(previousByteKinds)
   context.boxedVariables = cloneCStringSet(previousBoxedVariables)
   context.classInstanceTypes = cloneCStringMap(previousClassInstanceTypes)
   context.cppArrayValues = cloneCStringSet(previousCppArrayValues)
@@ -999,7 +993,6 @@ export function pushVariableScope(context: CVariableScopeContext): CVariableScop
   return {
     arrayLengths: previousArrayLengths,
     arrayShapes: previousArrayShapes,
-    byteKinds: previousByteKinds,
     boxedVariables: previousBoxedVariables,
     classInstanceTypes: previousClassInstanceTypes,
     cppArrayValues: previousCppArrayValues,
@@ -1035,7 +1028,6 @@ export function restoreVariableScope(context: CVariableScopeContext, snapshot: C
   context.variables = snapshot.variables
   context.arrayLengths = snapshot.arrayLengths
   context.arrayShapes = snapshot.arrayShapes
-  context.byteKinds = snapshot.byteKinds
   context.boxedVariables = snapshot.boxedVariables
   context.classInstanceTypes = snapshot.classInstanceTypes
   context.cppArrayValues = snapshot.cppArrayValues

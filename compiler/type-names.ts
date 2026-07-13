@@ -460,10 +460,6 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
   return false
 }
 
-export function isBytesTypeName(name: string): boolean {
-  return name === 'Buffer' || name === 'Uint8Array'
-}
-
 function normalizeUnionTypeNames(unionArgs: string[]): string {
   const normalized: string[] = []
   const withoutNullish: string[] = []

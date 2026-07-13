@@ -1822,9 +1822,6 @@ export type CScalarExpressionDependencies = {
   emitPreparedArrayIncludesCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayReduceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayUnshiftCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedBinaryNumberCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedBytesIndexExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedBytesLengthExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayIsArrayCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedClassMethodCallExpression(
@@ -2746,13 +2743,6 @@ export function emitPreparedNumberExpression(
     }
   }
 
-  if (expression.bufferRuntimeConstant === 'MAX_LENGTH') {
-    return {
-      lines: [],
-      expression: '((double)((size_t)-1))'
-    }
-  }
-
   const arrayIsArrayCall = deps.emitPreparedArrayIsArrayCallExpression(expression, context)
 
   if (arrayIsArrayCall !== null && typeof arrayIsArrayCall !== 'undefined') {
@@ -3010,12 +3000,6 @@ export function emitPreparedNumberExpression(
       return jsonScalarParse
     }
 
-    const binaryCall = deps.emitPreparedBinaryNumberCallExpression(expression, context)
-
-    if (binaryCall !== null && typeof binaryCall !== 'undefined') {
-      return binaryCall
-    }
-
     const numericCast = emitPreparedNumericCastExpression(expression, context, deps)
 
     if (numericCast !== null && typeof numericCast !== 'undefined') {
@@ -3106,12 +3090,6 @@ export function emitPreparedNumberExpression(
 
     if (collectionSize !== null && typeof collectionSize !== 'undefined') {
       return collectionSize
-    }
-
-    const bytesLength = deps.emitPreparedBytesLengthExpression(expression, context)
-
-    if (bytesLength !== null && typeof bytesLength !== 'undefined') {
-      return bytesLength
     }
 
     const nativeClassField = emitPreparedNativeClassFieldScalarExpression(expression, context)
@@ -3210,11 +3188,6 @@ export function emitPreparedNumberExpression(
       }
     }
 
-    const bytesIndex = deps.emitPreparedBytesIndexExpression(expression, context)
-
-    if (bytesIndex !== null && typeof bytesIndex !== 'undefined') {
-      return bytesIndex
-    }
   }
 
   if (expression.type === 'AwaitExpression') {
@@ -5008,7 +4981,6 @@ export type CValueExpressionDependencies = {
   emitPreparedArrayReduceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArrayJoinCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedArraySliceCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
-  emitPreparedBinaryValueExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression | null
   emitPreparedCallExpression(expression: CValueNode, context: CFunctionContext): PreparedExpression
   emitPreparedClassMethodCallExpression(
     expression: CValueNode,
@@ -5154,12 +5126,6 @@ export function emitCValueExpression(
 
   if (debugMemoryCall !== null && typeof debugMemoryCall !== 'undefined') {
     return debugMemoryCall
-  }
-
-  const binaryValue = deps.emitPreparedBinaryValueExpression(expression, context)
-
-  if (binaryValue !== null && typeof binaryValue !== 'undefined') {
-    return binaryValue
   }
 
   const arrayPopCall = deps.emitPreparedArrayPopCallExpression(expression, context, null)
@@ -5373,7 +5339,7 @@ export function emitCValueExpression(
           lines: [],
           expression: moduleValueName,
           cppType: moduleCppType,
-          valueType: 'object'
+          valueType: moduleValueType ?? valueType
         }
       }
 

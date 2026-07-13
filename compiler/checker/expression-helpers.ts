@@ -46,6 +46,12 @@ export function applyFsRuntimeCallPlan(
 
   if (plan.shape === 'stats') {
     expression.shape = fsStatsObjectShape
+  } else if (plan.resultTypeId !== null && typeof plan.resultTypeId !== 'undefined') {
+    expression.shape = {
+      kind: 'object',
+      fields: [],
+      libraryTypeId: plan.resultTypeId
+    }
   }
 
   if (plan.bytes !== null && typeof plan.bytes !== 'undefined') {

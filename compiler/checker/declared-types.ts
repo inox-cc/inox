@@ -3,7 +3,6 @@ import {
   arrayElementTypeNameFromKnownTypeName,
   isArrayTypeName,
   isBuiltinValueType,
-  isBytesTypeName,
   isNullableTypeName,
   isPromiseTypeName,
   isSetTypeName,
@@ -239,13 +238,6 @@ export function resolveDeclaredType(
     info.valueType = 'promise'
     info.shape = valueInfo.shape
     info.promiseValueType = valueInfo.valueType
-
-    return info
-  }
-
-  if (isBytesTypeName(name)) {
-    const info = unresolvedTypeInfo()
-    info.valueType = 'bytes'
 
     return info
   }
@@ -922,13 +914,6 @@ export function resolveWeakTargetShapeTypeName(
     const info = unresolvedTypeInfo()
     info.valueType = 'set'
     info.setElementType = elementInfo.valueType
-
-    return info
-  }
-
-  if (isBytesTypeName(name)) {
-    const info = unresolvedTypeInfo()
-    info.valueType = 'bytes'
 
     return info
   }

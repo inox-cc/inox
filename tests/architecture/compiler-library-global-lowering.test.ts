@@ -7,13 +7,14 @@ import type { CompilerLibraryDescriptor } from '../../compiler/extensions/types.
 
 test('package globals lower through generic member, index, optional argument and assignment operations', () => {
   const result = compileSource(
-    'const name = host.env.PATH\nconst first = host.argv[0]\nhost.exit()\nhost.exit(2)\nhost.exitCode = 3\n',
+    'const name = host.env.PATH\nconst first = host.argv[0]\nhost.exit()\nhost.exit(2)\nhost.exitCode = 3\nhost.argv[0] = 7\n',
     { libraries: createCompilerLibrarySet([hostLibrary()]), target: 'cc' }
   )
   const name = result.ir.body[0].init
   const first = result.ir.body[1].init
   const exitWithoutCode = result.ir.body[2].expression
   const assignment = result.ir.body[4].expression
+  const indexAssignment = result.ir.body[5].expression
 
   assert.equal(name.libraryOperationId, 'host#env-member')
   assert.equal(name.libraryCExpression, 'operator[]')
@@ -24,11 +25,13 @@ test('package globals lower through generic member, index, optional argument and
   assert.equal(first.valueType, 'string')
   assert.equal(exitWithoutCode.libraryOperationId, 'host#exit')
   assert.equal(assignment.libraryOperationId, 'host#exit-code-write')
+  assert.equal(indexAssignment.libraryOperationId, 'host#argv-index-write')
   assert.match(result.code, /inox::host\.env\["PATH"\]/)
   assert.match(result.code, /inox::host\.argv\[0(?:\.0)?\]/)
   assert.match(result.code, /inox::host\.exit\(\)/)
   assert.match(result.code, /inox::host\.exit\(2(?:\.0)?\)/)
   assert.match(result.code, /\(inox::host\.exitCode = 3(?:\.0)?\)/)
+  assert.match(result.code, /\(inox::host\.argv\[0(?:\.0)?\] = 7(?:\.0)?\)/)
 })
 
 test('package global result metadata preserves nested shapes and array element types', () => {
@@ -134,6 +137,20 @@ function hostLibrary(): CompilerLibraryDescriptor {
         cppType: 'inox::String',
         valueType: 'string',
         owned: true
+      },
+      {
+        libraryId: 'host',
+        bindingId: 'host:argv.*',
+        operationId: 'host#argv-index-write',
+        kind: 'index-write',
+        runtimeRequirements: [],
+        cExpression: 'operator[]',
+        cArgumentKinds: ['receiver', 'number', 'number'],
+        receiverTypeId: 'host:argv',
+        cCallStyle: 'index-assignment',
+        argumentChecks: [{ valueTypes: ['number'] }, { valueTypes: ['number'] }],
+        cppType: 'double',
+        valueType: 'number'
       },
       {
         libraryId: 'host',

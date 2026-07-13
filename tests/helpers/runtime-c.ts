@@ -110,7 +110,10 @@ async function compileRuntimeObjectFiles(
 
   for (const source of await runtimeSources()) {
     const object = join(objectDir, runtimeObjectName(source))
-    const compile = await runCommand('cc', [...includeArgs, ...compileArgs, '-c', source, '-o', object])
+    const compile = await runCommand(
+      'cc',
+      [...runtimeSourceCompileArgs(source), ...includeArgs, ...compileArgs, '-c', source, '-o', object]
+    )
 
     if (compile.code !== 0) {
       return {
@@ -154,7 +157,10 @@ async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<st
 
   for (const source of sources) {
     const object = join(objectDir, runtimeObjectName(source))
-    const compile = await runCommand('cc', [...includeArgs, ...compileArgs, '-c', source, '-o', object])
+    const compile = await runCommand(
+      'cc',
+      [...runtimeSourceCompileArgs(source), ...includeArgs, ...compileArgs, '-c', source, '-o', object]
+    )
 
     assert.equal(
       compile.code,
@@ -179,6 +185,14 @@ async function prepareRuntimeArchive(variant: RuntimeArchiveVariant): Promise<st
   await installRuntimeArchive(buildDir, dir, readyPath)
 
   return archive
+}
+
+function runtimeSourceCompileArgs(source: string): string[] {
+  if (source.endsWith('.cc')) {
+    return cxxGeneratedCompileArgs
+  }
+
+  return []
 }
 
 async function installRuntimeArchive(buildDir: string, dir: string, readyPath: string): Promise<void> {

@@ -279,7 +279,6 @@ function appendString(values: string[], value: string): string[] {
 function isJsStdGlobalRootName(name: string): boolean {
   return (
     name === 'Array' ||
-    name === 'Buffer' ||
     name === 'inox' ||
     name === 'Date' ||
     name === 'Error' ||
@@ -292,7 +291,6 @@ function isJsStdGlobalRootName(name: string): boolean {
     name === 'Object' ||
     name === 'Promise' ||
     name === 'Set' ||
-    name === 'Uint8Array' ||
     name === 'Uint16Array' ||
     name === 'Uint32Array' ||
     name === 'fetch' ||
@@ -334,7 +332,6 @@ function sortedStringSet(values: StringSet): string[] {
   const result: string[] = []
 
   pushStringIfPresent(values, result, 'Array')
-  pushStringIfPresent(values, result, 'Buffer')
   pushStringIfPresent(values, result, 'Date')
   pushStringIfPresent(values, result, 'Error')
   pushStringIfPresent(values, result, 'Int16Array')
@@ -348,7 +345,6 @@ function sortedStringSet(values: StringSet): string[] {
   pushStringIfPresent(values, result, 'Set')
   pushStringIfPresent(values, result, 'Uint16Array')
   pushStringIfPresent(values, result, 'Uint32Array')
-  pushStringIfPresent(values, result, 'Uint8Array')
   pushStringIfPresent(values, result, 'clearImmediate')
   pushStringIfPresent(values, result, 'clearInterval')
   pushStringIfPresent(values, result, 'clearTimeout')

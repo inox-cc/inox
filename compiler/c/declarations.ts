@@ -345,7 +345,13 @@ function registerFunctionParamsInContext(
 
     context.localValueNames.add(param.name)
 
-    if (param.nullable === true && isRuntimeNullableType(param.valueType)) {
+    const omittedStringWithoutDefault =
+      param.valueType === 'string' &&
+      param.optional === true &&
+      param.rest !== true &&
+      typeof param.defaultValue === 'undefined'
+
+    if ((param.nullable === true || omittedStringWithoutDefault) && isRuntimeNullableType(param.valueType)) {
       context.nullableVariables.add(param.name)
     }
 
@@ -371,7 +377,7 @@ function registerFunctionParamsInContext(
     } else if (param.valueType === 'string') {
       context.variables.set(param.name, 'string')
 
-      if (param.nullable !== true) {
+      if (param.nullable !== true && !omittedStringWithoutDefault) {
         context.runtimeStrings.add(param.name)
         context.runtimeStringValues.set(param.name, emitCStringParamName(param.name))
       }

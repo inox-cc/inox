@@ -118,7 +118,6 @@ type CFunctionContext = {
   arrayShapes: Map<string, CArrayElementInfo[]>
   asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies
   asyncTaskWrappers: Map<string, CAsyncTaskWrapper>
-  byteKinds: CStringMap
   boxedMutableCaptureDeclarations: Set<StatementNode>
   boxedValueTypes: CStringMap
   boxedValues: string[]
@@ -410,7 +409,6 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedBytesIndexAssignment(expression: StatementNode, context: CFunctionContext): PreparedStatement | null
   emitPreparedCallExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitPreparedClassMethodCallExpression(
     expression: StatementNode,
@@ -512,7 +510,6 @@ export type StatementLoweringDependencies = {
   resolveKnownArrayIndex(expression: StatementNode, context: CFunctionContext): CKnownArrayElement | null
   resolveKnownObjectIndex(expression: StatementNode, context: CFunctionContext): CKnownObjectIndexField | null
   resolveKnownObjectMember(expression: StatementNode, context: CFunctionContext): CKnownObjectField | null
-  resolveBytesExpressionKind(expression: StatementNode | null | undefined, context: CFunctionContext): string | null
   resolveKnownForOfArray(expression: StatementNode, context: CFunctionContext): KnownForOfArray | null
   resolveNullableScalarConditionNarrowing(
     expression: StatementNode,
@@ -1666,7 +1663,7 @@ export function emitRuntimeValueVariableDeclaration(
   if (value.cppType === 'Array') {
     context.cppArrayValues.add(statement.name)
   }
-  registerCppValueType(statement.name, value.cppType, context)
+  registerCppValueType(statement.name, value.cppType, value.valueType ?? valueType, context)
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
@@ -1721,9 +1718,10 @@ function emitLocalRuntimeValueDeclaration(statement: StatementNode, value: Prepa
 function registerCppValueType(
   name: string,
   cppType: string | null | undefined,
+  valueType: string | null | undefined,
   context: CFunctionContext
 ): void {
-  if (typeof cppType === 'string' && isCppRuntimeValueType(cppType)) {
+  if (typeof cppType === 'string' && isManagedRuntimeReturnType(valueType)) {
     context.cppValueTypes.set(name, cppType)
     return
   }
@@ -1746,7 +1744,7 @@ function emitObjectRuntimeCallValueVariableDeclaration(
   }
 
   registerRuntimeValueMetadata(statement.name, 'array', statement, statement.init, context)
-  registerCppValueType(statement.name, value.cppType, context)
+  registerCppValueType(statement.name, value.cppType, value.valueType ?? 'array', context)
 
   const lines: string[] = []
   pushAllLines(lines, value.lines)
@@ -1848,14 +1846,6 @@ export function registerRuntimeValueMetadata(
     )
   } else if (valueType === 'set') {
     context.setElementTypes.set(name, resolveRuntimeSetMetadataElementType(declaration, expression, context))
-  } else if (valueType === 'bytes') {
-    const byteKind = statementDeps(context).resolveBytesExpressionKind(expression, context)
-
-    if (byteKind !== null && typeof byteKind !== 'undefined') {
-      context.byteKinds.set(name, byteKind)
-    } else {
-      context.byteKinds.delete(name)
-    }
   }
 }
 
@@ -4094,6 +4084,25 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     return libraryObject.lines
   }
 
+  if (
+    libraryObject !== null &&
+    libraryObject.cppType !== null &&
+    typeof libraryObject.cppType !== 'undefined' &&
+    libraryObject.valueType !== null &&
+    typeof libraryObject.valueType !== 'undefined' &&
+    isManagedRuntimeReturnType(libraryObject.valueType)
+  ) {
+    const lines: string[] = []
+    pushAllLines(lines, libraryObject.lines)
+    lines.push(
+      `${constPrefix(statement.kind === 'const')}auto ${emitCIdentifier(statement.name)} = ${libraryObject.expression};`
+    )
+    context.variables.set(statement.name, libraryObject.valueType)
+    context.cppValueTypes.set(statement.name, libraryObject.cppType)
+    registerRuntimeValueMetadata(statement.name, libraryObject.valueType, statement, statement.init, context)
+    return lines
+  }
+
   const asyncPromiseCall = deps.emitPreparedAsyncFunctionPromiseCallExpression(
     statement.init,
     context,
@@ -4541,6 +4550,18 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
 
   pushAllLines(lines, value.lines)
 
+  const targetCppType = context.cppValueTypes.get(target)
+
+  if (targetCppType !== null && typeof targetCppType !== 'undefined') {
+    if (value.cppType !== null && typeof value.cppType !== 'undefined') {
+      lines.push(`${reference} = ${value.expression};`)
+    } else {
+      lines.push(`${reference} = ${targetCppType}(${value.expression});`)
+    }
+
+    return lines
+  }
+
   const valueCheck = emitRuntimeValueCheck(value.expression, expectedTag, context)
 
   if (valueCheck !== '') {
@@ -4549,16 +4570,6 @@ function emitRuntimeValueAssignment(expression: StatementNode, context: CFunctio
 
   lines.push(`${reference} = ${value.expression};`)
   pushPreparedRuntimeValueOwnershipLines(lines, reference, value)
-
-  if (targetType === 'bytes') {
-    const byteKind = statementDeps(context).resolveBytesExpressionKind(expression.value, context)
-
-    if (byteKind !== null && typeof byteKind !== 'undefined') {
-      context.byteKinds.set(target, byteKind)
-    } else {
-      context.byteKinds.delete(target)
-    }
-  }
 
   if (targetType === 'array') {
     updateRuntimeArrayAssignmentMetadata(target, expression.value, context)
@@ -4829,12 +4840,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
     }
 
     if (expression.target.type === 'IndexExpression') {
-      const bytesIndexAssignment = deps.emitPreparedBytesIndexAssignment(expression, context)
-
-      if (bytesIndexAssignment !== null && typeof bytesIndexAssignment !== 'undefined') {
-        return bytesIndexAssignment.lines
-      }
-
       const element = deps.resolveKnownArrayIndex(expression.target, context)
 
       if (element !== null && typeof element !== 'undefined') {
@@ -5224,7 +5229,11 @@ function pushRuntimeValueReturnAssignment(
   value: PreparedExpression,
   context: CFunctionContext
 ): void {
-  if (isCppRuntimeValueType(value.cppType)) {
+  if (
+    value.cppType !== null &&
+    typeof value.cppType !== 'undefined' &&
+    isManagedRuntimeReturnType(value.valueType)
+  ) {
     const temp = nextCName(context, 'inox_return_value')
 
     lines.push(`auto ${temp} = ${value.expression};`)
@@ -5233,20 +5242,6 @@ function pushRuntimeValueReturnAssignment(
   }
 
   lines.push(`${target} = ${value.expression};`)
-}
-
-function isCppRuntimeValueType(cppType: string | null | undefined): boolean {
-  return (
-    cppType === 'inox::String' ||
-    cppType === 'inox::Value' ||
-    cppType === 'inox::ObjectValue' ||
-    cppType === 'Array' ||
-    cppType === 'Map' ||
-    cppType === 'Set' ||
-    cppType === 'Buffer' ||
-    cppType === 'Uint8Array' ||
-    cppType === 'FsStats'
-  )
 }
 
 export function registerErrorChannel(context: CFunctionContext): void {

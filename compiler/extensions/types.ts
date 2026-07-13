@@ -94,10 +94,12 @@ export type LibraryOperationVariantDescriptor = {
   minArgs?: number | null
   maxArgs?: number | null
   argumentIndex?: number | null
+  argumentValueTypes?: string[]
   stringLiterals?: string[]
   cExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
@@ -118,12 +120,13 @@ export type LibraryOperationDescriptor = {
   cExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
   receiverTypeId?: LibraryObjectTypeId | null
   resultTypeId?: LibraryObjectTypeId | null
-  cCallStyle?: 'function' | 'member' | 'index' | 'member-assignment' | null
+  cCallStyle?: 'function' | 'member' | 'index' | 'index-assignment' | 'member-assignment' | null
   cFailureMode?: 'thrown' | 'invalid-result' | null
   minArgs?: number | null
   maxArgs?: number | null

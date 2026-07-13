@@ -9,6 +9,8 @@ import {
 import { nodeFsPromisesImportSource } from '../promises/compiler/descriptor.ts'
 import type { AnyNode, SymbolInfo, ValueType } from '../../../../compiler/types.ts'
 
+const bufferTypeId = 'node:buffer#Buffer'
+
 export type { FsRuntimeCallInfo } from './descriptor.ts'
 
 export type FsBooleanOptions = {
@@ -46,6 +48,7 @@ export type FsRuntimeCallPlan = {
   direntsFromOptions: boolean
   recursiveFromOptions: boolean
   forceFromOptions: boolean
+  resultTypeId: string | null
 }
 
 export type FsStatsRuntimeMethodInfo = {
@@ -243,7 +246,8 @@ export function fsRuntimeCallPlan(
     if (argCount < 2) {
       return fsBaseCallPlan(info, promisesApi, label, null, 1, 2, '1 or 2', 'readFileSync', 'bytes', {
         argumentChecks: [fsArgumentCheck('string', 0, label)],
-        bytes: true
+        bytes: true,
+        resultTypeId: bufferTypeId
       })
     }
 
@@ -296,7 +300,8 @@ export function fsRuntimeCallPlan(
       return fsBaseCallPlan(info, promisesApi, label, null, 1, 2, '1 or 2', 'readFile', 'promise', {
         argumentChecks: [fsArgumentCheck('string', 0, label)],
         promiseValueType: 'bytes',
-        bytes: true
+        bytes: true,
+        resultTypeId: bufferTypeId
       })
     }
 
@@ -493,6 +498,7 @@ type FsRuntimeCallPlanOptions = {
   direntsFromOptions?: boolean
   recursiveFromOptions?: boolean
   forceFromOptions?: boolean
+  resultTypeId?: string | null
 }
 
 function fsBaseCallPlan(
@@ -530,7 +536,8 @@ function fsBaseCallPlan(
     bytesFromWriteData: planOptions.bytesFromWriteData === true,
     direntsFromOptions: planOptions.direntsFromOptions === true,
     recursiveFromOptions: planOptions.recursiveFromOptions === true,
-    forceFromOptions: planOptions.forceFromOptions === true
+    forceFromOptions: planOptions.forceFromOptions === true,
+    resultTypeId: planOptions.resultTypeId ?? null
   }
 }
 

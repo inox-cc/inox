@@ -9,7 +9,6 @@ import {
   registerOwnedValue
 } from '../../../../compiler/c/context.ts'
 import { cStringLiteral, emitCIdentifier } from '../../../../compiler/c/identifiers.ts'
-import { emitRuntimeValueCheck } from '../../../../compiler/c/runtime-values.ts'
 import type {
   CPreparedCallOptions as PreparedCallOptions,
   CPreparedExpression as PreparedExpression,
@@ -451,13 +450,13 @@ export function emitPreparedFetchBodyOperand(
     const lines: string[] = []
 
     appendLines(lines, value.lines)
-    lines.push(emitRuntimeValueCheck(value.expression, 'INOX_TAG_BYTES', context))
-    lines.push(`BytesStorage* ${bytes} = (BytesStorage*)${value.expression}.as.ref;`)
+    lines.push(`auto ${bytes} = Uint8Array(${value.expression}).bytes();`)
+    lines.push(emitRuntimeTypeCheck('inox::thrown()', context))
 
     return {
       lines,
-      bytes: `(const char*)${bytes}->bytes`,
-      length: `${bytes}->length`
+      bytes: `(const char*)${bytes}.data()`,
+      length: `${bytes}.size()`
     }
   }
 

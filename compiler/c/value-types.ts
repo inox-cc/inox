@@ -8,14 +8,20 @@ export type CReturnTypeContext = {
 }
 
 export type CNullableScalarParam = {
+  defaultValue?: object | null
   nullable?: boolean
+  optional?: boolean
+  rest?: boolean
   valueType?: string
 }
 
 export type CNullableScalarParamInput = CNullableScalarParam | null | undefined
 
 type CNullableScalarParamRecord = {
+  defaultValue?: object | null
   nullable: boolean
+  optional?: boolean
+  rest?: boolean
   valueType?: string
 }
 
@@ -191,7 +197,12 @@ export function isNullableScalarParam(param: CNullableScalarParamInput): boolean
 }
 
 function isNullableScalarParamRecord(param: CNullableScalarParamRecord): boolean {
-  return param.nullable === true && isNullableScalarType(param.valueType)
+  const omittedStringWithoutDefault =
+    param.valueType === 'string' &&
+    param.optional === true &&
+    param.rest !== true &&
+    typeof param.defaultValue === 'undefined'
+  return (param.nullable === true && isNullableScalarType(param.valueType)) || omittedStringWithoutDefault
 }
 
 export function emitCStringParamName(name: string): string {

@@ -369,23 +369,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'Buffer',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object'
-    }
-  ],
-  [
-    'Uint8Array',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'object',
-      constructable: true
-    }
-  ],
-  [
     'Int8Array',
     {
       kind: 'global',
@@ -457,7 +440,6 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
     name === 'Map' ||
     name === 'Array' ||
     name === 'AbortController' ||
-    name === 'Uint8Array' ||
     name === 'Int8Array' ||
     name === 'Uint16Array' ||
     name === 'Int16Array' ||
@@ -479,8 +461,7 @@ export function builtinGlobalSymbol(name: string): SymbolInfo | null {
     name === 'Object' ||
     name === 'http' ||
     name === 'JSON' ||
-    name === 'Math' ||
-    name === 'Buffer'
+    name === 'Math'
   ) {
     return {
       kind: 'global',
