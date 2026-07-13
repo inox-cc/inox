@@ -428,6 +428,12 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
   copyStringMetadataArray(target, source, 'libraryCArgumentAdapters')
   copyStringMetadataArray(target, source, 'libraryCArgumentKinds')
   copyStringMetadataArray(target, source, 'libraryCResultShapeFields')
+  copyMetadataArray(target, source, 'libraryCArgumentSources')
+
+  const arrayElementTypeId = nullableString(source.arrayElementTypeId)
+  if (arrayElementTypeId !== null && typeof arrayElementTypeId !== 'undefined') {
+    target.arrayElementTypeId = arrayElementTypeId
+  }
 
   const libraryCppType = nullableString(source.libraryCppType)
   if (libraryCppType !== null && typeof libraryCppType !== 'undefined') {
@@ -557,6 +563,22 @@ function copyStringMetadataArray(target: LowerExpressionNode, source: LowerExpre
   }
 
   const copied: string[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    copied.push(values[index])
+  }
+
+  target[field] = copied
+}
+
+function copyMetadataArray(target: LowerExpressionNode, source: LowerExpressionNode, field: string): void {
+  const values = source[field]
+
+  if (!Array.isArray(values)) {
+    return
+  }
+
+  const copied: unknown[] = []
 
   for (let index = 0; index < values.length; index = index + 1) {
     copied.push(values[index])

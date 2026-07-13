@@ -1,5 +1,12 @@
 import type { AnyNode } from '../types.ts'
-import { emitPrepareOwnedValueWrite, emitRuntimeTypeCheck, nextCName, registerOwnedValue } from './context.ts'
+import {
+  emitPrepareOwnedValueWrite,
+  emitRuntimeTypeCheck,
+  nextCName,
+  registerEventLoop,
+  registerOwnedPromise,
+  registerOwnedValue
+} from './context.ts'
 import type { CFunctionContext } from './context.ts'
 import { cStringLiteral } from './identifiers.ts'
 import type {
@@ -10,10 +17,16 @@ import type {
   CPreparedStringBytesOperand as PreparedStringBytesOperand
 } from './types.ts'
 
+type CompilerLibraryCArgumentSource = {
+  argumentIndex: number
+  objectFieldName: string
+}
+
 type CompilerLibraryExpressionNode = AnyNode & {
   libraryCExpression?: string | null
   libraryCArgumentAdapters?: string[] | null
   libraryCArgumentKinds?: string[] | null
+  libraryCArgumentSources?: Array<CompilerLibraryCArgumentSource | null> | null
   libraryCResultShapeFields?: string[] | null
   libraryCCallStyle?: string | null
   libraryCFailureMode?: string | null
@@ -22,6 +35,8 @@ type CompilerLibraryExpressionNode = AnyNode & {
   libraryConstantValue?: string | null
   libraryCppType?: string | null
   libraryOwned?: boolean | null
+  promiseRejectionValueType?: string | null
+  promiseValueType?: string | null
 }
 
 export type CompilerLibraryLoweringDependencies = {
@@ -69,6 +84,7 @@ export function emitPreparedCompilerLibraryCallExpression(
   const item = expression as CompilerLibraryExpressionNode
   const target = item.libraryCExpression
   const argumentKinds = item.libraryCArgumentKinds
+  const argumentSources = item.libraryCArgumentSources
   const cppType = item.libraryCppType
 
   if (
@@ -97,6 +113,15 @@ export function emitPreparedCompilerLibraryCallExpression(
 
   for (let kindIndex = 0; kindIndex < argumentKinds.length; kindIndex = kindIndex + 1) {
     const kind = argumentKinds[kindIndex]
+    let argumentSource: CompilerLibraryCArgumentSource | null = null
+
+    if (
+      argumentSources !== null &&
+      typeof argumentSources !== 'undefined' &&
+      kindIndex < argumentSources.length
+    ) {
+      argumentSource = argumentSources[kindIndex]
+    }
 
     if (kind === 'receiver') {
       const receiver = compilerLibraryReceiver(expression)
@@ -192,6 +217,22 @@ export function emitPreparedCompilerLibraryCallExpression(
 
     if (kind === 'argument-presence') {
       argumentsList.push(optionalArgumentPresent ? 'true' : 'false')
+      continue
+    }
+
+    if (kind === 'object-boolean-field') {
+      if (
+        argumentSource === null
+      ) {
+        return null
+      }
+
+      argumentsList.push(
+        compilerLibraryObjectBooleanLiteral(
+          sourceArguments[argumentSource.argumentIndex],
+          argumentSource.objectFieldName
+        ) ? 'true' : 'false'
+      )
       continue
     }
 
@@ -357,6 +398,37 @@ export function emitPreparedCompilerLibraryCallExpression(
     callExpression = `(${receiverExpression}.${target} = ${argumentsList[0]})`
   }
 
+  if (item.valueType === 'promise' && cppType === 'inox::Promise') {
+    const promiseValueType = item.promiseValueType ?? 'unknown'
+    const rejectionValueType = item.promiseRejectionValueType ?? 'unknown'
+    const optionOwned = options?.owned
+    const optionOut = options?.out
+
+    if (optionOwned === false && (optionOut === null || typeof optionOut === 'undefined')) {
+      return {
+        lines,
+        expression: callExpression,
+        cppType,
+        valueType: promiseValueType,
+        rejectionValueType
+      }
+    }
+
+    const out = optionOut ?? nextCName(context, 'inox_library_promise')
+    registerEventLoop(context)
+    registerOwnedPromise(context, out, promiseValueType, rejectionValueType)
+    lines.push(`${out} = ${callExpression};`)
+    lines.push(emitRuntimeTypeCheck(`!${out}.valid()`, context))
+
+    return {
+      lines,
+      expression: out,
+      cppType,
+      valueType: promiseValueType,
+      rejectionValueType
+    }
+  }
+
   if (cppType === 'void') {
     lines.push(`${callExpression};`)
     pushCompilerLibraryFailureCheck(lines, item.libraryCFailureMode, '', context)
@@ -408,6 +480,36 @@ export function emitPreparedCompilerLibraryCallExpression(
     valueType: item.valueType ?? undefined,
     owned: item.libraryOwned === true
   }
+}
+
+export function isCompilerLibraryPromiseExpression(expression: AnyNode | null | undefined): boolean {
+  return (
+    expression !== null &&
+    typeof expression !== 'undefined' &&
+    expression.type === 'CallExpression' &&
+    expression.valueType === 'promise' &&
+    expression.libraryOperationId !== null &&
+    typeof expression.libraryOperationId !== 'undefined'
+  )
+}
+
+function compilerLibraryObjectBooleanLiteral(
+  argument: AnyNode | null | undefined,
+  fieldName: string
+): boolean {
+  if (argument === null || typeof argument === 'undefined' || argument.type !== 'ObjectLiteral') {
+    return false
+  }
+
+  for (let index = 0; index < argument.properties.length; index = index + 1) {
+    const property = argument.properties[index]
+
+    if (property.key === fieldName && property.value.type === 'BooleanLiteral') {
+      return property.value.value === true
+    }
+  }
+
+  return false
 }
 
 function applyCompilerLibraryValueAdapter(value: string, adapter: string | null | undefined): string {

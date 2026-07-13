@@ -59,6 +59,7 @@ import {
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import {
   compilerLibraryHasModuleDeclaration,
+  compilerLibraryNativeTypeForId,
   compilerLibraryNativeTypeIsAssignable,
   compilerLibraryOperationForGlobal,
   compilerLibraryOperationForImport,
@@ -68,6 +69,8 @@ import {
 import type {
   LibraryOperationDescriptor,
   LibraryOperationKind,
+  LibraryArgumentCheckDescriptor,
+  LibraryObjectLiteralFieldDescriptor,
   LibraryOperationVariantDescriptor,
   LibraryResultShapeFieldDescriptor
 } from './extensions/types.ts'
@@ -3741,6 +3744,17 @@ class Checker {
         if (valueTypes.length > 0 && !valueTypes.includes(this.inferCheckedExpressionType(argument))) {
           continue
         }
+
+        const objectFieldName = variant.objectFieldName
+        const booleanLiterals = variant.booleanLiterals ?? []
+
+        if (
+          objectFieldName !== null &&
+          typeof objectFieldName !== 'undefined' &&
+          !this.compilerLibraryObjectFieldMatches(argument, objectFieldName, booleanLiterals)
+        ) {
+          continue
+        }
       }
 
       return variant
@@ -3827,6 +3841,8 @@ class Checker {
 
       const objectTypeIds = check.objectTypeIds ?? []
 
+      this.checkCompilerLibraryObjectLiteralFields(argument, check, operation)
+
       if (objectTypeIds.length > 0 && info.valueType === 'object') {
         const objectTypeId = info.shape?.libraryTypeId
         let assignable = false
@@ -3880,6 +3896,126 @@ class Checker {
             this.checkAssignableType(resolved.valueType, fieldValueType, info.loc, false, resolved.nullable)
           }
         }
+      }
+    }
+  }
+
+  compilerLibraryObjectFieldMatches(
+    argument: AnyNode,
+    fieldName: string,
+    booleanLiterals: boolean[]
+  ): boolean {
+    if (argument.type !== 'ObjectLiteral') {
+      return false
+    }
+
+    for (let index = 0; index < argument.properties.length; index = index + 1) {
+      const property = argument.properties[index]
+
+      if (property.key !== fieldName) {
+        continue
+      }
+
+      if (booleanLiterals.length === 0) {
+        return true
+      }
+
+      return property.value.type === 'BooleanLiteral' && booleanLiterals.includes(property.value.value)
+    }
+
+    return false
+  }
+
+  checkCompilerLibraryObjectLiteralFields(
+    argument: AnyNode,
+    check: LibraryArgumentCheckDescriptor,
+    operation: LibraryOperationDescriptor
+  ): void {
+    const fields = check.objectLiteralFields
+
+    if (fields === null || typeof fields === 'undefined') {
+      return
+    }
+
+    if (argument.type !== 'ObjectLiteral') {
+      this.report(
+        'INOX_NOT_IMPLEMENTED',
+        `library operation ${operation.operationId} currently requires an object literal argument`,
+        argument.loc
+      )
+      return
+    }
+
+    const seen: Set<string> = new Set()
+
+    for (let propertyIndex = 0; propertyIndex < argument.properties.length; propertyIndex = propertyIndex + 1) {
+      const property = argument.properties[propertyIndex]
+      let field: LibraryObjectLiteralFieldDescriptor | null = null
+
+      for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
+        if (fields[fieldIndex].name === property.key) {
+          field = fields[fieldIndex]
+          break
+        }
+      }
+
+      if (field === null) {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          `library operation ${operation.operationId} does not support option ${property.key}`,
+          property.loc
+        )
+        continue
+      }
+
+      seen.add(field.name)
+      const valueType = this.inferCheckedExpressionType(property.value)
+
+      if (!field.valueTypes.includes(valueType)) {
+        this.report(
+          'INOX_TYPE_MISMATCH',
+          `library operation ${operation.operationId} option ${field.name} does not accept ${valueType}`,
+          property.value.loc
+        )
+        continue
+      }
+
+      const booleanLiterals = field.booleanLiterals ?? []
+
+      if (
+        booleanLiterals.length > 0 &&
+        (property.value.type !== 'BooleanLiteral' || !booleanLiterals.includes(property.value.value))
+      ) {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          `library operation ${operation.operationId} option ${field.name} requires a supported boolean literal`,
+          property.value.loc
+        )
+      }
+
+      const stringLiterals = field.stringLiterals ?? []
+
+      if (
+        stringLiterals.length > 0 &&
+        (property.value.type !== 'StringLiteral' || !stringLiterals.includes(property.value.value))
+      ) {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          `library operation ${operation.operationId} option ${field.name} requires a supported string literal`,
+          property.value.loc
+        )
+      }
+    }
+
+    for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex = fieldIndex + 1) {
+      const field = fields[fieldIndex]
+
+      if (field.optional !== true && !seen.has(field.name)) {
+        this.report(
+          'INOX_TYPE_MISMATCH',
+          `library operation ${operation.operationId} requires option ${field.name}`,
+          argument.loc
+        )
       }
     }
   }
@@ -4076,12 +4212,25 @@ class Checker {
       expression.libraryCArgumentAdapters = cArgumentAdapters
     }
 
+    const cArgumentSources = variant?.cArgumentSources ?? operation.cArgumentSources
+
+    if (cArgumentSources !== null && typeof cArgumentSources !== 'undefined') {
+      expression.libraryCArgumentSources = cArgumentSources
+    }
+
     expression.libraryCResultMode = variant?.cResultMode ?? operation.cResultMode ?? null
     expression.libraryCReceiverAdapter = variant?.cReceiverAdapter ?? operation.cReceiverAdapter ?? null
 
     const resultShapeFields = variant?.resultShapeFields ?? operation.resultShapeFields
     const resultTypeId = variant?.resultTypeId ?? operation.resultTypeId
     const cppType = variant?.cppType ?? operation.cppType
+    const valueType = variant?.valueType ?? operation.valueType
+    const nativeResultType = resultTypeId === null || typeof resultTypeId === 'undefined'
+      ? null
+      : compilerLibraryNativeTypeForId(libraries, resultTypeId)
+    const resultCppType = valueType === 'promise' && nativeResultType !== null
+      ? nativeResultType.cppType
+      : cppType
 
     if (
       (resultShapeFields !== null && typeof resultShapeFields !== 'undefined') ||
@@ -4103,18 +4252,31 @@ class Checker {
         kind: 'object',
         fields: shapeFields,
         libraryTypeId: resultTypeId ?? null,
-        libraryCppType: cppType ?? null
+        libraryCppType: resultCppType ?? null
       }
       expression.libraryCResultShapeFields = cResultShapeFields
     }
     expression.libraryCppType = cppType ?? null
-    const valueType = variant?.valueType ?? operation.valueType
 
     if (valueType !== null && typeof valueType !== 'undefined') {
       expression.valueType = valueType
     }
 
     expression.arrayElementType = variant?.resultArrayElementType ?? operation.resultArrayElementType ?? null
+    const arrayElementTypeId = variant?.resultArrayElementTypeId ?? operation.resultArrayElementTypeId
+
+    if (arrayElementTypeId !== null && typeof arrayElementTypeId !== 'undefined') {
+      expression.arrayElementTypeId = arrayElementTypeId
+      const nativeArrayElementType = compilerLibraryNativeTypeForId(libraries, arrayElementTypeId)
+
+      if (nativeArrayElementType !== null && nativeArrayElementType.declarationNames.length > 0) {
+        expression.arrayElementDeclaredType = nativeArrayElementType.declarationNames[0]
+      }
+    }
+
+    expression.promiseValueType = variant?.promiseValueType ?? operation.promiseValueType ?? null
+    expression.promiseRejectionValueType =
+      variant?.promiseRejectionValueType ?? operation.promiseRejectionValueType ?? null
 
     expression.libraryOwned = (variant?.owned ?? operation.owned) === true
     expression.libraryConstantValue = operation.constantValue ?? null

@@ -416,6 +416,11 @@ export type PromiseChainLoweringDependencies = {
 
 export type PromiseLoweringDependencies = {
   emitCValueExpression(expression: AnyNode, context: PromiseFunctionContext): PreparedExpression
+  emitPreparedCompilerLibraryCallExpression(
+    expression: AnyNode,
+    context: PromiseFunctionContext,
+    options?: PreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedAsyncFunctionPromiseCallExpression(
     expression: AnyNode | null | undefined,
     context: PromiseFunctionContext,
@@ -752,6 +757,15 @@ export function emitPreparedPromiseExpression(
 ): PreparedExpression | null {
   if (expression === null || typeof expression === 'undefined') {
     return null
+  }
+
+  const libraryCall = dependencies.emitPreparedCompilerLibraryCallExpression(expression, context, options)
+
+  if (libraryCall !== null && expression.valueType === 'promise') {
+    return preparedPromiseWithValueType(
+      libraryCall,
+      resolvedPromiseExpressionValueType(expression, context, libraryCall.valueType)
+    )
   }
 
   const fetchCall = dependencies.emitPreparedFetchCallExpression(expression, context, options)

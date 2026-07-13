@@ -250,13 +250,17 @@ function compilerLibrarySetFingerprint(libraries: CompilerLibraryDescriptor[]): 
           sortedStrings(item.bindingAliases ?? []).join(',') + ':' +
           sortedStrings(item.runtimeRequirements).join(',') + ':' +
           (item.cExpression ?? '') + ':' + (item.cArgumentKinds ?? []).join(',') + ':' +
-          (item.cArgumentAdapters ?? []).join(',') + ':' + (item.cResultMode ?? '') + ':' +
+          (item.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(item.cArgumentSources) + ':' +
+          (item.cResultMode ?? '') + ':' +
           (item.cReceiverAdapter ?? '') + ':' +
           operationResultShapeFingerprint(item) + ':' + (item.resultArrayElementType ?? '') + ':' +
+          (item.resultArrayElementTypeId ?? '') + ':' +
           (item.receiverTypeId ?? '') + ':' +
           (item.resultTypeId ?? '') + ':' + (item.cCallStyle ?? '') + ':' + (item.cFailureMode ?? '') + ':' +
           (item.minArgs ?? '') + ':' + (item.maxArgs ?? '') + ':' + operationArgumentChecksFingerprint(item) + ':' +
-          (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' + (item.nullable === true ? 'nullable' : 'required') + ':' +
+          (item.cppType ?? '') + ':' + (item.valueType ?? '') + ':' +
+          (item.promiseValueType ?? '') + ':' + (item.promiseRejectionValueType ?? '') + ':' +
+          (item.nullable === true ? 'nullable' : 'required') + ':' +
           (item.owned === true ? 'owned' : 'borrowed') + ':' + (item.constantValue ?? '') + ':' +
           (item.diagnosticCode ?? '') + ':' + (item.diagnosticMessage ?? '') + ':' +
           operationVariantsFingerprint(item)
@@ -327,6 +331,7 @@ function operationArgumentChecksFingerprint(operation: LibraryOperationDescripto
         sortedStrings(check.arrayElementValueTypes ?? []).join(',') + ':' +
         sortedStrings(check.stringLiterals ?? []).join(',') + ':' +
         (check.literalDiagnosticCode ?? '') + ':' + (check.literalDiagnosticMessage ?? '')
+        + ':' + objectLiteralFieldsFingerprint(check.objectLiteralFields ?? [])
     )
   }
 
@@ -343,18 +348,63 @@ function operationVariantsFingerprint(operation: LibraryOperationDescriptor): st
       (variant.minArgs ?? '') + ':' + (variant.maxArgs ?? '') + ':' +
         (variant.argumentIndex ?? '') + ':' + sortedStrings(variant.stringLiterals ?? []).join(',') + ':' +
         sortedStrings(variant.argumentValueTypes ?? []).join(',') + ':' +
+        (variant.objectFieldName ?? '') + ':' + sortedBooleans(variant.booleanLiterals ?? []).join(',') + ':' +
         (variant.cExpression ?? '') + ':' + (variant.cArgumentKinds ?? []).join(',') + ':' +
-        (variant.cArgumentAdapters ?? []).join(',') + ':' + (variant.cResultMode ?? '') + ':' +
+        (variant.cArgumentAdapters ?? []).join(',') + ':' + operationArgumentSourcesFingerprint(variant.cArgumentSources) + ':' +
+        (variant.cResultMode ?? '') + ':' +
         (variant.cReceiverAdapter ?? '') + ':' +
         resultShapeFieldsFingerprint(variant.resultShapeFields ?? []) + ':' +
-        (variant.resultArrayElementType ?? '') + ':' + (variant.resultTypeId ?? '') + ':' +
+        (variant.resultArrayElementType ?? '') + ':' + (variant.resultArrayElementTypeId ?? '') + ':' +
+        (variant.resultTypeId ?? '') + ':' +
         (variant.cppType ?? '') + ':' + (variant.valueType ?? '') + ':' +
+        (variant.promiseValueType ?? '') + ':' + (variant.promiseRejectionValueType ?? '') + ':' +
         (variant.nullable === true ? 'nullable' : 'required') + ':' +
         (variant.owned === true ? 'owned' : 'borrowed')
     )
   }
 
   return rows.join(';')
+}
+
+function objectLiteralFieldsFingerprint(fields: { name: string; valueTypes: string[]; booleanLiterals?: boolean[]; stringLiterals?: string[]; optional?: boolean }[]): string {
+  const rows: string[] = []
+
+  for (let index = 0; index < fields.length; index = index + 1) {
+    const field = fields[index]
+    rows.push(
+      field.name + ':' + sortedStrings(field.valueTypes).join(',') + ':' +
+        sortedBooleans(field.booleanLiterals ?? []).join(',') + ':' +
+        sortedStrings(field.stringLiterals ?? []).join(',') + ':' +
+        (field.optional === true ? 'optional' : 'required')
+    )
+  }
+
+  rows.sort()
+  return rows.join(';')
+}
+
+function operationArgumentSourcesFingerprint(
+  sources: Array<{ argumentIndex: number; objectFieldName: string } | null> | null | undefined
+): string {
+  const rows: string[] = []
+
+  for (let index = 0; index < (sources ?? []).length; index = index + 1) {
+    const source = (sources ?? [])[index]
+    rows.push(source === null ? '' : `${source.argumentIndex}:${source.objectFieldName}`)
+  }
+
+  return rows.join(',')
+}
+
+function sortedBooleans(values: boolean[]): string[] {
+  const rows: string[] = []
+
+  for (let index = 0; index < values.length; index = index + 1) {
+    rows.push(values[index] ? 'true' : 'false')
+  }
+
+  rows.sort()
+  return rows
 }
 
 function runtimeBackendConstraintsFingerprint(requirement: RuntimeRequirementDescriptor): string {

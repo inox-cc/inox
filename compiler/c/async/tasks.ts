@@ -33,6 +33,7 @@ import type {
   CObjectShape,
   CObjectShapeField,
   CPreparedCallArgs,
+  CPreparedCallOptions,
   CPreparedStringBytesOperand,
   CPromiseChainWrapper,
   CPromiseConstructorHandler,
@@ -220,6 +221,11 @@ export type AsyncTaskLoweringDependencies = {
     context: AsyncTaskFunctionContext
   ): CPreparedCallArgs
   emitPreparedCallExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
+  emitPreparedCompilerLibraryCallExpression(
+    expression: AsyncTaskAstNode,
+    context: AsyncTaskFunctionContext,
+    options?: CPreparedCallOptions
+  ): PreparedExpression | null
   emitPreparedFetchInitOperand(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): PreparedExpression
   emitPreparedNodeStdlibAsyncTaskSourceExpression(
     expression: AsyncTaskAstNode,
@@ -241,6 +247,7 @@ export type AsyncTaskLoweringDependencies = {
   isIndexAccessExpression(expression: AsyncTaskAstNode): boolean
   isMemberAccessExpression(expression: AsyncTaskAstNode): boolean
   isAsyncNodeStdlibRuntimeCallExpression(expression: AsyncTaskAstNode | null | undefined): boolean
+  isCompilerLibraryPromiseExpression(expression: AsyncTaskAstNode | null | undefined): boolean
   isRuntimeProducedStringExpression(expression: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
   isThrowingFunctionCallee(callee: AsyncTaskAstNode, context: AsyncTaskFunctionContext): boolean
   pushVariableScope(context: AsyncTaskFunctionContext): AsyncTaskVariableScopeSnapshot
@@ -2470,6 +2477,10 @@ function isSupportedAsyncTaskDirectAwaitPromiseExpression(
     return true
   }
 
+  if (asyncTaskDeps(context).isCompilerLibraryPromiseExpression(expression)) {
+    return true
+  }
+
   if (asyncTaskDeps(context).isAsyncNodeStdlibRuntimeCallExpression(expression)) {
     return true
   }
@@ -3236,6 +3247,21 @@ function emitPreparedAsyncTaskPromiseSourceExpression(
 
   if (rejected !== null && typeof rejected !== 'undefined') {
     return rejected
+  }
+
+  const libraryCall = asyncTaskDeps(context).emitPreparedCompilerLibraryCallExpression(
+    expression,
+    context,
+    { owned: false }
+  )
+
+  if (libraryCall !== null && asyncTaskDeps(context).isCompilerLibraryPromiseExpression(expression)) {
+    const lines: string[] = []
+    appendAsyncTaskLines(lines, libraryCall.lines)
+    lines.push(`frame->awaited = ${libraryCall.expression}.release();`)
+    lines.push('status = frame->awaited != nullptr ? INOX_OK : INOX_ERR_TYPE;')
+    appendAsyncTaskLines(lines, emitAsyncTaskScheduleStatusCheck(wrapper, options, null))
+    return { lines }
   }
 
   const nodeStdlibCall = asyncTaskDeps(context).emitPreparedNodeStdlibAsyncTaskSourceExpression(expression, context)

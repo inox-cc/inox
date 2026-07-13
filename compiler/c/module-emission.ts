@@ -1619,6 +1619,10 @@ function collectCModuleValueDeclarations(plan: CModulePlan, context?: CEmitConte
 }
 
 function cModuleValueLibraryCppType(node: AnyNode): string | null {
+  if (node.valueType === 'promise' || node.init?.valueType === 'promise') {
+    return null
+  }
+
   const shape = node.shape ?? node.init?.shape
   const cppType = shape?.libraryCppType
 
@@ -2255,6 +2259,10 @@ function cModuleValueCType(valueType: string, context: CEmitContext): string {
     return 'inox_value'
   }
 
+  if (valueType === 'promise') {
+    return 'inox::Promise'
+  }
+
   return emitCType(valueType)
 }
 
@@ -2276,6 +2284,10 @@ function cModuleValueGlobalInitializer(valueType: string): string {
   }
 
   if (valueType === 'regexp') {
+    return ''
+  }
+
+  if (valueType === 'promise') {
     return ''
   }
 

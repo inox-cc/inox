@@ -130,6 +130,7 @@ import {
   compilerLibraryStringConstantValue,
   emitPreparedCompilerLibraryCallExpression as emitPreparedCompilerLibraryCallExpressionWithDependencies,
   emitPreparedCompilerLibraryExpression,
+  isCompilerLibraryPromiseExpression,
   isCompilerLibraryStringExpression,
   type CompilerLibraryLoweringDependencies
 } from './library-operations.ts'
@@ -175,6 +176,7 @@ import {
   emitPreparedFetchCallExpression,
   emitPreparedFetchHeadersCallExpression,
   emitPreparedFetchInitOperand,
+  isAsyncFetchRuntimeCallExpression,
   isConsoleLog
 } from '../../stdlib/global/compiler/c.ts'
 import type { JsonClassInstanceOperand, JsonDeclarationDependencies } from '../../stdlib/global/compiler/c.ts'
@@ -875,6 +877,7 @@ promiseLoweringDependencies = {
   emitCValueExpression,
   emitPreparedAsyncFunctionPromiseCallExpression,
   emitPreparedCallExpression,
+  emitPreparedCompilerLibraryCallExpression,
   emitPreparedFetchCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
     emitPreparedFetchCallExpression(expression, context, fetchLoweringDependencies, options),
   emitPreparedFsCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
@@ -960,7 +963,7 @@ function emitPreparedNodeRuntimeStringExpression(
 function emitPreparedCompilerLibraryCallExpression(
   expression: AnyNode,
   context: CFunctionContext,
-  options?: PreparedCallOptions
+  options?: PreparedCallOptions | null
 ): PreparedExpression | null {
   return emitPreparedCompilerLibraryCallExpressionWithDependencies(
     expression,
@@ -1011,6 +1014,17 @@ function runtimeCallbackArgumentInfoForNodeStdlibCall(expression: AnyNode): Runt
   return null
 }
 
+function isConfiguredExternalEventLoopCallExpression(
+  expression: AnyNode | null | undefined
+): boolean {
+  return (
+    isTimerStartCallExpression(expression) ||
+    isCompilerLibraryPromiseExpression(expression) ||
+    isAsyncNodeStdlibRuntimeCallExpression(expression) ||
+    isAsyncFetchRuntimeCallExpression(expression)
+  )
+}
+
 const callbackLoweringDependencies: CallbackLoweringDependencies = {
   collectTemplatePlaceholderExpressions,
   createFunctionContext,
@@ -1026,7 +1040,7 @@ const callbackLoweringDependencies: CallbackLoweringDependencies = {
   emitReturnValueDeclarations,
   emitRuntimeCallbackRuntimeValueReturnLines,
   emitStatementList,
-  isExternalEventLoopCallExpression: isTimerStartCallExpression,
+  isExternalEventLoopCallExpression: isConfiguredExternalEventLoopCallExpression,
   registerObjectShape,
   runtimeCallbackArgumentInfoForCall: runtimeCallbackArgumentInfoForNodeStdlibCall,
   shouldEmitCleanupLabel
@@ -1059,6 +1073,7 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitOwnedValueDeclarations,
   emitPreparedCallArgs,
   emitPreparedCallExpression,
+  emitPreparedCompilerLibraryCallExpression,
   emitPreparedFetchInitOperand: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedFetchInitOperand(expression, context, fetchLoweringDependencies),
   emitPreparedNodeStdlibAsyncTaskSourceExpression: (expression: AnyNode, context: CFunctionContext) =>
@@ -1073,6 +1088,7 @@ const asyncTaskLoweringDependencies: AsyncTaskLoweringDependencies = {
   emitStatementList,
   inferExpressionType,
   isAsyncNodeStdlibRuntimeCallExpression,
+  isCompilerLibraryPromiseExpression,
   isIndexAccessExpression,
   isMemberAccessExpression,
   isRuntimeProducedStringExpression,
@@ -3117,7 +3133,27 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
     return [`${name} = ${moduleValueDefaultExpression(inferred)};`]
   }
 
-  const libraryObject = emitPreparedCompilerLibraryCallExpression(statement.init, context)
+  const libraryObject = emitPreparedCompilerLibraryCallExpression(
+    statement.init,
+    context,
+    statement.init.valueType === 'promise' ? { owned: false } : null
+  )
+
+  if (libraryObject !== null && statement.init.valueType === 'promise') {
+    const lines: string[] = []
+    pushAll(lines, libraryObject.lines)
+    lines.push(`${name} = ${libraryObject.expression};`)
+    lines.push(emitRuntimeTypeCheck(`!${name}.valid()`, context))
+    registerEventLoop(context)
+    context.variables.set(statement.name, 'promise')
+    context.moduleValueTypes.set(statement.name, 'promise')
+    context.promiseValueTypes.set(statement.name, libraryObject.valueType ?? 'unknown')
+    context.promiseRejectionValueTypes.set(
+      statement.name,
+      libraryObject.rejectionValueType ?? 'unknown'
+    )
+    return lines
+  }
 
   if (
     libraryObject !== null &&
@@ -8236,6 +8272,29 @@ function resolveAwaitResultCppValueInfo(
   if (valueType === 'string') {
     return {
       cppType: 'inox::String',
+      runtimeTypeChecked: true,
+      valueCheck: ''
+    }
+  }
+
+  const shape = expression.shape ?? expression.argument?.shape
+  const libraryCppType = shape?.libraryCppType
+
+  if (
+    libraryCppType !== null &&
+    typeof libraryCppType !== 'undefined' &&
+    libraryCppType !== 'inox::Promise'
+  ) {
+    return {
+      cppType: libraryCppType,
+      runtimeTypeChecked: true,
+      valueCheck: ''
+    }
+  }
+
+  if (valueType === 'array') {
+    return {
+      cppType: 'ArrayClass',
       runtimeTypeChecked: true,
       valueCheck: ''
     }

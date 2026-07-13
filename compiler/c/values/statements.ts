@@ -4080,6 +4080,11 @@ export function emitVariableDeclarationStatement(statement: StatementNode, conte
     preparedCallOut(statement.name)
   )
 
+  if (libraryObject !== null && statement.init.valueType === 'promise') {
+    registerPromiseVariableMetadata(statement, libraryObject, context)
+    return libraryObject.lines
+  }
+
   if (libraryObject !== null && libraryObject.valueType === 'object') {
     return libraryObject.lines
   }

@@ -190,6 +190,13 @@ function inferPromiseRejectionValueType(
   localErrorObjectNames: RejectionNameSet,
   deps: RejectionValueTypeDependencies
 ): string {
+  if (
+    expression.promiseRejectionValueType !== null &&
+    typeof expression.promiseRejectionValueType !== 'undefined'
+  ) {
+    return expression.promiseRejectionValueType
+  }
+
   if (expression.type === 'CallExpression' && deps.cPromiseRuntimeCallName(expression.callee) === 'reject') {
     return inferRejectedValueTypeWithErrors(expression.args[0], context, localErrorObjectNames, deps)
   }

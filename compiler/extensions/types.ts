@@ -52,6 +52,12 @@ export type LibraryCArgumentKind =
   | 'variadic-count'
   | 'result-shape'
   | 'string-view-or-value'
+  | 'object-boolean-field'
+
+export type LibraryCArgumentSourceDescriptor = {
+  argumentIndex: number
+  objectFieldName: string
+}
 
 export type LibraryCResultMode = 'value' | 'borrowed'
 
@@ -88,6 +94,15 @@ export type LibraryArgumentCheckDescriptor = {
   stringLiterals?: string[]
   literalDiagnosticCode?: string | null
   literalDiagnosticMessage?: string | null
+  objectLiteralFields?: LibraryObjectLiteralFieldDescriptor[]
+}
+
+export type LibraryObjectLiteralFieldDescriptor = {
+  name: string
+  valueTypes: string[]
+  booleanLiterals?: boolean[]
+  stringLiterals?: string[]
+  optional?: boolean
 }
 
 export type LibraryOperationVariantDescriptor = {
@@ -96,16 +111,22 @@ export type LibraryOperationVariantDescriptor = {
   argumentIndex?: number | null
   argumentValueTypes?: string[]
   stringLiterals?: string[]
+  objectFieldName?: string | null
+  booleanLiterals?: boolean[]
   cExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
+  resultArrayElementTypeId?: LibraryNativeTypeId | null
   resultTypeId?: LibraryObjectTypeId | null
   cppType?: string | null
   valueType?: string | null
+  promiseValueType?: string | null
+  promiseRejectionValueType?: string | null
   nullable?: boolean
   owned?: boolean
 }
@@ -120,10 +141,12 @@ export type LibraryOperationDescriptor = {
   cExpression?: string | null
   cArgumentKinds?: LibraryCArgumentKind[]
   cArgumentAdapters?: string[]
+  cArgumentSources?: Array<LibraryCArgumentSourceDescriptor | null>
   cReceiverAdapter?: string | null
   cResultMode?: LibraryCResultMode | null
   resultShapeFields?: LibraryResultShapeFieldDescriptor[]
   resultArrayElementType?: string | null
+  resultArrayElementTypeId?: LibraryNativeTypeId | null
   receiverTypeId?: LibraryObjectTypeId | null
   resultTypeId?: LibraryObjectTypeId | null
   cCallStyle?: 'function' | 'member' | 'index' | 'index-assignment' | 'member-assignment' | null
@@ -134,6 +157,8 @@ export type LibraryOperationDescriptor = {
   variants?: LibraryOperationVariantDescriptor[]
   cppType?: string | null
   valueType?: string | null
+  promiseValueType?: string | null
+  promiseRejectionValueType?: string | null
   nullable?: boolean
   owned?: boolean
   constantValue?: string | null
