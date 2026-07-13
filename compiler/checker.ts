@@ -3801,6 +3801,7 @@ class Checker {
 
       if (
         stringLiterals.length > 0 &&
+        info.valueType === 'string' &&
         (argument.type !== 'StringLiteral' || !stringLiterals.includes(argument.value))
       ) {
         this.report(
@@ -3934,6 +3935,10 @@ class Checker {
     const fields = check.objectLiteralFields
 
     if (fields === null || typeof fields === 'undefined') {
+      return
+    }
+
+    if (this.inferCheckedExpressionType(argument) !== 'object') {
       return
     }
 
