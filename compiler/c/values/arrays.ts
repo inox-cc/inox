@@ -1,6 +1,6 @@
 import { arrayRuntimeMethodName } from '../../../stdlib/global/compiler/descriptor.ts'
 import { memberExpressionPath } from '../../member-paths.ts'
-import type { AnyNode } from '../../types.ts'
+import type { AnyNode, ArrayBindingElement } from '../../types.ts'
 import type { CFunctionContext } from '../context.ts'
 import {
   cloneCArrayShapeMap,
@@ -147,7 +147,7 @@ function isSupportedRuntimeArrayElementType(valueType: string): boolean {
 }
 
 function isSupportedArrayMapElementType(valueType: string): boolean {
-  return isSupportedRuntimeArrayElementType(valueType) || valueType === 'object'
+  return isSupportedRuntimeArrayElementType(valueType) || valueType === 'object' || valueType === 'array'
 }
 
 function appendLines(out: string[], lines: string[]): void {
@@ -3200,6 +3200,12 @@ function emitPreparedArrayCallbackInput(
     } else if (receiver.elementType === 'object') {
       lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(value), context))
       lines.push(`auto ${valueParam.name} = ${value};`)
+    } else if (receiver.elementType === 'array') {
+      const nestedElementType = valueParam.arrayElementType ?? 'unknown'
+
+      context.runtimeArrayElementTypes.set(valueParam.name, nestedElementType)
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_ARRAY || ${value}.as.ref == 0`, context))
+      lines.push(`auto ${valueParam.name} = ${value};`)
     } else if (receiver.elementType === 'boolean') {
       lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
       lines.push(`double ${valueParam.name} = (double)(${value}.as.boolean != 0);`)
@@ -3207,11 +3213,55 @@ function emitPreparedArrayCallbackInput(
       lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
       lines.push(`double ${valueParam.name} = ${value}.as.number;`)
     }
+
+    appendLines(lines, emitPreparedArrayBindingElements(valueParam, context))
   }
 
   if (indexParam !== null && typeof indexParam !== 'undefined') {
     context.variables.set(indexParam.name, 'number')
     lines.push(`double ${indexParam.name} = (double)${index};`)
+  }
+
+  return lines
+}
+
+function emitPreparedArrayBindingElements(
+  param: ArrayNode,
+  context: ArrayFunctionContext
+): string[] {
+  const bindingElements: ArrayBindingElement[] = param.bindingElements ?? []
+  const lines: string[] = []
+
+  for (let index = 0; index < bindingElements.length; index = index + 1) {
+    const binding = bindingElements[index]
+    const value = nextCName(context, 'inox_array_binding')
+    const name = emitCIdentifier(binding.name)
+    const valueType = binding.valueType ?? 'unknown'
+
+    lines.push(`auto ${value} = ArrayClass(${emitCIdentifier(param.name)}).get(${binding.index});`)
+    lines.push(emitArrayThrownCheck(context))
+    context.variables.set(binding.name, valueType)
+
+    if (valueType === 'string') {
+      context.runtimeStrings.add(binding.name)
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_STRING || ${value}.as.ref == 0`, context))
+      lines.push(`inox_string* ${name} = (inox_string*)${value}.as.ref;`)
+    } else if (valueType === 'number') {
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_NUMBER`, context))
+      lines.push(`double ${name} = ${value}.as.number;`)
+    } else if (valueType === 'boolean') {
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_BOOL`, context))
+      lines.push(`double ${name} = (double)(${value}.as.boolean != 0);`)
+    } else if (valueType === 'array') {
+      context.runtimeArrayElementTypes.set(binding.name, binding.arrayElementType ?? 'unknown')
+      lines.push(emitRuntimeTypeCheck(`${value}.tag != INOX_TAG_ARRAY || ${value}.as.ref == 0`, context))
+      lines.push(`auto ${name} = ${value};`)
+    } else if (valueType === 'object') {
+      lines.push(emitRuntimeTypeCheck(runtimeObjectLikeValueMismatchCondition(value), context))
+      lines.push(`auto ${name} = ${value};`)
+    } else {
+      lines.push(`auto ${name} = ${value};`)
+    }
   }
 
   return lines

@@ -3,7 +3,6 @@ compiler/c/diagnostics.ts -> ../../stdlib/global/compiler/descriptor.ts
 compiler/c/index.ts -> ../../stdlib/global/compiler/c.ts
 compiler/c/index.ts -> ../../stdlib/global/compiler/descriptor.ts
 compiler/c/index.ts -> ../../stdlib/global/compiler/feature.ts
-compiler/c/index.ts -> ../stdlib/node/c.ts
 compiler/c/module-emission.ts -> ../../stdlib/global/compiler/descriptor.ts
 compiler/c/runtime-imports.ts -> ../stdlib/node/modules.ts
 compiler/c/runtime-methods.ts -> ../../stdlib/global/compiler/descriptor.ts
@@ -19,11 +18,9 @@ compiler/c/values/expressions.ts -> ../../../stdlib/global/compiler/feature.ts
 compiler/c/values/statements.ts -> ../../../stdlib/global/compiler/feature.ts
 compiler/c/values/strings.ts -> ../../../stdlib/global/compiler/descriptor.ts
 compiler/capabilities.ts -> ../stdlib/global/compiler/descriptor.ts
-compiler/capabilities.ts -> ./stdlib/node/descriptor.ts
 compiler/checker.ts -> ../stdlib/global/compiler/checker.ts
 compiler/checker.ts -> ../stdlib/global/compiler/descriptor.ts
 compiler/checker.ts -> ./stdlib/node/builtins.ts
-compiler/checker.ts -> ./stdlib/node/checker.ts
 compiler/checker.ts -> ./stdlib/node/modules.ts
 compiler/checker.ts -> ./stdlib/node/runtime-imports.ts
 compiler/checker/builtins.ts -> ../../stdlib/global/compiler/descriptor.ts
@@ -33,7 +30,6 @@ compiler/checker/fetch-calls.ts -> ../../stdlib/global/compiler/checker.ts
 compiler/checker/global-calls.ts -> ../../stdlib/global/compiler/checker.ts
 compiler/checker/global-calls.ts -> ../../stdlib/global/compiler/descriptor.ts
 compiler/checker/primitive-calls.ts -> ../../stdlib/global/compiler/descriptor.ts
-compiler/checker/timer-calls.ts -> ../stdlib/node/checker.ts
 compiler/features/index.ts -> ../../stdlib/global/compiler/feature.ts
 compiler/features/index.ts -> ../stdlib/node/feature.ts
 compiler/modules/graph.ts -> ../stdlib/declarations.ts
@@ -41,9 +37,4 @@ compiler/modules/graph.ts -> ../stdlib/node/modules.ts
 compiler/runtime-builtins.ts -> ./stdlib/node/modules.ts
 compiler/stdlib/declarations.ts -> ./node/modules.ts
 compiler/stdlib/node/builtins.ts -> ./modules.ts
-compiler/stdlib/node/c.ts -> ../../../stdlib/node/timers/compiler/c.ts
-compiler/stdlib/node/checker.ts -> ../../../stdlib/node/timers/compiler/checker.ts
-compiler/stdlib/node/checker.ts -> ../../../stdlib/node/timers/compiler/descriptor.ts
-compiler/stdlib/node/descriptor.ts -> ../../../stdlib/node/timers/compiler/descriptor.ts
-compiler/stdlib/node/feature.ts -> ../../../stdlib/node/timers/compiler/feature.ts
 compiler/stdlib/node/modules.ts -> ./descriptor.ts

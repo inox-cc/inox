@@ -44,12 +44,6 @@ function isSupportedCGlobalUsage(usage: IrGlobalUsage): boolean {
     path === 'Object.keys' ||
     path === 'Object.values' ||
     !!jsonRuntimeMethodNameFromPath(usage.path) ||
-    path === 'clearImmediate' ||
-    path === 'clearInterval' ||
-    path === 'clearTimeout' ||
-    path === 'setImmediate' ||
-    path === 'setInterval' ||
-    path === 'setTimeout' ||
     isCollectionConstructorGlobalUsagePath(usage.path) ||
     isSupportedCFetchGlobalUsage(usage) ||
     isSupportedCDebugGlobalUsage(usage) ||

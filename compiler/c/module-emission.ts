@@ -446,7 +446,6 @@ export function emitCModuleSource(
       prelude.needsObjectRuntime,
       prelude.needsJsonRuntime,
       prelude.needsRegexpRuntime,
-      prelude.needsTimerRuntime,
       prelude.needsConsoleRuntime,
       prelude.needsFetchRuntime,
       prelude.libraryCPreludeIncludes,
@@ -1654,8 +1653,7 @@ function shouldEmitCModuleStaticValueDeclaration(
 function isCModuleEntryLocalValueType(valueType: string): boolean {
   return (
     valueType !== 'function' &&
-    valueType !== 'promise' &&
-    valueType !== 'timer'
+    valueType !== 'promise'
   )
 }
 

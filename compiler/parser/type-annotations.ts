@@ -183,6 +183,10 @@ function isStatementBoundaryToken(token: Token): boolean {
     return true
   }
 
+  if (token.value === 'if') {
+    return true
+  }
+
   if (token.value === 'import') {
     return true
   }

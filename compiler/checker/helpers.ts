@@ -213,8 +213,7 @@ export function isConditionValueType(valueType: ValueType): boolean {
     valueType === 'map' ||
     valueType === 'set' ||
     valueType === 'promise' ||
-    valueType === 'function' ||
-    valueType === 'timer'
+    valueType === 'function'
   )
 }
 

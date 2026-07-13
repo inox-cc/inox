@@ -57,7 +57,6 @@ export function isOpaqueRuntimeValueType(valueType: CValueTypeInput): boolean {
     valueType !== 'promise' &&
     valueType !== 'regexp' &&
     valueType !== 'date' &&
-    valueType !== 'timer' &&
     valueType !== 'optional' &&
     valueType !== 'js-global'
   )
@@ -98,10 +97,6 @@ export function emitCType(valueType: CValueTypeInput): string {
 
   if (valueType === 'date') {
     return 'double'
-  }
-
-  if (valueType === 'timer') {
-    return 'inox_timer_handle*'
   }
 
   return 'double'

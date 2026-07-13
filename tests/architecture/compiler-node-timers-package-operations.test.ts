@@ -1,0 +1,195 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+
+import type {
+  LibraryArgumentCheckDescriptor,
+  LibraryOperationDescriptor
+} from '../../compiler/extensions/types.ts'
+import { discoverCompilerLibraries } from '../../scripts/lib/compiler-library-discovery.ts'
+
+type StartOperation = {
+  name: string
+  typeId: string
+  cppType: string
+  argumentKinds: string[]
+  minArgs: number
+  maxArgs: number
+}
+
+const startOperations: StartOperation[] = [
+  {
+    name: 'setImmediate',
+    typeId: 'node:timers#ImmediateHandle',
+    cppType: 'ImmediateHandle',
+    argumentKinds: ['runtime-callback'],
+    minArgs: 1,
+    maxArgs: 1
+  },
+  {
+    name: 'setInterval',
+    typeId: 'node:timers#IntervalHandle',
+    cppType: 'IntervalHandle',
+    argumentKinds: ['runtime-callback', 'number'],
+    minArgs: 2,
+    maxArgs: 2
+  },
+  {
+    name: 'setTimeout',
+    typeId: 'node:timers#TimeoutHandle',
+    cppType: 'TimeoutHandle',
+    argumentKinds: ['runtime-callback', 'number'],
+    minArgs: 2,
+    maxArgs: 2
+  }
+]
+
+const clearOperations = [
+  {
+    name: 'clearImmediate',
+    typeId: 'node:timers#ImmediateHandle',
+    cppType: 'ImmediateHandle'
+  },
+  {
+    name: 'clearInterval',
+    typeId: 'node:timers#IntervalHandle',
+    cppType: 'IntervalHandle'
+  },
+  {
+    name: 'clearTimeout',
+    typeId: 'node:timers#TimeoutHandle',
+    cppType: 'TimeoutHandle'
+  }
+]
+
+test('node:timers объявляет global, named, default и handle operations через package descriptor', async () => {
+  const discovered = await discoverCompilerLibraries()
+  const timersPackage = discovered.find((library) => library.id === 'node:timers')
+
+  assert.ok(timersPackage?.compilerPackage)
+
+  const operations = timersPackage.compilerPackage.operations
+  const expectedOperationIds: string[] = []
+
+  for (const item of startOperations) {
+    expectedOperationIds.push(`node:timers#${item.name}`)
+  }
+
+  for (const item of clearOperations) {
+    expectedOperationIds.push(`node:timers#${item.name}`)
+  }
+
+  for (const typeId of [
+    'node:timers#ImmediateHandle',
+    'node:timers#IntervalHandle',
+    'node:timers#TimeoutHandle'
+  ]) {
+    expectedOperationIds.push(`${typeId}.ref`)
+    expectedOperationIds.push(`${typeId}.unref`)
+  }
+
+  assert.deepEqual(
+    operations.map((item) => item.operationId).sort(),
+    expectedOperationIds.sort()
+  )
+
+  for (const item of startOperations) {
+    const descriptor = operation(operations, `node:timers#${item.name}`)
+
+    assertModuleBindings(descriptor, item.name)
+    assert.equal(descriptor.kind, 'call')
+    assert.deepEqual(descriptor.runtimeRequirements, ['node:timers'])
+    assert.equal(descriptor.cExpression, `timers.${item.name}`)
+    assert.deepEqual(descriptor.cArgumentKinds, item.argumentKinds)
+    assert.equal(descriptor.callbackLifetime, 'event-loop')
+    assert.equal(descriptor.cFailureMode, 'thrown')
+    assert.equal(descriptor.minArgs, item.minArgs)
+    assert.equal(descriptor.maxArgs, item.maxArgs)
+    assert.equal(descriptor.resultTypeId, item.typeId)
+    assert.equal(descriptor.cppType, item.cppType)
+    assert.equal(descriptor.valueType, 'object')
+    assert.equal(descriptor.nullable, false)
+
+    const callback = argumentCheck(descriptor, 0)
+
+    assert.deepEqual(callback.valueTypes, ['function'])
+    assert.deepEqual(callback.functionParameters, [])
+    assert.equal(callback.functionReturnType, 'void')
+
+    if (item.argumentKinds.includes('number')) {
+      assert.deepEqual(argumentCheck(descriptor, 1).valueTypes, ['number'])
+    }
+  }
+
+  for (const item of clearOperations) {
+    const descriptor = operation(operations, `node:timers#${item.name}`)
+
+    assertModuleBindings(descriptor, item.name)
+    assert.equal(descriptor.kind, 'call')
+    assert.deepEqual(descriptor.runtimeRequirements, ['node:timers'])
+    assert.equal(descriptor.cExpression, `timers.${item.name}`)
+    assert.deepEqual(descriptor.cArgumentKinds, ['value'])
+    assert.deepEqual(descriptor.cArgumentAdapters, [
+      `${item.cppType}(inox::Value($value))`
+    ])
+    assert.equal(descriptor.minArgs, 1)
+    assert.equal(descriptor.maxArgs, 1)
+    assert.deepEqual(argumentCheck(descriptor, 0), {
+      valueTypes: ['object'],
+      objectTypeIds: [item.typeId]
+    })
+    assert.equal(descriptor.cppType, 'void')
+    assert.equal(descriptor.valueType, 'void')
+  }
+
+  for (const typeId of [
+    'node:timers#ImmediateHandle',
+    'node:timers#IntervalHandle',
+    'node:timers#TimeoutHandle'
+  ]) {
+    for (const method of ['ref', 'unref']) {
+      const descriptor = operation(operations, `${typeId}.${method}`)
+
+      assert.equal(descriptor.bindingId, `${typeId}.${method}`)
+      assert.equal(descriptor.kind, 'call')
+      assert.equal(descriptor.receiverTypeId, typeId)
+      assert.deepEqual(descriptor.runtimeRequirements, [])
+      assert.equal(descriptor.cExpression, null)
+      assert.equal(descriptor.diagnosticCode, 'INOX_TIMER_REF_UNREF')
+      assert.equal(
+        descriptor.diagnosticMessage,
+        'timer handle ref() and unref() are not supported in the MVP; timer handles are referenced by default'
+      )
+    }
+  }
+})
+
+function operation(
+  operations: LibraryOperationDescriptor[],
+  operationId: string
+): LibraryOperationDescriptor {
+  const result = operations.find((item) => item.operationId === operationId)
+
+  assert.ok(result, `missing operation ${operationId}`)
+  return result
+}
+
+function argumentCheck(
+  operationDescriptor: LibraryOperationDescriptor,
+  index: number
+): LibraryArgumentCheckDescriptor {
+  const check = operationDescriptor.argumentChecks?.[index]
+
+  assert.ok(check, `missing argument check ${index} for ${operationDescriptor.operationId}`)
+  return check
+}
+
+function assertModuleBindings(
+  operationDescriptor: LibraryOperationDescriptor,
+  name: string
+): void {
+  assert.equal(operationDescriptor.bindingId, `node:timers#module:node:timers:${name}`)
+  assert.deepEqual(operationDescriptor.bindingAliases, [
+    `node:timers#module:node:timers:default.${name}`,
+    `global:${name}`
+  ])
+}

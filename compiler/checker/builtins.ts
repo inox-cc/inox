@@ -252,54 +252,6 @@ export const globals: Map<string, SymbolInfo> = new Map([
     }
   ],
   [
-    'setTimeout',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'function'
-    }
-  ],
-  [
-    'clearTimeout',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'function'
-    }
-  ],
-  [
-    'setInterval',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'function'
-    }
-  ],
-  [
-    'clearInterval',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'function'
-    }
-  ],
-  [
-    'setImmediate',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'function'
-    }
-  ],
-  [
-    'clearImmediate',
-    {
-      kind: 'global',
-      mutable: false,
-      valueType: 'function'
-    }
-  ],
-  [
     'JSON',
     {
       kind: 'global',
@@ -363,15 +315,7 @@ export const globals: Map<string, SymbolInfo> = new Map([
 ])
 
 export function builtinGlobalSymbol(name: string): SymbolInfo | null {
-  if (
-    name === 'fetch' ||
-    name === 'setTimeout' ||
-    name === 'clearTimeout' ||
-    name === 'setInterval' ||
-    name === 'clearInterval' ||
-    name === 'setImmediate' ||
-    name === 'clearImmediate'
-  ) {
+  if (name === 'fetch') {
     return {
       kind: 'global',
       mutable: false,

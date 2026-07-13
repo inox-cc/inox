@@ -446,10 +446,7 @@ function cBooleanLiteral(value: boolean): string {
 }
 
 function isRawPointerType(valueType: string): boolean {
-  return (
-    valueType === 'function' ||
-    valueType === 'timer'
-  )
+  return valueType === 'function'
 }
 
 function typeofRuntimeValueTagCheck(value: string, typeName: string): string | null {
@@ -1691,7 +1688,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||
     value === 'StringCContext' ||
-    value === 'TimerFunctionContext' ||
     value === 'AsyncTaskEmitContext' ||
     value === 'AsyncTaskFunctionContext' ||
     value === 'AsyncTaskPlannerContext'
@@ -1939,11 +1935,6 @@ export type CCallExpressionDependencies = {
     context: CFunctionContext,
     tempPrefix: string
   ): PreparedExpression
-  emitPreparedTimerCallExpression(
-    expression: CValueNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
   emitRuntimeCallbackCall(
     expression: CValueNode,
     callbackType: CFunctionType,
@@ -2067,14 +2058,6 @@ export function emitPreparedCallExpression(
 
   if (jsonCall !== null && typeof jsonCall !== 'undefined') {
     return jsonCall
-  }
-
-  const timerCall = deps.emitPreparedTimerCallExpression(expression, context, {
-    asValue: true
-  })
-
-  if (timerCall !== null && typeof timerCall !== 'undefined') {
-    return timerCall
   }
 
   const promise = deps.emitPreparedPromiseStaticExpression(expression, context)
@@ -2647,17 +2630,6 @@ export function emitCExpression(
       diagnostic(
         'INOX_C_FUNCTION_VALUE',
         'function values are not supported by the current C backend slice',
-        expressionLocation(expression)
-      )
-    )
-    return '0'
-  }
-
-  if (valueType === 'timer') {
-    context.diagnostics.push(
-      diagnostic(
-        'INOX_C_TIMER_HANDLE',
-        'timer handles can only be stored or passed to clear timer functions in the current C backend slice',
         expressionLocation(expression)
       )
     )

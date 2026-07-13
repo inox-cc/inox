@@ -1,4 +1,4 @@
-import type { AnyNode } from '../types.ts'
+import type { AnyNode, ArrayBindingElement } from '../types.ts'
 import type { LowerExpressionContext } from './expressions.ts'
 import { lowerExpression } from './expressions.ts'
 import type { LowerContext, LowerResolvedType } from './type-resolution.ts'
@@ -99,11 +99,29 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
 
   if (statement.type === 'ForOfStatement') {
     const variableState = pushLowerVariable(context, statement.name, forOfLowerVariable(statement))
+    const bindingStates: Array<{ name: string; state: LowerVariableScopeState }> = []
+    const bindingDeclarations: LowerNode[] = []
     let body = statement.body
 
     try {
+      const bindingElements: ArrayBindingElement[] = statement.bindingElements ?? []
+
+      for (const binding of bindingElements) {
+        const bindingVariable = forOfBindingLowerVariable(binding)
+        const state = pushLowerVariable(context, binding.name, bindingVariable)
+
+        bindingStates.push({ name: binding.name, state })
+        bindingDeclarations.push(forOfBindingDeclaration(statement, binding, bindingVariable))
+      }
+
       body = lowerStatementBody(statement.body, context)
+      body = prependForOfBindingDeclarations(body, bindingDeclarations)
     } finally {
+      for (let index = bindingStates.length - 1; index >= 0; index = index - 1) {
+        const binding = bindingStates[index]
+        restoreLowerVariable(context, binding.name, binding.state)
+      }
+
       restoreLowerVariable(context, statement.name, variableState)
     }
 
@@ -125,6 +143,7 @@ function lowerStatementInternal(statement: LowerNode, context: LowerContext): Lo
         setElementType: nullableString(statement.setElementType),
         functionType: nullableNode(statement.functionType),
         shape: nullableNode(statement.shape),
+        bindingElements: lowerForOfBindingElements(statement.bindingElements),
         loc: statement.loc,
         nameLoc: statement.nameLoc,
         iterable: lowerStatementExpression(statement.iterable, context),
@@ -475,6 +494,132 @@ function forOfLowerVariable(statement: LowerNode): LowerNode {
     functionType: nullableNode(statement.functionType),
     shape: nullableNode(statement.shape)
   }
+}
+
+function forOfBindingLowerVariable(binding: ArrayBindingElement): LowerNode {
+  return {
+    valueType: fallbackString(binding.valueType, 'unknown'),
+    nullable: binding.nullable === true,
+    arrayElementType: nullableString(binding.arrayElementType),
+    arrayElementDeclaredType: nullableString(binding.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(binding.arrayElementFunctionType),
+    mapKeyType: nullableString(binding.mapKeyType),
+    mapValueType: nullableString(binding.mapValueType),
+    promiseValueType: nullableString(binding.promiseValueType),
+    setElementType: nullableString(binding.setElementType),
+    functionType: nullableNode(binding.functionType),
+    shape: nullableNode(binding.shape)
+  }
+}
+
+function forOfBindingDeclaration(
+  statement: LowerNode,
+  binding: ArrayBindingElement,
+  variable: LowerNode
+): LowerNode {
+  const valueType = fallbackString(variable.valueType, 'unknown')
+
+  return {
+    type: 'VariableDeclaration',
+    kind: statement.kind,
+    exported: false,
+    name: binding.name,
+    loc: binding.loc,
+    declaredType: null,
+    valueType,
+    nullable: variable.nullable === true,
+    arrayElementType: nullableString(variable.arrayElementType),
+    arrayElementDeclaredType: nullableString(variable.arrayElementDeclaredType),
+    arrayElementFunctionType: nullableNode(variable.arrayElementFunctionType),
+    mapKeyType: nullableString(variable.mapKeyType),
+    mapValueType: nullableString(variable.mapValueType),
+    promiseValueType: nullableString(variable.promiseValueType),
+    setElementType: nullableString(variable.setElementType),
+    functionType: nullableNode(variable.functionType),
+    shape: nullableNode(variable.shape),
+    init: {
+      type: 'IndexExpression',
+      object: {
+        type: 'Reference',
+        path: [statement.name],
+        loc: statement.nameLoc,
+        valueType: 'array',
+        arrayElementType: nullableString(statement.arrayElementType),
+        arrayElementDeclaredType: nullableString(statement.arrayElementDeclaredType)
+      },
+      index: {
+        type: 'NumberLiteral',
+        value: `${binding.index}`,
+        loc: binding.loc,
+        valueType: 'number'
+      },
+      loc: binding.loc,
+      valueType
+    }
+  }
+}
+
+function prependForOfBindingDeclarations(body: LowerNode, declarations: LowerNode[]): LowerNode {
+  if (declarations.length === 0) {
+    return body
+  }
+
+  const statements: LowerNode[] = []
+
+  for (const declaration of declarations) {
+    statements.push(declaration)
+  }
+
+  if (body.type === 'BlockStatement') {
+    for (const statement of body.body) {
+      statements.push(statement)
+    }
+
+    return {
+      type: 'BlockStatement',
+      body: statements,
+      loc: body.loc
+    }
+  }
+
+  statements.push(body)
+
+  return {
+    type: 'BlockStatement',
+    body: statements,
+    loc: body.loc
+  }
+}
+
+function lowerForOfBindingElements(
+  elements: ArrayBindingElement[] | null | undefined
+): ArrayBindingElement[] | null {
+  if (elements === null || typeof elements === 'undefined') {
+    return null
+  }
+
+  const lowered: ArrayBindingElement[] = []
+
+  for (const element of elements) {
+    lowered.push({
+      name: element.name,
+      index: element.index,
+      loc: element.loc,
+      valueType: fallbackString(element.valueType, 'unknown'),
+      nullable: element.nullable === true,
+      arrayElementType: nullableString(element.arrayElementType),
+      arrayElementDeclaredType: nullableString(element.arrayElementDeclaredType),
+      arrayElementFunctionType: nullableNode(element.arrayElementFunctionType),
+      mapKeyType: nullableString(element.mapKeyType),
+      mapValueType: nullableString(element.mapValueType),
+      promiseValueType: nullableString(element.promiseValueType),
+      setElementType: nullableString(element.setElementType),
+      functionType: nullableNode(element.functionType),
+      shape: nullableNode(element.shape)
+    })
+  }
+
+  return lowered
 }
 
 function appendLoweredStatement(out: LowerNode[], statements: LoweredStatement): void {
@@ -2639,10 +2784,13 @@ function createCallbackReplacements(
   const replacements: Replacement[] = []
 
   if (valueParam !== null && typeof valueParam !== 'undefined') {
+    const valueReference = createReference(valueName, paramElementInfo(valueParam), valueParam.loc)
+
     replacements.push({
       name: valueParam.name,
-      replacement: createReference(valueName, paramElementInfo(valueParam), valueParam.loc)
+      replacement: valueReference
     })
+    appendArrayBindingReplacements(replacements, valueParam, valueReference)
   }
 
   if (indexParam !== null && typeof indexParam !== 'undefined') {
@@ -2653,6 +2801,33 @@ function createCallbackReplacements(
   }
 
   return replacements
+}
+
+function appendArrayBindingReplacements(
+  replacements: Replacement[],
+  valueParam: LowerNode,
+  valueReference: LowerNode
+): void {
+  const bindingElements: ArrayBindingElement[] = valueParam.bindingElements ?? []
+
+  for (let index = 0; index < bindingElements.length; index = index + 1) {
+    const binding = bindingElements[index]
+
+    replacements.push({
+      name: binding.name,
+      replacement: createArrayIndexExpression(
+        valueReference,
+        {
+          type: 'NumberLiteral',
+          value: `${binding.index}`,
+          valueType: 'number',
+          loc: binding.loc
+        },
+        paramElementInfo(binding),
+        binding.loc
+      )
+    })
+  }
 }
 
 function paramElementInfo(param: LowerNode): ArrayElementInfo {

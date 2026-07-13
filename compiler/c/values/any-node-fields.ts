@@ -40,7 +40,6 @@ export const compilerAnyNodeStringFields: readonly string[] = [
   'objectRuntimeMethod',
   'stringRuntimeMethod',
   'timeRuntimeMethod',
-  'timerRuntimeMethod',
   'numericCast',
   'returnType',
   'declaredReturnType',
@@ -79,6 +78,7 @@ export const compilerAnyNodeBooleanFields: readonly string[] = [
 
 export const compilerAnyNodeArrayFields: readonly string[] = [
   'args',
+  'bindingElements',
   'cases',
   'elements',
   'expressions',

@@ -54,7 +54,6 @@ type CoreRuntimeNode = AnyNode & {
   shape?: CoreRuntimeShape | null
   stringRuntimeMethod?: string | null
   target?: CoreRuntimeChildNode | null
-  timerRuntimeMethod?: string | null
   type?: string
   valueType?: string | null
 }
@@ -385,8 +384,7 @@ function plainFunctionCallHasStringArgument(expression: CoreRuntimeNode): boolea
   if (
     isStringConversionCall(expression) ||
     isNumberConversionCall(expression) ||
-    isNumericCastCall(expression) ||
-    timerRuntimeCallName(expression)
+    isNumericCastCall(expression)
   ) {
     return false
   }
@@ -571,18 +569,6 @@ function isNumericCastCall(expression: CoreRuntimeNode): boolean {
 function stringRuntimeMethodName(expression: CoreRuntimeNode): string | null {
   if (expression.stringRuntimeMethod !== null && typeof expression.stringRuntimeMethod !== 'undefined') {
     return expression.stringRuntimeMethod
-  }
-
-  return null
-}
-
-function timerRuntimeCallName(expression: CoreRuntimeNode): string | null {
-  if (
-    expression.type === 'CallExpression' &&
-    expression.timerRuntimeMethod !== null &&
-    typeof expression.timerRuntimeMethod !== 'undefined'
-  ) {
-    return expression.timerRuntimeMethod
   }
 
   return null

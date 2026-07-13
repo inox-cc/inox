@@ -404,7 +404,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||
     value === 'StringCContext' ||
-    value === 'TimerFunctionContext' ||
     value === 'AsyncTaskEmitContext' ||
     value === 'AsyncTaskFunctionContext' ||
     value === 'AsyncTaskPlannerContext'
@@ -3794,10 +3793,6 @@ export function emitRuntimeArrowCaptureCType(capture: CRuntimeArrowCapture): str
 
   if (capture.valueType === 'string') {
     return 'const char*'
-  }
-
-  if (capture.valueType === 'timer') {
-    return 'inox_timer_handle*'
   }
 
   return 'double'

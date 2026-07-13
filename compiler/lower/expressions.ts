@@ -467,11 +467,6 @@ function copyRuntimeMetadata(target: LowerExpressionNode, source: LowerExpressio
     target.timeRuntimeMethod = timeRuntimeMethod
   }
 
-  const timerRuntimeMethod = nullableString(source.timerRuntimeMethod)
-  if (timerRuntimeMethod !== null && typeof timerRuntimeMethod !== 'undefined') {
-    target.timerRuntimeMethod = timerRuntimeMethod
-  }
-
   const numericCast = nullableString(source.numericCast)
   if (numericCast !== null && typeof numericCast !== 'undefined') {
     target.numericCast = numericCast

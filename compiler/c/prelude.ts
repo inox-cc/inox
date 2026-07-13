@@ -198,7 +198,6 @@ export function emitCPrelude(
   needsObjectRuntime: boolean,
   needsJsonRuntime: boolean,
   needsRegexpRuntime: boolean,
-  needsTimerRuntime: boolean,
   needsConsoleRuntime: boolean,
   needsFetchRuntime: boolean,
   libraryCPreludeIncludes: string[],
@@ -299,24 +298,6 @@ export function emitCPrelude(
       lines.push('')
     }
 
-    if (needsTimerRuntime) {
-      lines.push('static inox_status inox_timer_callback_run(void* context) {')
-      lines.push('  if (context == 0) return INOX_ERR_TYPE;')
-      lines.push('  inox_value* callback = (inox_value*)context;')
-      lines.push('  inox_value result = inox_undefined_value();')
-      lines.push('  inox_status status = inox_callback_call(*callback, 0, 0, &result);')
-      lines.push('  inox_release(result);')
-      lines.push('  return status;')
-      lines.push('}')
-      lines.push('')
-      lines.push('static void inox_timer_callback_finalize(void* context) {')
-      lines.push('  if (context == 0) return;')
-      lines.push('  inox_value* callback = (inox_value*)context;')
-      lines.push('  inox_release(*callback);')
-      lines.push('  inox_default_free(0, context, sizeof(inox_value), _Alignof(inox_value));')
-      lines.push('}')
-      lines.push('')
-    }
   }
 
   return lines

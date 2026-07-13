@@ -564,7 +564,6 @@ function isContextDeclaredType(value: string): boolean {
     value === 'PromiseEmitContext' ||
     value === 'PromiseFunctionContext' ||
     value === 'StringCContext' ||
-    value === 'TimerFunctionContext' ||
     value === 'AsyncTaskEmitContext' ||
     value === 'AsyncTaskFunctionContext' ||
     value === 'AsyncTaskPlannerContext'

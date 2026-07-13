@@ -144,13 +144,6 @@ import {
   runtimeFetchAbortControllerValueMismatchCondition,
   runtimeObjectLikeValueMismatchCondition
 } from './runtime-values.ts'
-import type { TimerLoweringDependencies } from '../stdlib/node/c.ts'
-import {
-  emitPreparedTimerCallExpression,
-  emitTimerVariableDeclaration,
-  isTimerStartCallExpression,
-  timerCallbackFunctionType
-} from '../stdlib/node/c.ts'
 import type { FetchLoweringDependencies } from '../../stdlib/global/compiler/c.ts'
 import {
   cFetchRuntimeExpressionMethod,
@@ -489,7 +482,6 @@ let objectExpressionFieldDependencies: ObjectExpressionFieldDependencies = {
 }
 let jsonDeclarationDependencies = {} as JsonDeclarationDependencies
 let timeLoweringDependencies = {} as TimeLoweringDependencies
-let timerLoweringDependencies = {} as TimerLoweringDependencies
 let fetchLoweringDependencies = {} as FetchLoweringDependencies
 let compilerLibraryLoweringDependencies = {} as CompilerLibraryLoweringDependencies
 let promiseLoweringDependencies = {} as PromiseLoweringDependencies
@@ -587,8 +579,6 @@ const statementLoweringDependencies: StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ) => emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies, options),
-  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitPreparedUpdateExpression,
   emitPromiseConstructorSettlementCall: (expression: AnyNode, context: CFunctionContext) =>
     emitPromiseConstructorSettlementCall(expression, context, promiseLoweringDependencies),
@@ -801,12 +791,6 @@ timeLoweringDependencies = {
   inferExpressionType
 }
 
-timerLoweringDependencies = {
-  emitPreparedNumberExpression,
-  emitReference,
-  emitRuntimeCallbackValue
-}
-
 fetchLoweringDependencies = {
   emitCValueExpression,
   emitPreparedStringBytesOperand,
@@ -950,13 +934,6 @@ function runtimeCallbackArgumentInfoForNodeStdlibCall(expression: AnyNode): Runt
     return libraryCallback
   }
 
-  if (isTimerStartCallExpression(expression)) {
-    return {
-      functionType: timerCallbackFunctionType(),
-      index: 0
-    }
-  }
-
   return null
 }
 
@@ -965,7 +942,6 @@ function isConfiguredExternalEventLoopCallExpression(
 ): boolean {
   return (
     isCompilerLibraryExternalEventLoopCallExpression(expression) ||
-    isTimerStartCallExpression(expression) ||
     isCompilerLibraryPromiseExpression(expression) ||
     isAsyncFetchRuntimeCallExpression(expression)
   )
@@ -1130,8 +1106,6 @@ const cCallExpressionDependencies = {
   emitPreparedPromiseStaticExpression: (expression: AnyNode, context: CFunctionContext) =>
     emitPreparedPromiseStaticExpression(expression, context, promiseLoweringDependencies),
   emitPreparedRuntimeArrayIndexValue,
-  emitPreparedTimerCallExpression: (expression: AnyNode, context: CFunctionContext, options?: PreparedCallOptions) =>
-    emitPreparedTimerCallExpression(expression, context, timerLoweringDependencies, options),
   emitRuntimeCallbackCall,
   emitRuntimeCallbackValue,
   inferExpressionType,
@@ -2784,12 +2758,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
     return emitErrorObjectVariableDeclaration(statement, context)
   }
 
-  const timerDeclaration = emitTimerVariableDeclaration(statement, context, timerLoweringDependencies)
-
-  if (timerDeclaration !== null && typeof timerDeclaration !== 'undefined') {
-    return timerDeclaration
-  }
-
   const fetchHeadersBooleanDeclaration = emitFetchHeadersBooleanVariableDeclaration(
     statement,
     context,
@@ -2833,12 +2801,6 @@ function emitScalarVariableDeclaration(statement: AnyNode, context: CFunctionCon
       diagnostic('INOX_C_ARRAY_METHOD', 'array methods are not supported by the current C backend slice', statement.loc)
     )
     return [`double ${emitCIdentifier(statement.name)} = 0;`]
-  }
-
-  const timerHandleDeclaration = emitTimerVariableDeclaration(statement, context, timerLoweringDependencies, inferred)
-
-  if (timerHandleDeclaration !== null && typeof timerHandleDeclaration !== 'undefined') {
-    return timerHandleDeclaration
   }
 
   return emitNumberBooleanScalarVariableDeclaration(statement, context, inferred)
@@ -2969,15 +2931,11 @@ function emitUninitializedScalarVariableDeclaration(statement: AnyNode, context:
 
   if (isManagedRuntimeReturnType(inferred) || isOpaqueRuntimeValueType(inferred)) {
     registerOwnedValue(context, statement.name)
-    return [`${prefix}inox_value ${emitCIdentifier(statement.name)} = inox_undefined_value();`]
+    return [`${emitCIdentifier(statement.name)} = inox_undefined_value();`]
   }
 
   if (inferred === 'promise') {
     return [`${prefix}inox_promise* ${emitCIdentifier(statement.name)} = 0;`]
-  }
-
-  if (inferred === 'timer') {
-    return [`${prefix}inox_timer_handle* ${emitCIdentifier(statement.name)} = 0;`]
   }
 
   if (inferred === 'function') {
@@ -3126,18 +3084,6 @@ function emitModuleValueVariableAssignment(statement: AnyNode, context: CFunctio
         lines.push(`inox_promise_retain(${name});`)
       }
       return lines
-    }
-  }
-
-  if (inferred === 'timer') {
-    const timer = emitPreparedTimerCallExpression(statement.init, context, timerLoweringDependencies, {
-      out: name
-    })
-
-    if (timer !== null && typeof timer !== 'undefined') {
-      context.variables.set(statement.name, 'timer')
-      context.moduleValueTypes.set(statement.name, 'timer')
-      return timer.lines
     }
   }
 
@@ -8612,7 +8558,6 @@ function isSupportedRuntimeArrowCaptureValueType(valueType: string): boolean {
     isNullableScalarType(valueType) ||
     valueType === 'string' ||
     valueType === 'object' ||
-    valueType === 'timer' ||
     valueType === 'promise-settlement'
   )
 }
@@ -8644,7 +8589,7 @@ function emitRuntimeArrowCallbackValueInto(
         context,
         diagnostic(
           'INOX_C_FUNCTION_VALUE',
-          'capturing C callbacks currently support only const number/boolean/string/object/timer bindings and Promise resolve/reject handlers',
+          'capturing C callbacks currently support only const number/boolean/string/object bindings and Promise resolve/reject handlers',
           wrapper.expression.loc
         )
       )

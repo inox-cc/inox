@@ -451,11 +451,6 @@ export type StatementLoweringDependencies = {
     context: CFunctionContext,
     options?: PreparedCallOptions
   ): PreparedExpression | null
-  emitPreparedTimerCallExpression(
-    expression: StatementNode,
-    context: CFunctionContext,
-    options?: PreparedCallOptions
-  ): PreparedExpression | null
   emitPreparedUpdateExpression(expression: StatementNode, context: CFunctionContext): PreparedExpression
   emitPromiseConstructorSettlementCall(expression: StatementNode, context: CFunctionContext): string[] | null
   emitReference(expression: StatementNode, context: CFunctionContext): string
@@ -4645,12 +4640,6 @@ export function emitExpressionStatement(statement: StatementNode, context: CFunc
 
     if (fetchCall !== null && typeof fetchCall !== 'undefined') {
       return fetchCall.lines
-    }
-
-    const timerCall = deps.emitPreparedTimerCallExpression(expression, context)
-
-    if (timerCall !== null && typeof timerCall !== 'undefined') {
-      return timerCall.lines
     }
 
     const promise = deps.emitPreparedPromiseStaticExpression(expression, context)

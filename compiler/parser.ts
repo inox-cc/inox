@@ -50,7 +50,7 @@ import {
 import { locFromToken } from './parser/locations.ts'
 import { readTypeAnnotation } from './parser/type-annotations.ts'
 import { weakTypeNameFromTypeName } from './type-names.ts'
-import type { AnyNode, Diagnostic, ProgramNode, SourceLocation, Token } from './types.ts'
+import type { AnyNode, ArrayBindingElement, Diagnostic, ProgramNode, SourceLocation, Token } from './types.ts'
 
 export function parse(tokens: Token[]): ProgramNode {
   const parser = new Parser(tokens)
@@ -69,6 +69,11 @@ type FieldTypeAnnotation = {
 type TypeAnnotationOptions = {
   stopAtLineBreak?: boolean
   stopAtStatementBoundary?: boolean
+}
+
+type ParsedBindingName = {
+  name: Token
+  bindingElements: ArrayBindingElement[] | null
 }
 
 function pushAllNodes(target: AnyNode[], source: AnyNode[]): void {
@@ -212,11 +217,15 @@ class Parser {
   tokens: Token[]
   position: number
   diagnostics: Diagnostic[]
+  syntheticBindingIndex: number
+  syntheticBindingNames: Set<string>
 
   constructor(tokens: Token[]) {
     this.tokens = tokens
     this.position = 0
     this.diagnostics = []
+    this.syntheticBindingIndex = 0
+    this.syntheticBindingNames = new Set()
   }
 
   parseProgram(): ProgramNode {
@@ -1139,7 +1148,8 @@ class Parser {
 
   parseForOfStatement(start: Token): AnyNode {
     const kindToken = this.advance()
-    const name = this.expect('identifier', 'INOX_EXPECTED_IDENTIFIER', 'expected for-of binding name')
+    const binding = this.parseBindingName('expected for-of binding name')
+    const name = binding.name
     let declaredType: string | null = null
 
     if (this.matchValue(':')) {
@@ -1149,7 +1159,7 @@ class Parser {
     const iterable = this.parseExpression()
     this.expectValue(')', 'INOX_EXPECTED_PAREN', 'expected ) after for-of iterable')
 
-    return {
+    const statement: AnyNode = {
       type: 'ForOfStatement',
       kind: kindToken.value,
       name: name.value,
@@ -1169,6 +1179,12 @@ class Parser {
       iterable: iterable,
       body: this.parseStatement()
     }
+
+    if (binding.bindingElements !== null) {
+      statement.bindingElements = binding.bindingElements
+    }
+
+    return statement
   }
 
   parseUnsupportedForInStatement(): AnyNode {
@@ -1271,7 +1287,9 @@ class Parser {
     let declaredType: string | null = null
 
     if (this.matchValue(':')) {
-      declaredType = this.parseTypeAnnotation(['=', ';', '}', ')'], null)
+      declaredType = this.parseTypeAnnotation(['=', ';', '}', ')'], {
+        stopAtStatementBoundary: true
+      })
     }
 
     let init: AnyNode | null = null
@@ -1370,7 +1388,7 @@ class Parser {
     this.expectValue('(', 'INOX_EXPECTED_PAREN', 'expected ( before arrow parameters')
 
     while (!this.isValue(')') && !this.is('eof')) {
-      params.push(this.parseRuntimeParam())
+      params.push(this.parseRuntimeParam(true))
 
       if (!this.matchValue(',')) {
         break
@@ -1382,9 +1400,18 @@ class Parser {
     return params
   }
 
-  parseRuntimeParam(): AnyNode {
+  parseRuntimeParam(allowArrayBinding: boolean = false): AnyNode {
     const rest = this.matchValue('...')
-    const param = this.expectParameterName('expected parameter name')
+    let binding: ParsedBindingName
+
+    if (allowArrayBinding) {
+      binding = this.parseBindingName('expected parameter name')
+    } else {
+      binding = {
+        name: this.expectParameterName('expected parameter name'),
+        bindingElements: null
+      }
+    }
     let optional = this.matchValue('?')
     let valueType = 'unknown'
     let defaultValue: AnyNode | null = null
@@ -1398,7 +1425,151 @@ class Parser {
       defaultValue = this.parseExpression()
     }
 
-    return createParam(param, valueType, optional, defaultValue, rest)
+    const param = createParam(binding.name, valueType, optional, defaultValue, rest)
+
+    if (binding.bindingElements !== null) {
+      param.bindingElements = binding.bindingElements
+    }
+
+    return param
+  }
+
+  parseBindingName(message: string): ParsedBindingName {
+    if (!this.isValue('[')) {
+      return {
+        name: this.expectParameterName(message),
+        bindingElements: null
+      }
+    }
+
+    const start = this.current()
+
+    return {
+      name: this.nextSyntheticBindingName(start),
+      bindingElements: this.parseArrayBindingElements()
+    }
+  }
+
+  parseArrayBindingElements(): ArrayBindingElement[] {
+    const elements: ArrayBindingElement[] = []
+    this.expectValue('[', 'INOX_EXPECTED_BRACKET', 'expected [ before array binding pattern')
+    let index = 0
+
+    while (!this.isValue(']') && !this.is('eof')) {
+      if (this.matchValue(',')) {
+        index = index + 1
+        continue
+      }
+
+      if (this.matchValue('...')) {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          'rest elements in array binding patterns are not supported yet',
+          null
+        )
+      }
+
+      if (this.isValue('[')) {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          'nested array binding patterns are not supported yet',
+          null
+        )
+        this.parseArrayBindingElements()
+      } else if (this.isValue('{')) {
+        this.report(
+          'INOX_NOT_IMPLEMENTED',
+          'object binding patterns are not supported yet',
+          null
+        )
+        this.skipBindingObjectPattern()
+      } else {
+        const name = this.expectParameterName('expected array binding element name')
+
+        elements.push({
+          name: name.value,
+          index,
+          loc: locFromToken(name),
+          declaredType: null,
+          valueType: 'unknown',
+          nullable: false,
+          arrayElementType: null,
+          arrayElementDeclaredType: null,
+          arrayElementFunctionType: null,
+          mapKeyType: null,
+          mapValueType: null,
+          mapValueShape: null,
+          promiseValueType: null,
+          setElementType: null,
+          functionType: null,
+          shape: null
+        })
+
+        if (this.matchValue('=')) {
+          this.report(
+            'INOX_NOT_IMPLEMENTED',
+            'default values in array binding patterns are not supported yet',
+            null
+          )
+          this.parseExpression()
+        }
+      }
+
+      index = index + 1
+
+      if (!this.matchValue(',')) {
+        break
+      }
+    }
+
+    this.expectValue(']', 'INOX_EXPECTED_BRACKET', 'expected ] after array binding pattern')
+
+    return elements
+  }
+
+  skipBindingObjectPattern(): void {
+    this.expectValue('{', 'INOX_EXPECTED_OBJECT', 'expected { before object binding pattern')
+    let depth = 1
+
+    while (depth > 0 && !this.is('eof')) {
+      if (this.matchValue('{')) {
+        depth = depth + 1
+      } else if (this.matchValue('}')) {
+        depth = depth - 1
+      } else {
+        this.advance()
+      }
+    }
+  }
+
+  nextSyntheticBindingName(source: Token): Token {
+    let value = ''
+
+    while (value.length === 0 || this.sourceHasBindingName(value) || this.syntheticBindingNames.has(value)) {
+      value = `__inox_binding_${this.syntheticBindingIndex}`
+      this.syntheticBindingIndex = this.syntheticBindingIndex + 1
+    }
+
+    this.syntheticBindingNames.add(value)
+
+    return {
+      type: 'identifier',
+      value,
+      index: source.index,
+      line: source.line,
+      column: source.column,
+      file: source.file
+    }
+  }
+
+  sourceHasBindingName(name: string): boolean {
+    for (const token of this.tokens) {
+      if (token.type === 'identifier' && token.value === name) {
+        return true
+      }
+    }
+
+    return false
   }
 
   expectParameterName(message: string): Token {
@@ -2018,28 +2189,37 @@ class Parser {
     if (
       this.current().type !== 'keyword' ||
       !this.isForHeaderDeclarationKeyword(this.current().value) ||
-      this.peek(1).type !== 'identifier'
+      (this.peek(1).type !== 'identifier' && this.peek(1).value !== '[')
     ) {
       return false
     }
 
     let offset = 2
     let genericDepth = 0
+    let bindingDepth = this.peek(1).value === '[' ? 1 : 0
 
     while (this.peek(offset).type !== 'eof') {
       const token = this.peek(offset)
 
-      if (genericDepth === 0 && token.value === keyword) {
+      if (genericDepth === 0 && bindingDepth === 0 && token.value === keyword) {
         return true
       }
 
-      if (genericDepth === 0 && (token.value === ')' || token.value === ';' || token.value === '=')) {
+      if (
+        genericDepth === 0 &&
+        bindingDepth === 0 &&
+        (token.value === ')' || token.value === ';' || token.value === '=')
+      ) {
         return false
       }
 
-      if (token.value === '<') {
+      if (token.value === '[') {
+        bindingDepth = bindingDepth + 1
+      } else if (token.value === ']' && bindingDepth > 0) {
+        bindingDepth = bindingDepth - 1
+      } else if (bindingDepth === 0 && token.value === '<') {
         genericDepth = genericDepth + 1
-      } else if (token.value === '>' && genericDepth > 0) {
+      } else if (bindingDepth === 0 && token.value === '>' && genericDepth > 0) {
         genericDepth = genericDepth - 1
       }
 

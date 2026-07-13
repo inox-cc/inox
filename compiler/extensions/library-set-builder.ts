@@ -340,7 +340,10 @@ function operationArgumentChecksFingerprint(
         (check.literalDiagnosticCode ?? '') + ':' + (check.literalDiagnosticMessage ?? '')
         + ':' + objectLiteralFieldsFingerprint(check.objectLiteralFields ?? []) + ':' +
         callbackParametersFingerprint(check.functionParameters ?? []) + ':' +
-        (check.functionReturnType ?? '')
+        (check.functionReturnType ?? '') + ':' +
+        (check.functionAsync === true ? 'async' : check.functionAsync === false ? 'sync' : '') + ':' +
+        (check.functionAsyncDiagnosticCode ?? '') + ':' +
+        (check.functionAsyncDiagnosticMessage ?? '')
     )
   }
 

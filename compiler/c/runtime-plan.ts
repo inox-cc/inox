@@ -33,7 +33,6 @@ export type CRuntimePreludeRequirements = {
   needsObjectRuntime: boolean
   needsJsonRuntime: boolean
   needsRegexpRuntime: boolean
-  needsTimerRuntime: boolean
   needsConsoleRuntime: boolean
   needsFetchRuntime: boolean
   runtimeEntrypointAdapter: RuntimeEntrypointAdapterDescriptor | null
@@ -84,13 +83,11 @@ export function resolveCRuntimePreludeRequirements(
     signatureRuntimeTypes.has('function')
   const needsJsonRuntime = runtimeRequirements.has('json')
   const needsRegexpRuntime = irProgramsUseCPreludeFeature(input.irPrograms, 'regexp')
-  const needsTimerRuntime = runtimeRequirements.has('timers')
   const needsDebugMemoryRuntime = runtimeRequirements.has('debug-memory')
   const needsFetchRuntime = runtimePlanHasSupportedFetchGlobalUsage(input.globalUsages)
   const needsAsyncRuntime =
     runtimeRequirements.has('async-runtime') ||
     needsFetchRuntime ||
-    needsTimerRuntime ||
     signatureRuntimeTypes.has('promise')
   const needsCollectionRuntime =
     runtimeRequirements.has('collections') ||
@@ -157,7 +154,6 @@ export function resolveCRuntimePreludeRequirements(
     needsObjectRuntime,
     needsJsonRuntime,
     needsRegexpRuntime,
-    needsTimerRuntime,
     needsConsoleRuntime,
     needsFetchRuntime,
     runtimeEntrypointAdapter: libraryRuntime.entrypointAdapter,

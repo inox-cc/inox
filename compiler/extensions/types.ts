@@ -106,6 +106,9 @@ export type LibraryArgumentCheckDescriptor = {
   objectLiteralFields?: LibraryObjectLiteralFieldDescriptor[]
   functionParameters?: LibraryCallbackParameterDescriptor[]
   functionReturnType?: string | null
+  functionAsync?: boolean | null
+  functionAsyncDiagnosticCode?: string | null
+  functionAsyncDiagnosticMessage?: string | null
 }
 
 export type LibraryCallbackParameterDescriptor = {

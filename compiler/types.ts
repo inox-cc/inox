@@ -7,6 +7,13 @@ export type SourceLocation = {
   column: number
 }
 
+export type ArrayBindingElement = {
+  name: string
+  index: number
+  loc: SourceLocation
+  [key: string]: any
+}
+
 export type Token = SourceLocation & {
   type: string
   value: string
@@ -44,7 +51,6 @@ export type IrFeature =
   | 'regexp'
   | 'runtime-values'
   | 'string-bytes'
-  | 'timers'
   | 'weak-references'
 
 export type IrRuntimeRequirement = string
@@ -122,7 +128,6 @@ export type ValueType =
   | 'promise'
   | 'regexp'
   | 'string'
-  | 'timer'
   | 'unknown'
   | 'void'
   | string
@@ -245,7 +250,6 @@ export type RuntimeCapabilities = {
   entropy?: boolean
   heap?: boolean
   monotonicClock?: boolean
-  timers?: boolean
   wallClock?: boolean
 }
 

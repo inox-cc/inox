@@ -1,13 +1,3 @@
-import {
-  nodeTimersImportSource,
-  nodeTimersModuleObjectImportNames
-} from '../../../stdlib/node/timers/compiler/descriptor.ts'
-
-export {
-  isTimerRuntimeMethod,
-  timerRuntimeMethodNameFromPath
-} from '../../../stdlib/node/timers/compiler/descriptor.ts'
-
 export type NodeStdlibRuntimeImportKind = 'module-object'
 
 export type NodeStdlibPackageDescriptor = {
@@ -21,20 +11,9 @@ export type NodeStdlibRuntimeImportDescriptor = {
   importedNames: string[]
 }
 
-export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = [
-  {
-    source: nodeTimersImportSource,
-    libuvRuntimeFeature: null
-  }
-]
+export const nodeStdlibPackageDescriptors: NodeStdlibPackageDescriptor[] = []
 
-export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescriptor[] = [
-  {
-    source: nodeTimersImportSource,
-    kind: 'module-object',
-    importedNames: nodeTimersModuleObjectImportNames
-  },
-]
+export const nodeStdlibRuntimeImportDescriptors: NodeStdlibRuntimeImportDescriptor[] = []
 
 export function nodeStdlibPackageDescriptorCount(): number {
   return nodeStdlibPackageDescriptors.length
@@ -50,76 +29,4 @@ export function nodeStdlibRuntimeImportDescriptorCount(): number {
 
 export function nodeStdlibRuntimeImportDescriptorAt(index: number): NodeStdlibRuntimeImportDescriptor {
   return nodeStdlibRuntimeImportDescriptors[index]
-}
-
-export function isNodeStdlibRuntimeImportBinding(
-  source: string | null | undefined,
-  id: string,
-  kind: NodeStdlibRuntimeImportKind,
-  importedName: string | null | undefined
-): boolean {
-  return isNodeStdlibImportSourceForId(source, id) && isNodeStdlibRuntimeImportName(id, kind, importedName)
-}
-
-export function isNodeStdlibRuntimeImportName(
-  id: string,
-  kind: NodeStdlibRuntimeImportKind,
-  importedName: string | null | undefined
-): boolean {
-  if (importedName === null || typeof importedName === 'undefined') {
-    return false
-  }
-
-  for (let index = 0; index < nodeStdlibRuntimeImportDescriptorCount(); index = index + 1) {
-    const descriptor = nodeStdlibRuntimeImportDescriptorAt(index)
-
-    if (nodeStdlibModuleIdFromImportSource(descriptor.source) !== id || descriptor.kind !== kind) {
-      continue
-    }
-
-    for (let nameIndex = 0; nameIndex < descriptor.importedNames.length; nameIndex = nameIndex + 1) {
-      if (descriptor.importedNames[nameIndex] === importedName) {
-        return true
-      }
-    }
-  }
-
-  return false
-}
-
-function isNodeStdlibImportSourceForId(source: string | null | undefined, id: string): boolean {
-  if (source === null || typeof source === 'undefined') {
-    return false
-  }
-
-  return findNodeStdlibPackageDescriptor(source) !== null && nodeStdlibModuleIdFromImportSource(source) === id
-}
-
-function findNodeStdlibPackageDescriptor(source: string): NodeStdlibPackageDescriptor | null {
-  for (let index = 0; index < nodeStdlibPackageDescriptorCount(); index = index + 1) {
-    const descriptor = nodeStdlibPackageDescriptorAt(index)
-
-    if (descriptor.source === source) {
-      return descriptor
-    }
-  }
-
-  return null
-}
-
-function nodeStdlibModuleIdFromImportSource(source: string): string {
-  const prefixLength = 'node:'.length
-  let id = ''
-
-  for (let index = prefixLength; index < source.length; index = index + 1) {
-    const sourceChar = source.slice(index, index + 1)
-
-    if (sourceChar === '/' || sourceChar === '_') {
-      id = `${id}-`
-    } else {
-      id = `${id}${sourceChar}`
-    }
-  }
-
-  return id
 }

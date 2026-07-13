@@ -196,6 +196,8 @@ async function runIntegrationTests(): Promise<void> {
     await import('./integration/string-cpp-object-lowering.test.ts')
   const { assertRuntimeValueDeclarationsStayLocal } =
     await import('./integration/runtime-value-local-declaration-lowering.test.ts')
+  const { assertUninitializedRuntimeValuesUseCppRaii } =
+    await import('./integration/runtime-value-uninitialized-raii-lowering.test.ts')
   const { assertRuntimeValueDeclarationsReuseTypedHelperContracts } =
     await import('./integration/runtime-value-type-check-lowering.test.ts')
   const {
@@ -494,6 +496,10 @@ async function runIntegrationTests(): Promise<void> {
 
     await t.test('runtime-value-local-declaration-lowering', () => {
       assertRuntimeValueDeclarationsStayLocal()
+    })
+
+    await t.test('runtime-value-uninitialized-raii-lowering', () => {
+      assertUninitializedRuntimeValuesUseCppRaii()
     })
 
     await t.test('runtime-value-core-dependencies', async () => {

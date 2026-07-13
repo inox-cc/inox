@@ -449,7 +449,7 @@ export function isBuiltinTypeDependencyName(name: string): boolean {
     return true
   }
 
-  if (name === 'never' || name === 'nullable' || name === 'record' || name === 'set' || name === 'timer') {
+  if (name === 'never' || name === 'nullable' || name === 'record' || name === 'set') {
     return true
   }
 

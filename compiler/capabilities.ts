@@ -1,6 +1,5 @@
 import { diagnostic, throwDiagnostics } from './diagnostics.ts'
 import { collectIrGlobalUsages } from './ir.ts'
-import { isTimerRuntimeMethod } from './stdlib/node/descriptor.ts'
 import { timeRuntimeCapabilityFromPath } from '../stdlib/global/compiler/descriptor.ts'
 import type {
   AnyNode,
@@ -20,7 +19,6 @@ type CapabilityNode = AnyNode & {
   libraryOperationId?: string | null
   loc?: SourceLocation
   timeRuntimeMethod?: string | null
-  timerRuntimeMethod?: string | null
   type?: string | null
   valueType?: string | null
 }
@@ -217,12 +215,6 @@ function recordNodeCapabilityUsages(expression: CapabilityNode, usages: Capabili
     }
   }
 
-  const timerMethod = expression.timerRuntimeMethod
-
-  if (timerMethod !== null && typeof timerMethod !== 'undefined') {
-    pushCapability(usages, 'timers', 'timers', timerMethod, loc)
-  }
-
   const timeMethod = expression.timeRuntimeMethod
 
   if (timeMethod === 'dateConstructor' && capabilityArgCount(expression) === 0) {
@@ -252,17 +244,8 @@ function capabilityArgCount(expression: CapabilityNode): number {
 
 function requiredCapabilityForGlobalUsage(usage: IrGlobalUsage): RequiredCapability | null {
   const timeCapability = timeRuntimeCapabilityFromPath(usage.path)
-  const path = dotPath(usage.path)
-
   if (timeCapability !== null && typeof timeCapability !== 'undefined') {
     return timeCapability
-  }
-
-  if (isTimerRuntimeMethod(path)) {
-    return {
-      key: 'timers',
-      name: 'timers'
-    }
   }
 
   return null
